@@ -931,6 +931,50 @@ describe(AssetService.name, () => {
       expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
       expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).not.toHaveBeenCalled();
     });
+
+    it('rejects a single-PUT visibility change on a non-owned (space-edit) asset (rbac-3)', async () => {
+      const auth = AuthFactory.create();
+      const asset = AssetFactory.create({ visibility: AssetVisibility.Timeline });
+      // Caller does not own the asset but has space-edit rights → AssetUpdate gate passes.
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.asset.checkSpaceEditAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.asset.getById.mockResolvedValue(getForAsset(asset));
+      mocks.asset.update.mockResolvedValue({ ...getForAsset(asset), visibility: AssetVisibility.Locked });
+
+      await expect(sut.update(auth, asset.id, { visibility: AssetVisibility.Locked })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+
+      expect(mocks.asset.update).not.toHaveBeenCalled();
+      expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+    });
+
+    it('rejects setting livePhotoVideoId on a non-owned (space-edit) asset (rbac-3)', async () => {
+      const auth = AuthFactory.create();
+      const asset = AssetFactory.create();
+      const motionId = newUuid();
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.asset.checkSpaceEditAccess.mockResolvedValue(new Set([asset.id]));
+
+      await expect(sut.update(auth, asset.id, { livePhotoVideoId: motionId })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+
+      // Guard runs before onBeforeLink, so the motion-link side-effects never execute.
+      expect(mocks.asset.update).not.toHaveBeenCalled();
+    });
+
+    it('allows changing visibility on an asset the caller owns even as a space editor (rbac-3)', async () => {
+      const asset = AssetFactory.create({ visibility: AssetVisibility.Timeline });
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.asset.getById.mockResolvedValue(getForAsset(asset));
+      mocks.asset.update.mockResolvedValue({ ...getForAsset(asset), visibility: AssetVisibility.Archive });
+
+      await sut.update(AuthFactory.create({ id: asset.ownerId }), asset.id, { visibility: AssetVisibility.Archive });
+
+      expect(mocks.asset.update).toHaveBeenCalledWith({ id: asset.id, visibility: AssetVisibility.Archive });
+    });
   });
 
   describe('onAssetHide / onAssetShow', () => {
@@ -966,6 +1010,39 @@ describe(AssetService.name, () => {
       expect(mocks.asset.updateAll).toHaveBeenCalledWith(['asset-1', 'asset-2'], {
         visibility: AssetVisibility.Archive,
       });
+    });
+
+    it('rejects a bulk visibility change that includes a non-owned (space-edit) asset (rbac-3)', async () => {
+      const auth = AuthFactory.create();
+      // Editor owns asset-1; has space-edit rights over asset-2 (another member's asset) → AssetUpdate gate passes.
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+      mocks.access.asset.checkSpaceEditAccess.mockResolvedValue(new Set(['asset-2']));
+      mocks.asset.getByIds.mockResolvedValue([
+        { id: 'asset-1', visibility: AssetVisibility.Timeline } as any,
+        { id: 'asset-2', visibility: AssetVisibility.Timeline } as any,
+      ]);
+
+      await expect(
+        sut.updateAll(auth, { ids: ['asset-1', 'asset-2'], visibility: AssetVisibility.Locked }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      // The destructive cascade must NOT have fired for anyone (guard runs before the write + side-effects).
+      expect(mocks.asset.updateAll).not.toHaveBeenCalled();
+      expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitLibraryAssetVisibilityPurge).not.toHaveBeenCalled();
+    });
+
+    it('allows a space editor to change a NON-visibility field on a non-owned asset (existing policy) (rbac-3)', async () => {
+      const auth = AuthFactory.create();
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.asset.checkSpaceEditAccess.mockResolvedValue(new Set(['asset-2']));
+
+      await sut.updateAll(auth, { ids: ['asset-2'], isFavorite: true });
+
+      // No visibility → owner-split guard never runs → editor keeps their metadata-edit capability.
+      expect(mocks.asset.updateAll).toHaveBeenCalledWith(['asset-2'], { isFavorite: true });
     });
 
     it('should not update Assets table if no relevant fields are provided', async () => {

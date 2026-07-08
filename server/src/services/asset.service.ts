@@ -223,6 +223,18 @@ export class AssetService extends BaseService {
   async update(auth: AuthDto, id: string, dto: UpdateAssetDto): Promise<AssetResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids: [id] });
 
+    // rbac-3: visibility AND livePhotoVideoId are owner-only structural writes (see updateAll). A space editor
+    // holds AssetUpdate over other members' assets via checkSpaceEditAccess, but must not flip their visibility
+    // (fleet-wide tombstone) or re-link their motion video. Reject if either is set on an asset the caller does
+    // not own; other metadata (description/rating/…) stays editor-allowed. Runs BEFORE the livePhotoVideoId
+    // link/unlink side-effects and the visibility transition helper below.
+    if (dto.visibility !== undefined || dto.livePhotoVideoId !== undefined) {
+      const ownedIds = await this.checkAccess({ auth, permission: Permission.AssetDelete, ids: [id] });
+      if (!ownedIds.has(id)) {
+        throw new ForbiddenException('Visibility and live-photo linkage can only be changed on assets you own');
+      }
+    }
+
     const { description, dateTimeOriginal, latitude, longitude, rating, ...rest } = dto;
     const repos = { asset: this.assetRepository, event: this.eventRepository };
 
@@ -310,6 +322,21 @@ export class AssetService extends BaseService {
       timeZone,
     } = dto;
     await this.requireAccess({ auth, permission: Permission.AssetUpdate, ids });
+
+    // rbac-3: `visibility` is destructive — flipping an asset to Locked/Hidden strips it from the owner's
+    // albums (removeAssetsFromAll) and #757-tombstones it off every member device. AssetUpdate grants a space
+    // EDITOR that power over OTHER members' direct+library assets (checkSpaceEditAccess), which would let an
+    // editor wipe another member's asset fleet-wide. Restrict visibility to OWNED ids: reject the whole request
+    // if visibility is set on any id the caller does not own. This guard MUST run before the write and the
+    // applyVisibilityTransitionSideEffects cascade below, or the destructive side-effects fire before the guard.
+    // AssetDelete == the pure owner arm (checkOwnerAccess, same hasElevatedPermission as the AssetUpdate gate's
+    // isOwner sub-check); a library-backed asset owned by another user is correctly NOT returned as owned.
+    if (visibility !== undefined) {
+      const ownedIds = await this.checkAccess({ auth, permission: Permission.AssetDelete, ids });
+      if (ownedIds.size !== new Set(ids).size) {
+        throw new ForbiddenException('Visibility can only be changed on assets you own');
+      }
+    }
 
     const assetDto = _.omitBy({ isFavorite, visibility, duplicateId }, _.isUndefined);
 
