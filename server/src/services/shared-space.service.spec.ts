@@ -1740,6 +1740,7 @@ describe(SharedSpaceService.name, () => {
         .mockResolvedValueOnce(ownerMember) // requireRole check
         .mockResolvedValueOnce(existingMember) // pre-update fetch for oldRole
         .mockResolvedValueOnce(updatedMember); // fetch after update
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.updateMember.mockResolvedValue(
         factory.sharedSpaceMember({
           spaceId,
@@ -1793,6 +1794,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValueOnce(
         makeMemberResult({ userId: 'target-user', role: SharedSpaceRole.Viewer }),
       );
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.updateMember.mockResolvedValue(factory.sharedSpaceMember());
       // post-update fetch
       mocks.sharedSpace.getMember.mockResolvedValueOnce(
@@ -1818,6 +1820,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValueOnce(
         makeMemberResult({ userId: 'target-user', role: SharedSpaceRole.Viewer }),
       );
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.updateMember.mockResolvedValue(factory.sharedSpaceMember());
       mocks.sharedSpace.getMember.mockResolvedValueOnce(
         makeMemberResult({ userId: 'target-user', role: SharedSpaceRole.Editor }),
@@ -2007,6 +2010,37 @@ describe(SharedSpaceService.name, () => {
         ForbiddenException,
       );
     });
+
+    it('rejects demoting the space creator (rbac-4)', async () => {
+      const auth = factory.auth({ user: { id: 'co-owner' } });
+      const creatorId = 'creator-1';
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: creatorId, role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: creatorId }));
+
+      await expect(
+        sut.updateMember(auth, 'space-1', creatorId, { role: SharedSpaceRole.Viewer }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mocks.sharedSpace.updateMember).not.toHaveBeenCalled();
+    });
+
+    it('allows a no-op role set on the creator (stays Owner)', async () => {
+      const auth = factory.auth({ user: { id: 'co-owner' } });
+      const creatorId = 'creator-1';
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: creatorId, role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: creatorId }));
+      mocks.sharedSpace.updateMember.mockResolvedValue(void 0 as never);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.updateMember(auth, 'space-1', creatorId, { role: SharedSpaceRole.Owner });
+
+      expect(mocks.sharedSpace.updateMember).toHaveBeenCalledWith('space-1', creatorId, {
+        role: SharedSpaceRole.Owner,
+      });
+    });
   });
 
   describe('removeMember', () => {
@@ -2017,6 +2051,7 @@ describe(SharedSpaceService.name, () => {
       const ownerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
 
       mocks.sharedSpace.getMember.mockResolvedValue(ownerMember);
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
@@ -2031,6 +2066,7 @@ describe(SharedSpaceService.name, () => {
       const viewerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Viewer });
 
       mocks.sharedSpace.getMember.mockResolvedValue(viewerMember);
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
@@ -2045,6 +2081,7 @@ describe(SharedSpaceService.name, () => {
       const ownerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
 
       mocks.sharedSpace.getMember.mockResolvedValue(ownerMember);
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
 
       await expect(sut.removeMember(auth, spaceId, auth.user.id)).rejects.toBeInstanceOf(BadRequestException);
       expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
@@ -2056,6 +2093,7 @@ describe(SharedSpaceService.name, () => {
       const viewerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Viewer });
 
       mocks.sharedSpace.getMember.mockResolvedValue(viewerMember);
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
 
       await expect(sut.removeMember(auth, spaceId, newUuid())).rejects.toBeInstanceOf(ForbiddenException);
       expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
@@ -2066,6 +2104,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(
         makeMemberResult({ userId: 'user-1', role: SharedSpaceRole.Editor }),
       );
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
@@ -2084,6 +2123,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(
         makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
       );
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
@@ -2102,6 +2142,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(
         makeMemberResult({ userId: 'user-1', role: SharedSpaceRole.Editor }),
       );
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
@@ -2122,6 +2163,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(
         makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
       );
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
@@ -2135,6 +2177,32 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalledWith(
         expect.objectContaining({ name: JobName.SharedSpaceFaceMatchAll }),
       );
+    });
+
+    it('rejects removing the space creator (rbac-4)', async () => {
+      const auth = factory.auth({ user: { id: 'co-owner' } });
+      const creatorId = 'creator-1';
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'co-owner', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: creatorId }));
+
+      await expect(sut.removeMember(auth, 'space-1', creatorId)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
+    });
+
+    it('still allows removing a non-creator member', async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: 'owner-1' }));
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'other-user');
+
+      expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith('space-1', 'other-user');
     });
   });
 

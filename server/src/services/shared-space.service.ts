@@ -452,6 +452,14 @@ export class SharedSpaceService extends BaseService {
       throw new BadRequestException('Member not found');
     }
 
+    // rbac-4: a promoted co-Owner must not be able to demote the space creator.
+    // The creator is always an Owner member (create() inserts them); keeping the
+    // role at Owner is a harmless no-op, anything lower is a demotion → reject.
+    const space = await this.sharedSpaceRepository.getById(spaceId);
+    if (space && userId === space.createdById && dto.role !== SharedSpaceRole.Owner) {
+      throw new ForbiddenException('Cannot demote the space creator');
+    }
+
     const oldRole = existingMember.role;
     await this.sharedSpaceRepository.updateMember(spaceId, userId, { role: dto.role });
 
@@ -540,6 +548,7 @@ export class SharedSpaceService extends BaseService {
 
   async removeMember(auth: AuthDto, spaceId: string, userId: string): Promise<void> {
     const isSelf = auth.user.id === userId;
+    const space = await this.sharedSpaceRepository.getById(spaceId);
 
     if (isSelf) {
       const member = await this.requireMembership(auth, spaceId);
@@ -558,6 +567,12 @@ export class SharedSpaceService extends BaseService {
     }
 
     await this.requireRole(auth, spaceId, SharedSpaceRole.Owner);
+    // rbac-4: a promoted co-Owner must not be able to remove the space creator
+    // (the creator is always an Owner member, so their sync/grants would otherwise
+    // survive removal forever). Deleting the whole space via remove() is still allowed.
+    if (space && space.createdById === userId) {
+      throw new ForbiddenException('Cannot remove the space creator');
+    }
     await this.sharedSpaceRepository.removeMember(spaceId, userId);
     await this.sharedSpaceRepository.logActivity({
       spaceId,
