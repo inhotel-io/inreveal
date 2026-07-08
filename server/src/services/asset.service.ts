@@ -6,7 +6,7 @@ import { isAbsolute } from 'node:path';
 import { JOBS_ASSET_PAGINATION_SIZE } from 'src/constants';
 import { StorageCore } from 'src/cores/storage.core';
 import { AssetFace, AssetFile } from 'src/database';
-import { OnJob } from 'src/decorators';
+import { OnEvent, OnJob } from 'src/decorators';
 import { AssetResponseDto, SanitizedAssetResponseDto, mapAsset } from 'src/dtos/asset-response.dto';
 import {
   AssetBulkDeleteDto,
@@ -43,6 +43,7 @@ import {
   Permission,
   QueueName,
 } from 'src/enum';
+import { ArgOf } from 'src/repositories/event.repository';
 import type { LinkedSpacePerson } from 'src/repositories/shared-space.repository';
 import { BaseService } from 'src/services/base.service';
 import { StorageService } from 'src/services/storage.service';
@@ -260,6 +261,21 @@ export class AssetService extends BaseService {
     }
 
     return mapAsset(asset, { auth });
+  }
+
+  // Motion-photo bypass: the live-photo/motion paths (asset.util onBeforeLink/onAfterUnlink,
+  // metadata linkLivePhotos, metadata extraction-hide) flip a motion video's visibility directly and emit
+  // AssetHide/AssetShow — but nothing routed those to the #757 space purge, so a motion video in a
+  // space-linked library kept its bytes on member devices. AssetHide/AssetShow fire only on a genuine
+  // Timeline↔Hidden crossing, so we run the same transition side-effects for the single asset.
+  @OnEvent({ name: 'AssetHide' })
+  async onAssetHide({ assetId }: ArgOf<'AssetHide'>): Promise<void> {
+    await this.applyVisibilityTransitionSideEffects([assetId], AssetVisibility.Hidden);
+  }
+
+  @OnEvent({ name: 'AssetShow' })
+  async onAssetShow({ assetId }: ArgOf<'AssetShow'>): Promise<void> {
+    await this.applyVisibilityTransitionSideEffects([assetId], AssetVisibility.Timeline);
   }
 
   async updateAll(auth: AuthDto, dto: AssetBulkUpdateDto): Promise<void> {

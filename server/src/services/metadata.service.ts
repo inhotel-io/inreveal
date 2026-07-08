@@ -893,6 +893,9 @@ export class MetadataService extends BaseService {
           visibility: AssetVisibility.Hidden,
         });
         this.logger.log(`Hid unlinked motion photo video asset (${motionAsset.id})`);
+        // motion bypass: route through the same AssetHide handler the other motion paths use so the
+        // #757 space purge fires for a motion video hidden via extraction (asset.service.onAssetHide).
+        await this.eventRepository.emit('AssetHide', { assetId: motionAsset.id, userId: motionAsset.ownerId });
       }
 
       if (asset.livePhotoVideoId !== motionAsset.id) {

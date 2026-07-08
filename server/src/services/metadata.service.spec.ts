@@ -1324,6 +1324,10 @@ describe(MetadataService.name, () => {
         livePhotoVideoId: motionAsset.id,
       });
       expect(mocks.asset.update).toHaveBeenCalledTimes(4);
+      expect(mocks.event.emit).toHaveBeenCalledWith('AssetHide', {
+        assetId: motionAsset.id,
+        userId: motionAsset.ownerId,
+      });
     });
 
     it('should not update storage usage if motion photo is external', async () => {
