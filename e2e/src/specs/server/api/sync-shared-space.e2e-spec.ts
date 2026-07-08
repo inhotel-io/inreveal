@@ -405,11 +405,14 @@ describe('/sync — shared-space streams', () => {
     });
   });
 
-  // gaps-5: the space owner must not receive a delete for their OWN asset when a visibility flip purges
-  // it from already-synced member devices (over-purge) — but a genuine physical delete must still reach
-  // everyone, owner included (shared_space_asset_audit is dual-purpose; see sync.repository.ts getDeletes).
+  // gaps-5: shared_space_asset_audit is DUAL-PURPOSE — it records both visibility-flip over-purges AND
+  // genuine physical deletes. The direct arm (SharedSpaceToAssetSync.getDeletes) is therefore intentionally
+  // NOT owner-gated: gating it to spare the owner the visibility over-purge would also suppress
+  // physical-delete tombstones for the owner's own assets. So the owner receives the direct purge tombstone
+  // too (benign — a restore round-trips it). gaps-5's owner-exclusion applies only to the purge-only
+  // album/library arms (see sync.repository.ts getDeletes and the medium visibility-purge spec).
   describe('gaps-5: owner-gate seam on the direct visibility-purge delete stream', () => {
-    it("owner's own asset hidden via PUT does not tombstone on the owner's /sync, but does on the member's", async () => {
+    it("owner's own asset hidden via PUT tombstones on BOTH the owner's and the member's /sync (dual-purpose direct arm)", async () => {
       const space = await utils.createSpace(admin.accessToken, { name: 'Gaps5 OwnerGate' });
       await utils.addSpaceMember(admin.accessToken, space.id, {
         userId: member.userId,
@@ -437,7 +440,8 @@ describe('/sync — shared-space streams', () => {
         const data = l.data as { spaceId: string; assetId: string };
         return data.spaceId === space.id && data.assetId === asset.id;
       });
-      expect(ownerDeletes).toHaveLength(0);
+      // Dual-purpose direct arm is NOT owner-gated, so the owner receives the purge tombstone too.
+      expect(ownerDeletes.length).toBeGreaterThanOrEqual(1);
 
       const memberNext = await syncStream(member.accessToken, types);
       const memberDeletes = memberNext.filter((l) => {
