@@ -109,8 +109,15 @@ class SyncApiRepository {
           // is the last release WITHOUT space-albums; the feature (and its enum values)
           // ship in the next release, so gate on strictly-after-5.0.0, which also admits
           // the feature's release-candidates. See slice-5 plan §0.1 for the full evidence
-          // and the release-time reconciliation note. The server drop-unknown filter
-          // (slice-5 Commit 2) is the complementary defense for future skew.
+          // and the release-time reconciliation note. There is no complementary
+          // server-side defense: a slice-5 filter that dropped unknown request types
+          // was later reverted, so an older/skewed server's SyncRequestTypeSchema
+          // still 400s the WHOLE /sync/stream request on any unrecognized type. This
+          // client-side version gate is therefore the ONLY protection — every future
+          // gallery-fork-only request type MUST be gated the same way.
+          // TODO(M14): the gate value itself is an unenforced release-order
+          // assumption (mobile + server release independently); pin it to the real
+          // first-feature-release version + add a CI guard before relying on it.
           if (serverVersion > const SemVer(major: 5, minor: 0, patch: 0)) ...[
             SyncRequestType.sharedSpaceAlbumsV1,
             SyncRequestType.sharedSpaceAlbumLinksV1,
