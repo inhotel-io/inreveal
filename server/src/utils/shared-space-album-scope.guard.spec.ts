@@ -276,6 +276,15 @@ const VIS_ALLOWLIST: Record<string, string> = {
   'shared-space.repository.ts::getAlbumAssetIdsWithoutOtherSpacePath':
     'anti-join membership check for removals; no asset data',
 
+  // — Remove-path stack expansion (#751): reads shared_space_asset JOIN to find the
+  //   same-stack DIRECT members of a space so the whole stack is removed together.
+  //   Returns member ids for DELETION (never asset content to a client), and must
+  //   catch every member regardless of visibility — a gate would orphan Hidden/Locked
+  //   members. (The add-path sibling query getOwnedStackSiblingIds carries the gate
+  //   via visibleSpaceAssetVisibilities and passes the guard directly.)
+  'shared-space.repository.ts::getStackSiblingIdsInSpace':
+    'removal-path stack expansion; returns direct-member ids for deletion, not asset content',
+
   // — addedById attribution: select shared_space_*.addedById (who added the asset),
   //   never asset content. No visibility gate needed.
   'shared-space.repository.ts::getSpacePersonAssetAdderIds': 'returns addedById (user ids), not asset data',
