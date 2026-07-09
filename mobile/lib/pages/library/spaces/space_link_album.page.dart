@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/album/album.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
+import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
@@ -88,11 +89,13 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
     }
 
     final selectedCount = selectedIds.value.length;
-    final confirmLabel = selectedCount > 0 ? 'Link ($selectedCount)' : 'Link';
+    final confirmLabel = selectedCount > 0
+        ? 'space_link_album_confirm_count'.t(context: context, args: {'count': selectedCount})
+        : 'link'.t(context: context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Link Albums'),
+        title: Text('space_link_album_page_title'.t(context: context)),
         centerTitle: false,
         leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => context.maybePop()),
         actions: [
@@ -118,7 +121,7 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
             child: TextField(
               controller: queryController,
               decoration: InputDecoration(
-                hintText: 'Search albums',
+                hintText: 'search_albums'.t(context: context),
                 prefixIcon: const Icon(Icons.search_rounded),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 filled: true,
@@ -142,7 +145,7 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'No albums to link',
+                          'spaces_linked_albums_no_albums'.t(context: context),
                           style: context.textTheme.titleMedium?.copyWith(color: context.colorScheme.onSurfaceVariant),
                         ),
                       ],
@@ -191,7 +194,10 @@ class _AlbumRow extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.w500),
       ),
-      subtitle: Text('${album.assetCount} photos', style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12)),
+      subtitle: Text(
+        'space_album_photo_count'.t(context: context, args: {'count': album.assetCount.toString()}),
+        style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+      ),
       trailing: Checkbox(value: isSelected, onChanged: (_) => onTap(), shape: const CircleBorder()),
       onTap: onTap,
     );

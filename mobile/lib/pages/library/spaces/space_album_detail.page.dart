@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
+import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_kebab.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
@@ -78,11 +79,19 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
     try {
       final count = await ref.read(spaceAlbumActionsProvider).addAssets(widget.albumId, remoteAssetIds);
       if (context.mounted && count > 0) {
-        ImmichToast.show(context: context, msg: 'Added $count photos to album', toastType: ToastType.success);
+        ImmichToast.show(
+          context: context,
+          msg: 'space_album_add_photos_success'.t(context: context, args: {'count': count.toString()}),
+          toastType: ToastType.success,
+        );
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(context: context, msg: 'Failed to add photos', toastType: ToastType.error);
+        ImmichToast.show(
+          context: context,
+          msg: 'space_album_add_photos_failed'.t(context: context),
+          toastType: ToastType.error,
+        );
       }
     }
   }
@@ -99,13 +108,19 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
       if (context.mounted) {
         ImmichToast.show(
           context: context,
-          msg: album.showInTimeline ? 'Album hidden from timeline' : 'Album shown in timeline',
+          msg: album.showInTimeline
+              ? 'space_album_timeline_hidden'.t(context: context)
+              : 'space_album_timeline_shown'.t(context: context),
           toastType: ToastType.success,
         );
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(context: context, msg: 'Failed to update timeline setting', toastType: ToastType.error);
+        ImmichToast.show(
+          context: context,
+          msg: 'space_album_timeline_update_failed'.t(context: context),
+          toastType: ToastType.error,
+        );
       }
     }
   }
@@ -114,14 +129,14 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Unlink album'),
-        content: const Text('Remove this album from the space? Its photos will no longer appear here.'),
+        title: Text('space_album_unlink_title'.t(context: ctx)),
+        content: Text('space_album_unlink_confirmation'.t(context: ctx)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('cancel'.t(context: ctx))),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
-            child: const Text('Unlink'),
+            child: Text('space_album_unlink_action'.t(context: ctx)),
           ),
         ],
       ),
@@ -132,12 +147,20 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
     try {
       await ref.read(spaceAlbumActionsProvider).unlink(widget.spaceId, widget.albumId);
       if (context.mounted) {
-        ImmichToast.show(context: context, msg: 'Album unlinked', toastType: ToastType.success);
+        ImmichToast.show(
+          context: context,
+          msg: 'space_album_unlinked_success'.t(context: context),
+          toastType: ToastType.success,
+        );
         await context.maybePop();
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(context: context, msg: 'Failed to unlink album', toastType: ToastType.error);
+        ImmichToast.show(
+          context: context,
+          msg: 'spaces_linked_albums_error_unlink'.t(context: context),
+          toastType: ToastType.error,
+        );
       }
     }
   }
@@ -228,7 +251,13 @@ class SpaceAlbumAppBar extends StatelessWidget {
               children: [
                 Text(album!.name),
                 if (showSubtitle)
-                  Text('${album!.assetCount} photos · in $spaceName', style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    [
+                      'space_album_photo_count'.t(context: context, args: {'count': album!.assetCount.toString()}),
+                      'space_album_in_space'.t(context: context, args: {'space': spaceName!}),
+                    ].join(' · '),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
               ],
             )
           : null,

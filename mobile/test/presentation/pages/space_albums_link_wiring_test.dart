@@ -13,18 +13,11 @@ import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/pages/library/spaces/space_albums.page.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 
-Widget _wrap(
-  Widget widget, {
-  required String spaceId,
-  required List<SpaceAlbum> albums,
-}) {
-  return ProviderScope(
-    overrides: [
-      spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
-    ],
-    child: MaterialApp(home: widget),
-  );
-}
+import '../../widget_tester_extensions.dart';
+
+List<Override> _overrides({required String spaceId, required List<SpaceAlbum> albums}) => [
+  spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
+];
 
 void main() {
   const spaceId = 'space-1';
@@ -33,20 +26,17 @@ void main() {
       (tester) async {
     var callCount = 0;
 
-    await tester.pumpWidget(
-      _wrap(
-        SpaceAlbumsPage(
-          spaceId: spaceId,
-          canEdit: true,
-          onLink: () => callCount++,
-        ),
+    await tester.pumpConsumerWidget(
+      SpaceAlbumsPage(
         spaceId: spaceId,
-        albums: [
-          const SpaceAlbum(id: 'a1', name: 'Hawaii', showInTimeline: true),
-        ],
+        canEdit: true,
+        onLink: () => callCount++,
+      ),
+      overrides: _overrides(
+        spaceId: spaceId,
+        albums: [const SpaceAlbum(id: 'a1', name: 'Hawaii', showInTimeline: true)],
       ),
     );
-    await tester.pump();
 
     // Tap the ＋ Link app-bar action.
     await tester.tap(find.byKey(const Key('space-albums-link-action')));
@@ -60,21 +50,17 @@ void main() {
       (tester) async {
     var callCount = 0;
 
-    await tester.pumpWidget(
-      _wrap(
-        SpaceAlbumsPage(
-          spaceId: spaceId,
-          canEdit: true,
-          onLink: () => callCount++,
-        ),
+    await tester.pumpConsumerWidget(
+      SpaceAlbumsPage(
         spaceId: spaceId,
-        albums: const [], // empty — shows empty state
+        canEdit: true,
+        onLink: () => callCount++,
       ),
+      overrides: _overrides(spaceId: spaceId, albums: const []), // empty — shows empty state
     );
-    await tester.pump();
 
-    // The empty state shows a "Link album" FilledButton — tap it.
-    await tester.tap(find.text('Link album'));
+    // The empty state shows a "Link an album" FilledButton — tap it.
+    await tester.tap(find.text('Link an album'));
     await tester.pump();
 
     expect(callCount, 1);
