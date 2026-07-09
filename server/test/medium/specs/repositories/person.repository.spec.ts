@@ -490,6 +490,36 @@ describe(PersonRepository.name, () => {
 
       await expect(sut.getStatistics(person.id)).resolves.toEqual({ assets: 0, faces: 0 });
     });
+
+    // L3: memberUserId scopes the count to what a space-only reader can actually reach, instead of
+    // the owner's entire Timeline-visible library for that person.
+    it('scopes the count to space-reachable assets when memberUserId is provided (L3)', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: reader } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: owner.id, name: 'Shared' });
+
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: reader.id, role: SharedSpaceRole.Viewer });
+
+      // Asset shared into the space — reachable by `reader`, should count.
+      const { asset: sharedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAssetFace({ assetId: sharedAsset.id, personId: person.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: sharedAsset.id });
+
+      // Asset NOT shared into any space `reader` belongs to — unreachable, must not count.
+      const { asset: privateAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAssetFace({ assetId: privateAsset.id, personId: person.id });
+
+      // Unscoped (owner) count sees both assets.
+      await expect(sut.getStatistics(person.id)).resolves.toEqual({ assets: 2, faces: 2 });
+
+      // memberUserId-scoped count only sees the space-reachable asset.
+      await expect(sut.getStatistics(person.id, { memberUserId: reader.id })).resolves.toEqual({
+        assets: 1,
+        faces: 1,
+      });
+    });
   });
 
   describe('representative face picker queries', () => {
@@ -629,7 +659,11 @@ describe(PersonRepository.name, () => {
       // A DIFFERENT user's own person shares the same identity (e.g. a merged identity), with a face on
       // that other user's own asset -- never shared into any space the viewer belongs to.
       const { person: otherPerson } = await ctx.newPerson({ ownerId: otherUser.id });
-      await ctx.database.updateTable('person').set({ identityId: identity.id }).where('id', '=', otherPerson.id).execute();
+      await ctx.database
+        .updateTable('person')
+        .set({ identityId: identity.id })
+        .where('id', '=', otherPerson.id)
+        .execute();
       const { asset: otherAsset } = await ctx.newAsset({ ownerId: otherUser.id, visibility: AssetVisibility.Timeline });
       const { assetFace: otherFace } = await ctx.newAssetFace({ assetId: otherAsset.id, personId: otherPerson.id });
       await faceIdentityRepository.linkFace({ assetFaceId: otherFace.id, identityId: identity.id, source: 'manual' });

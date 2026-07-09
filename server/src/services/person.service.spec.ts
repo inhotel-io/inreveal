@@ -4894,7 +4894,9 @@ describe(PersonService.name, () => {
   describe('getStatistics', () => {
     it('returns personal person asset and face counts for a legacy owned person', async () => {
       const auth = AuthFactory.create();
-      const person = PersonFactory.create({ identityId: null });
+      // L3: ownerId must match auth.user.id — getStatistics now branches on person.ownerId to
+      // decide between the owner's unscoped count and a space-reader's memberUserId-scoped count.
+      const person = PersonFactory.create({ identityId: null, ownerId: auth.user.id });
 
       mocks.person.getById.mockResolvedValue(person);
       mocks.person.getStatistics.mockResolvedValue({ assets: 3, faces: 4 });
@@ -4957,6 +4959,23 @@ describe(PersonService.name, () => {
       mocks.person.getById.mockResolvedValue(person);
       await expect(sut.getStatistics(auth, person.id)).rejects.toBeInstanceOf(BadRequestException);
       expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.id]));
+    });
+
+    // L3: a space-only reader (PersonRead granted only via checkSharedSpaceAccess, never the
+    // owner) of a legacy (null-identityId) person previously got personRepository.getStatistics(id)
+    // unscoped — the OWNER's whole-library Timeline asset/face count for that person, not just the
+    // count reachable through the space. Must be scoped to memberUserId instead.
+    it('scopes legacy person statistics to space-reachable assets for a non-owner space reader (L3)', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create({ identityId: null }); // ownerId is random, != auth.user.id
+
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.person.checkSharedSpaceAccess.mockResolvedValue(new Set([person.id]));
+      mocks.person.getStatistics.mockResolvedValue({ assets: 2, faces: 2 });
+
+      await expect(sut.getStatistics(auth, person.id)).resolves.toEqual({ assets: 2, faces: 2 });
+      expect(mocks.person.getStatistics).toHaveBeenCalledWith(person.id, { memberUserId: auth.user.id });
     });
   });
 

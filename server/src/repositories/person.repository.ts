@@ -628,8 +628,14 @@ export class PersonRepository {
       .execute();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID] })
-  async getStatistics(personId: string): Promise<PersonStatistics> {
+  /**
+   * L3: `memberUserId` scopes the count to a space-only reader's reachable assets (own assets are
+   * never included here — a legacy person's assets all belong to `person.ownerId` — so this is a
+   * pure narrowing of the owner's Timeline assets down to the ones the member can actually reach
+   * via a shared space). Omit it for the owner's own unrestricted count.
+   */
+  @GenerateSql({ params: [DummyValue.UUID] }, { params: [DummyValue.UUID, { memberUserId: DummyValue.UUID }] })
+  async getStatistics(personId: string, options: { memberUserId?: string } = {}): Promise<PersonStatistics> {
     const result = await this.db
       .selectFrom('asset_face')
       .innerJoin('asset', 'asset.id', 'asset_face.assetId')
@@ -641,6 +647,17 @@ export class PersonRepository {
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
       .where('asset_face.personId', '=', personId)
+      .$if(!!options.memberUserId, (qb) =>
+        qb.where((eb) =>
+          eb.or(
+            spaceAssetPathBranches(eb, {
+              correlateAssetId: 'asset.id',
+              correlateLibraryId: 'asset.libraryId',
+              scope: { memberUserId: options.memberUserId! },
+            }),
+          ),
+        ),
+      )
       .executeTakeFirst();
 
     return {

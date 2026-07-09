@@ -423,6 +423,14 @@ export class PersonService extends BaseService {
         return this.faceIdentityRepository.getAccessiblePersonStatistics(auth.user.id, person.identityId);
       }
 
+      // L3: a legacy (null-identityId) person's statistics are otherwise unscoped — fine for the
+      // owner (their own library), but a space-only reader (PersonRead granted only via
+      // checkSharedSpaceAccess, never checkOwnerAccess) must only see the count reachable through
+      // the space(s) they're a member of, not the owner's whole library.
+      if (auth.user.id !== person.ownerId) {
+        return this.personRepository.getStatistics(id, { memberUserId: auth.user.id });
+      }
+
       return this.personRepository.getStatistics(id);
     }
 
