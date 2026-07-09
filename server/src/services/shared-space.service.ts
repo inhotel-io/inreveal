@@ -707,6 +707,15 @@ export class SharedSpaceService extends BaseService {
       }
     }
 
+    // Fork RBAC (Slice 4 / M11): the owner arm authorizes on album ownership only and never verified
+    // the album is actually linked to this space. Without this guard, logActivity below injects an
+    // AlbumUnlink row into an arbitrary space's feed (activity spam via a leaked spaceId), and a
+    // nonexistent spaceId 500s on the FK. Guard both paths: no link -> 404, before any side effect.
+    const linked = await this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId);
+    if (!linked) {
+      throw new NotFoundException('Album is not linked to this space');
+    }
+
     const album = await this.albumRepository.getById(albumId, { withAssets: false });
     const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
     await this.sharedSpaceRepository.removeAlbum(spaceId, albumId);

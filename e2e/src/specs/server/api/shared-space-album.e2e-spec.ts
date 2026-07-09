@@ -4,6 +4,7 @@ import {
   AssetMediaResponseDto,
   AssetVisibility,
   getAlbumInfo,
+  getSpaceActivities,
   LoginResponseDto,
   SharedSpaceResponseDto,
   SharedSpaceRole,
@@ -510,11 +511,13 @@ describe('/shared-spaces/:id/albums (T18)', () => {
       expect(status).toBe(204);
     });
 
-    it('unlinking an already-unlinked album is idempotent (204)', async () => {
-      // Ensure unlinked regardless of test order, then assert the second unlink is also 204.
+    it('unlinking an already-unlinked album returns a clean 404 on the repeat call (M11: no activity-feed growth)', async () => {
+      // Ensure unlinked regardless of test order, then assert the second unlink 404s
+      // instead of silently no-op'ing (that no-op used to fire an unconditional
+      // AlbumUnlink activity — see the M11 describe block below).
       await unlinkAlbum(editor.accessToken, ownerAlbum.id);
       const { status } = await unlinkAlbum(editor.accessToken, ownerAlbum.id);
-      expect(status).toBe(204);
+      expect(status).toBe(404);
     });
 
     it('after unlinking, album no longer appears in GET /shared-spaces/:id/albums', async () => {
@@ -740,5 +743,104 @@ describe('rbac-6 — album-link ownership controls', () => {
       .delete(`/shared-spaces/${spaceB.id}/albums/${album.id}`)
       .set('Authorization', `Bearer ${stranger.accessToken}`)
       .expect(403);
+  });
+});
+
+// M11 — unlinkAlbum owner-arm authorization gap.
+//
+// Before the fix, the owner arm of unlinkAlbum authorized on album ownership only and never
+// checked that the album was actually linked to the target space. logActivity then fired
+// unconditionally after a no-op removeAlbum, so (1) the album owner could inject an AlbumUnlink
+// activity into any space UUID they own the album against — even one they're not a member of and
+// the album was never linked to — and (2) a nonexistent spaceId 500'd on the
+// shared_space_activity.spaceId FK instead of 404ing. The fix adds a hasAlbumLink(spaceId, albumId)
+// guard before any side effect (logActivity, orphaned-face cleanup, grant reconcile).
+describe('M11 — unlinkAlbum requires a real album<->space link before any side effect', () => {
+  let albumOwner: LoginResponseDto; // owns unlinkedAlbum; NOT a member of spaceC
+  let spaceEditor: LoginResponseDto; // owns spaceC, and is an album editor on unlinkedAlbum
+  let spaceC: SharedSpaceResponseDto;
+  let unlinkedAlbum: AlbumResponseDto; // deliberately never linked to spaceC in beforeAll
+
+  // A syntactically-valid UUID that is never assigned to any real space in this test.
+  const NONEXISTENT_SPACE_ID = '00000000-0000-4000-a000-0000000000f1';
+
+  beforeAll(async () => {
+    await utils.resetDatabase();
+    const admin = await utils.adminSetup();
+    [albumOwner, spaceEditor] = await Promise.all([
+      utils.userSetup(admin.accessToken, createUserDto.create('m11-owner')),
+      utils.userSetup(admin.accessToken, createUserDto.create('m11-editor')),
+    ]);
+
+    unlinkedAlbum = await utils.createAlbum(albumOwner.accessToken, {
+      albumName: 'M11 Unlinked Album',
+      albumUsers: [{ userId: spaceEditor.userId, role: AlbumUserRole.Editor }],
+    });
+    spaceC = await utils.createSpace(spaceEditor.accessToken, { name: 'M11 Space C' });
+    // Deliberately: unlinkedAlbum is never linked to spaceC here.
+  });
+
+  it('album owner unlinking from a space the album was never linked to → 404, and injects no activity', async () => {
+    const before = await getSpaceActivities({ id: spaceC.id }, { headers: asBearerAuth(spaceEditor.accessToken) });
+
+    const { status } = await request(app)
+      .delete(`/shared-spaces/${spaceC.id}/albums/${unlinkedAlbum.id}`)
+      .set('Authorization', `Bearer ${albumOwner.accessToken}`);
+    expect(status).toBe(404);
+
+    const after = await getSpaceActivities({ id: spaceC.id }, { headers: asBearerAuth(spaceEditor.accessToken) });
+    expect(after).toHaveLength(before.length);
+    // 'album_unlink' mirrors the server's SharedSpaceActivityType.AlbumUnlink wire value.
+    expect(after.some((activity) => activity.type === 'album_unlink')).toBe(false);
+  });
+
+  it('repeated unlink attempts on the never-linked album each 404 cleanly (no feed growth)', async () => {
+    await request(app)
+      .delete(`/shared-spaces/${spaceC.id}/albums/${unlinkedAlbum.id}`)
+      .set('Authorization', `Bearer ${albumOwner.accessToken}`)
+      .expect(404);
+
+    const { status } = await request(app)
+      .delete(`/shared-spaces/${spaceC.id}/albums/${unlinkedAlbum.id}`)
+      .set('Authorization', `Bearer ${albumOwner.accessToken}`);
+    expect(status).toBe(404);
+
+    const activities = await getSpaceActivities({ id: spaceC.id }, { headers: asBearerAuth(spaceEditor.accessToken) });
+    expect(activities.some((activity) => activity.type === 'album_unlink')).toBe(false);
+  });
+
+  it('album owner unlinking from a nonexistent spaceId → 404, not 500', async () => {
+    const { status } = await request(app)
+      .delete(`/shared-spaces/${NONEXISTENT_SPACE_ID}/albums/${unlinkedAlbum.id}`)
+      .set('Authorization', `Bearer ${albumOwner.accessToken}`);
+    expect(status).toBe(404);
+  });
+
+  it('a non-owner caller still gets 403 for a nonexistent spaceId (no 404-vs-403 link-existence leak)', async () => {
+    // getMember(nonexistent spaceId, spaceEditor) resolves null, so this falls into the owner
+    // arm's checkAccess(AlbumDelete) check. spaceEditor only has AlbumUser-editor access on
+    // unlinkedAlbum (not ownership), so it's expected to 403 at that auth check — before the
+    // hasAlbumLink probe is ever reached. A non-owner must never learn "this space doesn't
+    // exist / this album isn't linked" (404) vs "you're not authorized" (403).
+    const { status } = await request(app)
+      .delete(`/shared-spaces/${NONEXISTENT_SPACE_ID}/albums/${unlinkedAlbum.id}`)
+      .set('Authorization', `Bearer ${spaceEditor.accessToken}`);
+    expect(status).toBe(403);
+  });
+
+  it('positive control: album owner unlinking a genuinely linked album succeeds with exactly one AlbumUnlink activity', async () => {
+    const before = await getSpaceActivities({ id: spaceC.id }, { headers: asBearerAuth(spaceEditor.accessToken) });
+    const beforeUnlinkCount = before.filter((activity) => activity.type === 'album_unlink').length;
+
+    // Link it for real (spaceEditor is space owner of spaceC + album editor on unlinkedAlbum).
+    await utils.linkSpaceAlbum(spaceEditor.accessToken, spaceC.id, unlinkedAlbum.id);
+
+    const { status } = await request(app)
+      .delete(`/shared-spaces/${spaceC.id}/albums/${unlinkedAlbum.id}`)
+      .set('Authorization', `Bearer ${albumOwner.accessToken}`);
+    expect(status).toBe(204);
+
+    const after = await getSpaceActivities({ id: spaceC.id }, { headers: asBearerAuth(spaceEditor.accessToken) });
+    expect(after.filter((activity) => activity.type === 'album_unlink')).toHaveLength(beforeUnlinkCount + 1);
   });
 });
