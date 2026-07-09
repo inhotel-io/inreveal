@@ -74,6 +74,57 @@ describe('reconcileAlbumGrants (correctness-4)', () => {
     expect(await sut.reconcileAlbumGrants([album.id])).toBe(0); // grant already gone
   });
 
+  it('M7: creates a missing grant when a live path exists (member + linked album, no grant row)', async () => {
+    // Simulates the create-side race documented in shared-space-album-create-triggers.spec.ts
+    // (E2): a member-join and an album-link land in separate transactions and each trigger's
+    // snapshot misses the other's just-committed row, so shared_space_album_after_insert_user /
+    // shared_space_member_after_insert_album never fire the grant INSERT for this pair.
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    // Link the album WITHOUT going through addAlbum's insert (which would fire the create-side
+    // trigger and grant it normally) — directly insert the link row to model the race outcome:
+    // a live path (member in space, album linked) with NO shared_space_album_user row.
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: owner.id })
+      .execute();
+    // The trigger DID fire on this direct insert too (it's the same INSERT the service issues),
+    // so simulate the race precisely by deleting the grant it just wrote.
+    await db.deleteFrom('shared_space_album_user').where('albumId', '=', album.id).execute();
+    expect(await hasGrant(album.id, member.id)).toBe(false);
+
+    const revoked = await sut.reconcileAlbumGrants([album.id]);
+
+    expect(revoked).toBe(0); // nothing to revoke — the fix is the grant, not a tombstone
+    expect(await hasGrant(album.id, member.id)).toBe(true); // self-healed
+  });
+
+  it('M7: positive control — a legitimately-revoked grant (no live path) is NOT re-created', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: exMember } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: exMember.id, role: SharedSpaceRole.Viewer });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    expect(await hasGrant(album.id, exMember.id)).toBe(true);
+
+    // exMember leaves the space: no more live path to the album. The synchronous delete-side
+    // trigger (shared_space_member_delete_album_audit) already tombstones the grant at DELETE
+    // time, so by the time reconcile runs there is nothing left for its OWN revoke sweep to do.
+    await db.deleteFrom('shared_space_member').where('spaceId', '=', space.id).where('userId', '=', exMember.id).execute();
+    expect(await hasGrant(album.id, exMember.id)).toBe(false); // already revoked synchronously
+
+    const revoked = await sut.reconcileAlbumGrants([album.id]);
+
+    expect(revoked).toBe(0); // nothing left to revoke; the insert step must not undo it either
+    expect(await hasGrant(album.id, exMember.id)).toBe(false); // NOT resurrected
+  });
+
   it('resolves the TOCTOU race: two concurrent revocations strand a grant, reconcile converges it', async () => {
     const { ctx, sut } = setup();
     const { user: owner } = await ctx.newUser();

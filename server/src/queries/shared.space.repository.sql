@@ -349,6 +349,19 @@ where
 
 -- SharedSpaceRepository.reconcileAlbumGrants
 insert into
+  "shared_space_album_user" ("userId", "albumId")
+select
+  "shared_space_member"."userId",
+  "shared_space_album"."albumId"
+from
+  "shared_space_album"
+  inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+where
+  "shared_space_album"."albumId" in ($1)
+  and "album"."deletedAt" is null
+on conflict do nothing
+insert into
   "shared_space_album_user_audit" ("albumId", "userId")
 select
   "shared_space_album_user"."albumId",
@@ -364,6 +377,12 @@ where
   )
 returning
   "albumId"
+
+-- SharedSpaceRepository.getAllGrantedAlbumIds
+select distinct
+  "albumId"
+from
+  "shared_space_album_user"
 
 -- SharedSpaceRepository.getSpacesLinkedToAlbum
 select
@@ -1869,6 +1888,16 @@ where
       "libAsset"."id" = "asset"."id"
       and "shared_space_library"."spaceId" = $4
   )
+
+-- SharedSpaceRepository.getSpacePersonFaceAssetIds
+select distinct
+  "asset_face"."assetId"
+from
+  "shared_space_person_face"
+  inner join "shared_space_person" on "shared_space_person"."id" = "shared_space_person_face"."personId"
+  inner join "asset_face" on "asset_face"."id" = "shared_space_person_face"."assetFaceId"
+where
+  "shared_space_person"."spaceId" = $1
 
 -- SharedSpaceRepository.deleteOrphanedPersons
 delete from "shared_space_person"

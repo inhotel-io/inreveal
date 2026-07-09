@@ -1539,6 +1539,10 @@ describe(SharedSpaceService.name, () => {
   describe('addMember', () => {
     beforeEach(() => {
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ faceRecognitionEnabled: false }));
+      // M7: addMember enqueues an album-grant reconcile over the space's currently-linked
+      // albums (a member-join can race a concurrent album-link and miss the grant). Default
+      // to no linked albums so pre-existing tests that don't care about this stay a no-op.
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
     });
 
     it('should add member with default viewer role', async () => {
@@ -1743,6 +1747,51 @@ describe(SharedSpaceService.name, () => {
           data: { spaceId, userId },
         },
       ]);
+    });
+
+    it('enqueues album-grant reconcile for the space linked albums when a member joins (M7)', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const newUserId = newUuid();
+      const ownerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
+      const newMember = makeMemberResult({ spaceId, userId: newUserId, role: SharedSpaceRole.Viewer });
+
+      mocks.sharedSpace.getMember
+        .mockResolvedValueOnce(ownerMember)
+        .mockResolvedValueOnce(void 0)
+        .mockResolvedValueOnce(newMember);
+      mocks.sharedSpace.addMember.mockResolvedValue(factory.sharedSpaceMember({ spaceId, userId: newUserId }));
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue(['album-a', 'album-b']);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.addMember(auth, spaceId, { userId: newUserId });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceAlbumGrantReconcile,
+        data: { albumIds: ['album-a', 'album-b'] },
+      });
+    });
+
+    it('does NOT enqueue album-grant reconcile when the space has no linked albums (M7)', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const newUserId = newUuid();
+      const ownerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
+      const newMember = makeMemberResult({ spaceId, userId: newUserId, role: SharedSpaceRole.Viewer });
+
+      mocks.sharedSpace.getMember
+        .mockResolvedValueOnce(ownerMember)
+        .mockResolvedValueOnce(void 0)
+        .mockResolvedValueOnce(newMember);
+      mocks.sharedSpace.addMember.mockResolvedValue(factory.sharedSpaceMember({ spaceId, userId: newUserId }));
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.addMember(auth, spaceId, { userId: newUserId });
+
+      expect(mocks.job.queue).not.toHaveBeenCalledWith(
+        expect.objectContaining({ name: JobName.SharedSpaceAlbumGrantReconcile }),
+      );
     });
   });
 
@@ -2078,7 +2127,7 @@ describe(SharedSpaceService.name, () => {
 
       await sut.removeMember(auth, spaceId, targetUserId);
 
-      expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith(spaceId, targetUserId);
+      expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith(spaceId, targetUserId, expect.anything());
     });
 
     it('should allow non-owner to leave (self-remove)', async () => {
@@ -2095,7 +2144,7 @@ describe(SharedSpaceService.name, () => {
 
       await sut.removeMember(auth, spaceId, auth.user.id);
 
-      expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith(spaceId, auth.user.id);
+      expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith(spaceId, auth.user.id, expect.anything());
     });
 
     it('should throw if owner tries to leave', async () => {
@@ -2238,7 +2287,7 @@ describe(SharedSpaceService.name, () => {
 
       await sut.removeMember(auth, 'space-1', 'other-user');
 
-      expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith('space-1', 'other-user');
+      expect(mocks.sharedSpace.removeMember).toHaveBeenCalledWith('space-1', 'other-user', expect.anything());
     });
 
     it("unlinks the departing member's OWNED albums on removal (albums-6)", async () => {
@@ -2256,7 +2305,7 @@ describe(SharedSpaceService.name, () => {
 
       await sut.removeMember(auth, 'space-1', 'member-2');
 
-      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
+      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2', expect.anything());
     });
 
     it("unlinks the leaver's OWNED albums on self-leave (albums-6)", async () => {
@@ -2274,7 +2323,7 @@ describe(SharedSpaceService.name, () => {
 
       await sut.removeMember(auth, 'space-1', 'member-2');
 
-      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2');
+      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2', expect.anything());
     });
 
     it('enqueues album grant reconcile for the space albums on member removal (correctness-4)', async () => {
@@ -4653,6 +4702,7 @@ describe(SharedSpaceService.name, () => {
       const spaceId = newUuid();
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
       mocks.sharedSpace.getAssetIdsInSpacePage.mockResolvedValue([{ assetId: 'asset-1' }]);
+      mocks.sharedSpace.getSpacePersonFaceAssetIds.mockResolvedValue([]);
       const processSpy = vi.spyOn(sut as any, 'processSpaceFaceMatch').mockResolvedValue([]);
 
       const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
@@ -4669,6 +4719,34 @@ describe(SharedSpaceService.name, () => {
       );
     });
 
+    it('sweeps stale space-person-faces before dispatching the first page (L6)', async () => {
+      const spaceId = newUuid();
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.getSpacePersonFaceAssetIds.mockResolvedValue(['asset-1', 'asset-2']);
+      mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath.mockResolvedValue(['asset-1']);
+      mocks.sharedSpace.removePersonFacesByAssetIds.mockResolvedValue(void 0);
+      mocks.sharedSpace.deleteOrphanedPersons.mockResolvedValue(void 0);
+
+      const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId });
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.getSpacePersonFaceAssetIds).toHaveBeenCalledWith(spaceId);
+      expect(mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath).toHaveBeenCalledWith(spaceId, ['asset-1', 'asset-2']);
+      expect(mocks.sharedSpace.removePersonFacesByAssetIds).toHaveBeenCalledWith(spaceId, ['asset-1']);
+      expect(mocks.sharedSpace.deleteOrphanedPersons).toHaveBeenCalledWith(spaceId);
+    });
+
+    it('does NOT sweep when there are no candidate space-person-faces (L6 no-op)', async () => {
+      const spaceId = newUuid();
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: true }));
+      mocks.sharedSpace.getSpacePersonFaceAssetIds.mockResolvedValue([]);
+
+      await sut.handleSharedSpaceFaceMatchAll({ spaceId });
+
+      expect(mocks.sharedSpace.getAssetIdsWithoutOtherSpacePath).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.removePersonFacesByAssetIds).not.toHaveBeenCalled();
+    });
+
     it('does not dispatch pages when the space is missing or disabled', async () => {
       mocks.sharedSpace.getById.mockResolvedValueOnce(void 0);
       expect(await sut.handleSharedSpaceFaceMatchAll({ spaceId: 'missing-space' })).toBe(JobStatus.Skipped);
@@ -4679,6 +4757,29 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalledWith(
         expect.objectContaining({ name: JobName.SharedSpaceFaceMatchPage }),
       );
+    });
+  });
+
+  describe('handleSharedSpaceAlbumGrantReconcileSweep (L8)', () => {
+    it('reconciles every album id present in the grant table', async () => {
+      mocks.sharedSpace.getAllGrantedAlbumIds.mockResolvedValue(['album-a', 'album-b']);
+      mocks.sharedSpace.reconcileAlbumGrants.mockResolvedValue(0);
+
+      const result = await sut.handleSharedSpaceAlbumGrantReconcileSweep();
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.getAllGrantedAlbumIds).toHaveBeenCalled();
+      expect(mocks.sharedSpace.reconcileAlbumGrants).toHaveBeenCalledWith(['album-a', 'album-b']);
+    });
+
+    it('is a no-op call when there are no granted albums', async () => {
+      mocks.sharedSpace.getAllGrantedAlbumIds.mockResolvedValue([]);
+      mocks.sharedSpace.reconcileAlbumGrants.mockResolvedValue(0);
+
+      const result = await sut.handleSharedSpaceAlbumGrantReconcileSweep();
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.sharedSpace.reconcileAlbumGrants).toHaveBeenCalledWith([]);
     });
   });
 
@@ -8231,10 +8332,14 @@ describe(SharedSpaceService.name, () => {
 
       await sut.linkAlbum(auth, space.id, albumId);
 
-      expect(mocks.job.queue).toHaveBeenCalledTimes(1);
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.SharedSpaceAlbumFaceSync,
         data: { spaceId: space.id, albumId },
+      });
+      // M7: a genuine new link also enqueues the album-grant reconcile self-heal.
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceAlbumGrantReconcile,
+        data: { albumIds: [albumId] },
       });
     });
 
@@ -8266,7 +8371,12 @@ describe(SharedSpaceService.name, () => {
 
       await sut.linkAlbum(auth, space.id, albumId);
 
-      expect(mocks.job.queue).not.toHaveBeenCalled();
+      // M7: a genuine new link still enqueues the album-grant reconcile self-heal even when
+      // face recognition is disabled (grants are independent of face matching).
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.SharedSpaceAlbumGrantReconcile,
+        data: { albumIds: [albumId] },
+      });
       expect(mocks.job.queue).not.toHaveBeenCalledWith(
         expect.objectContaining({ name: JobName.SharedSpaceAlbumFaceSync }),
       );

@@ -6,6 +6,7 @@ import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DatabaseRepository } from 'src/repositories/database.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -38,6 +39,9 @@ const setup = () => {
       AlbumRepository,
       AlbumUserRepository,
       AssetRepository,
+      // L7: removeMember wraps the membership delete + owned-album unlink in
+      // this.databaseRepository.transaction() — needs a real connection to the test DB.
+      DatabaseRepository,
       SharedSpaceRepository,
       UserRepository,
     ],
@@ -1094,6 +1098,152 @@ describe('SharedSpaceService — onAlbumDelete face cleanup', () => {
       .execute();
     expect(facesAfter.map((f) => f.assetFaceId)).not.toContain(faceXId);
     expect(facesAfter.map((f) => f.assetFaceId)).toContain(faceZId);
+  });
+});
+
+describe('SharedSpaceService — handleSharedSpaceFaceMatchAll stale-face sweep (L6)', () => {
+  it('sweeps a shared_space_person_face row stranded by a path removed outside the service, keeps one with a live path', async () => {
+    // L6: the synchronous cleanup in unlinkAlbum/removeMember only runs when the space-path
+    // removal goes through the service. A cascade or a failed fire-and-forget job can leave a
+    // shared_space_person_face row referencing an asset with NO remaining space path. The
+    // durable per-space reconcile (SharedSpaceFaceMatchAll) is the backstop that sweeps it.
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'StaleFaceAlbum' });
+    // assetStale: reachable ONLY via the album link we are about to strand.
+    const { asset: assetStale } = await ctx.newAsset({ ownerId: user.id });
+    // assetLive: also directly added to the space — keeps a path after the album link is gone.
+    const { asset: assetLive } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetStale.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: assetLive.id });
+
+    const spaceRepo = ctx.get(SharedSpaceRepository);
+    await spaceRepo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: assetLive.id });
+
+    const { result: staleFaceId } = await ctx.newAssetFace({ assetId: assetStale.id });
+    const { result: liveFaceId } = await ctx.newAssetFace({ assetId: assetLive.id });
+    const stalePerson = await spaceRepo.createPerson({
+      spaceId: space.id,
+      name: 'StaleFacePerson',
+      type: 'person',
+      representativeFaceId: null,
+    });
+    const livePerson = await spaceRepo.createPerson({
+      spaceId: space.id,
+      name: 'LiveFacePerson',
+      type: 'person',
+      representativeFaceId: null,
+    });
+    await spaceRepo.addPersonFaces([
+      { personId: stalePerson.id, assetFaceId: staleFaceId },
+      { personId: livePerson.id, assetFaceId: liveFaceId },
+    ]);
+
+    // Strand assetStale: remove its ONLY space path via a raw delete, bypassing unlinkAlbum's
+    // synchronous cleanup entirely (models a cascade / failed-job path that never swept it).
+    await defaultDatabase
+      .deleteFrom('shared_space_album')
+      .where('spaceId', '=', space.id)
+      .where('albumId', '=', album.id)
+      .execute();
+    const stranded = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .selectAll()
+      .where('personId', '=', stalePerson.id)
+      .execute();
+    expect(stranded).toHaveLength(1); // confirms the row really is stranded pre-sweep
+
+    const result = await sut.handleSharedSpaceFaceMatchAll({ spaceId: space.id });
+
+    expect(result).toBe(JobStatus.Success);
+    const staleAfter = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .selectAll()
+      .where('personId', '=', stalePerson.id)
+      .execute();
+    expect(staleAfter).toHaveLength(0); // swept
+    const staleOrphan = await defaultDatabase
+      .selectFrom('shared_space_person')
+      .selectAll()
+      .where('id', '=', stalePerson.id)
+      .execute();
+    expect(staleOrphan).toHaveLength(0); // now-faceless person also cleaned up
+
+    const liveAfter = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .selectAll()
+      .where('personId', '=', livePerson.id)
+      .execute();
+    expect(liveAfter).toHaveLength(1); // kept — still has a live path
+  });
+});
+
+describe('SharedSpaceService — removeMember atomicity (L7)', () => {
+  it('unlinks the owned album together with the membership row (happy path)', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'editor' });
+    const { result: album } = await ctx.newAlbum({ ownerId: member.id, albumName: 'MemberOwned' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: member.id });
+
+    await sut.removeMember(authFromUser(owner), space.id, member.id);
+
+    const membership = await defaultDatabase
+      .selectFrom('shared_space_member')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', member.id)
+      .execute();
+    expect(membership).toHaveLength(0);
+    const link = await defaultDatabase
+      .selectFrom('shared_space_album')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(link).toHaveLength(0);
+  });
+
+  it('rolls back the membership delete when the owned-album unlink fails mid-transaction', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'editor' });
+    const { result: album } = await ctx.newAlbum({ ownerId: member.id, albumName: 'MemberOwned' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: member.id });
+
+    const repo = ctx.get(SharedSpaceRepository);
+    const spy = vi.spyOn(repo, 'removeOwnedAlbumLinksAddedBy').mockRejectedValueOnce(new Error('boom'));
+
+    await expect(sut.removeMember(authFromUser(owner), space.id, member.id)).rejects.toThrow('boom');
+
+    // Neither effect committed: the membership delete and the album unlink ran in ONE
+    // transaction, so the throw between them must roll both back.
+    const membership = await defaultDatabase
+      .selectFrom('shared_space_member')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', member.id)
+      .execute();
+    expect(membership).toHaveLength(1); // rolled back — membership delete did NOT commit
+    const link = await defaultDatabase
+      .selectFrom('shared_space_album')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(link).toHaveLength(1); // rolled back — album link still there
+
+    spy.mockRestore();
   });
 });
 

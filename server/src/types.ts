@@ -607,6 +607,7 @@ export type JobItem =
 
   // Shared Space Album Grant Reconciliation
   | { name: JobName.SharedSpaceAlbumGrantReconcile; data: ISharedSpaceAlbumGrantReconcileJob }
+  | { name: JobName.SharedSpaceAlbumGrantReconcileSweep; data?: IBaseJob }
 
   // Classification
   | { name: JobName.AssetClassifyQueueAll; data: IBaseJob }

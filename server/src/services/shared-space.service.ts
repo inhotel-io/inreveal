@@ -427,6 +427,11 @@ export class SharedSpaceService extends BaseService {
     });
 
     await this.queueSpacePersonMetadataBackfill();
+    // M7: this member-join can race a concurrent album-link into this space (each create-side
+    // trigger fans out from its own row only and can miss the other's just-committed one), so
+    // reconcile over the space's currently-linked albums to self-heal any missed grant.
+    const linkedAlbumIds = (await this.sharedSpaceRepository.getLinkedAlbumIds(spaceId)) ?? [];
+    await this.queueAlbumGrantReconcile(linkedAlbumIds);
     const space = await this.sharedSpaceRepository.getById(spaceId);
     if (space?.faceRecognitionEnabled) {
       await this.jobRepository.queue({
@@ -560,8 +565,8 @@ export class SharedSpaceService extends BaseService {
       if (member.role === SharedSpaceRole.Owner) {
         throw new BadRequestException('Owner cannot leave the space');
       }
-      await this.sharedSpaceRepository.removeMember(spaceId, userId);
-      await this.cleanupDepartingMemberAlbums(spaceId, userId, space?.faceRecognitionEnabled ?? false);
+      const unlinkedAlbumIds = await this.removeMemberAndOwnedAlbumsAtomically(spaceId, userId);
+      await this.cleanupDepartingMemberFaces(spaceId, unlinkedAlbumIds, space?.faceRecognitionEnabled ?? false);
       await this.sharedSpaceRepository.logActivity({
         spaceId,
         userId,
@@ -580,8 +585,8 @@ export class SharedSpaceService extends BaseService {
     if (space && space.createdById === userId) {
       throw new ForbiddenException('Cannot remove the space creator');
     }
-    await this.sharedSpaceRepository.removeMember(spaceId, userId);
-    await this.cleanupDepartingMemberAlbums(spaceId, userId, space?.faceRecognitionEnabled ?? false);
+    const unlinkedAlbumIds = await this.removeMemberAndOwnedAlbumsAtomically(spaceId, userId);
+    await this.cleanupDepartingMemberFaces(spaceId, unlinkedAlbumIds, space?.faceRecognitionEnabled ?? false);
     await this.sharedSpaceRepository.logActivity({
       spaceId,
       userId: auth.user.id,
@@ -691,6 +696,10 @@ export class SharedSpaceService extends BaseService {
         type: SharedSpaceActivityType.AlbumLink,
         data: { albumId, albumName: album?.albumName ?? '' },
       });
+      // M7: a member-join and this album-link can land in overlapping transactions and each
+      // create-side trigger can miss the other's just-committed row, leaving a member of this
+      // space without a grant for the newly-linked album. The reconcile self-heals it.
+      await this.queueAlbumGrantReconcile([albumId]);
     }
   }
 
@@ -1428,6 +1437,16 @@ export class SharedSpaceService extends BaseService {
     return JobStatus.Success;
   }
 
+  // L8: low-frequency nightly backstop (see queue.service.ts's handleNightlyJobs). Sweeps every
+  // album with a live grant, independent of which code path linked/unlinked it — this is what
+  // catches cascade-deletion strands and any residual gap M6/L7's targeted fixes don't reach.
+  @OnJob({ name: JobName.SharedSpaceAlbumGrantReconcileSweep, queue: QueueName.BackgroundTask })
+  async handleSharedSpaceAlbumGrantReconcileSweep(): Promise<JobStatus> {
+    const albumIds = await this.sharedSpaceRepository.getAllGrantedAlbumIds();
+    await this.sharedSpaceRepository.reconcileAlbumGrants(albumIds);
+    return JobStatus.Success;
+  }
+
   // correctness-4: enqueue a post-commit reconciliation for the given albums. Idempotent
   // and deadlock-free — it runs after the triggering transaction commits, resolving the
   // TOCTOU race in the delete-side grant-revocation triggers. No-op for an empty set.
@@ -1443,17 +1462,38 @@ export class SharedSpaceService extends BaseService {
   }
 
   /**
-   * albums-6: unlink the departing user's OWNED albums from the space and clean up
-   * any now-orphaned space person faces (mirrors unlinkAlbum's cleanup). Returns the
-   * unlinked album ids so the caller can also enqueue grant reconciliation (Task 3).
+   * L7: delete the membership row and unlink the departing user's OWNED albums (albums-6)
+   * in ONE transaction, so a failure between the two can never leave the ex-member's own
+   * album linked with no membership row backing it (or vice versa). Fork rule: never run
+   * `this.db` queries inside a Kysely transaction() callback — both repo calls thread the
+   * `trx` handle instead (mirrors recountPersons). Returns the unlinked album ids so the
+   * caller can run face cleanup (outside the transaction — see cleanupDepartingMemberFaces)
+   * and enqueue grant reconciliation.
    */
-  private async cleanupDepartingMemberAlbums(
+  private async removeMemberAndOwnedAlbumsAtomically(spaceId: string, userId: string): Promise<string[]> {
+    return this.databaseRepository.transaction(async (trx) => {
+      await this.sharedSpaceRepository.removeMember(spaceId, userId, trx);
+      return (await this.sharedSpaceRepository.removeOwnedAlbumLinksAddedBy(spaceId, userId, trx)) ?? [];
+    });
+  }
+
+  /**
+   * albums-6 / L6: clean up any now-orphaned space person faces for the departing member's
+   * just-unlinked albums (mirrors unlinkAlbum's cleanup). Deliberately OUTSIDE the membership
+   * transaction (no `this.db` inside a Kysely transaction()) and re-drivable: a failure here
+   * doesn't roll back the already-committed membership/album-link removal — it falls back to
+   * the durable per-space reconcile (enqueueSpaceFaceProjectionReconcile / L6's stale-face
+   * sweep) instead of silently leaving stale face rows.
+   */
+  private async cleanupDepartingMemberFaces(
     spaceId: string,
-    userId: string,
+    unlinkedAlbumIds: string[],
     faceRecognitionEnabled: boolean,
-  ): Promise<string[]> {
-    const unlinkedAlbumIds = (await this.sharedSpaceRepository.removeOwnedAlbumLinksAddedBy(spaceId, userId)) ?? [];
-    if (faceRecognitionEnabled && unlinkedAlbumIds.length > 0) {
+  ): Promise<void> {
+    if (!faceRecognitionEnabled || unlinkedAlbumIds.length === 0) {
+      return;
+    }
+    try {
       for (const albumId of unlinkedAlbumIds) {
         const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(
           spaceId,
@@ -1464,8 +1504,10 @@ export class SharedSpaceService extends BaseService {
         }
       }
       await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
+    } catch (error) {
+      this.logger.error(`Failed to clean up departing-member space person faces for space ${spaceId}: ${error}`);
+      await this.enqueueSpaceFaceProjectionReconcile([spaceId]);
     }
-    return unlinkedAlbumIds;
   }
 
   private async queueSpaceIdentityReconciliation(input: {
@@ -1938,12 +1980,36 @@ export class SharedSpaceService extends BaseService {
       return JobStatus.Skipped;
     }
 
+    // L6: this is the durable per-space reconcile's entry point — sweep any
+    // shared_space_person_face row left behind by a space-path removal that didn't go through
+    // unlinkAlbum/removeMember's synchronous cleanup (cascade delete, failed fire-and-forget job).
+    await this.sweepStaleSpacePersonFaces(spaceId);
+
     await this.jobRepository.queue({
       name: JobName.SharedSpaceFaceMatchPage,
       data: { spaceId },
     });
 
     return JobStatus.Success;
+  }
+
+  // L6: delete shared_space_person_face rows whose asset has no remaining space path in this
+  // space, then recount + drop any person left with zero faces. Reuses the same
+  // getAssetIdsWithoutOtherSpacePath "any live path?" check the synchronous cleanup paths use.
+  private async sweepStaleSpacePersonFaces(spaceId: string): Promise<void> {
+    const candidateAssetIds = await this.sharedSpaceRepository.getSpacePersonFaceAssetIds(spaceId);
+    if (candidateAssetIds.length === 0) {
+      return;
+    }
+    const staleAssetIds = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(
+      spaceId,
+      candidateAssetIds,
+    );
+    if (staleAssetIds.length === 0) {
+      return;
+    }
+    await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, staleAssetIds);
+    await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
   }
 
   @OnJob({ name: JobName.SharedSpaceFaceMatchPage, queue: QueueName.FacialRecognition })

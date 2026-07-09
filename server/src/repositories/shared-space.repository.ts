@@ -211,13 +211,11 @@ export class SharedSpaceRepository {
       .executeTakeFirstOrThrow();
   }
 
+  // L7: accepts an optional trx so removeMember (service) can thread it through one
+  // transaction shared with removeOwnedAlbumLinksAddedBy. Mirrors recountPersons's db param.
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async removeMember(spaceId: string, userId: string) {
-    await this.db
-      .deleteFrom('shared_space_member')
-      .where('spaceId', '=', spaceId)
-      .where('userId', '=', userId)
-      .execute();
+  async removeMember(spaceId: string, userId: string, db: Kysely<DB> | Transaction<DB> = this.db) {
+    await db.deleteFrom('shared_space_member').where('spaceId', '=', spaceId).where('userId', '=', userId).execute();
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
@@ -618,9 +616,15 @@ export class SharedSpaceRepository {
   // Rows the member added for albums they do NOT own are left untouched. Deleting the
   // rows fires shared_space_album_delete_audit (link tombstone + gated grant revocation
   // for remaining members). Returns the album ids actually unlinked.
+  // L7: accepts an optional trx so removeMember (service) can thread it through one
+  // transaction shared with the membership-row delete — atomic member removal.
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async removeOwnedAlbumLinksAddedBy(spaceId: string, userId: string): Promise<string[]> {
-    const deleted = await this.db
+  async removeOwnedAlbumLinksAddedBy(
+    spaceId: string,
+    userId: string,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<string[]> {
+    const deleted = await db
       .deleteFrom('shared_space_album')
       .where('shared_space_album.spaceId', '=', spaceId)
       .where('shared_space_album.addedById', '=', userId)
@@ -677,19 +681,47 @@ export class SharedSpaceRepository {
     return rows.map((row) => row.albumId);
   }
 
-  // correctness-4: sweep the grants of the given albums and tombstone any with no live
-  // access path. Runs POST-COMMIT (its own statement/txn), so the READ COMMITTED snapshot
-  // race in the delete-side triggers is resolved — it sees committed state. Inserting into
-  // shared_space_album_user_audit fires shared_space_album_user_delete_after_audit (deletes
-  // the grant) + SharedSpaceAlbumSync.getDeletes (device tombstone). The nil sentinel
-  // excludes no real space → "does the user have ANY live path?"; a grant with a live path
-  // is skipped (no over-revocation), an already-revoked grant has no row to sweep. Returns
-  // the number of grants tombstoned.
+  // correctness-4 / M7: bidirectional sweep of the grants of the given albums — self-heals
+  // missing grants AND tombstones stranded ones. Runs POST-COMMIT (its own statement/txn), so
+  // the READ COMMITTED snapshot race in both the create-side and delete-side triggers is
+  // resolved — it sees fully committed state.
+  //
+  // Step 1 (M7 — grant-side self-heal): the create-side triggers (shared_space_album_after_insert_user
+  // / shared_space_member_after_insert_album) each fan out from ONE just-inserted row using a
+  // statement-time snapshot, so a member-join and an album-link landing in two overlapping
+  // transactions can each miss the other's row and neither ever grants the (member, album) pair
+  // (see the (doc) test in shared-space-album-create-triggers.spec.ts). This INSERT re-derives
+  // every (userId, albumId) pair that currently has a live path (member of the album's space,
+  // album not soft-deleted) and is missing its grant row. ON CONFLICT DO NOTHING makes it a
+  // no-op for pairs that already have a grant.
+  //
+  // Step 2 (tombstone sweep, pre-existing): inserting into shared_space_album_user_audit fires
+  // shared_space_album_user_delete_after_audit (deletes the grant) + SharedSpaceAlbumSync.getDeletes
+  // (device tombstone). The nil sentinel excludes no real space → "does the user have ANY live
+  // path?"; a grant with a live path is skipped (no over-revocation), an already-revoked grant
+  // has no row to sweep. Returns the number of grants tombstoned (Step 1 never over-counts here:
+  // a pair Step 1 just inserted, by construction, HAS a live path, so Step 2 always skips it).
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async reconcileAlbumGrants(albumIds: string[]): Promise<number> {
     if (albumIds.length === 0) {
       return 0;
     }
+
+    await this.db
+      .insertInto('shared_space_album_user')
+      .columns(['userId', 'albumId'])
+      .expression((eb) =>
+        eb
+          .selectFrom('shared_space_album')
+          .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+          .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+          .select(['shared_space_member.userId', 'shared_space_album.albumId'])
+          .where('shared_space_album.albumId', 'in', albumIds)
+          .where('album.deletedAt', 'is', null),
+      )
+      .onConflict((oc) => oc.doNothing())
+      .execute();
+
     const inserted = await this.db
       .insertInto('shared_space_album_user_audit')
       .columns(['albumId', 'userId'])
@@ -705,6 +737,15 @@ export class SharedSpaceRepository {
       .returning('albumId')
       .execute();
     return inserted.length;
+  }
+
+  // L8: every album id with at least one live grant row — the nightly sweep's target set for
+  // reconcileAlbumGrants, making the self-heal/tombstone mechanism path-independent (a backstop
+  // for M6 durability, L7 residue, and cascade-deletion strands that never enqueued a reconcile).
+  @GenerateSql({ params: [] })
+  async getAllGrantedAlbumIds(): Promise<string[]> {
+    const rows = await this.db.selectFrom('shared_space_album_user').select('albumId').distinct().execute();
+    return rows.map((row) => row.albumId);
   }
 
   // Album sync fan-out: used by the AlbumAssetsAdd/Remove handlers to find every space
@@ -2529,6 +2570,24 @@ export class SharedSpaceRepository {
       )
       .execute();
     return rows.map((r) => r.id);
+  }
+
+  // L6: candidate assetIds for the stale-face sweep — every asset currently referenced by a
+  // shared_space_person_face row for this space's persons. Feed the result into
+  // getAssetIdsWithoutOtherSpacePath to find which of them have no remaining space path (a
+  // path removed outside the service — cascade delete, or a failed fire-and-forget job — never
+  // ran the synchronous removePersonFacesByAssetIds cleanup that unlinkAlbum/removeMember do).
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getSpacePersonFaceAssetIds(spaceId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .select('asset_face.assetId')
+      .distinct()
+      .where('shared_space_person.spaceId', '=', spaceId)
+      .execute();
+    return rows.map((r) => r.assetId);
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })

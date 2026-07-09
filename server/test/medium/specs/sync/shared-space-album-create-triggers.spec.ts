@@ -119,9 +119,15 @@ describe('shared_space_member_after_insert_album (join → grant linked albums)'
 // This mirrors the equivalent hazard in the library trigger set (see
 // library-audit-triggers.spec.ts trigger_simultaneous_member_and_library_unlink).
 //
-// RESOLUTION (by design): the getCreatedAfter backfill stream re-delivers ALL
-// accessible albums on reconnect, so a missed initial grant self-heals on the
-// next sync session.  No separate repair job is needed.
+// RESOLUTION (M7): getCreatedAfter (SharedSpaceAlbumSync) reads FROM the
+// shared_space_album_user grant table itself, so a grant that was never
+// inserted has no row to re-deliver — the backfill stream does NOT self-heal
+// this on reconnect. The actual fix is reconcileAlbumGrants (see
+// shared-space-album-grant-reconcile.spec.ts's M7 tests), which now runs
+// bidirectionally (INSERT missing grants for any (member, linked-album) pair
+// with a live path, in addition to its pre-existing revoke sweep) and is
+// enqueued post-commit from linkAlbum and addMember — the two create-side
+// paths that can hit this race.
 //
 // This test documents the *sequential* outcome (each event fires after the other
 // is committed) and asserts both grants ARE written — confirming the happy-path
