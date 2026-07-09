@@ -51,13 +51,22 @@ export class ActivityService extends BaseService {
     });
   }
 
-  // Scope note: getStatistics gates on the same AlbumRead but returns only aggregate {comments, likes}
-  // counts — no identities/content — so it is outside C1's identity/content-leak scope. Restricting the
-  // counts would need an SQL predicate change + `make sql` regen (no DB available). Left unchanged
-  // deliberately.
+  // I2: getStatistics gates on the same AlbumRead as getAll (C1) but previously returned the
+  // aggregate {comments, likes} counts including album-level (assetId null) rows to space-only
+  // readers — a smaller side channel than C1's content/identity leak, but still info a space-only
+  // reader shouldn't have (album-level activity isn't visible to them anywhere else). Scope it the
+  // same way: hasDirectAccess readers keep the full count; space-only readers get asset-level-only.
   async getStatistics(auth: AuthDto, dto: ActivityDto): Promise<ActivityStatisticsResponseDto> {
     await this.requireAccess({ auth, permission: Permission.AlbumRead, ids: [dto.albumId] });
-    return await this.activityRepository.getStatistics({ albumId: dto.albumId, assetId: dto.assetId });
+
+    const hasDirectAccess =
+      !!auth.sharedLink || (await hasDirectAlbumReadAccess(this.accessRepository, auth.user.id, dto.albumId));
+
+    return await this.activityRepository.getStatistics({
+      albumId: dto.albumId,
+      assetId: dto.assetId,
+      excludeAlbumLevel: !hasDirectAccess,
+    });
   }
 
   async create(auth: AuthDto, dto: ActivityCreateDto): Promise<MaybeDuplicate<ActivityResponseDto>> {

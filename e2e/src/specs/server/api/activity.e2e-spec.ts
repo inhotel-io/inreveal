@@ -8,6 +8,7 @@ import {
   SharedSpaceRole,
   createActivity as create,
   createAlbum,
+  getActivityStatistics,
   removeAssetFromAlbum,
 } from '@immich/sdk';
 import { createUserDto, uuidDto } from 'src/fixtures';
@@ -472,6 +473,51 @@ describe('/activities', () => {
       for (const activity of asParticipant.body) {
         expect(activity.user.email).toBe(spaceOwner.userEmail);
       }
+    });
+
+    // I2: GET /activities/statistics gates on the same AlbumRead as GET /activities (C1) but
+    // returned the aggregate {comments, likes} count INCLUDING album-level (assetId null) rows to
+    // space-only readers. Scope it the same way C1 scopes content.
+    it('excludes album-level counts from GET /activities/statistics for a space-only reader; includes them for a direct reader', async () => {
+      const spaceOwner = admin; // album owner
+      const spaceViewer = await utils.userSetup(admin.accessToken, createUserDto.create('i2-space-viewer'));
+      const participant = await utils.userSetup(admin.accessToken, createUserDto.create('i2-participant'));
+      const i2Asset = await utils.createAsset(spaceOwner.accessToken);
+      const i2Album = await utils.createAlbum(spaceOwner.accessToken, {
+        albumName: 'I2 Album',
+        assetIds: [i2Asset.id],
+        albumUsers: [{ userId: participant.userId, role: AlbumUserRole.Viewer }],
+      });
+
+      // album-level like (no assetId) + asset-level comment (assetId set)
+      await createActivity({ albumId: i2Album.id, type: ReactionType.Like }, spaceOwner.accessToken);
+      await createActivity(
+        { albumId: i2Album.id, assetId: i2Asset.id, type: ReactionType.Comment, comment: 'on the photo' },
+        spaceOwner.accessToken,
+      );
+
+      const space = await utils.createSpace(spaceOwner.accessToken, { name: 'I2 Space' });
+      await utils.addSpaceMember(spaceOwner.accessToken, space.id, {
+        userId: spaceViewer.userId,
+        role: SharedSpaceRole.Viewer,
+      });
+      await utils.linkSpaceAlbum(spaceOwner.accessToken, space.id, i2Album.id);
+
+      // Negative: a space Viewer (no direct album access) sees the asset-level comment count but
+      // NOT the album-level like.
+      const asSpaceViewer = await getActivityStatistics(
+        { albumId: i2Album.id },
+        { headers: asBearerAuth(spaceViewer.accessToken) },
+      );
+      expect(asSpaceViewer).toEqual({ comments: 1, likes: 0 });
+
+      // Positive control: an album participant (shared album_user) has direct access and sees the
+      // full count, including the album-level like.
+      const asParticipant = await getActivityStatistics(
+        { albumId: i2Album.id },
+        { headers: asBearerAuth(participant.accessToken) },
+      );
+      expect(asParticipant).toEqual({ comments: 1, likes: 1 });
     });
   });
 });

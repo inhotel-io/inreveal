@@ -160,6 +160,40 @@ describe(ActivityService.name, () => {
         likes: 3,
       });
     });
+
+    // I2: getStatistics gates on the same AlbumRead as getAll (C1) but returned album-level
+    // (assetId null) comment/like counts to space-only readers unconditionally. Scope it the
+    // same way C1 scopes content: hasDirectAccess (owner/shared album_user/shared-link) sees
+    // album-level counts; a space-only reader does not.
+    it('excludes album-level counts for a space-only reader (I2)', async () => {
+      const [albumId, userId] = newUuids();
+
+      // AlbumRead granted ONLY via the space-linked arm (not owner, not shared album_user) — same
+      // access shape as the C1 space-only-reader test above.
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([albumId]));
+      mocks.activity.getStatistics.mockResolvedValue({ comments: 1, likes: 0 });
+
+      await sut.getStatistics(AuthFactory.create({ id: userId }), { albumId });
+
+      expect(mocks.activity.getStatistics).toHaveBeenCalledWith({
+        albumId,
+        assetId: undefined,
+        excludeAlbumLevel: true,
+      });
+    });
+
+    it('includes album-level counts for a direct reader (positive control) (I2)', async () => {
+      const [albumId, assetId] = newUuids();
+
+      mocks.activity.getStatistics.mockResolvedValue({ comments: 1, likes: 3 });
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+
+      await sut.getStatistics(AuthFactory.create(), { assetId, albumId });
+
+      expect(mocks.activity.getStatistics).toHaveBeenCalledWith({ albumId, assetId, excludeAlbumLevel: false });
+    });
   });
 
   describe('addComment', () => {
