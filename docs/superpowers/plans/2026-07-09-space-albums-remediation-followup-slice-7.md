@@ -7,6 +7,7 @@
 (L4), and stop leaking the owner's `isFavorite` on the library sync arm (L5).
 
 ## Global Constraints (spec §0)
+
 - TDD, positive control before negative. No co-author trailers. Targeted specs + tsc + lint; `make sql`
   only with Docker DB up (scratch). One commit per fix.
 
@@ -31,23 +32,23 @@ Timeline↔Archive no-op and the Locked album-strip-once behavior are unchanged.
 already-Hidden asset is **acceptable** (tombstones are idempotent) — this is the intended tradeoff.
 
 - [ ] **Test (unit) RED:** in `asset.service.spec.ts`, call `applyVisibilityTransitionSideEffects` (or
-  `updateAll`) with `nextVisibility = Hidden` and **prior = Hidden** (simulating the post-failed-write
-  retry) → assert `emitDirectAssetVisibilityPurge` / `emitAlbumAssetVisibilityPurge` /
-  `emitLibraryAssetVisibilityPurge` **ARE** called for those ids. Today they are NOT (prior-gate filters
-  them out) → RED. Positive controls that stay green: `nextVisibility = Timeline`, prior Timeline
-  (Timeline↔Archive) → **no** purge emit; prior Locked → `removeAssetsFromAll` skips it (lock-once).
+      `updateAll`) with `nextVisibility = Hidden` and **prior = Hidden** (simulating the post-failed-write
+      retry) → assert `emitDirectAssetVisibilityPurge` / `emitAlbumAssetVisibilityPurge` /
+      `emitLibraryAssetVisibilityPurge` **ARE** called for those ids. Today they are NOT (prior-gate filters
+      them out) → RED. Positive controls that stay green: `nextVisibility = Timeline`, prior Timeline
+      (Timeline↔Archive) → **no** purge emit; prior Locked → `removeAssetsFromAll` skips it (lock-once).
 - [ ] **Implement:** change the purge set to include all ids whenever `nextVisibility` is non-shareable —
-  i.e. replace `const purgeIds = ids.filter((id) => shareable(priorVisibilities.get(id)));` (`:441`) with
-  `const purgeIds = ids;` (the branch already guarantees `nextVisibility ∈ {Hidden, Locked}`). Keep the
-  Locked `lockIds` prior-gate (`:433`) and the **restore** prior-gate (`:421`) unchanged. Rewrite the
-  `:402-408` and `:439-440` comments to describe idempotent-unconditional purge (retry-convergent; a
-  re-affirm re-emits harmlessly) — remove the false "RECOVERABLE" claim.
+      i.e. replace `const purgeIds = ids.filter((id) => shareable(priorVisibilities.get(id)));` (`:441`) with
+      `const purgeIds = ids;` (the branch already guarantees `nextVisibility ∈ {Hidden, Locked}`). Keep the
+      Locked `lockIds` prior-gate (`:433`) and the **restore** prior-gate (`:421`) unchanged. Rewrite the
+      `:402-408` and `:439-440` comments to describe idempotent-unconditional purge (retry-convergent; a
+      re-affirm re-emits harmlessly) — remove the false "RECOVERABLE" claim.
 - [ ] **metadata.service.ts:890 (motion):** make the motion hide re-emit on retry — drop / invert the
-  `visibility === Timeline` guard so `AssetHide` is emitted whenever the motion path results in a Hidden
-  motion asset (idempotent). Test (unit, `metadata.service.spec.ts`): a re-extract on an already-Hidden
-  motion asset still emits `AssetHide`.
+      `visibility === Timeline` guard so `AssetHide` is emitted whenever the motion path results in a Hidden
+      motion asset (idempotent). Test (unit, `metadata.service.spec.ts`): a re-extract on an already-Hidden
+      motion asset still emits `AssetHide`.
 - [ ] **Test (medium, if Docker):** hide an asset in a space-linked context, then re-hide (simulating
-  retry) → member `/sync` still carries the purge tombstone (idempotent, converges).
+      retry) → member `/sync` still carries the purge tombstone (idempotent, converges).
 - [ ] Commit: `fix(spaces): make visibility-purge retry-convergent (M3)`
 
 ### Fix L4 — library hide→restore loses EXIF on member devices
@@ -62,11 +63,11 @@ it re-delivers), but the library arm has no restore emit — the asset row re-up
 shows empty EXIF forever.
 
 - [ ] **Test (medium) RED:** member syncs a library asset + EXIF → owner hides → member drops it → owner
-  unhides → assert the member's next `/sync` re-delivers the asset's EXIF (today it doesn't).
+      unhides → assert the member's next `/sync` re-delivers the asset's EXIF (today it doesn't).
 - [ ] **Implement:** add `emitLibraryAssetVisibilityRestore(restoreIds)` to
-  `shared-space.repository.ts` that bumps `asset_exif.updatedAt` (→ `updateId` via its trigger) for
-  restored assets whose `libraryId ∈ shared_space_library`; call it in the restore branch (`:425`, replace
-  the "Library restore is automatic" comment). Server-only (mobile handler exists).
+      `shared-space.repository.ts` that bumps `asset_exif.updatedAt` (→ `updateId` via its trigger) for
+      restored assets whose `libraryId ∈ shared_space_library`; call it in the restore branch (`:425`, replace
+      the "Library restore is automatic" comment). Server-only (mobile handler exists).
 - [ ] `make sql` if a decorated query changed. Commit: `fix(spaces): re-deliver EXIF on library-arm visibility restore (L4)`
 
 ### Fix L5 — library sync arm leaks owner `isFavorite`
@@ -78,17 +79,18 @@ to the syncing user's own rows via a CASE; `LibraryAssetSync` selects `columns.s
 `asset.isFavorite`) → a member syncing another owner's linked library gets the owner's true favorite flags.
 
 - [ ] **Test (medium) RED:** the existing `sync-library-asset.spec.ts:217-251` already reproduces it
-  (unasserted) — add the assertion: a member's library-arm sync row has `isFavorite = false` for a
-  non-owned asset the owner favorited. RED today.
+      (unasserted) — add the assertion: a member's library-arm sync row has `isFavorite = false` for a
+      non-owned asset the owner favorited. RED today.
 - [ ] **Implement:** in `LibraryAssetSync.getBackfill` and `getUpserts`, split `isFavorite` out of
-  `columns.syncAsset` and apply the same ownership CASE the direct/album arms use (favorite only for the
-  syncing user's own rows).
+      `columns.syncAsset` and apply the same ownership CASE the direct/album arms use (favorite only for the
+      syncing user's own rows).
 - [ ] `make sql` (Docker) for the changed decorated queries. Commit:
-  `fix(spaces): mask owner isFavorite on the library sync arm (L5)`
+      `fix(spaces): mask owner isFavorite on the library sync arm (L5)`
 
 ---
 
 ## Definition of done
+
 - 3 fixes, each RED→GREEN with positive control. tsc + lint clean; `make sql` run or flagged. Existing
   #757 transition tests (asset.service.spec) stay green (the Timeline↔Archive no-op + lock-once behaviors
   are preserved). Commits pushed. Scope-clean.

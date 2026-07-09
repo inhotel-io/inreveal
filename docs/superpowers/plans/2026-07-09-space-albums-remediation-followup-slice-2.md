@@ -17,11 +17,13 @@ predicate — no need to special-case the identity join.
 **Tech Stack:** NestJS, Kysely. Server-only, **no DTO/SDK change** (response shape unchanged).
 
 ## Global Constraints (spec §0)
+
 - TDD mandatory; positive control before every negative. No `this.db` in `transaction()`. No co-author
   trailers. Re-confirm lines before editing. Run targeted specs + `make check-server` + lint; leave
   full-suite + e2e to CI (write the e2e, don't block on running it).
 
 ## Key facts (verified)
+
 - `getRepresentativeFaces` (`person.repository.ts:427-468`): joins `asset_face` via
   `personId OR EXISTS(face_identity_face … identityId = person.identityId)`, joins `asset`, filters only
   `asset_face.deletedAt/isVisible`, `asset.deletedAt/isOffline`. **No visibility/space scope.**
@@ -41,18 +43,20 @@ predicate — no need to special-case the identity join.
 ### Task 1: Add `scope` to `getRepresentativeFaces` (repository)
 
 **Files:**
+
 - Modify: `server/src/repositories/person.repository.ts` — `RepresentativeFaceListOptions` (`:85`) +
   `getRepresentativeFaces` (`:427`)
 - Test (medium): `server/test/medium/specs/repositories/person.repository.spec.ts` (create/extend; find
   existing person repo medium spec via `grep -rl "getRepresentativeFaces\|personRepository" server/test/medium`)
 
 **Interfaces:**
+
 - Produces: `RepresentativeFaceListOptions.scope?: { memberUserId: string }`. When set, results are
   restricted to space-reachable + visibility-gated assets for that member.
 
 - [ ] **Step 1: Write failing medium test.** Seed: owner O; person P owned by O with `identityId` set.
-  Faces of P on three of O's assets — A1 (Timeline) linked into space S (via a linked album OR direct
-  `shared_space_asset`); A2 (Hidden); A3 (Timeline, never in any space). Add member V (Viewer) to S.
+      Faces of P on three of O's assets — A1 (Timeline) linked into space S (via a linked album OR direct
+      `shared_space_asset`); A2 (Hidden); A3 (Timeline, never in any space). Add member V (Viewer) to S.
   - `getRepresentativeFaces({ personId: P, take: 50, skip: 0, scope: { memberUserId: V } })` → returns
     **only** the A1 face; **excludes** A2 and A3.
   - `getRepresentativeFaces({ personId: P, take: 50, skip: 0 })` (owner path, no scope) → returns all
@@ -62,15 +66,18 @@ predicate — no need to special-case the identity join.
     unscoped call, **absent** for the `scope:{memberUserId:V}` call.
 
 - [ ] **Step 2: Run — expect RED.** `cd server && pnpm test:medium -- --run <person repo medium spec>`
-  (needs Docker; if `docker ps` fails, write the test, note it, and lean on Task 2's unit test + a
-  careful read). Expected: the `scope` call returns A2/A3 (leak) → FAIL.
+      (needs Docker; if `docker ps` fails, write the test, note it, and lean on Task 2's unit test + a
+      careful read). Expected: the `scope` call returns A2/A3 (leak) → FAIL.
 
 - [ ] **Step 3: Implement.** Add to `RepresentativeFaceListOptions`:
+
 ```ts
 scope?: { memberUserId: string };
 ```
+
 In `getRepresentativeFaces`, after the existing `.where('asset.isOffline', '=', false)` chain (and the
 identity DISTINCT-FROM filter), add:
+
 ```ts
 .$if(!!options.scope, (qb) =>
   qb.where((eb) =>
@@ -91,17 +98,19 @@ identity DISTINCT-FROM filter), add:
   ),
 )
 ```
+
 Add imports for `spaceVisibilityGate`, `spaceAssetPathBranches` from `src/utils/shared-space-album-scope`
 if not already imported.
 
 - [ ] **Step 4: Run — expect GREEN.** Same medium command. Owner sees all; V sees only A1.
 
 - [ ] **Step 5: `make sql`** only if the `@GenerateSql` example for `getRepresentativeFaces` changed the
-  generated doc AND Docker DB is up (scratch DB only; never without a DB). The decorator params
-  (`{ personId, take, skip }`) don't set `scope`, so the generated SQL is unchanged → likely skip; verify
-  `git status` shows no unintended `.sql` diff.
+      generated doc AND Docker DB is up (scratch DB only; never without a DB). The decorator params
+      (`{ personId, take, skip }`) don't set `scope`, so the generated SQL is unchanged → likely skip; verify
+      `git status` shows no unintended `.sql` diff.
 
 - [ ] **Step 6: Commit.**
+
 ```bash
 git add server/src/repositories/person.repository.ts server/test/medium/specs/repositories/person.repository.spec.ts server/src/queries 2>/dev/null
 git commit -m "fix(spaces): scope person representative-faces to space-reachable assets for non-owners (M1)"
@@ -112,25 +121,28 @@ git commit -m "fix(spaces): scope person representative-faces to space-reachable
 ### Task 2: Wire owner-vs-non-owner scope in `getFacesForPicker` (service)
 
 **Files:**
+
 - Modify: `server/src/services/person.service.ts` — `getFacesForPicker` (`:322-349`)
 - Test (unit): `server/src/services/person.service.spec.ts`
 - Test (e2e): `e2e/src/**` — extend a people-faces or shared-space person spec (find via
   `grep -rl "people.*faces\|representative" e2e/src`)
 
 **Interfaces:**
+
 - Consumes: `RepresentativeFaceListOptions.scope` from Task 1;
   `accessRepository.person.checkOwnerAccess(userId, Set<string>)`.
 
 - [ ] **Step 1: Write failing unit test** in `person.service.spec.ts`: with mocks,
-  `checkOwnerAccess` returns an **empty** set (non-owner) → assert `getRepresentativeFaces` is called with
-  `scope: { memberUserId: auth.user.id }`. Second test: `checkOwnerAccess` returns a set **containing**
-  the id (owner) → assert `getRepresentativeFaces` called with `scope: undefined`. (Person is reachable
-  via `requireAccess(PersonRead)` mock in both.)
+      `checkOwnerAccess` returns an **empty** set (non-owner) → assert `getRepresentativeFaces` is called with
+      `scope: { memberUserId: auth.user.id }`. Second test: `checkOwnerAccess` returns a set **containing**
+      the id (owner) → assert `getRepresentativeFaces` called with `scope: undefined`. (Person is reachable
+      via `requireAccess(PersonRead)` mock in both.)
 
 - [ ] **Step 2: Run — expect RED.** `cd server && pnpm test -- --run src/services/person.service.spec.ts`.
-  Expected: FAIL (today no `scope` is passed).
+      Expected: FAIL (today no `scope` is passed).
 
 - [ ] **Step 3: Implement.** In `getFacesForPicker`, after `requireAccess(PersonRead)` + `findOrFail`:
+
 ```ts
 const isOwner = await this.accessRepository.person.checkOwnerAccess(auth.user.id, new Set([id]));
 const scope = isOwner.has(id) ? undefined : { memberUserId: auth.user.id };
@@ -141,17 +153,19 @@ const rows = await this.personRepository.getRepresentativeFaces({
   scope,
 });
 ```
+
 (Prefer `person.ownerId === auth.user.id` if `findOrFail` already returns `ownerId` — either is fine;
 `checkOwnerAccess` matches `requireThumbnailAccess`'s pattern. Pick one, keep it consistent.)
 
 - [ ] **Step 4: Run — expect GREEN.** Same unit command.
 
 - [ ] **Step 5: Write the e2e negative** (write; CI runs): owner O's person P shared into space S; syncs
-  Viewer V. Positive control: owner `GET /people/P/faces` → full list incl. a hidden-asset face. Then V
-  `GET /people/P/faces` → returns only space-visible faces (assert the hidden/never-shared face ids are
-  absent); assert a 200 empty page (not 500) when P is only on hidden assets for V.
+      Viewer V. Positive control: owner `GET /people/P/faces` → full list incl. a hidden-asset face. Then V
+      `GET /people/P/faces` → returns only space-visible faces (assert the hidden/never-shared face ids are
+      absent); assert a 200 empty page (not 500) when P is only on hidden assets for V.
 
 - [ ] **Step 6: `make check-server` + lint, then commit.**
+
 ```bash
 git add server/src/services/person.service.ts server/src/services/person.service.spec.ts e2e/src
 git commit -m "fix(spaces): gate person-faces picker owner-vs-space in getFacesForPicker (M1)"
@@ -160,14 +174,16 @@ git commit -m "fix(spaces): gate person-faces picker owner-vs-space in getFacesF
 ---
 
 ## Edge cases (assert each — spec §Slice 2)
+
 - [ ] Owner caller → full unscoped list (no behavior change).
 - [ ] Non-owner, person only on Hidden/Locked → **empty page**, not a 500.
 - [ ] Identity fan-out to another user's assets → cross-user faces excluded (asset-level gate covers it).
 - [ ] Archived (shareable) space asset face → **included** (Archive passes `spaceVisibilityGate`).
 - [ ] Pagination (`page`/`size`) → `hasNextPage` reflects the **scoped** row count (the `take+1` fetch is
-  applied after the scope predicate).
+      applied after the scope predicate).
 - [ ] `getFaceThumbnail` on an excluded face → still `AssetRead`-denied (unchanged; assert no regression).
 
 ## Definition of done
+
 - Medium (repo scope) + unit (service wiring) green; e2e written (CI). `make check-server` + lint clean.
 - No DTO/SDK change. Two commits pushed. Scope-clean (only M1).

@@ -9,6 +9,7 @@ library-wide count leak (L3), suggestion-facet owner exception (I1), and activit
 leak (I2).
 
 ## Global Constraints (spec §0)
+
 - TDD, positive control before negative. No co-author trailers. Targeted specs + tsc + lint; write e2e,
   defer to CI. `make sql` only against a scratch DB with Docker up (never without a DB). Re-confirm lines.
 - **Consistency (critical):** L2 refactors `albumSharedSpaceScope`, which Slice 1 (H1) already modified.
@@ -28,11 +29,11 @@ simpler ones are green).
 admitting the leak). `getContributorCounts` filters `deletedAt` only (no visibility).
 
 - [ ] Test (unit) RED: a space-only reader (`hasDirectAccess` false) `get`ting a shared album → response
-  `contributorCounts` is `undefined`. Positive control: a direct reader → present. (medium, if feasible:
-  `getContributorCounts` excludes Hidden/Locked assets so the count can't reveal hidden counts.)
+      `contributorCounts` is `undefined`. Positive control: a direct reader → present. (medium, if feasible:
+      `getContributorCounts` excludes Hidden/Locked assets so the count can't reveal hidden counts.)
 - [ ] Implement: change to `contributorCounts: isShared && hasDirectAccess ? await this.albumRepository.getContributorCounts(album.id) : undefined`; **and** add `withDefaultVisibility` (Archive+Timeline) inside `getContributorCounts` so the hidden-count inference is closed for all callers. Remove the stale "flagged for a follow-up" comment.
 - [ ] `make sql` if `getContributorCounts`'s generated doc changed (Docker up). Commit:
-  `fix(spaces): gate album contributorCounts to direct readers + visibility (L1)`
+      `fix(spaces): gate album contributorCounts to direct readers + visibility (L1)`
 
 ### Fix L3 — `person.getStatistics` null-identityId library-wide count
 
@@ -40,11 +41,11 @@ admitting the leak). `getContributorCounts` filters `deletedAt` only (no visibil
 **Verified:** null-identityId branch calls `personRepository.getStatistics(id)` unscoped for non-owners.
 
 - [ ] Test (unit/medium) RED: a space-only reader of a person with `identityId = null` gets a count
-  restricted to space-reachable assets, not the owner's whole library. Positive control: owner → full.
+      restricted to space-reachable assets, not the owner's whole library. Positive control: owner → full.
 - [ ] Implement: in the null-identityId branch, if `auth.user.id !== person.ownerId`, route to a
-  space-scoped count (reuse the `getAccessiblePersonStatistics`-style `spaceAssetPathBranches({
-  memberUserId })` + `spaceVisibilityGate`), else the existing owner count. Add a scoped repo method or
-  parameterize `getStatistics` with an optional `memberUserId` scope.
+      space-scoped count (reuse the `getAccessiblePersonStatistics`-style `spaceAssetPathBranches({
+memberUserId })` + `spaceVisibilityGate`), else the existing owner count. Add a scoped repo method or
+      parameterize `getStatistics` with an optional `memberUserId` scope.
 - [ ] `make sql` if a new decorated query. Commit: `fix(spaces): scope legacy person statistics for space readers (L3)`
 
 ### Fix I1 — suggestion-facet albumId owner exception
@@ -54,9 +55,9 @@ admitting the leak). `getContributorCounts` filters `deletedAt` only (no visibil
 with no visibility gate → the owner's own Hidden album asset feeds People/Location/Camera facets.
 
 - [ ] Test (medium) RED: an owner's Hidden album asset does NOT contribute a facet value via the albumId
-  suggestion path. Positive control: a visible album asset does.
+      suggestion path. Positive control: a visible album asset does.
 - [ ] Implement: AND the ownerId branch (`:1226`) with `spaceVisibilityGate(eb)` — **albumId arm only**;
-  leave the `spaceId`/`timelineSpaceIds` arms' owner exception intact.
+      leave the `spaceId`/`timelineSpaceIds` arms' owner exception intact.
 - [ ] `make sql` if changed. Commit: `fix(spaces): gate owner Hidden assets out of album suggestion facets (I1)`
 
 ### Fix I2 — activity `getStatistics` album-level count leak
@@ -67,13 +68,13 @@ album-level (assetId null) rows to space-only readers. An in-code comment says i
 deferred (needs an SQL predicate change + `make sql`).
 
 - [ ] Test (unit) RED: a space-only reader's `getStatistics` excludes album-level comments/likes (assetId
-  null) from the counts; a direct reader includes them (positive control).
+      null) from the counts; a direct reader includes them (positive control).
 - [ ] Implement: compute `hasDirectAccess` (same as `getAll`: `!!auth.sharedLink ||
-  hasDirectAlbumReadAccess(...)`); when `!hasDirectAccess`, pass a flag to `activityRepository.getStatistics`
-  that excludes `assetId IS NULL` rows (add an optional `excludeAlbumLevel`/`assetIdNotNull` param to the
-  repo method). Update the deliberate-deferral comment.
+hasDirectAlbumReadAccess(...)`); when `!hasDirectAccess`, pass a flag to `activityRepository.getStatistics`
+      that excludes `assetId IS NULL` rows (add an optional `excludeAlbumLevel`/`assetIdNotNull` param to the
+      repo method). Update the deliberate-deferral comment.
 - [ ] `make sql` for the changed decorated `getStatistics` (Docker up). Commit:
-  `fix(spaces): exclude album-level activity counts for space-only readers (I2)`
+      `fix(spaces): exclude album-level activity counts for space-only readers (I2)`
 
 ### Fix L2 — `albumSharedSpaceScope` over-restriction (do LAST) ⚠️
 
@@ -85,11 +86,12 @@ those are re-admitted only via the `timelineSpaceIds` arms (membership + `showIn
 the grid shows are omitted for an album_user Viewer or a member with the timeline toggle off.
 
 - [ ] Test (medium) RED: an album_user Viewer's `searchMetadata { albumIds:[X] }`, where X contains a
-  library-backed or directly-space-linked visible asset, returns that asset (today it is omitted).
-  Positive controls that MUST stay green: Hidden album asset still excluded; **trashed album asset still
-  excluded (Slice 1 H1)**; Locked excluded.
+      library-backed or directly-space-linked visible asset, returns that asset (today it is omitted).
+      Positive controls that MUST stay green: Hidden album asset still excluded; **trashed album asset still
+      excluded (Slice 1 H1)**; Locked excluded.
 - [ ] Implement: replace the plain-album `eb.and([...])` branch AND drop the `timelineSpaceIds`
-  re-admission arms — reduce `albumSharedSpaceScope` to the flat gate:
+      re-admission arms — reduce `albumSharedSpaceScope` to the flat gate:
+
 ```ts
 export function albumSharedSpaceScope<O>(qb: SelectQueryBuilder<DB, 'asset', O>, _timelineSpaceIds?: string[]) {
   // AlbumRead already authorizes the album's content; match the album grid's flat visibility gate
@@ -97,14 +99,17 @@ export function albumSharedSpaceScope<O>(qb: SelectQueryBuilder<DB, 'asset', O>,
   return qb.where((eb) => eb.and([spaceVisibilityGate(eb), eb('asset.deletedAt', 'is', null)]));
 }
 ```
-  Keep the `timelineSpaceIds` param in the signature (callers pass it) but unused, or update the single
-  call site (`searchAssetBuilder:714`) — pick the lower-churn option and note it. **Re-run the Slice-1
-  H1 search medium/e2e tests — they must stay green.**
+
+Keep the `timelineSpaceIds` param in the signature (callers pass it) but unused, or update the single
+call site (`searchAssetBuilder:714`) — pick the lower-churn option and note it. **Re-run the Slice-1
+H1 search medium/e2e tests — they must stay green.**
+
 - [ ] `make sql` if changed. Commit: `fix(spaces): flat-gate album-scoped search to match the grid (L2)`
 
 ---
 
 ## Definition of done
+
 - 5 fixes, each with RED→GREEN TDD + positive control; e2e where the spec named one (L1, I2). tsc + lint
   clean; `make sql` run (or flagged if no Docker). **Slice-1 H1 tests still green after L2.** Scope-clean
   (only root-cause-A residuals). Commits pushed.

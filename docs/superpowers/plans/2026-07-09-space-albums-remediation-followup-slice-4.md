@@ -15,10 +15,12 @@ auth check, before the link probe).
 **Tech Stack:** NestJS. Server-only, no DTO/SDK change.
 
 ## Global Constraints (spec §0)
+
 - TDD, positive control before negative. No co-author trailers. Targeted specs + `make check-server`/tsc
-  + lint; write e2e, defer running to CI.
+  - lint; write e2e, defer running to CI.
 
 ## Key facts (verified)
+
 - `unlinkAlbum` (`shared-space.service.ts:697-727`): auth block at `:701-708` (Editor short-circuit else
   `checkAccess(AlbumDelete)` → `ForbiddenException`); then `getById` (`:710`),
   `getAlbumAssetIdsWithoutOtherSpacePath` (`:711`), `removeAlbum` (`:712`, silent no-op if no link),
@@ -33,6 +35,7 @@ auth check, before the link probe).
 ### Task 1: Add the `hasAlbumLink` guard
 
 **Files:**
+
 - Modify: `server/src/services/shared-space.service.ts` — `unlinkAlbum` (insert after `:708`, before
   `getById` at `:710`)
 - Test (unit): `server/src/services/shared-space.service.spec.ts`
@@ -40,6 +43,7 @@ auth check, before the link probe).
   `grep -rl "unlinkAlbum\|albums.*spaceId\|AlbumUnlink\|shared-spaces.*albums" e2e/src`)
 
 **Interfaces:**
+
 - Consumes: `this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId): Promise<boolean>`.
 
 - [ ] **Step 1: Write failing unit tests** in `shared-space.service.spec.ts` (mock repo):
@@ -51,10 +55,11 @@ auth check, before the link probe).
   - (Editor path, no link: `getMember` → editor member, `hasAlbumLink` → false → `NotFoundException`.)
 
 - [ ] **Step 2: Run — expect RED.** `cd server && pnpm test -- --run src/services/shared-space.service.spec.ts`.
-  Expected: the no-link owner test FAILS (today `logActivity` is called; no throw).
+      Expected: the no-link owner test FAILS (today `logActivity` is called; no throw).
 
 - [ ] **Step 3: Implement.** In `unlinkAlbum`, immediately after the auth `if (!isSpaceEditor) {…}` block
-  (`:708`) and before `const album = await this.albumRepository.getById(...)`:
+      (`:708`) and before `const album = await this.albumRepository.getById(...)`:
+
 ```ts
 // Fork RBAC (Slice 4 / M11): the owner arm authorizes on album ownership only and never verified
 // the album is actually linked to this space. Without this guard, logActivity below injects an
@@ -65,6 +70,7 @@ if (!linked) {
   throw new NotFoundException('Album is not linked to this space');
 }
 ```
+
 Ensure `NotFoundException` is imported from `@nestjs/common`.
 
 - [ ] **Step 4: Run — expect GREEN.** No-link → throws, no side effects; linked → proceeds.
@@ -78,6 +84,7 @@ Ensure `NotFoundException` is imported from `@nestjs/common`.
   - Editor unlinking a genuinely linked album → 204 (unchanged).
 
 - [ ] **Step 6: `make check-server`/tsc + lint, then commit.**
+
 ```bash
 git add server/src/services/shared-space.service.ts server/src/services/shared-space.service.spec.ts e2e/src
 git commit -m "fix(spaces): guard unlinkAlbum owner path against activity injection + FK 500 (M11)"
@@ -86,13 +93,15 @@ git commit -m "fix(spaces): guard unlinkAlbum owner path against activity inject
 ---
 
 ## Edge cases (assert each — spec §Slice 4)
+
 - [ ] Owner, album genuinely linked → unlink succeeds; exactly one `AlbumUnlink`; reconcile/cleanup run once.
 - [ ] Owner, album not linked to this (real) space → 404; no activity, no cleanup, no reconcile.
 - [ ] Nonexistent `spaceId` → 404, no FK 500.
 - [ ] Non-UUID `spaceId`/`albumId` → 400 (param DTO — regression-assert, unchanged).
 - [ ] Random non-owner non-editor caller → still **403** at the owner auth check (before the link probe —
-  no 404-vs-403 info leak about link existence).
+      no 404-vs-403 info leak about link existence).
 - [ ] Repeated calls (spam attempt) → each a clean 404; feed never grows.
 
 ## Definition of done
+
 - Unit green; e2e written (CI). tsc + lint clean. No DTO/SDK change. One commit pushed. Scope-clean.

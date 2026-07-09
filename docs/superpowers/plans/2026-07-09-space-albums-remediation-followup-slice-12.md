@@ -8,6 +8,7 @@
 regress, and remove dead code (R1).
 
 ## Global Constraints (spec §0)
+
 - No co-author trailers. Targeted specs + tsc + lint. `make sql` not expected (no query change). One
   commit per finding. Re-confirm exact lines before editing.
 
@@ -21,17 +22,19 @@ mock-called unit tests (`asset.service.spec.ts:980`, `metadata.service.spec.ts`)
 `@OnEvent({name:'AssetHide'})` seam + the seeded-Timeline-prior invariant have zero medium/e2e coverage.
 A refactor that renames the event or re-derives prior from the DB would keep unit tests green while motion
 videos silently stop purging.
+
 - [ ] **Test (medium):** seed a space-linked library with a **Timeline motion video**, sync + ack a
-  member, emit the **real** `AssetHide` event (or drive `MetadataService.linkLivePhotos` /
-  `updateAll {visibility:Hidden}`), assert the member's next `/sync` carries the **library-arm delete
-  tombstone** for the motion asset; mirror with `AssetShow` → re-upsert. Prove it fails (RED) if the
-  emit/handler is disconnected (temporarily comment the `@OnEvent` or the emit to confirm the test
-  catches it), then restore.
+      member, emit the **real** `AssetHide` event (or drive `MetadataService.linkLivePhotos` /
+      `updateAll {visibility:Hidden}`), assert the member's next `/sync` carries the **library-arm delete
+      tombstone** for the motion asset; mirror with `AssetShow` → re-upsert. Prove it fails (RED) if the
+      emit/handler is disconnected (temporarily comment the `@OnEvent` or the emit to confirm the test
+      catches it), then restore.
 - [ ] Commit: `test(spaces): pin motion-photo visibility purge through the real sync seam (M13)`
 
 ### L19 — four vacuous/mis-actor assertions
 
 **Files:** `server/test/e2e`… wait — these are in `e2e/` and `server/`:
+
 - **testq-2** (`e2e/src/specs/server/api/shared-space-visibility-negatives.e2e-spec.ts:605`): the
   PUT-locked album-removal test asserts `assetCount === 0`, which is vacuous (assetCount is
   visibility-filtered → 0 regardless of whether the `album_asset` row was deleted). **Fix:** after
@@ -42,7 +45,7 @@ videos silently stop purging.
   **Fix:** re-add a member-actor test pinning the forced-empty outcome (members cannot person-filter
   album-scoped search).
 - **testq-5** (`e2e/src/specs/server/api/shared-space-visibility-negatives.e2e-spec.ts:481`): the
-  map-marker negative has no positive control that the *hidden* asset would produce a marker. **Fix:**
+  map-marker negative has no positive control that the _hidden_ asset would produce a marker. **Fix:**
   before hiding, drain metadataExtraction then assert the owner sees `hidden.id`'s marker; then flip to
   Hidden and run the negatives.
 - **testq-6** (`server/src/services/shared-space.service.spec.ts:2033`): creator remove/demote
@@ -61,17 +64,19 @@ videos silently stop purging.
 **Problem:** the `Locked` entry in `visibilityOrder` and the `Hidden` fallback in `getSyncMergeResult`
 are dead code — `duplicateRepository.get` applies `withDefaultVisibility` (Archive+Timeline only), so a
 group/keeper can never be Hidden/Locked.
+
 - [ ] **Fix:** remove the dead `Locked`/`Hidden` branches (or replace with an assertion/`never` that the
-  keeper is always shareable). Keep it minimal. **Do NOT** do the optional "route visibility write
-  through the shared transition helper" TOCTOU change unless it is trivial and clearly safe — it is
-  out of scope for this cleanup; note it as a follow-up if skipped.
+      keeper is always shareable). Keep it minimal. **Do NOT** do the optional "route visibility write
+      through the shared transition helper" TOCTOU change unless it is trivial and clearly safe — it is
+      out of scope for this cleanup; note it as a follow-up if skipped.
 - [ ] **Test:** an existing duplicate.service.spec test still green; if a test asserted the dead branch,
-  update it. Add a one-line assertion that the keeper is shareable if it clarifies intent.
+      update it. Add a one-line assertion that the keeper is shareable if it clarifies intent.
 - [ ] Commit: `refactor(spaces): remove dead Locked/Hidden branches in duplicate merge (R1 cleanup)`
 
 ---
 
 ## Definition of done
+
 - M13 medium seam test added (proven to catch a disconnected emit). L19's four assertions tightened
   (each proven non-vacuous). R1 dead code removed. tsc + lint clean. Existing suites green. Commits
   pushed. Scope-clean (tests + the R1 cleanup only).
