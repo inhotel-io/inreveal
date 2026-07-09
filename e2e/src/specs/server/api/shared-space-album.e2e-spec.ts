@@ -427,6 +427,26 @@ describe('/shared-spaces/:id/albums (T18)', () => {
         .send({ ids: [editorAsset2.id] });
       expect(status).toBe(200);
     });
+
+    // L1: contributorCounts exposes contributor userIds + per-user asset counts — PII-adjacent
+    // in the same way albumUsers is (security-8). A space-only reader (no album_user row, access
+    // granted only via the space link) must not receive it.
+    it('space viewer (space-only access, no direct album grant) gets contributorCounts=undefined (L1)', async () => {
+      const { status, body } = await request(app)
+        .get(`/albums/${ownerAlbum.id}`)
+        .set('Authorization', `Bearer ${viewer.accessToken}`);
+      expect(status).toBe(200);
+      expect((body as AlbumResponseDto).contributorCounts).toBeUndefined();
+    });
+
+    it('album editor (direct album_user participant) still gets contributorCounts (positive control)', async () => {
+      const { status, body } = await request(app)
+        .get(`/albums/${ownerAlbum.id}`)
+        .set('Authorization', `Bearer ${editor.accessToken}`);
+      expect(status).toBe(200);
+      expect((body as AlbumResponseDto).contributorCounts).toBeDefined();
+      expect(Array.isArray((body as AlbumResponseDto).contributorCounts)).toBe(true);
+    });
   });
 
   // ─── Album delete via /albums/:id ─────────────────────────────────────────

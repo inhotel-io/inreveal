@@ -149,9 +149,11 @@ export class AlbumService extends BaseService {
       endDate: asDateTimeString(albumMetadataForIds?.endDate ?? undefined),
       assetCount: albumMetadataForIds?.assetCount ?? 0,
       lastModifiedAssetTimestamp: asDateTimeString(albumMetadataForIds?.lastModifiedAssetTimestamp ?? undefined),
-      // Note: contributorCounts still exposes contributor userIds for space-only readers — outside
-      // security-8's stated albumUsers-shape scope; flagged for a follow-up, not changed here.
-      contributorCounts: isShared ? await this.albumRepository.getContributorCounts(album.id) : undefined,
+      // L1: contributorCounts exposes contributor userIds + per-user asset counts — the same PII
+      // security-8 already gated the rest of albumUsers behind. A space-only reader (hasDirectAccess
+      // false) must not see it, matching the albumUsers redaction above.
+      contributorCounts:
+        isShared && hasDirectAccess ? await this.albumRepository.getContributorCounts(album.id) : undefined,
       sharedSpaceLinks,
     };
   }

@@ -974,6 +974,44 @@ describe(AlbumService.name, () => {
     });
   });
 
+  describe('get — contributorCounts (L1)', () => {
+    it('omits contributorCounts for a space-only reader (no direct album access)', async () => {
+      // spaceViewer is NOT in album.albumUsers — access granted only via checkSpaceLinkedAlbumReadAccess,
+      // mirroring the security-8 "space grant only" fixture above.
+      const spaceViewer = UserFactory.create();
+      const album = AlbumFactory.from().albumUser().build(); // owner + 1 extra participant -> isShared
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([album.id]));
+      mocks.album.getMetadataForIds.mockResolvedValue([
+        { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
+      ]);
+
+      const result = await sut.get(AuthFactory.create(spaceViewer), album.id);
+
+      expect(result.contributorCounts).toBeUndefined();
+      expect(mocks.album.getContributorCounts).not.toHaveBeenCalled();
+    });
+
+    it('includes contributorCounts for a direct reader (album participant) of a shared album', async () => {
+      const user = UserFactory.create();
+      const album = AlbumFactory.from().albumUser({ userId: user.id }).build(); // owner + user -> isShared
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([album.id]));
+      mocks.album.getMetadataForIds.mockResolvedValue([
+        { albumId: album.id, assetCount: 0, startDate: null, endDate: null, lastModifiedAssetTimestamp: null },
+      ]);
+      mocks.album.getContributorCounts.mockResolvedValue([{ userId: user.id, assetCount: 3 }]);
+
+      const result = await sut.get(AuthFactory.create(user), album.id);
+
+      expect(result.contributorCounts).toEqual([{ userId: user.id, assetCount: 3 }]);
+      expect(mocks.album.getContributorCounts).toHaveBeenCalledWith(album.id);
+    });
+  });
+
   describe('get — sharedSpaceLinks (rbac-6)', () => {
     it('returns sharedSpaceLinks to the album owner', async () => {
       const auth = AuthFactory.create();
