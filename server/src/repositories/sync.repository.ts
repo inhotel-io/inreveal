@@ -1271,10 +1271,23 @@ export class LibraryAssetSync extends BaseSync {
   // M3 visibility gate: the user always sees ALL visibilities of their own
   // assets. For OTHER members' assets (reached via the space-link branch of
   // accessibleLibraries), only Archive and Timeline are streamed.
+  //
+  // L5: isFavorite is masked to the syncing user's own rows (mirrors SharedSpaceAssetSync/
+  // SharedSpaceAlbumAssetSync) — a member syncing another owner's space-linked library must not learn
+  // the owner's true favorite flag for an asset they don't own.
   @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID, DummyValue.UUID], stream: true })
   getBackfill(options: SyncBackfillOptions, libraryId: string, userId: string) {
     return this.backfillQuery('asset', options)
-      .select(columns.syncAsset)
+      .select(columns.syncLibraryAsset)
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
       .select('asset.updateId')
       .where('asset.libraryId', '=', libraryId)
       .where((eb) => eb.or([eb('asset.ownerId', '=', userId), spaceVisibilityGate(eb)]))
@@ -1289,14 +1302,25 @@ export class LibraryAssetSync extends BaseSync {
   // as `LibraryAssetCreateV1` events; the client upserts idempotently.
   //
   // M3 visibility gate: see getBackfill above.
+  // L5: isFavorite masking — see getBackfill above.
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getUpserts(options: SyncQueryOptions) {
+    const userId = options.userId;
     return this.upsertQuery('asset', options)
-      .select(columns.syncAsset)
+      .select(columns.syncLibraryAsset)
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
       .select('asset.updateId')
       .where('asset.libraryId', 'is not', null)
-      .where('asset.libraryId', 'in', (eb) => accessibleLibraries(eb, options.userId))
-      .where((eb) => eb.or([eb('asset.ownerId', '=', options.userId), spaceVisibilityGate(eb)]))
+      .where('asset.libraryId', 'in', (eb) => accessibleLibraries(eb, userId))
+      .where((eb) => eb.or([eb('asset.ownerId', '=', userId), spaceVisibilityGate(eb)]))
       .stream();
   }
 
