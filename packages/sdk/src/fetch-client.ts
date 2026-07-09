@@ -8326,12 +8326,13 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, bucketSize, city, country, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, order, orderBy, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBucket({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, ocr, order, orderBy, originalFileName, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
     bucketSize?: TimeBucketSize;
     city?: string;
     country?: string;
+    description?: string;
     isFavorite?: boolean;
     isInAlbum?: boolean;
     isNotInAlbum?: boolean;
@@ -8339,8 +8340,10 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, isFavo
     key?: string;
     make?: string;
     model?: string;
+    ocr?: string;
     order?: AssetOrder;
     orderBy?: AssetOrderBy;
+    originalFileName?: string;
     personId?: string;
     personIds?: string[];
     rating?: number;
@@ -8370,6 +8373,7 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, isFavo
         bucketSize,
         city,
         country,
+        description,
         isFavorite,
         isInAlbum,
         isNotInAlbum,
@@ -8377,8 +8381,10 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, isFavo
         key,
         make,
         model,
+        ocr,
         order,
         orderBy,
+        originalFileName,
         personId,
         personIds,
         rating,
@@ -8405,12 +8411,13 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, isFavo
 /**
  * Get time bucket covers
  */
-export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, order, orderBy, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBuckets, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, ocr, order, orderBy, originalFileName, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBuckets, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
     bucketSize?: TimeBucketSize;
     city?: string;
     country?: string;
+    description?: string;
     isFavorite?: boolean;
     isInAlbum?: boolean;
     isNotInAlbum?: boolean;
@@ -8418,8 +8425,10 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
     key?: string;
     make?: string;
     model?: string;
+    ocr?: string;
     order?: AssetOrder;
     orderBy?: AssetOrderBy;
+    originalFileName?: string;
     personId?: string;
     personIds?: string[];
     rating?: number;
@@ -8449,6 +8458,7 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
         bucketSize,
         city,
         country,
+        description,
         isFavorite,
         isInAlbum,
         isNotInAlbum,
@@ -8456,8 +8466,10 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
         key,
         make,
         model,
+        ocr,
         order,
         orderBy,
+        originalFileName,
         personId,
         personIds,
         rating,
@@ -8484,12 +8496,13 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, order, orderBy, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, ocr, order, orderBy, originalFileName, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
     bucketSize?: TimeBucketSize;
     city?: string;
     country?: string;
+    description?: string;
     isFavorite?: boolean;
     isInAlbum?: boolean;
     isNotInAlbum?: boolean;
@@ -8497,8 +8510,10 @@ export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, isFav
     key?: string;
     make?: string;
     model?: string;
+    ocr?: string;
     order?: AssetOrder;
     orderBy?: AssetOrderBy;
+    originalFileName?: string;
     personId?: string;
     personIds?: string[];
     rating?: number;
@@ -8527,6 +8542,7 @@ export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, isFav
         bucketSize,
         city,
         country,
+        description,
         isFavorite,
         isInAlbum,
         isNotInAlbum,
@@ -8534,8 +8550,10 @@ export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, isFav
         key,
         make,
         model,
+        ocr,
         order,
         orderBy,
+        originalFileName,
         personId,
         personIds,
         rating,
