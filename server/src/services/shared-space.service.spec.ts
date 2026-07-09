@@ -2410,6 +2410,108 @@ describe(SharedSpaceService.name, () => {
         expect.objectContaining({ name: JobName.SharedSpaceAlbumGrantReconcile }),
       );
     });
+
+    // L16: cleanupDepartingMemberAlbums's auto-unlink was invisible in the activity feed —
+    // remaining members had no record of which albums vanished or why. removeMember must log
+    // one AlbumUnlink per auto-removed album (in addition to MemberRemove/MemberLeave).
+    it('logs an AlbumUnlink activity for each auto-removed departing-member album on removal (L16)', async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+      );
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue(['album-a']);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+
+      await sut.removeMember(auth, 'space-1', 'member-2');
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith({
+        spaceId: 'space-1',
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumUnlink,
+        data: { albumId: 'album-a', albumName: 'Trip' },
+      });
+      // still logs MemberRemove too — AlbumUnlink is additional, not a replacement
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ type: SharedSpaceActivityType.MemberRemove }),
+      );
+    });
+
+    it('logs an AlbumUnlink activity for each auto-removed album on self-leave (L16)', async () => {
+      const auth = factory.auth({ user: { id: 'member-2' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'member-2', role: SharedSpaceRole.Editor }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+      );
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue(['album-b']);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Beach' } as any);
+
+      await sut.removeMember(auth, 'space-1', 'member-2');
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith({
+        spaceId: 'space-1',
+        userId: 'member-2',
+        type: SharedSpaceActivityType.AlbumUnlink,
+        data: { albumId: 'album-b', albumName: 'Beach' },
+      });
+    });
+
+    it('does NOT log AlbumUnlink when no albums were auto-removed (L16)', async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+      );
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'member-2');
+
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: SharedSpaceActivityType.AlbumUnlink }),
+      );
+      expect(mocks.album.getById).not.toHaveBeenCalled();
+    });
+
+    // fallback name for an album that's already gone (deleted) by the time we log — album.getById
+    // filters deletedAt IS NULL, so a trashed own album (M9 now unlinks those too) resolves undefined.
+    it('falls back to a generic name when the auto-removed album is deleted/gone (L16)', async () => {
+      const auth = factory.auth({ user: { id: 'owner-1' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: 'space-1', createdById: 'owner-1', faceRecognitionEnabled: false }),
+      );
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
+      mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue(['album-trashed']);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+      mocks.album.getById.mockResolvedValue(void 0);
+
+      await sut.removeMember(auth, 'space-1', 'member-2');
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith({
+        spaceId: 'space-1',
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumUnlink,
+        data: { albumId: 'album-trashed', albumName: 'Deleted album' },
+      });
+    });
   });
 
   describe('addAssets', () => {

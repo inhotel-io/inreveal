@@ -581,6 +581,7 @@ export class SharedSpaceService extends BaseService {
         type: SharedSpaceActivityType.MemberLeave,
         data: {},
       });
+      await this.logDepartingMemberAlbumUnlinks(spaceId, userId, unlinkedAlbumIds);
       await this.queueSpacePersonMetadataBackfill();
       await this.queueAlbumGrantReconcile(affectedAlbumIds);
       return;
@@ -607,8 +608,33 @@ export class SharedSpaceService extends BaseService {
       type: SharedSpaceActivityType.MemberRemove,
       data: { removedUserId: userId },
     });
+    await this.logDepartingMemberAlbumUnlinks(spaceId, auth.user.id, unlinkedAlbumIds);
     await this.queueSpacePersonMetadataBackfill();
     await this.queueAlbumGrantReconcile(affectedAlbumIds);
+  }
+
+  // L16: cleanupDepartingMemberAlbums (removeMemberAndOwnedAlbumsAtomically /
+  // removeOwnedAlbumLinksAddedBy) silently auto-unlinked a departing member's own albums —
+  // remaining members had no record in the activity feed of which album vanished or why. Log
+  // one AlbumUnlink per auto-removed album, alongside the MemberLeave/MemberRemove entry
+  // already logged by the caller. `actingUserId` mirrors that entry's `userId` (the leaver on
+  // self-leave, the removing Owner on an admin removal). Album lookup can miss (M9: the
+  // departing member's own album may already be TRASHED by the time we log) — fall back to a
+  // generic name rather than an empty string.
+  private async logDepartingMemberAlbumUnlinks(
+    spaceId: string,
+    actingUserId: string,
+    unlinkedAlbumIds: string[],
+  ): Promise<void> {
+    for (const albumId of unlinkedAlbumIds) {
+      const album = await this.albumRepository.getById(albumId, { withAssets: false });
+      await this.sharedSpaceRepository.logActivity({
+        spaceId,
+        userId: actingUserId,
+        type: SharedSpaceActivityType.AlbumUnlink,
+        data: { albumId, albumName: album?.albumName ?? 'Deleted album' },
+      });
+    }
   }
 
   async addAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetAddDto): Promise<void> {
