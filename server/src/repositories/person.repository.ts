@@ -11,7 +11,11 @@ import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
-import { spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
+import {
+  spaceAssetPathBranches,
+  spaceVisibilityGate,
+  spaceVisibleAssetVisibilities,
+} from 'src/utils/shared-space-album-scope';
 
 export interface PersonSearchOptions {
   withHidden: boolean;
@@ -86,6 +90,12 @@ export interface RepresentativeFaceListOptions {
   personId: string;
   take: number;
   skip: number;
+  /**
+   * Fork RBAC (Slice 2 / M1): when set, restricts results to faces on assets that `memberUserId`
+   * can reach through a shared space AND that pass the shareable-visibility gate. Omit for the
+   * owner's own unscoped picker view.
+   */
+  scope?: { memberUserId: string };
 }
 
 export interface RepresentativeFaceUpdateOptions {
@@ -458,6 +468,24 @@ export class PersonRepository {
               .whereRef('face_identity_face.assetFaceId', '=', 'asset_face.id')
               .where(sql<SqlBool>`face_identity_face."identityId" IS DISTINCT FROM person."identityId"`),
           ),
+        ),
+      )
+      .$if(!!options.scope, (qb) =>
+        qb.where((eb) =>
+          eb.and([
+            // Fork RBAC (Slice 2 / M1): a non-owner (space-granted) caller may only see faces on assets
+            // they can reach through a space AND that pass the shareable visibility gate. Filters faces
+            // matched via BOTH the personId arm and the identity-expansion arm (predicate is on the
+            // joined asset row), so cross-user identity faces are also excluded.
+            spaceVisibilityGate(eb),
+            eb.or(
+              spaceAssetPathBranches(eb, {
+                correlateAssetId: 'asset.id',
+                correlateLibraryId: 'asset.libraryId',
+                scope: { memberUserId: options.scope!.memberUserId },
+              }),
+            ),
+          ]),
         ),
       )
       .orderBy('asset.fileCreatedAt', 'desc')
