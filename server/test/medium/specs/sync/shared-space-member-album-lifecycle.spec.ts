@@ -81,4 +81,39 @@ describe('removeOwnedAlbumLinksAddedBy (albums-6)', () => {
     expect(unlinked).toEqual([]);
     expect(await linksFor(space.id)).toHaveLength(1);
   });
+
+  // M9: a departing member's link to their own TRASHED album used to survive departure
+  // (the subquery filtered `album.deletedAt IS NULL`), because the soft-delete trigger
+  // tombstones grants but leaves the shared_space_album LINK row in place. A later
+  // restore then re-created grants for S's current members — re-sharing an album the
+  // owner had already removed themselves from the space with.
+  it('unlinks an album the departing member added AND owns even while it is TRASHED, so a later restore does NOT re-share it (M9)', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser(); // space owner
+    const { user: member } = await ctx.newUser(); // departing member + album owner
+    const { album } = await ctx.newAlbum({ ownerId: member.id }); // member OWNS this album
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: member.id });
+    expect(await linksFor(space.id)).toHaveLength(1);
+
+    // member trashes their own album — the soft-delete trigger tombstones grants but the
+    // shared_space_album link row survives (by design, so a quick restore re-syncs cleanly).
+    await ctx.softDeleteAlbum(album.id);
+    expect(await linksFor(space.id)).toHaveLength(1);
+
+    // member leaves the space
+    const unlinked = await sut.removeOwnedAlbumLinksAddedBy(space.id, member.id);
+
+    expect(unlinked).toEqual([album.id]);
+    expect(await linksFor(space.id)).toHaveLength(0);
+
+    // member restores their album — it must NOT reappear for S's members, and no grants exist
+    await db.updateTable('album').set({ deletedAt: null }).where('id', '=', album.id).execute();
+
+    expect(await linksFor(space.id)).toHaveLength(0);
+    const grants = await db.selectFrom('shared_space_album_user').selectAll().where('albumId', '=', album.id).execute();
+    expect(grants).toHaveLength(0);
+  });
 });

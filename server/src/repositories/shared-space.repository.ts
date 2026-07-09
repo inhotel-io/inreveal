@@ -611,11 +611,18 @@ export class SharedSpaceRepository {
   }
 
   // albums-6: on member removal/leave, unlink the shared_space_album rows the
-  // departing user ADDED and OWNS (album_user role='owner', album not soft-deleted).
-  // Remaining members lose access to the ex-member's album (its future assets too).
-  // Rows the member added for albums they do NOT own are left untouched. Deleting the
-  // rows fires shared_space_album_delete_audit (link tombstone + gated grant revocation
-  // for remaining members). Returns the album ids actually unlinked.
+  // departing user ADDED and OWNS (album_user role='owner'). Remaining members lose
+  // access to the ex-member's album (its future assets too). Rows the member added
+  // for albums they do NOT own are left untouched. Deleting the rows fires
+  // shared_space_album_delete_audit (link tombstone + gated grant revocation for
+  // remaining members). Returns the album ids actually unlinked.
+  // M9: deliberately does NOT filter `album.deletedAt IS NULL` — a link to the
+  // departing member's own TRASHED album must also be removed on departure. The
+  // soft-delete trigger already tombstoned that album's grants but leaves the
+  // shared_space_album link row in place; without this, a later restore re-creates
+  // grants for S's current members, re-sharing an album the owner had already left
+  // the space with. Deleting a trashed album's link is safe either way — grants are
+  // already revoked and the delete-audit tombstone is idempotent.
   // L7: accepts an optional trx so removeMember (service) can thread it through one
   // transaction shared with the membership-row delete — atomic member removal.
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
@@ -631,11 +638,9 @@ export class SharedSpaceRepository {
       .where('shared_space_album.albumId', 'in', (eb) =>
         eb
           .selectFrom('album_user')
-          .innerJoin('album', 'album.id', 'album_user.albumId')
           .select('album_user.albumId')
           .where('album_user.userId', '=', userId)
-          .where('album_user.role', '=', AlbumUserRole.Owner)
-          .where('album.deletedAt', 'is', null),
+          .where('album_user.role', '=', AlbumUserRole.Owner),
       )
       .returning('shared_space_album.albumId')
       .execute();
@@ -644,29 +649,60 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID] })
   getLinkedAlbums(spaceId: string) {
-    return this.db
-      .selectFrom('shared_space_album')
-      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
-      .selectAll('album')
-      .select([
-        'shared_space_album.addedById',
-        'shared_space_album.showInTimeline',
-        'shared_space_album.createdAt as linkedAt',
-      ])
-      .select((eb) =>
-        eb
-          .selectFrom('album_user')
-          .whereRef('album_user.albumId', '=', 'album.id')
-          .where('album_user.role', '=', AlbumUserRole.Owner)
-          .select('album_user.userId')
-          .limit(1)
-          .as('ownerId'),
-      )
-      .where('shared_space_album.spaceId', '=', spaceId)
-      .where('album.deletedAt', 'is', null)
-      .orderBy('album.createdAt', 'desc')
-      .orderBy('album.id', 'asc')
-      .execute();
+    return (
+      this.db
+        .selectFrom('shared_space_album')
+        .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+        .selectAll('album')
+        .select([
+          'shared_space_album.addedById',
+          'shared_space_album.showInTimeline',
+          'shared_space_album.createdAt as linkedAt',
+        ])
+        .select((eb) =>
+          eb
+            .selectFrom('album_user')
+            .whereRef('album_user.albumId', '=', 'album.id')
+            .where('album_user.role', '=', AlbumUserRole.Owner)
+            .select('album_user.userId')
+            .limit(1)
+            .as('ownerId'),
+        )
+        // L17: the raw `album.albumThumbnailAssetId` (already selected via `selectAll('album')`
+        // above) can point at an asset that isn't space-visible (Hidden/Locked, or since
+        // soft-deleted) — a member's gated thumbnail request for it 403s and the web renders a
+        // broken cover tile. This later `albumThumbnailAssetId` alias appears after `album.*` in
+        // the column list, so it wins on the duplicate name: COALESCE (1) the current thumbnail
+        // only if it's still a live, space-visible asset, else (2) the newest space-visible asset
+        // still in the album, else (3) null (web renders NoCover).
+        .select((eb) =>
+          eb.fn
+            .coalesce(
+              eb
+                .selectFrom('asset')
+                .select('asset.id')
+                .whereRef('asset.id', '=', 'album.albumThumbnailAssetId')
+                .where('asset.deletedAt', 'is', null)
+                .where((eb2) => spaceVisibilityGate(eb2)),
+              eb
+                .selectFrom('album_asset')
+                .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+                .select('asset.id')
+                .whereRef('album_asset.albumId', '=', 'album.id')
+                .where('asset.deletedAt', 'is', null)
+                .where((eb2) => spaceVisibilityGate(eb2))
+                .orderBy('asset.fileCreatedAt', 'desc')
+                .orderBy('asset.id', 'asc')
+                .limit(1),
+            )
+            .as('albumThumbnailAssetId'),
+        )
+        .where('shared_space_album.spaceId', '=', spaceId)
+        .where('album.deletedAt', 'is', null)
+        .orderBy('album.createdAt', 'desc')
+        .orderBy('album.id', 'asc')
+        .execute()
+    );
   }
 
   // correctness-4 support: album ids currently linked to a space (captured before a

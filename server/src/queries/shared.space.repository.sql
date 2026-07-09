@@ -303,11 +303,9 @@ where
       "album_user"."albumId"
     from
       "album_user"
-      inner join "album" on "album"."id" = "album_user"."albumId"
     where
       "album_user"."userId" = $3
       and "album_user"."role" = $4
-      and "album"."deletedAt" is null
   )
 returning
   "shared_space_album"."albumId"
@@ -328,12 +326,40 @@ select
       and "album_user"."role" = $1
     limit
       $2
-  ) as "ownerId"
+  ) as "ownerId",
+  coalesce(
+    (
+      select
+        "asset"."id"
+      from
+        "asset"
+      where
+        "asset"."id" = "album"."albumThumbnailAssetId"
+        and "asset"."deletedAt" is null
+        and "asset"."visibility" in ($3, $4)
+    ),
+    (
+      select
+        "asset"."id"
+      from
+        "album_asset"
+        inner join "asset" on "asset"."id" = "album_asset"."assetId"
+      where
+        "album_asset"."albumId" = "album"."id"
+        and "asset"."deletedAt" is null
+        and "asset"."visibility" in ($5, $6)
+      order by
+        "asset"."fileCreatedAt" desc,
+        "asset"."id" asc
+      limit
+        $7
+    )
+  ) as "albumThumbnailAssetId"
 from
   "shared_space_album"
   inner join "album" on "album"."id" = "shared_space_album"."albumId"
 where
-  "shared_space_album"."spaceId" = $3
+  "shared_space_album"."spaceId" = $8
   and "album"."deletedAt" is null
 order by
   "album"."createdAt" desc,
