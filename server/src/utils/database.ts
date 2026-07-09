@@ -615,6 +615,11 @@ export function albumSharedSpaceScope<O>(qb: SelectQueryBuilder<DB, 'asset', O>,
         // Locked asset reachable only through a linked album leaked to album searchers. Gate it flat
         // (Archive+Timeline, no owner exception) to match the album grid's withDefaultVisibility.
         spaceVisibilityGate(eb),
+        // Fork RBAC (Slice 1 / H1): album-granted search must never surface the owner's
+        // trashed assets, even when the caller flips withDeleted via
+        // trashedAfter/trashedBefore/isOffline (searchAssetBuilder's top-level `!withDeleted`
+        // gate no-ops in that case, and nothing else in this branch filtered deletedAt).
+        eb('asset.deletedAt', 'is', null),
         eb.not(eb.exists(eb.selectFrom('shared_space_asset').whereRef('shared_space_asset.assetId', '=', 'asset.id'))),
         eb.not(
           eb.exists(
