@@ -439,6 +439,64 @@ where
       )
   )
 
+-- AccessRepository.person.checkSharedSpaceEditAccess
+select
+  "person"."id"
+from
+  "person"
+where
+  "person"."id" in ($1)
+  and exists (
+    select
+    from
+      "asset_face"
+      inner join "asset" on "asset"."id" = "asset_face"."assetId"
+      and "asset"."deletedAt" is null
+      and "asset"."visibility" in ($2, $3)
+    where
+      "asset_face"."personId" = "person"."id"
+      and "asset_face"."deletedAt" is null
+      and "asset_face"."isVisible" is true
+      and (
+        exists (
+          select
+            1 as "exists"
+          from
+            "shared_space_asset"
+            inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_asset"."spaceId"
+          where
+            "shared_space_member"."userId" = $4::uuid
+            and "shared_space_member"."role" in ($5, $6)
+            and "shared_space_asset"."assetId" = "asset"."id"
+        )
+        or exists (
+          select
+            1 as "exists"
+          from
+            "shared_space_library"
+            inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_library"."spaceId"
+          where
+            "shared_space_member"."userId" = $7::uuid
+            and "shared_space_member"."role" in ($8, $9)
+            and "shared_space_library"."libraryId" = "asset"."libraryId"
+        )
+        or exists (
+          select
+            1 as "exists"
+          from
+            "shared_space_album"
+            inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+            inner join "album" on "album"."id" = "shared_space_album"."albumId"
+            and "album"."deletedAt" is null
+            inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+          where
+            "shared_space_member"."userId" = $10::uuid
+            and "shared_space_member"."role" in ($11, $12)
+            and "album_asset"."assetId" = "asset"."id"
+        )
+      )
+  )
+
 -- AccessRepository.person.checkFaceOwnerAccess
 select
   "asset_face"."id"

@@ -17,7 +17,7 @@
 //
 // See docs / data/sa-abstraction-spec-t8/report.md for the full design + slices.
 import { Expression, ExpressionBuilder, RawBuilder, ReferenceExpression, sql, SqlBool } from 'kysely';
-import { AssetVisibility } from 'src/enum';
+import { AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { anyUuid, asUuid } from 'src/utils/database';
 
@@ -53,11 +53,15 @@ export function spaceVisibilityGate(
  *  - `{ spaceIds }`     -> `shared_space_album.spaceId = any(<uuid[]>)` (timeline set)
  *  - `{ memberUserId }` -> inner-join `shared_space_member` on the user  (membership)
  *  - `{ spaceIdRef }`   -> `shared_space_album.spaceId = <outer column>` (correlated)
+ *
+ * `{ memberUserId }` additionally accepts an optional `memberRole` — when set, the membership
+ * join also requires `shared_space_member.role IN (memberRole)` (e.g. restricting to Owner/Editor
+ * for a write-capable scope). Omitting it preserves the original any-role membership check.
  */
 export type SpaceScope =
   | { spaceId: string }
   | { spaceIds: string[] }
-  | { memberUserId: string }
+  | { memberUserId: string; memberRole?: SharedSpaceRole[] }
   | { spaceIdRef: ReferenceExpression<DB, keyof DB> };
 
 export interface SpaceAlbumAssetOptions {
@@ -137,7 +141,10 @@ export function spaceAlbumAssetExists(
       .$if('memberUserId' in scope, (qb) =>
         qb
           .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
-          .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId)),
+          .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId))
+          .$if(!!(scope as { memberRole?: SharedSpaceRole[] }).memberRole?.length, (qb2) =>
+            qb2.where('shared_space_member.role', 'in', (scope as { memberRole: SharedSpaceRole[] }).memberRole),
+          ),
       )
       .select(eb.lit(1).as('exists'))
       .whereRef('album_asset.assetId', '=', options.correlateAssetId)
@@ -180,7 +187,10 @@ export function spaceDirectAssetExists(
       .$if('memberUserId' in scope, (qb) =>
         qb
           .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
-          .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId)),
+          .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId))
+          .$if(!!(scope as { memberRole?: SharedSpaceRole[] }).memberRole?.length, (qb2) =>
+            qb2.where('shared_space_member.role', 'in', (scope as { memberRole: SharedSpaceRole[] }).memberRole),
+          ),
       )
       .select(eb.lit(1).as('exists'))
       .whereRef('shared_space_asset.assetId', '=', options.correlateAssetId)
@@ -212,7 +222,10 @@ export function spaceLibraryAssetExists(
       .$if('memberUserId' in scope, (qb) =>
         qb
           .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_library.spaceId')
-          .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId)),
+          .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId))
+          .$if(!!(scope as { memberRole?: SharedSpaceRole[] }).memberRole?.length, (qb2) =>
+            qb2.where('shared_space_member.role', 'in', (scope as { memberRole: SharedSpaceRole[] }).memberRole),
+          ),
       )
       .select(eb.lit(1).as('exists'))
       .whereRef('shared_space_library.libraryId', '=', options.correlateLibraryId)

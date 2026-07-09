@@ -319,6 +319,47 @@ describe('AccessRepository.person.checkSharedSpaceAccess — album leg', () => {
   });
 });
 
+const seedPersonOnSpaceLinkedAlbum = async (ctx: ReturnType<typeof setup>['ctx']) => {
+  const { user: owner } = await ctx.newUser();
+  const { user: editor } = await ctx.newUser();
+  const { user: viewer } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: editor.id, role: 'editor' });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+  const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'PersonEditAlbum' });
+  await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+  const { asset } = await ctx.newAsset({ ownerId: owner.id });
+  await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+  const { person } = await ctx.newPerson({ ownerId: owner.id, name: 'EditAlbumPerson' });
+  await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+  return { editor, viewer, person };
+};
+
+// Slice 3 — M2: checkSharedSpaceEditAccess mirrors checkSharedSpaceAccess but additionally requires
+// the caller's shared_space_member.role to be Owner or Editor — a Viewer must get an empty set even
+// though checkSharedSpaceAccess (read) grants them.
+describe('AccessRepository.person.checkSharedSpaceEditAccess — album leg (M2)', () => {
+  it('GRANT — an Editor of the space is returned', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { editor, person } = await seedPersonOnSpaceLinkedAlbum(ctx);
+
+    const result = await accessRepo.person.checkSharedSpaceEditAccess(editor.id, new Set([person.id]));
+
+    expect(result.has(person.id)).toBe(true);
+  });
+
+  it('DENY — a Viewer of the same space gets an empty set even though read access is granted', async () => {
+    const { ctx, accessRepo } = setupRead();
+    const { viewer, person } = await seedPersonOnSpaceLinkedAlbum(ctx);
+
+    const readResult = await accessRepo.person.checkSharedSpaceAccess(viewer.id, new Set([person.id]));
+    expect(readResult.has(person.id)).toBe(true); // sanity: viewer DOES have read access
+
+    const editResult = await accessRepo.person.checkSharedSpaceEditAccess(viewer.id, new Set([person.id]));
+    expect(editResult.has(person.id)).toBe(false);
+  });
+});
+
 describe('getRecentAssets and getNewAssetCount — album leg (C2 consistency)', () => {
   it('album-only space: getRecentAssets returns album image assets, getNewAssetCount counts them, both equal getAssetCount', async () => {
     const { ctx, sut } = setup();
