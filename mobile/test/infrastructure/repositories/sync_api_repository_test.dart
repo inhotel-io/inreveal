@@ -140,6 +140,33 @@ void main() {
       final types = await capturedRequestTypes(const SemVer(major: 6, minor: 0, patch: 0));
       expect(albumTypes.every(types.contains), isTrue);
     });
+
+    test('M14: every SharedSpaceAlbum* SyncRequestType enum value is inside the version gate', () async {
+      // Guards the invariant the tests above only spot-check with the hardcoded `albumTypes`
+      // list: derives the "must be gated" set from the generated SyncRequestType.values enum
+      // itself, so a future fork-only SharedSpaceAlbum* type landing in the enum without being
+      // added to the `serverVersion > SemVer(5, 0, 0)` gate in sync_api.repository.dart fails
+      // here even if `albumTypes` above is never updated to match — the exact regression class
+      // the mobile-1 gate exists to prevent (a whole-stream 400 outage on an older server).
+      final forkAlbumTypes = SyncRequestType.values
+          .map((t) => t.value)
+          .where((v) => v.startsWith('SharedSpaceAlbum'))
+          .toSet();
+
+      final ungated = (await capturedRequestTypes(const SemVer(major: 5, minor: 0, patch: 0))).toSet();
+      expect(
+        ungated.intersection(forkAlbumTypes),
+        isEmpty,
+        reason: 'every SharedSpaceAlbum* SyncRequestType must be inside the version gate',
+      );
+
+      final gated = (await capturedRequestTypes(const SemVer(major: 6, minor: 0, patch: 0))).toSet();
+      expect(
+        forkAlbumTypes.difference(gated),
+        isEmpty,
+        reason: 'every SharedSpaceAlbum* SyncRequestType must be sent once the version gate is satisfied',
+      );
+    });
   });
 
   test('streamChanges stops processing stream when abort is called', () async {
