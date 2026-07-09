@@ -26,6 +26,7 @@ export async function up(db: Kysely<any>): Promise<void> {
         RETURN NULL;
       END IF;
 
+      -- soft-delete: revoke all grants for the trashed albums
       INSERT INTO shared_space_album_user_audit ("albumId", "userId")
       SELECT ssau."albumId", ssau."userId"
       FROM shared_space_album_user ssau
@@ -35,6 +36,7 @@ export async function up(db: Kysely<any>): Promise<void> {
         WHERE o."deletedAt" IS NULL AND n."deletedAt" IS NOT NULL
       );
 
+      -- soft-delete: tombstone all space->album links for the trashed albums
       INSERT INTO shared_space_album_audit ("spaceId", "albumId")
       SELECT ssa."spaceId", ssa."albumId"
       FROM shared_space_album ssa
@@ -44,6 +46,7 @@ export async function up(db: Kysely<any>): Promise<void> {
         WHERE o."deletedAt" IS NULL AND n."deletedAt" IS NOT NULL
       );
 
+      -- restore: re-create grants for members of every space still linking each album
       INSERT INTO shared_space_album_user ("userId", "albumId")
       SELECT DISTINCT ssm."userId", ssa."albumId"
       FROM shared_space_album ssa
@@ -56,6 +59,7 @@ export async function up(db: Kysely<any>): Promise<void> {
       ON CONFLICT ("userId", "albumId")
       DO UPDATE SET "createId" = immich_uuid_v7(), "createdAt" = now();
 
+      -- restore: bump shared_space_album.updateId so the link row re-delivers
       UPDATE shared_space_album
       SET "updatedAt" = clock_timestamp(), "updateId" = immich_uuid_v7(clock_timestamp())
       WHERE "albumId" IN (
@@ -74,7 +78,7 @@ export async function up(db: Kysely<any>): Promise<void> {
   FOR EACH STATEMENT
   EXECUTE FUNCTION album_soft_delete_shared_space_album();`.execute(db);
 
-  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_album_soft_delete_shared_space_album', '{"type":"function","name":"album_soft_delete_shared_space_album","sql":"CREATE OR REPLACE FUNCTION album_soft_delete_shared_space_album()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      IF NOT EXISTS (\\n        SELECT 1\\n        FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE (o.\\"deletedAt\\" IS NULL) <> (n.\\"deletedAt\\" IS NULL)\\n      ) THEN\\n        RETURN NULL;\\n      END IF;\\n\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT ssau.\\"albumId\\", ssau.\\"userId\\"\\n      FROM shared_space_album_user ssau\\n      WHERE ssau.\\"albumId\\" IN (\\n        SELECT n.\\"id\\" FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE o.\\"deletedAt\\" IS NULL AND n.\\"deletedAt\\" IS NOT NULL\\n      );\\n\\n      INSERT INTO shared_space_album_audit (\\"spaceId\\", \\"albumId\\")\\n      SELECT ssa.\\"spaceId\\", ssa.\\"albumId\\"\\n      FROM shared_space_album ssa\\n      WHERE ssa.\\"albumId\\" IN (\\n        SELECT n.\\"id\\" FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE o.\\"deletedAt\\" IS NULL AND n.\\"deletedAt\\" IS NOT NULL\\n      );\\n\\n      INSERT INTO shared_space_album_user (\\"userId\\", \\"albumId\\")\\n      SELECT DISTINCT ssm.\\"userId\\", ssa.\\"albumId\\"\\n      FROM shared_space_album ssa\\n      INNER JOIN shared_space_member ssm ON ssm.\\"spaceId\\" = ssa.\\"spaceId\\"\\n      WHERE ssa.\\"albumId\\" IN (\\n        SELECT n.\\"id\\" FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE o.\\"deletedAt\\" IS NOT NULL AND n.\\"deletedAt\\" IS NULL\\n      )\\n      ON CONFLICT (\\"userId\\", \\"albumId\\")\\n      DO UPDATE SET \\"createId\\" = immich_uuid_v7(), \\"createdAt\\" = now();\\n\\n      UPDATE shared_space_album\\n      SET \\"updatedAt\\" = clock_timestamp(), \\"updateId\\" = immich_uuid_v7(clock_timestamp())\\n      WHERE \\"albumId\\" IN (\\n        SELECT n.\\"id\\" FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE o.\\"deletedAt\\" IS NOT NULL AND n.\\"deletedAt\\" IS NULL\\n      );\\n\\n      RETURN NULL;\\n    END"}'::jsonb);`.execute(
+  await sql`INSERT INTO "migration_overrides" ("name", "value") VALUES ('function_album_soft_delete_shared_space_album', '{"type":"function","name":"album_soft_delete_shared_space_album","sql":"CREATE OR REPLACE FUNCTION album_soft_delete_shared_space_album()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      IF NOT EXISTS (\\n        SELECT 1\\n        FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE (o.\\"deletedAt\\" IS NULL) <> (n.\\"deletedAt\\" IS NULL)\\n      ) THEN\\n        RETURN NULL;\\n      END IF;\\n\\n      -- soft-delete: revoke all grants for the trashed albums\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT ssau.\\"albumId\\", ssau.\\"userId\\"\\n      FROM shared_space_album_user ssau\\n      WHERE ssau.\\"albumId\\" IN (\\n        SELECT n.\\"id\\" FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE o.\\"deletedAt\\" IS NULL AND n.\\"deletedAt\\" IS NOT NULL\\n      );\\n\\n      -- soft-delete: tombstone all space->album links for the trashed albums\\n      INSERT INTO shared_space_album_audit (\\"spaceId\\", \\"albumId\\")\\n      SELECT ssa.\\"spaceId\\", ssa.\\"albumId\\"\\n      FROM shared_space_album ssa\\n      WHERE ssa.\\"albumId\\" IN (\\n        SELECT n.\\"id\\" FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE o.\\"deletedAt\\" IS NULL AND n.\\"deletedAt\\" IS NOT NULL\\n      );\\n\\n      -- restore: re-create grants for members of every space still linking each album\\n      INSERT INTO shared_space_album_user (\\"userId\\", \\"albumId\\")\\n      SELECT DISTINCT ssm.\\"userId\\", ssa.\\"albumId\\"\\n      FROM shared_space_album ssa\\n      INNER JOIN shared_space_member ssm ON ssm.\\"spaceId\\" = ssa.\\"spaceId\\"\\n      WHERE ssa.\\"albumId\\" IN (\\n        SELECT n.\\"id\\" FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE o.\\"deletedAt\\" IS NOT NULL AND n.\\"deletedAt\\" IS NULL\\n      )\\n      ON CONFLICT (\\"userId\\", \\"albumId\\")\\n      DO UPDATE SET \\"createId\\" = immich_uuid_v7(), \\"createdAt\\" = now();\\n\\n      -- restore: bump shared_space_album.updateId so the link row re-delivers\\n      UPDATE shared_space_album\\n      SET \\"updatedAt\\" = clock_timestamp(), \\"updateId\\" = immich_uuid_v7(clock_timestamp())\\n      WHERE \\"albumId\\" IN (\\n        SELECT n.\\"id\\" FROM new_rows n\\n        INNER JOIN old_rows o ON o.\\"id\\" = n.\\"id\\"\\n        WHERE o.\\"deletedAt\\" IS NOT NULL AND n.\\"deletedAt\\" IS NULL\\n      );\\n\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb);`.execute(
     db,
   );
 
