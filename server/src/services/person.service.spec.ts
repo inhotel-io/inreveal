@@ -1013,6 +1013,44 @@ describe(PersonService.name, () => {
       expect(mocks.access.person.checkSharedSpaceAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.id]));
     });
 
+    // M1: a non-owner (space-granted) caller must be scoped to space-reachable, shareable-visibility
+    // faces only -- never the owner's Hidden/never-shared faces or faces pulled in via another user's
+    // identity. checkOwnerAccess returning an empty set is the non-owner signal.
+    it('scopes the repository call to the caller when the caller does not own the person', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create({ faceAssetId: 'face-1' });
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.person.checkSharedSpaceAccess.mockResolvedValue(new Set([person.id]));
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.getRepresentativeFaces.mockResolvedValue([]);
+
+      await sut.getFacesForPicker(auth, person.id, { page: 1, size: 10 });
+
+      expect(mocks.person.getRepresentativeFaces).toHaveBeenCalledWith({
+        personId: person.id,
+        take: 10,
+        skip: 0,
+        scope: { memberUserId: auth.user.id },
+      });
+    });
+
+    it('does not scope the repository call for the owner', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create({ faceAssetId: 'face-1' });
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.getRepresentativeFaces.mockResolvedValue([]);
+
+      await sut.getFacesForPicker(auth, person.id, { page: 1, size: 10 });
+
+      expect(mocks.person.getRepresentativeFaces).toHaveBeenCalledWith({
+        personId: person.id,
+        take: 10,
+        skip: 0,
+        scope: undefined,
+      });
+    });
+
     it('updates the representative face for a shared-space member who does not own the person', async () => {
       const auth = AuthFactory.create();
       const person = PersonFactory.create({ identityId: 'identity-1' });

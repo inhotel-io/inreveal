@@ -323,10 +323,17 @@ export class PersonService extends BaseService {
     await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
     const person = await this.findOrFail(id);
     const take = dto.size;
+    // Fork RBAC (Slice 2 / M1): PersonRead also admits non-owner space-granted callers. Scope those
+    // callers to space-reachable, shareable-visibility faces only — never the owner's Hidden/
+    // never-shared faces or faces pulled in via another user's identity. The owner keeps the full,
+    // unscoped list.
+    const isOwner = await this.accessRepository.person.checkOwnerAccess(auth.user.id, new Set([id]));
+    const scope = isOwner.has(id) ? undefined : { memberUserId: auth.user.id };
     const rows = await this.personRepository.getRepresentativeFaces({
       personId: id,
       take,
       skip: (dto.page - 1) * dto.size,
+      scope,
     });
     const faces = rows.slice(0, take);
 
