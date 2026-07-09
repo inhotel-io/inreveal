@@ -149,6 +149,20 @@ If you're a server admin, you can [link an external library](#connected-librarie
 2. Long-press to select photos.
 3. Tap **Remove from Space** in the bottom sheet.
 
+## Stacked Photos
+
+Stacks (RAW+JPEG pairs, bursts, or manually grouped photos) are treated as a unit in a space:
+
+- **Adding** any photo of a stack adds the **entire stack** to the space. In the space timeline the stack appears collapsed to its cover photo — exactly like your main timeline — with a badge showing how many frames it holds. Open the cover to page through every frame.
+- **Removing** any photo of a stack removes the **whole stack** from the space.
+- Changing which photo is the stack's cover keeps the stack in the space — the new cover simply takes its place.
+
+Hidden and locked photos are never added to a shared space, even when they belong to a stack.
+
+:::note
+Stacks that were added to a space before this feature shipped — or stacks you re-group after adding them — may still show only their cover. Re-add the stack to bring in every frame.
+:::
+
 ## Timeline Integration
 
 Each member can choose whether a space's photos appear in their personal timeline. Tap or click the **eye icon** in the space header to toggle between **Show on timeline** and **Hide from timeline**.

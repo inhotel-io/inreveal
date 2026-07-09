@@ -315,6 +315,28 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async getOwnedStackSiblingIds(userId: string, assetIds: string[]): Promise<string[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .selectFrom('asset as seed')
+      .innerJoin('asset as sibling', 'sibling.stackId', 'seed.stackId')
+      .select('sibling.id as assetId')
+      .distinct()
+      .where('seed.id', 'in', assetIds)
+      .where('seed.stackId', 'is not', null)
+      .where('sibling.ownerId', '=', userId)
+      .where('sibling.deletedAt', 'is', null)
+      .where('sibling.isOffline', '=', false)
+      .where('sibling.visibility', 'in', visibleSpaceAssetVisibilities)
+      .execute();
+
+    return rows.map((row) => row.assetId);
+  }
+
   /**
    * Returns the set of space IDs that contain ANY of the given asset IDs
    * via direct membership (`shared_space_asset`) AND in which the user has
@@ -356,6 +378,26 @@ export class SharedSpaceRepository {
       .where('spaceId', '=', spaceId)
       .where('assetId', 'in', assetIds)
       .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async getStackSiblingIdsInSpace(spaceId: string, assetIds: string[]): Promise<string[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .selectFrom('asset as seed')
+      .innerJoin('asset as sibling', 'sibling.stackId', 'seed.stackId')
+      .innerJoin('shared_space_asset', 'shared_space_asset.assetId', 'sibling.id')
+      .select('sibling.id as assetId')
+      .distinct()
+      .where('seed.id', 'in', assetIds)
+      .where('seed.stackId', 'is not', null)
+      .where('shared_space_asset.spaceId', '=', spaceId)
+      .execute();
+
+    return rows.map((row) => row.assetId);
   }
 
   /**
