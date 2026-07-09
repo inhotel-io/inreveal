@@ -693,33 +693,20 @@ describe('shared-space visibility negatives (Slice 11)', () => {
       // GET /albums/:id's `assets`/`assetCount` are visibility-filtered (withDefaultVisibility, an INNER
       // JOIN on album_asset) — assetCount reading 0 right after locking is true even if
       // removeAssetsFromAll never deleted the album_asset row, purely because Locked is excluded from
-      // the join. That alone does NOT prove the row was deleted (testq-2). Assert it first as a
-      // sanity check, but it is not the real proof below.
+      // the join. That alone does NOT prove the row was deleted (testq-2). Assert it as a sanity
+      // check; the real, non-vacuous proof is the member-sync delete below.
       const { status, body } = await request(app)
         .get(`/albums/${album.id}`)
         .set('Authorization', `Bearer ${owner.accessToken}`);
       expect(status).toBe(200);
       expect(body.assetCount).toBe(0);
 
-      // The real proof: PUT A back to Timeline, which lifts the visibility filter. If
-      // removeAssetsFromAll had actually deleted the album_asset row, A cannot resurrect into the
-      // album — assetCount must STAY 0. If the row had instead survived (the bug this test is meant to
-      // catch), A would reappear in the count the moment it becomes visible again.
-      await updateAsset(
-        { id: assetA.id, updateAssetDto: { visibility: AssetVisibility.Timeline } },
-        { headers: asBearerAuth(owner.accessToken) },
-      );
-      const restored = await request(app)
-        .get(`/albums/${album.id}`)
-        .set('Authorization', `Bearer ${owner.accessToken}`);
-      expect(restored.status).toBe(200);
-      expect(
-        restored.body.assetCount,
-        'A resurrected into the album — the album_asset row was not actually deleted by removeAssetsFromAll',
-      ).toBe(0);
-
-      // The member's sync still receives the delete (via the album_asset_audit trigger fired by
-      // removeAssetsFromAll — no shared_space_album_asset_audit tombstone needed for Locked).
+      // The real (non-vacuous) proof that removeAssetsFromAll DELETED the album_asset row: the member's
+      // sync receives a SharedSpaceAlbumToAssetDeleteV1 fired by the album_asset_audit trigger, which
+      // only fires on an actual row DELETE — a visibility filter alone would emit no delete. (Un-locking
+      // A back to Timeline to re-check resurrection is not possible over e2e: modifying a Locked asset
+      // requires elevated auth. The row-delete side of removeAssetsFromAll is covered at the
+      // unit/medium level by the #757 transition tests.)
       const next = await syncStream(member.accessToken, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
       const deletes = next.filter((l) => l.type === 'SharedSpaceAlbumToAssetDeleteV1');
       expect(deletes.some((d) => d.data.albumId === album.id && d.data.assetId === assetA.id)).toBe(true);
