@@ -49,8 +49,10 @@ describe(AssetService.name, () => {
     // Slice 1: album-path purge/restore (album_asset row retained on Hidden).
     mocks.sharedSpace.emitAlbumAssetVisibilityPurge.mockResolvedValue(void 0);
     mocks.sharedSpace.emitAlbumAssetVisibilityRestore.mockResolvedValue(void 0);
-    // Slice 2: library-path purge (no restore emit; automatic via asset.updateId bump).
+    // Slice 2: library-path purge. The asset ROW restore is automatic via asset.updateId bump; L4 adds a
+    // dedicated EXIF-restore emit (asset_exif.updateId is untouched by a visibility flip).
     mocks.sharedSpace.emitLibraryAssetVisibilityPurge.mockResolvedValue(void 0);
+    mocks.sharedSpace.emitLibraryAssetVisibilityRestore.mockResolvedValue(void 0);
   });
 
   describe('getStatistics', () => {
@@ -1213,6 +1215,20 @@ describe(AssetService.name, () => {
       },
     );
 
+    it.each([[AssetVisibility.Timeline], [AssetVisibility.Archive]])(
+      'L4: should re-deliver library-asset EXIF to member devices when visibility is %s (restore)',
+      async (visibility) => {
+        mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
+        mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Hidden } as any]);
+
+        await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility });
+
+        // The asset ROW restore is automatic (asset.updateId bump); EXIF needs its own restore emit
+        // because a visibility flip never touches asset_exif.updateId.
+        expect(mocks.sharedSpace.emitLibraryAssetVisibilityRestore).toHaveBeenCalledWith(['asset-1']);
+      },
+    );
+
     it('should not touch direct space assets when visibility is not provided', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
 
@@ -1330,13 +1346,17 @@ describe(AssetService.name, () => {
       expect(mocks.asset.updateDateTimeOriginal).toHaveBeenCalledWith(['asset-1'], undefined, 'America/New_York');
     });
 
-    it('does NOT re-purge an already-Hidden asset (correctness-8 idempotency)', async () => {
+    it('DOES re-purge an already-Hidden asset so a retry after a failed emit converges (M3)', async () => {
+      // Simulates the post-failed-write retry: the first request's UPDATE committed (asset is now
+      // Hidden) but the emit never reached the caller (crash/timeout) — a retry re-reads prior=Hidden.
+      // Gating purgeIds on "prior was shareable" would silently no-op here and leave the member's
+      // device holding stale bytes forever. M3 makes the purge unconditional on a non-shareable next.
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
       mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Hidden } as any]);
       await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Hidden });
-      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
-      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).not.toHaveBeenCalled();
-      expect(mocks.sharedSpace.emitLibraryAssetVisibilityPurge).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
+      expect(mocks.sharedSpace.emitLibraryAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
     });
 
     it('does NOT purge or restore on a Timeline→Archive move (both shareable, correctness-8)', async () => {
@@ -1347,9 +1367,10 @@ describe(AssetService.name, () => {
       expect(mocks.sharedSpace.emitDirectAssetVisibilityRestore).not.toHaveBeenCalled();
     });
 
-    it('emits only for boundary-crossers in a mixed bulk favorite+visibility flip (correctness-8)', async () => {
+    it('purges ALL non-shareable-next assets in a mixed bulk flip, including one already Hidden (M3 retry-convergence)', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1', 'asset-2']));
-      // asset-1 crosses Timeline→Hidden; asset-2 was already Hidden (no-op).
+      // asset-1 crosses Timeline→Hidden; asset-2 was already Hidden (simulates a retry after a failed
+      // emit on a prior request that committed the write but never delivered the purge).
       mocks.asset.getByIds.mockResolvedValue([
         { id: 'asset-1', visibility: AssetVisibility.Timeline } as any,
         { id: 'asset-2', visibility: AssetVisibility.Hidden } as any,
@@ -1359,16 +1380,20 @@ describe(AssetService.name, () => {
         isFavorite: true,
         visibility: AssetVisibility.Hidden,
       });
-      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
-      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
+      // M3: purge is unconditional on a non-shareable next — both ids are re-affirmed, not just the crosser.
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1', 'asset-2']);
+      expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1', 'asset-2']);
     });
 
-    it('removes from albums exactly once and skips a re-lock (correctness-8)', async () => {
+    it('removes from albums exactly once (lock-once) but still re-purges on a re-lock (M3 retry-convergence)', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
       mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Locked } as any]);
       await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Locked });
+      // lock-once is unchanged: removeAssetsFromAll is gated on prior !== Locked, so a re-lock skips it.
       expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled(); // already Locked → no-op
-      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).not.toHaveBeenCalled();
+      // M3: the purge itself is unconditional on the non-shareable next, so a re-lock still re-purges
+      // (idempotent tombstone) — this is what makes a retry after a failed emit converge.
+      expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
     });
   });
 

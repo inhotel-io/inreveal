@@ -401,11 +401,12 @@ export class AssetService extends BaseService {
    *
    * correctness-6 — NOT wrapped in a Kysely transaction: the UPDATE, removeAssetsFromAll and each emit run
    * on a DIFFERENT repository's own `this.db` handle, so a single `transaction()` would hit the
-   * `this.db`-inside-`transaction()` pool deadlock (#595). Resilience instead comes from (a) idempotent
-   * tombstones — re-running emits the same audit rows harmlessly (Task 4's boundary-crossing check makes a
-   * re-affirm a genuine no-op), and (b) a re-flip re-emitting the tombstone. A crash between the UPDATE and
-   * the emits therefore leaves a RECOVERABLE state (re-run converges), not a corrupted one. A periodic
-   * reconciliation sweep (grants/tombstones vs. live rows) is a possible follow-up; not required here.
+   * `this.db`-inside-`transaction()` pool deadlock (#595). Resilience instead comes from the purge being
+   * UNCONDITIONAL-AND-IDEMPOTENT on a non-shareable next (M3): it no longer depends on the prior visibility
+   * read before the write, so a retry that re-reads an already-Hidden/Locked asset (e.g. after a crash or a
+   * failed emit) re-affirms the tombstone rather than silently no-op'ing. Re-running emits the same audit
+   * rows harmlessly. A crash between the UPDATE and the emits therefore leaves a RECOVERABLE state (re-run
+   * converges), not a corrupted one.
    */
   private async applyVisibilityTransitionSideEffects(
     ids: string[],
@@ -422,7 +423,10 @@ export class AssetService extends BaseService {
       if (restoreIds.length > 0) {
         await this.sharedSpaceRepository.emitDirectAssetVisibilityRestore(restoreIds);
         await this.sharedSpaceRepository.emitAlbumAssetVisibilityRestore(restoreIds);
-        // Library restore is automatic (the visibility UPDATE bumped asset.updateId) — no emit.
+        // L4: the library ASSET ROW restore is automatic (the visibility UPDATE bumped asset.updateId),
+        // but its EXIF is not — asset_exif.updateId is untouched by a visibility flip, so without this
+        // emit a restored library asset would show empty EXIF forever on an already-synced member device.
+        await this.sharedSpaceRepository.emitLibraryAssetVisibilityRestore(restoreIds);
       }
       return;
     }
@@ -436,9 +440,11 @@ export class AssetService extends BaseService {
       }
     }
 
-    // Purge: only assets whose PRIOR was shareable cross out. Re-hide (Hidden→Hidden), Hidden→Locked and
-    // Locked→Hidden are non-shareable→non-shareable → no duplicate purge (already purged when first hidden).
-    const purgeIds = ids.filter((id) => shareable(priorVisibilities.get(id)));
+    // Purge: unconditional on every id whenever nextVisibility is non-shareable (M3, retry-convergent).
+    // This branch already guarantees nextVisibility ∈ {Hidden, Locked}, so we don't need to know the prior
+    // to decide whether to purge — a re-affirm (Hidden→Hidden, Locked→Locked) re-emits the same tombstone,
+    // which is harmless (idempotent) and is exactly what lets a retry after a failed emit converge.
+    const purgeIds = ids;
     if (purgeIds.length > 0) {
       await this.sharedSpaceRepository.emitDirectAssetVisibilityPurge(purgeIds);
       if (nextVisibility === AssetVisibility.Hidden) {

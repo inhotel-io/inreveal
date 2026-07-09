@@ -136,29 +136,46 @@ describe('Cross-path visibility purge convergence (X1)', () => {
   });
 });
 
-// correctness-8: applyVisibilityTransitionSideEffects must gate on the PRIOR visibility, not just the
-// target, so a re-affirm (already-Hidden -> Hidden) or a shareable-to-shareable move (Timeline -> Archive)
-// writes no duplicate/spurious tombstone, and a mixed bulk request only touches the assets that actually
-// cross the shareable boundary. RED reasoning (pre-fix): the old helper branched only on the target
-// visibility, so it unconditionally re-purged an already-Hidden asset and unconditionally bumped the
-// updateId of an already-shareable asset on every call.
-describe('Boundary-crossing purge gate (correctness-8)', () => {
-  it('re-hiding an already-Hidden direct+album asset writes NO new tombstone (idempotent re-affirm)', async () => {
+// correctness-8 / M3: applyVisibilityTransitionSideEffects's restore side still gates on the PRIOR
+// visibility (a shareable-to-shareable move like Timeline -> Archive writes no spurious re-upsert), but
+// the PURGE side (M3) is now UNCONDITIONAL on a non-shareable next, not gated on the prior. A re-affirm
+// (already-Hidden -> Hidden) DOES write a new tombstone, and a mixed bulk request purges every id whose
+// next is non-shareable, including one already Hidden. This is intentional: gating purge on the prior
+// visibility read before the write meant a retry after a failed emit (write committed, emit lost) would
+// re-read the now-Hidden asset and silently no-op, leaving a member device holding stale bytes forever.
+// The purge tombstone is idempotent, so re-emitting it on every non-shareable-next call is harmless and
+// makes the whole flow retry-convergent.
+describe('Boundary-crossing purge gate (correctness-8 / M3 retry-convergence)', () => {
+  it('M3: re-hiding an already-Hidden asset re-emits the purge tombstone so a retry after a failed emit converges', async () => {
     const { ctx } = await setup();
     const owner = await ctx.newSyncAuthUser();
+    const member = await ctx.newSyncAuthUser();
     const { sut: assetSut } = setupAssetService(ctx.database);
 
-    const { asset } = await ctx.newAsset({ ownerId: owner.user.id, visibility: AssetVisibility.Hidden });
+    const { asset } = await ctx.newAsset({ ownerId: owner.user.id, visibility: AssetVisibility.Timeline });
 
     const { space } = await ctx.newSharedSpace({ createdById: owner.user.id });
     await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.user.id, role: SharedSpaceRole.Editor });
     await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
 
     const { album } = await ctx.newAlbum({ ownerId: owner.user.id });
     await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
 
-    // Re-affirm Hidden -> Hidden: no boundary crossed, so no tombstone should be written on either table.
+    // Member already synced the asset while Timeline (simulates an already-synced device).
+    const initial = await ctx.syncStream(member.auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(member.auth, initial);
+    await ctx.assertSyncIsComplete(member.auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+
+    // First hide: genuine Timeline -> Hidden crossing. The member converges (delete delivered + acked).
+    await assetSut.updateAll(owner.auth, { ids: [asset.id], visibility: AssetVisibility.Hidden });
+    const afterFirstHide = await ctx.syncStream(member.auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    await ctx.syncAckAll(member.auth, afterFirstHide);
+    await ctx.assertSyncIsComplete(member.auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+
+    // Simulate a retry after a failed emit: the asset is ALREADY Hidden, but "hide" is called again
+    // (e.g. a client retry of a request whose write committed but whose response/emit was lost).
     await assetSut.updateAll(owner.auth, { ids: [asset.id], visibility: AssetVisibility.Hidden });
 
     const directAudit = await ctx.database
@@ -172,8 +189,20 @@ describe('Boundary-crossing purge gate (correctness-8)', () => {
       .where('assetId', '=', asset.id)
       .execute();
 
-    expect(directAudit, 'no direct-path tombstone on a no-op re-affirm').toHaveLength(0);
-    expect(albumAudit, 'no album-path tombstone on a no-op re-affirm').toHaveLength(0);
+    // A SECOND tombstone was written on the retry on both tables (audit rows are never deleted — only
+    // consumed via sync/ack above — so both the first-hide row and the retry's re-affirm row persist).
+    expect(directAudit, 'direct-path tombstone re-emitted on the retry').toHaveLength(2);
+    expect(albumAudit, 'album-path tombstone re-emitted on the retry').toHaveLength(2);
+
+    // The member's device — which had already acked the first delete and saw nothing new since — still
+    // converges: the retry's fresh tombstone is delivered on the next sync.
+    const afterRetry = await ctx.syncStream(member.auth, [SyncRequestType.SharedSpaceToAssetsV1]);
+    const retryDeletes = afterRetry.filter(
+      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceToAssetDeleteV1,
+    );
+    expect(retryDeletes.length, 'member /sync still carries the purge tombstone on the retry').toBeGreaterThanOrEqual(
+      1,
+    );
   });
 
   it('a Timeline -> Archive move (both shareable) delivers no spurious re-upsert to an already-synced member', async () => {
@@ -202,7 +231,7 @@ describe('Boundary-crossing purge gate (correctness-8)', () => {
     expect(deletes, 'no purge on a shareable-to-shareable move').toHaveLength(0);
   });
 
-  it('a mixed bulk request purges only the asset that crosses the boundary, not the one already Hidden', async () => {
+  it('M3: a mixed bulk request purges BOTH the asset that crosses the boundary and the one already Hidden', async () => {
     const { ctx } = await setup();
     const owner = await ctx.newSyncAuthUser();
     const { sut: assetSut } = setupAssetService(ctx.database);
@@ -226,6 +255,7 @@ describe('Boundary-crossing purge gate (correctness-8)', () => {
       .where('assetId', 'in', [crossing.id, alreadyHidden.id])
       .execute();
 
-    expect(auditRows.map((r) => r.assetId)).toEqual([crossing.id]);
+    // M3: purge is unconditional on a non-shareable next — the already-Hidden asset is re-affirmed too.
+    expect(auditRows.map((r) => r.assetId).toSorted()).toEqual([alreadyHidden.id, crossing.id].toSorted());
   });
 });

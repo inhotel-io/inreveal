@@ -233,6 +233,27 @@ where
       "shared_space_library"
   )
 
+-- SharedSpaceRepository.emitLibraryAssetVisibilityRestore
+update "asset_exif"
+set
+  "updatedAt" = clock_timestamp()
+where
+  "assetId" in ($1)
+  and "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+    where
+      "asset"."libraryId" is not null
+      and "asset"."libraryId" in (
+        select
+          "shared_space_library"."libraryId"
+        from
+          "shared_space_library"
+      )
+  )
+
 -- SharedSpaceRepository.removeLibrary
 delete from "shared_space_library"
 where

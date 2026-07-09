@@ -475,10 +475,11 @@ export class SharedSpaceRepository {
    * shared_space_library_asset_audit for each asset that belongs to a space-linked
    * library. LibraryAssetSync.getDeletes unions this table (owner-gated) so member
    * devices drop the asset. The owner is never purged — the union arm filters
-   * asset.ownerId != userId. Restore is automatic (the visibility UPDATE bumps
-   * asset.updateId; LibraryAssetSync.getUpserts re-emits the now-visible asset).
-   * Only space-linked libraries are targeted — the library owner's own sync stream
-   * and any non-space library member are unaffected.
+   * asset.ownerId != userId. The ASSET ROW's restore is automatic (the visibility
+   * UPDATE bumps asset.updateId; LibraryAssetSync.getUpserts re-emits the
+   * now-visible asset) — but its EXIF is NOT (see emitLibraryAssetVisibilityRestore
+   * below). Only space-linked libraries are targeted — the library owner's own
+   * sync stream and any non-space library member are unaffected.
    */
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async emitLibraryAssetVisibilityPurge(assetIds: string[]) {
@@ -500,6 +501,43 @@ export class SharedSpaceRepository {
           ),
       )
       .$narrowType<{ libraryId: string }>()
+      .execute();
+  }
+
+  /**
+   * L4 LIBRARY-path EXIF restore: when the owner flips a library-linked space
+   * asset back to Timeline/Archive, the asset ROW re-upserts automatically (its
+   * own updateId is bumped by the visibility UPDATE), but asset_exif.updateId is
+   * untouched by a visibility flip. LibraryAssetExifSync.getUpserts is gated on
+   * `asset_exif.updateId > ack`, so without this, a member who already
+   * synced-then-purged the asset would see the asset row reappear with EXIF
+   * missing forever. Touch asset_exif.updatedAt (mirrors
+   * emitDirectAssetVisibilityRestore / emitAlbumAssetVisibilityRestore) for every
+   * restored asset that belongs to a space-linked library so the updated_at
+   * BEFORE-UPDATE trigger bumps updateId and getUpserts re-emits.
+   *
+   * Over-emitting for an already-visible asset is harmless (the device simply
+   * re-upserts an exif row it already has).
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitLibraryAssetVisibilityRestore(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .updateTable('asset_exif')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
+      .where('assetId', 'in', (eb) =>
+        eb
+          .selectFrom('asset')
+          .select('asset.id')
+          .where('asset.libraryId', 'is not', null)
+          .where('asset.libraryId', 'in', (eb2) =>
+            eb2.selectFrom('shared_space_library').select('shared_space_library.libraryId'),
+          ),
+      )
       .execute();
   }
 
