@@ -18815,6 +18815,15 @@
             }
           },
           {
+            "name": "description",
+            "required": false,
+            "in": "query",
+            "description": "Filter by asset description (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "isFavorite",
             "required": false,
             "in": "query",
@@ -18877,6 +18886,15 @@
             }
           },
           {
+            "name": "ocr",
+            "required": false,
+            "in": "query",
+            "description": "Filter by OCR text content (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "order",
             "required": false,
             "in": "query",
@@ -18892,6 +18910,15 @@
             "description": "Date to group and order assets by (takenAt for date taken, createdAt for date added to Immich)",
             "schema": {
               "$ref": "#/components/schemas/AssetOrderBy"
+            }
+          },
+          {
+            "name": "originalFileName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by original filename (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -19189,6 +19216,15 @@
             }
           },
           {
+            "name": "description",
+            "required": false,
+            "in": "query",
+            "description": "Filter by asset description (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "isFavorite",
             "required": false,
             "in": "query",
@@ -19251,6 +19287,15 @@
             }
           },
           {
+            "name": "ocr",
+            "required": false,
+            "in": "query",
+            "description": "Filter by OCR text content (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "order",
             "required": false,
             "in": "query",
@@ -19266,6 +19311,15 @@
             "description": "Date to group and order assets by (takenAt for date taken, createdAt for date added to Immich)",
             "schema": {
               "$ref": "#/components/schemas/AssetOrderBy"
+            }
+          },
+          {
+            "name": "originalFileName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by original filename (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
             }
           },
           {
@@ -19568,6 +19622,15 @@
             }
           },
           {
+            "name": "description",
+            "required": false,
+            "in": "query",
+            "description": "Filter by asset description (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "isFavorite",
             "required": false,
             "in": "query",
@@ -19630,6 +19693,15 @@
             }
           },
           {
+            "name": "ocr",
+            "required": false,
+            "in": "query",
+            "description": "Filter by OCR text content (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "order",
             "required": false,
             "in": "query",
@@ -19645,6 +19717,15 @@
             "description": "Date to group and order assets by (takenAt for date taken, createdAt for date added to Immich)",
             "schema": {
               "$ref": "#/components/schemas/AssetOrderBy"
+            }
+          },
+          {
+            "name": "originalFileName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by original filename (substring, case/accent-insensitive)",
+            "schema": {
+              "type": "string"
             }
           },
           {
