@@ -101,7 +101,7 @@ describe('AlbumSharedSpaceLinks', () => {
     expect(container.querySelector('[data-testid="album-space-links"]')).toBeNull();
   });
 
-  it('does NOT render the previous album\'s links after navigating to a different album (L9)', async () => {
+  it("does NOT render the previous album's links after navigating to a different album (L9)", async () => {
     const { rerender } = renderWithTooltips(AlbumSharedSpaceLinks, {
       album: albumFactory.build({
         id: 'album-1',

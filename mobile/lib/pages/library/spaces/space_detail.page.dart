@@ -318,7 +318,10 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
         title: Text('space_album_unlink_title'.t(context: ctx)),
         content: Text('space_album_unlink_confirmation'.t(context: ctx)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('cancel'.t(context: ctx))),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('cancel'.t(context: ctx)),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),

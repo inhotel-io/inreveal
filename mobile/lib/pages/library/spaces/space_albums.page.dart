@@ -74,8 +74,9 @@ class SpaceAlbumsPage extends ConsumerWidget {
       ),
       body: albumsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) =>
-            Center(child: Text('space_albums_load_failed'.t(context: context, args: {'error': error.toString()}))),
+        error: (error, _) => Center(
+          child: Text('space_albums_load_failed'.t(context: context, args: {'error': error.toString()})),
+        ),
         data: (albums) => albums.isEmpty
             ? _EmptyState(key: const Key('space-albums-empty'), canEdit: canEdit, onLink: onLink)
             : _AlbumGrid(

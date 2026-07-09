@@ -99,7 +99,11 @@ class _CenteredMessage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
       child: Center(
-        child: Text(text, textAlign: TextAlign.center, style: TextStyle(color: context.colorScheme.onSurfaceVariant)),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: context.colorScheme.onSurfaceVariant),
+        ),
       ),
     );
   }
