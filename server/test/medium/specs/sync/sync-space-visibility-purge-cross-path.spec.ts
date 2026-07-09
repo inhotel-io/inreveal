@@ -7,13 +7,15 @@
 // This test exercises emitDirectAssetVisibilityPurge (Slice 4.B),
 // emitAlbumAssetVisibilityPurge (Slice 1), and emitLibraryAssetVisibilityPurge
 // (Slice 2) in concert, proving the three mechanisms converge on one device.
+import { ModuleRef, Reflector } from '@nestjs/core';
 import { Kysely } from 'kysely';
-import { AssetVisibility, SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
+import { AssetType, AssetVisibility, ImmichWorker, SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { AssetEditRepository } from 'src/repositories/asset-edit.repository';
 import { AssetJobRepository } from 'src/repositories/asset-job.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
+import { ConfigRepository } from 'src/repositories/config.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -257,5 +259,120 @@ describe('Boundary-crossing purge gate (correctness-8 / M3 retry-convergence)', 
 
     // M3: purge is unconditional on a non-shareable next — the already-Hidden asset is re-affirmed too.
     expect(auditRows.map((r) => r.assetId).toSorted()).toEqual([alreadyHidden.id, crossing.id].toSorted());
+  });
+});
+
+// M13: the #757 motion-photo purge (and the Slice-7 M3 motion retry fix) was pinned only by mock-called
+// unit tests (asset.service.spec.ts's "onAssetHide / onAssetShow" describe block calls `sut.onAssetHide(...)`
+// directly and asserts `mocks.sharedSpace.emit*` was called; metadata.service.spec.ts mocks
+// `eventRepository.emit` and asserts it was called with 'AssetHide'). Neither test exercises the real
+// `@OnEvent({ name: 'AssetHide' })` registration or a real EventRepository dispatch — a renamed event name,
+// a removed `@OnEvent` decorator, or a deleted `eventRepository.emit('AssetHide', ...)` call site anywhere
+// in metadata.service.ts would keep every one of those unit tests green while a motion video silently
+// stopped purging off member devices.
+//
+// setupRealAssetHideSeam wires AssetService's onAssetHide/onAssetShow into a REAL EventRepository via
+// EventRepository.setup() — the SAME reflection-based discovery app.module.ts runs once at boot
+// (`this.eventRepository.setup({ services })`) — against a fake ModuleRef that resolves only the two
+// tokens setup() needs (Reflector + the AssetService instance). Reflector itself is real: it has no DI
+// dependencies of its own (it's a thin `Reflect.getMetadata` wrapper — see
+// @nestjs/core/services/reflector.service.js), so this is genuine production wiring, not a hand-picked
+// handler bind like the real-EventRepository pattern used elsewhere in this suite (see
+// shared-space-album.service.spec.ts's setupWithAlbumDelete, which registers `emitHandlers['AlbumDelete']`
+// directly and would NOT notice a missing/renamed `@OnEvent` decorator). Removing or renaming
+// `@OnEvent({ name: 'AssetHide' })` on asset.service.ts is NOT registered here either — proven below.
+const setupRealAssetHideSeam = (db: Kysely<DB>) => {
+  const { sut: assetSut } = setupAssetService(db);
+
+  const reflector = new Reflector();
+  const fakeModuleRef = {
+    get: (token: unknown) => {
+      if (token === Reflector) {
+        return reflector;
+      }
+      if (token === AssetService) {
+        return assetSut;
+      }
+      throw new Error(`setupRealAssetHideSeam: unexpected ModuleRef.get(${String(token)})`);
+    },
+  } as unknown as ModuleRef;
+  const fakeConfigRepository = { getWorker: () => ImmichWorker.Api } as unknown as ConfigRepository;
+
+  const realEventRepo = new EventRepository(fakeModuleRef, fakeConfigRepository, LoggingRepository.create());
+  realEventRepo.setup({ services: [AssetService] });
+
+  return { realEventRepo };
+};
+
+// Same isExifEvent helper as sync-library-asset-exif.spec.ts's L4 test.
+const isLibraryExifEvent = (r: { type: string }) =>
+  r.type === SyncEntityType.LibraryAssetExifCreateV1 || r.type === SyncEntityType.LibraryAssetExifBackfillV1;
+
+describe('M13: motion-photo AssetHide/AssetShow purge through the real @OnEvent seam', () => {
+  it('purges a Timeline motion video off an already-synced member on the library arm when the REAL AssetHide event fires, and restores its EXIF on AssetShow', async () => {
+    const { ctx } = await setup();
+    const owner = await ctx.newSyncAuthUser();
+    const member = await ctx.newSyncAuthUser();
+    const { realEventRepo } = setupRealAssetHideSeam(ctx.database);
+
+    const { space } = await ctx.newSharedSpace({ createdById: owner.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.user.id, role: SharedSpaceRole.Editor });
+    const { library } = await ctx.newLibrary({ ownerId: owner.user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    // The motion-photo video component: a Timeline VIDEO asset in the space-linked library — the state
+    // right before metadata.service.ts's linkLivePhotos/applyMotionPhotos hides it. Seeded with EXIF so
+    // the AssetShow mirror below can assert on the EXIF-restore stream (see L4 in
+    // sync-library-asset-exif.spec.ts): unlike the library asset ROW, which re-upserts automatically off
+    // the visibility UPDATE's own updateId bump regardless of any event firing, asset_exif.updateId is
+    // untouched by a visibility flip — EXIF only re-syncs if onAssetShow's restore branch actually runs
+    // and calls emitLibraryAssetVisibilityRestore. That makes the EXIF stream (not the plain row
+    // create, which would pass even with the handler disconnected) the assertion that really proves the
+    // AssetShow seam below.
+    const { asset: motionVideo } = await ctx.newAsset({
+      ownerId: owner.user.id,
+      libraryId: library.id,
+      type: AssetType.Video,
+      visibility: AssetVisibility.Timeline,
+    });
+    await ctx.newExif({ assetId: motionVideo.id, make: 'MotionMake' });
+
+    const types = [SyncRequestType.LibraryAssetsV1, SyncRequestType.LibraryAssetExifsV1];
+
+    // Member syncs + acks both library streams (simulates an already-synced device).
+    const initial = await ctx.syncStream(member.auth, types);
+    expect(initial.filter((r) => isLibraryExifEvent(r))).toHaveLength(1);
+    await ctx.syncAckAll(member.auth, initial);
+    await ctx.assertSyncIsComplete(member.auth, types);
+
+    // Real production ordering: the DB write lands first (the motion-linking code flips visibility),
+    // THEN the event fires — see metadata.service.ts linkLivePhotos / applyMotionPhotos.
+    await ctx.get(AssetRepository).updateAll([motionVideo.id], { visibility: AssetVisibility.Hidden });
+    // The REAL event, through the REAL EventRepository — not a mocked emit, not a directly-invoked
+    // handler method.
+    await realEventRepo.emit('AssetHide', { assetId: motionVideo.id, userId: owner.user.id });
+
+    const afterHide = await ctx.syncStream(member.auth, types);
+    const deletes = afterHide.filter((r: { type: string }) => r.type === SyncEntityType.LibraryAssetDeleteV1);
+    expect(
+      deletes.some((e) => (e as { data: { assetId: string } }).data.assetId === motionVideo.id),
+      'library-arm delete tombstone missing for the motion video after the real AssetHide seam',
+    ).toBe(true);
+    await ctx.syncAckAll(member.auth, afterHide);
+    await ctx.assertSyncIsComplete(member.auth, types);
+
+    // Mirror: the REAL AssetShow event re-delivers the motion video's EXIF on the library arm.
+    await ctx.get(AssetRepository).updateAll([motionVideo.id], { visibility: AssetVisibility.Timeline });
+    await realEventRepo.emit('AssetShow', { assetId: motionVideo.id, userId: owner.user.id });
+
+    const afterShow = await ctx.syncStream(member.auth, types);
+    const restoredExif = afterShow.filter((r) => isLibraryExifEvent(r));
+    expect(
+      restoredExif.some((e) => (e as { data: { assetId: string } }).data.assetId === motionVideo.id),
+      "library-arm EXIF not re-delivered for the motion video after the real AssetShow seam — the asset ROW " +
+        'would re-upsert automatically here regardless of whether the handler ran, so this EXIF check is the ' +
+        'one that actually proves the seam',
+    ).toBe(true);
   });
 });
