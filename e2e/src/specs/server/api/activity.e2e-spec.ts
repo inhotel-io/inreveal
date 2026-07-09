@@ -418,5 +418,60 @@ describe('/activities', () => {
         .set('Authorization', `Bearer ${spaceOwner.accessToken}`);
       expect(asOwner.body).toHaveLength(2); // owner sees both
     });
+
+    it('redacts commenter/liker email on asset-level activity for a space-only reader; keeps it for an album participant (M5)', async () => {
+      const spaceOwner = admin; // album owner
+      const spaceViewer = await utils.userSetup(admin.accessToken, createUserDto.create('m5-space-viewer'));
+      const participant = await utils.userSetup(admin.accessToken, createUserDto.create('m5-participant'));
+      const m5Asset = await utils.createAsset(spaceOwner.accessToken);
+      const m5Album = await utils.createAlbum(spaceOwner.accessToken, {
+        albumName: 'M5 Album',
+        assetIds: [m5Asset.id],
+        albumUsers: [{ userId: participant.userId, role: AlbumUserRole.Viewer }],
+      });
+
+      await createActivity(
+        { albumId: m5Album.id, assetId: m5Asset.id, type: ReactionType.Comment, comment: 'nice shot' },
+        spaceOwner.accessToken,
+      );
+      await createActivity(
+        { albumId: m5Album.id, assetId: m5Asset.id, type: ReactionType.Like },
+        spaceOwner.accessToken,
+      );
+
+      const space = await utils.createSpace(spaceOwner.accessToken, { name: 'M5 Space' });
+      await utils.addSpaceMember(spaceOwner.accessToken, space.id, {
+        userId: spaceViewer.userId,
+        role: SharedSpaceRole.Viewer,
+      });
+      await utils.linkSpaceAlbum(spaceOwner.accessToken, space.id, m5Album.id);
+
+      // Negative: a space Viewer (no direct album access) sees both activities but with the
+      // commenter/liker email redacted — name/id/avatarColor are still present.
+      const asSpaceViewer = await request(app)
+        .get('/activities')
+        .query({ albumId: m5Album.id })
+        .set('Authorization', `Bearer ${spaceViewer.accessToken}`);
+      expect(asSpaceViewer.status).toBe(200);
+      expect(asSpaceViewer.body).toHaveLength(2);
+      for (const activity of asSpaceViewer.body) {
+        expect(activity.user.email).toBe('');
+        expect(activity.user.name).toBeTruthy();
+        expect(activity.user.id).toBeTruthy();
+        expect(activity.user.avatarColor).toBeTruthy();
+      }
+
+      // Positive control: an album participant (shared album_user) has direct access and sees the
+      // real email.
+      const asParticipant = await request(app)
+        .get('/activities')
+        .query({ albumId: m5Album.id })
+        .set('Authorization', `Bearer ${participant.accessToken}`);
+      expect(asParticipant.status).toBe(200);
+      expect(asParticipant.body).toHaveLength(2);
+      for (const activity of asParticipant.body) {
+        expect(activity.user.email).toBe(spaceOwner.userEmail);
+      }
+    });
   });
 });

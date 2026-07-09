@@ -102,6 +102,50 @@ describe(ActivityService.name, () => {
 
       expect(result).toHaveLength(1);
     });
+
+    it('redacts commenter/liker email from asset-level activity for a space-only reader (M5)', async () => {
+      const [albumId, assetId, commenterId, likerId, userId] = newUuids();
+      const comment = getForActivity(
+        ActivityFactory.create({ albumId, assetId, userId: commenterId, comment: 'nice shot' }),
+      );
+      const like = getForActivity(ActivityFactory.create({ albumId, assetId, userId: likerId, isLiked: true }));
+
+      // AlbumRead granted ONLY via the space-linked arm (not owner, not shared album_user) — same
+      // access shape as the C1 space-only-reader test above.
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSpaceLinkedAlbumReadAccess.mockResolvedValue(new Set([albumId]));
+      mocks.activity.search.mockResolvedValue([comment, like]);
+
+      const result = await sut.getAll(AuthFactory.create({ id: userId }), { albumId });
+
+      expect(result).toHaveLength(2);
+      for (const activity of result) {
+        expect(activity.user.email).toBe('');
+        expect(activity.user.name).toBeTruthy();
+        expect(activity.user.id).toBeTruthy();
+        expect(activity.user.avatarColor).toBeTruthy();
+      }
+    });
+
+    it('keeps the real commenter/liker email for a direct reader (positive control) (M5)', async () => {
+      const [albumId, assetId, commenterId, likerId, userId] = newUuids();
+      const comment = getForActivity(
+        ActivityFactory.create({ albumId, assetId, userId: commenterId, comment: 'nice shot' }),
+      );
+      const like = getForActivity(ActivityFactory.create({ albumId, assetId, userId: likerId, isLiked: true }));
+
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.activity.search.mockResolvedValue([comment, like]);
+
+      const result = await sut.getAll(AuthFactory.create({ id: userId }), { albumId });
+
+      expect(result).toHaveLength(2);
+      const commentResult = result.find((a) => a.type === 'comment');
+      const likeResult = result.find((a) => a.type === 'like');
+      expect(commentResult?.user.email).toBe(comment.user.email);
+      expect(likeResult?.user.email).toBe(like.user.email);
+    });
   });
 
   describe('getStatistics', () => {

@@ -38,7 +38,17 @@ export class ActivityService extends BaseService {
 
     const visible = hasDirectAccess ? activities : activities.filter((activity) => activity.assetId !== null);
 
-    return visible.map((activity) => mapActivity(activity));
+    return visible.map((activity) => {
+      const dto = mapActivity(activity);
+      // M5: a space-only reader (no owner/album-user/shared-link access) must not learn commenter/liker
+      // emails on the asset-level activity C1 leaves visible — the same PII security-8 stripped from
+      // albumUsers, one endpoint over. Redact after mapActivity so mapUser's avatarColor email-fallback
+      // is already computed.
+      if (!hasDirectAccess) {
+        dto.user.email = '';
+      }
+      return dto;
+    });
   }
 
   // Scope note: getStatistics gates on the same AlbumRead but returns only aggregate {comments, likes}
