@@ -1496,6 +1496,42 @@ describe(AssetRepository.name, () => {
     });
   });
 
+  // H1 belt-and-suspenders: timeline.service.ts's timeBucketChecks already rejects
+  // isTrashed=true on an albumId browse at the service boundary (Slice 1 / H1). This test calls
+  // the repository directly with an options shape that can only reach it if that guard is
+  // bypassed, proving the album arm's own `deletedAt IS NULL` gate holds independently.
+  describe('getTimeBucket — album arm trash gate belt-and-suspenders (Slice 1 / H1)', () => {
+    it('never surfaces a trashed album asset via the explicit albumId arm, even with isTrashed=true', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'H1BeltAlbum' });
+      const bucketDate = new Date('2026-04-15T12:00:00.000Z');
+      const alive = await createTimelineAsset(ctx, owner.id, bucketDate);
+      const trashed = await createTimelineAsset(ctx, owner.id, bucketDate, { deletedAt: new Date() });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: alive.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: trashed.id });
+
+      const ownerAuth = factory.auth({ user: { id: owner.id } });
+
+      const bucket = await sut.getTimeBucket(
+        '2026-04-01',
+        {
+          userIds: [owner.id],
+          albumId: album.id,
+          visibility: AssetVisibility.Timeline,
+          isTrashed: true,
+        },
+        ownerAuth,
+      );
+
+      const ids = (JSON.parse(bucket.assets) as TimeBucketAssets).id ?? [];
+      // The top-level isTrashed ternary already excludes `alive` (no deletedAt); the album arm's
+      // own gate must ALSO exclude `trashed` — pre-fix, the album arm had no deletedAt condition,
+      // so `trashed` alone satisfied `deletedAt IS NOT NULL AND album_asset match`, leaking it.
+      expect(ids).toEqual([]);
+    });
+  });
+
   describe('getTimeBucket with spacePersonIds', () => {
     it('should only return assets whose matching face is visible and not deleted when filtering by spacePersonId', async () => {
       const { ctx, sut } = setup();

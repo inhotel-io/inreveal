@@ -137,6 +137,14 @@ export class TimelineService extends BaseService {
       throw new BadRequestException('Hidden and locked assets are not available when browsing a shared space or album');
     }
 
+    // Fork RBAC (Slice 1 / H1): trash is an owner-private state; an album/space browse must
+    // never enumerate trashed assets. Closes the timeline vector before it reaches the repo
+    // (belt-and-suspenders data-layer gate also lives in the album arm of
+    // withTimeBucketAssetFilters / getTimeBucket in asset.repository.ts).
+    if (spaceBrowse && dto.isTrashed === true) {
+      throw new BadRequestException('Trashed assets are not available when browsing a shared space or album');
+    }
+
     if (dto.albumId) {
       await this.requireAccess({ auth, permission: Permission.AlbumRead, ids: [dto.albumId] });
     } else if (dto.spaceId) {

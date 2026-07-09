@@ -171,6 +171,19 @@ describe('shared-space visibility negatives (Slice 11)', () => {
     return { album, timelineAsset, hiddenAsset };
   };
 
+  /** Owner-created album with two Timeline assets, linked into a fresh space with a Viewer (H1). */
+  const setupLinkedAlbumForTrash = async (name: string) => {
+    const toTrashAsset = await utils.createAsset(owner.accessToken);
+    const liveAsset = await utils.createAsset(owner.accessToken);
+    const album = await utils.createAlbum(owner.accessToken, {
+      albumName: name,
+      assetIds: [toTrashAsset.id, liveAsset.id],
+    });
+    const spaceId = await freshSpaceWithViewer(name);
+    await linkAlbum(spaceId, album.id);
+    return { album, toTrashAsset, liveAsset };
+  };
+
   // ─────────────────────────────────────────────────────────────────────────────
   // GET /assets/:id — Hidden / Locked → 400; Timeline / Archive → 200
   // ─────────────────────────────────────────────────────────────────────────────
@@ -470,6 +483,79 @@ describe('shared-space visibility negatives (Slice 11)', () => {
       const returnedIds = (body.id ?? []) as string[];
       expect(returnedIds).toContain(timelineAsset.id);
       expect(returnedIds).not.toContain(hiddenAsset.id);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // POST /search/metadata + GET /timeline/bucket(s) (albumId) — trashed asset absent (H1)
+  //
+  // A space Viewer must never read the owner's TRASHED album assets, via either the
+  // withDeleted/trashedBefore/trashedAfter search params or an isTrashed=true timeline browse.
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('POST /search/metadata + GET /timeline/bucket(s) (albumId via space AlbumRead grant) — trashed asset absent (H1)', () => {
+    it('positive control: before trashing, the asset is visible via both the timeline bucket and search', async () => {
+      const { album, toTrashAsset } = await setupLinkedAlbumForTrash('h1-positive-control');
+      const timeBucket = await firstAlbumBucket(album.id);
+
+      const { status, body } = await request(app)
+        .get(`/timeline/bucket?bucketSize=month&timeBucket=${timeBucket}&albumId=${album.id}&isTrashed=false`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
+      expect(status).toBe(200);
+      expect((body.id ?? []) as string[]).toContain(toTrashAsset.id);
+
+      const ids = await searchAlbumIds({ albumIds: [album.id] });
+      expect(ids).toContain(toTrashAsset.id);
+    });
+
+    it('POST /search/metadata: trashed album asset absent even with withDeleted=true; live sibling present', async () => {
+      const { album, toTrashAsset, liveAsset } = await setupLinkedAlbumForTrash('h1-search-neg');
+      await utils.deleteAssets(owner.accessToken, [toTrashAsset.id]);
+
+      const ids = await searchAlbumIds({ albumIds: [album.id], withDeleted: true });
+
+      // Absence from the response is the strongest assertion here: if the id isn't in the item
+      // array, none of its fields (checksum/originalPath/thumbhash/EXIF/people) can leak either.
+      expect(ids).not.toContain(toTrashAsset.id);
+      expect(ids).toContain(liveAsset.id);
+    });
+
+    it('GET /timeline/bucket: albumId + isTrashed=true → 400 for a Viewer member', async () => {
+      const { album, toTrashAsset } = await setupLinkedAlbumForTrash('h1-bucket-neg');
+      await utils.deleteAssets(owner.accessToken, [toTrashAsset.id]);
+
+      const { status } = await request(app)
+        .get(`/timeline/bucket?bucketSize=month&timeBucket=1970-01-01&albumId=${album.id}&isTrashed=true`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
+
+      expect(status).toBe(400);
+    });
+
+    it('GET /timeline/buckets: albumId + isTrashed=true → 400 for a Viewer member', async () => {
+      const { album, toTrashAsset } = await setupLinkedAlbumForTrash('h1-buckets-neg');
+      await utils.deleteAssets(owner.accessToken, [toTrashAsset.id]);
+
+      const { status } = await request(app)
+        .get(`/timeline/buckets?bucketSize=month&albumId=${album.id}&isTrashed=true`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
+
+      expect(status).toBe(400);
+    });
+
+    it('GET /timeline/bucket: albumId + isTrashed=false still returns the live sibling (no over-block)', async () => {
+      const { album, toTrashAsset, liveAsset } = await setupLinkedAlbumForTrash('h1-bucket-pos');
+      await utils.deleteAssets(owner.accessToken, [toTrashAsset.id]);
+      // Resolved AFTER trashing so the returned bucket reflects the still-live sibling.
+      const timeBucket = await firstAlbumBucket(album.id);
+
+      const { status, body } = await request(app)
+        .get(`/timeline/bucket?bucketSize=month&timeBucket=${timeBucket}&albumId=${album.id}&isTrashed=false`)
+        .set('Authorization', `Bearer ${member.accessToken}`);
+
+      expect(status).toBe(200);
+      const returnedIds = (body.id ?? []) as string[];
+      expect(returnedIds).toContain(liveAsset.id);
+      expect(returnedIds).not.toContain(toTrashAsset.id);
     });
   });
 
