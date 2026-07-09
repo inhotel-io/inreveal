@@ -1999,4 +1999,33 @@ describe('matrix: album-scoped facets — getFilterSuggestions excludes Hidden f
     expect(result.countries).toContain('ParticipantLockedTLCountry'); // Timeline ✓
     expect(result.countries).not.toContain('ParticipantLockedCountry'); // Locked blocked ✓
   });
+
+  // I1: the albumId arm's OWNER branch (`eb('asset.ownerId', '=', anyUuid(userIds))`) had no
+  // visibility gate — "caller's own assets follow the resolved visibility applied upstream" is
+  // true for the plain-asset search path, but getFilterSuggestions calls into applySuggestionScope
+  // directly with no upstream visibility resolution, so the caller's OWN Hidden asset in the album
+  // leaked a facet value even though the same asset is invisible everywhere else.
+  it("excludes the CALLER'S OWN Hidden-asset facet from album-scoped suggestions (I1)", async () => {
+    const { searchRepo, ctx } = setup();
+    const { user: albumOwner } = await ctx.newUser();
+
+    const { result: album } = await ctx.newAlbum({ ownerId: albumOwner.id, albumName: 'FacetOwnerHiddenAlbum' });
+
+    // Owner's Timeline asset — country should appear (positive control).
+    const { asset: tlAsset } = await ctx.newAsset({ ownerId: albumOwner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newExif({ assetId: tlAsset.id, country: 'OwnerTimelineCountry' });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: tlAsset.id });
+
+    // Owner's Hidden asset in the SAME album — country must NOT appear.
+    const { asset: hiAsset } = await ctx.newAsset({ ownerId: albumOwner.id, visibility: AssetVisibility.Hidden });
+    await ctx.newExif({ assetId: hiAsset.id, country: 'OwnerHiddenCountry' });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: hiAsset.id });
+
+    // Ask from albumOwner's own perspective — userIds includes the asset owner, hitting the
+    // unguarded ownerId branch directly.
+    const result = await searchRepo.getFilterSuggestions([albumOwner.id], { albumId: album.id });
+
+    expect(result.countries).toContain('OwnerTimelineCountry'); // Timeline ✓ (positive control)
+    expect(result.countries).not.toContain('OwnerHiddenCountry'); // Hidden blocked ✓
+  });
 });

@@ -789,6 +789,90 @@ describe(SearchService.name, () => {
     });
   });
 
+  // L2: albumSharedSpaceScope's plain-album branch anti-joined out any asset that ALSO happened to
+  // be directly-space-linked or library-linked (via shared_space_asset / shared_space_library),
+  // re-admitting them only through the timelineSpaceIds arms — which require BOTH the caller to be
+  // a member of the linking space AND that member's showInTimeline toggle to be on. AlbumRead
+  // already authorizes the album's content (same as the plain album grid, which never anti-joins on
+  // shared_space_*), so an album_user Viewer with no space membership at all — or a space member
+  // with the timeline toggle off — could not see an otherwise-visible library-backed/space-linked
+  // album asset via search, even though the album grid (inAlbums + withDefaultVisibility) shows it.
+  describe('albumIds option — over-restriction fix (L2)', () => {
+    it('includes a directly-space-linked album asset for a pure album_user Viewer (no space membership at all)', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'L2DirectAlbum' });
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer });
+
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+      // The asset is ALSO directly linked into an unrelated shared space the viewer is not a
+      // member of. Today's anti-join excludes it from album-scoped search purely because of that
+      // unrelated link — the album grid has no such exclusion.
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const response = await sut.searchMetadata(auth, { albumIds: [album.id] });
+
+      expect(itemIds(response)).toContain(asset.id);
+    });
+
+    it('includes a library-linked album asset for a space member with the timeline toggle OFF', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'L2LibraryAlbum' });
+
+      const { library } = await ctx.newLibrary({ ownerId: owner.id });
+      const { asset } = await ctx.newAsset({
+        ownerId: owner.id,
+        visibility: AssetVisibility.Timeline,
+        libraryId: library.id,
+      });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+      // Turn the member's OWN timeline toggle off -> getTimelineSpaceIds (getSpaceIdsForTimeline)
+      // will not include this space for `member`, even though they remain a member.
+      await ctx.database
+        .updateTable('shared_space_member')
+        .set({ showInTimeline: false })
+        .where('spaceId', '=', space.id)
+        .where('userId', '=', member.id)
+        .execute();
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: owner.id });
+
+      const auth = factory.auth({ user: { id: member.id } });
+      const response = await sut.searchMetadata(auth, { albumIds: [album.id] });
+
+      expect(itemIds(response)).toContain(asset.id);
+    });
+
+    // Positive control: a plain album asset with no space link at all was never affected by the
+    // anti-join and must remain visible after the flat-gate refactor too.
+    it('still includes a plain (non-space-linked) album asset (positive control)', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'L2PlainAlbum' });
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer });
+
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const response = await sut.searchMetadata(auth, { albumIds: [album.id] });
+
+      expect(itemIds(response)).toContain(asset.id);
+    });
+  });
+
   describe('getSearchSuggestions', () => {
     it('should filter out empty search suggestions', async () => {
       const { sut, ctx } = setup();

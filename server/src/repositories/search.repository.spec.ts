@@ -594,17 +594,19 @@ describe(SearchRepository.name, () => {
       expect(sql).toMatch(/"asset"\."visibility" in \(\$\d+(?:, \$\d+)*\)/);
     });
 
-    it('searchAssetBuilder album-scoped branch gates space assets on Archive+Timeline visibility', () => {
-      // albumSharedSpaceScope is activated when albumIds is set and userIds is absent.
-      // Without the fix, the space asset/library EXISTS arms have no visibility predicate.
+    it('searchAssetBuilder album-scoped branch applies the flat visibility gate regardless of timelineSpaceIds (L2)', () => {
+      // albumSharedSpaceScope is activated when albumIds is set and userIds is absent. L2 flattened
+      // the gate to match the album grid exactly (Archive+Timeline, not-deleted, no space-path
+      // check) — passing timelineSpaceIds no longer changes the emitted predicate, and the
+      // shared_space_asset/shared_space_library anti-join + re-admission arms are gone entirely.
       const sql = buildAssetSearchSql({
         albumIds: ['11111111-1111-1111-1111-111111111111'],
         timelineSpaceIds: ['33333333-3333-3333-3333-333333333333'],
       });
 
-      expect(sql).toContain('"shared_space_asset"');
-      expect(sql).toContain('"shared_space_library"');
-      // Visibility gate must appear alongside the space membership check.
+      expect(sql).not.toContain('"shared_space_asset"');
+      expect(sql).not.toContain('"shared_space_library"');
+      // Visibility gate must still appear.
       expect(sql).toMatch(/"asset"\."visibility" in \(\$\d+(?:, \$\d+)*\)/);
     });
 
