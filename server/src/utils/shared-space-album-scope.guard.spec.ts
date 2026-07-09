@@ -188,6 +188,11 @@ const ALBUM_ALLOWLIST: Record<string, string> = {
   // no visibility leak — a pre-existing album-completeness gap, tracked separately.
   'shared-space.repository.ts::getPersonalThumbnailForSpacePerson':
     'GUARD-DISCOVERED album gap: or(direct,library) omits album arm (pre-existing, follow-up)',
+  // Library-path EXIF restore write-infra (Slice 7 / L4): UPDATE asset_exif.updatedAt scoped to
+  // space-linked libraries so restored library assets re-stream EXIF. Library-path-specific (the
+  // album path has emitAlbumAssetVisibilityRestore); no album arm applies, no asset content served.
+  'shared-space.repository.ts::emitLibraryAssetVisibilityRestore':
+    'library-path EXIF restore write-infra; no album arm applies (mirrors emitLibraryAssetVisibilityPurge)',
 };
 
 describe('space-album scope guard: every library scoping arm has album coverage', () => {
@@ -316,6 +321,15 @@ const VIS_ALLOWLIST: Record<string, string> = {
   //   content served; fires on visibility transitions to write tombstones.
   'shared-space.repository.ts::emitLibraryAssetVisibilityPurge':
     'reads asset library ids into audit tombstone (purge write-infra); no asset content returned',
+  // — Library-path EXIF restore write-infra (Slice 7 / L4): bumps asset_exif.updatedAt for
+  //   space-linked library assets so restored EXIF re-streams. Write-only; no asset content served.
+  'shared-space.repository.ts::emitLibraryAssetVisibilityRestore':
+    'bumps asset_exif.updatedAt for space-linked library assets (restore write-infra); no asset content returned',
+  // — Album-grant reconcile (Slice 8 / M6+M7): bidirectional INSERT/DELETE over shared_space_album
+  //   ⋈ member ⋈ album ids to keep shared_space_album_user in sync with live paths. Manages the ACL
+  //   itself; never selects or serves asset rows.
+  'shared-space.repository.ts::reconcileAlbumGrants':
+    'grant reconcile: reads album/member/album ids to INSERT/DELETE grants; manages the ACL, no asset content',
 
   // — Album-ACCESS grant checks: select ONLY album.id (which albums the user may
   //   read/edit via a space link), never asset rows. Individual asset visibility is
