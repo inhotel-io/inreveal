@@ -464,8 +464,16 @@ export class SharedSpaceService extends BaseService {
     // rbac-4: a promoted co-Owner must not be able to demote the space creator.
     // The creator is always an Owner member (create() inserts them); keeping the
     // role at Owner is a harmless no-op, anything lower is a demotion → reject.
+    // testq-6: fail-closed, not fail-open — existingMember above already proves a member row exists for
+    // this spaceId, and the membership FK guarantees its space row exists too, so a missing getById
+    // result here is a data-integrity fault, not a legitimate "no space" case. Silently skipping the
+    // creator-demotion guard on a lookup miss (the previous `space &&` short-circuit) would let a
+    // repository-shape refactor that changed how getById fails disable this guard with no test noticing.
     const space = await this.sharedSpaceRepository.getById(spaceId);
-    if (space && userId === space.createdById && dto.role !== SharedSpaceRole.Owner) {
+    if (!space) {
+      throw new NotFoundException('Space not found');
+    }
+    if (userId === space.createdById && dto.role !== SharedSpaceRole.Owner) {
       throw new ForbiddenException('Cannot demote the space creator');
     }
 
@@ -582,7 +590,13 @@ export class SharedSpaceService extends BaseService {
     // rbac-4: a promoted co-Owner must not be able to remove the space creator
     // (the creator is always an Owner member, so their sync/grants would otherwise
     // survive removal forever). Deleting the whole space via remove() is still allowed.
-    if (space && space.createdById === userId) {
+    // testq-6: fail-closed here too (see the identical guard in updateMember) — requireRole above
+    // already proves a member row exists for this spaceId, so the membership FK guarantees the space
+    // row exists; a missing getById result is a data-integrity fault, not license to skip the guard.
+    if (!space) {
+      throw new NotFoundException('Space not found');
+    }
+    if (space.createdById === userId) {
       throw new ForbiddenException('Cannot remove the space creator');
     }
     const unlinkedAlbumIds = await this.removeMemberAndOwnedAlbumsAtomically(spaceId, userId);

@@ -1444,6 +1444,43 @@ describe(SearchService.name, () => {
       );
     });
 
+    // testq-4: the test above was rebased-in with checkOwnerAccess granting the actor OWNER access to
+    // the album (needed to satisfy #29352's requireAccess(AlbumRead) gate), which lost coverage of the
+    // space-MEMBER path (checkSharedAlbumAccess, not checkOwnerAccess) — the actor who most needs the
+    // person-filter guard below, since they don't own the album's assets. A member combining albumIds
+    // with personIds must not be able to bypass person-filter RBAC: resolveScopedPersonFilters routes
+    // every personIds token through faceIdentityRepository.resolveScopedPersonTokens whenever albumIds
+    // is set (isGlobalSharedScope), and an inaccessible token forces the whole search empty.
+    it('forces an empty result for a space-member actor who person-filters an album-scoped search with an inaccessible token', async () => {
+      const albumId = newUuid();
+      const spaceId = newUuid();
+      const personId = newUuid();
+      // Member access via the album's own share grant, NOT ownership.
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+      mocks.search.searchMetadata.mockResolvedValue({ hasNextPage: false, items: [] });
+      (mocks.faceIdentity as any).resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: [],
+        legacyPersonIds: [],
+        legacySpacePersonIds: [],
+        hasInaccessibleToken: true,
+      });
+
+      await sut.searchMetadata(authStub.user1, { albumIds: [albumId], personIds: [personId] });
+
+      expect(mocks.access.album.checkSharedAlbumAccess).toHaveBeenCalled();
+      expect((mocks.faceIdentity as any).resolveScopedPersonTokens).toHaveBeenCalledWith({
+        userId: authStub.user1.user.id,
+        tokens: [personId],
+        scope: { withSharedSpaces: true, timelineSpaceIds: [spaceId], spaceId: undefined },
+      });
+      expect(mocks.search.searchMetadata).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ forceEmptyResult: true }),
+      );
+    });
+
     it('deduplicates resolved scoped person filters before repository search', async () => {
       const token = `person:${newUuid()}`;
       mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);

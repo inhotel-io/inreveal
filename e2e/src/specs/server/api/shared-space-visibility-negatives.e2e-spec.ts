@@ -574,13 +574,22 @@ describe('shared-space visibility negatives (Slice 11)', () => {
         albumName: 'MapMarkerHiddenNeg',
         assetIds: [gps.id, hidden.id],
       });
-      await setVisibility(hidden.id, AssetVisibility.Hidden);
       const spaceId = await freshSpaceWithViewer('map-marker-hidden-neg');
       await linkAlbum(spaceId, album.id);
 
-      // Map markers only surface assets whose EXIF (GPS lat/lon) has been extracted — drain the
-      // metadataExtraction queue (admin token has queue-read access) before querying.
+      // testq-5 positive control: drain metadataExtraction and confirm `hidden` produces a marker
+      // WHILE STILL TIMELINE, before ever hiding it. Without this, the "not present" assertions below
+      // would pass just as well if GPS extraction had silently failed for `hidden` (a fixture/timing
+      // bug) or if some unrelated bug dropped its marker — neither of which is the visibility gate this
+      // test is meant to pin. Map markers only surface assets whose EXIF (GPS lat/lon) has been
+      // extracted — drain the metadataExtraction queue (admin token has queue-read access) first.
       await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+      const beforeHideIds = await mapMarkerIds(album.id, owner.accessToken);
+      expect(beforeHideIds, '`hidden` must have a marker before hiding, or the negatives below are vacuous').toContain(
+        hidden.id,
+      );
+
+      await setVisibility(hidden.id, AssetVisibility.Hidden);
 
       const memberIds = await mapMarkerIds(album.id, member.accessToken);
       expect(memberIds).toContain(gps.id);
@@ -681,14 +690,33 @@ describe('shared-space visibility negatives (Slice 11)', () => {
         { headers: asBearerAuth(owner.accessToken) },
       );
 
-      // GET /albums/:id no longer counts A (removeAssetsFromAll ran through the single-PUT path too).
-      // Assert on assetCount rather than the `assets` array: the raw endpoint omits `assets` here
-      // (A is now Locked → elevated-only), but assetCount reflects the album_asset row deletion.
+      // GET /albums/:id's `assets`/`assetCount` are visibility-filtered (withDefaultVisibility, an INNER
+      // JOIN on album_asset) — assetCount reading 0 right after locking is true even if
+      // removeAssetsFromAll never deleted the album_asset row, purely because Locked is excluded from
+      // the join. That alone does NOT prove the row was deleted (testq-2). Assert it first as a
+      // sanity check, but it is not the real proof below.
       const { status, body } = await request(app)
         .get(`/albums/${album.id}`)
         .set('Authorization', `Bearer ${owner.accessToken}`);
       expect(status).toBe(200);
       expect(body.assetCount).toBe(0);
+
+      // The real proof: PUT A back to Timeline, which lifts the visibility filter. If
+      // removeAssetsFromAll had actually deleted the album_asset row, A cannot resurrect into the
+      // album — assetCount must STAY 0. If the row had instead survived (the bug this test is meant to
+      // catch), A would reappear in the count the moment it becomes visible again.
+      await updateAsset(
+        { id: assetA.id, updateAssetDto: { visibility: AssetVisibility.Timeline } },
+        { headers: asBearerAuth(owner.accessToken) },
+      );
+      const restored = await request(app)
+        .get(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+      expect(restored.status).toBe(200);
+      expect(
+        restored.body.assetCount,
+        'A resurrected into the album — the album_asset row was not actually deleted by removeAssetsFromAll',
+      ).toBe(0);
 
       // The member's sync still receives the delete (via the album_asset_audit trigger fired by
       // removeAssetsFromAll — no shared_space_album_asset_audit tombstone needed for Locked).

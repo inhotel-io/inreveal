@@ -1808,7 +1808,8 @@ describe(SharedSpaceService.name, () => {
         .mockResolvedValueOnce(ownerMember) // requireRole check
         .mockResolvedValueOnce(existingMember) // pre-update fetch for oldRole
         .mockResolvedValueOnce(updatedMember); // fetch after update
-      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      // testq-6: fail-closed — a real space whose creator is neither actor nor target (not the rbac-4 case).
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, createdById: newUuid() }));
       mocks.sharedSpace.updateMember.mockResolvedValue(
         factory.sharedSpaceMember({
           spaceId,
@@ -1862,7 +1863,8 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValueOnce(
         makeMemberResult({ userId: 'target-user', role: SharedSpaceRole.Viewer }),
       );
-      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      // testq-6: fail-closed — a real space whose creator is neither actor nor target (not the rbac-4 case).
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: newUuid() }));
       mocks.sharedSpace.updateMember.mockResolvedValue(factory.sharedSpaceMember());
       // post-update fetch
       mocks.sharedSpace.getMember.mockResolvedValueOnce(
@@ -1888,7 +1890,8 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValueOnce(
         makeMemberResult({ userId: 'target-user', role: SharedSpaceRole.Viewer }),
       );
-      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      // testq-6: fail-closed — a real space whose creator is neither actor nor target (not the rbac-4 case).
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: newUuid() }));
       mocks.sharedSpace.updateMember.mockResolvedValue(factory.sharedSpaceMember());
       mocks.sharedSpace.getMember.mockResolvedValueOnce(
         makeMemberResult({ userId: 'target-user', role: SharedSpaceRole.Editor }),
@@ -2109,6 +2112,22 @@ describe(SharedSpaceService.name, () => {
         role: SharedSpaceRole.Owner,
       });
     });
+
+    // testq-6: the creator-demotion guard used to silently no-op when getById returned undefined
+    // (`if (space && ...)`) — pin the fail-closed replacement directly, independent of the e2e negatives.
+    it('fails closed (does not silently allow the demotion) when the space lookup returns nothing', async () => {
+      const auth = factory.auth({ user: { id: 'co-owner' } });
+      const targetUserId = 'target-1';
+      mocks.sharedSpace.getMember
+        .mockResolvedValueOnce(makeMemberResult({ userId: 'co-owner', role: SharedSpaceRole.Owner })) // requireRole check
+        .mockResolvedValueOnce(makeMemberResult({ userId: targetUserId, role: SharedSpaceRole.Viewer })); // existingMember fetch
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+
+      await expect(
+        sut.updateMember(auth, 'space-1', targetUserId, { role: SharedSpaceRole.Editor }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(mocks.sharedSpace.updateMember).not.toHaveBeenCalled();
+    });
   });
 
   describe('removeMember', () => {
@@ -2119,7 +2138,8 @@ describe(SharedSpaceService.name, () => {
       const ownerMember = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Owner });
 
       mocks.sharedSpace.getMember.mockResolvedValue(ownerMember);
-      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      // testq-6: fail-closed — a real space whose creator is neither actor nor target (not the rbac-4 case).
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId, createdById: newUuid() }));
       mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
@@ -2199,7 +2219,8 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(
         makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
       );
-      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      // testq-6: fail-closed — a real space whose creator is neither actor nor target (not the rbac-4 case).
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: newUuid() }));
       mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
@@ -2243,7 +2264,8 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(
         makeMemberResult({ userId: 'owner-1', role: SharedSpaceRole.Owner }),
       );
-      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      // testq-6: fail-closed — a real space whose creator is neither actor nor target (not the rbac-4 case).
+      mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: 'space-1', createdById: newUuid() }));
       mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
       mocks.sharedSpace.removeMember.mockResolvedValue(void 0);
       mocks.sharedSpace.removeOwnedAlbumLinksAddedBy.mockResolvedValue([]);
@@ -2271,6 +2293,20 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
 
       await expect(sut.removeMember(auth, 'space-1', creatorId)).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
+    });
+
+    // testq-6: the creator-removal guard used to silently no-op when getById returned undefined
+    // (`if (space && ...)`) — pin the fail-closed replacement directly, independent of the e2e negatives.
+    it('fails closed (does not silently allow the removal) when the space lookup returns nothing', async () => {
+      const auth = factory.auth({ user: { id: 'co-owner' } });
+      mocks.sharedSpace.getMember.mockResolvedValue(
+        makeMemberResult({ userId: 'co-owner', role: SharedSpaceRole.Owner }),
+      );
+      mocks.sharedSpace.getById.mockResolvedValue(void 0);
+      mocks.sharedSpace.getLinkedAlbumIds.mockResolvedValue([]);
+
+      await expect(sut.removeMember(auth, 'space-1', 'target-1')).rejects.toBeInstanceOf(NotFoundException);
       expect(mocks.sharedSpace.removeMember).not.toHaveBeenCalled();
     });
 
