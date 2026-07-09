@@ -376,11 +376,24 @@ export class PersonService extends BaseService {
     id: string,
     dto: RepresentativeFaceUpdateDto,
   ): Promise<PersonResponseDto> {
-    // Setting the representative face manages the person's thumbnail, which shared-space members
+    // Setting the representative face manages the person's thumbnail, which shared-space Editors
     // can also do — so gate on person.read (owner | shared space) rather than owner-only
     // person.update. The chosen face is still gated on asset.read below.
     await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
     const current = await this.findOrFail(id);
+
+    // Fork RBAC (Slice 3 / M2): PersonRead only proves reachability (viewers included). Mutating the
+    // owner's GLOBAL representative face must be limited to the owner or an Editor/Owner of a space
+    // the person is shared through — mirror album writes. A viewer is denied.
+    const ids = new Set([id]);
+    const isOwner = await this.accessRepository.person.checkOwnerAccess(auth.user.id, ids);
+    if (!isOwner.has(id)) {
+      const canEdit = await this.accessRepository.person.checkSharedSpaceEditAccess(auth.user.id, ids);
+      if (!canEdit.has(id)) {
+        throw new ForbiddenException('Not authorized to change this person');
+      }
+    }
+
     const face = await this.personRepository.getRepresentativeFaceForUpdate({
       personId: id,
       assetFaceId: dto.assetFaceId,

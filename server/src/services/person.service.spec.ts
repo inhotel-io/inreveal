@@ -1051,12 +1051,16 @@ describe(PersonService.name, () => {
       });
     });
 
-    it('updates the representative face for a shared-space member who does not own the person', async () => {
+    // M2: renamed from "...a shared-space member..." — before M2, ANY shared-space member (including
+    // a Viewer) passed here since only PersonRead was checked. Now the write gate additionally
+    // requires Editor/Owner space role, so this positive control must grant edit access explicitly.
+    it('updates the representative face for a shared-space Editor who does not own the person', async () => {
       const auth = AuthFactory.create();
       const person = PersonFactory.create({ identityId: 'identity-1' });
       const face = AssetFaceFactory.create({ id: 'face-1', assetId: 'asset-1', personId: person.id });
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set());
       mocks.access.person.checkSharedSpaceAccess.mockResolvedValue(new Set([person.id]));
+      mocks.access.person.checkSharedSpaceEditAccess.mockResolvedValue(new Set([person.id]));
       mocks.access.asset.checkSpaceAccess.mockResolvedValue(new Set([face.assetId]));
       mocks.person.getRepresentativeFaceForUpdate.mockResolvedValue(face);
       mocks.person.getById.mockResolvedValue(person);
@@ -1067,7 +1071,7 @@ describe(PersonService.name, () => {
       );
 
       expect(mocks.person.update).toHaveBeenCalledWith({ id: person.id, faceAssetId: face.id });
-      expect(mocks.access.person.checkSharedSpaceAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.id]));
+      expect(mocks.access.person.checkSharedSpaceEditAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.id]));
     });
 
     it('rejects a representative face update when the actor cannot read the chosen face asset', async () => {
@@ -1076,6 +1080,9 @@ describe(PersonService.name, () => {
       const face = AssetFaceFactory.create({ id: 'face-1', assetId: 'asset-1', personId: person.id });
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set());
       mocks.access.person.checkSharedSpaceAccess.mockResolvedValue(new Set([person.id]));
+      // Editor access (the M2 write gate) is granted; the failure below is the pre-existing,
+      // unrelated AssetRead check on the chosen face itself.
+      mocks.access.person.checkSharedSpaceEditAccess.mockResolvedValue(new Set([person.id]));
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
       mocks.access.asset.checkSpaceAccess.mockResolvedValue(new Set());
       mocks.person.getById.mockResolvedValue(person);
@@ -1086,6 +1093,32 @@ describe(PersonService.name, () => {
       );
 
       expect(mocks.person.update).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    // Slice 3 — M2: PersonRead (checked above) admits ANY space role, including Viewer. Mutating the
+    // owner's GLOBAL representative face must be denied to a Viewer -- only the owner or a space
+    // Editor/Owner may do it. Before this fix, a Viewer with PersonRead reachability could mutate.
+    it('denies a representative face update from a shared-space viewer who is not owner or editor (M2)', async () => {
+      const auth = AuthFactory.create();
+      const person = PersonFactory.create({ identityId: 'identity-1' });
+      const face = AssetFaceFactory.create({ id: 'face-1', assetId: 'asset-1', personId: person.id });
+      // PersonRead reachability: the viewer has shared-space READ access...
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.person.checkSharedSpaceAccess.mockResolvedValue(new Set([person.id]));
+      // ...but NOT edit access (viewer role).
+      mocks.access.person.checkSharedSpaceEditAccess.mockResolvedValue(new Set());
+      mocks.access.asset.checkSpaceAccess.mockResolvedValue(new Set([face.assetId]));
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.getRepresentativeFaceForUpdate.mockResolvedValue(face);
+
+      await expect(sut.updateRepresentativeFace(auth, person.id, { assetFaceId: face.id })).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(mocks.access.person.checkSharedSpaceEditAccess).toHaveBeenCalledWith(auth.user.id, new Set([person.id]));
+      expect(mocks.person.update).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.updateRepresentativeFace).not.toHaveBeenCalled();
       expect(mocks.job.queue).not.toHaveBeenCalled();
     });
   });
