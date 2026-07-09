@@ -100,4 +100,59 @@ describe('AlbumSharedSpaceLinks', () => {
 
     expect(container.querySelector('[data-testid="album-space-links"]')).toBeNull();
   });
+
+  it('does NOT render the previous album\'s links after navigating to a different album (L9)', async () => {
+    const { rerender } = renderWithTooltips(AlbumSharedSpaceLinks, {
+      album: albumFactory.build({
+        id: 'album-1',
+        sharedSpaceLinks: [{ spaceId: 'space-1', spaceName: 'Trip', linkedById: 'e1', showInTimeline: true }],
+      }),
+    });
+
+    expect(screen.getByText('Trip')).toBeInTheDocument();
+
+    // Simulate SvelteKit reusing this component instance across album navigation: only the `album`
+    // prop changes, no remount.
+    await rerender({
+      component: AlbumSharedSpaceLinks,
+      componentProps: {
+        album: albumFactory.build({
+          id: 'album-2',
+          sharedSpaceLinks: [{ spaceId: 'space-2', spaceName: 'Zoo', linkedById: 'e2', showInTimeline: true }],
+        }),
+      },
+    });
+
+    expect(screen.queryByText('Trip')).not.toBeInTheDocument();
+    expect(screen.getByText('Zoo')).toBeInTheDocument();
+  });
+
+  it('unlinking on one album does not affect a same-spaceId link rendered after navigating to another album (L9)', async () => {
+    const { rerender } = renderWithTooltips(AlbumSharedSpaceLinks, {
+      album: albumFactory.build({
+        id: 'album-1',
+        sharedSpaceLinks: [{ spaceId: 'space-1', spaceName: 'Trip', linkedById: 'e1', showInTimeline: true }],
+      }),
+    });
+
+    await userEvent.click(screen.getByTestId('album-space-link-unlink'));
+    await waitFor(() => {
+      expect(sdkMock.unlinkAlbum).toHaveBeenCalledWith({ id: 'space-1', albumId: 'album-1' });
+    });
+    expect(screen.queryByText('Trip')).not.toBeInTheDocument();
+
+    // Navigate to a different album that happens to be linked to the SAME space id. The
+    // optimistic removal tracked for album-1 must not leak into album-2's rendering.
+    await rerender({
+      component: AlbumSharedSpaceLinks,
+      componentProps: {
+        album: albumFactory.build({
+          id: 'album-2',
+          sharedSpaceLinks: [{ spaceId: 'space-1', spaceName: 'Trip', linkedById: 'e1', showInTimeline: true }],
+        }),
+      },
+    });
+
+    expect(screen.getByText('Trip')).toBeInTheDocument();
+  });
 });

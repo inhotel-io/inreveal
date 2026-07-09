@@ -4,6 +4,7 @@
   import { IconButton, modalManager } from '@immich/ui';
   import { mdiLinkVariantOff } from '@mdi/js';
   import { t } from 'svelte-i18n';
+  import { SvelteSet } from 'svelte/reactivity';
 
   interface Props {
     album: AlbumResponseDto;
@@ -14,7 +15,22 @@
   // Owner-only: the server populates `sharedSpaceLinks` on GET /albums/:id only for the album owner
   // (rbac-6). Every other caller — album editors/viewers, space-only readers, shared-link viewers —
   // gets `undefined`, so this component naturally renders nothing for them.
-  let links = $state([...(album.sharedSpaceLinks ?? [])]);
+  //
+  // `links` is derived (not snapshotted) off `album.sharedSpaceLinks` because SvelteKit reuses this
+  // component instance across album navigation (only the `album` prop changes) — a one-time `$state`
+  // snapshot would keep rendering the PREVIOUS album's links, and unlink would then target a space
+  // that isn't actually linked to the album currently on screen (L9).
+  let removedSpaceIds = new SvelteSet<string>();
+
+  $effect(() => {
+    // Reset optimistic-unlink tracking whenever the album identity changes — a `removedSpaceIds`
+    // entry from a previous album must not hide a same-numbered space link that legitimately
+    // belongs to the new album's server-provided list.
+    void album.id;
+    removedSpaceIds.clear();
+  });
+
+  let links = $derived((album.sharedSpaceLinks ?? []).filter((link) => !removedSpaceIds.has(link.spaceId)));
 
   const handleUnlink = async (spaceId: string, spaceName: string) => {
     const confirmed = await modalManager.showDialog({
@@ -27,7 +43,7 @@
 
     try {
       await unlinkAlbum({ id: spaceId, albumId: album.id });
-      links = links.filter((link) => link.spaceId !== spaceId);
+      removedSpaceIds.add(spaceId);
     } catch (error) {
       // Reuse the space-albums-list unlink error copy — same failure mode, opposite direction.
       handleError(error, $t('spaces_linked_albums_error_unlink'));

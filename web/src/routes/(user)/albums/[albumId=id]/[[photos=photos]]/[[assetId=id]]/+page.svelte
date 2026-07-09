@@ -54,6 +54,7 @@
     getAlbumAssetsActions,
     handleDeleteAlbum,
     handleDownloadAlbum,
+    handleLinkAlbumToSpace,
   } from '$lib/services/album.service';
   import { getGlobalActions } from '$lib/services/app.service';
   import { getAssetBulkActions } from '$lib/services/asset.service';
@@ -91,6 +92,7 @@
     mdiImageOutline,
     mdiImagePlusOutline,
     mdiLink,
+    mdiLinkVariantPlus,
     mdiPlus,
     mdiPresentationPlay,
   } from '@mdi/js';
@@ -722,7 +724,7 @@
             />
             <SetVisibilityAction menuItem onVisibilitySet={handleSetVisibility} />
           {/if}
-          {#if assetMultiSelectManager.assets.length === 1}
+          {#if isEditor && assetMultiSelectManager.assets.length === 1}
             <MenuOption
               text={$t('set_as_album_cover')}
               icon={mdiImageOutline}
@@ -820,6 +822,15 @@
                 {/if}
 
                 {#if isOwned}
+                  <MenuOption
+                    icon={mdiLinkVariantPlus}
+                    text={$t('link_album_to_space')}
+                    onClick={async () => {
+                      if (await handleLinkAlbumToSpace(album)) {
+                        await refreshAlbum();
+                      }
+                    }}
+                  />
                   <MenuOption
                     icon={mdiDeleteOutline}
                     text={$t('delete_album')}
