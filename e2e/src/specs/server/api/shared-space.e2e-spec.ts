@@ -547,9 +547,7 @@ describe('/shared-spaces', () => {
       const { body: members } = await request(app)
         .get(`/shared-spaces/${space.id}/members`)
         .set('Authorization', `Bearer ${user1.accessToken}`);
-      expect(members).toContainEqual(
-        expect.objectContaining({ userId: user1.userId, role: SharedSpaceRole.Owner }),
-      );
+      expect(members).toContainEqual(expect.objectContaining({ userId: user1.userId, role: SharedSpaceRole.Owner }));
     });
   });
 
@@ -1151,9 +1149,7 @@ describe('/shared-spaces', () => {
       const { body: members } = await request(app)
         .get(`/shared-spaces/${space.id}/members`)
         .set('Authorization', `Bearer ${user1.accessToken}`);
-      expect(members).toContainEqual(
-        expect.objectContaining({ userId: user1.userId, role: SharedSpaceRole.Owner }),
-      );
+      expect(members).toContainEqual(expect.objectContaining({ userId: user1.userId, role: SharedSpaceRole.Owner }));
     });
   });
 

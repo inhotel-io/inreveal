@@ -370,7 +370,7 @@ describe('M13: motion-photo AssetHide/AssetShow purge through the real @OnEvent 
     const restoredExif = afterShow.filter((r) => isLibraryExifEvent(r));
     expect(
       restoredExif.some((e) => (e as { data: { assetId: string } }).data.assetId === motionVideo.id),
-      "library-arm EXIF not re-delivered for the motion video after the real AssetShow seam — the asset ROW " +
+      'library-arm EXIF not re-delivered for the motion video after the real AssetShow seam — the asset ROW ' +
         'would re-upsert automatically here regardless of whether the handler ran, so this EXIF check is the ' +
         'one that actually proves the seam',
     ).toBe(true);

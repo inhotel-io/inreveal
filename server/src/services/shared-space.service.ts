@@ -2015,10 +2015,7 @@ export class SharedSpaceService extends BaseService {
     if (candidateAssetIds.length === 0) {
       return;
     }
-    const staleAssetIds = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(
-      spaceId,
-      candidateAssetIds,
-    );
+    const staleAssetIds = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(spaceId, candidateAssetIds);
     if (staleAssetIds.length === 0) {
       return;
     }

@@ -2341,7 +2341,11 @@ describe(SharedSpaceService.name, () => {
 
       await sut.removeMember(auth, 'space-1', 'member-2');
 
-      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2', expect.anything());
+      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith(
+        'space-1',
+        'member-2',
+        expect.anything(),
+      );
     });
 
     it("unlinks the leaver's OWNED albums on self-leave (albums-6)", async () => {
@@ -2359,7 +2363,11 @@ describe(SharedSpaceService.name, () => {
 
       await sut.removeMember(auth, 'space-1', 'member-2');
 
-      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith('space-1', 'member-2', expect.anything());
+      expect(mocks.sharedSpace.removeOwnedAlbumLinksAddedBy).toHaveBeenCalledWith(
+        'space-1',
+        'member-2',
+        expect.anything(),
+      );
     });
 
     it('enqueues album grant reconcile for the space albums on member removal (correctness-4)', async () => {

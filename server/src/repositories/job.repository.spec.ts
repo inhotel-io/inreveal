@@ -931,7 +931,12 @@ describe(JobRepository.name, () => {
       {},
     ],
     // M6: SharedSpaceFaceMatchAll now also sets removeOnFail (see the dedicated M6 tests above).
-    [JobName.SharedSpaceFaceMatchAll, { spaceId: 'space-1' }, 'shared-space-face-match-all/space-1', { removeOnFail: true }],
+    [
+      JobName.SharedSpaceFaceMatchAll,
+      { spaceId: 'space-1' },
+      'shared-space-face-match-all/space-1',
+      { removeOnFail: true },
+    ],
     [
       JobName.SharedSpaceFaceMatchPage,
       { spaceId: 'space-1', afterAssetId: 'asset-9' },

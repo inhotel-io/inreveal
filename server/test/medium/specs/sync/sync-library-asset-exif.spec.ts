@@ -249,7 +249,11 @@ describe(SyncRequestType.LibraryAssetExifsV1, () => {
     await owner.ctx.newExif({ assetId: asset.id, make: 'L4Make' });
 
     const { space } = await owner.ctx.newSharedSpace({ createdById: owner.auth.user.id });
-    await owner.ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.auth.user.id, role: SharedSpaceRole.Owner });
+    await owner.ctx.newSharedSpaceMember({
+      spaceId: space.id,
+      userId: owner.auth.user.id,
+      role: SharedSpaceRole.Owner,
+    });
     await owner.ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.user.id, role: SharedSpaceRole.Editor });
     await owner.ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: owner.auth.user.id });
 

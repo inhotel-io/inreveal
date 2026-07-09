@@ -116,7 +116,11 @@ describe('reconcileAlbumGrants (correctness-4)', () => {
     // exMember leaves the space: no more live path to the album. The synchronous delete-side
     // trigger (shared_space_member_delete_album_audit) already tombstones the grant at DELETE
     // time, so by the time reconcile runs there is nothing left for its OWN revoke sweep to do.
-    await db.deleteFrom('shared_space_member').where('spaceId', '=', space.id).where('userId', '=', exMember.id).execute();
+    await db
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', exMember.id)
+      .execute();
     expect(await hasGrant(album.id, exMember.id)).toBe(false); // already revoked synchronously
 
     const revoked = await sut.reconcileAlbumGrants([album.id]);
