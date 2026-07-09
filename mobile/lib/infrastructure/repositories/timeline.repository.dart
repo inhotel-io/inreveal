@@ -886,7 +886,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
             _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
             (_db.remoteAssetEntity.ownerId.isIn(userIds) |
                 viz.assetMember.userId.isNotNull() |
-                viz.libraryMember.userId.isNotNull()),
+                viz.libraryMember.userId.isNotNull() |
+                viz.albumMember.userId.isNotNull()),
       )
       ..groupBy([dateExp])
       ..orderBy([OrderingTerm.desc(dateExp)]);
@@ -968,7 +969,9 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
     TimelineTemporalScope temporalScope = const TimelineTemporalScope.none(),
   }) => _remoteQueryBuilder(
     filter: (row) =>
-        row.deletedAt.isNull() & row.visibility.equalsValue(AssetVisibility.timeline) & row.id.isIn(assetIds),
+        row.deletedAt.isNull() &
+        (row.visibility.equalsValue(AssetVisibility.timeline) | row.visibility.equalsValue(AssetVisibility.archive)) &
+        row.id.isIn(assetIds),
     groupBy: groupBy,
     temporalScope: temporalScope,
     origin: TimelineOrigin.person,
@@ -1006,7 +1009,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
             _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
             (_db.remoteAssetEntity.ownerId.isIn(userIds) |
                 viz.assetMember.userId.isNotNull() |
-                viz.libraryMember.userId.isNotNull()),
+                viz.libraryMember.userId.isNotNull() |
+                viz.albumMember.userId.isNotNull()),
       )
       ..groupBy([dateExp])
       ..orderBy([OrderingTerm.desc(dateExp)]);
@@ -1192,7 +1196,8 @@ class DriftTimelineRepository extends DriftDatabaseRepository {
             _remoteWithinTemporalScope(_db.remoteAssetEntity, temporalScope) &
             (_db.remoteAssetEntity.ownerId.isIn(userIds) |
                 viz.assetMember.userId.isNotNull() |
-                viz.libraryMember.userId.isNotNull()),
+                viz.libraryMember.userId.isNotNull() |
+                viz.albumMember.userId.isNotNull()),
       )
       ..groupBy([dateExp])
       ..orderBy([OrderingTerm.desc(dateExp)]);
