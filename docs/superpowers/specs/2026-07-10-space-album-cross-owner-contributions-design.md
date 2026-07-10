@@ -166,7 +166,42 @@ album_space_asset  — a live-gated cross-owner contribution of a space photo in
 
 ---
 
-## 5. Access & read model
+## 5. Access, role & visibility model (RBAC)
+
+### 5.0 Role & visibility matrix (the security contract)
+
+Two **independent** role systems: **space** `SharedSpaceRole` = Owner / Editor / Viewer
+(`shared_space_member.role`) and **album** `AlbumUserRole` = Owner / Editor / Viewer (`album_user`).
+
+| Operation | Allowed for | Enforced by |
+|---|---|---|
+| **View** a contribution (grid / count / timeline / download / search) | any **live member** of the album's linked space — Owner/Editor/**Viewer** | read arm joins `shared_space_member` with **no role filter** (mirrors `checkSpaceLinkedAlbumReadAccess`, `access.repository.ts:165`) |
+| **Contribute** a **non-owned** photo | space **Owner/Editor** of the album's linked space **S**, *and* the asset is space-visible to them via **S** *and* passes the visibility gate | album-level `AlbumAssetCreate` (#752 `role IN [owner,editor]`, `access.repository.ts:158` — **throws 403 for Viewers**) **+** per-asset eligibility (§5.1) |
+| **Contribute** an **owned** photo | space **Owner/Editor** (album-level gate) → normal `album_asset` | `AlbumAssetCreate` + `AssetShare` (owner) |
+| **Remove** a contribution | album **Owner/Editor** OR live space **Owner/Editor** of S | `AlbumAssetDelete` (#752 made it space-editor-aware) + row delete |
+| **Link / unlink** album ↔ space | out of scope (#752) | — |
+
+**Non-bypass rules (assert each as an explicit negative test):**
+- **Viewers never write.** A space Viewer is hard-blocked at `AlbumAssetCreate` (403) *before* any
+  per-asset logic runs — they can contribute neither their own nor others' photos.
+- **Album role ≠ space rights.** A direct `album_user` **editor** who is **not** a space member
+  cannot contribute non-owned space assets (own → `album_asset`; others' → `NO_PERMISSION`). Album
+  ownership does **not** bypass the space-Editor requirement for pulling in others' photos.
+- **Same space for all three.** Eligibility requires a *single* space **S** where the album is
+  linked to S, the adder is Owner/Editor of S, **and** the asset is space-visible via S. An asset
+  visible only via a *different* space the adder edits is **not** contributable here — no
+  cross-space smuggling.
+
+**Visibility gate (critical — a leak vector if missed).** The space-visibility arms
+(`spaceAssetPathBranches`) do **not** exclude Hidden/Locked assets on their own — `spaceVisibilityGate`
+(`[Archive, Timeline]` only; `shared-space-album-scope.ts:42`) is applied *separately* at each call
+site (this was #752 remediation Slice 1). Therefore:
+- **Add:** eligibility MUST `AND` the flat `spaceVisibilityGate` into the visibility check — an Editor
+  must never contribute an asset its owner marked **Hidden/Locked** (which the Editor cannot even
+  see). No owner exception (contributions are cross-owner by definition).
+- **Read:** `spaceContributedAssetExists` MUST be composed with `spaceVisibilityGate(eb, 'asset.visibility')`
+  at every read site (like the album arm), so an asset marked Hidden *after* it was contributed is
+  defensively excluded going forward.
 
 ### 5.1 Adding (the #764 fix) — `AlbumService.addAssets`
 
@@ -181,7 +216,9 @@ shared-links/memories):
      `album_space_asset(album, asset, S, addedById=auth.user.id)`. "Space-visible via S" reuses
      `shared-space-album-scope.ts` `spaceAssetPathBranches` (direct `shared_space_asset` ∪
      linked-library ∪ linked-album arms) scoped to
-     `{ memberUserId: auth.user.id, memberRole: [owner, editor], spaceId: S }`.
+     `{ memberUserId: auth.user.id, memberRole: [owner, editor], spaceId: S }`, **AND**ed with the
+     flat `spaceVisibilityGate` (§5.0) so Hidden/Locked assets are never eligible. The role filter
+     ties the contribution to a space **S** where the adder is Owner/Editor.
    - **Already in** `album_asset` *or* `album_space_asset` → `DUPLICATE`.
    - **Otherwise** → `NO_PERMISSION`.
 3. Return a merged `BulkIdResponseDto[]` across both buckets (per-asset outcome preserved).
@@ -206,18 +243,27 @@ EXISTS (
 )
 ```
 
-Because the row is *not* in `album_asset`, the owner's `checkAlbumAccess` never sees it → no
-permanent grant. **Album contents** = `album_asset ∪ spaceContributedAssetExists(...)`, deduped by
-`assetId`. Wire into every consumer of `spaceAlbumAssetExists` / `spaceAssetPathBranches`: album
-detail/grid, asset count, thumbnail, the space aggregated timeline (respecting `showInTimeline`),
-download, activity, in-album search. (Largest surface — Slices 2–3.)
+The membership join uses **any-role** membership (no `memberRole` filter) — Viewers must see
+contributions — and every read site **composes it with `spaceVisibilityGate`** (§5.0) exactly as it
+already does for the album arm. Because the row is *not* in `album_asset`, the owner's
+`checkAlbumAccess` never sees it → no permanent grant. **Album contents** =
+`album_asset ∪ spaceContributedAssetExists(...)`, deduped by `assetId`. Wire into every consumer of
+`spaceAlbumAssetExists` / `spaceAssetPathBranches`: album detail/grid, asset count, thumbnail, the
+space aggregated timeline (respecting `showInTimeline`), download, activity, in-album search
+(Largest surface — Slices 2–3). At each site, confirm the visibility gate is present for the new arm
+— do not replicate any site that is still missing it.
 
 ### 5.3 Removing — `AlbumService.removeAssets`
 
-Removing a contribution = delete the `album_space_asset` row (never touches the asset). Permitted for
-the **album owner**, any **space Editor** of the linked space, and the **contributor**. Space-aware
-branch alongside the existing `AssetShare` / `AlbumAssetDelete` (`canAlwaysRemove`) logic. Removing
-an ordinary `album_asset` row is unchanged.
+Removing a contribution = delete the `album_space_asset` row (never touches the asset). Gate it on
+the **same `AlbumAssetDelete`** access #752 already defines — which resolves to *album Owner/Editor*
+**or** *space Owner/Editor* of the linked space (`checkSpaceLinkedAlbumAccess`, `role IN [owner,editor]`).
+This is symmetric with the add gate and needs no new permission. A space **Viewer** cannot remove.
+
+We deliberately **do not** add a standalone "the contributor may always remove" allowance: a
+contributor who is still an Editor is already covered, and one demoted to Viewer *should* lose write
+ability — a bespoke allowance would reintroduce a role-transition bypass. Removing an ordinary
+`album_asset` row is unchanged.
 
 ---
 
@@ -375,9 +421,13 @@ owned by Carol.
   and the asset **count includes** X.
 - *Given* Bob adds **his own** asset Y (in S) to L, *When* it runs, *Then* Y takes the **`album_asset`**
   path (`success:true`), unchanged.
-- *Given* a **Viewer** V of S, *When* V tries to add X to L, *Then* the add is **denied**
-  (`AlbumAssetCreate` role gate) — no row created.
+- *Given* a **Viewer** V of S, *When* V tries to add X (or their *own* asset) to L, *Then* the add
+  is **denied with 403** — `AlbumAssetCreate` throws *before* any per-asset logic; no row created.
 - *Given* asset Z **not in S**, *When* Bob adds Z to L, *Then* **`NO_PERMISSION`** for Z — no row.
+- *Given* asset H owned by Carol but **Hidden/Locked**, *When* Bob adds H to L, *Then*
+  **`NO_PERMISSION`** (visibility gate) — no row, and H never becomes visible to any member via L.
+- *Given* Dave is a direct `album_user` **editor** of L but **not** a member of S, *When* Dave adds
+  non-owned X to L, *Then* **`NO_PERMISSION`** (album role ≠ space rights); his *own* asset → `album_asset`.
 - *Given* X is already in L (as contribution or owned), *When* Bob adds X again, *Then* **`DUPLICATE`**.
 - *Given* a mixed batch {X (non-owned, in S), Y (Bob-owned, in S), Z (not in S)}, *When* Bob adds
   them, *Then* per-asset `{X:success, Y:success, Z:no_permission}` and a partial `BulkIdResponse`.
@@ -401,6 +451,9 @@ owned by Carol.
 - Asset visible to Bob only via a **different** space T (album L not linked to T) → `NO_PERMISSION`
   (eligibility requires visibility via **L's** space).
 - Album linked to **no** space Bob edits → non-owned add → `NO_PERMISSION` (owner-only unchanged).
+- **Visibility-gate leak negative (critical):** an Editor cannot contribute a Hidden/Locked asset
+  (above); additionally assert the resulting `album_space_asset` set never contains a Hidden/Locked
+  asset id, so no member's album read can surface one.
 - **Leak negative (critical):** setup Alice as an **Editor member** of S (not the creator) who owns
   album L and links it into S. After Bob contributes X, Alice's `checkAlbumAccess`-backed reads of X
   resolve **only while she is a live member of S** — assert Alice loses X the moment she is removed
@@ -433,6 +486,9 @@ lifecycle/leak guarantee from §6 is asserted.
   general pool but keeps it* → X **stays** in L (§8 default 1).
 - **External-share negative:** *Given* Alice shares L via public link / external `album_user`, *When*
   a non-space viewer opens it, *Then* contributions are **absent** (owned assets still present).
+- **Contributed-then-Hidden negative:** *Given* contribution X is visible, *When* X's owner marks X
+  **Hidden/Locked**, *Then* the `spaceVisibilityGate` on the read arm excludes X from every album
+  surface for every member (defense-in-depth against post-hoc visibility changes).
 
 **TDD — red first**
 - **Medium/e2e** per surface (timeline, download, activity, search, thumbnail) + the full lifecycle
@@ -457,12 +513,17 @@ candidates are contributions the viewer can't currently see.
 
 **Delivers.** Collaborative removal, correctly role-gated.
 
-**Behavior (BDD)** — contribution `(L, X, S)` by Bob.
+**Behavior (BDD)** — contribution `(L, X, S)` by Bob. Gate = `AlbumAssetDelete` (album Owner/Editor
+**or** space Owner/Editor).
 - *Given* Alice (album **owner**), *When* she removes X from L, *Then* the `album_space_asset` row is
   deleted, X leaves L, and asset X itself is untouched.
-- *Given* Bob (the **contributor**), *When* he removes X, *Then* deleted.
-- *Given* another space **Editor** Dave, *When* he removes X, *Then* deleted.
-- *Given* a space **Viewer** V, *When* V tries to remove X, *Then* **denied**; row stays.
+- *Given* another live space **Editor** Dave, *When* he removes X, *Then* deleted.
+- *Given* Bob (the contributor) who is **still an Editor**, *When* he removes X, *Then* deleted (via
+  the Editor path — no special contributor rule).
+- *Given* Bob was **demoted to Viewer** (or left S), *When* he tries to remove his own X, *Then*
+  **denied** — he no longer has write rights.
+- *Given* a space **Viewer** V (who is not the album owner), *When* V tries to remove X, *Then*
+  **denied**; row stays.
 - *Given* a **non-member**, *When* they try, *Then* **denied**.
 - *Given* removal of an **owned** `album_asset` row, *When* it runs, *Then* unchanged behavior.
 
@@ -470,15 +531,18 @@ candidates are contributions the viewer can't currently see.
 - **e2e/medium**: the six cases through the remove endpoint; assert row presence/absence and that
   the asset row persists. Red because the current remove path has no `album_space_asset` branch.
 
-**Fix (green).** Space-aware branch in `AlbumService.removeAssets` / the `removeAssets` util caller:
-resolve the row's `spaceId`, allow if owner ∨ space-Editor ∨ contributor; delete the row (emit
-`AlbumAssetsRemove` + audit).
+**Fix (green).** Space-aware branch in `AlbumService.removeAssets` gated on the existing
+`AlbumAssetDelete` access (album Owner/Editor ∨ space Owner/Editor of the linked space — no new
+permission, no bespoke contributor rule): if the caller has `AlbumAssetDelete` on L, delete the
+`album_space_asset` row (emit `AlbumAssetsRemove` + audit).
 
 **Edge cases**
 - Removing X that is **not present** → `NOT_FOUND` (not 500).
 - Editor of a **different** space (not L's) → denied.
-- Contributor who has since **left** S → still allowed to remove their own bookmark? **Default: no**
-  (no live membership → treated as non-member). Assert.
+- Album **Viewer** who is *also* the album owner? Not possible (owner role ≠ viewer); the album owner
+  always has `AlbumAssetDelete`. A space **Viewer** who does not own L → denied.
+- A caller with `AlbumAssetDelete` removes an owned `album_asset` **and** a contributed
+  `album_space_asset` in one batch → both handled, correct per-asset results.
 
 **Green.** All cases green; existing remove suite green.
 
@@ -552,15 +616,22 @@ the add action is hidden/disabled for Viewers.
 
 ## 10. Global acceptance criteria
 
-- A space Editor can add a non-owned, space-visible photo to a space-linked album; a Viewer cannot.
+- **Role matrix (§5.0) holds exactly:** *view* = any live space member (incl. Viewer); *contribute*
+  = space Owner/Editor of the album's space; *remove* = `AlbumAssetDelete` (album Owner/Editor ∨
+  space Owner/Editor). Every non-bypass rule has a passing negative test: Viewer 403 hard-block,
+  album-editor-not-space-member denied, no cross-space smuggling.
+- **No Hidden/Locked leak:** a Hidden/Locked asset is never contributable (add-time flat
+  `spaceVisibilityGate`) and never rendered via a contribution (read-time gate at every surface),
+  including when an asset is marked Hidden *after* being contributed.
 - Contributed photos render in every album surface for live members and **nowhere** for
   non-members — including the album owner once their space access ends, and including external
   album shares / public links.
 - Leaving/unlinking/deleting behaves exactly per the §6 table; re-join/re-link is reversible.
 - The add-to-album toast never reports success when nothing was added.
 - Mobile converges with contribution insert/delete/backfill.
-- Full-suite green for every touched package; no widening of `AssetShare`/shared-link/memory
-  permissions (assert an unrelated shared-link e2e still owner-gates).
+- Full-suite green for every touched package; **no widening of `AssetShare`/shared-link/memory
+  permissions** (assert an unrelated shared-link e2e still owner-gates — a space member still cannot
+  mint a public link of another member's photo).
 
 ## 11. Out of scope
 
