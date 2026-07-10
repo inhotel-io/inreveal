@@ -62,6 +62,9 @@
   import { handlePromiseError } from '$lib/utils';
   import { buildAlbumAssetPickerFilterConfig, buildAlbumDetailFilterConfig } from '$lib/utils/album-filter-config';
   import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
+  import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
+  import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
+  import { lang } from '$lib/stores/preferences.store';
   import { handleError } from '$lib/utils/handle-error';
   import { isAlbumsRoute, navigate, type AssetGridRouteSearchParams } from '$lib/utils/navigation';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
@@ -322,6 +325,15 @@
   });
 
   const totalAssetCount = $derived(timelineManager?.assetCount ?? 0);
+
+  const handleAddAllToCollection = () => {
+    void modalManager.show(SearchAddAllToCollectionModal, {
+      terms: { ...filterStateToSearchTerms(albumFilters), albumIds: [album.id] },
+      total: totalAssetCount,
+      smartSearchEnabled: false,
+      language: $lang,
+    });
+  };
   const hasTimelineMonths = $derived((timelineManager?.months?.length ?? 0) > 0);
   const activeFilterCount = $derived(
     getActiveFilterCount(viewMode === AlbumPageViewMode.SELECT_ASSETS ? pickerFilters : albumFilters),
@@ -539,6 +551,7 @@
                   albumFilters = clearFilters(albumFilters);
                   temporalAnchor = undefined;
                 }}
+                onAddAllToCollection={handleAddAllToCollection}
               />
             {/snippet}
             <FilterToolbar

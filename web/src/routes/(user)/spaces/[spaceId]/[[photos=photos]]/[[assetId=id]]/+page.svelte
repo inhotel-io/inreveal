@@ -58,6 +58,9 @@
     mapSmartSearchFacetsToFilterSuggestions,
   } from '$lib/utils/space-search';
   import { buildSpaceTimelineOptions, handleSpaceRemoveFilter } from '$lib/utils/space-filter-options';
+  import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
+  import type { SearchTerms } from '$lib/services/search.service';
+  import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
   import {
     type ActivatableTimelineBucket,
     getTimelineBucketZoomTarget,
@@ -81,7 +84,7 @@
     type SharedSpaceResponseDto,
     type SmartSearchFacetsResponseDto,
   } from '@immich/sdk';
-  import { IconButton, toastManager } from '@immich/ui';
+  import { IconButton, modalManager, toastManager } from '@immich/ui';
   import { mdiDotsVertical, mdiImageOutline, mdiPlus } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import { untrack } from 'svelte';
@@ -386,6 +389,25 @@
   );
 
   const totalAssetCount = $derived(timelineManager?.assetCount ?? 0);
+
+  const handleAddAllToCollection = () => {
+    const query = committedSearchQuery.trim();
+    const terms: SearchTerms = { ...filterStateToSearchTerms(filters), spaceId: space.id };
+    // Space timelines scope people via spacePersonIds, not personIds (see buildSpaceTimelineOptions).
+    if (terms.personIds) {
+      terms.spacePersonIds = terms.personIds;
+      delete terms.personIds;
+    }
+    if (query) {
+      terms.query = query;
+    }
+    void modalManager.show(SearchAddAllToCollectionModal, {
+      terms,
+      total: showSearchResults ? (smartFacetTotal ?? 0) : totalAssetCount,
+      smartSearchEnabled: !!query,
+      language: $lang,
+    });
+  };
 
   const options = $derived.by(() => {
     if (viewMode === 'select-assets') {
@@ -758,6 +780,7 @@
         onClearAll={handleClearAllFilters}
         searchQuery={committedSearchQuery}
         onClearSearch={clearSearch}
+        onAddAllToCollection={handleAddAllToCollection}
       />
     {/snippet}
     {#if viewMode === 'view'}
