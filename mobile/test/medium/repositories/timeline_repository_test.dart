@@ -1,4 +1,7 @@
-import 'package:drift/drift.dart';
+// `hide isNull`: drift and flutter_test both export `isNull`; this test uses
+// drift's Value()/.equals() (space-album link writes) and flutter_test's isNull
+// matcher (live-photos group merged in from main), so drift's must yield.
+import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
