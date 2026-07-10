@@ -20,8 +20,14 @@ Widget _wrapSliver(Widget sliverWidget) => Scaffold(
   ),
 );
 
-SpaceAlbum _album({required String id, String? name, bool showInTimeline = true, int assetCount = 0}) =>
-    SpaceAlbum(id: id, name: name ?? 'Album $id', showInTimeline: showInTimeline, assetCount: assetCount);
+SpaceAlbum _album({required String id, String? name, bool showInTimeline = true, int assetCount = 0}) => SpaceAlbum(
+  id: id,
+  name: name ?? 'Album $id',
+  showInTimeline: showInTimeline,
+  assetCount: assetCount,
+  linkedAt: DateTime.utc(2026, 1, 1),
+  updatedAt: DateTime.utc(2026, 1, 1),
+);
 
 // ---------------------------------------------------------------------------
 // Tests

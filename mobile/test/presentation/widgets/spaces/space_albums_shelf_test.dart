@@ -36,7 +36,14 @@ Finder findByKeyPrefix(String prefix) => find.byWidgetPredicate(
 // ---------------------------------------------------------------------------
 
 SpaceAlbum _album({required String id, String? name, String? thumbnailAssetId, bool showInTimeline = true}) =>
-    SpaceAlbum(id: id, name: name ?? 'Album $id', thumbnailAssetId: thumbnailAssetId, showInTimeline: showInTimeline);
+    SpaceAlbum(
+      id: id,
+      name: name ?? 'Album $id',
+      thumbnailAssetId: thumbnailAssetId,
+      showInTimeline: showInTimeline,
+      linkedAt: DateTime.utc(2026, 1, 1),
+      updatedAt: DateTime.utc(2026, 1, 1),
+    );
 
 /// Overrides [spaceAlbumsProvider] with a fixed list, for use with
 /// [WidgetTester.pumpConsumerWidget]'s `overrides` param (which already
@@ -44,11 +51,7 @@ SpaceAlbum _album({required String id, String? name, String? thumbnailAssetId, b
 ///
 /// Pass [assetService] to also override [assetServiceProvider] — needed for
 /// cover-thumbnail tests that call [assetServiceProvider.getRemoteAsset].
-List<Override> _overrides({
-  required String spaceId,
-  required List<SpaceAlbum> albums,
-  AssetService? assetService,
-}) => [
+List<Override> _overrides({required String spaceId, required List<SpaceAlbum> albums, AssetService? assetService}) => [
   spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
   if (assetService != null) assetServiceProvider.overrideWithValue(assetService),
 ];

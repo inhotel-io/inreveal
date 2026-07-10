@@ -11,18 +11,14 @@ import '../../widget_tester_extensions.dart';
 // Helpers
 // ---------------------------------------------------------------------------
 
-SpaceAlbum _album({
-  required String id,
-  String? name,
-  int assetCount = 0,
-  bool showInTimeline = true,
-}) =>
-    SpaceAlbum(
-      id: id,
-      name: name ?? 'Album $id',
-      assetCount: assetCount,
-      showInTimeline: showInTimeline,
-    );
+SpaceAlbum _album({required String id, String? name, int assetCount = 0, bool showInTimeline = true}) => SpaceAlbum(
+  id: id,
+  name: name ?? 'Album $id',
+  assetCount: assetCount,
+  showInTimeline: showInTimeline,
+  linkedAt: DateTime.utc(2026, 1, 1),
+  updatedAt: DateTime.utc(2026, 1, 1),
+);
 
 /// Overrides [spaceAlbumsProvider] with a fixed list, for use with
 /// [WidgetTester.pumpConsumerWidget]'s `overrides` param.
@@ -59,10 +55,7 @@ void main() {
   });
 
   testWidgets('viewer + 2 albums: shows 2 cards but NO ⋮ menu and NO ＋ Link action', (tester) async {
-    final albums = [
-      _album(id: 'a1', name: 'Hawaii'),
-      _album(id: 'a2', name: 'Sunsets'),
-    ];
+    final albums = [_album(id: 'a1', name: 'Hawaii'), _album(id: 'a2', name: 'Sunsets')];
 
     await tester.pumpConsumerWidget(
       const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
@@ -87,9 +80,12 @@ void main() {
 
     expect(find.byKey(const Key('space-albums-empty')), findsOneWidget);
     // No album cards
-    expect(find.byWidgetPredicate(
-      (w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('space-album-card-'),
-    ), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('space-album-card-'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('off-timeline album card shows visibility_off icon', (tester) async {

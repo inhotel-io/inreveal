@@ -28,17 +28,14 @@ import '../../widget_tester_extensions.dart';
 // Helpers
 // ---------------------------------------------------------------------------
 
-SpaceAlbum _album({
-  required String id,
-  String name = 'Album',
-  int assetCount = 0,
-  bool showInTimeline = true,
-}) =>
+SpaceAlbum _album({required String id, String name = 'Album', int assetCount = 0, bool showInTimeline = true}) =>
     SpaceAlbum(
       id: id,
       name: name,
       assetCount: assetCount,
       showInTimeline: showInTimeline,
+      linkedAt: DateTime.utc(2026, 1, 1),
+      updatedAt: DateTime.utc(2026, 1, 1),
     );
 
 List<Override> _overrides({required String spaceId, required List<SpaceAlbum> albums}) => [
@@ -48,7 +45,10 @@ List<Override> _overrides({required String spaceId, required List<SpaceAlbum> al
 /// Wraps a SliverAppBar in a scrollable context so it renders.
 Widget _wrapSliver(Widget sliver) => Scaffold(
   body: CustomScrollView(
-    slivers: [sliver, const SliverToBoxAdapter(child: SizedBox(height: 800))],
+    slivers: [
+      sliver,
+      const SliverToBoxAdapter(child: SizedBox(height: 800)),
+    ],
   ),
 );
 
@@ -60,8 +60,7 @@ void main() {
   const spaceId = 'space-1';
 
   group('SpaceAlbumsPage — onToggle callback wiring', () {
-    testWidgets('editor taps Show/Hide in timeline — onToggle invoked with correct albumId',
-        (tester) async {
+    testWidgets('editor taps Show/Hide in timeline — onToggle invoked with correct albumId', (tester) async {
       String? toggledId;
       final albums = [
         _album(id: 'a1', name: 'Hawaii', showInTimeline: true),
@@ -69,12 +68,7 @@ void main() {
       ];
 
       await tester.pumpConsumerWidget(
-        SpaceAlbumsPage(
-          spaceId: spaceId,
-          canEdit: true,
-          onToggle: (id) => toggledId = id,
-          onUnlink: (_) {},
-        ),
+        SpaceAlbumsPage(spaceId: spaceId, canEdit: true, onToggle: (id) => toggledId = id, onUnlink: (_) {}),
         overrides: _overrides(spaceId: spaceId, albums: albums),
       );
 
@@ -89,18 +83,12 @@ void main() {
       expect(toggledId, 'a1');
     });
 
-    testWidgets('viewer (canEdit:false) — no ⋮ menu, onToggle never invoked',
-        (tester) async {
+    testWidgets('viewer (canEdit:false) — no ⋮ menu, onToggle never invoked', (tester) async {
       String? toggledId;
       final albums = [_album(id: 'a1', name: 'Hawaii')];
 
       await tester.pumpConsumerWidget(
-        SpaceAlbumsPage(
-          spaceId: spaceId,
-          canEdit: false,
-          onToggle: (id) => toggledId = id,
-          onUnlink: (_) {},
-        ),
+        SpaceAlbumsPage(spaceId: spaceId, canEdit: false, onToggle: (id) => toggledId = id, onUnlink: (_) {}),
         overrides: _overrides(spaceId: spaceId, albums: albums),
       );
 
@@ -110,18 +98,12 @@ void main() {
   });
 
   group('SpaceAlbumsPage — onUnlink callback wiring', () {
-    testWidgets('editor taps Unlink — onUnlink invoked with correct albumId',
-        (tester) async {
+    testWidgets('editor taps Unlink — onUnlink invoked with correct albumId', (tester) async {
       String? unlinkedId;
       final albums = [_album(id: 'a1', name: 'Hawaii')];
 
       await tester.pumpConsumerWidget(
-        SpaceAlbumsPage(
-          spaceId: spaceId,
-          canEdit: true,
-          onToggle: (_) {},
-          onUnlink: (id) => unlinkedId = id,
-        ),
+        SpaceAlbumsPage(spaceId: spaceId, canEdit: true, onToggle: (_) {}, onUnlink: (id) => unlinkedId = id),
         overrides: _overrides(spaceId: spaceId, albums: albums),
       );
 
@@ -133,11 +115,13 @@ void main() {
       expect(unlinkedId, 'a1');
     });
 
-    testWidgets('viewer (canEdit:false) — no ＋ Link action in app-bar',
-        (tester) async {
+    testWidgets('viewer (canEdit:false) — no ＋ Link action in app-bar', (tester) async {
       await tester.pumpConsumerWidget(
         const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
-        overrides: _overrides(spaceId: spaceId, albums: [_album(id: 'a1')]),
+        overrides: _overrides(
+          spaceId: spaceId,
+          albums: [_album(id: 'a1')],
+        ),
       );
 
       expect(find.byKey(const Key('space-albums-link-action')), findsNothing);

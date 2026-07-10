@@ -18,8 +18,13 @@ import 'package:immich_mobile/providers/sync_status.provider.dart';
 // Helpers
 // ---------------------------------------------------------------------------
 
-SpaceAlbum _album(String id) =>
-    SpaceAlbum(id: id, name: 'Album $id', showInTimeline: true);
+SpaceAlbum _album(String id) => SpaceAlbum(
+  id: id,
+  name: 'Album $id',
+  showInTimeline: true,
+  linkedAt: DateTime.utc(2026, 1, 1),
+  updatedAt: DateTime.utc(2026, 1, 1),
+);
 
 Widget _wrap({
   required String spaceId,
@@ -35,14 +40,7 @@ Widget _wrap({
     child: MaterialApp(
       home: Scaffold(
         body: CustomScrollView(
-          slivers: [
-            SpaceTopSliver(
-              spaceId: spaceId,
-              canEdit: canEdit,
-              onLinkTap: () {},
-              onAlbumTap: (_) {},
-            ),
-          ],
+          slivers: [SpaceTopSliver(spaceId: spaceId, canEdit: canEdit, onLinkTap: () {}, onAlbumTap: (_) {})],
         ),
       ),
     ),
@@ -58,9 +56,7 @@ class _FakeSyncStatusNotifier extends SyncStatusNotifier {
   final bool syncing;
 
   @override
-  SyncStatusState build() => SyncStatusState(
-    remoteSyncStatus: syncing ? SyncStatus.syncing : SyncStatus.idle,
-  );
+  SyncStatusState build() => SyncStatusState(remoteSyncStatus: syncing ? SyncStatus.syncing : SyncStatus.idle);
 }
 
 // ---------------------------------------------------------------------------
@@ -69,18 +65,14 @@ class _FakeSyncStatusNotifier extends SyncStatusNotifier {
 
 void main() {
   testWidgets('editor + 1 album: shelf is present inside the top sliver', (tester) async {
-    await tester.pumpWidget(
-      _wrap(spaceId: 'space-1', canEdit: true, albums: [_album('a1')]),
-    );
+    await tester.pumpWidget(_wrap(spaceId: 'space-1', canEdit: true, albums: [_album('a1')]));
     await tester.pump(); // stream emit
 
     expect(find.byKey(const Key('space-albums-shelf')), findsOneWidget);
   });
 
   testWidgets('viewer + 0 albums: shelf is absent from the top sliver', (tester) async {
-    await tester.pumpWidget(
-      _wrap(spaceId: 'space-1', canEdit: false, albums: []),
-    );
+    await tester.pumpWidget(_wrap(spaceId: 'space-1', canEdit: false, albums: []));
     await tester.pump();
 
     expect(find.byKey(const Key('space-albums-shelf')), findsNothing);
@@ -89,9 +81,7 @@ void main() {
   });
 
   testWidgets('editor + 0 albums: slim shelf with link tile still renders', (tester) async {
-    await tester.pumpWidget(
-      _wrap(spaceId: 'space-1', canEdit: true, albums: []),
-    );
+    await tester.pumpWidget(_wrap(spaceId: 'space-1', canEdit: true, albums: []));
     await tester.pump();
 
     expect(find.byKey(const Key('space-albums-shelf')), findsOneWidget);

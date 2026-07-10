@@ -11,6 +11,8 @@ class SpaceAlbum {
   final String? thumbnailAssetId;
   final bool showInTimeline;
   final int assetCount;
+  final DateTime linkedAt;
+  final DateTime updatedAt;
 
   const SpaceAlbum({
     required this.id,
@@ -18,5 +20,7 @@ class SpaceAlbum {
     this.thumbnailAssetId,
     required this.showInTimeline,
     this.assetCount = 0,
+    required this.linkedAt,
+    required this.updatedAt,
   });
 }

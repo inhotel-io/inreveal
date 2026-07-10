@@ -96,6 +96,20 @@ void main() {
       expect(albums.map((a) => a.id), contains(album.id), reason: 'album must still appear on the shelf');
       expect(albums.single.assetCount, 0);
     });
+
+    test('watchLinkedAlbums exposes linkedAt (link.createdAt) and updatedAt (meta.updatedAt)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final linked = DateTime.utc(2026, 1, 2);
+      final updated = DateTime.utc(2026, 3, 4);
+      final album = await ctx.newSharedSpaceAlbum(name: 'Alpha', updatedAt: updated);
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id, createdAt: linked);
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+
+      expect(albums.single.linkedAt, linked);
+      expect(albums.single.updatedAt, updated);
+    });
   });
 
   test('deleteAlbumMetadata removes metadata + membership but keeps remote_asset', () async {

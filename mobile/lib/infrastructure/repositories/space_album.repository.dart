@@ -51,6 +51,8 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
           thumbnailAssetId: m.thumbnailAssetId,
           showInTimeline: l.showInTimeline,
           assetCount: row.read(assetCountExp) ?? 0,
+          linkedAt: l.createdAt,
+          updatedAt: m.updatedAt,
         );
       }).toList(),
     );

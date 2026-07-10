@@ -450,6 +450,8 @@ class MediumRepositoryContext {
     String? thumbnailAssetId,
     bool? isActivityEnabled,
     int? order,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) async {
     id ??= TestUtils.uuid();
     return db
@@ -461,6 +463,8 @@ class MediumRepositoryContext {
             thumbnailAssetId: .new(thumbnailAssetId),
             isActivityEnabled: .new(isActivityEnabled ?? true),
             order: .new(order ?? 0),
+            createdAt: .new(TestUtils.date(createdAt)),
+            updatedAt: .new(TestUtils.date(updatedAt)),
           ),
         );
   }
@@ -470,6 +474,7 @@ class MediumRepositoryContext {
     required String albumId,
     bool? showInTimeline,
     String? addedById,
+    DateTime? createdAt,
   }) {
     return db
         .into(db.sharedSpaceAlbumLinkEntity)
@@ -479,6 +484,7 @@ class MediumRepositoryContext {
             albumId: .new(albumId),
             showInTimeline: .new(showInTimeline ?? true),
             addedById: .new(addedById),
+            createdAt: .new(TestUtils.date(createdAt)),
           ),
         );
   }

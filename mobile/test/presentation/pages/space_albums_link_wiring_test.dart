@@ -22,19 +22,22 @@ List<Override> _overrides({required String spaceId, required List<SpaceAlbum> al
 void main() {
   const spaceId = 'space-1';
 
-  testWidgets('tapping ＋ Link in SpaceAlbumsPage invokes the onLink callback',
-      (tester) async {
+  testWidgets('tapping ＋ Link in SpaceAlbumsPage invokes the onLink callback', (tester) async {
     var callCount = 0;
 
     await tester.pumpConsumerWidget(
-      SpaceAlbumsPage(
-        spaceId: spaceId,
-        canEdit: true,
-        onLink: () => callCount++,
-      ),
+      SpaceAlbumsPage(spaceId: spaceId, canEdit: true, onLink: () => callCount++),
       overrides: _overrides(
         spaceId: spaceId,
-        albums: [const SpaceAlbum(id: 'a1', name: 'Hawaii', showInTimeline: true)],
+        albums: [
+          SpaceAlbum(
+            id: 'a1',
+            name: 'Hawaii',
+            showInTimeline: true,
+            linkedAt: DateTime.utc(2026, 1, 1),
+            updatedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ],
       ),
     );
 
@@ -45,17 +48,11 @@ void main() {
     expect(callCount, 1);
   });
 
-  testWidgets(
-      'tapping ＋ Link in empty-state SpaceAlbumsPage invokes the onLink callback',
-      (tester) async {
+  testWidgets('tapping ＋ Link in empty-state SpaceAlbumsPage invokes the onLink callback', (tester) async {
     var callCount = 0;
 
     await tester.pumpConsumerWidget(
-      SpaceAlbumsPage(
-        spaceId: spaceId,
-        canEdit: true,
-        onLink: () => callCount++,
-      ),
+      SpaceAlbumsPage(spaceId: spaceId, canEdit: true, onLink: () => callCount++),
       overrides: _overrides(spaceId: spaceId, albums: const []), // empty — shows empty state
     );
 
