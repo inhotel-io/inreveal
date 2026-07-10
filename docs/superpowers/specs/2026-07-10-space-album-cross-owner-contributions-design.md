@@ -5,6 +5,10 @@
 > tethered to live space access (it vanishes the instant the contributor's/viewer's space access
 > ends or the album is unlinked, and it never becomes a permanent grant the album owner can carry
 > out of the space). Fixes issue **#764** as a byproduct.
+>
+> **Method.** Test-driven, behavior-first. Every slice lists its **BDD scenarios (Given/When/Then)**
+> first, turns each into a **failing test (red)**, then implements the minimum to pass (**green**),
+> then refactors. Slices are **vertical** and independently implementable via `/impl-loop`.
 
 ---
 
@@ -15,11 +19,52 @@
   branch — folded into the space-albums feature set but reviewable on its own.
 - **Depends on #752.** Everything here builds on machinery #752 already introduced: the
   `shared_space_album` link, the revocable `shared_space_album_user` grant (auto-removed on leave
-  via `shared_space_member_delete_album_audit`), the space-aware `AlbumAssetCreate` case, and the
-  `shared-space-album-scope.ts` visibility helpers. **Do not** start until #752 is stable.
-- **Line numbers** are navigation hints against `8071b039ca`; every slice re-confirms symbols in
-  the worktree before editing.
-- **Terminal state of this spec:** feed to `writing-plans` (then `impl-loop`), TDD per slice.
+  via `shared_space_member_delete_album_audit`), the space-aware `AlbumAssetCreate` case, the
+  `shared-space-album-scope.ts` visibility helpers, and the `SharedSpaceAlbum*Sync` streams. **Do
+  not** start until #752 is stable.
+- **Line numbers** are navigation hints against `8071b039ca`; **every slice re-confirms symbols in
+  the worktree before editing** — treat references as navigation, not literal coordinates.
+- **Terminal state:** feed to `/impl-loop` slice-by-slice (Slice 0 first; it's independent).
+
+### 0.1 TDD is mandatory for every slice
+
+Each fix follows this loop, and each `/impl-loop` run must show the evidence:
+
+1. **Red** — write the test(s) encoding the BDD scenario (contribution rendered / leak blocked /
+   permission denied). Run them; capture the exact command and the expected failure. A test that
+   passes on first run is a red flag — it isn't exercising the new behavior.
+2. **Green** — minimal change to pass. Capture the green command + output.
+3. **Refactor** — extract/dedupe with tests staying green.
+
+No slice is "done" without red evidence, green evidence, and a full-suite validation for the
+touched package(s).
+
+### 0.2 Test layers (per package)
+
+- **Server** — vitest **unit** (`newTestService()` auto-mocks deps, `test/utils.ts`), vitest
+  **medium** (`test:medium`, real Postgres via testcontainers, real `SyncService`/`SyncRepository`;
+  a new repository must be hand-registered in `test/medium.factory.ts`'s `newRealRepository`
+  switch), and **e2e** (`e2e/src/specs/server/api/*.e2e-spec.ts`, vitest against a running stack).
+  Prefer **medium** for anything touching SQL predicates / sync streams / triggers; **e2e** for the
+  full HTTP→emit→DB→`/sync` seam. There is already `e2e/src/specs/server/api/shared-space-album.e2e-spec.ts`
+  to extend.
+- **Web** — vitest + `@testing-library/svelte` (happy-dom) for unit; **Playwright**
+  (`e2e/src/specs/web/`, e.g. `spaces-albums.e2e-spec.ts`) for affordance/role-gating.
+- **Mobile** — `flutter test` (Drift repo + convergence). Regenerate l10n/keys first per CLAUDE.md.
+
+### 0.3 Cross-cutting conventions
+
+- **Migrations:** fork-only files in `server/src/schema/migrations-gallery/` with round timestamps
+  (e.g. `1783000000000`) that don't collide. Add a `scripts/revert-to-immich.sql` DROP entry per new
+  table. After schema/repo changes, regenerate query SQL with `make sql` **only against a scratch
+  migrated DB** — never the dev-stack DB, never without a running DB (deletes query files).
+- **Kysely transactions:** never issue `this.db` queries inside a `transaction()` callback (pool
+  deadlock).
+- **BaseService:** if a new repository is added, wire it in **all three** sites — import, constructor,
+  and the positional `static create()` list — or plugin-host services get shifted repos.
+- **SDK regen:** if any server DTO/endpoint shape changes, `make build-sdk` → `make open-api` so
+  web/mobile typecheck.
+- **No Claude co-author trailers.** One commit per slice (or per coherent fix-group within a slice).
 
 ---
 
@@ -41,14 +86,11 @@ to the album"** — and the photo is not added. Two distinct defects stacked:
    Editor can add **only their own** photos to a space album; anyone else's photo returns
    `NO_PERMISSION` for every asset.
 
-For the "Close Family" use case (most members are non-admin Editors curating a shared pool of
-photos contributed by *many* members), this makes collaborative curation impossible.
-
 ### 1.1 The trap we must avoid
 
 `AssetShare` is owner-only **by design** — it also gates **public shared links** and **memories**.
-Simply adding `checkSpaceAccess` to the global `AssetShare` case would let any space member mint a
-public link of another member's photo. **We must not widen `AssetShare`.** The fix is a narrow,
+Adding `checkSpaceAccess` to the global `AssetShare` case would let any space member mint a public
+link of another member's photo. **We must not widen `AssetShare`.** The fix is a narrow,
 album-scoped add path.
 
 ### 1.2 The new risk collaborative add introduces
@@ -65,8 +107,8 @@ ever consented to *space* sharing. Closing this is the reason for a dedicated ta
 ## 2. Goals & non-goals
 
 **Goals**
-- A space **Editor** may add any asset **space-visible to them** to an album **linked to that space**,
-  regardless of who owns the asset.
+- A space **Editor** may add any asset **space-visible to them via the album's space** to that
+  space-linked album, regardless of who owns the asset.
 - Contributed (non-owned) photos are **inert bookmarks**: access is re-derived from live space
   membership + the live album↔space link on every read; they never grant permanent access via
   `checkAlbumAccess`.
@@ -74,12 +116,12 @@ ever consented to *space* sharing. Closing this is the reason for a dedicated ta
   contribution from view (for everyone, including the album owner). Re-joining / re-linking restores it.
 - The add-to-album toast tells the truth (success / partial / failure).
 
-**Non-goals (this slice)**
+**Non-goals (this feature)**
 - No change to personal (non-space) albums or normal shared albums.
 - No widening of `AssetShare`, shared-link, or memory permissions.
 - **Viewers** stay read-only (contribute = Editor+), matching #752's `AlbumAssetCreate` role gate.
-- Not solving the sibling issues #763 (favorite for members) / #765 (fix-match no-op) here, though
-  they share the "members can't curate in a space" theme.
+- Not solving siblings #763 (favorite for members) / #765 (fix-match no-op), though they share the
+  "members can't curate in a space" theme.
 
 ---
 
@@ -98,14 +140,7 @@ The adder's **own** photos are *not* contributions — they take the ordinary `a
 ## 4. Data model
 
 New fork table `album_space_asset` (`server/src/schema/tables/album-space-asset.table.ts`) plus its
-own delete-audit table `album_space_asset_audit` (for the sync delete stream), plus a migration in
-`server/src/schema/migrations-gallery/` (round timestamp, e.g. `1783000000000`; add a
-`scripts/revert-to-immich.sql` DROP entry).
-
-> **Naming caution.** #752 already ships `shared_space_album_asset_audit` — that audits deletions of
-> **normal `album_asset`** membership in linked albums, feeding `SharedSpaceAlbumToAssetSync`. It is
-> **not** related to this table. Keep the new table's name (`album_space_asset`) and its audit
-> (`album_space_asset_audit`) distinct to avoid conflating the two.
+own delete-audit table `album_space_asset_audit` (drives the sync delete stream), plus a migration.
 
 ```
 album_space_asset  — a live-gated cross-owner contribution of a space photo into a linked album
@@ -120,9 +155,14 @@ album_space_asset  — a live-gated cross-owner contribution of a space photo in
 
 - **Not** `album_asset`, **not** `album_user`, **not** an access grant — a bookmark whose validity
   is recomputed on every read.
-- `spaceId` disambiguates albums linked to multiple spaces and drives the "from *Space*" affordance
-  and the add-eligibility check (the Editor must be an Editor of *that* space).
-- Sync columns because mobile must receive/drop these rows (see §7).
+- `spaceId` disambiguates albums linked to multiple spaces, drives the "from *Space*" affordance,
+  and pins add-eligibility (the Editor must be an Editor of *that* space, and the asset must be
+  visible via *that* space).
+- Sync columns because mobile must receive/drop these rows (§7.2).
+
+> **Naming caution.** #752 already ships `shared_space_album_asset_audit` — that audits deletions of
+> **normal `album_asset`** membership in linked albums, feeding `SharedSpaceAlbumToAssetSync`. It is
+> **unrelated** to this table. Keep `album_space_asset` / `album_space_asset_audit` distinct.
 
 ---
 
@@ -130,64 +170,58 @@ album_space_asset  — a live-gated cross-owner contribution of a space photo in
 
 ### 5.1 Adding (the #764 fix) — `AlbumService.addAssets`
 
-Replace the single `AssetShare`-gated `addAssets(...)` call with a two-bucket split *inside the
-album-add path only* (no change to the generic `asset.util.ts` used by shared-links/memories):
+Two-bucket split *inside the album-add path only* (no change to generic `asset.util.ts` used by
+shared-links/memories):
 
 1. Resolve the album's live space link(s) the adder is an **Editor** of:
-   `shared_space_album ⋈ shared_space_member(role ∈ {owner, editor})` for `auth.user.id`. If none,
-   behavior is unchanged from today (owner-only add).
-2. For each requested asset, in order of precedence:
+   `shared_space_album ⋈ shared_space_member(role ∈ {owner, editor})` for `auth.user.id`.
+2. Per requested asset, in precedence order:
    - **Owned / AssetShare-eligible** → normal `album_asset` insert (unchanged path).
-   - **Not owned, but space-visible to the adder via an eligible space `S`** → insert into
-     `album_space_asset (album, asset, S, addedById=auth.user.id)`.
-     "Space-visible to the adder via S" reuses `shared-space-album-scope.ts`
-     `spaceAssetPathBranches` (direct `shared_space_asset` ∪ linked-library ∪ linked-album arms)
-     scoped to `{ memberUserId: auth.user.id, memberRole: [owner, editor], spaceId: S }`.
-   - **Already present** in `album_asset` *or* `album_space_asset` → `DUPLICATE`.
+   - **Not owned, but space-visible to the adder via an eligible space `S`** → insert
+     `album_space_asset(album, asset, S, addedById=auth.user.id)`. "Space-visible via S" reuses
+     `shared-space-album-scope.ts` `spaceAssetPathBranches` (direct `shared_space_asset` ∪
+     linked-library ∪ linked-album arms) scoped to
+     `{ memberUserId: auth.user.id, memberRole: [owner, editor], spaceId: S }`.
+   - **Already in** `album_asset` *or* `album_space_asset` → `DUPLICATE`.
    - **Otherwise** → `NO_PERMISSION`.
 3. Return a merged `BulkIdResponseDto[]` across both buckets (per-asset outcome preserved).
 
-An asset never lands in both tables (each asset has exactly one owner → exactly one eligible path).
+An asset never lands in both tables (each asset has one owner → one eligible path).
 
 ### 5.2 Reading — extend the album visibility arm
 
-`album_space_asset` becomes a **fourth arm** of space visibility, parallel to
-`spaceDirectAssetExists` / `spaceLibraryAssetExists` / `spaceAlbumAssetExists`. Add
-`spaceContributedAssetExists(eb, { correlateAssetId, scope })` to `shared-space-album-scope.ts`:
+Add `spaceContributedAssetExists(eb, { correlateAssetId, scope })` to `shared-space-album-scope.ts`
+as a **fourth arm** parallel to `spaceDirectAssetExists` / `spaceLibraryAssetExists` /
+`spaceAlbumAssetExists`:
 
 ```
 EXISTS (
   SELECT 1 FROM album_space_asset asa
-  JOIN shared_space_album ssa  ON ssa.albumId = asa.albumId AND ssa.spaceId = asa.spaceId   -- link still live
-  JOIN album a                 ON a.id = asa.albumId AND a.deletedAt IS NULL
-  [membership scope]           JOIN shared_space_member m ON m.spaceId = asa.spaceId
-                                 AND m.userId = :viewer  [AND m.role IN (:roles)]
+  JOIN shared_space_album ssa ON ssa.albumId = asa.albumId AND ssa.spaceId = asa.spaceId   -- link live
+  JOIN album a                ON a.id = asa.albumId AND a.deletedAt IS NULL
+  [membership scope]          JOIN shared_space_member m ON m.spaceId = asa.spaceId
+                                AND m.userId = :viewer  [AND m.role IN (:roles)]
   WHERE asa.assetId = <correlateAssetId>
     [AND asa.spaceId = :scopeSpaceId]
 )
 ```
 
-- Unlink the album → no `shared_space_album` row → excluded (reversible on re-link).
-- Viewer leaves the space → no `shared_space_member` row → excluded (reversible on re-join).
-- Because the row is *not* in `album_asset`, the owner's `checkAlbumAccess` never sees it → no
-  permanent grant, no leak via external album sharing / public links.
-
-**Album contents** become `album_asset ∪ spaceContributedAssetExists(...)`, deduped by `assetId`.
-Wire the new arm into every place #752 already routes the album arm: **album detail/grid, asset
-count, thumbnail selection, the space aggregated timeline (respecting `showInTimeline`), download,
-activity, and in-album search.** (This is the largest surface area of the change — audit each
-consumer of `spaceAlbumAssetExists` / `spaceAssetPathBranches`.)
+Because the row is *not* in `album_asset`, the owner's `checkAlbumAccess` never sees it → no
+permanent grant. **Album contents** = `album_asset ∪ spaceContributedAssetExists(...)`, deduped by
+`assetId`. Wire into every consumer of `spaceAlbumAssetExists` / `spaceAssetPathBranches`: album
+detail/grid, asset count, thumbnail, the space aggregated timeline (respecting `showInTimeline`),
+download, activity, in-album search. (Largest surface — Slices 2–3.)
 
 ### 5.3 Removing — `AlbumService.removeAssets`
 
-Removing a contributed asset = delete the `album_space_asset` row (never touches the asset).
-Permitted for the **album owner**, any **space Editor** of the linked space, and the **contributor**.
-Add a space-aware branch alongside the existing `AssetShare` / `AlbumAssetDelete` (`canAlwaysRemove`)
-logic. Removal of an ordinary `album_asset` row is unchanged.
+Removing a contribution = delete the `album_space_asset` row (never touches the asset). Permitted for
+the **album owner**, any **space Editor** of the linked space, and the **contributor**. Space-aware
+branch alongside the existing `AssetShare` / `AlbumAssetDelete` (`canAlwaysRemove`) logic. Removing
+an ordinary `album_asset` row is unchanged.
 
 ---
 
-## 6. Lifecycle & edge cases
+## 6. Lifecycle & edge cases (assertion source for the slices)
 
 | Event | Effect on a contribution `(album L, asset A, space S)` |
 |---|---|
@@ -196,8 +230,10 @@ logic. Removal of an ordinary `album_asset` row is unchanged.
 | Space S deleted | Row deleted (FK `spaceId` CASCADE). |
 | Album L deleted | Row deleted (FK `albumId` CASCADE). |
 | Asset A deleted | Row deleted (FK `assetId` CASCADE). |
-| Album L shared outside S (external `album_user` / public link) | Non-space viewers **never** see A (arm keys on *viewer's* live membership). No leak. |
-| Owner opens L after leaving S / after unlink | A is gone for the owner too (owner reaches contributions only via the space arm, not `album_asset`). |
+| Owner un-shares A from the space's **general pool** (`shared_space_asset` delete), A not deleted | **Row stays** (§8 default 1); A still renders in L for members. |
+| `addedById` user deleted | Row survives (`SET NULL`); affordance shows "unknown". |
+| Album L shared outside S (external `album_user` / public link) | Non-space viewers **never** see A. |
+| Owner opens L after leaving S / after unlink | A is gone for the owner too (reaches contributions only via the space arm). |
 
 ---
 
@@ -205,67 +241,329 @@ logic. Removal of an ordinary `album_asset` row is unchanged.
 
 ### 7.1 Web
 - **Add flow:** the existing "Add to album or space" picker + `addAssetsToAlbums` already targets
-  space-linked albums; no picker change needed — the server now accepts non-owned assets for
-  eligible albums.
-- **Toast (fixes #764's literal title):** `notifyAddToAlbum` must branch on result counts —
-  `success` (all added), `info`/warning (partial), `warning`/`error` (none added) — instead of an
-  unconditional `toastManager.primary`. **Standalone**; can land first, independent of the backend.
-- **Legibility:** a "from *Space name*" affordance on contributed tiles in the album view (we have
-  `spaceId` → space name), so the "these can disappear when you leave/unlink" behavior is understood.
-  Contributed tiles are **not** owned by the viewer → respect existing non-owner asset affordances.
+  space-linked albums; no picker change — the server now accepts non-owned assets for eligible albums.
+- **Toast (fixes #764's literal title):** `notifyAddToAlbum` branches on result counts — success
+  (all added), info/warning (partial), warning/error (none) — instead of unconditional
+  `toastManager.primary`. **Standalone** (Slice 0).
+- **Legibility:** a "from *Space name*" affordance on contributed tiles (we have `spaceId` → space
+  name), so "these can disappear" is understood. Contributed tiles are non-owned → respect existing
+  non-owner asset affordances.
 
 ### 7.2 Mobile / sync
-- `album_space_asset` carries sync watermarks. Contributions are album→asset **membership edges**, so
-  extend **`SharedSpaceAlbumToAssetSync`** (`sync.repository.ts:1609`) to union `album_space_asset`
-  inserts, with deletes driven by the new `album_space_asset_audit` stream. The contributed asset's
-  **payload + exif** (owned by another member) must also reach the client: include
-  `album_space_asset`-reachable assets in **`SharedSpaceAlbumAssetSync`** (`:1689`) and
-  **`SharedSpaceAlbumAssetExifSync`** (`:1763`), mirroring how the existing linked-album arm streams
-  `album_asset`-reachable assets. Register a new `SyncEntityType`/`SyncRequestType` pair
-  (e.g. `SharedSpaceAlbumContributions*`) if the membership edge needs a distinct stream from
+- Contributions are album→asset **membership edges**: extend **`SharedSpaceAlbumToAssetSync`**
+  (`sync.repository.ts:1609`) to union `album_space_asset` inserts, deletes driven by the new
+  `album_space_asset_audit` stream. The contributed asset's **payload + exif** (owned by another
+  member) must also reach the client: include `album_space_asset`-reachable assets in
+  **`SharedSpaceAlbumAssetSync`** (`:1689`) and **`SharedSpaceAlbumAssetExifSync`** (`:1763`),
+  mirroring how the linked-album arm streams `album_asset`-reachable assets. Add a distinct
+  `SyncEntityType`/`SyncRequestType` pair if the edge needs its own stream from
   `SharedSpaceAlbumToAssetsV1`.
-- Contributions render read-through-space like the rest of a space album; tap-through respects the
-  same owner/role gating already in place.
+- Contributions render read-through-space; tap-through respects existing owner/role gating.
 
 ---
 
 ## 8. Open sub-decisions (defaults chosen; confirm at review)
 
-1. **Un-share vs. curated life.** If the asset's owner *removes A from the space's general pool*
-   (a `shared_space_asset` delete) but does not delete A, does A stay in albums it was curated into?
-   **Default: yes, stays** — a contribution has its own life tethered to space S, not to the source
-   arm it came from; only delete / unlink / leave / space-deletion remove it. (Alternative: also
-   require A to be independently space-visible at read time — stronger for the owner, but makes
-   curated album content fragile.)
-2. **Contributions into externally-shared albums.** Allowed — the per-viewer arm makes it safe
-   (non-space viewers never see contributions). No block needed.
-3. **Multi-space albums.** `spaceId` pins provenance; a contribution is visible to members of *its*
-   space. An album linked to two spaces can hold contributions tagged to each; each is gated
-   independently. No dedup needed beyond `assetId` at read time.
+1. **Un-share vs. curated life.** Owner removes A from the space's *general pool* but not delete →
+   **Default: A stays** in albums it was curated into (contribution tethered to S, not to the source
+   arm). Alternative: also require A independently space-visible at read time (stronger for the
+   owner, fragile curation). *If flipped, the read arm in §5.2 gains an extra `spaceAssetPath`
+   existence condition and the Slice 3 lifecycle test inverts.*
+2. **Contributions into externally-shared albums.** Allowed — per-viewer arm keeps it safe.
+3. **Multi-space albums.** `spaceId` pins provenance; visible to members of *its* space; each link
+   gated independently; dedup by `assetId` at read time.
 
 ---
 
-## 9. Slice outline (detail → `writing-plans`)
+## 9. Slice overview
 
-1. **Toast honesty** (web, standalone). Red: a `notifyAddToAlbum` unit test asserting a 0-success
-   result yields a non-success toast. Green: branch on counts.
-2. **Schema + migration.** `album_space_asset` + `album_space_asset_audit` tables + migration +
-   `revert-to-immich.sql` entry + audit trigger wiring. Medium test: insert/read/cascade behavior.
-3. **Add path.** `AlbumService.addAssets` two-bucket split + repository method. Medium/e2e: Editor
-   adds a non-owned space photo → row in `album_space_asset`, `success: true`; Viewer → denied;
-   non-space asset → `NO_PERMISSION`; owned asset still → `album_asset`.
-4. **Read arm.** `spaceContributedAssetExists` + wire into album grid/count/thumbnail/timeline/
-   download/activity/search. Medium: leave/unlink hides; owner has no permanent access; external
-   share doesn't leak.
-5. **Remove path.** Space-aware `removeAssets` branch. Medium: owner/editor/contributor can remove;
-   viewer cannot.
-6. **Sync.** Extend `SharedSpaceAlbumToAssetSync` (membership edge) + `SharedSpaceAlbumAssetSync` /
-   `SharedSpaceAlbumAssetExifSync` (contributed asset payload/exif) for `album_space_asset`
-   insert/delete via `album_space_asset_audit`. Medium: sync stream carries contribution + payload +
-   audit-driven removal.
-7. **Web UX.** "from *Space*" affordance + Playwright role-gating (Editor sees add succeed, Viewer
-   has no add).
-8. **SDK/regen** if any DTO/endpoint shape changes; `make build-sdk` → `make open-api`.
+| # | Slice | Layers | Depends on | Independent ship? |
+|---|---|---|---|---|
+| 0 | Honest add-to-album toast (fixes #764 title) | web unit | — | ✅ land anytime |
+| 1 | Schema foundation: `album_space_asset` + audit + migration | server medium | — | foundation |
+| 2 | Contribute a non-owned space photo (add path + album grid & count) | server e2e + medium | 1 | ✅ vertical MVP |
+| 3 | Contributions across remaining album surfaces + leak/lifecycle negatives | server medium + e2e | 2 | extends 2 |
+| 4 | Remove a contribution | server e2e + medium | 2 | ✅ vertical |
+| 5 | Mobile sync of contributions | server medium + mobile | 2, 3 | ✅ vertical |
+| 6 | Web legibility affordance + role-gating | web unit + Playwright | 2 | ✅ vertical |
 
-Each slice is TDD (red → green → refactor) with full-suite validation for touched packages before
-"done". No Claude co-author trailers.
+Ordering: **0** anytime; **1 → 2 → {3, 4, 5, 6}**. Each `/impl-loop` run does one slice, TDD.
+
+---
+
+## Slice 0 — Honest add-to-album toast
+
+**Delivers.** #764's literal title: a failed or partial add never renders as a green "Successful".
+Pure web; independent of the backend feature.
+
+**Behavior (BDD)**
+- *Given* an add-to-album request where the server returns **0 successes** (all `NO_PERMISSION`),
+  *When* `notifyAddToAlbum` runs, *Then* a **non-success** toast (warning/error) shows "…cannot be
+  added…" — never the green success heading.
+- *Given* a result where **all assets were duplicates**, *When* it runs, *Then* an **info** toast
+  says "already in the album".
+- *Given* a **partial** result (some success, some fail), *When* it runs, *Then* an **info/warning**
+  toast states the partial count.
+- *Given* **all** assets succeed, *When* it runs, *Then* the success toast + "View album" button
+  (unchanged behavior).
+
+**TDD — red first**
+- **Web unit** (`web/src/lib/services/album.service.spec.ts`): mock `toastManager`; feed
+  `notifyAddToAlbum` each result shape; assert the **method called** (`error`/`warning`/`info`/`primary`)
+  and message key. Red today because the current code always calls `.primary`.
+
+**Fix (green).** Branch `notifyAddToAlbum` on `successCount` / `duplicateCount` / `assetIds.length`
+to select the toast severity + message; keep "View album" on any run that produced ≥1 success.
+
+**Edge cases (explicit assertions)**
+- 0 success, 0 duplicate → error/warning (not primary).
+- 0 success, all duplicate → info "already part of album".
+- Mixed success + duplicate + no-permission → partial wording, "View album" present.
+- All success → primary + "View album" (regression).
+- `notifyAddToAlbums` (multi-album path) audited for the same lie; fix if present.
+
+**Green.** All shapes assert the correct severity; existing album.service web tests stay green;
+`pnpm --filter immich-web test` + `check:typescript` clean.
+
+---
+
+## Slice 1 — Schema foundation: `album_space_asset` (+ audit, migration)
+
+**Delivers.** The storage substrate + cascade/audit guarantees. No user-facing behavior yet
+(the one non-vertical slice); fully covered by medium tests on the live schema.
+
+**Behavior (BDD)**
+- *Given* a linked album, asset, and space, *When* an `album_space_asset` row is inserted, *Then* it
+  persists with sync watermarks and is readable by `(albumId, assetId)`.
+- *Given* an `album_space_asset` row, *When* its **album** / **asset** / **space** is deleted,
+  *Then* the row is **cascade-deleted**; *When* its `addedById` user is deleted, *Then* the row
+  **survives** with `addedById = NULL`.
+- *Given* an `album_space_asset` row is deleted, *When* the delete commits, *Then* an
+  `album_space_asset_audit` row is emitted (for the sync delete stream in Slice 5).
+
+**TDD — red first**
+- **Medium** (`server/test/medium/specs/…`): create the table via migration on the testcontainers
+  DB; assert insert/read; assert each FK cascade/SET-NULL; assert the audit row on delete. Red
+  because table/trigger don't exist.
+
+**Fix (green).**
+- `album-space-asset.table.ts` + `album-space-asset-audit.table.ts` (mirror `shared_space_asset` +
+  its audit trigger pattern).
+- Migration in `migrations-gallery/` (round timestamp); `revert-to-immich.sql` DROP entries for both
+  tables; register the repository (if any) in `medium.factory.ts` and BaseService (all three sites).
+- Regenerate query SQL against a scratch migrated DB.
+
+**Edge cases**
+- Duplicate `(albumId, assetId)` insert → PK conflict handled (`onConflict do nothing`), not a 500.
+- Audit trigger fires on **statement**-level bulk delete (not just row) — assert multi-row delete.
+- Migration applies cleanly on a DB that already has all #752 migrations (unordered-migration path).
+
+**Green.** Medium schema suite green; `make sql` diff limited to the new tables; server `check` clean.
+
+---
+
+## Slice 2 — Contribute a non-owned space photo (add path + album grid & count)
+
+**Delivers.** The core loop end-to-end: an Editor adds a photo they don't own to a space-linked
+album and **sees it in the album grid**, gated on live membership. This is the #764 capability.
+
+**Behavior (BDD)** — space S; Alice owns album L linked to S; Bob is an Editor of S; asset X is in S
+owned by Carol.
+- *Given* Bob (Editor), *When* Bob adds X to L, *Then* the response is `success:true` for X and an
+  `album_space_asset(L, X, S, addedBy=Bob)` row exists — **not** an `album_asset` row.
+- *Given* the contribution exists, *When* any live member of S opens L, *Then* X appears in the grid
+  and the asset **count includes** X.
+- *Given* Bob adds **his own** asset Y (in S) to L, *When* it runs, *Then* Y takes the **`album_asset`**
+  path (`success:true`), unchanged.
+- *Given* a **Viewer** V of S, *When* V tries to add X to L, *Then* the add is **denied**
+  (`AlbumAssetCreate` role gate) — no row created.
+- *Given* asset Z **not in S**, *When* Bob adds Z to L, *Then* **`NO_PERMISSION`** for Z — no row.
+- *Given* X is already in L (as contribution or owned), *When* Bob adds X again, *Then* **`DUPLICATE`**.
+- *Given* a mixed batch {X (non-owned, in S), Y (Bob-owned, in S), Z (not in S)}, *When* Bob adds
+  them, *Then* per-asset `{X:success, Y:success, Z:no_permission}` and a partial `BulkIdResponse`.
+
+**TDD — red first**
+- **e2e** (`shared-space-album.e2e-spec.ts`): the seven scenarios above through the real HTTP add
+  endpoint + a follow-up album read asserting X present/absent. Red because add returns
+  `NO_PERMISSION` for non-owned assets today.
+- **Medium**: the read arm `spaceContributedAssetExists` returns X for a member and **not** for a
+  non-member; album count reflects it.
+- **Unit** (`album.service.spec.ts`): the two-bucket split routes owned→`album_asset`,
+  non-owned-space-visible→`album_space_asset`, others→`NO_PERMISSION`.
+
+**Fix (green).**
+- `AlbumService.addAssets` two-bucket split (§5.1) + an `albumSpaceAsset` repository insert.
+- `spaceContributedAssetExists` helper (§5.2); wire into the album **grid** query and **asset count**.
+- Emit `AlbumAssetsAdd` for contributed ids too (event parity with the owned path).
+
+**Edge cases (explicit assertions)**
+- Asset visible to Bob via **each** arm — direct pool, linked library, linked album — is all eligible.
+- Asset visible to Bob only via a **different** space T (album L not linked to T) → `NO_PERMISSION`
+  (eligibility requires visibility via **L's** space).
+- Album linked to **no** space Bob edits → non-owned add → `NO_PERMISSION` (owner-only unchanged).
+- **Leak negative (critical):** setup Alice as an **Editor member** of S (not the creator) who owns
+  album L and links it into S. After Bob contributes X, Alice's `checkAlbumAccess`-backed reads of X
+  resolve **only while she is a live member of S** — assert Alice loses X the moment she is removed
+  from S while L stays linked (other members still see X), proving no permanent `album_asset` grant.
+  Complementary assertion via **unlink** (L removed from S) — owner loses contributions too.
+- Concurrent duplicate add (two editors add X at once) → one row, one `success`, one `DUPLICATE`;
+  no 500.
+
+**Green.** All e2e/medium/unit above green; existing album + space-album suites green.
+
+---
+
+## Slice 3 — Contributions across remaining album surfaces + leak/lifecycle negatives
+
+**Delivers.** Contributions behave correctly everywhere a space album is read, and every
+lifecycle/leak guarantee from §6 is asserted.
+
+**Behavior (BDD)**
+- *Given* a contribution X in L with `showInTimeline=true`, *When* a member views the **space
+  timeline**, *Then* X appears; *When* `showInTimeline=false`, *Then* X is absent.
+- *Given* a member **downloads** L, *When* the archive builds, *Then* X is included; a non-member's
+  download excludes it.
+- *Given* a member **searches within** L, *When* the query matches X, *Then* X is returned.
+- *Given* L's **thumbnail** is a contributed asset and the viewer is a non-member, *When* L renders
+  in a list, *Then* no 500 and no leaked thumbnail (falls back gracefully).
+- *Given* **album activity** (comments/likes), *When* a space-only reader loads L, *Then* activity
+  still respects #752's direct-access gate (contributions don't widen it).
+- **Lifecycle negatives:** *leave S* → X hidden; *rejoin* → X visible; *unlink L from S* → X hidden
+  for all incl. owner; *relink* → visible; *delete X / L / S* → row gone; *owner un-shares X from
+  general pool but keeps it* → X **stays** in L (§8 default 1).
+- **External-share negative:** *Given* Alice shares L via public link / external `album_user`, *When*
+  a non-space viewer opens it, *Then* contributions are **absent** (owned assets still present).
+
+**TDD — red first**
+- **Medium/e2e** per surface (timeline, download, activity, search, thumbnail) + the full lifecycle
+  and external-share negatives. Red because those surfaces only union `album_asset` today.
+
+**Fix (green).** Wire `spaceContributedAssetExists` into each remaining consumer of
+`spaceAlbumAssetExists` / `spaceAssetPathBranches`; make thumbnail selection resilient when the only
+candidates are contributions the viewer can't currently see.
+
+**Edge cases**
+- Dedup: an asset present in both `album_asset` and `album_space_asset` (shouldn't happen, but assert
+  read returns it **once**).
+- `showInTimeline` toggled after contribution → timeline visibility flips accordingly.
+- Count/thumbnail recompute correctly after a contribution is hidden by leave/unlink.
+- Activity gate (security-8 from #752) unchanged for space-only readers.
+
+**Green.** All surface + lifecycle + leak negatives green; #752 visibility-hardening suites green.
+
+---
+
+## Slice 4 — Remove a contribution
+
+**Delivers.** Collaborative removal, correctly role-gated.
+
+**Behavior (BDD)** — contribution `(L, X, S)` by Bob.
+- *Given* Alice (album **owner**), *When* she removes X from L, *Then* the `album_space_asset` row is
+  deleted, X leaves L, and asset X itself is untouched.
+- *Given* Bob (the **contributor**), *When* he removes X, *Then* deleted.
+- *Given* another space **Editor** Dave, *When* he removes X, *Then* deleted.
+- *Given* a space **Viewer** V, *When* V tries to remove X, *Then* **denied**; row stays.
+- *Given* a **non-member**, *When* they try, *Then* **denied**.
+- *Given* removal of an **owned** `album_asset` row, *When* it runs, *Then* unchanged behavior.
+
+**TDD — red first**
+- **e2e/medium**: the six cases through the remove endpoint; assert row presence/absence and that
+  the asset row persists. Red because the current remove path has no `album_space_asset` branch.
+
+**Fix (green).** Space-aware branch in `AlbumService.removeAssets` / the `removeAssets` util caller:
+resolve the row's `spaceId`, allow if owner ∨ space-Editor ∨ contributor; delete the row (emit
+`AlbumAssetsRemove` + audit).
+
+**Edge cases**
+- Removing X that is **not present** → `NOT_FOUND` (not 500).
+- Editor of a **different** space (not L's) → denied.
+- Contributor who has since **left** S → still allowed to remove their own bookmark? **Default: no**
+  (no live membership → treated as non-member). Assert.
+
+**Green.** All cases green; existing remove suite green.
+
+---
+
+## Slice 5 — Mobile sync of contributions
+
+**Delivers.** Contributions appear/disappear on mobile via the sync streams, with payload+exif.
+
+**Behavior (BDD)**
+- *Given* a new contribution `(L, X, S)`, *When* a member's client syncs, *Then* the membership edge
+  **and** X's payload + exif arrive; X renders in L on device.
+- *Given* the contribution is removed (Slice 4) or the member leaves S, *When* the client syncs,
+  *Then* the edge is deleted via the audit stream and X leaves L on device.
+- *Given* a member **joins** S which already has contributions, *When* they sync from scratch,
+  *Then* they **backfill** all contributions (watermark `createId` walk).
+
+**TDD — red first**
+- **Medium** (`SyncService`/`SyncRepository` against testcontainers): assert
+  `SharedSpaceAlbumToAssetSync` emits the contribution edge; `SharedSpaceAlbumAssetSync` /
+  `…ExifSync` emit X's payload/exif; the audit stream emits the delete; backfill covers pre-existing
+  rows. Red because these streams only union `album_asset` today.
+- **Mobile** (`flutter test`): a convergence test — apply insert then delete events, assert the Drift
+  album membership converges (X present then absent).
+
+**Fix (green).** Union `album_space_asset` into the three sync classes (§7.2); wire
+`album_space_asset_audit` into the delete stream; register any new `SyncEntityType`/`RequestType`.
+
+**Edge cases**
+- Leaving S removes edges via audit **without** deleting X's underlying asset payload if X is still
+  visible via another path (assert no spurious asset deletion).
+- Re-link / re-join re-emits the edges (idempotent apply on device).
+- Ack-watermark monotonicity: no duplicate emissions after ack.
+
+**Green.** Medium sync + mobile convergence green; existing space-album sync suites green.
+
+---
+
+## Slice 6 — Web legibility affordance + role-gating
+
+**Delivers.** Contributed tiles are legible and the add affordance is correctly role-gated in the UI.
+
+**Behavior (BDD)**
+- *Given* a member views L, *When* a tile is a contribution, *Then* it shows a **"from *Space*"**
+  affordance (source space name) and the standard **non-owner** asset affordances (no owner-only
+  actions).
+- *Given* an **Editor** in the space, *When* they open the add-to-album flow for a space photo they
+  don't own, *Then* the add **succeeds** (end-to-end).
+- *Given* a **Viewer**, *When* they view space assets, *Then* the "add to this album" affordance is
+  **absent/disabled** (no dead-end).
+
+**TDD — red first**
+- **Web unit**: the tile renders the "from *Space*" label when given a contributed asset with a
+  `spaceId`/space name.
+- **Playwright** (`spaces-albums.e2e-spec.ts`): Editor add succeeds and the tile shows the badge;
+  Viewer has no add affordance. (Role-badge assertions use `{ ignoreCase: true }` per the known
+  lowercase-enum + CSS-capitalize gotcha.)
+
+**Fix (green).** Thread the source-space name onto contributed tiles; render the affordance; ensure
+the add action is hidden/disabled for Viewers.
+
+**Edge cases**
+- `addedById = NULL` (contributor deleted) → affordance still renders (space name only).
+- Contribution that becomes hidden mid-session (owner unlink) → tile disappears on refresh without error.
+- Album shared externally opened by a non-space viewer → no badge, no contribution tiles.
+
+**Green.** Web unit + Playwright green; `pnpm --filter immich-web lint` (tolerated tailwind warnings)
++ `check:typescript` clean.
+
+---
+
+## 10. Global acceptance criteria
+
+- A space Editor can add a non-owned, space-visible photo to a space-linked album; a Viewer cannot.
+- Contributed photos render in every album surface for live members and **nowhere** for
+  non-members — including the album owner once their space access ends, and including external
+  album shares / public links.
+- Leaving/unlinking/deleting behaves exactly per the §6 table; re-join/re-link is reversible.
+- The add-to-album toast never reports success when nothing was added.
+- Mobile converges with contribution insert/delete/backfill.
+- Full-suite green for every touched package; no widening of `AssetShare`/shared-link/memory
+  permissions (assert an unrelated shared-link e2e still owner-gates).
+
+## 11. Out of scope
+
+- Personal (non-space) album cross-owner adds; normal shared-album semantics.
+- Issues #763 / #765 (separate "member curation" work).
+- Any change to who may **link/unlink** an album to a space (that's #752's remit).
