@@ -35,9 +35,9 @@ import { album_soft_delete_shared_space_album } from 'src/schema/functions';
 // of source position (same pattern as composite-migration-provider.spec.ts), so the mock is
 // already installed by the time this migration module's top-level `import { sql } from
 // 'kysely'` resolves.
-import { up } from 'src/schema/migrations-gallery/1782000000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger';
+import { up } from 'src/schema/migrations-gallery/1782050000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger';
 
-describe('1782000000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger override parity', () => {
+describe('1782050000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger override parity', () => {
   beforeEach(() => {
     capturedSql.length = 0;
   });

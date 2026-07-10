@@ -366,8 +366,8 @@ DELETE FROM "kysely_migrations"
    '1779300000000-FixUserHasAlbumPathSoftDeleted',
    '1779309791424-SharedSpaceAlbumAssetAuditTable',
    '1781181889688-SharedSpaceLibraryAssetAuditTable',
-   '1782000000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger',
    '1782000000000-AddAssetExifDescriptionTrigramIndex',
+   '1782050000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger',
    '1782100000000-FixSharedSpaceAlbumGrantRelinkCreateId',
    '1782300000000-AddSharedSpaceAlbumAuditSyncIndexes',
 
