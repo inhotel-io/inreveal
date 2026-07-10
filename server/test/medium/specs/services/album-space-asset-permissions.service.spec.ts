@@ -77,6 +77,7 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
   const authOf = (name: string) => factory.auth({ user: { id: actors[name].id, email: actors[name].email } });
 
   // The exact read gate every album surface uses — does `userId` see `assetId` as a contribution?
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- test helper closes over the shared fixture db
   const seesContribution = async (userId: string, assetId: string) => {
     const rows = await db
       .selectFrom('asset')
@@ -297,11 +298,7 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
       expect(asLiveMember.map((r) => r.id)).toContain(asset.id);
 
       // No live member-space (album owner who left / a pure-owner album view) → contribution excluded.
-      const withoutLiveMembership = await inAlbums(
-        db.selectFrom('asset').where('asset.id', '=', asset.id),
-        [albumL],
-        undefined,
-      )
+      const withoutLiveMembership = await inAlbums(db.selectFrom('asset').where('asset.id', '=', asset.id), [albumL])
         .select('asset.id')
         .execute();
       expect(withoutLiveMembership).toHaveLength(0);
@@ -312,6 +309,7 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
   // REMOVE — who may remove a contribution
   // ===============================================================================================
   describe('REMOVE', () => {
+    // eslint-disable-next-line unicorn/consistent-function-scoping -- closes over the shared fixture (sut, actors, spaceS, albumL)
     const contributeFresh = async () => {
       const { ctx } = setup();
       const { asset } = await ctx.newAsset({ ownerId: actors.carol.id, visibility: AssetVisibility.Timeline });
