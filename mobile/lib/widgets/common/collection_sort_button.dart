@@ -62,7 +62,10 @@ class CollectionSortButton<T> extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'sort_by_label'.t(context: context, args: {'label': currentOption.label.t(context: context)}),
+                'sort_by_label'.t(
+                  context: context,
+                  args: {'label': currentOption.label.t(context: context)},
+                ),
                 style: context.textTheme.labelLarge?.copyWith(color: context.colorScheme.onSurface.withAlpha(225)),
               ),
             ],
