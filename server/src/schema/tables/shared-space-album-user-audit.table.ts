@@ -1,4 +1,4 @@
-import { AfterInsertTrigger, Column, CreateDateColumn, Generated, Table, Timestamp } from '@immich/sql-tools';
+import { AfterInsertTrigger, Column, CreateDateColumn, Generated, Index, Table, Timestamp } from '@immich/sql-tools';
 import { PrimaryGeneratedUuidV7Column } from 'src/decorators';
 import { shared_space_album_user_delete_after_audit } from 'src/schema/functions';
 
@@ -14,6 +14,9 @@ import { shared_space_album_user_delete_after_audit } from 'src/schema/functions
   referencingNewTableAs: 'inserted_rows',
   function: shared_space_album_user_delete_after_audit,
 })
+// gaps-7: SharedSpaceAlbumSync.getDeletes scans by userId = ? AND id range. A composite
+// (userId, id) index serves the equality + range scan without an in-memory sort.
+@Index({ name: 'shared_space_album_user_audit_userId_id_idx', columns: ['userId', 'id'] })
 export class SharedSpaceAlbumUserAuditTable {
   @PrimaryGeneratedUuidV7Column()
   id!: Generated<string>;

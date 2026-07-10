@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_kebab.widget.dart';
 
+import '../../../widget_tester_extensions.dart';
+
 // ---------------------------------------------------------------------------
 // Helper
 // ---------------------------------------------------------------------------
 
-Widget _wrap(Widget widget) => MaterialApp(home: Scaffold(appBar: AppBar(actions: [widget])));
+Widget _wrap(Widget widget) => Scaffold(appBar: AppBar(actions: [widget]));
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -14,7 +16,7 @@ Widget _wrap(Widget widget) => MaterialApp(home: Scaffold(appBar: AppBar(actions
 
 void main() {
   testWidgets('canEdit:true showInTimeline:true — shows 3 items with correct keys after tap', (tester) async {
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrap(
         SpaceAlbumKebab(
           canEdit: true,
@@ -42,7 +44,7 @@ void main() {
   });
 
   testWidgets('canEdit:false — renders SizedBox.shrink (no popup menu button)', (tester) async {
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrap(
         SpaceAlbumKebab(
           canEdit: false,
@@ -59,7 +61,7 @@ void main() {
   });
 
   testWidgets('canEdit:true showInTimeline:false — toggle item shows "Show in timeline"', (tester) async {
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrap(
         SpaceAlbumKebab(
           canEdit: true,

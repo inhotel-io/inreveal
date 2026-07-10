@@ -714,6 +714,10 @@ export type SyncItem = {
   [SyncEntityType.SharedSpaceAlbumAssetExifBackfillV1]: SyncAssetExifV1;
 };
 
+// mobile-1: the client version-gates the fork-only SharedSpaceAlbum* request types
+// (sync_api.repository.dart) so it never sends them to a server that predates them — that is the
+// fix for the app-ahead-of-server outage. The server keeps strict enum validation (unknown request
+// types are rejected), preserving the established API contract.
 const SyncStreamSchema = z
   .object({
     types: z.array(SyncRequestTypeSchema).describe('Sync request types'),

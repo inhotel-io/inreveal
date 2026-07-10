@@ -5,6 +5,7 @@ import {
   AlbumUserRole,
   BulkIdErrorReason,
   deleteAlbum,
+  linkAlbum,
   removeUserFromAlbum,
   updateAlbumInfo,
   updateAlbumUser,
@@ -12,6 +13,7 @@ import {
   type AlbumsAddAssetsResponseDto,
   type AssetResponseDto,
   type BulkIdResponseDto,
+  type SharedSpaceResponseDto,
   type UpdateAlbumDto,
   type UserResponseDto,
 } from '@immich/sdk';
@@ -25,6 +27,7 @@ import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import AlbumAddUsersModal from '$lib/modals/AlbumAddUsersModal.svelte';
 import AlbumOptionsModal from '$lib/modals/AlbumOptionsModal.svelte';
 import SharedLinkCreateModal from '$lib/modals/SharedLinkCreateModal.svelte';
+import SpacePickerModal from '$lib/modals/SpacePickerModal.svelte';
 import { Route } from '$lib/route';
 import { createAlbumAndRedirect } from '$lib/utils/album-utils';
 import { downloadArchive } from '$lib/utils/asset-utils';
@@ -285,6 +288,28 @@ export const handleDeleteAlbum = async (album: AlbumResponseDto, options?: { pro
 
 export const handleDownloadAlbum = async (album: AlbumResponseDto) => {
   await downloadArchive(`${album.albumName}.zip`, { albumId: album.id });
+};
+
+// L15: "Link to space" entry point from the album itself (mirrors the existing "link an album"
+// flow already available from inside a space — see SpaceLinkAlbumModal / the space albums page).
+// Reuses the existing SpacePickerModal (built for cmdk selection, never wired up) and the existing
+// `linkAlbum` PUT /shared-spaces/{id}/albums/{albumId} SDK call — no new backend, no new modal.
+export const handleLinkAlbumToSpace = async (album: AlbumResponseDto) => {
+  const $t = await getFormatter();
+
+  const space = await modalManager.show<{ onClose: (space?: SharedSpaceResponseDto) => void }>(SpacePickerModal, {});
+  if (!space) {
+    return false;
+  }
+
+  try {
+    await linkAlbum({ id: space.id, albumId: album.id });
+    toastManager.primary($t('album_linked_to_space', { values: { space: space.name } }));
+    return true;
+  } catch (error) {
+    handleError(error, $t('spaces_linked_albums_error_link'));
+    return false;
+  }
 };
 
 export const handleConfirmAlbumDelete = async (album: AlbumResponseDto) => {

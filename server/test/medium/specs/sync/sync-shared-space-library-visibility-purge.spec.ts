@@ -209,4 +209,60 @@ describe('LibraryAssetSync — library visibility purge (space members, not owne
     const remainingLibraryAuditIds = remainingLibraryAudit.map((r) => r.id);
     expect(remainingLibraryAuditIds).not.toContain(staleLibraryRow.id);
   });
+
+  // security-7: a member who is ALSO the owner's partner keeps partner-entitled access to the asset (a
+  // partner may see Hidden). The library purge tombstone must NOT reach them, or their client drops the
+  // remote_asset row despite the partner entitlement. A non-partner member still gets the purge (control).
+  it('S7: a partner-and-member does NOT receive the library purge; a non-partner member does', async () => {
+    const owner = await setup();
+    const partnerMember = await owner.ctx.newSyncAuthUser();
+    const plainMember = await owner.ctx.newSyncAuthUser();
+
+    // Space with a linked library + one Timeline asset; both members are Editors.
+    const { space } = await owner.ctx.newSharedSpace({ createdById: owner.auth.user.id });
+    await owner.ctx.newSharedSpaceMember({
+      spaceId: space.id,
+      userId: owner.auth.user.id,
+      role: SharedSpaceRole.Owner,
+    });
+    await owner.ctx.newSharedSpaceMember({
+      spaceId: space.id,
+      userId: partnerMember.user.id,
+      role: SharedSpaceRole.Editor,
+    });
+    await owner.ctx.newSharedSpaceMember({
+      spaceId: space.id,
+      userId: plainMember.user.id,
+      role: SharedSpaceRole.Editor,
+    });
+    const { library } = await owner.ctx.newLibrary({ ownerId: owner.auth.user.id });
+    const { asset } = await owner.ctx.newAsset({
+      ownerId: owner.auth.user.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    await owner.ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id });
+
+    // Owner shares with partnerMember (owner = sharedById, partnerMember = sharedWithId).
+    await owner.ctx.newPartner({ sharedById: owner.auth.user.id, sharedWithId: partnerMember.user.id });
+
+    // Both members sync + ack the asset while visible.
+    for (const auth of [partnerMember.auth, plainMember.auth]) {
+      const initial = await owner.ctx.syncStream(auth, [SyncRequestType.LibraryAssetsV1]);
+      await owner.ctx.syncAckAll(auth, initial);
+    }
+
+    // Owner hides → library purge tombstone written for the space-linked library.
+    await owner.ctx.get(SharedSpaceRepository).emitLibraryAssetVisibilityPurge([asset.id]);
+
+    // Partner-and-member: NO delete (partner entitlement preserved).
+    const partnerNext = await owner.ctx.syncStream(partnerMember.auth, [SyncRequestType.LibraryAssetsV1]);
+    const partnerDeletes = partnerNext.filter((r: { type: string }) => r.type === SyncEntityType.LibraryAssetDeleteV1);
+    expect(partnerDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(false);
+
+    // Plain member (no partner): still purged.
+    const plainNext = await owner.ctx.syncStream(plainMember.auth, [SyncRequestType.LibraryAssetsV1]);
+    const plainDeletes = plainNext.filter((r: { type: string }) => r.type === SyncEntityType.LibraryAssetDeleteV1);
+    expect(plainDeletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
+  });
 });

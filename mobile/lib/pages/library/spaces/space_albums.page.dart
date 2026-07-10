@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
+import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
@@ -59,7 +60,7 @@ class SpaceAlbumsPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Albums'),
+        title: Text('space_albums_page_title'.t(context: context)),
         centerTitle: false,
         actions: [
           if (canEdit)
@@ -67,13 +68,15 @@ class SpaceAlbumsPage extends ConsumerWidget {
               key: const Key('space-albums-link-action'),
               onPressed: onLink,
               icon: const Icon(Icons.add),
-              label: const Text('Link'),
+              label: Text('link'.t(context: context)),
             ),
         ],
       ),
       body: albumsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Failed to load albums: $error')),
+        error: (error, _) => Center(
+          child: Text('space_albums_load_failed'.t(context: context, args: {'error': error.toString()})),
+        ),
         data: (albums) => albums.isEmpty
             ? _EmptyState(key: const Key('space-albums-empty'), canEdit: canEdit, onLink: onLink)
             : _AlbumGrid(
@@ -225,11 +228,14 @@ class _AlbumCard extends ConsumerWidget {
                     Row(
                       children: [
                         Text(
-                          '${album.assetCount} photos',
+                          'space_album_photo_count'.t(context: context, args: {'count': album.assetCount.toString()}),
                           style: context.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                         ),
                         if (isOffTimeline)
-                          Text('· Hidden', style: context.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant)),
+                          Text(
+                            '· ${'space_albums_hidden'.t(context: context)}',
+                            style: context.textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+                          ),
                       ],
                     ),
                   ],
@@ -254,9 +260,16 @@ class _AlbumCard extends ConsumerWidget {
                     itemBuilder: (ctx) => [
                       PopupMenuItem(
                         value: _CardAction.toggle,
-                        child: Text(album.showInTimeline ? 'Hide in timeline' : 'Show in timeline'),
+                        child: Text(
+                          album.showInTimeline
+                              ? 'spaces_hide_from_timeline'.t(context: ctx)
+                              : 'spaces_linked_albums_show_in_timeline'.t(context: ctx),
+                        ),
                       ),
-                      const PopupMenuItem(value: _CardAction.unlink, child: Text('Unlink from space')),
+                      PopupMenuItem(
+                        value: _CardAction.unlink,
+                        child: Text('space_album_unlink_from_space'.t(context: ctx)),
+                      ),
                     ],
                   ),
                 ),
@@ -293,12 +306,16 @@ class _EmptyState extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'No albums yet',
+            'space_albums_empty'.t(context: context),
             style: context.textTheme.titleMedium?.copyWith(color: context.colorScheme.onSurfaceVariant),
           ),
           if (canEdit) ...[
             const SizedBox(height: 12),
-            FilledButton.icon(onPressed: onLink, icon: const Icon(Icons.add), label: const Text('Link album')),
+            FilledButton.icon(
+              onPressed: onLink,
+              icon: const Icon(Icons.add),
+              label: Text('space_albums_empty_editor_cta'.t(context: context)),
+            ),
           ],
         ],
       ),

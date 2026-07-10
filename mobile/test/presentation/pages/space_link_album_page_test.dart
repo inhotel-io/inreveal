@@ -10,6 +10,8 @@ import 'package:immich_mobile/providers/infrastructure/remote_album.provider.dar
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:mocktail/mocktail.dart';
 
+import '../../widget_tester_extensions.dart';
+
 // ---------------------------------------------------------------------------
 // Fakes / stubs
 // ---------------------------------------------------------------------------
@@ -57,26 +59,16 @@ class _StubCurrentUserNotifier extends CurrentUserProvider {
   }
 }
 
-Widget _wrap(
-  Widget widget, {
-  required List<RemoteAlbum> albums,
-}) {
+List<Override> _overrides({required List<RemoteAlbum> albums}) {
   final userService = _MockUserService();
   final user = _userDto(_currentUserId);
   when(() => userService.tryGetMyUser()).thenReturn(user);
   when(() => userService.watchMyUser()).thenAnswer((_) => const Stream.empty());
 
-  return ProviderScope(
-    overrides: [
-      remoteAlbumProvider.overrideWith(
-        () => _StubRemoteAlbumNotifier(albums),
-      ),
-      currentUserProvider.overrideWith(
-        (ref) => _StubCurrentUserNotifier(userService, user),
-      ),
-    ],
-    child: MaterialApp(home: widget),
-  );
+  return [
+    remoteAlbumProvider.overrideWith(() => _StubRemoteAlbumNotifier(albums)),
+    currentUserProvider.overrideWith((ref) => _StubCurrentUserNotifier(userService, user)),
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -95,16 +87,13 @@ void main() {
       _album(id: 'a3', ownerId: _currentUserId, name: 'Already Linked'),
     ];
 
-    await tester.pumpWidget(
-      _wrap(
-        const SpaceLinkAlbumPage(
-          spaceId: spaceId,
-          linkedAlbumIds: ['a3'],
-        ),
-        albums: albums,
+    await tester.pumpConsumerWidget(
+      const SpaceLinkAlbumPage(
+        spaceId: spaceId,
+        linkedAlbumIds: ['a3'],
       ),
+      overrides: _overrides(albums: albums),
     );
-    await tester.pump();
 
     expect(find.byKey(const Key('link-album-row-a1')), findsOneWidget);
     expect(find.byKey(const Key('link-album-row-a2')), findsOneWidget);
@@ -119,13 +108,10 @@ void main() {
       _album(id: 'a3', ownerId: _currentUserId, name: 'Beach hawaii'),
     ];
 
-    await tester.pumpWidget(
-      _wrap(
-        const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: []),
-        albums: albums,
-      ),
+    await tester.pumpConsumerWidget(
+      const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: []),
+      overrides: _overrides(albums: albums),
     );
-    await tester.pump();
 
     // Type a query.
     await tester.enterText(find.byType(TextField), 'HAWAII');
@@ -146,17 +132,14 @@ void main() {
 
     final List<String> picked = [];
 
-    await tester.pumpWidget(
-      _wrap(
-        SpaceLinkAlbumPage(
-          spaceId: spaceId,
-          linkedAlbumIds: const [],
-          onAlbumsPicked: picked.addAll,
-        ),
-        albums: albums,
+    await tester.pumpConsumerWidget(
+      SpaceLinkAlbumPage(
+        spaceId: spaceId,
+        linkedAlbumIds: const [],
+        onAlbumsPicked: picked.addAll,
       ),
+      overrides: _overrides(albums: albums),
     );
-    await tester.pump();
 
     // Confirm button should be present when nothing selected (disabled).
     expect(find.byKey(const Key('link-album-confirm')), findsOneWidget);
@@ -190,13 +173,10 @@ void main() {
       ),
     ];
 
-    await tester.pumpWidget(
-      _wrap(
-        const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: []),
-        albums: albums,
-      ),
+    await tester.pumpConsumerWidget(
+      const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: []),
+      overrides: _overrides(albums: albums),
     );
-    await tester.pump();
 
     expect(find.byKey(const Key('link-album-empty')), findsOneWidget);
     expect(

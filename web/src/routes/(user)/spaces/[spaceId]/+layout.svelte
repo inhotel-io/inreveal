@@ -56,6 +56,11 @@
   const showInTimeline = $derived(currentMember?.showInTimeline ?? true);
   const sharePersonMetadata = $derived(currentMember?.sharePersonMetadata ?? true);
 
+  // L16: departing members' own albums are auto-unlinked on leave (cleanupDepartingMemberAlbums) —
+  // warn upfront when the current member has any, so leaving isn't a surprise for the space's
+  // other members.
+  const hasOwnLinkedAlbums = $derived(data.linkedAlbums.some((album) => album.addedById === authManager.user.id));
+
   // A detail route (person or album) suppresses the cover + tabs; it keeps its own back nav.
   const suffix = $derived(page.url.pathname.slice(base.length));
   const isDetailRoute = $derived(/^\/(people|albums)\/[^/]+/.test(suffix));
@@ -157,7 +162,9 @@
 
   const handleLeave = async () => {
     const confirmed = await modalManager.showDialog({
-      prompt: $t('spaces_leave_confirmation', { values: { name: space.name } }),
+      prompt: $t(hasOwnLinkedAlbums ? 'spaces_leave_confirmation_with_albums' : 'spaces_leave_confirmation', {
+        values: { name: space.name },
+      }),
       title: $t('spaces_leave'),
     });
     if (!confirmed) {

@@ -4,6 +4,7 @@ import { AlbumUserRole, AssetVisibility } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
@@ -26,6 +27,10 @@ const setup = (db?: Kysely<DB>) => {
       AccessRepository,
       AssetRepository,
       DatabaseRepository,
+      // Slice 1: the albumIds+personIds edge-case test exercises searchMetadata's person path, which calls
+      // faceIdentityRepository.resolveScopedPersonTokens — wire it real so the resolver runs (returns no
+      // scoped tokens for a plain personId) instead of throwing on an undefined repo.
+      FaceIdentityRepository,
       SearchRepository,
       SharedSpaceRepository,
       PartnerRepository,
@@ -140,6 +145,54 @@ const seedSpaceAssetWithFacets = async (
 beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
+
+// Owner's album carrying one asset per visibility, linked into a space with a Viewer member.
+const seedAlbumWithVisibilities = async (ctx: SearchCtx) => {
+  const { user: owner } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'VisAlbum' });
+
+  const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+  const { asset: archiveAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
+  const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+  const { asset: lockedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Locked });
+  for (const asset of [timelineAsset, archiveAsset, hiddenAsset, lockedAsset]) {
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+  }
+
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+  await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+  return { owner, member, album, space, timelineAsset, archiveAsset, hiddenAsset, lockedAsset };
+};
+
+// Owner's album carrying a trashed asset (still linked via album_asset) alongside a live
+// sibling, linked into a space with a Viewer member. H1: the album-granted search scope had
+// no `deletedAt` gate, so a Viewer could read the owner's TRASHED asset metadata (ids, EXIF,
+// people, thumbhash) via `withDeleted` / `trashedBefore` / `trashedAfter`.
+const seedAlbumWithTrashedAsset = async (ctx: SearchCtx) => {
+  const { user: owner } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'TrashAlbum' });
+
+  const { asset: trashedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+  const { asset: liveAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+  await ctx.newAlbumAsset({ albumId: album.id, assetId: trashedAsset.id });
+  await ctx.newAlbumAsset({ albumId: album.id, assetId: liveAsset.id });
+  await ctx.softDeleteAsset(trashedAsset.id);
+
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+  await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+  return { owner, member, album, space, trashedAsset, liveAsset };
+};
+
+const itemIds = (response: Awaited<ReturnType<SearchService['searchMetadata']>>) =>
+  response.assets.items.map((item) => item.id);
 
 describe(SearchService.name, () => {
   it('should work', () => {
@@ -481,6 +534,258 @@ describe(SearchService.name, () => {
       await expect(sut.searchMetadata(auth, { albumIds: [album.id] })).rejects.toThrow(
         'Not found or no album.read access',
       );
+    });
+  });
+
+  describe('albumIds option — visibility gate (Slice 1 / security-1)', () => {
+    it('hides a Hidden album asset from a Viewer member (default visibility); Timeline+Archive present, Locked absent', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithVisibilities(ctx);
+      const auth = factory.auth({ user: { id: s.member.id } });
+
+      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id] });
+      const ids = itemIds(response);
+
+      expect(ids).toContain(s.timelineAsset.id);
+      expect(ids).toContain(s.archiveAsset.id); // Archive is shareable — not stripped
+      expect(ids).not.toContain(s.hiddenAsset.id); // security-1: Hidden gated on the album path
+      expect(ids).not.toContain(s.lockedAsset.id); // Locked never present
+    });
+
+    it('hides a Hidden album asset even when the member explicitly requests visibility=hidden', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithVisibilities(ctx);
+      const auth = factory.auth({ user: { id: s.member.id } });
+
+      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], visibility: AssetVisibility.Hidden });
+
+      expect(itemIds(response)).not.toContain(s.hiddenAsset.id);
+    });
+
+    it("hides the OWNER's own Hidden album asset via the album path (flat gate, matches the grid)", async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithVisibilities(ctx);
+      const ownerAuth = factory.auth({ user: { id: s.owner.id } });
+
+      const response = await sut.searchMetadata(ownerAuth, {
+        albumIds: [s.album.id],
+        visibility: AssetVisibility.Hidden,
+      });
+
+      expect(itemIds(response)).not.toContain(s.hiddenAsset.id);
+    });
+
+    it('OWNER still finds their Hidden asset via the non-album userIds search path (untouched)', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithVisibilities(ctx);
+      const ownerAuth = factory.auth({ user: { id: s.owner.id } });
+
+      // No albumIds -> userIds = [owner], scoped to ownerId + explicit Hidden. This path keeps its
+      // own `own OR gate` and is untouched by the fix.
+      const response = await sut.searchMetadata(ownerAuth, { visibility: AssetVisibility.Hidden });
+
+      expect(itemIds(response)).toContain(s.hiddenAsset.id);
+    });
+
+    it('gates a Hidden asset reachable via an album linked into TWO spaces (member of one)', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'TwoSpaceAlbum' });
+
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: timelineAsset.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: hiddenAsset.id });
+
+      const { space: spaceA } = await ctx.newSharedSpace({ createdById: owner.id });
+      const { space: spaceB } = await ctx.newSharedSpace({ createdById: owner.id });
+      await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: owner.id, role: 'owner' });
+      await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: owner.id, role: 'owner' });
+      // member belongs ONLY to spaceA
+      await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: member.id, role: 'viewer' });
+      await ctx.newSharedSpaceAlbum({ spaceId: spaceA.id, albumId: album.id });
+      await ctx.newSharedSpaceAlbum({ spaceId: spaceB.id, albumId: album.id });
+
+      const auth = factory.auth({ user: { id: member.id } });
+      const response = await sut.searchMetadata(auth, { albumIds: [album.id] });
+      const ids = itemIds(response);
+
+      expect(ids).toContain(timelineAsset.id);
+      expect(ids).not.toContain(hiddenAsset.id);
+    });
+
+    it('a member of NEITHER space has no album.read access (403-empty)', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: stranger } = await ctx.newUser();
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'NoAccessAlbum' });
+      const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+      const strangerAuth = factory.auth({ user: { id: stranger.id } });
+
+      await expect(sut.searchMetadata(strangerAuth, { albumIds: [album.id] })).rejects.toThrow(
+        'Not found or no album.read access',
+      );
+    });
+
+    it('gate still applies when albumIds is combined with a personIds filter', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithVisibilities(ctx);
+
+      // A person whose face sits on BOTH the Timeline and the Hidden album asset. The OWNER searches
+      // (they hold PersonRead on their own person — a member could not filter by it). Combining the album
+      // scope with the person scope must not open a bypass: the flat album gate still hides the Hidden
+      // asset from the owner too (matches the album grid), while the Timeline asset comes through.
+      const { person } = await ctx.newPerson({ ownerId: s.owner.id, name: 'ComboPerson' });
+      await ctx.newAssetFace({ assetId: s.timelineAsset.id, personId: person.id });
+      await ctx.newAssetFace({ assetId: s.hiddenAsset.id, personId: person.id });
+
+      const auth = factory.auth({ user: { id: s.owner.id } });
+      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], personIds: [person.id] });
+      const ids = itemIds(response);
+
+      expect(ids).toContain(s.timelineAsset.id);
+      expect(ids).not.toContain(s.hiddenAsset.id);
+    });
+  });
+
+  describe('albumIds option — trash gate (Slice 1 / H1)', () => {
+    it('excludes a trashed album asset from a Viewer member when withDeleted is requested', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithTrashedAsset(ctx);
+      const auth = factory.auth({ user: { id: s.member.id } });
+
+      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], withDeleted: true });
+      const ids = itemIds(response);
+
+      expect(ids).toContain(s.liveAsset.id);
+      expect(ids).not.toContain(s.trashedAsset.id); // H1: trashed album asset must never leak via withDeleted
+    });
+
+    it('excludes the trashed album asset with no trash params too (regression)', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithTrashedAsset(ctx);
+      const auth = factory.auth({ user: { id: s.member.id } });
+
+      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id] });
+      const ids = itemIds(response);
+
+      expect(ids).toContain(s.liveAsset.id);
+      expect(ids).not.toContain(s.trashedAsset.id);
+    });
+
+    it('excludes the trashed album asset when queried via a matching trashedBefore/trashedAfter range', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithTrashedAsset(ctx);
+      const auth = factory.auth({ user: { id: s.member.id } });
+
+      const response = await sut.searchMetadata(auth, {
+        albumIds: [s.album.id],
+        trashedAfter: new Date('2000-01-01T00:00:00.000Z'),
+        trashedBefore: new Date('2999-01-01T00:00:00.000Z'),
+      });
+      const ids = itemIds(response);
+
+      // Note: liveAsset (deletedAt IS NULL) never matches a trashedBefore/After range on its
+      // own — that's plain SQL null-comparison semantics, not the fix under test here. The
+      // assertion that matters is that the flat `deletedAt IS NULL` album gate wins over a
+      // trashedAfter/trashedBefore range that WOULD otherwise match the trashed asset.
+      expect(ids).not.toContain(s.trashedAsset.id);
+    });
+
+    it("excludes the OWNER's own trashed album asset via the album path too (flat gate, no owner exception)", async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithTrashedAsset(ctx);
+      const ownerAuth = factory.auth({ user: { id: s.owner.id } });
+
+      const response = await sut.searchMetadata(ownerAuth, { albumIds: [s.album.id], withDeleted: true });
+
+      expect(itemIds(response)).not.toContain(s.trashedAsset.id);
+    });
+
+    it('OWNER still finds their trashed asset via the non-album userIds search path (untouched)', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithTrashedAsset(ctx);
+      const ownerAuth = factory.auth({ user: { id: s.owner.id } });
+
+      // No albumIds -> userIds = [owner]; this path keeps its own withDeleted handling and is
+      // untouched by the fix.
+      const response = await sut.searchMetadata(ownerAuth, { withDeleted: true });
+
+      expect(itemIds(response)).toContain(s.trashedAsset.id);
+    });
+
+    it('gates a trashed asset reachable via an album linked into TWO spaces (member of one)', async () => {
+      const { sut, ctx } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: member } = await ctx.newUser();
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'TwoSpaceTrashAlbum' });
+
+      const { asset: liveAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      const { asset: trashedAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: liveAsset.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: trashedAsset.id });
+      await ctx.softDeleteAsset(trashedAsset.id);
+
+      const { space: spaceA } = await ctx.newSharedSpace({ createdById: owner.id });
+      const { space: spaceB } = await ctx.newSharedSpace({ createdById: owner.id });
+      await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: owner.id, role: 'owner' });
+      await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: owner.id, role: 'owner' });
+      // member belongs ONLY to spaceA
+      await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: member.id, role: 'viewer' });
+      await ctx.newSharedSpaceAlbum({ spaceId: spaceA.id, albumId: album.id });
+      await ctx.newSharedSpaceAlbum({ spaceId: spaceB.id, albumId: album.id });
+
+      const auth = factory.auth({ user: { id: member.id } });
+      const response = await sut.searchMetadata(auth, { albumIds: [album.id], withDeleted: true });
+      const ids = itemIds(response);
+
+      expect(ids).toContain(liveAsset.id);
+      expect(ids).not.toContain(trashedAsset.id);
+    });
+
+    it('gate still applies when albumIds is combined with a personIds filter', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithTrashedAsset(ctx);
+
+      // A person whose face sits on BOTH the live and the trashed album asset. Combining the
+      // album scope with the person scope must not open a bypass: the trash gate still hides
+      // the trashed asset even for the owner, while the live asset comes through.
+      const { person } = await ctx.newPerson({ ownerId: s.owner.id, name: 'TrashComboPerson' });
+      await ctx.newAssetFace({ assetId: s.liveAsset.id, personId: person.id });
+      await ctx.newAssetFace({ assetId: s.trashedAsset.id, personId: person.id });
+
+      const auth = factory.auth({ user: { id: s.owner.id } });
+      const response = await sut.searchMetadata(auth, {
+        albumIds: [s.album.id],
+        personIds: [person.id],
+        withDeleted: true,
+      });
+      const ids = itemIds(response);
+
+      expect(ids).toContain(s.liveAsset.id);
+      expect(ids).not.toContain(s.trashedAsset.id);
+    });
+
+    it('a Hidden album asset stays excluded alongside the new trash gate (both gates hold)', async () => {
+      const { sut, ctx } = setup();
+      const s = await seedAlbumWithVisibilities(ctx);
+      await ctx.softDeleteAsset(s.timelineAsset.id);
+      const auth = factory.auth({ user: { id: s.member.id } });
+
+      const response = await sut.searchMetadata(auth, { albumIds: [s.album.id], withDeleted: true });
+      const ids = itemIds(response);
+
+      expect(ids).not.toContain(s.hiddenAsset.id); // visibility gate still holds
+      expect(ids).not.toContain(s.lockedAsset.id);
+      expect(ids).not.toContain(s.timelineAsset.id); // now trashed -> excluded by the new gate
+      expect(ids).toContain(s.archiveAsset.id); // untouched, live Archive asset still present
     });
   });
 

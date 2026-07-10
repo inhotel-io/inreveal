@@ -341,3 +341,94 @@ describe('timeline bucket explicit-visibility — spacePersonIds path', () => {
     expect(ids.has(tlAsset)).toBe(true);
   });
 });
+
+// Seed an album (owner + viewer via a shared space) carrying one asset per visibility.
+const seedAlbum = async (ctx: ReturnType<typeof setup>['ctx'], spaceRepo: ReturnType<typeof setup>['spaceRepo']) => {
+  const { user: owner } = await ctx.newUser();
+  const { user: viewer } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: 'viewer' });
+
+  const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'AlbumArm' });
+  await spaceRepo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+  const hidden = await makeBucketAsset(ctx, owner.id, AssetVisibility.Hidden);
+  const locked = await makeBucketAsset(ctx, owner.id, AssetVisibility.Locked);
+  const archive = await makeBucketAsset(ctx, owner.id, AssetVisibility.Archive);
+  const timeline = await makeBucketAsset(ctx, owner.id, AssetVisibility.Timeline);
+  for (const assetId of [hidden, locked, archive, timeline]) {
+    await ctx.newAlbumAsset({ albumId: album.id, assetId });
+  }
+
+  return { owner, viewer, album, hidden, locked, archive, timeline };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATH 4: albumId arm (explicit visibility bypasses withDefaultVisibility)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('timeline bucket explicit-visibility — albumId arm', () => {
+  it('visibility=HIDDEN via albumId surfaces NO Hidden album asset (viewer OR owner — flat gate)', async () => {
+    const { assetRepo, spaceRepo, ctx } = setup();
+    const s = await seedAlbum(ctx, spaceRepo);
+
+    const opts: TimeBucketOptions = {
+      albumId: s.album.id,
+      visibility: AssetVisibility.Hidden,
+      bucketSize: TimeBucketSize.Year,
+    };
+
+    expect(countBuckets(await assetRepo.getTimeBuckets(opts))).toBe(0);
+
+    const asViewer = await bucketAssetIds(assetRepo, BUCKET, opts, s.viewer.id);
+    expect(asViewer.has(s.hidden)).toBe(false);
+
+    // Flat: even the album owner does not see their own Hidden via the album arm.
+    const asOwner = await bucketAssetIds(assetRepo, BUCKET, opts, s.owner.id);
+    expect(asOwner.has(s.hidden)).toBe(false);
+  });
+
+  it('visibility=LOCKED via albumId surfaces NO Locked album asset', async () => {
+    const { assetRepo, spaceRepo, ctx } = setup();
+    const s = await seedAlbum(ctx, spaceRepo);
+
+    const opts: TimeBucketOptions = {
+      albumId: s.album.id,
+      visibility: AssetVisibility.Locked,
+      bucketSize: TimeBucketSize.Year,
+    };
+
+    expect(countBuckets(await assetRepo.getTimeBuckets(opts))).toBe(0);
+    const ids = await bucketAssetIds(assetRepo, BUCKET, opts, s.viewer.id);
+    expect(ids.has(s.locked)).toBe(false);
+  });
+
+  it('regression: visibility=Timeline via albumId STILL returns the Timeline album asset', async () => {
+    const { assetRepo, spaceRepo, ctx } = setup();
+    const s = await seedAlbum(ctx, spaceRepo);
+
+    const opts: TimeBucketOptions = {
+      albumId: s.album.id,
+      visibility: AssetVisibility.Timeline,
+      bucketSize: TimeBucketSize.Year,
+    };
+
+    const ids = await bucketAssetIds(assetRepo, BUCKET, opts, s.viewer.id);
+    expect(ids.has(s.timeline)).toBe(true);
+  });
+
+  it('regression: visibility=Archive via albumId STILL returns the Archive album asset (Archive is shareable)', async () => {
+    const { assetRepo, spaceRepo, ctx } = setup();
+    const s = await seedAlbum(ctx, spaceRepo);
+
+    const opts: TimeBucketOptions = {
+      albumId: s.album.id,
+      visibility: AssetVisibility.Archive,
+      bucketSize: TimeBucketSize.Year,
+    };
+
+    const ids = await bucketAssetIds(assetRepo, BUCKET, opts, s.viewer.id);
+    expect(ids.has(s.archive)).toBe(true);
+  });
+});

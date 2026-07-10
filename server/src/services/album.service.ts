@@ -18,6 +18,7 @@ import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import { AlbumUserRole, Permission } from 'src/enum';
 import { AlbumAssetCount, AlbumInfoOptions } from 'src/repositories/album.repository';
 import { BaseService } from 'src/services/base.service';
+import { hasDirectAlbumReadAccess } from 'src/utils/access';
 import { addAssets, removeAssets } from 'src/utils/asset.util';
 import { asDateTimeString } from 'src/utils/date';
 import { getPreferences } from 'src/utils/preferences';
@@ -101,13 +102,44 @@ export class AlbumService extends BaseService {
 
     const mapped = mapAlbum(album);
 
-    // Fix: if the caller is not an album participant (owner or album_user), redact emails.
-    // A space Viewer gets AlbumRead via checkSpaceLinkedAlbumReadAccess (no role filter)
-    // but should not see PII (email) of album participants.
-    const isParticipant = album.albumUsers ? album.albumUsers.some(({ user }) => user.id === auth.user.id) : false;
-    if (!isParticipant) {
+    // security-8: a caller who reaches the album ONLY through shared-space membership (not the album owner
+    // or a shared album_user) must not see other participants' PII (id / name / role / profile image /
+    // email). Strip albumUsers down to the album owner (display name only, email redacted), matching
+    // getLinkedAlbums; genuine participants and shared-link callers keep the full list.
+    const hasDirectAccess =
+      !!auth.sharedLink || (await hasDirectAlbumReadAccess(this.accessRepository, auth.user.id, id));
+    if (!hasDirectAccess) {
+      const ownerAlbumUser = mapped.albumUsers.find(({ role }) => role === AlbumUserRole.Owner);
+      mapped.albumUsers = ownerAlbumUser ? [ownerAlbumUser] : mapped.albumUsers.slice(0, 1);
       for (const albumUser of mapped.albumUsers) {
         albumUser.user.email = '';
+      }
+    }
+
+    // rbac-6: the album OWNER (and only the owner) sees the list of shared spaces this album is
+    // linked into, so they can review + revoke links (a space editor can link an owner's album).
+    // Non-owner callers — including album editors/viewers and space-only readers — get no list.
+    // A shared-link visitor is explicitly excluded even though checkOwnerAccess would return true
+    // for one (shared-link AuthDto.user.id resolves to the link creator/album owner for access
+    // checks) — a public link is not an authenticated owner session and must never expose the
+    // owner-only space-link list to whoever holds the link URL.
+    let isAlbumOwner = false;
+    if (!auth.sharedLink) {
+      const ownerIds = await this.accessRepository.album.checkOwnerAccess(auth.user.id, new Set([id]));
+      isAlbumOwner = ownerIds.has(id);
+    }
+    let sharedSpaceLinks: AlbumResponseDto['sharedSpaceLinks'];
+    if (isAlbumOwner) {
+      const links = await this.sharedSpaceRepository.getAlbumSpaceLinks(id);
+      // Omit the field entirely when the album has no space links, so a plain album's response shape is
+      // unchanged (the field only appears for the owner when there is at least one link to surface).
+      if (links.length > 0) {
+        sharedSpaceLinks = links.map((link) => ({
+          spaceId: link.spaceId,
+          spaceName: link.spaceName,
+          linkedById: link.linkedById,
+          showInTimeline: link.showInTimeline,
+        }));
       }
     }
 
@@ -117,7 +149,12 @@ export class AlbumService extends BaseService {
       endDate: asDateTimeString(albumMetadataForIds?.endDate ?? undefined),
       assetCount: albumMetadataForIds?.assetCount ?? 0,
       lastModifiedAssetTimestamp: asDateTimeString(albumMetadataForIds?.lastModifiedAssetTimestamp ?? undefined),
-      contributorCounts: isShared ? await this.albumRepository.getContributorCounts(album.id) : undefined,
+      // L1: contributorCounts exposes contributor userIds + per-user asset counts — the same PII
+      // security-8 already gated the rest of albumUsers behind. A space-only reader (hasDirectAccess
+      // false) must not see it, matching the albumUsers redaction above.
+      contributorCounts:
+        isShared && hasDirectAccess ? await this.albumRepository.getContributorCounts(album.id) : undefined,
+      sharedSpaceLinks,
     };
   }
 

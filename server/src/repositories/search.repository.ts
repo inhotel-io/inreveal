@@ -1222,8 +1222,14 @@ export class SearchRepository {
                   .where('album_asset.albumId', '=', asUuid(options!.albumId!)),
               ),
               eb.or([
-                // Caller's own assets follow the resolved visibility applied upstream; no gate.
-                eb('asset.ownerId', '=', anyUuid(userIds)),
+                // I1: unlike the plain-asset search path, getFilterSuggestions calls into
+                // applySuggestionScope with no upstream visibility resolution — so "caller's own
+                // assets follow the resolved visibility applied upstream" does NOT hold here. Gate
+                // the owner's own assets too (Archive + Timeline), matching the album grid's
+                // withDefaultVisibility, so the caller's own Hidden/Locked album asset can't feed a
+                // facet value either. albumId arm ONLY — the sibling spaceId/timelineSpaceIds arms
+                // below keep their deliberate M3 own-asset exception.
+                eb.and([spaceVisibilityGate(eb), eb('asset.ownerId', '=', anyUuid(userIds))]),
                 // Other album participants' assets: Archive + Timeline only (mirrors the
                 // album view's withDefaultVisibility — Hidden/Locked never surface for
                 // other members, matching the sibling spaceId/timelineSpaceIds branches).

@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SharedSpaceRole } from 'src/enum';
+import { AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { SyncRepository } from 'src/repositories/sync.repository';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
@@ -126,6 +126,98 @@ describe('SharedSpaceAlbumToAssetSync.getUpserts', () => {
       result.push(row);
     }
     expect(result.some((r: any) => r.albumId === album.id)).toBe(false);
+  });
+
+  it('security-6: excludes a Hidden album asset link row from the member upsert stream', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset: hidden } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    const { asset: timeline } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: hidden.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: timeline.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+    const stream = sut.getUpserts({ nowId: NOW_ID, userId: member.id });
+    const result: any[] = [];
+    for await (const row of stream) {
+      result.push(row);
+    }
+    const assetIds = result.map((r: any) => r.assetId);
+    expect(assetIds).toContain(timeline.id); // shareable membership delivered
+    expect(assetIds).not.toContain(hidden.id); // Hidden membership withheld
+  });
+
+  it('security-6: excludes a Hidden album asset link row from the per-album backfill stream', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset: hidden } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    const { asset: timeline } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: hidden.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: timeline.id });
+
+    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id);
+    const result: any[] = [];
+    for await (const row of stream) {
+      result.push(row);
+    }
+    const assetIds = result.map((r: any) => r.assetId);
+    expect(assetIds).toContain(timeline.id);
+    expect(assetIds).not.toContain(hidden.id);
+  });
+
+  it('security-6: an album linked into TWO spaces gates the Hidden asset in both member streams', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: memberA } = await ctx.newUser();
+    const { user: memberB } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset: hidden } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: hidden.id });
+
+    const { space: spaceA } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: memberA.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: spaceA.id, albumId: album.id });
+
+    const { space: spaceB } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: memberB.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: spaceB.id, albumId: album.id });
+
+    for (const userId of [memberA.id, memberB.id]) {
+      const stream = sut.getUpserts({ nowId: NOW_ID, userId });
+      const result: any[] = [];
+      for await (const row of stream) {
+        result.push(row);
+      }
+      expect(result.map((r: any) => r.assetId)).not.toContain(hidden.id);
+    }
+  });
+
+  it('regression: an Archive album asset link row is still emitted (flat gate keeps Archive)', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Archive });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+    const stream = sut.getUpserts({ nowId: NOW_ID, userId: member.id });
+    const result: any[] = [];
+    for await (const row of stream) {
+      result.push(row);
+    }
+    expect(result.map((r: any) => r.assetId)).toContain(asset.id);
   });
 });
 

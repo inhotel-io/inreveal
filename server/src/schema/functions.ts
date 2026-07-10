@@ -671,7 +671,8 @@ export const shared_space_album_after_insert_user = registerFunction({
       SELECT DISTINCT ssm."userId", ir."albumId"
       FROM inserted_rows ir
       INNER JOIN shared_space_member ssm ON ssm."spaceId" = ir."spaceId"
-      ON CONFLICT DO NOTHING;
+      ON CONFLICT ("userId", "albumId")
+      DO UPDATE SET "createId" = immich_uuid_v7(), "createdAt" = now();
 
       UPDATE album
       SET "updatedAt" = clock_timestamp(), "updateId" = immich_uuid_v7(clock_timestamp())
@@ -702,6 +703,92 @@ export const shared_space_member_after_insert_album = registerFunction({
         FROM inserted_rows ir
         INNER JOIN shared_space_album ssa ON ssa."spaceId" = ir."spaceId"
       );
+      RETURN NULL;
+    END`,
+});
+
+// --- gallery-fork: album soft-delete/restore → shared_space_album lifecycle ---
+//
+// One AFTER UPDATE statement trigger on album. Guarded (in-body) to real
+// deletedAt NULL<->NOT-NULL transitions so it ignores the frequent non-deletedAt
+// album updates (renames, updateId bumps from the create-side grant triggers) and
+// the re-stamp softDeleteAll does on already-trashed albums.
+//
+// SOFT-DELETE (live -> trashed): tombstone every shared_space_album_user grant
+// (SharedSpaceAlbumSync.getDeletes drops the album + assets on members' devices;
+// the existing shared_space_album_user_delete_after_audit consumer deletes the
+// grant rows) and every space->album link (SharedSpaceAlbumLinkSync.getDeletes
+// drops the shelf link row). A soft-deleted album is universally inaccessible
+// (user_has_album_path is FALSE for everyone once deletedAt is set), so revoking
+// ALL grants ungated is correct.
+//
+// RESTORE (trashed -> live): re-create the grant for every member of every space
+// still linking the album, with a FRESH createId. ON CONFLICT DO UPDATE bumps the
+// createId of any grant that survived (e.g. a member who joined during the window),
+// so getCreatedAfter re-delivers past a stale checkpoint (closes albums-2 + albums-3).
+// Then bump shared_space_album.updateId so SharedSpaceAlbumLinkSync.getUpserts
+// re-delivers the link row (its deletedAt filter passes again after restore).
+//
+// NOTE: declared as plain AFTER UPDATE (not AFTER UPDATE OF "deletedAt") because
+// the sql-tools decorator/override toolchain cannot express a column-restricted
+// update trigger; the in-body guard makes the column restriction non-load-bearing.
+export const album_soft_delete_shared_space_album = registerFunction({
+  name: 'album_soft_delete_shared_space_album',
+  returnType: 'TRIGGER',
+  language: 'PLPGSQL',
+  body: `
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM new_rows n
+        INNER JOIN old_rows o ON o."id" = n."id"
+        WHERE (o."deletedAt" IS NULL) <> (n."deletedAt" IS NULL)
+      ) THEN
+        RETURN NULL;
+      END IF;
+
+      -- soft-delete: revoke all grants for the trashed albums
+      INSERT INTO shared_space_album_user_audit ("albumId", "userId")
+      SELECT ssau."albumId", ssau."userId"
+      FROM shared_space_album_user ssau
+      WHERE ssau."albumId" IN (
+        SELECT n."id" FROM new_rows n
+        INNER JOIN old_rows o ON o."id" = n."id"
+        WHERE o."deletedAt" IS NULL AND n."deletedAt" IS NOT NULL
+      );
+
+      -- soft-delete: tombstone all space->album links for the trashed albums
+      INSERT INTO shared_space_album_audit ("spaceId", "albumId")
+      SELECT ssa."spaceId", ssa."albumId"
+      FROM shared_space_album ssa
+      WHERE ssa."albumId" IN (
+        SELECT n."id" FROM new_rows n
+        INNER JOIN old_rows o ON o."id" = n."id"
+        WHERE o."deletedAt" IS NULL AND n."deletedAt" IS NOT NULL
+      );
+
+      -- restore: re-create grants for members of every space still linking each album
+      INSERT INTO shared_space_album_user ("userId", "albumId")
+      SELECT DISTINCT ssm."userId", ssa."albumId"
+      FROM shared_space_album ssa
+      INNER JOIN shared_space_member ssm ON ssm."spaceId" = ssa."spaceId"
+      WHERE ssa."albumId" IN (
+        SELECT n."id" FROM new_rows n
+        INNER JOIN old_rows o ON o."id" = n."id"
+        WHERE o."deletedAt" IS NOT NULL AND n."deletedAt" IS NULL
+      )
+      ON CONFLICT ("userId", "albumId")
+      DO UPDATE SET "createId" = immich_uuid_v7(), "createdAt" = now();
+
+      -- restore: bump shared_space_album.updateId so the link row re-delivers
+      UPDATE shared_space_album
+      SET "updatedAt" = clock_timestamp(), "updateId" = immich_uuid_v7(clock_timestamp())
+      WHERE "albumId" IN (
+        SELECT n."id" FROM new_rows n
+        INNER JOIN old_rows o ON o."id" = n."id"
+        WHERE o."deletedAt" IS NOT NULL AND n."deletedAt" IS NULL
+      );
+
       RETURN NULL;
     END`,
 });

@@ -514,6 +514,41 @@ describe('/shared-spaces', () => {
 
       expect(status).toBe(403);
     });
+
+    // security-9: a non-UUID path param must 400 (route-param DTO validation), not fall through to
+    // Postgres and surface as a raw 500.
+    it('returns 400 (not 500) for a non-UUID member userId path param', async () => {
+      const space = await utils.createSpace(user1.accessToken, { name: 'Non-UUID Member Param' });
+
+      const { status } = await request(app)
+        .patch(`/shared-spaces/${space.id}/members/not-a-uuid`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({ role: SharedSpaceRole.Editor });
+
+      expect(status).toBe(400);
+    });
+
+    // rbac-4 / testq-6: unit tests for this guard mostly stub the space lookup away entirely (fail-open
+    // happy path); this e2e negative exercises the real DB row so it survives regardless of whether the
+    // service-level guard is fail-open or fail-closed. user1 creates the space (creator); user2 is
+    // promoted to a co-Owner — a co-Owner must still not be able to demote the creator.
+    it('rejects a co-Owner demoting the space creator', async () => {
+      const space = await utils.createSpace(user1.accessToken, { name: 'Co-Owner Demote Creator Neg' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId, role: SharedSpaceRole.Owner });
+
+      const { status } = await request(app)
+        .patch(`/shared-spaces/${space.id}/members/${user1.userId}`)
+        .set('Authorization', `Bearer ${user2.accessToken}`)
+        .send({ role: SharedSpaceRole.Viewer });
+
+      expect(status).toBe(403);
+
+      // The creator must still be Owner — the demotion did not apply.
+      const { body: members } = await request(app)
+        .get(`/shared-spaces/${space.id}/members`)
+        .set('Authorization', `Bearer ${user1.accessToken}`);
+      expect(members).toContainEqual(expect.objectContaining({ userId: user1.userId, role: SharedSpaceRole.Owner }));
+    });
   });
 
   describe('GET /shared-spaces/:id/members', () => {
@@ -1094,6 +1129,27 @@ describe('/shared-spaces', () => {
         .set('Authorization', `Bearer ${user2.accessToken}`);
 
       expect(status).toBe(403);
+    });
+
+    // rbac-4 / testq-6: unit tests for this guard mostly stub the space lookup away entirely (fail-open
+    // happy path); this e2e negative exercises the real DB row so it survives regardless of whether the
+    // service-level guard is fail-open or fail-closed. user1 creates the space (creator); user2 is
+    // promoted to a co-Owner — a co-Owner must still not be able to remove the creator.
+    it('rejects a co-Owner removing the space creator', async () => {
+      const space = await utils.createSpace(user1.accessToken, { name: 'Co-Owner Remove Creator Neg' });
+      await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId, role: SharedSpaceRole.Owner });
+
+      const { status } = await request(app)
+        .delete(`/shared-spaces/${space.id}/members/${user1.userId}`)
+        .set('Authorization', `Bearer ${user2.accessToken}`);
+
+      expect(status).toBe(403);
+
+      // The creator must still be a member — the removal did not apply.
+      const { body: members } = await request(app)
+        .get(`/shared-spaces/${space.id}/members`)
+        .set('Authorization', `Bearer ${user1.accessToken}`);
+      expect(members).toContainEqual(expect.objectContaining({ userId: user1.userId, role: SharedSpaceRole.Owner }));
     });
   });
 

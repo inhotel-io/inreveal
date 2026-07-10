@@ -12,6 +12,7 @@ import { DatabaseRepository } from 'src/repositories/database.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { WorkflowRepository } from 'src/repositories/workflow.repository';
@@ -36,6 +37,11 @@ class WorkflowTestContext extends MediumTestContext<WorkflowExecutionService> {
         DatabaseRepository,
         LoggingRepository,
         PluginRepository,
+        // Slice 3: AssetService.update() now routes visibility through applyVisibilityTransitionSideEffects,
+        // which uses this.sharedSpaceRepository (space purge/restore emits). The plugin-host AssetService is
+        // built via BaseService.create(AssetService, this), reading repos off this WorkflowExecutionService —
+        // so the harness must wire SharedSpaceRepository (real: no-op for the non-space assets used here).
+        SharedSpaceRepository,
         StorageRepository,
         UserRepository,
         WorkflowRepository,

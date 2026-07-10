@@ -5,7 +5,11 @@ import { ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AlbumUserRole, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { asUuid } from 'src/utils/database';
-import { spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
+import {
+  spaceAssetPathBranches,
+  spaceVisibilityGate,
+  spaceVisibleAssetVisibilities,
+} from 'src/utils/shared-space-album-scope';
 
 class ActivityAccess {
   constructor(private db: Kysely<DB>) {}
@@ -706,7 +710,10 @@ class PersonAccess {
               join
                 .onRef('asset.id', '=', 'asset_face.assetId')
                 .on('asset.deletedAt', 'is', null)
-                .on('asset.visibility', '=', AssetVisibility.Timeline),
+                // rbac-7 (deny-only widening): widen from Timeline-only to the shareable set
+                // (Timeline + Archive) so a person appearing only on Archived space assets — shown in the
+                // space people grid via getPersonsBySpaceId — is also granted PersonRead. Never Hidden/Locked.
+                .on('asset.visibility', 'in', spaceVisibleAssetVisibilities),
             )
             .whereRef('asset_face.personId', '=', 'person.id')
             .where('asset_face.deletedAt', 'is', null)
@@ -717,6 +724,52 @@ class PersonAccess {
                   correlateAssetId: 'asset.id',
                   correlateLibraryId: 'asset.libraryId',
                   scope: { memberUserId: userId },
+                }),
+              ),
+            ),
+        ),
+      )
+      .execute()
+      .then((persons) => new Set(persons.map((person) => person.id)));
+  }
+
+  // Fork RBAC (Slice 3 / M2): checkSharedSpaceAccess above proves PersonRead reachability for ANY
+  // space role (including Viewer). Mutating the owner's GLOBAL representative face must be limited
+  // to the owner or an Editor/Owner of a space the person is shared through — this mirrors
+  // checkSharedSpaceAccess exactly except for the added `memberRole` filter.
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkSharedSpaceEditAccess(userId: string, personIds: Set<string>) {
+    if (personIds.size === 0) {
+      return new Set<string>();
+    }
+
+    return this.db
+      .selectFrom('person')
+      .select('person.id')
+      .where('person.id', 'in', [...personIds])
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_face')
+            .innerJoin('asset', (join) =>
+              join
+                .onRef('asset.id', '=', 'asset_face.assetId')
+                .on('asset.deletedAt', 'is', null)
+                // rbac-7 (deny-only widening): widen from Timeline-only to the shareable set
+                // (Timeline + Archive) so a person appearing only on Archived space assets — shown in the
+                // space people grid via getPersonsBySpaceId — is also granted PersonRead. Never Hidden/Locked.
+                .on('asset.visibility', 'in', spaceVisibleAssetVisibilities),
+            )
+            .whereRef('asset_face.personId', '=', 'person.id')
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .where((eb) =>
+              eb.or(
+                spaceAssetPathBranches(eb, {
+                  correlateAssetId: 'asset.id',
+                  correlateLibraryId: 'asset.libraryId',
+                  scope: { memberUserId: userId, memberRole: [SharedSpaceRole.Owner, SharedSpaceRole.Editor] },
                 }),
               ),
             ),

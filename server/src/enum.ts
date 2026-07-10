@@ -1009,6 +1009,12 @@ export enum JobName {
   // Shared Space Bulk Operations
   SharedSpaceBulkAddAssets = 'SharedSpaceBulkAddAssets',
 
+  // Shared Space Album Grant Reconciliation
+  SharedSpaceAlbumGrantReconcile = 'SharedSpaceAlbumGrantReconcile',
+  // L8: low-frequency nightly backstop — reconciles every album with a live grant, making the
+  // mechanism path-independent (covers M6 durability gaps, L7 residue, and cascade strands).
+  SharedSpaceAlbumGrantReconcileSweep = 'SharedSpaceAlbumGrantReconcileSweep',
+
   // Classification
   AssetClassifyQueueAll = 'AssetClassifyQueueAll',
   AssetClassify = 'AssetClassify',

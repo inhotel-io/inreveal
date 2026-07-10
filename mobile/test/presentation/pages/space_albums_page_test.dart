@@ -5,6 +5,8 @@ import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/pages/library/spaces/space_albums.page.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 
+import '../../widget_tester_extensions.dart';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -22,20 +24,11 @@ SpaceAlbum _album({
       showInTimeline: showInTimeline,
     );
 
-/// Wraps [widget] in a [ProviderScope] that overrides [spaceAlbumsProvider]
-/// with a fixed list, and a minimal [MaterialApp] for theme/directionality.
-Widget _wrap(
-  Widget widget, {
-  required String spaceId,
-  required List<SpaceAlbum> albums,
-}) {
-  return ProviderScope(
-    overrides: [
-      spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
-    ],
-    child: MaterialApp(home: widget),
-  );
-}
+/// Overrides [spaceAlbumsProvider] with a fixed list, for use with
+/// [WidgetTester.pumpConsumerWidget]'s `overrides` param.
+List<Override> _overrides({required String spaceId, required List<SpaceAlbum> albums}) => [
+  spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
+];
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -50,14 +43,10 @@ void main() {
       _album(id: 'a2', name: 'Sunsets', assetCount: 38),
     ];
 
-    await tester.pumpWidget(
-      _wrap(
-        const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
-        spaceId: spaceId,
-        albums: albums,
-      ),
+    await tester.pumpConsumerWidget(
+      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      overrides: _overrides(spaceId: spaceId, albums: albums),
     );
-    await tester.pump(); // let StreamProvider emit
 
     // 2 cards
     expect(find.byKey(const Key('space-album-card-a1')), findsOneWidget);
@@ -75,14 +64,10 @@ void main() {
       _album(id: 'a2', name: 'Sunsets'),
     ];
 
-    await tester.pumpWidget(
-      _wrap(
-        const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
-        spaceId: spaceId,
-        albums: albums,
-      ),
+    await tester.pumpConsumerWidget(
+      const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
+      overrides: _overrides(spaceId: spaceId, albums: albums),
     );
-    await tester.pump();
 
     // 2 cards visible
     expect(find.byKey(const Key('space-album-card-a1')), findsOneWidget);
@@ -95,14 +80,10 @@ void main() {
   });
 
   testWidgets('empty + editor: shows empty state', (tester) async {
-    await tester.pumpWidget(
-      _wrap(
-        const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
-        spaceId: spaceId,
-        albums: [],
-      ),
+    await tester.pumpConsumerWidget(
+      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      overrides: _overrides(spaceId: spaceId, albums: const []),
     );
-    await tester.pump();
 
     expect(find.byKey(const Key('space-albums-empty')), findsOneWidget);
     // No album cards
@@ -117,14 +98,10 @@ void main() {
       _album(id: 'a2', name: 'Reef dives', showInTimeline: false, assetCount: 12),
     ];
 
-    await tester.pumpWidget(
-      _wrap(
-        const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
-        spaceId: spaceId,
-        albums: albums,
-      ),
+    await tester.pumpConsumerWidget(
+      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      overrides: _overrides(spaceId: spaceId, albums: albums),
     );
-    await tester.pump();
 
     expect(find.byIcon(Icons.visibility_off), findsOneWidget);
     // The off-timeline card should show the "Hidden" label

@@ -7,7 +7,7 @@
 // (shared_space_album_asset_audit) unioned into SharedSpaceAlbumToAssetSync.
 import { Kysely } from 'kysely';
 import { DateTime } from 'luxon';
-import { SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
+import { AssetVisibility, SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SyncRepository } from 'src/repositories/sync.repository';
@@ -52,23 +52,36 @@ const seedSpaceWithAlbumAsset = async (
 };
 
 describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () => {
-  it('A1: emits a delete for an album-linked asset flipped to Hidden after it was acked', async () => {
-    const { auth, ctx } = await setup();
-    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, auth.user.id);
+  it('A1: emits a delete for an album-linked asset flipped to Hidden after it was acked, excluding the owner (gaps-5)', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, ownerAuth.user.id, { memberId: memberAuth.user.id });
 
-    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    await ctx.syncAckAll(auth, initial);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    // Simulate an already-synced device for BOTH the owner and the member.
+    const ownerInitial = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(ownerAuth, ownerInitial);
+    const memberInitial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, memberInitial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
 
     await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
 
-    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1);
-    expect(deletes).toHaveLength(1);
-    expect((deletes[0] as { data: { albumId: string; assetId: string } }).data).toMatchObject({
+    const memberNext = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const memberDeletes = memberNext.filter(
+      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1,
+    );
+    expect(memberDeletes).toHaveLength(1);
+    expect((memberDeletes[0] as { data: { albumId: string; assetId: string } }).data).toMatchObject({
       albumId: album.id,
       assetId: asset.id,
     });
+
+    // gaps-5: the album owner must NOT receive a delete for their own hidden asset.
+    const ownerNext = await ctx.syncStream(ownerAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const ownerDeletes = ownerNext.filter(
+      (r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1,
+    );
+    expect(ownerDeletes).toHaveLength(0);
   });
 
   it('A2: re-emits the album membership when the asset is restored to Timeline after a purge', async () => {
@@ -141,26 +154,29 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
   });
 
   it('A5: multi-album fan-out — delete emitted for each (albumId, assetId) pair', async () => {
-    const { auth, ctx } = await setup();
-    const { space } = await ctx.newSharedSpace({ createdById: auth.user.id });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Owner });
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    const { space } = await ctx.newSharedSpace({ createdById: ownerAuth.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: ownerAuth.user.id, role: SharedSpaceRole.Owner });
+    // gaps-5: the space owner never receives a delete for their own asset — sync as a separate member.
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: memberAuth.user.id, role: SharedSpaceRole.Editor });
 
-    const { album: album1 } = await ctx.newAlbum({ ownerId: auth.user.id });
-    const { album: album2 } = await ctx.newAlbum({ ownerId: auth.user.id });
-    const { asset } = await ctx.newAsset({ ownerId: auth.user.id });
+    const { album: album1 } = await ctx.newAlbum({ ownerId: ownerAuth.user.id });
+    const { album: album2 } = await ctx.newAlbum({ ownerId: ownerAuth.user.id });
+    const { asset } = await ctx.newAsset({ ownerId: ownerAuth.user.id });
 
     await ctx.newAlbumAsset({ albumId: album1.id, assetId: asset.id });
     await ctx.newAlbumAsset({ albumId: album2.id, assetId: asset.id });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album1.id });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album2.id });
 
-    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    await ctx.syncAckAll(auth, initial);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const initial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, initial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
 
     await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
 
-    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const next = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
     const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1);
     expect(deletes).toHaveLength(2);
     const pairs = deletes.map((d) => (d as { data: { albumId: string; assetId: string } }).data);
@@ -228,16 +244,20 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
   });
 
   it('A9: showInTimeline=false linked album still fires purge and restore', async () => {
-    const { auth, ctx } = await setup();
-    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, auth.user.id, { showInTimeline: false });
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, ownerAuth.user.id, {
+      memberId: memberAuth.user.id,
+      showInTimeline: false,
+    });
 
-    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    await ctx.syncAckAll(auth, initial);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const initial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, initial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
 
     await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
 
-    const afterPurge = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const afterPurge = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
     const deletes = afterPurge.filter(
       (r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1,
     );
@@ -247,12 +267,12 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
       assetId: asset.id,
     });
 
-    await ctx.syncAckAll(auth, afterPurge);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, afterPurge);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
 
     await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityRestore([asset.id]);
 
-    const afterRestore = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const afterRestore = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
     const upserts = afterRestore.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1);
     expect(upserts).toContainEqual(
       expect.objectContaining({ data: expect.objectContaining({ albumId: album.id, assetId: asset.id }) }),
@@ -266,25 +286,26 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
   });
 
   it('X3: calling emitAlbumAssetVisibilityPurge twice is idempotent — member converges to absent', async () => {
-    const { auth, ctx } = await setup();
-    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, auth.user.id);
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, ownerAuth.user.id, { memberId: memberAuth.user.id });
 
-    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    await ctx.syncAckAll(auth, initial);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const initial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, initial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
 
     // Double-purge — duplicate tombstones are written but should not cause errors.
     await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id])).resolves.not.toThrow();
     await expect(ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id])).resolves.not.toThrow();
 
     // The member must receive at least one delete for the asset (convergence to absent).
-    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const next = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
     const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1);
     expect(deletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
 
     // Ack all deletes; next sync must be empty (device has converged).
-    await ctx.syncAckAll(auth, next);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, next);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
 
     // Verify the album association data is correct on at least one delete event.
     expect(
@@ -300,23 +321,27 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
   // runs under ONE client checkpoint. Deletes from both sources in one window must
   // all deliver, and a single ack must advance past both (next sync empty).
   it('X4: union checkpoint correctness — ack advances past both audit sources; next sync empty', async () => {
-    const { auth, ctx } = await setup();
+    const { auth: ownerAuth, ctx } = await setup();
+    // gaps-5: the space-arm (shared_space_album_asset_audit) tombstone is now owner-gated, so this must
+    // sync as a non-owner member to observe deletes from BOTH union arms in the same window.
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
 
     // Seed a space with TWO linked albums, same asset in both.
-    const { space } = await ctx.newSharedSpace({ createdById: auth.user.id });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Owner });
-    const { album: albumA } = await ctx.newAlbum({ ownerId: auth.user.id });
-    const { album: albumB } = await ctx.newAlbum({ ownerId: auth.user.id });
-    const { asset } = await ctx.newAsset({ ownerId: auth.user.id });
+    const { space } = await ctx.newSharedSpace({ createdById: ownerAuth.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: ownerAuth.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: memberAuth.user.id, role: SharedSpaceRole.Editor });
+    const { album: albumA } = await ctx.newAlbum({ ownerId: ownerAuth.user.id });
+    const { album: albumB } = await ctx.newAlbum({ ownerId: ownerAuth.user.id });
+    const { asset } = await ctx.newAsset({ ownerId: ownerAuth.user.id });
     await ctx.newAlbumAsset({ albumId: albumA.id, assetId: asset.id });
     await ctx.newAlbumAsset({ albumId: albumB.id, assetId: asset.id });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: albumA.id });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: albumB.id });
 
     // Member syncs and acks to simulate an already-synced device.
-    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
-    await ctx.syncAckAll(auth, initial);
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const initial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, initial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
 
     // Produce one tombstone from EACH union arm in the same window:
     // Arm 1 (album_asset_audit): remove asset from album A — fires the album_asset_audit trigger.
@@ -325,7 +350,7 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
     await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
 
     // Sync — must deliver deletes from BOTH sources (≥2 deletes covering albumA and albumB).
-    const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const next = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
     const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1);
     expect(deletes.length, 'expected deletes from both audit sources').toBeGreaterThanOrEqual(2);
 
@@ -334,10 +359,10 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
     expect(pairs).toContainEqual(expect.objectContaining({ albumId: albumB.id, assetId: asset.id }));
 
     // Ack all deletes — the single checkpoint must advance past both audit tables.
-    await ctx.syncAckAll(auth, next);
+    await ctx.syncAckAll(memberAuth, next);
 
     // Next sync MUST be empty: no re-delivery from either arm, no skip.
-    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
   });
 
   it('R1 (album): cleanupAuditTable prunes old shared_space_album_asset_audit rows but retains recent ones', async () => {
@@ -367,5 +392,84 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
 
     expect(remainingIds).not.toContain(oldRow.id);
     expect(remainingIds).toContain(recentRow.id);
+  });
+
+  // correctness-1 (album): restore-then-hide in one window must not resurrect a now-Hidden album asset.
+  it('correctness-1: album restore-then-hide within one window converges to absent for a member', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberAuth } = await ctx.newSyncAuthUser();
+    const { album, asset } = await seedSpaceWithAlbumAsset(ctx, ownerAuth.user.id, { memberId: memberAuth.user.id });
+
+    const initial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    await ctx.syncAckAll(memberAuth, initial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+
+    await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityRestore([asset.id]);
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Hidden })
+      .where('id', '=', asset.id)
+      .execute();
+    await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
+
+    const next = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const upserts = next
+      .filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1)
+      .map((e) => (e as { data: { albumId: string; assetId: string } }).data);
+    const deletes = next
+      .filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1)
+      .map((e) => (e as { data: { albumId: string; assetId: string } }).data);
+
+    expect(deletes).toContainEqual(expect.objectContaining({ albumId: album.id, assetId: asset.id }));
+    expect(upserts).not.toContainEqual(expect.objectContaining({ albumId: album.id, assetId: asset.id }));
+
+    await ctx.syncAckAll(memberAuth, next);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+  });
+
+  // correctness-1 edge: an album linked into TWO spaces gates the Hidden asset in both members' streams.
+  it('correctness-1: album linked into two spaces gates a Hidden asset in both members', async () => {
+    const { auth: ownerAuth, ctx } = await setup();
+    const { auth: memberA } = await ctx.newSyncAuthUser();
+    const { auth: memberB } = await ctx.newSyncAuthUser();
+    const { album } = await ctx.newAlbum({ ownerId: ownerAuth.user.id });
+    const { asset } = await ctx.newAsset({ ownerId: ownerAuth.user.id, visibility: AssetVisibility.Timeline });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+    const { space: spaceA } = await ctx.newSharedSpace({ createdById: ownerAuth.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: ownerAuth.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: memberA.user.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: spaceA.id, albumId: album.id });
+
+    const { space: spaceB } = await ctx.newSharedSpace({ createdById: ownerAuth.user.id });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: ownerAuth.user.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: memberB.user.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: spaceB.id, albumId: album.id });
+
+    // Both members sync + ack the asset while visible.
+    for (const auth of [memberA, memberB]) {
+      const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+      await ctx.syncAckAll(auth, initial);
+      await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    }
+
+    // Hide + purge.
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Hidden })
+      .where('id', '=', asset.id)
+      .execute();
+    await ctx.get(SharedSpaceRepository).emitAlbumAssetVisibilityPurge([asset.id]);
+
+    for (const auth of [memberA, memberB]) {
+      const next = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+      const deletes = next.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetDeleteV1);
+      // Each member gets exactly one delete (their own space's album link) and no re-add.
+      expect(deletes.some((e) => (e as { data: { assetId: string } }).data.assetId === asset.id)).toBe(true);
+      await ctx.syncAckAll(auth, next);
+      const afterAck = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+      const upserts = afterAck.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1);
+      expect(upserts.map((e) => (e as { data: { assetId: string } }).data.assetId)).not.toContain(asset.id);
+    }
   });
 });

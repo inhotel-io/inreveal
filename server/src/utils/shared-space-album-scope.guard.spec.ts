@@ -97,6 +97,13 @@ const NON_DECL = new Set([
   'filter',
   'forEach',
   'then',
+  // Bare calls to the fork's own gate/scope helpers, e.g. `spaceVisibilityGate(eb),` as the
+  // first array element of an `eb.and([...])` conjunct. DECL cannot distinguish a call site
+  // from a declaration (both look like `identifier(`), so without this exclusion the backward
+  // scan in enclosingFn stops at the call instead of continuing to the real enclosing function
+  // (e.g. albumSharedSpaceScope) — misattributing the enclosing fn and defeating its allowlist
+  // entry (Slice 1 / security-1 regression).
+  'spaceVisibilityGate',
   // SQL keywords that appear as the first token in raw sql`` template literal lines
   // and would otherwise be misidentified as TypeScript function names by DECL.
   'AND',
@@ -181,6 +188,11 @@ const ALBUM_ALLOWLIST: Record<string, string> = {
   // no visibility leak — a pre-existing album-completeness gap, tracked separately.
   'shared-space.repository.ts::getPersonalThumbnailForSpacePerson':
     'GUARD-DISCOVERED album gap: or(direct,library) omits album arm (pre-existing, follow-up)',
+  // Library-path EXIF restore write-infra (Slice 7 / L4): UPDATE asset_exif.updatedAt scoped to
+  // space-linked libraries so restored library assets re-stream EXIF. Library-path-specific (the
+  // album path has emitAlbumAssetVisibilityRestore); no album arm applies, no asset content served.
+  'shared-space.repository.ts::emitLibraryAssetVisibilityRestore':
+    'library-path EXIF restore write-infra; no album arm applies (mirrors emitLibraryAssetVisibilityPurge)',
 };
 
 describe('space-album scope guard: every library scoping arm has album coverage', () => {
@@ -266,7 +278,17 @@ const VIS_ALLOWLIST: Record<string, string> = {
   'shared-space.repository.ts::hasLibraryLink': 'boolean link-existence check; no asset data',
   'shared-space.repository.ts::getLinkedAlbums': 'returns album metadata rows for management UI; no asset content',
   'shared-space.repository.ts::getSpacesLinkedToAlbum': 'returns space-album link metadata (ids/flags), not asset rows',
+  // albums-6: departing-member album-link cleanup + correctness-4 reconcile targeting —
+  // both operate on shared_space_album LINK rows (delete-by-ownership / id list), never
+  // asset content.
+  'shared-space.repository.ts::removeOwnedAlbumLinksAddedBy':
+    'deletes shared_space_album link rows the departing member added and owns; RETURNING albumId only, no asset content',
+  'shared-space.repository.ts::getLinkedAlbumIds':
+    'returns album ids linked to a space (link metadata), not asset rows',
   'shared-space.repository.ts::getSpacesLinkedToLibrary': 'returns library-link metadata (ids/flags), not asset rows',
+  // rbac-6: album owner's management view of every space this album is linked into —
+  // returns spaceId/spaceName/linkedById/showInTimeline only, never asset rows.
+  'shared-space.repository.ts::getAlbumSpaceLinks': 'returns space-album link metadata for the owner; no asset content',
 
   // — Anti-join membership gates: read direct/library/album rows to check that an
   //   asset is NOT already reachable via another space path (removal / face cleanup).
@@ -308,6 +330,15 @@ const VIS_ALLOWLIST: Record<string, string> = {
   //   content served; fires on visibility transitions to write tombstones.
   'shared-space.repository.ts::emitLibraryAssetVisibilityPurge':
     'reads asset library ids into audit tombstone (purge write-infra); no asset content returned',
+  // — Library-path EXIF restore write-infra (Slice 7 / L4): bumps asset_exif.updatedAt for
+  //   space-linked library assets so restored EXIF re-streams. Write-only; no asset content served.
+  'shared-space.repository.ts::emitLibraryAssetVisibilityRestore':
+    'bumps asset_exif.updatedAt for space-linked library assets (restore write-infra); no asset content returned',
+  // — Album-grant reconcile (Slice 8 / M6+M7): bidirectional INSERT/DELETE over shared_space_album
+  //   ⋈ member ⋈ album ids to keep shared_space_album_user in sync with live paths. Manages the ACL
+  //   itself; never selects or serves asset rows.
+  'shared-space.repository.ts::reconcileAlbumGrants':
+    'grant reconcile: reads album/member/album ids to INSERT/DELETE grants; manages the ACL, no asset content',
 
   // — Album-ACCESS grant checks: select ONLY album.id (which albums the user may
   //   read/edit via a space link), never asset rows. Individual asset visibility is

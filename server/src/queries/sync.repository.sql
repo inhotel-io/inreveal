@@ -1589,11 +1589,13 @@ select
   "shared_space_asset"."updateId"
 from
   "shared_space_asset" as "shared_space_asset"
+  inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
 where
   "shared_space_asset"."updateId" < $1
   and "shared_space_asset"."updateId" <= $2
   and "shared_space_asset"."updateId" > $3
   and "shared_space_asset"."spaceId" = $4
+  and "asset"."visibility" in ($5, $6)
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1632,6 +1634,7 @@ select
   "shared_space_asset"."updateId"
 from
   "shared_space_asset" as "shared_space_asset"
+  inner join "asset" on "asset"."id" = "shared_space_asset"."assetId"
 where
   "shared_space_asset"."updateId" < $1
   and "shared_space_asset"."updateId" > $2
@@ -1650,6 +1653,7 @@ where
     where
       "shared_space_member"."userId" = $4
   )
+  and "asset"."visibility" in ($5, $6)
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1768,7 +1772,6 @@ select
   "asset"."localDateTime",
   "asset"."type",
   "asset"."deletedAt",
-  "asset"."isFavorite",
   "asset"."visibility",
   "asset"."duration",
   "asset"."livePhotoVideoId",
@@ -1777,17 +1780,21 @@ select
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
+  case
+    when "asset"."ownerId" = $1 then "asset"."isFavorite"
+    else $2
+  end as "isFavorite",
   "asset"."updateId"
 from
   "asset" as "asset"
 where
-  "asset"."updateId" < $1
-  and "asset"."updateId" <= $2
-  and "asset"."updateId" > $3
-  and "asset"."libraryId" = $4
+  "asset"."updateId" < $3
+  and "asset"."updateId" <= $4
+  and "asset"."updateId" > $5
+  and "asset"."libraryId" = $6
   and (
-    "asset"."ownerId" = $5
-    or "asset"."visibility" in ($6, $7)
+    "asset"."ownerId" = $7
+    or "asset"."visibility" in ($8, $9)
   )
 order by
   "asset"."updateId" asc
@@ -1805,7 +1812,6 @@ select
   "asset"."localDateTime",
   "asset"."type",
   "asset"."deletedAt",
-  "asset"."isFavorite",
   "asset"."visibility",
   "asset"."duration",
   "asset"."livePhotoVideoId",
@@ -1814,12 +1820,16 @@ select
   "asset"."width",
   "asset"."height",
   "asset"."isEdited",
+  case
+    when "asset"."ownerId" = $1 then "asset"."isFavorite"
+    else $2
+  end as "isFavorite",
   "asset"."updateId"
 from
   "asset" as "asset"
 where
-  "asset"."updateId" < $1
-  and "asset"."updateId" > $2
+  "asset"."updateId" < $3
+  and "asset"."updateId" > $4
   and "asset"."libraryId" is not null
   and "asset"."libraryId" in (
     select
@@ -1827,7 +1837,7 @@ where
     from
       "library"
     where
-      "library"."ownerId" = $3
+      "library"."ownerId" = $5
       and "library"."deletedAt" is null
     union
     select
@@ -1841,19 +1851,19 @@ where
         from
           "shared_space"
         where
-          "shared_space"."createdById" = $4
+          "shared_space"."createdById" = $6
         union
         select
           "shared_space_member"."spaceId" as "id"
         from
           "shared_space_member"
         where
-          "shared_space_member"."userId" = $5
+          "shared_space_member"."userId" = $7
       )
   )
   and (
-    "asset"."ownerId" = $6
-    or "asset"."visibility" in ($7, $8)
+    "asset"."ownerId" = $8
+    or "asset"."visibility" in ($9, $10)
   )
 order by
   "asset"."updateId" asc
@@ -1938,6 +1948,15 @@ where
       )
   )
   and "asset"."ownerId" != $11
+  and not exists (
+    select
+      1 as "exists"
+    from
+      "partner"
+    where
+      "partner"."sharedById" = "asset"."ownerId"
+      and "partner"."sharedWithId" = $12
+  )
 order by
   "id" asc
 
@@ -2237,11 +2256,13 @@ select
   "shared_space_album"."updateId"
 from
   "shared_space_album" as "shared_space_album"
+  inner join "album" on "album"."id" = "shared_space_album"."albumId"
 where
   "shared_space_album"."updateId" < $1
   and "shared_space_album"."updateId" <= $2
   and "shared_space_album"."updateId" > $3
   and "shared_space_album"."spaceId" = $4
+  and "album"."deletedAt" is null
 order by
   "shared_space_album"."updateId" asc
 
@@ -2284,6 +2305,7 @@ select
   "shared_space_album"."updateId"
 from
   "shared_space_album" as "shared_space_album"
+  inner join "album" on "album"."id" = "shared_space_album"."albumId"
 where
   "shared_space_album"."updateId" < $1
   and "shared_space_album"."updateId" > $2
@@ -2302,6 +2324,7 @@ where
     where
       "shared_space_member"."userId" = $4
   )
+  and "album"."deletedAt" is null
 order by
   "shared_space_album"."updateId" asc
 
@@ -2312,11 +2335,13 @@ select
   "album_asset"."updateId"
 from
   "album_asset" as "album_asset"
+  inner join "asset" on "asset"."id" = "album_asset"."assetId"
 where
   "album_asset"."updateId" < $1
   and "album_asset"."updateId" <= $2
   and "album_asset"."updateId" > $3
   and "album_asset"."albumId" = $4
+  and "asset"."visibility" in ($5, $6)
 order by
   "album_asset"."updateId" asc
 
@@ -2356,15 +2381,16 @@ where
   )
 union
 select
-  "id",
-  "assetId",
-  "albumId"
+  "shared_space_album_asset_audit"."id" as "id",
+  "shared_space_album_asset_audit"."assetId" as "assetId",
+  "shared_space_album_asset_audit"."albumId" as "albumId"
 from
   "shared_space_album_asset_audit"
+  inner join "asset" on "asset"."id" = "shared_space_album_asset_audit"."assetId"
 where
-  "id" < $5
-  and "id" > $6
-  and "albumId" in (
+  "shared_space_album_asset_audit"."id" < $5
+  and "shared_space_album_asset_audit"."id" > $6
+  and "shared_space_album_asset_audit"."albumId" in (
     select
       "shared_space_album"."albumId" as "id"
     from
@@ -2388,6 +2414,7 @@ where
           "shared_space_member"."userId" = $8
       )
   )
+  and "asset"."ownerId" != $9
 order by
   "id" asc
 
@@ -2398,6 +2425,7 @@ select
   "album_asset"."updateId"
 from
   "album_asset" as "album_asset"
+  inner join "asset" on "asset"."id" = "album_asset"."assetId"
   inner join "shared_space_album_user" on "shared_space_album_user"."albumId" = "album_asset"."albumId"
 where
   "album_asset"."updateId" < $1
@@ -2427,6 +2455,7 @@ where
           "shared_space_member"."userId" = $5
       )
   )
+  and "asset"."visibility" in ($6, $7)
 order by
   "album_asset"."updateId" asc
 

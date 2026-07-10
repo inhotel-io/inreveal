@@ -570,14 +570,19 @@ export class AlbumRepository {
   /**
    * Get per-user asset contribution counts for a single album.
    * Excludes deleted assets, orders by count desc.
+   * L1: also excludes Hidden/Locked assets (withDefaultVisibility) — the per-user totals are
+   * PII-adjacent (album.service.get gates the whole field to direct readers), and without this
+   * gate a contributor's Hidden/Locked asset count could still be inferred from the total.
    */
   @GenerateSql({ params: [DummyValue.UUID] })
   getContributorCounts(id: string) {
-    return this.db
-      .selectFrom('album_asset')
-      .innerJoin('asset', 'asset.id', 'assetId')
-      .where('asset.deletedAt', 'is', sql.lit(null))
-      .where('album_asset.albumId', '=', id)
+    return withDefaultVisibility(
+      this.db
+        .selectFrom('album_asset')
+        .innerJoin('asset', 'asset.id', 'assetId')
+        .where('asset.deletedAt', 'is', sql.lit(null))
+        .where('album_asset.albumId', '=', id),
+    )
       .select('asset.ownerId as userId')
       .select((eb) => eb.fn.countAll<number>().as('assetCount'))
       .groupBy('asset.ownerId')

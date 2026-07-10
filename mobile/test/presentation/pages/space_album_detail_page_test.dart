@@ -4,19 +4,19 @@ import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/pages/library/spaces/space_album_detail.page.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_kebab.widget.dart';
 
+import '../../widget_tester_extensions.dart';
+
 // ---------------------------------------------------------------------------
 // Helper
 // ---------------------------------------------------------------------------
 
 /// Wraps a SliverAppBar widget in a proper sliver context for testing.
-Widget _wrapSliver(Widget sliverWidget) => MaterialApp(
-  home: Scaffold(
-    body: CustomScrollView(
-      slivers: [
-        sliverWidget,
-        const SliverToBoxAdapter(child: SizedBox(height: 800)),
-      ],
-    ),
+Widget _wrapSliver(Widget sliverWidget) => Scaffold(
+  body: CustomScrollView(
+    slivers: [
+      sliverWidget,
+      const SliverToBoxAdapter(child: SizedBox(height: 800)),
+    ],
   ),
 );
 
@@ -29,7 +29,7 @@ SpaceAlbum _album({required String id, String? name, bool showInTimeline = true,
 
 void main() {
   testWidgets('editor role (canEdit:true) — SpaceAlbumKebab is present and has menu button', (tester) async {
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrapSliver(
         SpaceAlbumAppBar(
           canEdit: true,
@@ -46,7 +46,7 @@ void main() {
   });
 
   testWidgets('viewer role (canEdit:false) — SpaceAlbumKebab renders SizedBox.shrink', (tester) async {
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrapSliver(
         SpaceAlbumAppBar(
           canEdit: false,
@@ -62,7 +62,7 @@ void main() {
   });
 
   testWidgets('subtitle "{count} photos · in {space}" renders when album and spaceName are provided', (tester) async {
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrapSliver(
         SpaceAlbumAppBar(
           canEdit: false,
@@ -77,7 +77,7 @@ void main() {
   });
 
   testWidgets('subtitle is absent when spaceName is null (metadata not yet loaded)', (tester) async {
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrapSliver(
         SpaceAlbumAppBar(
           canEdit: false,
@@ -98,7 +98,7 @@ void main() {
 
   testWidgets('toggle menu item is DISABLED when album is null (stream unresolved)', (tester) async {
     bool toggled = false;
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrapSliver(
         SpaceAlbumAppBar(
           canEdit: true,
@@ -125,7 +125,7 @@ void main() {
 
   testWidgets('toggle menu item is ENABLED when album is non-null and invokes callback', (tester) async {
     bool toggled = false;
-    await tester.pumpWidget(
+    await tester.pumpConsumerWidget(
       _wrapSliver(
         SpaceAlbumAppBar(
           canEdit: true,

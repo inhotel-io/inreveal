@@ -139,6 +139,30 @@ const SharedSpaceAlbumParamSchema = z.object({
   albumId: z.uuidv4(),
 });
 
+// security-9: every one of these path params is a uuidv4 id in Immich (space.id, user.id,
+// shared_space_person.id, asset_face.id for faceId, library.id) — validating them here turns a
+// non-UUID path segment into a 400 instead of a raw Postgres 22P02 -> 500.
+const SharedSpaceMemberParamSchema = z.object({
+  id: z.uuidv4(),
+  userId: z.uuidv4(),
+});
+
+const SharedSpacePersonParamSchema = z.object({
+  id: z.uuidv4(),
+  personId: z.uuidv4(),
+});
+
+const SharedSpacePersonFaceParamSchema = z.object({
+  id: z.uuidv4(),
+  personId: z.uuidv4(),
+  faceId: z.uuidv4(),
+});
+
+const SharedSpaceLibraryParamSchema = z.object({
+  id: z.uuidv4(),
+  libraryId: z.uuidv4(),
+});
+
 const SharedSpaceLinkedAlbumSchema = AlbumResponseSchema.omit({ albumUsers: true })
   .extend({
     ownerId: z.string().describe('User ID of the album owner (non-PII UUID, for group-by-owner)'),
@@ -198,6 +222,10 @@ export class SharedSpaceMemberMetadataContributionDto extends createZodDto(
 export class SharedSpaceLibraryLinkDto extends createZodDto(SharedSpaceLibraryLinkSchema) {}
 export class SharedSpaceAlbumLinkUpdateDto extends createZodDto(SharedSpaceAlbumLinkUpdateSchema) {}
 export class SharedSpaceAlbumParamDto extends createZodDto(SharedSpaceAlbumParamSchema) {}
+export class SharedSpaceMemberParamDto extends createZodDto(SharedSpaceMemberParamSchema) {}
+export class SharedSpacePersonParamDto extends createZodDto(SharedSpacePersonParamSchema) {}
+export class SharedSpacePersonFaceParamDto extends createZodDto(SharedSpacePersonFaceParamSchema) {}
+export class SharedSpaceLibraryParamDto extends createZodDto(SharedSpaceLibraryParamSchema) {}
 export class SharedSpaceLinkedAlbumDto extends createZodDto(SharedSpaceLinkedAlbumSchema) {}
 export class SharedSpaceAssetAddDto extends createZodDto(SharedSpaceAssetAddSchema) {}
 export class SharedSpaceAssetRemoveDto extends createZodDto(SharedSpaceAssetRemoveSchema) {}

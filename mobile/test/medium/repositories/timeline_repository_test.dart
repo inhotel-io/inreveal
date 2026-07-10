@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space_album_link.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/stack.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/repositories/timeline.repository.dart';
@@ -219,6 +220,54 @@ void main() {
 
       final restored = await sut.sharedSpace(space.id, .none).assetSource(0, 100);
       expect(restored.map((a) => (a as RemoteAsset).id), contains(asset.id));
+    });
+  });
+
+  group('mobile-6: archived visibility', () {
+    // Sum of per-bucket assetCount == number of visible assets in the timeline.
+    Future<int> bucketTotal(TimelineQuery q) async {
+      final buckets = await q.bucketSource().first;
+      return buckets.fold<int>(0, (sum, b) => sum + b.assetCount);
+    }
+
+    test('spaceAlbum detail returns an Archived album asset (sites 4-6)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum();
+      final archived = await ctx.newRemoteAsset(ownerId: user.id, visibility: AssetVisibility.archive);
+      final hidden = await ctx.newRemoteAsset(ownerId: user.id, visibility: AssetVisibility.hidden);
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id, showInTimeline: true);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: archived.id);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: hidden.id);
+
+      // Site 6: assetSource.
+      final assets = await sut.spaceAlbum(space.id, album.id, GroupAssetsBy.none).assetSource(0, 100);
+      final ids = assets.map((a) => (a as RemoteAsset).id).toList();
+      expect(ids, contains(archived.id), reason: 'archived album asset must surface on mobile');
+      expect(ids, isNot(contains(hidden.id)), reason: 'hidden must never leak');
+
+      // Site 4 (groupBy none count) + Site 5 (groupBy day): 1 visible (archived) only.
+      expect(await bucketTotal(sut.spaceAlbum(space.id, album.id, GroupAssetsBy.none)), 1);
+      expect(await bucketTotal(sut.spaceAlbum(space.id, album.id, GroupAssetsBy.day)), 1);
+    });
+
+    test('sharedSpace timeline returns an Archived direct-added asset (sites 1-3)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final archived = await ctx.newRemoteAsset(ownerId: user.id, visibility: AssetVisibility.archive);
+      final hidden = await ctx.newRemoteAsset(ownerId: user.id, visibility: AssetVisibility.hidden);
+      await ctx.insertSharedSpaceAsset(spaceId: space.id, assetId: archived.id);
+      await ctx.insertSharedSpaceAsset(spaceId: space.id, assetId: hidden.id);
+
+      // Site 3: assetSource.
+      final assets = await sut.sharedSpace(space.id, GroupAssetsBy.none).assetSource(0, 100);
+      final ids = assets.map((a) => (a as RemoteAsset).id).toList();
+      expect(ids, contains(archived.id), reason: 'archived direct-added asset must surface on mobile');
+      expect(ids, isNot(contains(hidden.id)), reason: 'hidden must never leak');
+
+      // Site 1 (groupBy none count) + Site 2 (groupBy day): 1 visible (archived) only.
+      expect(await bucketTotal(sut.sharedSpace(space.id, GroupAssetsBy.none)), 1);
+      expect(await bucketTotal(sut.sharedSpace(space.id, GroupAssetsBy.day)), 1);
     });
   });
 

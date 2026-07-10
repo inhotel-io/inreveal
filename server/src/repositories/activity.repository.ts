@@ -74,13 +74,20 @@ export class ActivityRepository {
     await this.db.deleteFrom('activity').where('id', '=', asUuid(id)).execute();
   }
 
-  @GenerateSql({ params: [{ albumId: DummyValue.UUID, assetId: DummyValue.UUID }] })
+  @GenerateSql(
+    { params: [{ albumId: DummyValue.UUID, assetId: DummyValue.UUID }] },
+    { params: [{ albumId: DummyValue.UUID, excludeAlbumLevel: true }] },
+  )
   async getStatistics({
     albumId,
     assetId,
+    excludeAlbumLevel,
   }: {
     albumId: string;
     assetId?: string;
+    /** I2: when true, drop album-level (assetId IS NULL) rows from the counts — for space-only
+     * readers, who must not learn album-level comment/like totals. */
+    excludeAlbumLevel?: boolean;
   }): Promise<{ comments: number; likes: number }> {
     const result = await this.db
       .selectFrom('activity')
@@ -95,7 +102,7 @@ export class ActivityRepository {
       .where(({ or, and, eb }) =>
         or([
           and([eb('asset.deletedAt', 'is', null), eb('asset.visibility', 'in', DEFAULT_VISIBILITY)]),
-          eb('asset.id', 'is', null),
+          ...(excludeAlbumLevel ? [] : [eb('asset.id', 'is', null)]),
         ]),
       )
       .executeTakeFirstOrThrow();

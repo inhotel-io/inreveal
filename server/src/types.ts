@@ -345,6 +345,10 @@ export interface ISharedSpaceBulkAddAssetsJob extends IBaseJob {
   userId: string;
 }
 
+export interface ISharedSpaceAlbumGrantReconcileJob extends IBaseJob {
+  albumIds: string[];
+}
+
 export type EmailImageAttachment = {
   filename: string;
   cid: string;
@@ -600,6 +604,10 @@ export type JobItem =
 
   // Shared Space Bulk Operations
   | { name: JobName.SharedSpaceBulkAddAssets; data: ISharedSpaceBulkAddAssetsJob }
+
+  // Shared Space Album Grant Reconciliation
+  | { name: JobName.SharedSpaceAlbumGrantReconcile; data: ISharedSpaceAlbumGrantReconcileJob }
+  | { name: JobName.SharedSpaceAlbumGrantReconcileSweep; data?: IBaseJob }
 
   // Classification
   | { name: JobName.AssetClassifyQueueAll; data: IBaseJob }

@@ -317,7 +317,19 @@ export function withTimeBucketAssetFilters<O>(
     .$if(!!options.albumId, (qb) =>
       qb
         .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
-        .where('album_asset.albumId', '=', asUuid(options.albumId!)),
+        .where('album_asset.albumId', '=', asUuid(options.albumId!))
+        // Fork RBAC (Slice 1 / security-3 defense-in-depth): an explicit visibility=HIDDEN/LOCKED
+        // bypasses the top-level withDefaultVisibility (which only fires when visibility is
+        // undefined). Flat-gate the album arm so Hidden/Locked album assets never surface via the
+        // timeline bucket, even if the service-level guard is bypassed. Idempotent for the default
+        // album grid view (withDefaultVisibility is the same Archive+Timeline predicate).
+        .where((eb) => spaceVisibilityGate(eb))
+        // Fork RBAC (Slice 1 / H1 defense-in-depth): the top-level `options.isTrashed` ternary
+        // (line 253) flips `deletedAt IS NOT NULL` for the whole query, and the service-layer
+        // guard (timeline.service.ts timeBucketChecks) already rejects isTrashed=true on an
+        // album/space browse — but flat-gate here too so the album arm never surfaces a trashed
+        // asset even if that guard is bypassed. Keep the getTimeBucket inline copy in sync.
+        .where('asset.deletedAt', 'is', null),
     )
     .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
       qb.where((eb) =>
@@ -1395,12 +1407,24 @@ export class AssetRepository {
           .where(truncatedDate(options.orderBy, bucketSize), '=', timeBucket.replace(/^[+-]/, ''))
           .$if(!!options.albumId, (qb) =>
             qb.where((eb) =>
-              eb.exists(
-                eb
-                  .selectFrom('album_asset')
-                  .whereRef('album_asset.assetId', '=', 'asset.id')
-                  .where('album_asset.albumId', '=', asUuid(options.albumId!)),
-              ),
+              eb.and([
+                eb.exists(
+                  eb
+                    .selectFrom('album_asset')
+                    .whereRef('album_asset.assetId', '=', 'asset.id')
+                    .where('album_asset.albumId', '=', asUuid(options.albumId!)),
+                ),
+                // Fork RBAC (Slice 1 / security-3 defense-in-depth) — inline copy of the
+                // withTimeBucketAssetFilters albumId gate. Keep in sync with that helper: an
+                // explicit visibility=HIDDEN/LOCKED bypasses withDefaultVisibility above, so the
+                // album arm needs its own flat gate to never surface Hidden/Locked album assets.
+                spaceVisibilityGate(eb),
+                // Fork RBAC (Slice 1 / H1 defense-in-depth) — inline copy of the
+                // withTimeBucketAssetFilters albumId deletedAt gate. Keep in sync with that
+                // helper: never surface a trashed album asset via this arm even if the
+                // top-level isTrashed ternary (line 1352) or the service-layer guard is bypassed.
+                eb('asset.deletedAt', 'is', null),
+              ]),
             ),
           )
           .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>

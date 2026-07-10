@@ -22,6 +22,8 @@ import 'package:immich_mobile/pages/library/spaces/space_album_detail.page.dart'
 import 'package:immich_mobile/pages/library/spaces/space_albums.page.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 
+import '../../widget_tester_extensions.dart';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -39,27 +41,16 @@ SpaceAlbum _album({
       showInTimeline: showInTimeline,
     );
 
-Widget _wrapPage(
-  Widget widget, {
-  required String spaceId,
-  required List<SpaceAlbum> albums,
-}) {
-  return ProviderScope(
-    overrides: [
-      spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
-    ],
-    child: MaterialApp(home: widget),
-  );
-}
+List<Override> _overrides({required String spaceId, required List<SpaceAlbum> albums}) => [
+  spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
+];
 
 /// Wraps a SliverAppBar in a scrollable context so it renders.
-Widget _wrapSliver(Widget sliver) => MaterialApp(
-      home: Scaffold(
-        body: CustomScrollView(
-          slivers: [sliver, const SliverToBoxAdapter(child: SizedBox(height: 800))],
-        ),
-      ),
-    );
+Widget _wrapSliver(Widget sliver) => Scaffold(
+  body: CustomScrollView(
+    slivers: [sliver, const SliverToBoxAdapter(child: SizedBox(height: 800))],
+  ),
+);
 
 // ---------------------------------------------------------------------------
 // SpaceAlbumsPage callback tests (wiring contract)
@@ -77,26 +68,22 @@ void main() {
         _album(id: 'a2', name: 'Reef', showInTimeline: false),
       ];
 
-      await tester.pumpWidget(
-        _wrapPage(
-          SpaceAlbumsPage(
-            spaceId: spaceId,
-            canEdit: true,
-            onToggle: (id) => toggledId = id,
-            onUnlink: (_) {},
-          ),
+      await tester.pumpConsumerWidget(
+        SpaceAlbumsPage(
           spaceId: spaceId,
-          albums: albums,
+          canEdit: true,
+          onToggle: (id) => toggledId = id,
+          onUnlink: (_) {},
         ),
+        overrides: _overrides(spaceId: spaceId, albums: albums),
       );
-      await tester.pump();
 
       // Open the ⋮ menu for album a1
       await tester.tap(find.byKey(const Key('space-album-card-menu-a1')));
       await tester.pumpAndSettle();
 
-      // Tap the "Hide in timeline" option
-      await tester.tap(find.text('Hide in timeline'));
+      // Tap the "Hide from timeline" option
+      await tester.tap(find.text('Hide from timeline'));
       await tester.pumpAndSettle();
 
       expect(toggledId, 'a1');
@@ -107,19 +94,15 @@ void main() {
       String? toggledId;
       final albums = [_album(id: 'a1', name: 'Hawaii')];
 
-      await tester.pumpWidget(
-        _wrapPage(
-          SpaceAlbumsPage(
-            spaceId: spaceId,
-            canEdit: false,
-            onToggle: (id) => toggledId = id,
-            onUnlink: (_) {},
-          ),
+      await tester.pumpConsumerWidget(
+        SpaceAlbumsPage(
           spaceId: spaceId,
-          albums: albums,
+          canEdit: false,
+          onToggle: (id) => toggledId = id,
+          onUnlink: (_) {},
         ),
+        overrides: _overrides(spaceId: spaceId, albums: albums),
       );
-      await tester.pump();
 
       expect(find.byKey(const Key('space-album-card-menu-a1')), findsNothing);
       expect(toggledId, isNull);
@@ -132,19 +115,15 @@ void main() {
       String? unlinkedId;
       final albums = [_album(id: 'a1', name: 'Hawaii')];
 
-      await tester.pumpWidget(
-        _wrapPage(
-          SpaceAlbumsPage(
-            spaceId: spaceId,
-            canEdit: true,
-            onToggle: (_) {},
-            onUnlink: (id) => unlinkedId = id,
-          ),
+      await tester.pumpConsumerWidget(
+        SpaceAlbumsPage(
           spaceId: spaceId,
-          albums: albums,
+          canEdit: true,
+          onToggle: (_) {},
+          onUnlink: (id) => unlinkedId = id,
         ),
+        overrides: _overrides(spaceId: spaceId, albums: albums),
       );
-      await tester.pump();
 
       await tester.tap(find.byKey(const Key('space-album-card-menu-a1')));
       await tester.pumpAndSettle();
@@ -156,14 +135,10 @@ void main() {
 
     testWidgets('viewer (canEdit:false) — no ＋ Link action in app-bar',
         (tester) async {
-      await tester.pumpWidget(
-        _wrapPage(
-          const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
-          spaceId: spaceId,
-          albums: [_album(id: 'a1')],
-        ),
+      await tester.pumpConsumerWidget(
+        const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
+        overrides: _overrides(spaceId: spaceId, albums: [_album(id: 'a1')]),
       );
-      await tester.pump();
 
       expect(find.byKey(const Key('space-albums-link-action')), findsNothing);
     });
@@ -177,7 +152,7 @@ void main() {
     testWidgets('canEdit:true — Add photos fires onAddPhotos', (tester) async {
       var addCount = 0;
 
-      await tester.pumpWidget(
+      await tester.pumpConsumerWidget(
         _wrapSliver(
           SpaceAlbumAppBar(
             canEdit: true,
@@ -201,7 +176,7 @@ void main() {
     testWidgets('canEdit:true — Toggle timeline fires onToggleTimeline', (tester) async {
       var toggleCount = 0;
 
-      await tester.pumpWidget(
+      await tester.pumpConsumerWidget(
         _wrapSliver(
           SpaceAlbumAppBar(
             canEdit: true,
@@ -225,7 +200,7 @@ void main() {
     testWidgets('canEdit:true — Unlink fires onUnlink', (tester) async {
       var unlinkCount = 0;
 
-      await tester.pumpWidget(
+      await tester.pumpConsumerWidget(
         _wrapSliver(
           SpaceAlbumAppBar(
             canEdit: true,
@@ -247,7 +222,7 @@ void main() {
     });
 
     testWidgets('canEdit:false — no kebab affordance (viewer-denied)', (tester) async {
-      await tester.pumpWidget(
+      await tester.pumpConsumerWidget(
         _wrapSliver(
           SpaceAlbumAppBar(
             canEdit: false,

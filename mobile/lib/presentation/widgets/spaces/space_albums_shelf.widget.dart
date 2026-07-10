@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
+import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
@@ -102,7 +103,9 @@ class SpaceAlbumsShelf extends ConsumerWidget {
                 return _LinkTile(
                   key: const Key('space-album-link-tile'),
                   onTap: onLinkTap,
-                  label: albums.isEmpty ? 'Link an album' : 'Link',
+                  label: albums.isEmpty
+                      ? 'space_albums_empty_editor_cta'.t(context: context)
+                      : 'link'.t(context: context),
                 );
               },
             ),
@@ -130,12 +133,15 @@ class _HeaderRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('Albums ($count)', style: context.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            'space_albums_shelf_title'.t(context: context, args: {'count': count}),
+            style: context.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+          ),
           if (showSeeAll)
             GestureDetector(
               onTap: onSeeAll,
               child: Text(
-                'See all ▸',
+                'space_albums_see_all'.t(context: context),
                 style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.primary),
               ),
             ),

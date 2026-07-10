@@ -168,4 +168,34 @@ describe('ActivityRepository — visibility gate', () => {
     expect(Number(stats.likes)).toBe(1);
     expect(Number(stats.comments)).toBe(0);
   });
+
+  // I2: excludeAlbumLevel drops assetId-IS-NULL (album-level) rows from the counts — used for
+  // space-only readers, who must not learn album-level comment/like totals.
+  it('getStatistics({ excludeAlbumLevel: true }) drops album-level counts, keeps asset-level (I2)', async () => {
+    const { ctx, activityRepo } = setup();
+    const { result: owner } = await ctx.newUser();
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'Stats ExcludeAlbumLevel Test' });
+
+    const { asset: timelineAsset } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: timelineAsset.id });
+
+    // Asset-level comment — should always count.
+    await activityRepo.create({
+      albumId: album.id,
+      assetId: timelineAsset.id,
+      userId: owner.id,
+      isLiked: false,
+      comment: 'asset comment',
+    });
+    // Album-level like (assetId = null) — should be dropped when excludeAlbumLevel is set.
+    await activityRepo.create({ albumId: album.id, assetId: null, userId: owner.id, isLiked: true });
+
+    const fullStats = await activityRepo.getStatistics({ albumId: album.id });
+    expect(Number(fullStats.comments)).toBe(1);
+    expect(Number(fullStats.likes)).toBe(1); // positive control: album-level like counted by default
+
+    const scopedStats = await activityRepo.getStatistics({ albumId: album.id, excludeAlbumLevel: true });
+    expect(Number(scopedStats.comments)).toBe(1); // asset-level comment still counted
+    expect(Number(scopedStats.likes)).toBe(0); // album-level like excluded
+  });
 });

@@ -197,6 +197,8 @@ class ApiClient {
           return AlbumNameDto.fromJson(value);
         case 'AlbumResponseDto':
           return AlbumResponseDto.fromJson(value);
+        case 'AlbumSharedSpaceLinkResponseDto':
+          return AlbumSharedSpaceLinkResponseDto.fromJson(value);
         case 'AlbumStatisticsResponseDto':
           return AlbumStatisticsResponseDto.fromJson(value);
         case 'AlbumUserAddDto':

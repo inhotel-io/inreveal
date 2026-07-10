@@ -119,9 +119,15 @@ describe('shared_space_member_after_insert_album (join → grant linked albums)'
 // This mirrors the equivalent hazard in the library trigger set (see
 // library-audit-triggers.spec.ts trigger_simultaneous_member_and_library_unlink).
 //
-// RESOLUTION (by design): the getCreatedAfter backfill stream re-delivers ALL
-// accessible albums on reconnect, so a missed initial grant self-heals on the
-// next sync session.  No separate repair job is needed.
+// RESOLUTION (M7): getCreatedAfter (SharedSpaceAlbumSync) reads FROM the
+// shared_space_album_user grant table itself, so a grant that was never
+// inserted has no row to re-deliver — the backfill stream does NOT self-heal
+// this on reconnect. The actual fix is reconcileAlbumGrants (see
+// shared-space-album-grant-reconcile.spec.ts's M7 tests), which now runs
+// bidirectionally (INSERT missing grants for any (member, linked-album) pair
+// with a live path, in addition to its pre-existing revoke sweep) and is
+// enqueued post-commit from linkAlbum and addMember — the two create-side
+// paths that can hit this race.
 //
 // This test documents the *sequential* outcome (each event fires after the other
 // is committed) and asserts both grants ARE written — confirming the happy-path
@@ -161,5 +167,56 @@ describe('(doc) simultaneous member-insert + album-link race — sequential simu
       .where('userId', '=', lateMember.id)
       .execute();
     expect(grantsAfterLink.some((g) => g.albumId === album.id)).toBe(true);
+  });
+});
+
+describe('re-link after unlink refreshes the grant createId (albums-9)', () => {
+  it('bumps createId on ON CONFLICT when the grant survived via another path', async () => {
+    const ctx = new SyncTestContext(db);
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { space: s1 } = await ctx.newSharedSpace({ createdById: owner.id });
+    const { space: s2 } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: s1.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: member.id, role: SharedSpaceRole.Viewer });
+
+    // Link into both spaces → one grant for member (PK dedups). It survives an s1 unlink via s2.
+    await ctx.newSharedSpaceAlbum({ spaceId: s1.id, albumId: album.id, addedById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: s2.id, albumId: album.id, addedById: owner.id });
+    const grantsBefore = await grantsFor(album.id);
+    const grantBefore = grantsBefore.find((g) => g.userId === member.id)!;
+
+    await db.deleteFrom('shared_space_album').where('spaceId', '=', s1.id).where('albumId', '=', album.id).execute();
+    // grant retained via s2 (user_has_album_path true)
+    const grantsAfterUnlink = await grantsFor(album.id);
+    expect(grantsAfterUnlink.some((g) => g.userId === member.id)).toBe(true);
+
+    // Re-link into s1 → ON CONFLICT DO UPDATE refreshes the surviving grant's createId
+    await ctx.newSharedSpaceAlbum({ spaceId: s1.id, albumId: album.id, addedById: owner.id });
+
+    const grantsAfter = await grantsFor(album.id);
+    const grantAfter = grantsAfter.find((g) => g.userId === member.id)!;
+    expect(grantAfter.createId > grantBefore.createId).toBe(true);
+  });
+
+  it('a fresh legitimate grant (no prior path) is a plain insert, not a resurrection', async () => {
+    const ctx = new SyncTestContext(db);
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    // unlink → sole path gone → grant revoked
+    await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
+    const grantsAfterUnlink = await grantsFor(album.id);
+    expect(grantsAfterUnlink.some((g) => g.userId === member.id)).toBe(false);
+
+    // re-link → plain INSERT (no conflict), member re-granted exactly once
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    const grantsAfterRelink = await grantsFor(album.id);
+    expect(grantsAfterRelink.filter((g) => g.userId === member.id)).toHaveLength(1);
   });
 });

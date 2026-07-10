@@ -105,6 +105,8 @@ class JobName {
   static const sharedSpacePersonDedup = JobName._(r'SharedSpacePersonDedup');
   static const sharedSpacePersonMetadataBackfill = JobName._(r'SharedSpacePersonMetadataBackfill');
   static const sharedSpaceBulkAddAssets = JobName._(r'SharedSpaceBulkAddAssets');
+  static const sharedSpaceAlbumGrantReconcile = JobName._(r'SharedSpaceAlbumGrantReconcile');
+  static const sharedSpaceAlbumGrantReconcileSweep = JobName._(r'SharedSpaceAlbumGrantReconcileSweep');
   static const assetClassifyQueueAll = JobName._(r'AssetClassifyQueueAll');
   static const assetClassify = JobName._(r'AssetClassify');
 
@@ -192,6 +194,8 @@ class JobName {
     sharedSpacePersonDedup,
     sharedSpacePersonMetadataBackfill,
     sharedSpaceBulkAddAssets,
+    sharedSpaceAlbumGrantReconcile,
+    sharedSpaceAlbumGrantReconcileSweep,
     assetClassifyQueueAll,
     assetClassify,
   ];
@@ -314,6 +318,8 @@ class JobNameTypeTransformer {
         case r'SharedSpacePersonDedup': return JobName.sharedSpacePersonDedup;
         case r'SharedSpacePersonMetadataBackfill': return JobName.sharedSpacePersonMetadataBackfill;
         case r'SharedSpaceBulkAddAssets': return JobName.sharedSpaceBulkAddAssets;
+        case r'SharedSpaceAlbumGrantReconcile': return JobName.sharedSpaceAlbumGrantReconcile;
+        case r'SharedSpaceAlbumGrantReconcileSweep': return JobName.sharedSpaceAlbumGrantReconcileSweep;
         case r'AssetClassifyQueueAll': return JobName.assetClassifyQueueAll;
         case r'AssetClassify': return JobName.assetClassify;
         default:

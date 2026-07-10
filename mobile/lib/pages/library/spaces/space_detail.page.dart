@@ -4,6 +4,7 @@ import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/space_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_top_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
@@ -266,13 +267,17 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
       if (context.mounted) {
         ImmichToast.show(
           context: context,
-          msg: ids.length == 1 ? 'Album linked' : '${ids.length} albums linked',
+          msg: 'space_album_linked_success'.t(context: context, args: {'count': ids.length.toString()}),
           toastType: ToastType.success,
         );
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(context: context, msg: 'Failed to link album', toastType: ToastType.error);
+        ImmichToast.show(
+          context: context,
+          msg: 'spaces_linked_albums_error_link'.t(context: context),
+          toastType: ToastType.error,
+        );
       }
     }
   }
@@ -288,13 +293,19 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
       if (context.mounted) {
         ImmichToast.show(
           context: context,
-          msg: album.showInTimeline ? 'Album hidden from timeline' : 'Album shown in timeline',
+          msg: album.showInTimeline
+              ? 'space_album_timeline_hidden'.t(context: context)
+              : 'space_album_timeline_shown'.t(context: context),
           toastType: ToastType.success,
         );
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(context: context, msg: 'Failed to update timeline setting', toastType: ToastType.error);
+        ImmichToast.show(
+          context: context,
+          msg: 'space_album_timeline_update_failed'.t(context: context),
+          toastType: ToastType.error,
+        );
       }
     }
   }
@@ -304,14 +315,17 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Unlink album'),
-        content: const Text('Remove this album from the space? Its photos will no longer appear here.'),
+        title: Text('space_album_unlink_title'.t(context: ctx)),
+        content: Text('space_album_unlink_confirmation'.t(context: ctx)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('cancel'.t(context: ctx)),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
-            child: const Text('Unlink'),
+            child: Text('space_album_unlink_action'.t(context: ctx)),
           ),
         ],
       ),
@@ -322,11 +336,19 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
     try {
       await ref.read(spaceAlbumActionsProvider).unlink(widget.spaceId, albumId);
       if (context.mounted) {
-        ImmichToast.show(context: context, msg: 'Album unlinked', toastType: ToastType.success);
+        ImmichToast.show(
+          context: context,
+          msg: 'space_album_unlinked_success'.t(context: context),
+          toastType: ToastType.success,
+        );
       }
     } catch (_) {
       if (context.mounted) {
-        ImmichToast.show(context: context, msg: 'Failed to unlink album', toastType: ToastType.error);
+        ImmichToast.show(
+          context: context,
+          msg: 'spaces_linked_albums_error_unlink'.t(context: context),
+          toastType: ToastType.error,
+        );
       }
     }
   }

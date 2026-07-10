@@ -14,7 +14,7 @@ import { SystemMetadataRepository } from 'src/repositories/system-metadata.repos
 import { DB } from 'src/schema';
 import { GeodataPlacesTable } from 'src/schema/tables/geodata-places.table';
 import { NaturalEarthCountriesTable } from 'src/schema/tables/natural-earth-countries.table';
-import { spaceAlbumAssetExists, spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
+import { spaceAlbumAssetExists, spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 
 export interface MapMarkerSearchOptions {
   isArchived?: boolean;
@@ -74,10 +74,17 @@ export class MapRepository {
 
   @GenerateSql({ params: [DummyValue.UUID] })
   getAlbumMapMarkers(albumId: string) {
-    return this.mapMarkersQuery()
-      .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
-      .where('album_asset.albumId', '=', albumId)
-      .execute();
+    return (
+      this.mapMarkersQuery()
+        .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
+        .where('album_asset.albumId', '=', albumId)
+        // security-2: never expose GPS / city / state / country of Hidden or Locked album assets. Flat
+        // gate (no owner exception), consistent with the album grid (withDefaultVisibility) and the album
+        // download path (downloadAlbumId). mapMarkersQuery() is asset-rooted, so asset.visibility is
+        // available without an extra join.
+        .where((eb) => spaceVisibilityGate(eb))
+        .execute()
+    );
   }
 
   @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID], [DummyValue.UUID]] })

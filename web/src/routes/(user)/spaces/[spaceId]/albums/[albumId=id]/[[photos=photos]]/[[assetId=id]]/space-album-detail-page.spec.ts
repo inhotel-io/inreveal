@@ -34,7 +34,7 @@ vi.mock('$lib/components/timeline/AssetSelectControlBar.svelte', async () => {
 });
 
 vi.mock('$lib/components/timeline/actions/RemoveFromAlbumAction.svelte', async () => {
-  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  const { default: MockComponent } = await import('./mock-remove-from-album.test-wrapper.svelte');
   return { default: MockComponent };
 });
 
@@ -383,8 +383,8 @@ describe('Space album detail page', () => {
     renderPage({ members: [makeMember(SharedSpaceRole.Editor)] });
     // AssetSelectControlBar renders its children
     expect(screen.getByTestId('asset-select-control-bar')).toBeInTheDocument();
-    // RemoveFromAlbumAction (noop-component) is rendered
-    expect(screen.getByTestId('noop-component')).toBeInTheDocument();
+    // RemoveFromAlbumAction is rendered
+    expect(screen.getByTestId('album-remove-from-album')).toBeInTheDocument();
     // DownloadAction is rendered for all members
     expect(screen.getByTestId('download-action')).toBeInTheDocument();
   });
@@ -406,8 +406,8 @@ describe('Space album detail page', () => {
     expect(screen.getByTestId('asset-select-control-bar')).toBeInTheDocument();
     // DownloadAction is available to all members (bar is not empty for viewers)
     expect(screen.getByTestId('download-action')).toBeInTheDocument();
-    // But RemoveFromAlbumAction (noop-component) is NOT rendered
-    expect(screen.queryByTestId('noop-component')).not.toBeInTheDocument();
+    // But RemoveFromAlbumAction is NOT rendered
+    expect(screen.queryByTestId('album-remove-from-album')).not.toBeInTheDocument();
   });
 
   it('add mode shows picker control bar (no add-photos button visible while in add mode)', async () => {
@@ -740,12 +740,51 @@ describe('Space album detail page', () => {
         ],
       }),
     });
-    expect(screen.getByTestId('noop-component')).toBeInTheDocument();
+    expect(screen.getByTestId('album-remove-from-album')).toBeInTheDocument();
   });
 
   it('space=Owner + default album + selection active: RemoveFromAlbum is present', () => {
     mockAssetMultiSelectManager.selectionActive = true;
     renderPage({ members: [makeMember(SharedSpaceRole.Owner)] });
-    expect(screen.getByTestId('noop-component')).toBeInTheDocument();
+    expect(screen.getByTestId('album-remove-from-album')).toBeInTheDocument();
+  });
+
+  describe('rbac-5/albums-8: album-path control bar exposes no editor metadata affordances', () => {
+    // This route is entirely album-path (see the +page.svelte control-bar comment). The control
+    // bar only ever imports DownloadAction + RemoveFromAlbumAction — no Archive / ChangeDate /
+    // ChangeLocation / Tag action is wired here at all, regardless of role. These assertions pin
+    // that shape so a future change can't silently add a metadata-edit affordance to this route.
+    it('shows Download + RemoveFromAlbum for a manager and no metadata-edit affordances', () => {
+      mockAssetMultiSelectManager.selectionActive = true;
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)] });
+
+      expect(screen.getByTestId('download-action')).toBeInTheDocument();
+      expect(screen.getByTestId('album-remove-from-album')).toBeInTheDocument();
+      expect(screen.queryByTestId('change-date-action')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('change-location-action')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('archive-action')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('tag-action')).not.toBeInTheDocument();
+    });
+
+    it('hides RemoveFromAlbum for a non-manager (viewer) and still has no metadata-edit affordances', () => {
+      mockAssetMultiSelectManager.selectionActive = true;
+      renderPage({
+        members: [makeMember(SharedSpaceRole.Viewer)],
+        album: makeAlbum({
+          albumUsers: [
+            {
+              user: { id: 'current-user-id', email: 'user@example.com', name: 'Current User' } as never,
+              role: AlbumUserRole.Viewer,
+            },
+          ],
+        }),
+      });
+
+      expect(screen.queryByTestId('album-remove-from-album')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('change-date-action')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('change-location-action')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('archive-action')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('tag-action')).not.toBeInTheDocument();
+    });
   });
 });

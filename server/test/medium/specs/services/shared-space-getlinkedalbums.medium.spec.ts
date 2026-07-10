@@ -1,4 +1,5 @@
 import { Kysely } from 'kysely';
+import { AssetVisibility } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
@@ -178,5 +179,77 @@ describe('SharedSpaceService.getLinkedAlbums — rich AlbumResponseDto shape', (
     expect(result[0].linkedAt).toBe((rawLink.linkedAt as unknown as Date).toISOString());
     // They should differ since the album was created before the link
     expect(result[0].linkedAt).not.toBe(result[0].createdAt);
+  });
+
+  // L17: the raw album.albumThumbnailAssetId can point at an asset that isn't space-visible
+  // (Hidden/Locked, or since soft-deleted) — a member's gated thumbnail request for that asset
+  // 403s and the web renders a broken cover tile. getLinkedAlbums must substitute a space-visible
+  // cover per-viewer instead of returning the raw, possibly-inaccessible thumbnail id verbatim.
+  describe('L17 — per-viewer space-visible cover substitution', () => {
+    it('substitutes a Hidden cover with the newest space-visible asset still in the album', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+      const { asset: hiddenCover } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+      const { asset: visible } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      const { result: album } = await ctx.newAlbum({
+        ownerId: owner.id,
+        albumName: 'HiddenCover',
+        albumThumbnailAssetId: hiddenCover.id,
+      });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: hiddenCover.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: visible.id });
+      await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+      const result = await sut.getLinkedAlbums(authFromUser(owner), space.id);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].albumThumbnailAssetId).not.toBe(hiddenCover.id);
+      expect(result[0].albumThumbnailAssetId).toBe(visible.id);
+    });
+
+    it('returns a null cover when the Hidden cover has no space-visible fallback asset', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+      const { asset: hiddenCover } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Hidden });
+      const { result: album } = await ctx.newAlbum({
+        ownerId: owner.id,
+        albumName: 'OnlyHidden',
+        albumThumbnailAssetId: hiddenCover.id,
+      });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: hiddenCover.id });
+      await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+      const result = await sut.getLinkedAlbums(authFromUser(owner), space.id);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].albumThumbnailAssetId).toBeNull();
+    });
+
+    it('positive control: leaves a Timeline (space-visible) cover unchanged', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+      const { asset: cover } = await ctx.newAsset({ ownerId: owner.id, visibility: AssetVisibility.Timeline });
+      const { result: album } = await ctx.newAlbum({
+        ownerId: owner.id,
+        albumName: 'VisibleCover',
+        albumThumbnailAssetId: cover.id,
+      });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: cover.id });
+      await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+      const result = await sut.getLinkedAlbums(authFromUser(owner), space.id);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].albumThumbnailAssetId).toBe(cover.id);
+    });
   });
 });

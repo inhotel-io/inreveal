@@ -605,11 +605,31 @@ export function withEdits(eb: ExpressionBuilder<DB, 'asset'>): AliasedEditAction
  * shared-space content reached through an album is only visible to searchers who
  * can access it via space membership + timeline visibility (timelineSpaceIds).
  * Plain (non-shared-space) album assets stay visible per upstream album access.
+ *
+ * NOTE (L2 reverted): a Slice-6 change flattened this to a single
+ * `spaceVisibilityGate` on the theory that the anti-join + `timelineSpaceIds`
+ * re-admission was pure over-restriction vs the album grid. That was WRONG — the
+ * `timelineSpaceIds`/showInTimeline gate is LOAD-BEARING: a space member who has
+ * hidden a space from their timeline (showInTimeline=false) must not see that
+ * space's directly-/library-linked content via album-scoped search or
+ * suggestions. Flattening it re-admitted hidden-space content and broke the
+ * People-identity RBAC projection tests (`people-identity-rbac.spec.ts`,
+ * "album scope excludes ... while the space is hidden from timeline"). Restored
+ * the anti-join + timelineSpaceIds arms; H1's `deletedAt IS NULL` (trashed
+ * exclusion) is kept on every branch.
  */
 export function albumSharedSpaceScope<O>(qb: SelectQueryBuilder<DB, 'asset', O>, timelineSpaceIds?: string[]) {
   return qb.where((eb) =>
     eb.or([
       eb.and([
+        // Fork RBAC (Slice 1 / security-1): the plain-album branch (assets NOT reached via a
+        // direct shared_space_asset / shared_space_library) had no visibility gate, so a Hidden or
+        // Locked asset reachable only through a linked album leaked to album searchers. Gate it flat
+        // (Archive+Timeline, no owner exception) to match the album grid's withDefaultVisibility.
+        spaceVisibilityGate(eb),
+        // Fork RBAC (Slice 1 / H1): album-granted search must never surface the owner's trashed
+        // assets, even when the caller flips withDeleted via trashedAfter/trashedBefore/isOffline.
+        eb('asset.deletedAt', 'is', null),
         eb.not(eb.exists(eb.selectFrom('shared_space_asset').whereRef('shared_space_asset.assetId', '=', 'asset.id'))),
         eb.not(
           eb.exists(
@@ -621,9 +641,10 @@ export function albumSharedSpaceScope<O>(qb: SelectQueryBuilder<DB, 'asset', O>,
         ? [
             // Space-linked assets via direct asset membership: gate on Archive + Timeline
             // (matches the album view's withDefaultVisibility; Hidden/Locked must not
-            // surface for viewers who are not the asset owner).
+            // surface for viewers who are not the asset owner) + not-deleted (H1).
             eb.and([
               spaceVisibilityGate(eb),
+              eb('asset.deletedAt', 'is', null),
               eb.exists(
                 eb
                   .selectFrom('shared_space_asset')
@@ -631,9 +652,10 @@ export function albumSharedSpaceScope<O>(qb: SelectQueryBuilder<DB, 'asset', O>,
                   .where('shared_space_asset.spaceId', '=', anyUuid(timelineSpaceIds)),
               ),
             ]),
-            // Space-linked assets via library membership: same Archive + Timeline gate.
+            // Space-linked assets via library membership: same Archive + Timeline + not-deleted gate.
             eb.and([
               spaceVisibilityGate(eb),
+              eb('asset.deletedAt', 'is', null),
               eb.exists(
                 eb
                   .selectFrom('shared_space_library')

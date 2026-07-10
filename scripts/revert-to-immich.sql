@@ -93,6 +93,7 @@ END $$;
 -- -----------------------------------------------------------------------------
 DROP TRIGGER IF EXISTS "library_after_insert" ON "library";
 DROP TRIGGER IF EXISTS "asset_library_delete_audit" ON "asset";
+DROP TRIGGER IF EXISTS "album_soft_delete_shared_space_album" ON "album";
 
 -- -----------------------------------------------------------------------------
 -- 2. Drop Gallery-only tables (CASCADE).
@@ -172,6 +173,7 @@ DROP FUNCTION IF EXISTS shared_space_album_delete_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_member_delete_album_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_delete_album_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_album_user_delete_after_audit() CASCADE;
+DROP FUNCTION IF EXISTS album_soft_delete_shared_space_album() CASCADE;
 
 -- -----------------------------------------------------------------------------
 -- 4. Drop Gallery-added columns from Immich-native tables.
@@ -227,6 +229,7 @@ DELETE FROM "migration_overrides"
    'function_shared_space_member_delete_album_audit',
    'function_shared_space_delete_album_audit',
    'function_shared_space_album_user_delete_after_audit',
+   'function_album_soft_delete_shared_space_album',
    'index_asset_face_personId_idx',
    'index_face_identity_representativeFaceId_idx',
    'index_person_identityId_idx',
@@ -253,6 +256,7 @@ DELETE FROM "migration_overrides"
    'trigger_shared_space_member_delete_album_audit',
    'trigger_shared_space_delete_album_audit',
    'trigger_shared_space_album_user_delete_after_audit',
+   'trigger_album_soft_delete_shared_space_album',
    'trigger_shared_space_album_updatedAt',
    'trigger_shared_space_library_updatedAt',
    'trigger_shared_space_member_after_insert',
@@ -362,7 +366,10 @@ DELETE FROM "kysely_migrations"
    '1779300000000-FixUserHasAlbumPathSoftDeleted',
    '1779309791424-SharedSpaceAlbumAssetAuditTable',
    '1781181889688-SharedSpaceLibraryAssetAuditTable',
+   '1782000000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger',
    '1782000000000-AddAssetExifDescriptionTrigramIndex',
+   '1782100000000-FixSharedSpaceAlbumGrantRelinkCreateId',
+   '1782300000000-AddSharedSpaceAlbumAuditSyncIndexes',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
@@ -422,10 +429,15 @@ BEGIN
      AND tablename IN (
        'library_user', 'library_audit', 'library_asset_audit',
        'shared_space_library_audit', 'shared_space_library',
+       'shared_space_library_asset_audit',
        'shared_space_activity', 'shared_space_person_alias',
        'shared_space_person_face', 'shared_space_person',
+       'shared_space_face_match_backfill_target',
        'shared_space_asset_audit', 'shared_space_member_audit',
        'shared_space_audit', 'shared_space_asset', 'shared_space_member',
+       'shared_space_album', 'shared_space_album_audit',
+       'shared_space_album_user', 'shared_space_album_user_audit',
+       'shared_space_album_asset_audit',
        'face_identity_face', 'face_identity',
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',

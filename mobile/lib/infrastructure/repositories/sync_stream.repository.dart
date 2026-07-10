@@ -80,6 +80,21 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             await _db.remoteAssetCloudIdEntity.deleteAll();
             await _db.assetEditEntity.deleteAll();
             await _db.assetOcrEntity.deleteAll();
+
+            // --- gallery-fork: clear fork space + library tables (mobile-4) ---
+            // SyncResetV1 must wipe every fork-only remote table too, or a stale
+            // shared_space_album_asset + link row joined to a re-synced remote_asset
+            // wrongly re-places assets in space timelines after a reset. Runs under
+            // PRAGMA foreign_keys = OFF (see reset() preamble), so ordering is free;
+            // children-before-parents kept for readability.
+            await _db.sharedSpaceAlbumAssetEntity.deleteAll();
+            await _db.sharedSpaceAlbumLinkEntity.deleteAll();
+            await _db.sharedSpaceAlbumEntity.deleteAll();
+            await _db.sharedSpaceAssetEntity.deleteAll();
+            await _db.sharedSpaceLibraryEntity.deleteAll();
+            await _db.sharedSpaceMemberEntity.deleteAll();
+            await _db.sharedSpaceEntity.deleteAll();
+            await _db.libraryEntity.deleteAll();
           });
         } finally {
           // re-enable FK even if the transaction throws, otherwise the connection
@@ -792,13 +807,19 @@ class SyncStreamRepository extends DriftDatabaseRepository {
           await _db.libraryEntity.deleteWhere((row) => row.id.equals(libraryId));
         }
 
-        // Sweep orphan library assets in chunks to stay under the SQLite
-        // parameter limit. Preserves user-owned, partner-shared, and direct-add
-        // (shared_space_asset) paths. Uses snake_case because Drift generates
-        // snake_case table/column names from camelCase Dart identifiers — see
-        // remote_asset.entity.dart for the `libraryId` column declaration that
-        // becomes `library_id`. The chunks all run inside the same transaction
-        // so the entire sweep is still atomic with the libraryEntity deletes.
+        // Sweep orphan library assets in chunks to stay under the SQLite parameter
+        // limit. Preserves every path that still legitimately reaches the asset:
+        // user-owned, partner-shared, direct-add (shared_space_asset), space-album
+        // membership (shared_space_album_asset) and classic-album membership
+        // (remote_album_asset). mobile-2: unlinking a library while an asset is also
+        // in a linked album must NOT delete the shared remote_asset row, or the asset
+        // vanishes from album detail + the space timeline (the "swap a library link
+        // for curated album links" workflow the feature encourages). remote_album_asset
+        // is the adjacent pre-existing classic-album gap. Uses snake_case because Drift
+        // generates snake_case table/column names from camelCase Dart identifiers — see
+        // remote_asset.entity.dart for the `libraryId` column that becomes `library_id`.
+        // The chunks all run inside the same transaction so the entire sweep stays
+        // atomic with the libraryEntity deletes.
         for (var offset = 0; offset < libraryIds.length; offset += _kSweepChunkSize) {
           final chunk = libraryIds.sublist(offset, (offset + _kSweepChunkSize).clamp(0, libraryIds.length));
           final placeholders = chunk.map((_) => '?').join(',');
@@ -812,6 +833,8 @@ class SyncStreamRepository extends DriftDatabaseRepository {
                 SELECT shared_by_id FROM partner_entity WHERE shared_with_id = ?
               )
               AND id NOT IN (SELECT asset_id FROM shared_space_asset_entity)
+              AND id NOT IN (SELECT asset_id FROM shared_space_album_asset_entity)
+              AND id NOT IN (SELECT asset_id FROM remote_album_asset_entity)
             ''',
             [...chunk, currentUserId, currentUserId],
           );
@@ -1344,13 +1367,41 @@ class SyncStreamRepository extends DriftDatabaseRepository {
 
         final validUsers = {currentUserId, ...partnerIds.nonNulls};
 
-        // Asset is not owned by the current user or any of their partners and is not part of any (shared) album
-        // Likely a stale asset that was previously shared but has been removed
+        // Delete assets no longer reachable by ANY path. Keep-set:
+        //   owned ∪ partner ∪ remote_album_asset (classic album)
+        //   ∪ shared_space_asset (direct) ∪ shared_space_album_asset (granted album)
+        //   ∪ library-reachable (library_id ∈ shared_space_library).
+        // mobile-3/gaps-1: without the space/album/library arms a member's Drift DB
+        // keeps remote_asset (filename, checksum, thumbhash) + remote_exif (GPS, city,
+        // camera) forever after a purge/unlink, defeating the purge's privacy goal.
+        //
+        // remote_exif rows are removed automatically: remote_exif_entity.assetId has
+        // ON DELETE CASCADE and this transaction runs with foreign_keys = ON.
+        //
+        // DEFERRED (follow-up): evicting cached thumbnail BYTES (in-memory
+        // CustomImageCache — a PaintingBinding.imageCache singleton keyed by
+        // ImageProvider instances, not asset ids — and the URL-keyed disk cache) is a
+        // UI/service-layer concern not reachable from this Drift repository. Row-level
+        // GC (remote_asset + cascaded remote_exif) is done here; byte eviction is a
+        // future service-layer step (resolve pruned ids → provider keys / disk URLs).
         await _db.remoteAssetEntity.deleteWhere((asset) {
           return asset.ownerId.isNotIn(validUsers) &
               asset.id.isNotInQuery(
                 _db.remoteAlbumAssetEntity.selectOnly()..addColumns([_db.remoteAlbumAssetEntity.assetId]),
-              );
+              ) &
+              asset.id.isNotInQuery(
+                _db.sharedSpaceAssetEntity.selectOnly()..addColumns([_db.sharedSpaceAssetEntity.assetId]),
+              ) &
+              asset.id.isNotInQuery(
+                _db.sharedSpaceAlbumAssetEntity.selectOnly()..addColumns([_db.sharedSpaceAlbumAssetEntity.assetId]),
+              ) &
+              // Library-reachable exclusion. NULL-safe: `library_id NOT IN (...)` is NULL
+              // (not TRUE) when library_id is NULL, so a null-library orphan would never
+              // be deleted — guard with `IS NULL OR ...` so it still prunes.
+              (asset.libraryId.isNull() |
+                  asset.libraryId.isNotInQuery(
+                    _db.sharedSpaceLibraryEntity.selectOnly()..addColumns([_db.sharedSpaceLibraryEntity.libraryId]),
+                  ));
         });
       });
     } catch (error, stack) {

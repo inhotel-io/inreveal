@@ -535,6 +535,18 @@ export const utils = {
     return result.rows[0].id as string;
   },
 
+  // Slice 3 — M2: PersonResponseDto does not expose `faceAssetId` (only `thumbnailPath`, which is
+  // populated asynchronously via the PersonGenerateThumbnail job). Representative-face write-scope
+  // specs need to assert "left unchanged" / "changed to X" directly, so read the column via SQL.
+  getPersonFaceAssetId: async (personId: string): Promise<string | null> => {
+    if (!client) {
+      throw new Error('Database client not connected');
+    }
+
+    const result = await client.query(`SELECT "faceAssetId" FROM "person" WHERE id = $1`, [personId]);
+    return (result.rows[0]?.faceAssetId as string | undefined) ?? null;
+  },
+
   setPersonThumbnail: async (personId: string) => {
     if (!client) {
       return;

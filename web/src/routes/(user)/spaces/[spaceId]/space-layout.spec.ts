@@ -61,7 +61,12 @@ const member = (o: Partial<SharedSpaceMemberResponseDto> = {}): SharedSpaceMembe
 
 function renderLayout(
   role: SharedSpaceRole,
-  options: { isAdmin?: boolean; space?: SharedSpaceResponseDto; member?: SharedSpaceMemberResponseDto } = {},
+  options: {
+    isAdmin?: boolean;
+    space?: SharedSpaceResponseDto;
+    member?: SharedSpaceMemberResponseDto;
+    linkedAlbums?: unknown[];
+  } = {},
 ) {
   const { isAdmin = false } = options;
   mockAuthManager.user = { id: 'u1', isAdmin };
@@ -70,7 +75,7 @@ function renderLayout(
     data: {
       space: options.space ?? space(),
       members: [options.member ?? member({ role })],
-      linkedAlbums: [],
+      linkedAlbums: options.linkedAlbums ?? [],
     } as never,
   });
 }
@@ -253,6 +258,38 @@ describe('space [spaceId] +layout.svelte', () => {
       await waitFor(() => expect(modalManager.showDialog).toHaveBeenCalled());
       expect(sdkMock.removeMember).not.toHaveBeenCalled();
       expect(gotoMock).not.toHaveBeenCalled();
+    });
+
+    it('handleLeave: uses the plain confirmation when the leaving member has no linked albums', async () => {
+      vi.mocked(modalManager.showDialog).mockResolvedValue(false);
+      renderLayout(SharedSpaceRole.Editor, {
+        member: member({ role: SharedSpaceRole.Editor }),
+        linkedAlbums: [{ addedById: 'someone-else' }],
+      });
+
+      await clickOverflowOption('spaces_leave');
+
+      await waitFor(() =>
+        expect(modalManager.showDialog).toHaveBeenCalledWith(
+          expect.objectContaining({ prompt: 'spaces_leave_confirmation' }),
+        ),
+      );
+    });
+
+    it('handleLeave: warns that linked albums will be removed when the leaving member linked albums of their own (L16)', async () => {
+      vi.mocked(modalManager.showDialog).mockResolvedValue(false);
+      renderLayout(SharedSpaceRole.Editor, {
+        member: member({ role: SharedSpaceRole.Editor }),
+        linkedAlbums: [{ addedById: 'u1' }],
+      });
+
+      await clickOverflowOption('spaces_leave');
+
+      await waitFor(() =>
+        expect(modalManager.showDialog).toHaveBeenCalledWith(
+          expect.objectContaining({ prompt: 'spaces_leave_confirmation_with_albums' }),
+        ),
+      );
     });
 
     it('handleBulkAddAssets: bulk-adds assets for an editor when confirmed', async () => {
