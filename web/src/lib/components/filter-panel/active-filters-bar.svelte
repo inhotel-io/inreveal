@@ -14,6 +14,7 @@
     mdiMagnify,
     mdiMapMarker,
     mdiOcr,
+    mdiPlus,
     mdiStar,
     mdiTag,
     mdiTextSearch,
@@ -40,6 +41,12 @@
     searchQuery?: string;
     onClearSearch?: () => void;
     embedded?: boolean;
+    /**
+     * When provided (and there are results), shows an "Add all N to…" action that hands the current
+     * filter result off to a collection picker. Surfaces where adding the visible assets to an
+     * album/space doesn't apply (tags, trash, locked, partners) simply pass no handler.
+     */
+    onAddAllToCollection?: () => void;
   }
 
   let {
@@ -52,6 +59,7 @@
     searchQuery = '',
     onClearSearch,
     embedded = false,
+    onAddAllToCollection,
   }: Props = $props();
 
   interface Chip {
@@ -165,6 +173,9 @@
   });
 
   let hasActiveFilters = $derived(chips.length > 0 || searchQuery.trim().length > 0);
+  let showAddAll = $derived(
+    !!onAddAllToCollection && hasActiveFilters && resultCount !== undefined && resultCount > 0,
+  );
   let showCountSeparator = $derived(resultCount !== undefined && (chips.length > 0 || searchQuery.trim().length > 0));
 </script>
 
@@ -223,10 +234,23 @@
     </span>
   {/each}
 
+  {#if showAddAll}
+    <button
+      type="button"
+      class="ml-auto inline-flex items-center gap-1.5 rounded-full bg-immich-primary/10 py-1 pe-3.5 ps-2.5 text-xs font-semibold text-immich-primary transition-colors hover:bg-immich-primary/[0.16] dark:bg-immich-dark-primary/10 dark:text-immich-dark-primary dark:hover:bg-immich-dark-primary/20"
+      onclick={() => onAddAllToCollection?.()}
+      data-testid="add-all-to-collection"
+    >
+      <Icon icon={mdiPlus} size="15" />
+      <span>{$t('add_all_search_results', { values: { count: resultCount ?? 0 } })}</span>
+    </button>
+  {/if}
+
   {#if hasActiveFilters}
     <button
       type="button"
-      class="ml-auto rounded-full px-2.5 py-1 text-xs font-semibold text-immich-primary transition-colors hover:bg-immich-primary/10 dark:text-immich-dark-primary dark:hover:bg-immich-dark-primary/10"
+      class="rounded-full px-2.5 py-1 text-xs font-semibold text-immich-primary transition-colors hover:bg-immich-primary/10 dark:text-immich-dark-primary dark:hover:bg-immich-dark-primary/10"
+      class:ml-auto={!showAddAll}
       onclick={() => {
         onClearAll();
         if (searchQuery) {
