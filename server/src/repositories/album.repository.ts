@@ -431,6 +431,59 @@ export class AlbumRepository {
       .execute();
   }
 
+  // --- Cross-owner contributions (album_space_asset) — #764 ---------------------------------------
+  // A contribution is a bookmark of a space photo the contributor does not own; it lives OUTSIDE
+  // `album_asset` so it can never become a permanent `checkAlbumAccess` grant for the album owner.
+
+  /** Which of `assetIds` already exist as contributions in the album (for DUPLICATE detection). */
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  @ChunkedSet({ paramIndex: 1 })
+  async getContributedAssetIds(albumId: string, assetIds: string[]): Promise<Set<string>> {
+    if (assetIds.length === 0) {
+      return new Set();
+    }
+
+    return this.db
+      .selectFrom('album_space_asset')
+      .select('album_space_asset.assetId')
+      .where('album_space_asset.albumId', '=', albumId)
+      .where('album_space_asset.assetId', 'in', assetIds)
+      .execute()
+      .then((results) => new Set(results.map(({ assetId }) => assetId)));
+  }
+
+  @GenerateSql({
+    params: [
+      [{ albumId: DummyValue.UUID, assetId: DummyValue.UUID, spaceId: DummyValue.UUID, addedById: DummyValue.UUID }],
+    ],
+  })
+  async addContributedAssets(
+    values: { albumId: string; assetId: string; spaceId: string; addedById: string }[],
+  ): Promise<void> {
+    if (values.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('album_space_asset')
+      .values(values)
+      .onConflict((oc) => oc.doNothing())
+      .execute();
+  }
+
+  @Chunked({ paramIndex: 1 })
+  async removeContributedAssetIds(albumId: string, assetIds: string[]): Promise<void> {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .deleteFrom('album_space_asset')
+      .where('album_space_asset.albumId', '=', albumId)
+      .where('album_space_asset.assetId', 'in', assetIds)
+      .execute();
+  }
+
   @GenerateSql({
     params: [
       { albumName: DummyValue.STRING },

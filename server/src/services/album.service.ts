@@ -248,13 +248,25 @@ export class AlbumService extends BaseService {
     const album = await this.findOrFail(id, auth.user.id, { withAssets: false });
     await this.requireAccess({ auth, permission: Permission.AlbumAssetCreate, ids: [id] });
 
+    // Ordinary path: assets the caller owns / has AssetShare on land in `album_asset`.
     const results = await addAssets(
       auth,
       { access: this.accessRepository, bulk: this.albumRepository },
       { parentId: id, assetIds: dto.ids },
     );
 
-    const { id: firstNewAssetId } = results.find(({ success }) => success) || {};
+    // #764 cross-owner contributions: assets denied above (not owned / no partner share) may still be
+    // added as space bookmarks when the album is space-linked and the caller is a space Editor of the
+    // space the asset is visible through. These go to `album_space_asset`, never `album_asset`, so the
+    // album owner never gains a permanent grant.
+    const contributedIds = await this.tryContributeDeniedAssets(auth, id, results);
+
+    // Only the caller's OWN newly-added assets (real `album_asset` rows) drive the thumbnail default
+    // and the face/sync event — a contribution is a bookmark with no `album_asset` row.
+    const ownedNewAssetIds = results
+      .filter(({ success, id: assetId }) => success && !contributedIds.has(assetId))
+      .map(({ id: assetId }) => assetId);
+    const firstNewAssetId = ownedNewAssetIds[0];
     if (firstNewAssetId) {
       await this.albumRepository.update(
         id,
@@ -272,11 +284,58 @@ export class AlbumService extends BaseService {
         await this.eventRepository.emit('AlbumUpdate', { id, recipientId });
       }
 
-      const addedAssetIds = results.filter(({ success }) => success).map(({ id }) => id);
-      await this.eventRepository.emit('AlbumAssetsAdd', { albumId: id, assetIds: addedAssetIds });
+      await this.eventRepository.emit('AlbumAssetsAdd', { albumId: id, assetIds: ownedNewAssetIds });
     }
 
     return results;
+  }
+
+  /**
+   * #764: upgrade `no_permission` results to cross-owner contributions where eligible. Mutates
+   * `results` in place (denied → success, or → duplicate if already contributed) and returns the set
+   * of asset ids that became contributions.
+   */
+  private async tryContributeDeniedAssets(
+    auth: AuthDto,
+    albumId: string,
+    results: BulkIdResponseDto[],
+  ): Promise<Set<string>> {
+    const contributedIds = new Set<string>();
+    const deniedIds = results
+      .filter(({ success, error }) => !success && error === BulkIdErrorReason.NO_PERMISSION)
+      .map(({ id }) => id);
+    if (deniedIds.length === 0) {
+      return contributedIds;
+    }
+
+    const [contributable, alreadyContributed] = await Promise.all([
+      this.sharedSpaceRepository.getContributableAssetSpaces(auth.user.id, albumId, deniedIds),
+      this.albumRepository.getContributedAssetIds(albumId, deniedIds),
+    ]);
+    const spaceByAsset = new Map(contributable.map(({ assetId, spaceId }) => [assetId, spaceId]));
+
+    const toInsert: { albumId: string; assetId: string; spaceId: string; addedById: string }[] = [];
+    for (const result of results) {
+      if (result.success || result.error !== BulkIdErrorReason.NO_PERMISSION) {
+        continue;
+      }
+      if (alreadyContributed.has(result.id)) {
+        result.error = BulkIdErrorReason.DUPLICATE;
+        continue;
+      }
+      const spaceId = spaceByAsset.get(result.id);
+      if (spaceId) {
+        toInsert.push({ albumId, assetId: result.id, spaceId, addedById: auth.user.id });
+        result.success = true;
+        delete result.error;
+        contributedIds.add(result.id);
+      }
+    }
+
+    if (toInsert.length > 0) {
+      await this.albumRepository.addContributedAssets(toInsert);
+    }
+    return contributedIds;
   }
 
   async addAssetsToAlbums(auth: AuthDto, dto: AlbumsAddAssetsDto): Promise<AlbumsAddAssetsResponseDto> {
@@ -358,6 +417,8 @@ export class AlbumService extends BaseService {
   }
 
   async removeAssets(auth: AuthDto, id: string, dto: BulkIdsDto): Promise<BulkIdResponseDto[]> {
+    // AlbumAssetDelete (#752) = album owner/editor OR space owner/editor of the linked space; a space
+    // Viewer or non-member is refused here (403) before any row is touched — the remove RBAC gate.
     await this.requireAccess({ auth, permission: Permission.AlbumAssetDelete, ids: [id] });
 
     const album = await this.findOrFail(id, auth.user.id, { withAssets: false });
@@ -366,13 +427,34 @@ export class AlbumService extends BaseService {
       { access: this.accessRepository, bulk: this.albumRepository },
       { parentId: id, assetIds: dto.ids, canAlwaysRemove: Permission.AlbumDelete },
     );
+    const albumAssetRemovedIds = results.filter(({ success }) => success).map(({ id }) => id);
+
+    // #764: a contribution is never in `album_asset`, so the util reports it NOT_FOUND. The caller
+    // already passed AlbumAssetDelete above, so removing it (deleting the `album_space_asset` row) is
+    // authorized. The underlying asset is untouched.
+    const notFoundIds = results
+      .filter(({ success, error }) => !success && error === BulkIdErrorReason.NOT_FOUND)
+      .map(({ id: assetId }) => assetId);
+    if (notFoundIds.length > 0) {
+      const contributed = await this.albumRepository.getContributedAssetIds(id, notFoundIds);
+      if (contributed.size > 0) {
+        await this.albumRepository.removeContributedAssetIds(id, [...contributed]);
+        for (const result of results) {
+          if (contributed.has(result.id)) {
+            result.success = true;
+            delete result.error;
+          }
+        }
+      }
+    }
 
     const removedIds = results.filter(({ success }) => success).map(({ id }) => id);
     if (removedIds.length > 0 && album.albumThumbnailAssetId && removedIds.includes(album.albumThumbnailAssetId)) {
       await this.albumRepository.updateThumbnails();
     }
-    if (removedIds.length > 0) {
-      await this.eventRepository.emit('AlbumAssetsRemove', { albumId: id, assetIds: removedIds });
+    // Face/sync cleanup only applies to real album_asset rows, not contributions.
+    if (albumAssetRemovedIds.length > 0) {
+      await this.eventRepository.emit('AlbumAssetsRemove', { albumId: id, assetIds: albumAssetRemovedIds });
     }
 
     return results;

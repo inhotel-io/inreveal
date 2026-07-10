@@ -116,11 +116,24 @@ export function accessibleSpaceAlbums(eb: ExpressionBuilder<DB, keyof DB>, userI
 }
 
 /**
- * The single definition of the linked-album access path, as an `EXISTS (...)`
- * predicate. Negate with `eb.not(spaceAlbumAssetExists(...))` for anti-join /
- * "no other space path" uses.
+ * The linked-album access path, as an `EXISTS (...)` predicate. Covers BOTH sources of a linked
+ * album's contents: the album owner's own `album_asset` rows AND cross-owner `album_space_asset`
+ * contributions (#764). Because both arms are unioned here, every consumer of the album arm
+ * (timeline, search, map, view, memory, access, …) surfaces contributions with the exact same
+ * membership / role / showInTimeline / not-deleted scoping it already applies — no per-site change.
+ *
+ * Negate with `eb.not(spaceAlbumAssetExists(...))` for anti-join / "no other space path" uses:
+ * `NOT (albumAsset OR contributed)` correctly excludes both.
  */
 export function spaceAlbumAssetExists(
+  eb: ExpressionBuilder<DB, keyof DB>,
+  options: SpaceAlbumAssetOptions,
+): Expression<SqlBool> {
+  return eb.or([linkedAlbumAssetExists(eb, options), spaceContributedAssetExists(eb, options)]);
+}
+
+/** The `album_asset` arm — the album owner's own contents (unchanged pre-#764 behavior). */
+function linkedAlbumAssetExists(
   eb: ExpressionBuilder<DB, keyof DB>,
   options: SpaceAlbumAssetOptions,
 ): Expression<SqlBool> {
@@ -148,6 +161,61 @@ export function spaceAlbumAssetExists(
       )
       .select(eb.lit(1).as('exists'))
       .whereRef('album_asset.assetId', '=', options.correlateAssetId)
+      .$if('spaceId' in scope, (qb) =>
+        qb.where('shared_space_album.spaceId', '=', asUuid((scope as { spaceId: string }).spaceId)),
+      )
+      .$if('spaceIds' in scope, (qb) =>
+        qb.where('shared_space_album.spaceId', '=', anyUuid((scope as { spaceIds: string[] }).spaceIds)),
+      )
+      .$if('spaceIdRef' in scope, (qb) =>
+        qb.whereRef(
+          'shared_space_album.spaceId',
+          '=',
+          (scope as { spaceIdRef: ReferenceExpression<DB, keyof DB> }).spaceIdRef,
+        ),
+      )
+      .$if(!!options.requireShowInTimeline, (qb) => qb.where('shared_space_album.showInTimeline', '=', true))
+      .$if(!!options.excludeAlbumId, (qb) => qb.where('shared_space_album.albumId', '!=', options.excludeAlbumId!)),
+  );
+}
+
+/**
+ * The `album_space_asset` arm — cross-owner contributions (#764). Mirrors {@link linkedAlbumAssetExists}
+ * exactly, except the join additionally correlates `album_space_asset.spaceId` to the link's space so
+ * a contribution is only ever visible through the SINGLE space it was contributed to (a multi-space
+ * album never leaks a contribution to members of a different linked space). Exported for direct use
+ * where only the contributed arm is wanted.
+ */
+export function spaceContributedAssetExists(
+  eb: ExpressionBuilder<DB, keyof DB>,
+  options: SpaceAlbumAssetOptions,
+): Expression<SqlBool> {
+  const notDeleted = options.requireAlbumNotDeleted ?? true;
+  const { scope } = options;
+
+  return eb.exists(
+    eb
+      .selectFrom('shared_space_album')
+      .innerJoin('album_space_asset', (join) =>
+        join
+          .onRef('album_space_asset.albumId', '=', 'shared_space_album.albumId')
+          .onRef('album_space_asset.spaceId', '=', 'shared_space_album.spaceId'),
+      )
+      .$if(notDeleted, (qb) =>
+        qb.innerJoin('album', (join) =>
+          join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+        ),
+      )
+      .$if('memberUserId' in scope, (qb) =>
+        qb
+          .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+          .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId))
+          .$if(!!(scope as { memberRole?: SharedSpaceRole[] }).memberRole?.length, (qb2) =>
+            qb2.where('shared_space_member.role', 'in', (scope as { memberRole: SharedSpaceRole[] }).memberRole),
+          ),
+      )
+      .select(eb.lit(1).as('exists'))
+      .whereRef('album_space_asset.assetId', '=', options.correlateAssetId)
       .$if('spaceId' in scope, (qb) =>
         qb.where('shared_space_album.spaceId', '=', asUuid((scope as { spaceId: string }).spaceId)),
       )

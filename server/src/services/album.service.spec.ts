@@ -18,6 +18,12 @@ describe(AlbumService.name, () => {
 
   beforeEach(() => {
     ({ sut, mocks } = newTestService(AlbumService));
+    // #764 cross-owner contribution defaults: no denied asset is contributable / already contributed
+    // unless a test opts in, so add/remove behave exactly as before for the non-space cases.
+    mocks.sharedSpace.getContributableAssetSpaces.mockResolvedValue([]);
+    mocks.album.getContributedAssetIds.mockResolvedValue(new Set());
+    mocks.album.addContributedAssets.mockResolvedValue();
+    mocks.album.removeContributedAssetIds.mockResolvedValue();
   });
 
   it('should work', () => {
