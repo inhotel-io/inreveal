@@ -14,7 +14,14 @@ import { UserTable } from 'src/schema/tables/user.table';
 @Table({ name: 'album_space_asset' })
 @Index({ name: 'album_space_asset_spaceId_idx', columns: ['spaceId'] })
 export class AlbumSpaceAssetTable {
-  @ForeignKeyColumn(() => AlbumTable, { onDelete: 'CASCADE', onUpdate: 'CASCADE', nullable: false, primary: true })
+  // index: false — albumId is the leading column of the composite PK, so a separate FK index is redundant.
+  @ForeignKeyColumn(() => AlbumTable, {
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE',
+    nullable: false,
+    primary: true,
+    index: false,
+  })
   albumId!: string;
 
   @ForeignKeyColumn(() => AssetTable, { onDelete: 'CASCADE', onUpdate: 'CASCADE', nullable: false, primary: true })

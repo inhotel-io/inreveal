@@ -433,6 +433,22 @@ from
   ) as "dummy"
 on conflict do nothing
 
+-- AlbumRepository.getContributedAssetIds
+select
+  "album_space_asset"."assetId"
+from
+  "album_space_asset"
+where
+  "album_space_asset"."albumId" = $1
+  and "album_space_asset"."assetId" in ($2)
+
+-- AlbumRepository.addContributedAssets
+insert into
+  "album_space_asset" ("albumId", "assetId", "spaceId", "addedById")
+values
+  ($1, $2, $3, $4)
+on conflict do nothing
+
 -- AlbumRepository.create
 with
   "album" as (
