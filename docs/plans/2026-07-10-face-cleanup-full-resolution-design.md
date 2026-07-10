@@ -194,8 +194,12 @@ suspectedOwnerId)`, `declinedBy` = the admin.
   resolved entirely by keeping/locking still leaves the console immediately.
 - **Cleanup reused**: emptied-**unnamed**-cluster auto-delete (`countEligibleFaces` / `countAllFaces` gate);
   **named** persons are never auto-deleted.
-- **Create-new-person** is done client-side via Immich's existing `createPerson` **with the cluster's
-  ownerId** (§6); the new id arrives in a `moveToPerson[].destinationPersonId`. No new person endpoint.
+- **Owner-scoped people for the picker.** Immich's own `getAllPeople` / `createPerson` are **self-scoped**
+  (the caller's own people), so an admin re-attributing another user's cluster needs dedicated admin
+  endpoints: `GET /admin/face-repair/owner/:ownerId/people?query=&page=` (paginated search over that owner's
+  `person` rows, named + unnamed) and `POST /admin/face-repair/owner/:ownerId/people` (create a person under
+  `ownerId`). Both `@Authenticated({ admin: true })`. Create-new returns the id, which the web passes as a
+  `moveToPerson[].destinationPersonId`.
 
 The old `apply` endpoint + DTO and the standalone `entireCluster` apply path are removed once the page is
 migrated (fork-only, pre-GA — no compat burden). The paginated `cluster-faces` list endpoint (add-faces)
@@ -229,11 +233,11 @@ Concretely, `[personId]/+page.svelte` + `review.svelte.ts` are reworked to:
     "every face accounted for", and one **Apply · N faces** button (`data-testid="apply-btn"`).
   - **≥1 selected → bulk bar** (`data-testid="bulk-bar"`): `→ Owner` · `Keep here` · `Confirm / lock` ·
     `Move → person…` · `Not a face` · Clear. Each retags the selection and clears it.
-- **Person-picker modal** (`data-testid="person-picker"`, opened from `Move → person…`): search box over
-  people **owned by the cluster's owner** (named people + unnamed clusters, avatar + face count + short id),
-  plus **Create new person "<query>"** which calls Immich `createPerson({ name, ownerId: cluster owner })`
-  then routes the selection to the new id. Selecting a destination sets those tiles to `other` with a
-  `→ <Name>` chip.
+- **Person-picker modal** (`data-testid="person-picker"`, opened from `Move → person…`): searches the
+  **admin owner-scoped people endpoint** above (named people + unnamed clusters of the cluster's owner,
+  avatar + face count + short id), plus **Create new person "<query>"** which POSTs to the owner-scoped
+  create endpoint and routes the selection to the returned id. Selecting a destination sets those tiles to
+  `other` with a `→ <Name>` chip.
 - **View-model** (`review.svelte.ts`): tracks a per-face `state` (+ `destinationPersonId`/name for `other`),
   selection ops, the derived tally, and a **pure `buildResolveRequest()`** that emits
   `FaceRepairResolveRequestDto` — grouping `owner`/`other` faces by destination, and emitting
