@@ -37,6 +37,31 @@ From brainstorming + the approved design mock (5 phone frames rendered in the ap
 4. **Filtering + sorting run client-side** on the already-loaded list — both lists are fully in memory, so it is instant and reactive; no new queries.
 5. Grid stays 2-column; no list/grid view toggle.
 
+## Design reference
+
+The UI must match the approved mock committed alongside this doc — [`2026-07-10-mobile-spaces-albums-search-sort-mock.html`](./2026-07-10-mobile-spaces-albums-search-sort-mock.html) (open in a browser; theme-aware, rendered in the app's Material style). Its five frames are the acceptance target for the visual + interaction layer:
+
+1. **Space albums · default** — app bar (keeping the editor **Link** action) → a pill `SearchField` ("Search albums") → a row whose left shows the result count ("21 albums") and whose right is a `Sort: Recently linked` pill → the existing 2-column album grid (cover, name, "N photos", "· Hidden" on off-timeline cards).
+2. **Space albums · sort menu open** — a scrim + a menu titled "Sort albums by" listing the 4 modes; the selected mode (Recently linked) shows a check **and** a down/up direction arrow.
+3. **Space albums · searching "ita"** — the field is filled with a clear ✕; the count reads "2 of 21 · matches 'ita'"; the grid shows only the matches; sort still applies within them.
+4. **Spaces · default** — the same search + sort row under the "Spaces" app bar, defaulting to `Recent activity`; the existing `SpaceCard` grid and the create **＋** FAB stay.
+5. **Spaces · sort menu open** — a menu titled "Sort spaces by" listing the 5 modes.
+
+Build to this layout: the `Sort: <mode>` pill, the check + reversible arrow, the result-count caption, the clear ✕, and a distinct no-match state. (The mock's richer space-card subtitle is **deferred** — see [Out of scope](#out-of-scope--deferred).)
+
+## Development approach (test-first)
+
+This feature is built with TDD (`superpowers:test-driven-development`): for every behavior below, write a **failing** test first (red), add the minimal code to pass (green), then refactor — never write implementation ahead of a test that pins it. The implementation plan slices the work so each slice is its own red→green→refactor loop:
+
+1. `SpaceAlbum` model + `watchLinkedAlbums` expose `linkedAt`/`updatedAt` (repository/Drift test first).
+2. Pure filter/sort helpers + the two sort-mode enums (unit tests: ordering, reverse, ties, null-safety, case-insensitive search).
+3. Reusable `CollectionSortButton` (widget test: renders modes, selects, reverses on re-tap).
+4. `SpaceAlbumsPage` search + sort + no-match (widget tests).
+5. `SpacesPage` search + sort + no-match (widget tests).
+6. Persistence round-trip through `Store` for both surfaces.
+
+The filter + sort logic lives in **pure, testable functions** (e.g. `filterAndSortSpaceAlbums(list, query, sort)` / `filterAndSortSpaces(...)`) so the edge-case matrix is covered by fast unit tests, leaving widget tests to verify wiring, rendering, and persistence. `dart analyze --fatal-infos lib test` and the mobile test suite must be green before the feature is done.
+
 ## Shared UI
 
 A single row layout added under the app bar on both pages, above the grid:
@@ -135,14 +160,52 @@ All new strings go through the normal i18n pipeline (`i18n/en.json` source of tr
 
 ## Testing
 
-Widget tests per page (mirroring the existing `space_*` page specs and the album-selector tests):
+Written **test-first** (see [Development approach](#development-approach-test-first)). Coverage splits between **pure-function unit tests** (the filter/sort logic — where most edge cases live) and **widget tests** (wiring, rendering, persistence, regressions), mirroring the existing `space_*` page specs and `album_selector` tests. Every bullet below is a test case.
 
-- Search filters the grid to matching names; clearing restores the full list.
-- Each sort mode orders the grid correctly; re-tapping the selected mode reverses it.
-- Sort choice + direction round-trips through `Store` (persisted across a rebuild).
-- No-match state renders on a non-matching query; the all-empty state is unchanged when there are genuinely no items.
-- Regression: the editor `Link` action + card `⋮` menu (albums) and the create FAB (spaces) remain present and role-gated exactly as before.
-- `SpaceAlbum` now carries `linkedAt`/`updatedAt`; `watchLinkedAlbums` populates them (repository/Drift test).
+### Filter (search) — unit
+
+- Empty query → the full list, unchanged (and still sorted).
+- Whitespace-only query → treated as empty → full list.
+- Query is **trimmed** and matched **case-insensitively**, substring anywhere in the name ("ita" → "Italy 2022"; "ITALY" matches; "2022" matches).
+- Diacritics are **not** folded — "Sächsische" matches "säch"/"SÄCH" but not "sach". Asserted explicitly so the behavior is intentional, not an accident (fold-or-not can change later with a test to prove it).
+- No match on a non-empty list → empty result (drives the no-match state); the source list is untouched.
+- Query matching every item → full list.
+- Regex-meta / special characters in the query (`.`, `(`, `\`, `*`) are treated as literal text, never as a pattern.
+
+### Sort — unit (both enums)
+
+- Each mode orders by its field in its `defaultOrder`.
+- `isReverse` flips every mode.
+- **Deterministic ties**: equal sort keys keep a stable order (tie-break by name asc, then id) so repeated re-sorts never reshuffle.
+- Space albums: `recentlyLinked` uses `linkedAt`, `recentlyUpdated` uses `updatedAt` (a fixture where those two disagree proves they are not swapped).
+- Spaces null-safety: with `lastActivityAt`/`memberCount`/`assetCount` **absent**, `recentActivity` falls back `updatedAt` → `createdAt`; `members`/`photos` treat absent as `0`; absent never throws and sorts to a stable position.
+- Search + sort compose: sort applies **within** the filtered subset; clearing the query restores the full sorted list.
+- Empty list and single-item list don't throw.
+
+### Persistence — unit / widget
+
+- Chosen mode + `isReverse` are written to `Store` and re-read on the next mount (round-trip across a fresh build).
+- Absent/unset keys → the enum's default mode + `defaultOrder`.
+- **Defensive**: a stored index out of range (enum reordered/shrunk in a later build) falls back to the default instead of crashing.
+- The search query is **not** persisted (a fresh mount starts empty).
+
+### Widget / rendering
+
+- `SpaceAlbumsPage`: search field + `Sort:` pill render; typing filters the grid; opening the menu lists the modes; tapping a mode re-sorts; re-tapping the selected mode reverses (arrow flips); the result-count caption updates.
+- Reactive: when `spaceAlbumsProvider` (a Drift stream) emits an updated list, the active filter + sort re-apply automatically.
+- **No-match vs empty are distinct**: the no-match state (icon + "No albums match '<query>'") renders when a query filters everything out; the genuinely-empty `_EmptyState` still renders when the space has zero linked albums. Distinct widget keys so tests can tell them apart.
+- `SpacesPage`: same, over `SpaceCard`; the `loading` and `error` branches of `sharedSpacesProvider.when` are preserved and show **no** search/sort controls.
+- `SpaceAlbumsPage` `loading`/`error` branches preserved likewise.
+
+### Regression (unchanged affordances)
+
+- Albums: the editor-gated **Link** app-bar action and the card `⋮` menu (Show/Hide in timeline, Unlink) remain present and gated by `canEdit`; a viewer (`canEdit == false`) sees neither, before and after filtering/sorting.
+- Albums: the "Hidden" (off-timeline) badge + dimmed cover still render and survive filter/sort.
+- Spaces: the create **＋** FAB and its create-space dialog still work; the all-empty state is unchanged.
+
+### Data layer
+
+- `watchLinkedAlbums` populates `linkedAt` (from `shared_space_album_link.createdAt`) and `updatedAt` (from `shared_space_album.updatedAt`); a repository/Drift test asserts both are read and correct, including two rows whose `createdAt` and `updatedAt` differ.
 
 ## Out of scope / deferred
 
@@ -151,13 +214,15 @@ Widget tests per page (mirroring the existing `space_*` page specs and the album
 
 ## File-by-file summary
 
-| File                                                                 | Change                                                               |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `mobile/lib/widgets/common/collection_sort_button.dart` _(new)_      | Reusable sort pill + reversible menu, generic over a sort-mode enum. |
-| `mobile/lib/pages/library/spaces/space_albums.page.dart`             | Add search + sort; `SpaceAlbumSortMode`; no-match state.             |
-| `mobile/lib/pages/library/spaces/spaces.page.dart`                   | Add search + sort; `SpaceSortMode`; no-match state.                  |
-| `mobile/lib/domain/models/space_album.model.dart`                    | Add `linkedAt`, `updatedAt`.                                         |
-| `mobile/lib/infrastructure/repositories/space_album.repository.dart` | `watchLinkedAlbums` reads `link.createdAt` + `meta.updatedAt`.       |
-| `StoreKey` enum + store usage                                        | 4 new keys for the two surfaces' persisted sort state.               |
-| `i18n/en.json` (+ generated l10n)                                    | New search-hint / sort-label / no-match / count strings.             |
-| Widget/repository tests for both pages                               | Cover filter, sort, reverse, persistence, no-match, regressions.     |
+| File                                                                 | Change                                                                                                          |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `mobile/lib/widgets/common/collection_sort_button.dart` _(new)_      | Reusable sort pill + reversible menu, generic over a sort-mode enum.                                            |
+| `mobile/lib/pages/library/spaces/collection_sort.dart` _(new)_       | Pure `filterAndSortSpaceAlbums` / `filterAndSortSpaces` helpers + `SpaceAlbumSortMode` / `SpaceSortMode` enums. |
+| `mobile/lib/pages/library/spaces/space_albums.page.dart`             | Add search + sort wiring; no-match state.                                                                       |
+| `mobile/lib/pages/library/spaces/spaces.page.dart`                   | Add search + sort wiring; no-match state.                                                                       |
+| `mobile/lib/domain/models/space_album.model.dart`                    | Add `linkedAt`, `updatedAt`.                                                                                    |
+| `mobile/lib/infrastructure/repositories/space_album.repository.dart` | `watchLinkedAlbums` reads `link.createdAt` + `meta.updatedAt`.                                                  |
+| `StoreKey` enum + store usage                                        | 4 new keys for the two surfaces' persisted sort state.                                                          |
+| `i18n/en.json` (+ generated l10n)                                    | New search-hint / sort-label / no-match / count strings.                                                        |
+| `docs/plans/2026-07-10-…-mock.html`                                  | The approved visual reference (this deliverable).                                                               |
+| Test files (**written first**, per [Testing](#testing))              | Pure-function unit tests for filter/sort + widget tests for both pages + a Drift test.                          |
