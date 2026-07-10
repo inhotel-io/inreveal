@@ -21,6 +21,9 @@
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
   import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import { withNameCapture } from '$lib/utils/filter-name-capture';
+  import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
+  import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
+  import { lang } from '$lib/stores/preferences.store';
   import { SvelteMap } from 'svelte/reactivity';
   import {
     type ActivatableTimelineBucket,
@@ -36,7 +39,7 @@
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
   import HeaderActionButton from '$lib/components/HeaderActionButton.svelte';
-  import { Icon, IconButton } from '@immich/ui';
+  import { Icon, IconButton, modalManager } from '@immich/ui';
   import { mdiArrowLeft, mdiImageOutline, mdiImagePlusOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
@@ -106,6 +109,18 @@
     // build buckets. The top-level <Timeline grouping={...}> prop alone does not re-group.
     grouping: timelineGrouping,
   });
+
+  // Mirror the global album page: collect every asset matching the active browse filters
+  // (scoped to this album) into another album/space. ActiveFiltersBar self-gates the button
+  // on there being active filters + results.
+  const handleAddAllToCollection = () => {
+    void modalManager.show(SearchAddAllToCollectionModal, {
+      terms: { ...filterStateToSearchTerms(browseFilters), albumIds: [album.id] },
+      total: browseTotal,
+      smartSearchEnabled: false,
+      language: $lang,
+    });
+  };
 
   const pickerFilterConfig = $derived(
     withNameCapture(buildAlbumAssetPickerFilterConfig(), pickerPersonNames, pickerTagNames),
@@ -271,6 +286,7 @@
                 browseFilters = clearFilters(browseFilters);
                 temporalAnchor = undefined;
               }}
+              onAddAllToCollection={handleAddAllToCollection}
             />
           </div>
         {/if}

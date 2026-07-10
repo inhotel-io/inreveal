@@ -536,6 +536,13 @@ describe('Space album detail page', () => {
     await waitFor(() => expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument());
   });
 
+  it('wires the add-all-to-collection handler into the browse ActiveFiltersBar', async () => {
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-add-person'));
+    const bar = await screen.findByTestId('active-filters-bar');
+    expect(bar).toHaveAttribute('data-has-add-all', 'true');
+  });
+
   it('browse: when filtered to empty, the filtered-empty block replaces the timeline; clear restores it', async () => {
     setMockTimelineEmpty();
     renderPage();
