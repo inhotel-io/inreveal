@@ -364,6 +364,52 @@ void main() {
       final single = [spacesSample.first];
       expect(spaceNames(filterAndSortSpaces(single, '', SpaceSortMode.photos, true)), [spacesSample.first.name]);
     });
+
+    test('memberCount/lastActivityAt Optional.present(null) (explicit null, not absent) sorts as 0 / falls back '
+        'without throwing', () {
+      // `Optional.present(null)` is a distinct state from `Optional.absent()`
+      // (the server explicitly sent `null` rather than omitting the field).
+      // `.value` on a present Optional never throws (even when the value
+      // itself is null), so the `isPresent` guards in `_members`/`_activity`
+      // must not be the only thing standing between this and a NullCheck /
+      // type-cast crash.
+      final presentNullSpace = SharedSpaceResponseDto(
+        id: 'present-null',
+        name: 'Present Null',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-05T00:00:00Z',
+        createdById: 'user-1',
+        lastActivityAt: const Optional.present(null),
+        memberCount: const Optional.present(null),
+      );
+      final hasMembers = SharedSpaceResponseDto(
+        id: 'has-members',
+        name: 'Has Members',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        createdById: 'user-1',
+        lastActivityAt: const Optional.present('2026-02-01T00:00:00Z'),
+        memberCount: const Optional.present(3),
+      );
+      final items = [presentNullSpace, hasMembers];
+
+      for (final mode in SpaceSortMode.values) {
+        expect(() => filterAndSortSpaces(items, '', mode, false), returnsNormally, reason: 'mode: $mode');
+      }
+
+      // members desc by default: present-but-null memberCount treated as 0,
+      // sorting after the space with 3 members.
+      expect(
+        filterAndSortSpaces(items, '', SpaceSortMode.members, false).map((s) => s.id).toList(),
+        ['has-members', 'present-null'],
+      );
+
+      // recentActivity: present-but-null lastActivityAt falls back to
+      // updatedAt (not a crash on a null `.value`); hasMembers' real
+      // lastActivityAt (Feb 1) is later than presentNullSpace's fallback
+      // updatedAt (Jan 5).
+      expect(filterAndSortSpaces(items, '', SpaceSortMode.recentActivity, false).first.id, 'has-members');
+    });
   });
 
   group('sort-mode enum shape', () {

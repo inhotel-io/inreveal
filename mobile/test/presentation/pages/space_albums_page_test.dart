@@ -188,8 +188,8 @@ void main() {
     expect(find.byKey(const Key('space-album-card-it2')), findsOneWidget);
     // Clear (✕) button now shows
     expect(find.byKey(const Key('space-albums-search-clear')), findsOneWidget);
-    // Result count reflects the filtered count
-    expect(find.text('2 albums'), findsOneWidget);
+    // Result count reflects filtered-of-total plus the query while searching
+    expect(find.text('2 of 3 · matches "ita"'), findsOneWidget);
   });
 
   testWidgets('tapping the clear (✕) button resets the query and restores the full list', (tester) async {
@@ -270,7 +270,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('collection-sort-button-pill')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Number of assets'));
+    await tester.tap(find.text('Photo count'));
     await tester.pumpAndSettle();
 
     // Now sorted by asset count desc -> r1 (50) sorts before r2 (5).
@@ -301,6 +301,30 @@ void main() {
     expect(_firstCardByPosition(tester, ['r1', 'r2']), 'r1');
     expect(SettingsRepository.instance.appConfig.spaceAlbums.sortMode, SpaceAlbumSortMode.recentlyLinked);
     expect(SettingsRepository.instance.appConfig.spaceAlbums.isReverse, true);
+  });
+
+  testWidgets('a persisted sort mode is honored on mount, not just after picking it', (tester) async {
+    final albums = [
+      _album(id: 'r1', name: 'Reorder A', assetCount: 50, linkedAt: DateTime.utc(2026, 1, 1)),
+      _album(id: 'r2', name: 'Reorder B', assetCount: 5, linkedAt: DateTime.utc(2026, 1, 10)),
+    ];
+
+    // Pre-seed a persisted, non-default sort mode BEFORE the page ever mounts
+    // — proves the page reads the stored config on mount rather than merely
+    // writing to it when the user picks a mode from the menu.
+    await SettingsRepository.instance.write(SettingsKey.spaceAlbumsSortMode, SpaceAlbumSortMode.photoCount);
+    await SettingsRepository.instance.write(SettingsKey.spaceAlbumsIsReverse, false);
+
+    await tester.pumpConsumerWidget(
+      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      overrides: _overrides(spaceId: spaceId, albums: albums),
+    );
+
+    // photoCount desc -> r1 (50) sorts before r2 (5). The default mode
+    // (recentlyLinked) would instead put r2 first, so this proves the
+    // persisted mode was actually read, not just the default applied.
+    expect(_firstCardByPosition(tester, ['r1', 'r2']), 'r1');
+    expect(find.text('Sort: Photo count'), findsOneWidget);
   });
 
   // ---------------------------------------------------------------------

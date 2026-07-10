@@ -112,6 +112,7 @@ class SpacesPage extends HookConsumerWidget {
             );
           }
 
+          final trimmedQuery = query.value.trim();
           final filtered = filterAndSortSpaces(spaces, query.value, sortConfig.sortMode, sortConfig.isReverse);
 
           return Column(
@@ -121,6 +122,8 @@ class SpacesPage extends HookConsumerWidget {
                 hasQuery: query.value.isNotEmpty,
                 onClear: queryController.clear,
                 resultCount: filtered.length,
+                totalCount: spaces.length,
+                query: trimmedQuery,
                 sortMode: sortConfig.sortMode,
                 isReverse: sortConfig.isReverse,
                 onSortChanged: (mode, isReverse) async {
@@ -191,6 +194,8 @@ class _SearchAndSortBar extends StatelessWidget {
     required this.hasQuery,
     required this.onClear,
     required this.resultCount,
+    required this.totalCount,
+    required this.query,
     required this.sortMode,
     required this.isReverse,
     required this.onSortChanged,
@@ -200,6 +205,8 @@ class _SearchAndSortBar extends StatelessWidget {
   final bool hasQuery;
   final VoidCallback onClear;
   final int resultCount;
+  final int totalCount;
+  final String query;
   final SpaceSortMode sortMode;
   final bool isReverse;
   final void Function(SpaceSortMode mode, bool isReverse) onSortChanged;
@@ -229,7 +236,12 @@ class _SearchAndSortBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'spaces_result_count'.t(context: context, args: {'count': resultCount.toString()}),
+                query.isEmpty
+                    ? 'spaces_result_count'.t(context: context, args: {'count': resultCount.toString()})
+                    : 'spaces_page_search_result_count'.t(
+                        context: context,
+                        args: {'count': resultCount.toString(), 'total': totalCount.toString(), 'query': query},
+                      ),
                 key: const Key('spaces-result-count'),
                 style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceVariant),
               ),

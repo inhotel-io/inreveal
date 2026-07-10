@@ -145,7 +145,7 @@ void main() {
     expect(find.byKey(const Key('space-card-s2')), findsOneWidget);
     expect(find.byKey(const Key('space-card-s3')), findsNothing);
     expect(find.byKey(const Key('spaces-search-clear')), findsOneWidget);
-    expect(find.text('2 spaces'), findsOneWidget);
+    expect(find.text('2 of 3 · matches "ita"'), findsOneWidget);
   });
 
   testWidgets('tapping the clear (✕) button resets the query and restores the full list', (tester) async {

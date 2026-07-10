@@ -36,7 +36,7 @@ class CollectionSortButton<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentOption = options.firstWhere((option) => option.mode == current);
+    final currentOption = options.firstWhere((option) => option.mode == current, orElse: () => options.first);
 
     return MenuAnchor(
       style: MenuStyle(
@@ -62,7 +62,7 @@ class CollectionSortButton<T> extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Sort: ${currentOption.label.t(context: context)}',
+                'sort_by_label'.t(context: context, args: {'label': currentOption.label.t(context: context)}),
                 style: context.textTheme.labelLarge?.copyWith(color: context.colorScheme.onSurface.withAlpha(225)),
               ),
             ],

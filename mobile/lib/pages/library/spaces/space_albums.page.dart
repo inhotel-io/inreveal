@@ -101,6 +101,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
             return _EmptyState(key: const Key('space-albums-empty'), canEdit: canEdit, onLink: onLink);
           }
 
+          final trimmedQuery = query.value.trim();
           final filtered = filterAndSortSpaceAlbums(albums, query.value, sortConfig.sortMode, sortConfig.isReverse);
 
           return Column(
@@ -110,6 +111,8 @@ class SpaceAlbumsPage extends HookConsumerWidget {
                 hasQuery: query.value.isNotEmpty,
                 onClear: queryController.clear,
                 resultCount: filtered.length,
+                totalCount: albums.length,
+                query: trimmedQuery,
                 sortMode: sortConfig.sortMode,
                 isReverse: sortConfig.isReverse,
                 onSortChanged: (mode, isReverse) async {
@@ -149,6 +152,8 @@ class _SearchAndSortBar extends StatelessWidget {
     required this.hasQuery,
     required this.onClear,
     required this.resultCount,
+    required this.totalCount,
+    required this.query,
     required this.sortMode,
     required this.isReverse,
     required this.onSortChanged,
@@ -158,6 +163,8 @@ class _SearchAndSortBar extends StatelessWidget {
   final bool hasQuery;
   final VoidCallback onClear;
   final int resultCount;
+  final int totalCount;
+  final String query;
   final SpaceAlbumSortMode sortMode;
   final bool isReverse;
   final void Function(SpaceAlbumSortMode mode, bool isReverse) onSortChanged;
@@ -187,7 +194,12 @@ class _SearchAndSortBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'space_albums_result_count'.t(context: context, args: {'count': resultCount.toString()}),
+                query.isEmpty
+                    ? 'space_albums_result_count'.t(context: context, args: {'count': resultCount.toString()})
+                    : 'space_albums_search_result_count'.t(
+                        context: context,
+                        args: {'count': resultCount.toString(), 'total': totalCount.toString(), 'query': query},
+                      ),
                 key: const Key('space-albums-result-count'),
                 style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceVariant),
               ),

@@ -4,8 +4,8 @@ import 'package:openapi/api.dart';
 
 /// Sort modes for a space's linked-albums grid ([SpaceAlbumsPage]).
 enum SpaceAlbumSortMode {
-  name(0, 'library_page_sort_title', SortOrder.asc),
-  photoCount(1, 'library_page_sort_asset_count', SortOrder.desc),
+  name(0, 'name', SortOrder.asc),
+  photoCount(1, 'sort_photo_count', SortOrder.desc),
   recentlyLinked(2, 'sort_recently_linked', SortOrder.desc),
   recentlyUpdated(3, 'sort_recently_updated', SortOrder.desc);
 
@@ -20,7 +20,7 @@ enum SpaceAlbumSortMode {
 
 /// Sort modes for the Spaces grid ([SpacesPage]).
 enum SpaceSortMode {
-  name(0, 'library_page_sort_title', SortOrder.asc),
+  name(0, 'name', SortOrder.asc),
   recentActivity(1, 'sort_recent_activity', SortOrder.desc),
   dateCreated(2, 'sort_date_created', SortOrder.desc),
   members(3, 'sort_members', SortOrder.desc),
