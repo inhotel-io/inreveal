@@ -1351,9 +1351,24 @@ export class AssetRepository {
     const order = options.order === AssetOrder.Asc ? AssetOrder.Asc : AssetOrder.Desc;
     const bucketSize = options.bucketSize ?? TimeBucketSize.Month;
     const query = this.db
+      // Stage 1 — FILTER: reuse the shared timeline filter chain (the same one
+      // getTimeBuckets/getTimeBucketCovers use) so the asset list can never drift
+      // out of sync with the scrubber counts. Selects ids only; asset_exif is
+      // joined by the helper only when an exif filter is active.
+      .with('filtered', (qb) =>
+        withTimeBucketAssetFilters(
+          qb
+            .selectFrom('asset')
+            .select('asset.id')
+            .where(truncatedDate(options.orderBy, bucketSize), '=', timeBucket.replace(/^[+-]/, '')),
+          options,
+        ),
+      )
+      // Stage 2 — PROJECT: build the columnar row shape for the matched ids.
       .with('cte', (qb) =>
         qb
-          .selectFrom('asset')
+          .selectFrom('filtered')
+          .innerJoin('asset', 'asset.id', 'filtered.id')
           .innerJoin('asset_exif', 'asset.id', 'asset_exif.assetId')
           .select((eb) => [
             'asset.duration',
@@ -1388,130 +1403,10 @@ export class AssetRepository {
             qb.select(['asset_exif.city', 'asset_exif.country']),
           )
           .$if(!!options.withCoordinates, (qb) => qb.select(['asset_exif.latitude', 'asset_exif.longitude']))
-          .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
-          .where('asset.deletedAt', options.isTrashed ? 'is not' : 'is', null)
-          .$if(options.visibility == undefined, withDefaultVisibility)
-          .$if(!!options.visibility, (qb) => qb.where('asset.visibility', '=', options.visibility!))
-          .$if(!!options.bbox, (qb) => {
-            const bbox = options.bbox!;
-            const circle = getBoundingCircle(bbox);
-
-            const withBoundingCircle = qb.where(
-              sql`earth_box(ll_to_earth_public(${circle.centerLatitude}, ${circle.centerLongitude}), ${circle.radius})`,
-              '@>',
-              sql`ll_to_earth_public(asset_exif.latitude, asset_exif.longitude)`,
-            );
-
-            return withBoundingBox(withBoundingCircle, bbox);
-          })
-          .where(truncatedDate(options.orderBy, bucketSize), '=', timeBucket.replace(/^[+-]/, ''))
-          .$if(!!options.albumId, (qb) =>
-            qb.where((eb) =>
-              eb.and([
-                eb.exists(
-                  eb
-                    .selectFrom('album_asset')
-                    .whereRef('album_asset.assetId', '=', 'asset.id')
-                    .where('album_asset.albumId', '=', asUuid(options.albumId!)),
-                ),
-                // Fork RBAC (Slice 1 / security-3 defense-in-depth) — inline copy of the
-                // withTimeBucketAssetFilters albumId gate. Keep in sync with that helper: an
-                // explicit visibility=HIDDEN/LOCKED bypasses withDefaultVisibility above, so the
-                // album arm needs its own flat gate to never surface Hidden/Locked album assets.
-                spaceVisibilityGate(eb),
-                // Fork RBAC (Slice 1 / H1 defense-in-depth) — inline copy of the
-                // withTimeBucketAssetFilters albumId deletedAt gate. Keep in sync with that
-                // helper: never surface a trashed album asset via this arm even if the
-                // top-level isTrashed ternary (line 1352) or the service-layer guard is bypassed.
-                eb('asset.deletedAt', 'is', null),
-              ]),
-            ),
-          )
-          .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
-            qb.where((eb) =>
-              eb.not(eb.exists((eb) => eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
-            ),
-          )
-          .$if(!!options.isInAlbum && !options.albumId, (qb) =>
-            qb.where((eb) =>
-              eb.exists((eb) => eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id')),
-            ),
-          )
-          .$if(!!options.spaceId, (qb) =>
-            qb.where((eb) =>
-              // Fork RBAC (Fix A) — inline copy of the withTimeBucketAssetFilters gate. Keep in
-              // sync with that helper: intersect the space-membership predicate with an
-              // INDEPENDENT `own OR (Archive|Timeline)` gate so explicit `visibility=HIDDEN`/
-              // `LOCKED` can't leak OTHER members' Hidden/Locked in-space assets.
-              eb.and([
-                eb.or(
-                  spaceAssetPathBranches(eb, {
-                    correlateAssetId: 'asset.id',
-                    correlateLibraryId: 'asset.libraryId',
-                    scope: { spaceId: options.spaceId! },
-                    requireShowInTimeline: true,
-                  }),
-                ),
-                eb.or([
-                  ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
-                  spaceVisibilityGate(eb),
-                ]),
-              ]),
-            ),
-          )
-          .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
-          .$if(!!options.spacePersonIds?.length, (qb) =>
-            hasSpacePeople(qb, options.spacePersonIds!).where((eb) =>
-              // Space-person face narrowing carries the independent visibility gate too (inline copy).
-              eb.or([
-                ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
-                spaceVisibilityGate(eb),
-              ]),
-            ),
-          )
-          .$if(!!options.identityIds?.length, (qb) => hasFaceIdentities(qb, options.identityIds!))
-          .$if(!!options.city, (qb) => qb.where('asset_exif.city', '=', options.city!))
-          .$if(!!options.country, (qb) => qb.where('asset_exif.country', '=', options.country!))
-          .$if(!!options.make, (qb) => qb.where('asset_exif.make', '=', options.make!))
-          .$if(!!options.model, (qb) => qb.where('asset_exif.model', '=', options.model!))
-          .$if(options.rating !== undefined, (qb) => qb.where('asset_exif.rating', '>=', options.rating!))
-          .$if(!!options.userIds && !options.timelineSpaceIds, (qb) =>
-            qb.where('asset.ownerId', '=', anyUuid(options.userIds!)),
-          )
-          .$if(!!options.userIds && !!options.timelineSpaceIds, (qb) =>
-            qb.where((eb) =>
-              // Fork RBAC (Fix A) — inline copy of the withTimeBucketAssetFilters timelineSpaceIds
-              // arm. Caller's own rows follow the resolved visibility; other members' rows carry
-              // the independent Archive+Timeline gate so Hidden/Locked never leak.
-              eb.or([
-                eb('asset.ownerId', '=', anyUuid(options.userIds!)),
-                eb.and([
-                  spaceVisibilityGate(eb),
-                  eb.or(
-                    spaceAssetPathBranches(eb, {
-                      correlateAssetId: 'asset.id',
-                      correlateLibraryId: 'asset.libraryId',
-                      scope: { spaceIds: options.timelineSpaceIds! },
-                      requireShowInTimeline: true,
-                    }),
-                  ),
-                ]),
-              ]),
-            ),
-          )
-          .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
+          // withStacked collapses a stack to its primary asset (filtered in Stage 1)
+          // and projects the [stackId, count] array for the columnar output.
           .$if(!!options.withStacked, (qb) =>
             qb
-              .where((eb) =>
-                eb.not(
-                  eb.exists(
-                    eb
-                      .selectFrom('stack')
-                      .whereRef('stack.id', '=', 'asset.stackId')
-                      .whereRef('stack.primaryAssetId', '!=', 'asset.id'),
-                  ),
-                ),
-              )
               .leftJoinLateral(
                 (eb) =>
                   eb
@@ -1526,14 +1421,6 @@ export class AssetRepository {
               )
               .select('stack'),
           )
-          .$if(!!options.assetType, (qb) => qb.where('asset.type', '=', options.assetType!))
-          .$if(options.isDuplicate !== undefined, (qb) =>
-            qb.where('asset.duplicateId', options.isDuplicate ? 'is not' : 'is', null),
-          )
-          .$if(!!options.isTrashed, (qb) => qb.where('asset.status', '!=', AssetStatus.Deleted))
-          .$if(!!options.tagIds?.length, (qb) => withAnyTagId(qb, options.tagIds!))
-          .$if(!!options.takenAfter, (qb) => qb.where('asset.localDateTime', '>=', new Date(options.takenAfter!)))
-          .$if(!!options.takenBefore, (qb) => qb.where('asset.localDateTime', '<=', new Date(options.takenBefore!)))
           .orderBy(
             options.orderBy == AssetOrderBy.CreatedAt
               ? sql`"createdAt"`
