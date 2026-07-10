@@ -1,14 +1,20 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
+import 'package:immich_mobile/pages/library/spaces/collection_sort.dart';
 import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
+import 'package:immich_mobile/widgets/common/collection_sort_button.dart';
+import 'package:immich_mobile/widgets/common/search_field.dart';
 
 /// Space Albums list/manage page — Surface 2 of the Phase-2B design.
 ///
@@ -21,10 +27,14 @@ import 'package:immich_mobile/routing/router.dart';
 ///  - Editor-only app-bar "＋ Link" action — stub callback [onLink] (link
 ///    picker lands in B5).
 ///  - Centered empty state for an empty list.
+///  - A search field + reversible `CollectionSortButton` (persisted via
+///    [AppConfig.spaceAlbums] / [SettingsKey.spaceAlbumsSortMode] /
+///    [SettingsKey.spaceAlbumsIsReverse]) and a distinct no-match state when
+///    a query filters out every linked album.
 ///
 /// Role-gated: affordances only shown when [canEdit] is true.
 @RoutePage()
-class SpaceAlbumsPage extends ConsumerWidget {
+class SpaceAlbumsPage extends HookConsumerWidget {
   final String spaceId;
   final bool canEdit;
 
@@ -57,6 +67,15 @@ class SpaceAlbumsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final albumsAsync = ref.watch(spaceAlbumsProvider(spaceId));
+    final sortConfig = ref.watch(appConfigProvider.select((config) => config.spaceAlbums));
+
+    final queryController = useTextEditingController();
+    final query = useState('');
+    useEffect(() {
+      void listener() => query.value = queryController.text;
+      queryController.addListener(listener);
+      return () => queryController.removeListener(listener);
+    }, [queryController]);
 
     return Scaffold(
       appBar: AppBar(
@@ -77,16 +96,110 @@ class SpaceAlbumsPage extends ConsumerWidget {
         error: (error, _) => Center(
           child: Text('space_albums_load_failed'.t(context: context, args: {'error': error.toString()})),
         ),
-        data: (albums) => albums.isEmpty
-            ? _EmptyState(key: const Key('space-albums-empty'), canEdit: canEdit, onLink: onLink)
-            : _AlbumGrid(
-                albums: albums,
-                canEdit: canEdit,
-                onToggle: onToggle,
-                onUnlink: onUnlink,
-                onTap: (albumId) =>
-                    context.pushRoute(SpaceAlbumDetailRoute(spaceId: spaceId, albumId: albumId, canEdit: canEdit)),
+        data: (albums) {
+          if (albums.isEmpty) {
+            return _EmptyState(key: const Key('space-albums-empty'), canEdit: canEdit, onLink: onLink);
+          }
+
+          final filtered = filterAndSortSpaceAlbums(albums, query.value, sortConfig.sortMode, sortConfig.isReverse);
+
+          return Column(
+            children: [
+              _SearchAndSortBar(
+                controller: queryController,
+                hasQuery: query.value.isNotEmpty,
+                onClear: queryController.clear,
+                resultCount: filtered.length,
+                sortMode: sortConfig.sortMode,
+                isReverse: sortConfig.isReverse,
+                onSortChanged: (mode, isReverse) async {
+                  final settings = ref.read(settingsProvider);
+                  await settings.write(SettingsKey.spaceAlbumsSortMode, mode);
+                  await settings.write(SettingsKey.spaceAlbumsIsReverse, isReverse);
+                },
               ),
+              Expanded(
+                child: filtered.isEmpty
+                    ? _NoMatch(key: const Key('space-albums-no-match'), query: query.value)
+                    : _AlbumGrid(
+                        albums: filtered,
+                        canEdit: canEdit,
+                        onToggle: onToggle,
+                        onUnlink: onUnlink,
+                        onTap: (albumId) => context.pushRoute(
+                          SpaceAlbumDetailRoute(spaceId: spaceId, albumId: albumId, canEdit: canEdit),
+                        ),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Search + sort bar
+// ---------------------------------------------------------------------------
+
+class _SearchAndSortBar extends StatelessWidget {
+  const _SearchAndSortBar({
+    required this.controller,
+    required this.hasQuery,
+    required this.onClear,
+    required this.resultCount,
+    required this.sortMode,
+    required this.isReverse,
+    required this.onSortChanged,
+  });
+
+  final TextEditingController controller;
+  final bool hasQuery;
+  final VoidCallback onClear;
+  final int resultCount;
+  final SpaceAlbumSortMode sortMode;
+  final bool isReverse;
+  final void Function(SpaceAlbumSortMode mode, bool isReverse) onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SearchField(
+            key: const Key('space-albums-search-field'),
+            hintText: 'space_albums_search_hint'.t(context: context),
+            controller: controller,
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: hasQuery
+                ? IconButton(
+                    key: const Key('space-albums-search-clear'),
+                    icon: const Icon(Icons.clear_rounded),
+                    onPressed: onClear,
+                  )
+                : null,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'space_albums_result_count'.t(context: context, args: {'count': resultCount.toString()}),
+                key: const Key('space-albums-result-count'),
+                style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceVariant),
+              ),
+              CollectionSortButton<SpaceAlbumSortMode>(
+                options: SpaceAlbumSortMode.values.map((mode) => (mode: mode, label: mode.label)).toList(),
+                current: sortMode,
+                isReverse: isReverse,
+                onChanged: onSortChanged,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -317,6 +430,34 @@ class _EmptyState extends StatelessWidget {
               label: Text('space_albums_empty_editor_cta'.t(context: context)),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// No-match state (source list non-empty, but the query matches nothing)
+// ---------------------------------------------------------------------------
+
+class _NoMatch extends StatelessWidget {
+  const _NoMatch({super.key, required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.search_off_rounded, size: 64, color: context.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+          const SizedBox(height: 16),
+          Text(
+            'space_albums_no_match'.t(context: context, args: {'query': query}),
+            textAlign: TextAlign.center,
+            style: context.textTheme.titleMedium?.copyWith(color: context.colorScheme.onSurfaceVariant),
+          ),
         ],
       ),
     );

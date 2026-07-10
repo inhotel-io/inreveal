@@ -14,14 +14,23 @@
 /// provider path). Integration is confirmed by the on-device verify.
 library;
 
+import 'package:drift/drift.dart' as drift;
+import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
+import 'package:immich_mobile/domain/services/store.service.dart';
+import 'package:immich_mobile/entities/store.entity.dart';
+import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
+import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
+import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/pages/library/spaces/space_album_detail.page.dart';
 import 'package:immich_mobile/pages/library/spaces/space_albums.page.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 
+import '../../test_utils.dart';
 import '../../widget_tester_extensions.dart';
 
 // ---------------------------------------------------------------------------
@@ -52,6 +61,19 @@ Widget _wrapSliver(Widget sliver) => Scaffold(
   ),
 );
 
+/// Force a taller logical viewport so the ⋮ menu (below the album cover,
+/// itself below the search+sort header added on top of [SpaceAlbumsPage])
+/// isn't clipped out of the default 800×600 test surface — `tester.tap`
+/// would otherwise compute a coordinate that hit-tests to nothing.
+/// `tester.binding.setSurfaceSize` is a no-op under the current Flutter test
+/// binding; overriding the view's physical size directly is the working API.
+void _setTallLogicalSize(WidgetTester tester, {double dpr = 3.0}) {
+  tester.view.devicePixelRatio = dpr;
+  tester.view.physicalSize = Size(800 * dpr, 1200 * dpr);
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 // ---------------------------------------------------------------------------
 // SpaceAlbumsPage callback tests (wiring contract)
 // ---------------------------------------------------------------------------
@@ -59,8 +81,29 @@ Widget _wrapSliver(Widget sliver) => Scaffold(
 void main() {
   const spaceId = 'space-1';
 
+  late Drift db;
+
+  setUpAll(() async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    TestUtils.init();
+    db = Drift(drift.DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
+    await StoreService.init(storeRepository: DriftStoreRepository(db), listenUpdates: false);
+    await SettingsRepository.ensureInitialized(db);
+  });
+
+  setUp(() async {
+    await Store.clear();
+    await SettingsRepository.instance.clear(SettingsKey.values);
+  });
+
+  tearDownAll(() async {
+    await Store.clear();
+    await db.close();
+  });
+
   group('SpaceAlbumsPage — onToggle callback wiring', () {
     testWidgets('editor taps Show/Hide in timeline — onToggle invoked with correct albumId', (tester) async {
+      _setTallLogicalSize(tester);
       String? toggledId;
       final albums = [
         _album(id: 'a1', name: 'Hawaii', showInTimeline: true),
@@ -99,6 +142,7 @@ void main() {
 
   group('SpaceAlbumsPage — onUnlink callback wiring', () {
     testWidgets('editor taps Unlink — onUnlink invoked with correct albumId', (tester) async {
+      _setTallLogicalSize(tester);
       String? unlinkedId;
       final albums = [_album(id: 'a1', name: 'Hawaii')];
 
