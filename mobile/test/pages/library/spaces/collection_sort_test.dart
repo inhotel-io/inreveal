@@ -216,6 +216,13 @@ void main() {
       expect(byUpdated.first.name, 'Alps Weekend');
       // The two orders genuinely disagree (not just reading the same field twice).
       expect(names(byLinked), isNot(equals(names(byUpdated))));
+
+      // Reversed flips both independently: ascending linkedAt / updatedAt puts
+      // the "Documentary Duplicate" pair (earliest on both fields) first.
+      final byLinkedReversed = filterAndSortSpaceAlbums(sample, '', SpaceAlbumSortMode.recentlyLinked, true);
+      final byUpdatedReversed = filterAndSortSpaceAlbums(sample, '', SpaceAlbumSortMode.recentlyUpdated, true);
+      expect(byLinkedReversed.first.id, 'dup-1');
+      expect(byUpdatedReversed.first.id, 'dup-1');
     });
 
     test('ties break deterministically by name then id', () {
@@ -304,16 +311,20 @@ void main() {
       expect(spaceNames(filterAndSortSpaces(spacesSample, '', SpaceSortMode.dateCreated, true)).first, 'Empty Space');
     });
 
-    test('members desc by default (absent treated as 0), ties break by name', () {
+    test('members desc by default (absent treated as 0), ties break by name, reversed flips', () {
       final byMembers = filterAndSortSpaces(spacesSample, '', SpaceSortMode.members, false);
       expect(spaceNames(byMembers).first, 'Team Project'); // memberCount 12
       expect(spaceNames(byMembers).last, 'Empty Space'); // absent -> 0
       // 'Family Photos' (8) and 'Family Photos Archive' (8) tie; name breaks it.
       final tiedNames = spaceNames(byMembers).where((n) => n.startsWith('Family')).toList();
       expect(tiedNames, ['Family Photos', 'Family Photos Archive']);
+
+      final reversed = filterAndSortSpaces(spacesSample, '', SpaceSortMode.members, true);
+      expect(spaceNames(reversed).first, 'Empty Space');
+      expect(spaceNames(reversed).last, 'Team Project');
     });
 
-    test('photos desc by default (absent treated as 0), ties break by name', () {
+    test('photos desc by default (absent treated as 0), ties break by name, reversed flips', () {
       final byPhotos = filterAndSortSpaces(spacesSample, '', SpaceSortMode.photos, false);
       expect(spaceNames(byPhotos).first, 'Family Photos'); // assetCount 500
       expect(spaceNames(byPhotos).last, 'Empty Space'); // absent -> 0
@@ -321,6 +332,10 @@ void main() {
       final tiedIndexE = spaceNames(byPhotos).indexOf('Family Photos Archive');
       final tiedIndexC = spaceNames(byPhotos).indexOf('Team Project');
       expect(tiedIndexE, lessThan(tiedIndexC));
+
+      final reversed = filterAndSortSpaces(spacesSample, '', SpaceSortMode.photos, true);
+      expect(spaceNames(reversed).first, 'Empty Space');
+      expect(spaceNames(reversed).last, 'Family Photos');
     });
 
     test('space with absent lastActivityAt/memberCount/assetCount does not throw and sorts stably', () {
