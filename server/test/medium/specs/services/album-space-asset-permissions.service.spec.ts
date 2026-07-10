@@ -13,6 +13,7 @@ import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
 import { AlbumService } from 'src/services/album.service';
 import { checkAccess } from 'src/utils/access';
+import { inAlbums } from 'src/utils/database';
 import { spaceContributedAssetExists } from 'src/utils/shared-space-album-scope';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
@@ -276,6 +277,34 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
         await spaceRepo.addAlbum({ spaceId: spaceS, albumId: albumL, addedById: actors.spaceOwner.id });
       }
       expect(await seesContribution(actors.spaceEditor.id, assetCarol)).toBe(true);
+    });
+  });
+
+  // ===============================================================================================
+  // DISPLAY — contribution surfaces as album content only for a live member (inAlbums gate)
+  // ===============================================================================================
+  describe('DISPLAY (album grid membership)', () => {
+    it('shows as album content when the viewer has the tether space live (timelineSpaceIds); excluded without it', async () => {
+      const { ctx } = setup();
+      const { asset } = await ctx.newAsset({ ownerId: actors.carol.id, visibility: AssetVisibility.Timeline });
+      await ctx.newSharedSpaceAsset({ spaceId: spaceS, assetId: asset.id, addedById: actors.carol.id });
+      const [res] = await sut.addAssets(authOf('spaceEditor'), albumL, { ids: [asset.id] });
+      expect(res.success).toBe(true);
+
+      const asLiveMember = await inAlbums(db.selectFrom('asset').where('asset.id', '=', asset.id), [albumL], [spaceS])
+        .select('asset.id')
+        .execute();
+      expect(asLiveMember.map((r) => r.id)).toContain(asset.id);
+
+      // No live member-space (album owner who left / a pure-owner album view) → contribution excluded.
+      const withoutLiveMembership = await inAlbums(
+        db.selectFrom('asset').where('asset.id', '=', asset.id),
+        [albumL],
+        undefined,
+      )
+        .select('asset.id')
+        .execute();
+      expect(withoutLiveMembership).toHaveLength(0);
     });
   });
 
