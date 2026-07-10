@@ -354,7 +354,6 @@
     if (query) {
       terms.query = query;
     } else if (filters.isFavorite === undefined) {
-      terms.withPartners = true;
       terms.withSharedSpaces = true;
     }
     void modalManager.show(SearchAddAllToCollectionModal, {

@@ -110,4 +110,21 @@ describe('TimelineRouteGroupingBar', () => {
     expect(screen.queryByTestId('timeline-desktop-grouping-control')).not.toBeInTheDocument();
     expect(screen.queryByTestId('active-filters-bar')).not.toBeInTheDocument();
   });
+
+  it('surfaces the add-all-to-collection action when a handler and results are provided (no temporal filter)', async () => {
+    const onAddAllToCollection = vi.fn();
+    render(TimelineRouteGroupingBar, {
+      props: {
+        grouping: 'month',
+        resultCount: 42,
+        onGroupingChange: () => {},
+        onAddAllToCollection,
+      },
+    });
+
+    const button = screen.getByTestId('add-all-to-collection');
+    expect(button).toBeInTheDocument();
+    await fireEvent.click(button);
+    expect(onAddAllToCollection).toHaveBeenCalled();
+  });
 });
