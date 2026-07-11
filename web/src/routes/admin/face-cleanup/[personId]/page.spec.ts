@@ -414,6 +414,64 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     });
   });
 
+  // ---- Slice 3: "Confirm / lock" bulk action (owner-agnostic lock) — mirrors the Keep here (stay) wiring ----
+
+  describe('Bulk actions — Confirm / lock', () => {
+    it('tags the selected tile lock (violet ribbon) and updates the tally, clearing the selection', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('bulk-lock'));
+
+      await waitFor(() => {
+        // Bulk actions clear the selection, swapping the dock back to the summary.
+        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.getByTestId('tally')).toBeInTheDocument();
+      });
+
+      const refreshedTiles = screen.getAllByTestId('face-tile');
+      expect(refreshedTiles[0]).toHaveAttribute('data-state', 'lock');
+      expect(screen.getByText('admin.face_cleanup_review_tile_lock_ribbon')).toBeInTheDocument();
+
+      // The tally's "Locked" chip now reads 1 and is no longer dimmed (opacity-40 = zero-count).
+      const tally = screen.getByTestId('tally');
+      const lockLabel = within(tally).getByText('admin.face_cleanup_review_tally_lock');
+      const lockChip = lockLabel.parentElement!;
+      expect(lockChip).not.toHaveClass('opacity-40');
+      expect(lockChip).toHaveTextContent('1');
+    });
+
+    it('includes the locked face in `lock` and excludes it from `moveToPerson` on Apply', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]); // face-1, suspected owner-a
+      await fireEvent.click(screen.getByTestId('bulk-lock'));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+            ],
+            stay: [],
+            lock: ['face-1'],
+            detach: [],
+          },
+        });
+      });
+    });
+  });
+
   // ---- Rest-of-cluster (legacy `applyFaceRepair` path, retained this slice — see +page.svelte L76-79) ----
 
   describe('Rest-of-cluster legacy apply path', () => {
