@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { OnJob } from 'src/decorators';
-import { FaceRepairScanParams } from 'src/dtos/face-repair.dto';
+import { FaceRepairResolveRequest, FaceRepairResolveResponse, FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
 import { ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
 import { BaseService } from 'src/services/base.service';
@@ -12,6 +12,8 @@ import {
   applyDeclineFilters,
   classifyFlaggedPerson,
   decideReattribution,
+  findOverlappingIds,
+  findUnresolvableIds,
   tallyReattribution,
 } from 'src/utils/face-repair';
 
@@ -678,6 +680,114 @@ export class FaceRepairService extends BaseService {
     }
 
     return result;
+  }
+
+  // Slice 1 of the full per-face resolution (docs/plans/2026-07-10-face-cleanup-full-resolution-design.md):
+  // replaces the 2-state `apply` for a single reviewed person. Only the move-to-owner path is wired this
+  // slice — `stay`/`lock`/`detach` are validated (disjoint buckets + snapshot membership) but always empty
+  // until Slices 2/3/5 land; `resolvedBy` is threaded through now (unused here) so those slices' controller
+  // wiring never needs to change (C2).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async resolveFaces(input: FaceRepairResolveRequest, resolvedBy: string): Promise<FaceRepairResolveResponse> {
+    const { personId, moveToPerson, stay, lock, detach } = input;
+    const moveFaceIds = moveToPerson.flatMap((group) => group.faceIds);
+
+    // Guards reused verbatim from applyRepair (C5), before any snapshot read.
+    if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
+      throw new ConflictException('Refusing to apply while facial recognition is active');
+    }
+    await this.faceRepairScanRepository.failStaleScans(STALE_SCAN_TIMEOUT_MS);
+    const latest = await this.faceRepairScanRepository.getLatestScan();
+    if (latest && (latest.status === 'pending' || latest.status === 'running')) {
+      throw new ConflictException('Refusing to apply while a scan is in progress');
+    }
+
+    // E7: a face may resolve only one way in a single request. moveToPerson's groups flatten to one bucket;
+    // stay/lock/detach are always [] this slice, so this is a no-op until Slices 2/3/5 populate them — but the
+    // check is already in place so those slices don't need to revisit it.
+    const overlapping = findOverlappingIds([moveFaceIds, stay, lock, detach]);
+    if (overlapping.length > 0) {
+      throw new BadRequestException('A face cannot be resolved more than one way in the same request');
+    }
+
+    // Read this person's stored flagged-face snapshot (per-face suspected owner) and apply the same
+    // declined-since-scan filtering the review page and applyRepair both use.
+    const stored = latest
+      ? await this.faceRepairScanRepository.getScanFlaggedFacesForPersons(latest.id, [personId])
+      : [];
+    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
+      personIds: [personId],
+      assetFaceIds: stored.map((face) => face.assetFaceId),
+    });
+    const byPerson = new Map<string, FlaggedFace[]>([
+      [
+        personId,
+        stored.map((face) => ({
+          assetFaceId: face.assetFaceId,
+          currentPersonId: face.personId,
+          suspectedOwnerId: face.suspectedOwnerId,
+        })),
+      ],
+    ]);
+    applyDeclineFilters(byPerson, declineMaps);
+    const resolvable = new Set((byPerson.get(personId) ?? []).map((face) => face.assetFaceId));
+
+    // stay/lock/detach (E15) act only on this stored, still-flagged snapshot — a rest-of-cluster face has no
+    // suspected owner and no keep/lock/detach meaning. Always [] this slice, so a no-op today.
+    const unresolvable = findUnresolvableIds([...stay, ...lock, ...detach], resolvable);
+    if (unresolvable.length > 0) {
+      throw new BadRequestException('Some faces are not in the flagged snapshot for this person');
+    }
+
+    // moveToPerson: a requested face no longer flagged here — moved off since the scan, or declined since
+    // (E1/M9) — is silently skipped rather than rejected; executeRepair's own still-on-source re-check at
+    // write time covers any remaining race between this read and the write.
+    const toRepair: FlaggedFace[] = [];
+    let preSkipped = 0;
+    for (const group of moveToPerson) {
+      for (const assetFaceId of group.faceIds) {
+        if (resolvable.has(assetFaceId)) {
+          toRepair.push({ assetFaceId, currentPersonId: personId, suspectedOwnerId: group.destinationPersonId });
+        } else {
+          preSkipped++;
+        }
+      }
+    }
+
+    const result = await this.executeRepair({
+      toRepair,
+      reviewOnlyFaces: [],
+      reviewOnlyPersonIds: [],
+      unAttributableFaces: [],
+      perPerson: [],
+    });
+
+    // Empty-unnamed cleanup, reused from applyRepair's manual-move cleanup (A2): only delete a source with
+    // ZERO remaining faces of any kind, and only when it was never named.
+    const remaining = await this.faceRepairRepository.countEligibleFaces({ personId });
+    if (remaining === 0) {
+      const source = await this.personRepository.getById(personId);
+      if (source && (!source.name || source.name.trim().length === 0)) {
+        const remainingAll = await this.faceRepairRepository.countAllFaces(personId);
+        if (remainingAll === 0) {
+          await this.personRepository.delete([personId]);
+        }
+      }
+    }
+
+    // Drop-on-any-resolution (C5, E13): unlike applyRepair's `moved > 0` gate, a committed resolve always
+    // drains the person from the console immediately, even when every flagged face was kept/locked (zero
+    // moves, wired in Slices 2/3). moveToPerson destinations only ever gain faces from this call, so there is
+    // no destination to additionally drain this slice.
+    await this.faceRepairScanRepository.removePersonsFromLatestScan([personId]);
+
+    return {
+      moved: result.moved,
+      declined: 0,
+      locked: 0,
+      detached: 0,
+      skipped: result.skipped + preSkipped,
+    };
   }
 
   private async collectClusterFaceIds(personId: string): Promise<string[]> {

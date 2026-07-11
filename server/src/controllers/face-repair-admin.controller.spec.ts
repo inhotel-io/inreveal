@@ -324,6 +324,58 @@ describe(FaceRepairAdminController.name, () => {
     });
   });
 
+  describe('POST /admin/face-repair/resolve', () => {
+    const personId = '00000000-0000-4000-a000-000000000030';
+    const ownerA = '00000000-0000-4000-a000-000000000031';
+    const ownerB = '00000000-0000-4000-a000-000000000032';
+    const faceId1 = '00000000-0000-4000-a000-000000000033';
+    const faceId2 = '00000000-0000-4000-a000-000000000034';
+    const faceId3 = '00000000-0000-4000-a000-000000000035';
+    const adminUserId = '00000000-0000-4000-a000-000000000099';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/admin/face-repair/resolve');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates to service.resolveFaces with the auth user id as resolvedBy (C2)', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.resolveFaces.mockResolvedValue({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      const moveToPerson = [
+        { destinationPersonId: ownerA, faceIds: [faceId1, faceId2] },
+        { destinationPersonId: ownerB, faceIds: [faceId3] },
+      ];
+      const { status, body } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson });
+      expect(status).toBe(201);
+      expect(service.resolveFaces).toHaveBeenCalledWith(
+        expect.objectContaining({ personId, moveToPerson, stay: [], lock: [], detach: [] }),
+        adminUserId,
+      );
+      expect(body).toEqual({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });
+    });
+
+    it('rejects a non-uuid personId with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId: 'not-a-uuid' });
+      expect(status).toBe(400);
+      expect(service.resolveFaces).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-uuid faceId in a moveToPerson group with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson: [{ destinationPersonId: ownerA, faceIds: ['not-a-uuid'] }] });
+      expect(status).toBe(400);
+      expect(service.resolveFaces).not.toHaveBeenCalled();
+    });
+  });
+
   describe('DELETE /admin/face-repair/decline', () => {
     const uuid1 = '00000000-0000-4000-a000-000000000001';
 

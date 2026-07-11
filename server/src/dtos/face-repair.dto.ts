@@ -226,3 +226,33 @@ export const FaceRepairClusterFacesResponseSchema = z
   })
   .meta({ id: 'FaceRepairClusterFacesResponseDto' });
 export class FaceRepairClusterFacesResponseDto extends createZodDto(FaceRepairClusterFacesResponseSchema) {}
+
+// Slice 1 of the full per-face resolution: `resolve` replaces the 2-state `apply` (spec
+// docs/plans/2026-07-10-face-cleanup-full-resolution-design.md). Only `moveToPerson` is wired end-to-end this
+// slice; `stay`/`lock`/`detach` default to [] and are validated (disjoint buckets) but not yet acted on —
+// Slices 2/3/5 wire them without another DTO/SDK change.
+const MoveGroupSchema = z.object({ destinationPersonId: z.uuidv4(), faceIds: z.array(z.uuidv4()).min(1) });
+export const FaceRepairResolveRequestSchema = z
+  .object({
+    personId: z.uuidv4(),
+    moveToPerson: z.array(MoveGroupSchema).default([]),
+    stay: z.array(z.uuidv4()).default([]),
+    lock: z.array(z.uuidv4()).default([]),
+    detach: z.array(z.uuidv4()).default([]),
+    entireCluster: z.object({ destinationPersonId: z.uuidv4() }).optional(),
+  })
+  .meta({ id: 'FaceRepairResolveRequestDto' });
+export class FaceRepairResolveRequestDto extends createZodDto(FaceRepairResolveRequestSchema) {}
+export type FaceRepairResolveRequest = z.infer<typeof FaceRepairResolveRequestSchema>;
+
+export const FaceRepairResolveResponseSchema = z
+  .object({
+    moved: z.number(),
+    declined: z.number(),
+    locked: z.number(),
+    detached: z.number(),
+    skipped: z.number(),
+  })
+  .meta({ id: 'FaceRepairResolveResponseDto' });
+export class FaceRepairResolveResponseDto extends createZodDto(FaceRepairResolveResponseSchema) {}
+export type FaceRepairResolveResponse = z.infer<typeof FaceRepairResolveResponseSchema>;

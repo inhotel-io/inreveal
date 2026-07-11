@@ -170,6 +170,26 @@ export type FaceRepairDeclineRequestDto = {
 export type FaceRepairDeclineCreatedDto = {
     created: number;
 };
+export type FaceRepairResolveRequestDto = {
+    detach?: string[];
+    entireCluster?: {
+        destinationPersonId: string;
+    };
+    lock?: string[];
+    moveToPerson?: {
+        destinationPersonId: string;
+        faceIds: string[];
+    }[];
+    personId: string;
+    stay?: string[];
+};
+export type FaceRepairResolveResponseDto = {
+    declined: number;
+    detached: number;
+    locked: number;
+    moved: number;
+    skipped: number;
+};
 export type FaceRepairScanTriggerRequestDto = {
     params?: {
         largeClusterThreshold?: number;
@@ -4545,6 +4565,21 @@ export function declineFaceRepair({ faceRepairDeclineRequestDto }: {
         ...opts,
         method: "POST",
         body: faceRepairDeclineRequestDto
+    })));
+}
+/**
+ * Resolve reviewed faces
+ */
+export function resolveFaces({ faceRepairResolveRequestDto }: {
+    faceRepairResolveRequestDto: FaceRepairResolveRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairResolveResponseDto;
+    }>("/admin/face-repair/resolve", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairResolveRequestDto
     })));
 }
 /**
