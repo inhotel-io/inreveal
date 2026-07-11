@@ -1135,6 +1135,7 @@ export class SyncService extends BaseService {
         const backfill = this.syncRepository.sharedSpaceAlbumToAsset.getBackfill(
           { ...options, afterUpdateId: startId, beforeUpdateId: endId },
           album.id,
+          options.userId,
         );
 
         for await (const { updateId, ...data } of backfill) {
@@ -1268,6 +1269,7 @@ export class SyncService extends BaseService {
         const backfill = this.syncRepository.sharedSpaceAlbumAssetExif.getBackfill(
           { ...options, afterUpdateId: startId, beforeUpdateId: endId },
           album.id,
+          options.userId,
         );
 
         for await (const { updateId, ...data } of backfill) {

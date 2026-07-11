@@ -7,7 +7,9 @@ import { getKyselyDB } from 'test/utils';
 
 const drain = async (stream: AsyncIterable<any>) => {
   const out: any[] = [];
-  for await (const row of stream) out.push(row);
+  for await (const row of stream) {
+    out.push(row);
+  }
   return out;
 };
 
@@ -277,6 +279,7 @@ describe('SharedSpaceAlbumAssetSync.getUpdates', () => {
 });
 
 describe('SharedSpaceAlbumAssetSync — contributions (album_space_asset)', () => {
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- test-local seed factory, co-located with its cases
   const seed = async (ctx: SyncTestContext) => {
     const { user: owner } = await ctx.newUser();
     const { user: member } = await ctx.newUser();
@@ -303,5 +306,64 @@ describe('SharedSpaceAlbumAssetSync — contributions (album_space_asset)', () =
     const { member, album, asset } = await seed(ctx);
     const rows = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, member.id));
     expect(rows.some((r: any) => r.id === asset.id)).toBe(true);
+  });
+
+  it('getUpdates emits the contributed asset payload to a member (coupling satisfied)', async () => {
+    const { ctx, sut } = setup();
+    const { member, asset } = await seed(ctx);
+    // albumToAssetAck at max → the `album_space_asset.updateId <= ack` coupling passes.
+    const rows = await drain(
+      sut.getUpdates(
+        { nowId: NOW_ID, userId: member.id },
+        { type: SyncEntityType.AlbumToAssetV1, updateId: BEFORE_UPDATE_ID },
+      ),
+    );
+    expect(rows.some((r: any) => r.id === asset.id)).toBe(true);
+  });
+});
+
+describe('SharedSpaceAlbumAssetSync — multi-space co-linked album (I2 §8.3)', () => {
+  // Payload/exif arms leak the raw photo bytes + EXIF, so the space-correlation gate must cover them too.
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- test-local seed factory, co-located with its cases
+  const seedDisjoint = async (ctx: SyncTestContext) => {
+    const { user: owner } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { user: memberS1 } = await ctx.newUser();
+    const { user: memberS2 } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+
+    const { space: s1 } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: s1.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: s1.id, userId: memberS1.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: s1.id, albumId: album.id });
+
+    const { space: s2 } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: memberS2.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: s2.id, albumId: album.id });
+
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: s1.id });
+    return { album, asset, memberS1, memberS2 };
+  };
+
+  it('does not emit an S1 contribution payload to an S2-only member across getCreates/getBackfill/getUpdates', async () => {
+    const { ctx, sut } = setup();
+    const { album, asset, memberS1, memberS2 } = await seedDisjoint(ctx);
+    const ack = { type: SyncEntityType.AlbumToAssetV1, updateId: BEFORE_UPDATE_ID };
+
+    const s2Creates = await drain(sut.getCreates({ nowId: NOW_ID, userId: memberS2.id }));
+    expect(s2Creates.some((r: any) => r.id === asset.id)).toBe(false);
+    const s2Backfill = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS2.id));
+    expect(s2Backfill.some((r: any) => r.id === asset.id)).toBe(false);
+    const s2Updates = await drain(sut.getUpdates({ nowId: NOW_ID, userId: memberS2.id }, ack));
+    expect(s2Updates.some((r: any) => r.id === asset.id)).toBe(false);
+
+    const s1Creates = await drain(sut.getCreates({ nowId: NOW_ID, userId: memberS1.id }));
+    expect(s1Creates.some((r: any) => r.id === asset.id)).toBe(true);
+    const s1Backfill = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS1.id));
+    expect(s1Backfill.some((r: any) => r.id === asset.id)).toBe(true);
+    const s1Updates = await drain(sut.getUpdates({ nowId: NOW_ID, userId: memberS1.id }, ack));
+    expect(s1Updates.some((r: any) => r.id === asset.id)).toBe(true);
   });
 });
