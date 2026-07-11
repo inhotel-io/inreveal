@@ -796,10 +796,14 @@ export class FaceRepairService extends BaseService {
     let preSkipped = 0;
     for (const group of moveToPerson) {
       for (const assetFaceId of group.faceIds) {
-        if (resolvable.has(assetFaceId)) {
-          toRepair.push({ assetFaceId, currentPersonId: personId, suspectedOwnerId: group.destinationPersonId });
+        const isFlagged = flaggedIds.has(assetFaceId);
+        if (isFlagged && !resolvable.has(assetFaceId)) {
+          preSkipped++; // flagged but declined/dismissed since scan — don't re-move a declined pairing
         } else {
-          preSkipped++;
+          // Either a resolvable flagged face, or a non-flagged rest-of-cluster face (§5.3: moveToPerson
+          // accepts any eligible face currently on personId). executeRepair's still-on-source re-check at
+          // write time skips anything not actually on personId, so no separate eligibility check is needed here.
+          toRepair.push({ assetFaceId, currentPersonId: personId, suspectedOwnerId: group.destinationPersonId });
         }
       }
     }
