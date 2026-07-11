@@ -3,7 +3,6 @@
   import { Route } from '$lib/route';
   import { getPersonFaceThumbnailUrl } from '$lib/utils/people-utils';
   import {
-    applyFaceRepair,
     getFaceRepairClusterFaces,
     getFaceRepairPersonFaces,
     getLatestScan,
@@ -74,10 +73,9 @@
   let applying = $state(false);
   let applyError = $state<string | null>(null);
 
-  // Rest-of-cluster (server-paginated, add-faces feature) — retained this slice as its own self-contained
-  // flow on the OLD `apply` endpoint (Slice 1 only moves the flagged-grid Apply onto `resolve`; unifying the
-  // Rest section onto `resolve` is a later slice). Its selection is intentionally decoupled from the
-  // flagged-grid review model above.
+  // Rest-of-cluster (server-paginated, add-faces feature) — its own self-contained flow, now also posting
+  // through `resolve` (Slice 6): a selected subset moves via `moveToPerson`, "move entire cluster" via
+  // `entireCluster`. Its selection is intentionally decoupled from the flagged-grid review model above.
   const REST_PAGE_SIZE = 48;
   let restFaces = $state<{ assetFaceId: string }[]>([]);
   let restTotal = $state(0);
@@ -238,11 +236,10 @@
     }
     restMoving = true;
     try {
-      await applyFaceRepair({
-        faceRepairApplyRequestDto: {
-          approvedPersonIds: [],
-          excludeFaceIds: [],
-          manualMove: { personId, destinationPersonId: ownerPersonId, faceIds: [...restSelected] },
+      await resolveFaces({
+        faceRepairResolveRequestDto: {
+          personId,
+          moveToPerson: [{ destinationPersonId: ownerPersonId, faceIds: [...restSelected] }],
         },
       });
       void goto(Route.faceCleanup());
@@ -266,11 +263,10 @@
       return;
     }
     try {
-      await applyFaceRepair({
-        faceRepairApplyRequestDto: {
-          approvedPersonIds: [],
-          excludeFaceIds: [],
-          manualMove: { personId, destinationPersonId: ownerPersonId, entireCluster: true },
+      await resolveFaces({
+        faceRepairResolveRequestDto: {
+          personId,
+          entireCluster: { destinationPersonId: ownerPersonId },
         },
       });
       void goto(Route.faceCleanup());
@@ -481,7 +477,7 @@
         {/if}
       </div>
 
-      <!-- Rest of this cluster (paginated, add-faces feature — retained on the old apply endpoint) -->
+      <!-- Rest of this cluster (paginated, add-faces feature — posts through resolve) -->
       <div
         class="mb-28 overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700"
         data-testid="rest-section"

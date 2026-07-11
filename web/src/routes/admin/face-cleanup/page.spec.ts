@@ -1,4 +1,11 @@
-import { applyFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
+import {
+  getFaceRepairPersonFaces,
+  getLatestScan,
+  resolveFaces,
+  triggerScan,
+  type FaceRepairPersonFacesDto,
+} from '@immich/sdk';
+import { toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,7 +18,8 @@ vi.mock('@immich/sdk', async (importOriginal) => {
     ...actual,
     getLatestScan: vi.fn(),
     triggerScan: vi.fn(),
-    applyFaceRepair: vi.fn(),
+    resolveFaces: vi.fn(),
+    getFaceRepairPersonFaces: vi.fn(),
     getPeopleThumbnailPath: (id: string) => `/people/${id}/thumbnail`,
   };
 });
@@ -141,7 +149,11 @@ describe('+page.svelte (face cleanup)', () => {
     vi.useFakeTimers();
     vi.mocked(getLatestScan).mockResolvedValue(null as unknown as object);
     vi.mocked(triggerScan).mockResolvedValue({ scanId: 'new-scan' });
-    vi.mocked(applyFaceRepair).mockResolvedValue({ moved: 5, skipped: 0 });
+    vi.mocked(getFaceRepairPersonFaces).mockResolvedValue({
+      personId: 'c1',
+      flaggedFaces: [{ assetFaceId: 'f1', suspectedOwnerId: 'owner-person' }],
+    } as unknown as FaceRepairPersonFacesDto);
+    vi.mocked(resolveFaces).mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, skipped: 0 });
   });
 
   afterEach(() => {
@@ -352,9 +364,17 @@ describe('+page.svelte (face cleanup)', () => {
 
   // ---- bulk apply ----
 
-  it('bulk-approve posts the checked personIds to applyFaceRepair', async () => {
+  it('bulk-approve resolves each checked person, grouping its flagged faces by suspectedOwnerId', async () => {
     const persons = [makeScanPerson({ personId: 'c1', recommendation: 'confident' })];
     vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+    vi.mocked(getFaceRepairPersonFaces).mockResolvedValue({
+      personId: 'c1',
+      flaggedFaces: [
+        { assetFaceId: 'f1', suspectedOwnerId: 'owner-a' },
+        { assetFaceId: 'f2', suspectedOwnerId: 'owner-b' },
+        { assetFaceId: 'f3', suspectedOwnerId: 'owner-a' },
+      ],
+    } as unknown as FaceRepairPersonFacesDto);
 
     render(Page, { props: { data: makePageData() } });
 
@@ -366,11 +386,50 @@ describe('+page.svelte (face cleanup)', () => {
     await fireEvent.click(applyBtn);
 
     await waitFor(() => {
-      expect(applyFaceRepair).toHaveBeenCalledWith({
-        faceRepairApplyRequestDto: {
-          approvedPersonIds: ['c1'],
+      expect(getFaceRepairPersonFaces).toHaveBeenCalledWith({ personId: 'c1' });
+      expect(resolveFaces).toHaveBeenCalledWith({
+        faceRepairResolveRequestDto: {
+          personId: 'c1',
+          moveToPerson: [
+            { destinationPersonId: 'owner-a', faceIds: ['f1', 'f3'] },
+            { destinationPersonId: 'owner-b', faceIds: ['f2'] },
+          ],
         },
       });
+    });
+  });
+
+  it('bulk-approve skips a selected person with zero flagged faces (no resolveFaces call, no error)', async () => {
+    const persons = [
+      makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
+      makeScanPerson({ personId: 'c2', recommendation: 'confident', ownerId: 'owner2' }),
+    ];
+    vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+    vi.mocked(getFaceRepairPersonFaces).mockImplementation((({ personId }: { personId: string }) =>
+      Promise.resolve(
+        personId === 'c1'
+          ? { personId, flaggedFaces: [{ assetFaceId: 'f1', suspectedOwnerId: 'owner-a' }] }
+          : { personId, flaggedFaces: [] },
+      )) as typeof getFaceRepairPersonFaces);
+
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => {
+      expect(screen.getByText('admin.face_cleanup_apply')).toBeInTheDocument();
+    });
+
+    const applyBtn = screen.getByText('admin.face_cleanup_apply');
+    await fireEvent.click(applyBtn);
+
+    await waitFor(() => {
+      expect(resolveFaces).toHaveBeenCalledTimes(1);
+      expect(resolveFaces).toHaveBeenCalledWith({
+        faceRepairResolveRequestDto: {
+          personId: 'c1',
+          moveToPerson: [{ destinationPersonId: 'owner-a', faceIds: ['f1'] }],
+        },
+      });
+      expect(toastManager.success).toHaveBeenCalled();
     });
   });
 
@@ -381,7 +440,7 @@ describe('+page.svelte (face cleanup)', () => {
     vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
 
     let resolveApply!: () => void;
-    vi.mocked(applyFaceRepair).mockReturnValueOnce(
+    vi.mocked(resolveFaces).mockReturnValueOnce(
       new Promise<never>((_, reject) => {
         resolveApply = () => reject(Object.assign(new Error('conflict'), { status: 409 }));
       }),
