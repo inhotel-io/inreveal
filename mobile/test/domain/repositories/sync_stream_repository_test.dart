@@ -1993,5 +1993,39 @@ void main() {
         expect(await db.sharedSpaceAlbumAssetEntity.select().get(), hasLength(1));
       });
     });
+
+    // --- Cross-owner contribution convergence (#764) ---
+    //
+    // A contribution rides the SAME SharedSpaceAlbumToAssetV1 membership +
+    // SharedSpaceAlbumAssetV1 payload events as an owner's album_asset —
+    // mobile is origin-blind (no owner column on the shared_space_album_asset
+    // row). No production code changes back this test: it is a
+    // characterization/regression guard that locks in the existing,
+    // already-convergent behaviour. (The red/green cycle for this slice is
+    // entirely server-side — see #764 tasks 1-5.)
+    group('cross-owner contribution convergence (#764)', () {
+      test('a contributed (albumId, assetId) membership is present after insert, '
+          'absent after delete, blob retained', () async {
+        await sut.updateUsersV1([_createUser()]);
+        await sut.updateSharedSpaceAlbumAssetsV1([
+          _createAssetV2(id: 'contrib-asset', checksum: 'cContrib1', fileName: 'contrib.jpg'),
+        ]);
+        await sut.updateSharedSpaceAlbumToAssetsV1([makeAlbumToAsset(albumId: 'album-1', assetId: 'contrib-asset')]);
+
+        final present = await db.sharedSpaceAlbumAssetEntity.select().get();
+        expect(present.any((r) => r.albumId == 'album-1' && r.assetId == 'contrib-asset'), isTrue);
+
+        await sut.deleteSharedSpaceAlbumToAssetsV1([
+          SyncAlbumToAssetDeleteV1(albumId: 'album-1', assetId: 'contrib-asset'),
+        ]);
+
+        final afterDelete = await db.sharedSpaceAlbumAssetEntity.select().get();
+        expect(afterDelete.any((r) => r.assetId == 'contrib-asset'), isFalse);
+
+        // Removing the membership edge must NOT delete the asset blob (only pruneAssets GCs it).
+        final blob = await db.remoteAssetEntity.select().get();
+        expect(blob.any((r) => r.id == 'contrib-asset'), isTrue);
+      });
+    });
   });
 }

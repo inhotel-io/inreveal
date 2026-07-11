@@ -378,6 +378,11 @@ export class AlbumRepository {
   @Chunked()
   async removeAssetsFromAll(assetIds: string[]): Promise<void> {
     await this.db.deleteFrom('album_asset').where('album_asset.assetId', 'in', assetIds).execute();
+    // #764: also drop cross-owner contributions — "remove from all albums" must clear both membership
+    // tables, else a Locked contribution never leaves a member's device (the album_asset-only delete
+    // above never fires the album_space_asset delete trigger). Un-lock won't restore (row deleted),
+    // matching owned-asset Locked semantics.
+    await this.db.deleteFrom('album_space_asset').where('album_space_asset.assetId', 'in', assetIds).execute();
   }
 
   @Chunked({ paramIndex: 1 })

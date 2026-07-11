@@ -555,6 +555,23 @@ export class SharedSpaceRepository {
           ),
       )
       .execute();
+
+    // #764: contributions live in album_space_asset (not album_asset); tombstone the contributed
+    // (albumId, assetId) pairs too so SharedSpaceAlbumToAssetSync.getDeletes drops a now-Hidden
+    // contribution on member devices. Unlike the album_asset arm above there is NO space-link filter
+    // here — album_space_asset has no FK to shared_space_album, so we cannot (and need not) restrict to
+    // linked albums at write time. The safety is applied at READ time: getDeletes scopes these
+    // tombstones by accessibleSpaceAlbums, so only a member who can see the album ever receives the delete.
+    await this.db
+      .insertInto('album_space_asset_audit')
+      .columns(['albumId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('album_space_asset')
+          .select(['album_space_asset.albumId', 'album_space_asset.assetId'])
+          .where('album_space_asset.assetId', 'in', assetIds),
+      )
+      .execute();
   }
 
   /**
@@ -580,6 +597,16 @@ export class SharedSpaceRepository {
       .set({ updatedAt: sql`clock_timestamp()` })
       .where('assetId', 'in', assetIds)
       .where('albumId', 'in', (eb) => eb.selectFrom('shared_space_album').select('shared_space_album.albumId'))
+      .execute();
+
+    // #764: bump contributed rows too so getUpserts re-emits an un-hidden contribution to devices
+    // that purged it. The album_space_asset_updatedAt BEFORE-UPDATE trigger regenerates updateId.
+    // Unlike the album_asset arm above this has no space-link filter (a harmless over-bump — getUpserts
+    // re-gates by grant + visibility, and now also per-space via contributionVisibleToMember).
+    await this.db
+      .updateTable('album_space_asset')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
       .execute();
   }
 

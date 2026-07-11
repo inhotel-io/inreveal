@@ -278,6 +278,15 @@ where
     from
       "shared_space_album"
   )
+insert into
+  "album_space_asset_audit" ("albumId", "assetId")
+select
+  "album_space_asset"."albumId",
+  "album_space_asset"."assetId"
+from
+  "album_space_asset"
+where
+  "album_space_asset"."assetId" in ($1)
 
 -- SharedSpaceRepository.emitAlbumAssetVisibilityRestore
 update "album_asset"
@@ -291,6 +300,11 @@ where
     from
       "shared_space_album"
   )
+update "album_space_asset"
+set
+  "updatedAt" = clock_timestamp()
+where
+  "assetId" in ($1)
 
 -- SharedSpaceRepository.emitLibraryAssetVisibilityPurge
 insert into
