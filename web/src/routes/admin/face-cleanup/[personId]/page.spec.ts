@@ -1,15 +1,14 @@
 import {
-  applyFaceRepair,
   getFaceRepairClusterFaces,
   getFaceRepairPersonFaces,
   getLatestScan,
+  resolveFaces,
   type FaceRepairClusterFacesResponseDto,
   type FaceRepairPersonFacesDto,
 } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { goto } from '$app/navigation';
 import Page from './+page.svelte';
 
 // Mock @immich/sdk before any imports that use it
@@ -18,7 +17,7 @@ vi.mock('@immich/sdk', async (importOriginal) => {
   return {
     ...actual,
     getLatestScan: vi.fn(),
-    applyFaceRepair: vi.fn(),
+    resolveFaces: vi.fn(),
     getFaceRepairPersonFaces: vi.fn(),
     getFaceRepairClusterFaces: vi.fn(),
     getPeopleThumbnailPath: (id: string) => `/people/${id}/thumbnail`,
@@ -99,26 +98,18 @@ vi.mock('$lib/utils/people-utils', () => ({
 // ---- helpers ----
 
 const PERSON_ID = 'person-1';
-const OWNER_PERSON_ID = 'owner-p1';
+const OWNER_A_ID = 'owner-a';
+const OWNER_B_ID = 'owner-b';
 
-const makeFlaggedFace = (i: number) => ({
-  assetFaceId: `face-${i}`,
-  suspectedOwnerId: OWNER_PERSON_ID,
-});
+// A mixed cluster: two faces suspect owner A, one suspects owner B (E14) — exercises the per-face grouping
+// (W1) all the way through the rendered page and into the resolveFaces call (P4).
+const makeFlaggedFaces = () => [
+  { assetFaceId: 'face-1', suspectedOwnerId: OWNER_A_ID },
+  { assetFaceId: 'face-2', suspectedOwnerId: OWNER_A_ID },
+  { assetFaceId: 'face-3', suspectedOwnerId: OWNER_B_ID },
+];
 
-const makeFlaggedFaces = (count = 3) => Array.from({ length: count }, (_, i) => makeFlaggedFace(i + 1));
-
-const makeRestFaces = (count: number) => Array.from({ length: count }, (_, i) => ({ assetFaceId: `rest-${i + 1}` }));
-const restResponse = (faces: { assetFaceId: string }[], total: number, hasMore: boolean) =>
-  ({ faces, total, hasMore }) as unknown as FaceRepairClusterFacesResponseDto;
-
-const makeScanPerson = (
-  over: Partial<{
-    personId: string;
-    personName: string | null;
-    faceCount: number;
-  }> = {},
-) => ({
+const makeScanPerson = (over: Partial<{ personId: string; personName: string | null; faceCount: number }> = {}) => ({
   personId: PERSON_ID,
   ownerId: 'owner-user-1',
   personName: 'Jula',
@@ -127,7 +118,10 @@ const makeScanPerson = (
   eligible: 10,
   flagged: 3,
   flaggedFraction: 0.3,
-  suspectedOwners: [{ ownerPersonId: OWNER_PERSON_ID, ownerName: 'Armin', thumbnailFaceId: null, count: 3 }],
+  suspectedOwners: [
+    { ownerPersonId: OWNER_A_ID, ownerName: 'Armin', thumbnailFaceId: null, count: 2 },
+    { ownerPersonId: OWNER_B_ID, ownerName: 'Berta', thumbnailFaceId: null, count: 1 },
+  ],
   recommendation: 'confident' as const,
   reviewReasons: [] as string[],
   ...over,
@@ -150,180 +144,218 @@ const makePageData = (personId = PERSON_ID) => ({
   meta: { title: 'Review person' },
 });
 
-describe('+page.svelte (face-cleanup review)', () => {
+const emptyRest = () => ({ faces: [], total: 0, hasMore: false }) as unknown as FaceRepairClusterFacesResponseDto;
+
+describe('+page.svelte (face-cleanup review — Model B)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan() as unknown as object);
     vi.mocked(getFaceRepairPersonFaces).mockResolvedValue({
       personId: PERSON_ID,
-      flaggedFaces: makeFlaggedFaces(3),
+      flaggedFaces: makeFlaggedFaces(),
     } as unknown as FaceRepairPersonFacesDto);
-    vi.mocked(applyFaceRepair).mockResolvedValue({ moved: 0, skipped: 0 });
-    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
-      faces: [],
-      total: 0,
-      hasMore: false,
-    } as unknown as FaceRepairClusterFacesResponseDto);
+    vi.mocked(resolveFaces).mockResolvedValue({ moved: 0, declined: 0, locked: 0, detached: 0, skipped: 0 });
+    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(emptyRest());
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  // ---- decision strip + tiles ----
-
-  it('renders decision strip and one tile per flagged face', async () => {
+  it('renders one flagged-grid tile per flagged face, defaulting to the owner state', async () => {
     render(Page, { props: { data: makePageData() } });
 
     await waitFor(() => {
-      // Decision strip labels
-      expect(screen.getByTestId('stays-label')).toBeInTheDocument();
-      expect(screen.getByTestId('moves-label')).toBeInTheDocument();
-      // One tile per face
+      expect(screen.getByTestId('flagged-grid')).toBeInTheDocument();
       const tiles = screen.getAllByTestId('face-tile');
       expect(tiles).toHaveLength(3);
+      for (const tile of tiles) {
+        expect(tile).toHaveAttribute('data-state', 'owner');
+      }
     });
   });
 
-  // ---- tile toggle: exclude + re-include ----
+  // ---- P1: selection — click toggle, shift-click range, select-all, clear ----
 
-  it('clicking a tile excludes it; action-bar move count decrements; re-click restores', async () => {
-    render(Page, { props: { data: makePageData() } });
+  describe('P1 selection', () => {
+    it('click toggles a single tile selected, and toggling again deselects it', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-    await waitFor(() => {
-      expect(screen.getAllByTestId('face-tile')).toHaveLength(3);
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(tiles[0]);
+      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
     });
 
-    // Move btn initially enabled (3 moving, > 0)
-    const moveBtn = screen.getByTestId('move-btn');
-    expect(moveBtn).not.toBeDisabled();
+    it('shift-click selects the whole range between the last click and this one', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-    // Click first tile → exclude face-1
-    const tiles = screen.getAllByTestId('face-tile');
-    await fireEvent.click(tiles[0]);
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]);
+      await fireEvent.click(tiles[2], { shiftKey: true });
 
-    await waitFor(() => {
-      // The tile should be marked excluded
-      expect(tiles[0]).toHaveAttribute('data-excluded', 'true');
+      await waitFor(() => {
+        expect(screen.getByTestId('bulk-bar')).toHaveTextContent('3');
+      });
     });
 
-    // Move button still enabled (2 remaining)
-    expect(moveBtn).not.toBeDisabled();
+    it('Select all selects every tile', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-    // Re-click to restore
-    await fireEvent.click(tiles[0]);
-    await waitFor(() => {
-      expect(tiles[0]).toHaveAttribute('data-excluded', 'false');
-    });
-  });
+      await fireEvent.click(screen.getByTestId('select-all'));
 
-  // ---- deselect-all → Move disabled ----
-
-  it('deselecting all faces disables the Move button', async () => {
-    vi.mocked(getFaceRepairPersonFaces).mockResolvedValue({
-      personId: PERSON_ID,
-      flaggedFaces: makeFlaggedFaces(2),
-    } as unknown as FaceRepairPersonFacesDto);
-
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => {
-      expect(screen.getAllByTestId('face-tile')).toHaveLength(2);
+      await waitFor(() => {
+        expect(screen.getByTestId('bulk-bar')).toHaveTextContent('3');
+      });
     });
 
-    const tiles = screen.getAllByTestId('face-tile');
-    await fireEvent.click(tiles[0]);
-    await fireEvent.click(tiles[1]);
+    it('Clear empties the selection and swaps the dock back to the summary', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-    await waitFor(() => {
-      const moveBtn = screen.getByTestId('move-btn');
-      expect(moveBtn).toBeDisabled();
-    });
-  });
+      await fireEvent.click(screen.getByTestId('select-all'));
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
 
-  // ---- Move posts correct payload ----
+      await fireEvent.click(screen.getByTestId('clear'));
 
-  it('Move posts approvedPersonIds:[personId] and the exact excludeFaceIds', async () => {
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => {
-      expect(screen.getAllByTestId('face-tile')).toHaveLength(3);
+      await waitFor(() => {
+        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.getByTestId('tally')).toBeInTheDocument();
+      });
     });
 
-    // Exclude face-1
-    const tiles = screen.getAllByTestId('face-tile');
-    await fireEvent.click(tiles[0]);
+    it('Reset returns every tile to the owner state and clears the selection', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-    await waitFor(() => {
-      expect(tiles[0]).toHaveAttribute('data-excluded', 'true');
-    });
+      await fireEvent.click(screen.getByTestId('select-all'));
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
 
-    // Click Move
-    const moveBtn = screen.getByTestId('move-btn');
-    await fireEvent.click(moveBtn);
+      await fireEvent.click(screen.getByTestId('reset'));
 
-    await waitFor(() => {
-      expect(applyFaceRepair).toHaveBeenCalledWith({
-        faceRepairApplyRequestDto: {
-          approvedPersonIds: [PERSON_ID],
-          excludeFaceIds: ['face-1'],
-        },
+      await waitFor(() => {
+        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        for (const tile of screen.getAllByTestId('face-tile')) {
+          expect(tile).toHaveAttribute('data-state', 'owner');
+        }
       });
     });
   });
 
-  // ---- Cancel: no request, navigates back ----
+  // ---- P2: dock swaps summary ↔ bulk bar on selection count ----
 
-  it('Cancel navigates back without making a request', async () => {
-    render(Page, { props: { data: makePageData() } });
+  describe('P2 dock swap', () => {
+    it('shows the summary (tally + apply-btn) when nothing is selected', async () => {
+      render(Page, { props: { data: makePageData() } });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('cancel-btn')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId('dock')).toBeInTheDocument();
+        expect(screen.getByTestId('tally')).toBeInTheDocument();
+        expect(screen.getByTestId('apply-btn')).toBeInTheDocument();
+        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+      });
     });
 
-    await fireEvent.click(screen.getByTestId('cancel-btn'));
+    it('swaps to the bulk bar once at least one tile is selected, hiding the summary', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-    expect(applyFaceRepair).not.toHaveBeenCalled();
-    expect(goto).toHaveBeenCalledWith('/admin/face-cleanup');
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
+        expect(screen.queryByTestId('apply-btn')).not.toBeInTheDocument();
+      });
+    });
+
+    it('swaps back to the summary once the selection is cleared', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('clear'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('apply-btn')).toBeInTheDocument();
+        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+      });
+    });
   });
 
-  // ---- apply 409 non-destructive ----
+  // ---- P4: Apply posts { faceRepairResolveRequestDto } matching on-screen state ----
 
-  it('apply 409 shows error non-destructively and keeps state', async () => {
-    let resolveApply!: () => void;
-    vi.mocked(applyFaceRepair).mockReturnValueOnce(
-      new Promise<never>((_, reject) => {
-        resolveApply = () => reject(Object.assign(new Error('conflict'), { status: 409 }));
-      }),
-    );
+  describe('P4 Apply', () => {
+    it('posts resolveFaces with every flagged face grouped by its own suspected owner (default, untouched state)', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-    render(Page, { props: { data: makePageData() } });
+      await fireEvent.click(screen.getByTestId('apply-btn'));
 
-    await waitFor(() => {
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-1', 'face-2'] },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+            ],
+            stay: [],
+            lock: [],
+            detach: [],
+          },
+        });
+      });
+    });
+
+    it('never calls resolveFaces with an undefined body', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalledTimes(1));
+      const [arg] = vi.mocked(resolveFaces).mock.calls[0];
+      expect(arg).toBeDefined();
+      expect(arg.faceRepairResolveRequestDto).toBeDefined();
+    });
+
+    // Regression guard for the onMount-awaits-rejected-promise anti-pattern (advanced-scan notes): the
+    // rejection is only produced once the test explicitly triggers it, well after the click — never as an
+    // immediately-rejected promise handed to a fire-and-forget onMount await.
+    it('shows a conflict message on 409 without navigating away, preserving on-screen state', async () => {
+      let rejectApply!: () => void;
+      vi.mocked(resolveFaces).mockReturnValueOnce(
+        new Promise((_, reject) => {
+          rejectApply = () => reject(Object.assign(new Error('conflict'), { status: 409 }));
+        }),
+      );
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const applyBtn = screen.getByTestId('apply-btn');
+      await fireEvent.click(applyBtn);
+      expect(applyBtn).toBeDisabled();
+
+      rejectApply();
+
+      await waitFor(() => {
+        expect(screen.getByText('admin.face_cleanup_review_apply_conflict')).toBeInTheDocument();
+      });
       expect(screen.getAllByTestId('face-tile')).toHaveLength(3);
     });
-
-    const moveBtn = screen.getByTestId('move-btn');
-    await fireEvent.click(moveBtn);
-
-    // In-flight → button disabled
-    expect(moveBtn).toBeDisabled();
-
-    resolveApply();
-
-    await waitFor(() => {
-      expect(screen.getByText('admin.face_cleanup_review_apply_conflict')).toBeInTheDocument();
-    });
-
-    // State preserved: tiles still there
-    expect(screen.getAllByTestId('face-tile')).toHaveLength(3);
-    // Button re-enabled (not navigated away)
-    expect(goto).not.toHaveBeenCalled();
   });
 
-  // ---- stale person: no flagged faces ----
+  // ---- bonus: existing graceful empty state preserved (design §8.5 P5) ----
 
-  it('gracefully shows "no flagged faces" state when getFaceRepairPersonFaces returns empty array', async () => {
+  it('gracefully shows "no flagged faces" when getFaceRepairPersonFaces returns empty', async () => {
     vi.mocked(getFaceRepairPersonFaces).mockResolvedValue({
       personId: PERSON_ID,
       flaggedFaces: [],
@@ -333,115 +365,8 @@ describe('+page.svelte (face-cleanup review)', () => {
 
     await waitFor(() => {
       expect(screen.getByText('admin.face_cleanup_review_no_flagged')).toBeInTheDocument();
-      expect(screen.getByText('admin.face_cleanup_review_no_flagged_sub')).toBeInTheDocument();
     });
-
-    // No tiles, no action bar
     expect(screen.queryAllByTestId('face-tile')).toHaveLength(0);
-    expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument();
-  });
-
-  it('renders the Rest section with loaded faces and a Load more when there are more', async () => {
-    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse(makeRestFaces(2), 5, true));
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => expect(screen.getByTestId('rest-section')).toBeInTheDocument());
-    await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(2));
-    expect(screen.getByTestId('rest-load-more')).toBeInTheDocument();
-  });
-
-  it('shows the empty Rest state when the cluster has only flagged faces (E1)', async () => {
-    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse([], 0, false));
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => expect(screen.getByTestId('rest-empty')).toBeInTheDocument());
-    expect(screen.queryAllByTestId('rest-tile')).toHaveLength(0);
-  });
-
-  it('selecting a Rest tile counts toward the move (re-enables Move after all flagged are excluded)', async () => {
-    vi.mocked(getFaceRepairPersonFaces).mockResolvedValue({
-      personId: PERSON_ID,
-      flaggedFaces: makeFlaggedFaces(1),
-    } as unknown as FaceRepairPersonFacesDto);
-    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse(makeRestFaces(1), 1, false));
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(1));
-
-    // Exclude the only flagged face → Move disabled (0 moving).
-    await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
-    await waitFor(() => expect(screen.getByTestId('move-btn')).toBeDisabled());
-
-    // Select a Rest face → Move enabled again (1 manual moving).
-    await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
-    await waitFor(() => expect(screen.getByTestId('move-btn')).not.toBeDisabled());
-  });
-
-  it('Select all marks every loaded Rest face selected', async () => {
-    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse(makeRestFaces(3), 3, false));
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(3));
-    await fireEvent.click(screen.getByTestId('select-all-btn'));
-
-    await waitFor(() => {
-      for (const tile of screen.getAllByTestId('rest-tile')) {
-        expect(tile).toHaveAttribute('data-selected', 'true');
-      }
-    });
-  });
-
-  it('Move entire cluster opens a confirm and issues an entireCluster apply (even with an empty Rest, E1)', async () => {
-    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse([], 0, false));
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeInTheDocument());
-    await fireEvent.click(screen.getByTestId('move-entire-btn'));
-    await waitFor(() => expect(screen.getByTestId('entire-confirm')).toBeInTheDocument());
-    await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
-
-    await waitFor(() => {
-      expect(applyFaceRepair).toHaveBeenCalledWith({
-        faceRepairApplyRequestDto: {
-          approvedPersonIds: [],
-          excludeFaceIds: [],
-          manualMove: { personId: PERSON_ID, destinationPersonId: OWNER_PERSON_ID, entireCluster: true },
-        },
-      });
-    });
-  });
-
-  it('Move entire cluster still moves the flagged faces when the Rest load fails (E1 under network failure)', async () => {
-    vi.mocked(getFaceRepairClusterFaces).mockRejectedValue(new Error('network'));
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeInTheDocument());
-    await fireEvent.click(screen.getByTestId('move-entire-btn'));
-    await waitFor(() => expect(screen.getByTestId('entire-confirm')).toBeInTheDocument());
-    await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
-
-    await waitFor(() => {
-      expect(applyFaceRepair).toHaveBeenCalledWith({
-        faceRepairApplyRequestDto: {
-          approvedPersonIds: [],
-          excludeFaceIds: [],
-          manualMove: { personId: PERSON_ID, destinationPersonId: OWNER_PERSON_ID, entireCluster: true },
-        },
-      });
-    });
-  });
-
-  it('disables Select all and Move entire cluster when there is no primary owner (E17)', async () => {
-    vi.mocked(getLatestScan).mockResolvedValue(
-      makeCompletedScan([makeScanPerson({})]) as unknown as object, // overwritten below
-    );
-    vi.mocked(getLatestScan).mockResolvedValue(
-      makeCompletedScan([{ ...makeScanPerson(), suspectedOwners: [] }]) as unknown as object,
-    );
-    vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(restResponse(makeRestFaces(2), 2, false));
-    render(Page, { props: { data: makePageData() } });
-
-    await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeDisabled());
-    expect(screen.getByTestId('select-all-btn')).toBeDisabled();
+    expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
   });
 });
