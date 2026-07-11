@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Kysely } from 'kysely';
-import { SourceType } from 'src/enum';
+import { JobName, SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
@@ -951,5 +951,161 @@ describe('FaceRepairService.resolveFaces: lock on a non-flagged face (M14, E15)'
     const latest = await scanRepo.getLatestScan();
     const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
     expect(snapshotPersonIds).toContain(source.id);
+  });
+});
+
+// ── Slice 5: detach ("Not a face") ──────────────────────────────────────────────────────────────────
+
+const identityLinkRowsFor = (assetFaceId: string) =>
+  db
+    .selectFrom('face_identity_face')
+    .select(['assetFaceId', 'identityId'])
+    .where('assetFaceId', '=', assetFaceId)
+    .execute();
+
+describe('FaceRepairService.resolveFaces: detach (M6, E4, E15)', () => {
+  it('nulls personId and strips the identity link, and a subsequent identity backfill does NOT reattach it', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    // f1 already carries an identity link (as a genuinely-resolved ML face normally would) — proves detach
+    // actually strips it, rather than the assertion trivially passing because no link ever existed.
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const sourceIdentity = await faceIdentityRepo.ensurePersonIdentity(source.id);
+    await faceIdentityRepo.linkFace({ assetFaceId: f1, identityId: sourceIdentity.id, source: 'backfill' });
+    expect(await identityLinkRowsFor(f1)).toHaveLength(1);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [f1] },
+      user.id,
+    );
+
+    expect(result).toEqual({ moved: 0, declined: 0, locked: 0, detached: 1, skipped: 0 });
+
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBeNull();
+    expect(await identityLinkRowsFor(f1)).toHaveLength(0);
+
+    // Regression lock (E4): backfillPersonalIdentities iterates PEOPLE and links any of THEIR faces lacking an
+    // identity row (`where asset_face.personId = person.id`). Since f1's personId is now null, no person's pass
+    // will ever select it — it can never be silently re-linked back to `source` (or anyone else) by a later
+    // backfill. Exercised via the real repository method (not mocked) — this is the exact mechanism a
+    // `JobName.FaceIdentityBackfill` job run invokes; going through the full job/PersonService orchestration
+    // isn't needed to prove the guarantee, since all of the reattachment logic lives in this repository call.
+    await faceIdentityRepo.backfillPersonalIdentities({ limit: 1000 });
+
+    const afterBackfill = await personIdsOf([f1]);
+    expect(afterBackfill[f1]).toBeNull();
+    expect(await identityLinkRowsFor(f1)).toHaveLength(0);
+  });
+
+  it('leaves the face untouched (still on source, identity link intact) when detach is empty', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [] },
+      user.id,
+    );
+
+    expect(result.detached).toBe(0);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: detach on a non-flagged face (M14, E15)', () => {
+  it('throws BadRequestException when a detach id is not in the flagged snapshot for this person', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    // A rest-of-cluster face on the same person that was never part of the flagged snapshot.
+    const notFlagged = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await expect(
+      sut.resolveFaces({ personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [notFlagged] }, user.id),
+    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+
+    // No side effects: untouched, no identity link stripped, person still in the scan snapshot.
+    const byId = await personIdsOf([notFlagged]);
+    expect(byId[notFlagged]).toBe(source.id);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: detach regenerates the representative thumbnail (M21, E19)', () => {
+  it('repoints faceAssetId off the detached face and queues PersonGenerateThumbnail for the person', async () => {
+    const { sut, ctx, scanRepo, jobMock } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Jane Doe' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const f2 = await seedFace(ctx, user.id, source.id);
+
+    // f1 is the person's representative/feature face.
+    await db.updateTable('person').set({ faceAssetId: f1 }).where('id', '=', source.id).execute();
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: f1, suspectedOwnerId: ownerA.id },
+      { assetFaceId: f2, suspectedOwnerId: ownerA.id },
+    ]);
+
+    await sut.resolveFaces({ personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [f1] }, user.id);
+
+    const updated = await db
+      .selectFrom('person')
+      .select('faceAssetId')
+      .where('id', '=', source.id)
+      .executeTakeFirstOrThrow();
+    // Repointed to the still-eligible remaining face (f2), never left on the now-detached f1.
+    expect(updated.faceAssetId).toBe(f2);
+
+    const queuedJobs = jobMock.queueAll.mock.calls.flatMap(([items]) => items);
+    expect(queuedJobs).toEqual(
+      expect.arrayContaining([{ name: JobName.PersonGenerateThumbnail, data: { id: source.id } }]),
+    );
+  });
+
+  it('does NOT queue a thumbnail regen when the detached face was not the representative', async () => {
+    const { sut, ctx, scanRepo, jobMock } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Jane Doe' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const f2 = await seedFace(ctx, user.id, source.id);
+
+    // f2 (not f1) is the representative — detaching f1 must not disturb it.
+    await db.updateTable('person').set({ faceAssetId: f2 }).where('id', '=', source.id).execute();
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: f1, suspectedOwnerId: ownerA.id },
+      { assetFaceId: f2, suspectedOwnerId: ownerA.id },
+    ]);
+
+    await sut.resolveFaces({ personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [f1] }, user.id);
+
+    const updated = await db
+      .selectFrom('person')
+      .select('faceAssetId')
+      .where('id', '=', source.id)
+      .executeTakeFirstOrThrow();
+    expect(updated.faceAssetId).toBe(f2);
+
+    const queuedJobs = jobMock.queueAll.mock.calls.flatMap(([items]) => items);
+    expect(queuedJobs.some((job) => job.name === JobName.PersonGenerateThumbnail)).toBe(false);
   });
 });
