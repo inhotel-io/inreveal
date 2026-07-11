@@ -7,6 +7,7 @@ import {
   type FaceRepairClusterFacesResponseDto,
   type FaceRepairPersonFacesDto,
 } from '@immich/sdk';
+import { modalManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,6 +39,9 @@ vi.mock('@immich/ui', async (original) => {
       danger: vi.fn(),
     },
     IconButton: mod.Button,
+    // The person-picker modal itself is covered end-to-end by PersonPicker.spec.ts; here we only need to
+    // verify the bulk action opens it with the right props and routes back whatever it resolves with.
+    modalManager: { show: vi.fn() },
   };
 });
 
@@ -148,6 +152,13 @@ const makePageData = (personId = PERSON_ID) => ({
 
 const emptyRest = () => ({ faces: [], total: 0, hasMore: false }) as unknown as FaceRepairClusterFacesResponseDto;
 
+// `modalManager.show` is a generic overloaded method (its return type depends on the component passed in),
+// so `vi.mocked(modalManager.show)` can't infer a concrete signature at this call site. Cast once to a plain
+// mock of the shape the picker's `onClose` actually resolves with (see PersonPicker.svelte).
+const showModal = modalManager.show as unknown as ReturnType<
+  typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string } | undefined>>
+>;
+
 describe('+page.svelte (face-cleanup review — Model B)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -159,6 +170,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     vi.mocked(resolveFaces).mockResolvedValue({ moved: 0, declined: 0, locked: 0, detached: 0, skipped: 0 });
     vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(emptyRest());
     vi.mocked(applyFaceRepair).mockResolvedValue({ moved: 0, skipped: 0 });
+    showModal.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -469,6 +481,108 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           },
         });
       });
+    });
+  });
+
+  // ---- Slice 4: "Move → person…" bulk action (owner-scoped picker) ----
+  // The picker component itself (list/search/create-new/E8) is covered by PersonPicker.spec.ts; here we
+  // verify the bulk-bar action opens it with the right props and routes whatever it resolves with into the
+  // review model, matching the "Keep here"/"Confirm / lock" wiring above.
+
+  describe('Bulk actions — Move to person (other)', () => {
+    it('opens the picker with the owner id, selection count and the scan-suggested owner', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('bulk-other'));
+
+      await waitFor(() => {
+        expect(showModal).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ ownerId: 'owner-user-1', faceCount: 1, suggestedPersonId: OWNER_A_ID }),
+        );
+      });
+    });
+
+    it('tags the selected tile "other" (amber ribbon) with the chosen destination, and tallies it under "→ other"', async () => {
+      showModal.mockResolvedValueOnce({ personId: 'chosen-1', name: 'Chosen Person' });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('bulk-other'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.getByTestId('tally')).toBeInTheDocument();
+      });
+
+      const refreshedTiles = screen.getAllByTestId('face-tile');
+      expect(refreshedTiles[0]).toHaveAttribute('data-state', 'other');
+      // Scoped to the tile itself: the 'owner'-state tiles reuse the same `..._tile_dest` key, so an
+      // unscoped query would match more than one element.
+      expect(within(refreshedTiles[0]).getByText('admin.face_cleanup_review_tile_dest')).toBeInTheDocument();
+
+      const tally = screen.getByTestId('tally');
+      const otherLabel = within(tally).getByText('admin.face_cleanup_review_tally_other');
+      const otherChip = otherLabel.parentElement!;
+      expect(otherChip).not.toHaveClass('opacity-40');
+      expect(otherChip).toHaveTextContent('1');
+    });
+
+    it('groups the chosen destination into its own moveToPerson entry on Apply', async () => {
+      showModal.mockResolvedValueOnce({ personId: 'chosen-1', name: 'Chosen Person' });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]); // face-1, suspected owner-a
+      await fireEvent.click(screen.getByTestId('bulk-other'));
+      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [
+              { destinationPersonId: 'chosen-1', faceIds: ['face-1'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+            ],
+            stay: [],
+            lock: [],
+            detach: [],
+          },
+        });
+      });
+    });
+
+    it('leaves the selection untouched if the picker is closed without choosing a destination', async () => {
+      showModal.mockResolvedValueOnce(undefined);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]);
+      await fireEvent.click(screen.getByTestId('bulk-other'));
+
+      await waitFor(() => expect(showModal).toHaveBeenCalled());
+
+      // Selection (and its "owner" state) survives an uncommitted picker — the bulk bar is still showing.
+      expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
+      expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'owner');
     });
   });
 

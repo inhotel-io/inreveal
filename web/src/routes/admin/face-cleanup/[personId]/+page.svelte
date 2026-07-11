@@ -10,13 +10,14 @@
     getPeopleThumbnailPath,
     resolveFaces,
   } from '@immich/sdk';
-  import { Button, Icon } from '@immich/ui';
+  import { Button, Icon, modalManager } from '@immich/ui';
   import { mdiArrowLeft, mdiArrowRight, mdiCheckBold, mdiClose, mdiLock } from '@mdi/js';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
+  import PersonPicker from './PersonPicker.svelte';
   import { createReviewModel, type FaceEntry, type FaceState, type FlaggedFace } from './review.svelte';
 
   interface ScanPerson {
@@ -180,6 +181,20 @@
 
   const handleBulkLock = () => {
     vm.applyToSelection('lock');
+  };
+
+  const handleBulkOther = async () => {
+    if (!scanPerson || vm.selectedCount === 0) {
+      return;
+    }
+    const destination = await modalManager.show(PersonPicker, {
+      ownerId: scanPerson.ownerId,
+      faceCount: vm.selectedCount,
+      suggestedPersonId: ownerPersonId,
+    });
+    if (destination) {
+      vm.applyToSelection('other', destination);
+    }
   };
 
   const loadRestPage = async () => {
@@ -639,6 +654,15 @@
             >
               <span class="size-2 rounded-xs" style="background: {STATE_COLOR.lock}"></span>
               {$t('admin.face_cleanup_review_bulk_lock')}
+            </button>
+            <button
+              type="button"
+              onclick={handleBulkOther}
+              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+              data-testid="bulk-other"
+            >
+              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.other}"></span>
+              {$t('admin.face_cleanup_review_bulk_other')}
             </button>
             <button
               type="button"
