@@ -614,56 +614,6 @@
         ]
       }
     },
-    "/admin/face-repair/apply": {
-      "post": {
-        "operationId": "applyFaceRepair",
-        "parameters": [],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FaceRepairApplyRequestDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FaceRepairApplyResponseDto"
-                }
-              }
-            },
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          },
-          {
-            "api_key": []
-          }
-        ],
-        "summary": "Apply face re-attribution for approved persons",
-        "tags": [
-          "Faces"
-        ],
-        "x-immich-admin-only": true,
-        "x-immich-history": [
-          {
-            "version": "v1",
-            "state": "Added"
-          }
-        ]
-      }
-    },
     "/admin/face-repair/decline": {
       "delete": {
         "operationId": "removeFaceRepairDeclines",
@@ -25571,73 +25521,6 @@
         },
         "required": [
           "id"
-        ],
-        "type": "object"
-      },
-      "FaceRepairApplyRequestDto": {
-        "properties": {
-          "approvedPersonIds": {
-            "default": [],
-            "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "excludeFaceIds": {
-            "items": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "manualMove": {
-            "properties": {
-              "destinationPersonId": {
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                "type": "string"
-              },
-              "entireCluster": {
-                "type": "boolean"
-              },
-              "faceIds": {
-                "items": {
-                  "format": "uuid",
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "personId": {
-                "format": "uuid",
-                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                "type": "string"
-              }
-            },
-            "required": [
-              "personId",
-              "destinationPersonId"
-            ],
-            "type": "object"
-          }
-        },
-        "type": "object"
-      },
-      "FaceRepairApplyResponseDto": {
-        "properties": {
-          "moved": {
-            "type": "number"
-          },
-          "skipped": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "moved",
-          "skipped"
         ],
         "type": "object"
       },

@@ -119,20 +119,6 @@ export type FaceRepairResponseDto = {
         };
     };
 };
-export type FaceRepairApplyRequestDto = {
-    approvedPersonIds?: string[];
-    excludeFaceIds?: string[];
-    manualMove?: {
-        destinationPersonId: string;
-        entireCluster?: boolean;
-        faceIds?: string[];
-        personId: string;
-    };
-};
-export type FaceRepairApplyResponseDto = {
-    moved: number;
-    skipped: number;
-};
 export type FaceRepairDeclineRemoveRequestDto = {
     faces?: {
         assetFaceId: string;
@@ -4525,21 +4511,6 @@ export function runFaceRepair({ faceRepairRequestDto }: {
         ...opts,
         method: "POST",
         body: faceRepairRequestDto
-    })));
-}
-/**
- * Apply face re-attribution for approved persons
- */
-export function applyFaceRepair({ faceRepairApplyRequestDto }: {
-    faceRepairApplyRequestDto: FaceRepairApplyRequestDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 201;
-        data: FaceRepairApplyResponseDto;
-    }>("/admin/face-repair/apply", oazapfts.json({
-        ...opts,
-        method: "POST",
-        body: faceRepairApplyRequestDto
     })));
 }
 /**

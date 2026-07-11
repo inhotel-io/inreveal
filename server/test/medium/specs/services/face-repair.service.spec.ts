@@ -1192,7 +1192,7 @@ describe('FaceRepairService.runRepair', () => {
 });
 
 // ── decline filter integration tests ──────────────────────────────────────────
-// These tests exercise that buildRepairPlan (and all callers — getPersonFlaggedFaces, applyRepair)
+// These tests exercise that buildRepairPlan (and all callers — getPersonFlaggedFaces, resolveFaces)
 // honor persisted face-level declines and person-level dismissals.
 
 let declineDatabase: Kysely<DB>;
@@ -1269,7 +1269,7 @@ describe('FaceRepairService decline filter', () => {
     }
   });
 
-  it('apply does not move a declined face', async () => {
+  it('resolveFaces does not move a declined face', async () => {
     const { sut, ctx } = setupDecline();
     const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
     jobMock.isActive.mockResolvedValue(false);
@@ -1301,8 +1301,8 @@ describe('FaceRepairService decline filter', () => {
         .execute();
     }
 
-    // Run a scan first so the flagged snapshot is persisted (apply reads that snapshot, not a live recompute),
-    // using the same params as planParams so it flags exactly the leaked faces.
+    // Run a scan first so the flagged snapshot is persisted (resolveFaces reads that snapshot, not a live
+    // recompute), using the same params as planParams so it flags exactly the leaked faces.
     const { scanId } = await sut.triggerScan(user.id, planParams);
     await sut.handleFaceRepairScan({ scanId });
 
@@ -1317,9 +1317,20 @@ describe('FaceRepairService decline filter', () => {
       declinedBy: null,
     });
 
-    // applyRepair with alexia approved — the post-scan declines must be filtered from the snapshot, moving 0
-    const result = await sut.applyRepair({ approvedPersonIds: [alexia.id] });
+    // resolveFaces, requesting the exact leaked-face -> karina moves the client would have built from the
+    // pre-decline flagged snapshot — the post-scan declines must be filtered from the snapshot, moving 0.
+    const result = await sut.resolveFaces(
+      {
+        personId: alexia.id,
+        moveToPerson: [{ destinationPersonId: karina.id, faceIds: leakedToRepair.map((f) => f.assetFaceId) }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
     expect(result.moved).toBe(0);
+    expect(result.skipped).toBe(leakedToRepair.length);
 
     // Faces still assigned to Alexia
     const rows = await ctx.database

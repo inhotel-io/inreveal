@@ -3,8 +3,6 @@ import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
-  FaceRepairApplyRequestDto,
-  FaceRepairApplyResponseDto,
   FaceRepairClusterFacesRequestDto,
   FaceRepairClusterFacesResponseDto,
   FaceRepairDeclineCreatedDto,
@@ -89,13 +87,6 @@ export class FaceRepairAdminController {
     @Body() dto: FaceRepairClusterFacesRequestDto,
   ): Promise<FaceRepairClusterFacesResponseDto> {
     return this.service.getClusterFaces(personId, dto) as Promise<FaceRepairClusterFacesResponseDto>;
-  }
-
-  @Post('apply')
-  @Authenticated({ admin: true })
-  @Endpoint({ summary: 'Apply face re-attribution for approved persons', history: new HistoryBuilder().added('v1') })
-  applyFaceRepair(@Body() dto: FaceRepairApplyRequestDto): Promise<FaceRepairApplyResponseDto> {
-    return this.service.applyRepair(dto) as Promise<FaceRepairApplyResponseDto>;
   }
 
   @Post('resolve')
