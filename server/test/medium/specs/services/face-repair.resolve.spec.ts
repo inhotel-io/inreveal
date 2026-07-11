@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
@@ -213,6 +213,90 @@ describe('FaceRepairService.resolveFaces: move-to-owner (M1, M3, E14)', () => {
     const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
     expect(sourceRow).toBeUndefined();
   });
+
+  it('keeps a drained NAMED source person after all its eligible faces move (M8)', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Jane Doe' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: owner.id }]);
+
+    await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: owner.id, faceIds: [f1] }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+
+    // A NAMED source is kept even though it's fully drained of eligible faces (unlike the unnamed case above).
+    const sourceRow = await db
+      .selectFrom('person')
+      .select(['id', 'name'])
+      .where('id', '=', source.id)
+      .executeTakeFirst();
+    expect(sourceRow).toBeDefined();
+    expect(sourceRow?.name).toBe('Jane Doe');
+
+    // Still drained from the console/scan even though the person row itself survives.
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).not.toContain(source.id);
+  });
+});
+
+// ── M15: zero-override — the default owner group covers every flagged face (E10) ───────────────────
+
+describe('FaceRepairService.resolveFaces: zero-override all-to-owner (M15, E10)', () => {
+  it('moves every flagged face via the single default owner group and drains the (unnamed) person', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const f2 = await seedFace(ctx, user.id, source.id);
+    const f3 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: f1, suspectedOwnerId: owner.id },
+      { assetFaceId: f2, suspectedOwnerId: owner.id },
+      { assetFaceId: f3, suspectedOwnerId: owner.id },
+    ]);
+
+    // The whole point of "zero-override": there is exactly ONE moveToPerson group — the default owner — and
+    // it contains every flagged face on the person, i.e. the admin never touched the per-face destination.
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: owner.id, faceIds: [f1, f2, f3] }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+
+    expect(result).toEqual({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });
+
+    const byId = await personIdsOf([f1, f2, f3]);
+    expect(byId[f1]).toBe(owner.id);
+    expect(byId[f2]).toBe(owner.id);
+    expect(byId[f3]).toBe(owner.id);
+
+    // Unnamed source has zero remaining faces of any kind → auto-deleted (E6), and drained from the scan.
+    const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
+    expect(sourceRow).toBeUndefined();
+
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).not.toContain(source.id);
+  });
 });
 
 // ── M9: face moved off the person since the scan → skipped ─────────────────────────────────────────
@@ -312,5 +396,44 @@ describe('FaceRepairService.resolveFaces: concurrency guards (M10, E9)', () => {
 
     const byId = await personIdsOf([f1]);
     expect(byId[f1]).toBe(source.id);
+  });
+});
+
+// ── M19: an empty resolve is rejected outright, never drains the person (E16) ──────────────────────
+
+describe('FaceRepairService.resolveFaces: empty resolve is rejected (M19, E16)', () => {
+  it('throws BadRequestException when every bucket is empty and entireCluster is absent, and does not drain the person', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: owner.id }]);
+
+    await expect(
+      sut.resolveFaces(
+        {
+          personId: source.id,
+          moveToPerson: [],
+          stay: [],
+          lock: [],
+          detach: [],
+        },
+        user.id,
+      ),
+    ).rejects.toThrow(new BadRequestException('Resolve request has no faces to act on'));
+
+    // The face is untouched...
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+
+    // ...and — unlike today's bug — the person is NOT drained from the latest scan.
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+
+    const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
+    expect(sourceRow).toBeDefined();
   });
 });
