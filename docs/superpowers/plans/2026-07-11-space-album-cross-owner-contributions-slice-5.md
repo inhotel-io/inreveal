@@ -48,6 +48,7 @@ So the contributed delete arm is `SELECT id, assetId, albumId FROM album_space_a
 **Delivers.** `album_space_asset` gains the standard `updateId`/`updatedAt` sync watermark (+ `BEFORE UPDATE` trigger) so the contributed sync arm mirrors `album_asset` exactly; a new trigger-driven `album_space_asset_audit` table captures every contribution deletion (explicit + FK cascade). No user-facing behavior — fully covered by a medium schema test.
 
 **Files:**
+
 - Modify: `server/src/schema/tables/album-space-asset.table.ts` (add `updateId`/`updatedAt` + `@UpdatedAtTrigger`)
 - Create: `server/src/schema/tables/album-space-asset-audit.table.ts`
 - Modify: `server/src/schema/index.ts` (register the audit table)
@@ -57,6 +58,7 @@ So the contributed delete arm is `SELECT id, assetId, albumId FROM album_space_a
 - Create/Test: `server/test/medium/specs/sync/album-space-asset-audit.spec.ts`
 
 **Interfaces:**
+
 - Produces: `album_space_asset.updateId` / `.updatedAt` columns; `album_space_asset_audit` table `{ id (v7 PK), albumId, assetId, deletedAt }`; DB triggers `album_space_asset_updatedAt` (BEFORE UPDATE) and `album_space_asset_delete_audit` (AFTER DELETE STATEMENT); `SyncTestContext.newAlbumSpaceAsset({ albumId, assetId, spaceId, addedById? })`.
 
 - [ ] **Step 1: Add the `newAlbumSpaceAsset` test helper**
@@ -336,7 +338,9 @@ export async function up(db: Kysely<any>): Promise<void> {
   );
   await sql`CREATE INDEX "album_space_asset_audit_albumId_idx" ON "album_space_asset_audit" ("albumId");`.execute(db);
   await sql`CREATE INDEX "album_space_asset_audit_assetId_idx" ON "album_space_asset_audit" ("assetId");`.execute(db);
-  await sql`CREATE INDEX "album_space_asset_audit_deletedAt_idx" ON "album_space_asset_audit" ("deletedAt");`.execute(db);
+  await sql`CREATE INDEX "album_space_asset_audit_deletedAt_idx" ON "album_space_asset_audit" ("deletedAt");`.execute(
+    db,
+  );
 
   // --- 3. AFTER-DELETE statement-level trigger → tombstone every deleted contribution ---
   await sql`CREATE OR REPLACE FUNCTION album_space_asset_delete_audit()
@@ -388,6 +392,7 @@ export async function down(db: Kysely<any>): Promise<void> {
 - [ ] **Step 8: Add `revert-to-immich.sql` entries**
 
 In `scripts/revert-to-immich.sql`:
+
 - Add near the existing `DROP TABLE IF EXISTS "album_space_asset" CASCADE;` (line ~114): `DROP TABLE IF EXISTS "album_space_asset_audit" CASCADE;`
 - Add to the `DROP FUNCTION` block: `DROP FUNCTION IF EXISTS album_space_asset_delete_audit() CASCADE;`
 - Add to the known-function allowlist (the `'function_...'` list ~line 227): `'function_album_space_asset_delete_audit',`
@@ -420,10 +425,12 @@ git commit -m "feat(spaces): album_space_asset sync watermark + delete-audit tri
 **Delivers.** The `(albumId, assetId)` membership edge for a contribution is emitted by the backfill, upsert, and (via the new audit table) delete arms — mirroring the `album_asset` arm, keyed on the shared `updateId` watermark.
 
 **Files:**
+
 - Modify: `server/src/repositories/sync.repository.ts` (`SharedSpaceAlbumToAssetSync`, `:1609-1680`)
 - Test: `server/test/medium/specs/sync/shared-space-album-to-asset-sync.spec.ts` (extend)
 
 **Interfaces:**
+
 - Consumes: `album_space_asset.{assetId, albumId, updateId}`, `album_space_asset_audit.{id, assetId, albumId}` (Task 1); `accessibleSpaceAlbums`, `spaceVisibilityGate` (already imported in `sync.repository.ts`).
 - Produces: contributed membership rows in the same shape `{ assetId, albumId, updateId }` the existing arm emits — no signature change, so `sync.service.ts` and mobile are untouched.
 
@@ -541,7 +548,11 @@ describe('SharedSpaceAlbumToAssetSync — contributions (album_space_asset)', ()
 
     // Member leaves S → shared_space_member_delete_album_audit revokes the album grant (#752), same
     // path that drops the album (and thus its contribution edges) on device.
-    await db.deleteFrom('shared_space_member').where('spaceId', '=', space.id).where('userId', '=', member.id).execute();
+    await db
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', member.id)
+      .execute();
 
     const after = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
     expect(after.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);
@@ -638,22 +649,22 @@ Replace `SharedSpaceAlbumToAssetSync.getUpserts` (`:1658-1673`) with:
 In `SharedSpaceAlbumToAssetSync.getDeletes` (`:1624-1656`), add a third arm after `spaceAlbumAssetArm` and fold it into the union. Insert before the `return`:
 
 ```ts
-    // album_space_asset_audit — cross-owner contribution removals (#764). Trigger-driven, so the
-    // asset row may already be gone on FK cascade → NO asset join. A contribution is never also an
-    // owner's album_asset row (spec §5.1), so the owner has no independent path → NO ownerId filter:
-    // every member, including the asset's owner, drops the edge on removal/delete/Hidden-purge.
-    const contributedAuditArm = this.db
-      .selectFrom('album_space_asset_audit')
-      .select(['id', 'assetId', 'albumId'])
-      .where('id', '<', nowId)
-      .$if(!!ack, (qb) => qb.where('id', '>', ack!.updateId))
-      .where('albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId));
+// album_space_asset_audit — cross-owner contribution removals (#764). Trigger-driven, so the
+// asset row may already be gone on FK cascade → NO asset join. A contribution is never also an
+// owner's album_asset row (spec §5.1), so the owner has no independent path → NO ownerId filter:
+// every member, including the asset's owner, drops the edge on removal/delete/Hidden-purge.
+const contributedAuditArm = this.db
+  .selectFrom('album_space_asset_audit')
+  .select(['id', 'assetId', 'albumId'])
+  .where('id', '<', nowId)
+  .$if(!!ack, (qb) => qb.where('id', '>', ack!.updateId))
+  .where('albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId));
 ```
 
 …and change the final `return` to union all three arms:
 
 ```ts
-    return albumAssetArm.union(spaceAlbumAssetArm).union(contributedAuditArm).orderBy('id', 'asc').stream();
+return albumAssetArm.union(spaceAlbumAssetArm).union(contributedAuditArm).orderBy('id', 'asc').stream();
 ```
 
 - [ ] **Step 6: Wire `album_space_asset_audit` into this stream's audit cleanup**
@@ -695,12 +706,14 @@ git commit -m "feat(spaces): union contributions into SharedSpaceAlbumToAssetSyn
 **Delivers.** A contributed asset's full payload (`SharedSpaceAlbumAssetSync`) and EXIF (`SharedSpaceAlbumAssetExifSync`) reach every member, so a contributed photo renders (not a grey placeholder) on device.
 
 **Files:**
+
 - Modify: `server/src/repositories/sync.repository.ts` (`SharedSpaceAlbumAssetSync` `:1689-1758`, `SharedSpaceAlbumAssetExifSync` `:1763-1808`)
 - Test: `server/test/medium/specs/sync/shared-space-album-asset-sync.spec.ts` (extend — payload) and `server/test/medium/specs/sync/shared-space-album-asset-exif-sync.spec.ts` (extend — exif)
 
 > **Test-file targeting (verified):** these two repo-level specs already define `NOW_ID`, `BEFORE_UPDATE_ID`, and a `setup()` returning `sut = ctx.get(SyncRepository).sharedSpaceAlbumAsset` (resp. `.sharedSpaceAlbumAssetExif`) — use those. Do **not** target `sync-shared-space-album.spec.ts` (its `setup()` returns `{ auth, user, session, ctx }` and has none of that harness). Neither repo-level file defines a `drain` helper — either add a local `const drain = async (s) => { const o = []; for await (const r of s) o.push(r); return o; };` at the top of your new `describe`, or inline the `for await` collect as the file's existing tests do.
 
 **Interfaces:**
+
 - Consumes: `album_space_asset.{assetId, albumId, updateId}` (Task 1); `columns.syncAlbumAsset`, `columns.syncAssetExif`, `accessibleSpaceAlbums`, `spaceVisibilityGate` (already in file).
 - Produces: contributed asset/exif rows in the identical output shape as the `album_asset` arm — no service/mobile change.
 
@@ -915,10 +928,11 @@ Replace `:1713-1734`. Both arms key on `asset.updateId > ack` (payload mutation)
 - [ ] **Step 6: Apply the identical three-method union to `SharedSpaceAlbumAssetExifSync`**
 
 Repeat Steps 3–5 for `SharedSpaceAlbumAssetExifSync` (`:1763-1808`), using `asset_exif` + `columns.syncAssetExif` (no `isFavorite` CASE — exif has none). For each of its `getBackfill` / `getUpdates` / `getCreates`, mirror the existing arm and add a contributed arm swapping `album_asset` → `album_space_asset` and its `updateId`. Preserve the exif joins exactly:
+
 - `getBackfill`: `album_(space_)asset` ⋈ `asset_exif` ⋈ `album` (deletedAt null) ⋈ `asset`; select `columns.syncAssetExif` + `<table>.updateId`; window on the membership `updateId`.
 - `getUpdates`: `asset_exif` ⋈ `album_(space_)asset` ⋈ `asset`; key on `asset_exif.updateId` window; coupling `<table>.updateId <= albumToAssetAck.updateId`; grant + accessibleSpaceAlbums + visGate.
 - `getCreates`: `album_(space_)asset` ⋈ `asset_exif` ⋈ `asset`; window on membership `updateId > ack`; grant + accessibleSpaceAlbums + visGate.
-Each returns `albumAssetArm.union(contributedArm).orderBy('updateId', 'asc').stream()`.
+  Each returns `albumAssetArm.union(contributedArm).orderBy('updateId', 'asc').stream()`.
 
 - [ ] **Step 7: Run the tests to confirm green**
 
@@ -944,11 +958,13 @@ git commit -m "feat(spaces): stream contributed asset payload + exif to members 
 **Delivers.** When a contributed asset is marked Hidden, member devices drop it (no mobile Hidden leak — §10); when un-hidden, it re-appears via the `updateId` bump. The new audit table is pruned on the cleanup schedule.
 
 **Files:**
+
 - Modify: `server/src/repositories/shared-space.repository.ts` (`emitAlbumAssetVisibilityPurge` `:540`, `emitAlbumAssetVisibilityRestore` `:573`)
 - Modify: `server/src/repositories/sync.repository.ts` (`SharedSpaceAlbumToAssetSync.cleanupAuditTable` `:1677`)
 - Test: `server/test/medium/specs/sync/sync-shared-space-album-visibility-purge.spec.ts` (extend)
 
 **Interfaces:**
+
 - Consumes: `album_space_asset_audit` (Task 1), the delete arm (Task 2), the `updateId` bump path via the `album_space_asset_updatedAt` trigger (Task 1).
 - Produces: no signature change — `asset.service.ts` call sites (`:425`, `:452`) already pass `purgeIds` / `restoreIds`.
 
@@ -1027,20 +1043,20 @@ Expected: FAIL — purge writes no `album_space_asset_audit` row; restore does n
 In `server/src/repositories/shared-space.repository.ts`, after the existing `shared_space_album_asset_audit` insert in `emitAlbumAssetVisibilityPurge` (`:545-557`), add a second insert that tombstones contributed rows into `album_space_asset_audit`:
 
 ```ts
-    // #764: contributions live in album_space_asset (not album_asset); tombstone the contributed
-    // (albumId, assetId) pairs too so SharedSpaceAlbumToAssetSync.getDeletes drops a now-Hidden
-    // contribution on member devices. Only space-linked albums (the album_space_asset FK already
-    // guarantees that, but keep the space-link filter symmetric with the album_asset arm).
-    await this.db
-      .insertInto('album_space_asset_audit')
-      .columns(['albumId', 'assetId'])
-      .expression(
-        this.db
-          .selectFrom('album_space_asset')
-          .select(['album_space_asset.albumId', 'album_space_asset.assetId'])
-          .where('album_space_asset.assetId', 'in', assetIds),
-      )
-      .execute();
+// #764: contributions live in album_space_asset (not album_asset); tombstone the contributed
+// (albumId, assetId) pairs too so SharedSpaceAlbumToAssetSync.getDeletes drops a now-Hidden
+// contribution on member devices. Only space-linked albums (the album_space_asset FK already
+// guarantees that, but keep the space-link filter symmetric with the album_asset arm).
+await this.db
+  .insertInto('album_space_asset_audit')
+  .columns(['albumId', 'assetId'])
+  .expression(
+    this.db
+      .selectFrom('album_space_asset')
+      .select(['album_space_asset.albumId', 'album_space_asset.assetId'])
+      .where('album_space_asset.assetId', 'in', assetIds),
+  )
+  .execute();
 ```
 
 - [ ] **Step 4: Extend `emitAlbumAssetVisibilityRestore`**
@@ -1048,13 +1064,13 @@ In `server/src/repositories/shared-space.repository.ts`, after the existing `sha
 In the same file, after the existing `album_asset` `updatedAt` bump in `emitAlbumAssetVisibilityRestore` (`:578-583`), add a bump for contributed rows (the `album_space_asset_updatedAt` trigger turns the touch into a fresh `updateId`):
 
 ```ts
-    // #764: bump contributed rows too so getUpserts re-emits an un-hidden contribution to devices
-    // that purged it. The album_space_asset_updatedAt BEFORE-UPDATE trigger regenerates updateId.
-    await this.db
-      .updateTable('album_space_asset')
-      .set({ updatedAt: sql`clock_timestamp()` })
-      .where('assetId', 'in', assetIds)
-      .execute();
+// #764: bump contributed rows too so getUpserts re-emits an un-hidden contribution to devices
+// that purged it. The album_space_asset_updatedAt BEFORE-UPDATE trigger regenerates updateId.
+await this.db
+  .updateTable('album_space_asset')
+  .set({ updatedAt: sql`clock_timestamp()` })
+  .where('assetId', 'in', assetIds)
+  .execute();
 ```
 
 > `sql` is already imported in `shared-space.repository.ts` (used by the sibling methods).
@@ -1090,9 +1106,11 @@ git commit -m "feat(spaces): Hidden/restore parity + audit prune for contributio
 **Delivers.** End-to-end proof through the real `SyncService` seam that: a member who joins a space with pre-existing contributions **backfills** them; the delete arm never causes a spurious **asset** deletion; and re-emitting after ack is monotonic (no duplicates).
 
 **Files:**
+
 - Test: `server/test/medium/specs/services/sync.service.spec.ts` (extend) — or a new `server/test/medium/specs/sync/album-space-asset-convergence.spec.ts` if the service spec's setup does not fit.
 
 **Interfaces:**
+
 - Consumes: the full `SyncService` (via `SyncTestContext`, whose generic is `SyncService`), Tasks 2–4.
 
 - [ ] **Step 1: Inspect the existing service-level sync test**
@@ -1102,6 +1120,7 @@ Read `server/test/medium/specs/services/sync.service.spec.ts` (and `sync-shared-
 - [ ] **Step 2: Write the failing convergence test**
 
 Add a `describe` that:
+
 1. Creates space S (owner) + album L linked to S + a contribution `(L, X, S)` where X is owned by Carol, **before** `member` joins.
 2. Adds `member` to S (Editor) — which fires the grant trigger.
 3. Runs a full sync for `member` and asserts a `SharedSpaceAlbumToAssetV1` (or `…BackfillV1`) item for `(L, X)` **and** a `SharedSpaceAlbumAssetV1` payload item for X are emitted (backfill-on-join).
@@ -1131,14 +1150,17 @@ git commit -m "test(spaces): service-level convergence for contribution sync (#7
 **Delivers.** A `flutter test` proving the mobile Drift layer converges for a contribution `(albumId, assetId)` membership: present after an insert event, absent after a delete event, with the remote asset blob retained. **No mobile production code changes** — mobile is origin-blind; this is a regression guard that locks in that a contribution (indistinguishable from an owner membership on the wire) converges through the existing handlers.
 
 **Files:**
+
 - Test: `mobile/test/domain/repositories/sync_stream_repository_test.dart` (extend the existing `SyncStreamRepository - SharedSpaceAlbum handlers` group, ~lines 1706-1996)
 
 **Interfaces:**
+
 - Consumes: existing handlers `SyncStreamRepository.updateSharedSpaceAlbumToAssetsV1` / `deleteSharedSpaceAlbumToAssetsV1` / `updateSharedSpaceAlbumAssetsV1`; Drift `db.sharedSpaceAlbumAssetEntity`, `db.remoteAssetEntity`; local builders `makeAlbumToAsset`, `makeAlbumV2` (already in the file).
 
 - [ ] **Step 1: Regenerate localization/keys (once) so `flutter test` compiles**
 
 Per CLAUDE.md, from `mobile/` with Flutter 3.41.7:
+
 ```bash
 cd mobile && flutter pub get && dart run easy_localization:generate -S ../i18n && dart run bin/generate_keys.dart
 ```
@@ -1200,6 +1222,7 @@ git commit -m "test(mobile): contribution sync convergence regression guard (#76
 **Delivers.** Regenerated query docs, green full server medium + unit suites, green mobile test, and the branch pushed.
 
 **Files:**
+
 - Modify (generated): `server/src/queries/*.sql` (via `make sql`)
 
 - [ ] **Step 1: Regenerate query SQL against a SCRATCH migrated DB**
@@ -1241,6 +1264,7 @@ git commit -m "chore(server): regenerate SQL for contribution sync streams (#764
 ```bash
 git push
 ```
+
 (Branch `feat/space-albums-collab-contrib` already has an upstream — plain `git push`. If not: `git push -u origin feat/space-albums-collab-contrib`.)
 
 ---
@@ -1254,4 +1278,7 @@ git push
 - **Placeholder scan:** migration/decorator/stream code shown in full; test code shown; the two "read the file and match" notes (exif builder name, service-spec collect helper) are unavoidable local-lookup instructions, not deferred logic. ✅
 - **Type consistency:** all arms select matching UNION columns (`{assetId, albumId, updateId}` for membership; `columns.syncAlbumAsset`+`isFavorite`+`updateId` for asset; `columns.syncAssetExif`+`updateId` for exif); watermark alias `updateId` used uniformly for `orderBy`. ✅
 - **Not implementing future slices:** Slice 6 (web legibility) untouched. ✅
+
+```
+
 ```

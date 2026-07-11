@@ -393,7 +393,11 @@ describe('SharedSpaceAlbumToAssetSync — contributions (album_space_asset)', ()
 
     // Member leaves S → shared_space_member_delete_album_audit revokes the album grant (#752), same
     // path that drops the album (and thus its contribution edges) on device.
-    await db.deleteFrom('shared_space_member').where('spaceId', '=', space.id).where('userId', '=', member.id).execute();
+    await db
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', member.id)
+      .execute();
 
     const after = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
     expect(after.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);

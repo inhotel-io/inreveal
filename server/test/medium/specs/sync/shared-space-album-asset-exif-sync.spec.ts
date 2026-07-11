@@ -325,14 +325,18 @@ describe('SharedSpaceAlbumAssetExifSync — multi-space co-linked album (I2 §8.
 
     const s2Creates = await drain(sut.getCreates({ nowId: NOW_ID, userId: memberS2.id }));
     expect(s2Creates.some((r: any) => r.assetId === asset.id)).toBe(false);
-    const s2Backfill = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS2.id));
+    const s2Backfill = await drain(
+      sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS2.id),
+    );
     expect(s2Backfill.some((r: any) => r.assetId === asset.id)).toBe(false);
     const s2Updates = await drain(sut.getUpdates({ nowId: NOW_ID, userId: memberS2.id }, ack));
     expect(s2Updates.some((r: any) => r.assetId === asset.id)).toBe(false);
 
     const s1Creates = await drain(sut.getCreates({ nowId: NOW_ID, userId: memberS1.id }));
     expect(s1Creates.some((r: any) => r.assetId === asset.id)).toBe(true);
-    const s1Backfill = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS1.id));
+    const s1Backfill = await drain(
+      sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS1.id),
+    );
     expect(s1Backfill.some((r: any) => r.assetId === asset.id)).toBe(true);
     const s1Updates = await drain(sut.getUpdates({ nowId: NOW_ID, userId: memberS1.id }, ack));
     expect(s1Updates.some((r: any) => r.assetId === asset.id)).toBe(true);

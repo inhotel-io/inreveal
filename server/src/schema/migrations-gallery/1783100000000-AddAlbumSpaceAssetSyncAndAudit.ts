@@ -37,7 +37,9 @@ export async function up(db: Kysely<any>): Promise<void> {
   );
   await sql`CREATE INDEX "album_space_asset_audit_albumId_idx" ON "album_space_asset_audit" ("albumId");`.execute(db);
   await sql`CREATE INDEX "album_space_asset_audit_assetId_idx" ON "album_space_asset_audit" ("assetId");`.execute(db);
-  await sql`CREATE INDEX "album_space_asset_audit_deletedAt_idx" ON "album_space_asset_audit" ("deletedAt");`.execute(db);
+  await sql`CREATE INDEX "album_space_asset_audit_deletedAt_idx" ON "album_space_asset_audit" ("deletedAt");`.execute(
+    db,
+  );
 
   // --- 3. AFTER-DELETE statement-level trigger → tombstone every deleted contribution ---
   await sql`CREATE OR REPLACE FUNCTION album_space_asset_delete_audit()
