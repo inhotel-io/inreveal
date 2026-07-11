@@ -32,7 +32,7 @@ describe('SharedSpaceAlbumToAssetSync.getBackfill', () => {
     const { asset } = await ctx.newAsset({ ownerId: owner.id });
     await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
 
-    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id);
+    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, owner.id);
     const result: any[] = [];
     for await (const row of stream) {
       result.push(row);
@@ -49,7 +49,7 @@ describe('SharedSpaceAlbumToAssetSync.getBackfill', () => {
     const { asset } = await ctx.newAsset({ ownerId: owner.id });
     await ctx.newAlbumAsset({ albumId: a1.id, assetId: asset.id });
 
-    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, a2.id);
+    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, a2.id, owner.id);
     const result: any[] = [];
     for await (const row of stream) {
       result.push(row);
@@ -161,7 +161,7 @@ describe('SharedSpaceAlbumToAssetSync.getUpserts', () => {
     await ctx.newAlbumAsset({ albumId: album.id, assetId: hidden.id });
     await ctx.newAlbumAsset({ albumId: album.id, assetId: timeline.id });
 
-    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id);
+    const stream = sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, owner.id);
     const result: any[] = [];
     for await (const row of stream) {
       result.push(row);
@@ -275,28 +275,32 @@ describe('SharedSpaceAlbumToAssetSync — contributions (album_space_asset)', ()
   it('getBackfill returns a contributed (albumId, assetId) row for the album', async () => {
     const { ctx, sut } = setup();
     const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
     const { user: carol } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { asset } = await ctx.newAsset({ ownerId: carol.id }); // owned by someone else
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
     await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
 
-    const rows = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id));
+    const rows = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, member.id));
     expect(rows.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
   });
 
   it('getBackfill excludes a contributed row whose asset is Hidden (visibility gate)', async () => {
     const { ctx, sut } = setup();
     const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
     const { user: carol } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { asset } = await ctx.newAsset({ ownerId: carol.id, visibility: AssetVisibility.Hidden });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
     await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
 
-    const rows = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id));
+    const rows = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, member.id));
     expect(rows.some((r) => r.assetId === asset.id)).toBe(false);
   });
 
@@ -315,6 +319,23 @@ describe('SharedSpaceAlbumToAssetSync — contributions (album_space_asset)', ()
 
     const rows = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
     expect(rows.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+
+  it('getUpserts excludes a Hidden contribution for a member (visibility gate parity with getBackfill)', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id, visibility: AssetVisibility.Hidden });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const rows = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
+    expect(rows.some((r) => r.assetId === asset.id)).toBe(false);
   });
 
   it('getUpserts does not return a contributed row for a non-member', async () => {
@@ -376,5 +397,56 @@ describe('SharedSpaceAlbumToAssetSync — contributions (album_space_asset)', ()
 
     const after = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
     expect(after.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);
+  });
+});
+
+describe('SharedSpaceAlbumToAssetSync — multi-space co-linked album (I2 §8.3)', () => {
+  // Album L linked to S1 AND S2 (disjoint members). A contribution made via S1 must reach an S1 member
+  // but NEVER an S2-only member — the album grant / accessibleSpaceAlbums are space-agnostic, so without
+  // the space-correlation gate an S1 contribution leaks the edge to S2.
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- test-local seed factory, co-located with its cases
+  const seedDisjoint = async (ctx: SyncTestContext) => {
+    const { user: owner } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { user: memberS1 } = await ctx.newUser();
+    const { user: memberS2 } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id }); // contributed by a third user
+
+    const { space: s1 } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: s1.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: s1.id, userId: memberS1.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: s1.id, albumId: album.id });
+
+    const { space: s2 } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: s2.id, userId: memberS2.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: s2.id, albumId: album.id });
+
+    // Contribution pinned to S1 only.
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: s1.id });
+    return { album, asset, memberS1, memberS2 };
+  };
+
+  it('getUpserts does not emit an S1 contribution to an S2-only member (but does to an S1 member)', async () => {
+    const { ctx, sut } = setup();
+    const { album, asset, memberS1, memberS2 } = await seedDisjoint(ctx);
+
+    const s2 = await drain(sut.getUpserts({ nowId: NOW_ID, userId: memberS2.id }));
+    expect(s2.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);
+
+    const s1 = await drain(sut.getUpserts({ nowId: NOW_ID, userId: memberS1.id }));
+    expect(s1.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+
+  it('getBackfill does not emit an S1 contribution to an S2-only member (but does to an S1 member)', async () => {
+    const { ctx, sut } = setup();
+    const { album, asset, memberS1, memberS2 } = await seedDisjoint(ctx);
+
+    const s2 = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS2.id));
+    expect(s2.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);
+
+    const s1 = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS1.id));
+    expect(s1.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
   });
 });
