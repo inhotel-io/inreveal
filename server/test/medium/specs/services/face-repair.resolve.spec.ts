@@ -101,7 +101,7 @@ const scanPerson = (personId: string, ownerId: string, flagged: number): RepairS
 
 // Seed a completed scan whose stored flagged-face snapshot points `faces` at their given suspected owners,
 // bypassing the real ANN scan (which is exercised separately in face-repair.scan.spec.ts). resolveFaces reads
-// this snapshot via getScanFlaggedFacesForPersons, exactly like applyRepair does today.
+// this snapshot via getScanFlaggedFacesForPersons (the same read the now-retired applyRepair used to make).
 const seedFlaggedSnapshot = async (
   scanRepo: FaceRepairScanRepository,
   userId: string,
@@ -288,6 +288,60 @@ describe('FaceRepairService.resolveFaces: moveToPerson carries rest-of-cluster f
   });
 });
 
+// Ported from the retired applyRepair manual-move spec (E5): a moveToPerson group need not carry every
+// eligible face on the person — a partial move leaves the rest, and a source with remaining faces survives
+// (unlike the fully-drained-unnamed-source deletion covered elsewhere).
+describe('FaceRepairService.resolveFaces: partial move leaves the surviving source intact (E5)', () => {
+  it('moves only the picked faces to the destination and leaves the rest; the surviving source is not deleted', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: dest } = await ctx.newPerson({ ownerId: user.id, name: 'Pierre' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const faceIds: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      faceIds.push(await seedFace(ctx, user.id, source.id));
+    }
+    const picked = [faceIds[0], faceIds[1]];
+    const kept = faceIds.slice(2);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: dest.id, faceIds: picked }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+
+    expect(result.moved).toBe(2);
+
+    const byId = await personIdsOf(faceIds);
+    for (const faceId of picked) {
+      expect(byId[faceId]).toBe(dest.id);
+    }
+    for (const faceId of kept) {
+      expect(byId[faceId]).toBe(source.id);
+    }
+
+    // Source survives (faces remain) → not deleted.
+    const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
+    expect(sourceRow?.id).toBe(source.id);
+
+    // Picked faces have manual identities.
+    const idRows = await db
+      .selectFrom('face_identity_face')
+      .select(['source'])
+      .where('assetFaceId', 'in', picked)
+      .execute();
+    expect(idRows).toHaveLength(2);
+    for (const row of idRows) {
+      expect(row.source).toBe('manual');
+    }
+  });
+});
+
 // ── M2 / M12 / M20: move to a CHOSEN person (owner-scoped, Slice 4) ─────────────────────────────────
 
 describe('FaceRepairService.resolveFaces: move to a chosen person (M2, state 2)', () => {
@@ -407,7 +461,7 @@ describe('FaceRepairService.resolveFaces: destination person gone (M20, E18)', (
 
 describe('FaceRepairService.resolveFaces: entireCluster (M13, E12)', () => {
   it('moves EVERY eligible face of personId — including one never in the flagged snapshot — server-enumerated with no client paging, and drains the person', async () => {
-    const { sut, ctx, scanRepo } = setup();
+    const { sut, ctx, scanRepo, jobMock } = setup();
     const { user } = await ctx.newUser();
     // The scan's suggestion — deliberately NOT the entireCluster destination below, proving the request's
     // destination wins rather than each face's stored suspectedOwnerId (mirrors the M2 review-gap coverage).
@@ -419,6 +473,10 @@ describe('FaceRepairService.resolveFaces: entireCluster (M13, E12)', () => {
     // A rest-of-cluster face that was never part of any flagged snapshot — entireCluster must still move it,
     // since it enumerates every ELIGIBLE face of personId, not just the flagged ones.
     const f2 = await seedFace(ctx, user.id, source.id);
+
+    // Ported from the retired applyRepair manual-move spec (E13): make a soon-to-move face the source's
+    // representative, so executeRepair's shared reconcile-representative-faces step must repoint/queue it.
+    await db.updateTable('person').set({ faceAssetId: f1 }).where('id', '=', source.id).execute();
 
     await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: suggested.id }]);
 
@@ -440,12 +498,16 @@ describe('FaceRepairService.resolveFaces: entireCluster (M13, E12)', () => {
     expect(byId[f1]).toBe(dest.id);
     expect(byId[f2]).toBe(dest.id);
 
+    // Representative reconcile queued a thumbnail regen for the drained source (E13, ported from manual-move).
+    const queuedNames = jobMock.queueAll.mock.calls.flatMap(([items]) => items).map((item) => item.name);
+    expect(queuedNames).toContain(JobName.PersonGenerateThumbnail);
+
     // Drained from the console...
     const latest = await scanRepo.getLatestScan();
     const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
     expect(snapshotPersonIds).not.toContain(source.id);
 
-    // ...and the now-fully-drained UNNAMED source is auto-deleted (same cleanup applyRepair's manual move used).
+    // ...and the now-fully-drained UNNAMED source is auto-deleted (same cleanup the retired applyRepair's manual move used).
     const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
     expect(sourceRow).toBeUndefined();
   });
