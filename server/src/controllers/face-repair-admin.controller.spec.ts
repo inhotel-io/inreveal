@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { FaceRepairAdminController } from 'src/controllers/face-repair-admin.controller';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import request from 'supertest';
@@ -452,6 +453,126 @@ describe(FaceRepairAdminController.name, () => {
         .send({ name: 'New Person' });
       expect(status).toBe(400);
       expect(service.createOwnerPerson).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /admin/face-repair/resolutions', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get('/admin/face-repair/resolutions');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('is admin-only: a non-admin caller gets 403 (C1)', async () => {
+      ctx.authenticate.mockRejectedValue(new ForbiddenException('Forbidden'));
+      const { status } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/resolutions')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(403);
+      expect(service.listResolutions).not.toHaveBeenCalled();
+    });
+
+    it('delegates to service.listResolutions', async () => {
+      service.listResolutions.mockResolvedValue({ resolutions: [] });
+      const { status, body } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/resolutions')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(service.listResolutions).toHaveBeenCalled();
+      expect(body).toMatchObject({ resolutions: [] });
+    });
+  });
+
+  describe('POST /admin/face-repair/resolutions/remove', () => {
+    const uuid1 = '00000000-0000-4000-a000-000000000001';
+    const uuid2 = '00000000-0000-4000-a000-000000000002';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/admin/face-repair/resolutions/remove');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('is admin-only: a non-admin caller gets 403 (C1)', async () => {
+      ctx.authenticate.mockRejectedValue(new ForbiddenException('Forbidden'));
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolutions/remove')
+        .set('Authorization', 'Bearer token')
+        .send({ declineIds: [uuid1] });
+      expect(status).toBe(403);
+      expect(service.removeResolutions).not.toHaveBeenCalled();
+    });
+
+    it('should delegate to service.removeResolutions (declineIds)', async () => {
+      service.removeResolutions.mockResolvedValue({ removed: 1 });
+      const { status, body } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolutions/remove')
+        .set('Authorization', 'Bearer token')
+        .send({ declineIds: [uuid1] });
+      expect(status).toBe(201);
+      expect(service.removeResolutions).toHaveBeenCalledWith({ declineIds: [uuid1] });
+      expect(body).toEqual({ removed: 1 });
+    });
+
+    it('should delegate to service.removeResolutions (lockIds)', async () => {
+      service.removeResolutions.mockResolvedValue({ removed: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolutions/remove')
+        .set('Authorization', 'Bearer token')
+        .send({ lockIds: [uuid1] });
+      expect(status).toBe(201);
+      expect(service.removeResolutions).toHaveBeenCalledWith({ lockIds: [uuid1] });
+    });
+
+    it('should delegate to service.removeResolutions (faces natural key)', async () => {
+      service.removeResolutions.mockResolvedValue({ removed: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolutions/remove')
+        .set('Authorization', 'Bearer token')
+        .send({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }] });
+      expect(status).toBe(201);
+      expect(service.removeResolutions).toHaveBeenCalledWith({
+        faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }],
+      });
+    });
+
+    it('accepts a v7 declineId (regression guard: face_repair_decline.id is uuid v7) (C2)', async () => {
+      // Regression: z.uuidv4() rejects v7 ids — this exact bug broke decline "Undo" before. z.uuid() must accept them.
+      const uuidV7 = '01890000-0000-7000-8000-000000000001';
+      service.removeResolutions.mockResolvedValue({ removed: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolutions/remove')
+        .set('Authorization', 'Bearer token')
+        .send({ declineIds: [uuidV7] });
+      expect(status).toBe(201);
+      expect(service.removeResolutions).toHaveBeenCalledWith({ declineIds: [uuidV7] });
+    });
+
+    it('accepts a v7 lockId (regression guard: face_repair_lock.id is uuid v7) (C2)', async () => {
+      const uuidV7 = '01890000-0000-7000-8000-000000000002';
+      service.removeResolutions.mockResolvedValue({ removed: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolutions/remove')
+        .set('Authorization', 'Bearer token')
+        .send({ lockIds: [uuidV7] });
+      expect(status).toBe(201);
+      expect(service.removeResolutions).toHaveBeenCalledWith({ lockIds: [uuidV7] });
+    });
+
+    it('rejects a malformed body (non-uuid declineId) with 400 (C2)', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolutions/remove')
+        .set('Authorization', 'Bearer token')
+        .send({ declineIds: ['not-a-uuid'] });
+      expect(status).toBe(400);
+      expect(service.removeResolutions).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty declineIds array with 400 (C2)', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolutions/remove')
+        .set('Authorization', 'Bearer token')
+        .send({ declineIds: [] });
+      expect(status).toBe(400);
+      expect(service.removeResolutions).not.toHaveBeenCalled();
     });
   });
 });
