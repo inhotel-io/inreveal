@@ -575,122 +575,12 @@ export class FaceRepairService extends BaseService {
     return { removed };
   }
 
-  async applyRepair(input: {
-    approvedPersonIds: string[];
-    excludeFaceIds?: string[];
-    manualMove?: { personId: string; destinationPersonId: string; faceIds?: string[]; entireCluster?: boolean };
-  }): Promise<RepairExecution> {
-    const manualMove = input.manualMove;
-    if (manualMove && manualMove.destinationPersonId === manualMove.personId) {
-      throw new BadRequestException('Cannot move a cluster into itself');
-    }
-
-    const hasManualWork = !!manualMove && (manualMove.entireCluster === true || (manualMove.faceIds?.length ?? 0) > 0);
-    const hasFlagged = input.approvedPersonIds.length > 0;
-    if (!hasFlagged && !hasManualWork) {
-      return { moved: 0, skipped: 0 };
-    }
-
-    if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
-      throw new ConflictException('Refusing to apply while facial recognition is active');
-    }
-    await this.faceRepairScanRepository.failStaleScans(STALE_SCAN_TIMEOUT_MS);
-    const latest = await this.faceRepairScanRepository.getLatestScan();
-    if (latest && (latest.status === 'pending' || latest.status === 'running')) {
-      throw new ConflictException('Refusing to apply while a scan is in progress');
-    }
-
-    const toRepair: FlaggedFace[] = [];
-    if (hasFlagged && latest) {
-      // Consume the already-persisted flagged-face snapshot from the reviewed scan instead of recomputing the
-      // plan via one per-face ANN query in the request (B1: that exceeded reverse-proxy/gateway timeouts at
-      // scale). Reading `latest.id`'s stored rows also means apply acts on the exact set the admin reviewed —
-      // getPersonFlaggedFaces reads the same rows — rather than re-planning against whatever scan happens to be
-      // latest, closing the M1 governance gap. The read's still-on-person eligibility join keeps it safe: a face
-      // moved off its cluster since the scan is silently dropped, and executeRepair re-checks at write time.
-      const stored = await this.faceRepairScanRepository.getScanFlaggedFacesForPersons(
-        latest.id,
-        input.approvedPersonIds,
-      );
-      const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
-        personIds: input.approvedPersonIds,
-        assetFaceIds: stored.map((s) => s.assetFaceId),
-      });
-      const byPerson = new Map<string, FlaggedFace[]>();
-      for (const face of stored) {
-        const list = byPerson.get(face.personId) ?? [];
-        list.push({
-          assetFaceId: face.assetFaceId,
-          currentPersonId: face.personId,
-          suspectedOwnerId: face.suspectedOwnerId,
-        });
-        byPerson.set(face.personId, list);
-      }
-      // Respect declines made after the scan (during review): same filtering the review page applies at read.
-      applyDeclineFilters(byPerson, declineMaps);
-      const exclude = new Set(input.excludeFaceIds);
-      for (const faces of byPerson.values()) {
-        for (const face of faces) {
-          if (!exclude.has(face.assetFaceId)) {
-            toRepair.push(face);
-          }
-        }
-      }
-    }
-
-    if (hasManualWork && manualMove) {
-      const manualFaceIds = manualMove.entireCluster
-        ? await this.collectClusterFaceIds(manualMove.personId)
-        : (manualMove.faceIds ?? []);
-      for (const assetFaceId of manualFaceIds) {
-        toRepair.push({
-          assetFaceId,
-          currentPersonId: manualMove.personId,
-          suspectedOwnerId: manualMove.destinationPersonId,
-        });
-      }
-    }
-
-    const result = await this.executeRepair({
-      toRepair,
-      reviewOnlyFaces: [],
-      reviewOnlyPersonIds: [],
-      unAttributableFaces: [],
-      perPerson: [],
-    });
-
-    if (result.moved > 0) {
-      const personsToDrop = new Set(input.approvedPersonIds);
-      if (hasManualWork && manualMove) {
-        const remaining = await this.faceRepairRepository.countEligibleFaces({ personId: manualMove.personId });
-        if (remaining === 0) {
-          personsToDrop.add(manualMove.personId);
-          const source = await this.personRepository.getById(manualMove.personId);
-          // Only delete a truly empty source: countEligibleFaces ignores hidden/Manual faces, so gate the delete
-          // on countAllFaces to avoid orphaning survivors via the FK's onDelete: SET NULL (A2). It still leaves
-          // the (drained) person in personsToDrop so the console snapshot no longer surfaces it.
-          if (source && (!source.name || source.name.trim().length === 0)) {
-            const remainingAll = await this.faceRepairRepository.countAllFaces(manualMove.personId);
-            if (remainingAll === 0) {
-              await this.personRepository.delete([manualMove.personId]);
-            }
-          }
-        }
-      }
-      if (personsToDrop.size > 0) {
-        await this.faceRepairScanRepository.removePersonsFromLatestScan([...personsToDrop]);
-      }
-    }
-
-    return result;
-  }
-
   // Slice 1 of the full per-face resolution (docs/plans/2026-07-10-face-cleanup-full-resolution-design.md):
   // replaces the 2-state `apply` for a single reviewed person. Slice 2 wires the `stay` (soft-decline) bucket
   // on top of Slice 1's move-to-owner path; Slice 3 wires `lock` (durable, owner-agnostic confirm) on the same
   // raw-snapshot membership check; Slice 5 wires `detach` ("Not a face" — unassign + strip the identity link)
   // on the same raw-snapshot membership check; Slice 6 wires `entireCluster` (server-enumerated whole-cluster
-  // move, mutually exclusive with the per-face buckets) — the old `apply` endpoint is retired in a later slice.
+  // move, mutually exclusive with the per-face buckets) — the old `apply` endpoint has since been retired.
   async resolveFaces(input: FaceRepairResolveRequest, resolvedBy: string): Promise<FaceRepairResolveResponse> {
     const { personId, moveToPerson, stay, lock, detach, entireCluster } = input;
     const moveFaceIds = moveToPerson.flatMap((group) => group.faceIds);
@@ -709,7 +599,7 @@ export class FaceRepairService extends BaseService {
       throw new BadRequestException('Resolve request has no faces to act on');
     }
 
-    // Guards reused verbatim from applyRepair (C5), before any snapshot read.
+    // Guards reused verbatim from the now-retired applyRepair (C5), before any snapshot read.
     if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
       throw new ConflictException('Refusing to apply while facial recognition is active');
     }
@@ -755,7 +645,7 @@ export class FaceRepairService extends BaseService {
     }
 
     // Read this person's stored flagged-face snapshot (per-face suspected owner) and apply the same
-    // declined-since-scan filtering the review page and applyRepair both use.
+    // declined-since-scan filtering the review page uses (and the now-retired applyRepair used to).
     const stored = latest
       ? await this.faceRepairScanRepository.getScanFlaggedFacesForPersons(latest.id, [personId])
       : [];
@@ -871,8 +761,8 @@ export class FaceRepairService extends BaseService {
       }
     }
 
-    // Empty-unnamed cleanup, reused from applyRepair's manual-move cleanup (A2): only delete a source with
-    // ZERO remaining faces of any kind, and only when it was never named.
+    // Empty-unnamed cleanup, reused from the now-retired applyRepair's manual-move cleanup (A2): only delete a
+    // source with ZERO remaining faces of any kind, and only when it was never named.
     const remaining = await this.faceRepairRepository.countEligibleFaces({ personId });
     if (remaining === 0) {
       const source = await this.personRepository.getById(personId);
@@ -884,8 +774,8 @@ export class FaceRepairService extends BaseService {
       }
     }
 
-    // Drop-on-any-resolution (C5, E13): unlike applyRepair's `moved > 0` gate, a committed resolve always
-    // drains the person from the console immediately, even when every flagged face was kept/stayed (zero
+    // Drop-on-any-resolution (C5, E13): unlike the now-retired applyRepair's `moved > 0` gate, a committed
+    // resolve always drains the person from the console immediately, even when every flagged face was kept/stayed (zero
     // moves) — the M11 stay-only case, with `lock` still to come in Slice 3. moveToPerson destinations only
     // ever gain faces from this call, so there is no destination to additionally drain this slice.
     await this.faceRepairScanRepository.removePersonsFromLatestScan([personId]);

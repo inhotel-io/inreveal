@@ -275,55 +275,6 @@ describe(FaceRepairAdminController.name, () => {
     });
   });
 
-  describe('POST /admin/face-repair/apply', () => {
-    const personId = '00000000-0000-4000-a000-000000000020';
-    const destId = '00000000-0000-4000-a000-000000000021';
-
-    it('should be an authenticated route', async () => {
-      await request(ctx.getHttpServer()).post('/admin/face-repair/apply');
-      expect(ctx.authenticate).toHaveBeenCalled();
-    });
-
-    it('delegates the legacy flagged-only apply to service.applyRepair', async () => {
-      service.applyRepair.mockResolvedValue({ moved: 2, skipped: 0 });
-      const { status } = await request(ctx.getHttpServer())
-        .post('/admin/face-repair/apply')
-        .set('Authorization', 'Bearer token')
-        .send({ approvedPersonIds: [personId] });
-      expect(status).toBe(201);
-      expect(service.applyRepair).toHaveBeenCalledWith(expect.objectContaining({ approvedPersonIds: [personId] }));
-    });
-
-    it('passes a manualMove block (empty approvedPersonIds) through to service.applyRepair', async () => {
-      service.applyRepair.mockResolvedValue({ moved: 5, skipped: 0 });
-      const manualMove = { personId, destinationPersonId: destId, entireCluster: true };
-      const { status } = await request(ctx.getHttpServer())
-        .post('/admin/face-repair/apply')
-        .set('Authorization', 'Bearer token')
-        .send({ approvedPersonIds: [], manualMove });
-      expect(status).toBe(201);
-      expect(service.applyRepair).toHaveBeenCalledWith(expect.objectContaining({ manualMove }));
-    });
-
-    it('rejects empty approvedPersonIds with no manualMove (400, refine)', async () => {
-      const { status } = await request(ctx.getHttpServer())
-        .post('/admin/face-repair/apply')
-        .set('Authorization', 'Bearer token')
-        .send({ approvedPersonIds: [] });
-      expect(status).toBe(400);
-      expect(service.applyRepair).not.toHaveBeenCalled();
-    });
-
-    it('rejects a manualMove missing destinationPersonId with 400 (E17)', async () => {
-      const { status } = await request(ctx.getHttpServer())
-        .post('/admin/face-repair/apply')
-        .set('Authorization', 'Bearer token')
-        .send({ approvedPersonIds: [], manualMove: { personId, entireCluster: true } });
-      expect(status).toBe(400);
-      expect(service.applyRepair).not.toHaveBeenCalled();
-    });
-  });
-
   describe('POST /admin/face-repair/resolve', () => {
     const personId = '00000000-0000-4000-a000-000000000030';
     const ownerA = '00000000-0000-4000-a000-000000000031';
