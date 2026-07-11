@@ -134,6 +134,7 @@ DROP TABLE IF EXISTS "shared_space" CASCADE;
 -- Face identities
 DROP TABLE IF EXISTS "face_repair_scan_flagged_face" CASCADE;
 DROP TABLE IF EXISTS "face_repair_decline" CASCADE;
+DROP TABLE IF EXISTS "face_repair_lock" CASCADE;
 DROP TABLE IF EXISTS "face_repair_scan" CASCADE;
 DROP TABLE IF EXISTS "face_identity_face" CASCADE;
 DROP TABLE IF EXISTS "face_identity" CASCADE;
@@ -402,6 +403,7 @@ DELETE FROM "kysely_migrations"
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
    '1784000000000-FixFaceRepairScanInFlightIndexOverride',
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
+   '1785000000000-AddFaceRepairLock',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current

@@ -37,6 +37,7 @@ import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
+import { FaceRepairLockRepository } from 'src/repositories/face-repair-lock.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { IntegrityRepository } from 'src/repositories/integrity.repository';
@@ -250,6 +251,7 @@ export type ServiceOverrides = {
   faceRepair: FaceRepairRepository;
   faceRepairScan: FaceRepairScanRepository;
   faceRepairDecline: FaceRepairDeclineRepository;
+  faceRepairLock: FaceRepairLockRepository;
   integrityReport: IntegrityRepository;
   job: JobRepository;
   library: LibraryRepository;
@@ -347,6 +349,7 @@ export const getMocks = () => {
     faceRepair: automock(FaceRepairRepository, { strict: false }),
     faceRepairScan: automock(FaceRepairScanRepository, { strict: false }),
     faceRepairDecline: automock(FaceRepairDeclineRepository, { strict: false }),
+    faceRepairLock: automock(FaceRepairLockRepository, { strict: false }),
     integrityReport: automock(IntegrityRepository, { strict: false }),
     job: newJobRepositoryMock(),
     apiKey: automock(ApiKeyRepository),
@@ -425,6 +428,7 @@ export const newTestService = <T extends BaseService>(
     overrides.faceRepair || (mocks.faceRepair as As<FaceRepairRepository>),
     overrides.faceRepairScan || (mocks.faceRepairScan as As<FaceRepairScanRepository>),
     overrides.faceRepairDecline || (mocks.faceRepairDecline as As<FaceRepairDeclineRepository>),
+    overrides.faceRepairLock || (mocks.faceRepairLock as As<FaceRepairLockRepository>),
     overrides.integrityReport || (mocks.integrityReport as As<IntegrityRepository>),
     overrides.job || (mocks.job as As<JobRepository>),
     overrides.library || (mocks.library as As<LibraryRepository>),

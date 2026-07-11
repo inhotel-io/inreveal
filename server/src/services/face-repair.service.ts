@@ -684,8 +684,9 @@ export class FaceRepairService extends BaseService {
 
   // Slice 1 of the full per-face resolution (docs/plans/2026-07-10-face-cleanup-full-resolution-design.md):
   // replaces the 2-state `apply` for a single reviewed person. Slice 2 wires the `stay` (soft-decline) bucket
-  // on top of Slice 1's move-to-owner path; `lock`/`detach` are validated (disjoint buckets + snapshot
-  // membership) but still always empty until Slices 3/5 land.
+  // on top of Slice 1's move-to-owner path; Slice 3 wires `lock` (durable, owner-agnostic confirm) on the same
+  // raw-snapshot membership check. `detach` is still validated (disjoint buckets + snapshot membership) but
+  // remains always empty until Slice 5 lands.
   async resolveFaces(input: FaceRepairResolveRequest, resolvedBy: string): Promise<FaceRepairResolveResponse> {
     const { personId, moveToPerson, stay, lock, detach } = input;
     const moveFaceIds = moveToPerson.flatMap((group) => group.faceIds);
@@ -794,6 +795,12 @@ export class FaceRepairService extends BaseService {
           })
         : 0;
 
+    // Confirm/lock (Slice 3, state 4): durably, owner-agnostically lock each `lock`-bucket face to this
+    // reviewed person. `insertLocks` is idempotent via the plain unique index on assetFaceId — re-locking an
+    // already-locked face (even one whose flaggedIds membership above passed via a stale/declined snapshot row)
+    // is a silent no-op, never a unique-violation.
+    const locked = lock.length > 0 ? await this.faceRepairLockRepository.insertLocks(lock, personId, resolvedBy) : 0;
+
     // Empty-unnamed cleanup, reused from applyRepair's manual-move cleanup (A2): only delete a source with
     // ZERO remaining faces of any kind, and only when it was never named.
     const remaining = await this.faceRepairRepository.countEligibleFaces({ personId });
@@ -816,7 +823,7 @@ export class FaceRepairService extends BaseService {
     return {
       moved: result.moved,
       declined,
-      locked: 0,
+      locked,
       detached: 0,
       skipped: result.skipped + preSkipped,
     };
