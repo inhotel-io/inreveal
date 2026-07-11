@@ -25,8 +25,9 @@ SDK, SvelteKit + Svelte 5 runes + `@immich/ui` (web), Vitest (unit + medium/test
 ## Global Constraints
 
 - **TDD, always.** Every step writes the failing test first, watches it fail for the right reason, then
-  implements the minimum. The spec §8 matrix (U1–U3, M1–M16, C1–C2, W1–W3, P1–P5, X1–X2) is the coverage
-  contract; each slice lists the IDs it must turn green.
+  implements the minimum. The spec §8 matrix (U1–U3, M1–M22, C1–C3, W1–W3, P1–P5, X1–X2) is the coverage
+  contract; **each slice lists the IDs it must turn green, and every matrix ID must appear in exactly one
+  slice** (Slice 8 Step 0 asserts this — see the coverage table at the end).
 - **Fork migrations** go in `server/src/schema/migrations-gallery/` with a round timestamp; **plain** unique
   indexes only (a partial index needs a `migration_overrides` entry for SQL Schema Checks CI).
 - **UUID validation:** entity ids (`asset_face.id`, `person.id`) are **v4** → `z.uuidv4()`; fork
@@ -73,6 +74,52 @@ suspectedOwnerId)`, wraps re-attribution + `ensurePersonIdentity` + `replaceFace
   `server/test/medium/specs/**` with hand-registered repos in `test/medium.factory.ts`; web via
   Vitest + `@testing-library/svelte`; e2e `e2e/src/specs/web/face-cleanup.e2e-spec.ts`.
 
+## Verified reference-fact corrections (2026-07-11, read against this branch)
+
+These override any looser wording above; folded in after a code-level verification pass. (Labelled **RF**
+= "reference fact" to avoid colliding with the §8 controller-test IDs C1/C2.)
+
+- **RF1 — Mockup has NO `data-testid` attributes.** `2026-07-10-face-cleanup-resolution-mockup.html` is a
+  static mockup using element **`id`s** (`grid`, `dock`, `summary`, `chips`, `allset`, `applyBtn`, `applyLbl`,
+  `bulk`, `count`, `modalBg`, `pickCount`, `psearch`, `people`) + `data-state`/`data-idx`/`data-name`, not
+  test-ids. The implementation must **add** the `data-testid`s the spec §6 / §8 tests reference
+  (`flagged-grid`, `face-tile` [+ `data-faceid`, `data-state`], `select-all`, `reset`, `dock`, `tally`,
+  `apply-btn`, `bulk-bar`, `clear`, `person-picker`) while reproducing the mockup's **layout, `data-state`
+  color model, and copy**. Colors (`:root`): owner `#4f46e5`/tint `#eef0fe`, stay `#16a34a`/`#e7f6ec`, lock
+  `#7c3aed`/`#f1eafe`, other `#d97706`/`#fdf0dd`, detach `#475569`/`#eef1f5` (detach also
+  `filter: grayscale(1) opacity(0.55)`). Ribbon copy: owner `→ <OwnerName>`, stay `Keeps here`, lock
+  `Locked`, other `→ <Name>`, detach `Detached`. Bulk-bar chips: `→ Owner`, `Keep here`, `Confirm / lock`,
+  `Move → person…`, `Not a face`, `Clear`. Summary: "every face accounted for" + `Apply · N faces`. Banner:
+  "N faces need review — every one leaves the queue once you apply". Picker: title "Move N faces to…",
+  subtitle "Any person or cluster in the library — not just this scan's suggestion.", search "Search
+  people…", suggestion row subtitle "this scan's suggestion", `Create new person "<query>"`, empty "No
+  matches".
+- **RF2 — `resolve` route needs `@Auth()` (threads `resolvedBy`).** Today `applyFaceRepair` does **not** inject
+  `@Auth()`; only `triggerScan`/`declineFaceRepair` do. Because `stay`→`createDeclines({declinedBy})` (Slice 2)
+  and `lock`→`insertLocks(..., createdBy)` (Slice 3) need the admin id, the new route takes
+  `@Auth() auth: AuthDto` and the service signature is **`resolveFaces(input: FaceRepairResolveRequest,
+resolvedBy: string)`** from Slice 1 (controller passes `auth.user.id`). `resolvedBy` is unused by the
+  move-only Slice 1 path but wired through from the start so Slices 2/3/5 don't re-touch the controller.
+- **RF3 — Exact primitives.** `FaceRepairRepository.reattributeFaces(fromPersonId, toPersonId, assetFaceIds,
+db = this.db)` (chunked 1000). `executeRepair(plan: RepairPlan)` where `RepairPlan = { toRepair:
+FlaggedFace[]; reviewOnlyFaces: []; reviewOnlyPersonIds: []; unAttributableFaces: []; perPerson: [] }` and
+  `FlaggedFace = { assetFaceId: string; currentPersonId: string; suspectedOwnerId: string }` (exported from
+  `services/face-repair.service.ts`). Build `plan.toRepair` from `{ assetFaceId, currentPersonId: personId,
+suspectedOwnerId: destinationPersonId }` per moved face. `getScanFlaggedFacesForPersons(scanId, personIds)`
+  returns `{ assetFaceId, personId, suspectedOwnerId }[]` — **per-face** suspected owner (confirmed).
+- **RF4 — Response shape** is `{ moved, declined, locked, detached, skipped }` (Slice 1 leaves declined/locked/
+  detached = 0). Old `FaceRepairApplyResponse` was `{ moved, skipped }`.
+- **RF5 — `applyRepair` guard order** (reuse verbatim, service `:580-688`): `isActive(FacialRecognition)` →
+  `ConflictException('Refusing to apply while facial recognition is active')`; `failStaleScans`;
+  `getLatestScan` pending/running → `ConflictException('Refusing to apply while a scan is in progress')` — all
+  **before** the snapshot read. `resolveFaces` reuses these + the empty-unnamed cleanup
+  (`countEligibleFaces`/`countAllFaces` + `personRepository.delete`), but calls `removePersonsFromLatestScan`
+  **unconditionally on a committed resolution** (drop-on-any-resolution), unlike `applyRepair`'s `moved > 0`
+  gate.
+- **RF6 — Medium factory.** `FaceRepair*` repos construct via the generic `new key(db)` bucket in
+  `newRealRepository`; add `FaceRepairLockRepository` there and to the `real:[...]` list of the resolve
+  medium spec. Setup: `newMediumService(FaceRepairService, { database: db, real: [...], mock: [LoggingRepository, JobRepository] })`.
+
 ---
 
 ## File Structure
@@ -108,8 +155,12 @@ suspectedOwnerId)`, wraps re-attribution + `ensurePersonIdentity` + `replaceFace
 keeps the default → Owner (or toggles back), hits **Apply**, and every face moves to **its own** suspected
 owner; the person drains from the console.
 
-**Covers:** spec req 5, 6; state 1. Edge E1, E9, E10, E14 (owner grouping). Tests **M1, M3, M9, M10, W1
-(owner), W2, W3, P1, P2, P4**. (Old `apply` stays until Slice 6.)
+**Covers:** spec req 5, 6; state 1. Edge E1, E9, E10, E14 (owner grouping), E16 (empty resolve). Tests **U3,
+M1, M3, M8, M9, M10, M15, M19, C1 (resolve half), C2 (resolve half), W1 (owner), W2, W3, P1, P2, P4, P5**.
+(Old `apply` stays until Slice 6.) The pure bucket-validation helper (**U3**) covering **overlap (E7)** and
+**non-flagged stay/lock/detach ids (E15)** is built here and reused by every later bucket; its integration
+counterparts (**M7** disjoint→400, **M14** non-flagged→400) land with the buckets that first make them
+reachable (Slices 2 / 3 / 5).
 
 **Files:** DTO, service `resolveFaces`, controller `resolve`, SDK regen, `+page.svelte`, `review.svelte.ts`,
 medium `face-repair.resolve.spec.ts`, web `review.spec.ts` / `page.spec.ts`.
@@ -132,33 +183,46 @@ export const FaceRepairResolveRequestSchema = z
 export const FaceRepairResolveResponseSchema = z
   .object({ moved: z.number(), declined: z.number(), locked: z.number(), detached: z.number(), skipped: z.number() })
   .meta({ id: 'FaceRepairResolveResponseDto' });
-// service
-resolveFaces(input: FaceRepairResolveRequest): Promise<FaceRepairResolveResponse>;
+// service (RF2 — threads the admin id from the controller's @Auth(); unused by the move-only Slice 1 path
+// but wired from the start so Slices 2/3/5 don't re-touch the controller)
+resolveFaces(input: FaceRepairResolveRequest, resolvedBy: string): Promise<FaceRepairResolveResponse>;
 ```
 
 - [ ] **Step 1 — Failing medium test M1/M3 (per-face owner move).** In
       `server/test/medium/specs/services/face-repair.resolve.spec.ts`: seed a person with faces whose stored
       snapshot points two faces at owner A and one at owner B; call `resolveFaces({ personId, moveToPerson:
-    [{A,[f1,f2]},{B,[f3]}] })`; assert `asset_face.personId` = A for f1,f2 and B for f3, `moved === 3`, and
-      the person is removed from the latest scan. Run: `pnpm test:medium -- face-repair.resolve` → FAIL
-      (`resolveFaces` undefined).
+[{A,[f1,f2]},{B,[f3]}] })`; assert `asset_face.personId` = A for f1,f2 and B for f3, `moved === 3`, and
+      the person is removed from the latest scan. **Also M15 (E10 zero-override):** a resolve whose only
+      bucket is the default owner group for _every_ flagged face moves them all and drains the person. Run:
+      `pnpm test:medium -- face-repair.resolve` → FAIL (`resolveFaces` undefined).
 - [ ] **Step 2 — DTO + schema.** Add the schemas above to `face-repair.dto.ts` + `class
-    FaceRepairResolveRequestDto extends createZodDto(...)`. Run `pnpm exec vitest run src/dtos/face-repair.dto.spec.ts` after adding a validation test (accepts owner groups; rejects a
+FaceRepairResolveRequestDto extends createZodDto(...)`. Run `pnpm exec vitest run src/dtos/face-repair.dto.spec.ts` after adding a validation test (accepts owner groups; rejects a
       non-uuid faceId) → PASS.
-- [ ] **Step 3 — Service `resolveFaces` (move path).** Implement in `face-repair.service.ts`: guard reuse
-      (`isActive(FacialRecognition)`, `failStaleScans`, `getLatestScan` pending/running); read the snapshot
-      via `getScanFlaggedFacesForPersons`; **validate** `moveToPerson` faces are on `personId` + eligible
-      (helper `assertResolvable`); build `plan.toRepair` from the groups; call `executeRepair`; run the
-      empty-unnamed cleanup; then `removePersonsFromLatestScan([personId, …drainedDestinations])`
-      **unconditionally on a committed resolution** (not gated on `moved > 0`). Run Step 1 test → PASS.
-- [ ] **Step 4 — Failing tests M9 (skip) + M10 (guard).** Add: a face moved off `personId` since the snapshot
-      → not moved, counted in `skipped`; and `resolveFaces` while `FacialRecognition` active → throws
-      `ConflictException`. Run → FAIL, then confirm they PASS against Step 3 (adjust if needed).
-- [ ] **Step 5 — Controller route.** Add to `face-repair-admin.controller.ts`:
+- [ ] **Step 3 — Failing unit U3, then service `resolveFaces(input, resolvedBy)` (move path).** First add
+      **U3** to `src/utils/face-repair.spec.ts`: the pure bucket-validation helper flags (a) the same id in
+      two buckets (E7) and (b) a `stay`/`lock`/`detach` id absent from the flagged snapshot (E15) — both as
+      errors → FAIL. Then implement `resolveFaces(input, resolvedBy)` in `face-repair.service.ts` (signature
+      per RF2; `resolvedBy` unused on this move-only path but wired through): guard reuse
+      (`isActive(FacialRecognition)`, `failStaleScans`, `getLatestScan` pending/running); **reject an empty
+      resolve** — no `moveToPerson`/`stay`/`lock`/`detach` and no `entireCluster` → `BadRequestException`
+      (M19/E16); read the snapshot via `getScanFlaggedFacesForPersons`; run the bucket-validation helper
+      (**disjoint** + snapshot membership) and `assertResolvable` (`moveToPerson` faces on `personId` +
+      eligible); build `plan.toRepair` from the groups; call `executeRepair`; run the empty-unnamed cleanup;
+      then `removePersonsFromLatestScan([personId, …drainedDestinations])` **unconditionally on a committed
+      resolution** (not gated on `moved > 0`). Run U3 + Step 1 → PASS.
+- [ ] **Step 4 — Failing tests M9 (skip) + M10 (guard) + M8 (drain cleanup).** Add: a face moved off
+      `personId` since the snapshot → not moved, counted in `skipped` (M9); `resolveFaces` while
+      `FacialRecognition` active → throws `ConflictException` (M10); and a move that empties an **unnamed**
+      source auto-deletes it while a drained **named** person is kept (M8/E6). Run → FAIL, then confirm they
+      PASS against Step 3 (adjust if needed). _(M19 empty-resolve was written in Step 3.)_
+- [ ] **Step 5 — Controller route + auth tests C1/C2 (resolve half).** Add to
+      `face-repair-admin.controller.ts` (per RF2, inject `@Auth()` and thread the admin id):
       `@Post('resolve') @Authenticated({ admin: true }) @Endpoint({ summary: 'Resolve reviewed faces',
-    history: new HistoryBuilder().added('v1') }) resolveFaces(@Body() dto: FaceRepairResolveRequestDto) {
-    return this.service.resolveFaces(dto) as Promise<FaceRepairResolveResponseDto>; }`. Extend
-      `face-repair-admin.controller.spec.ts` to assert delegation. Run → PASS.
+history: new HistoryBuilder().added('v1') }) resolveFaces(@Auth() auth: AuthDto, @Body() dto:
+FaceRepairResolveRequestDto) { return this.service.resolveFaces(dto, auth.user.id) as
+Promise<FaceRepairResolveResponseDto>; }`. Extend `face-repair-admin.controller.spec.ts` to assert
+      delegation **and** the resolve-route halves of **C1** (non-admin → 403) and **C2** (malformed body →
+      400). Run → PASS. (Slice 7 adds the `resolutions*` halves of C1/C2.)
 - [ ] **Step 6 — Regen SDK.** `cd server && pnpm build && pnpm sync:open-api && cd .. && make open-api-typescript`. Verify `resolveFaceRepair` (or generated name) + the two DTOs appear in
       `open-api/typescript-sdk/src/fetch-client.ts`. Commit server + SDK.
 - [ ] **Step 7 — Failing web unit W1/W2/W3.** In `review.spec.ts`: construct the reworked view-model, set
@@ -170,9 +234,11 @@ resolveFaces(input: FaceRepairResolveRequest): Promise<FaceRepairResolveResponse
       (`toggle`, `range`, `selectAll`, `clear`, `reset`); a `$derived` tally; and a **pure**
       `buildResolveRequest(personId): FaceRepairResolveRequestDto` that groups `owner`/`other` faces by
       destination (owner destination = each face's `suspectedOwnerId`). Run Step 7 → PASS.
-- [ ] **Step 9 — Failing component P1/P2/P4.** In `page.spec.ts`: render the page with a mocked flagged set;
-      assert click/shift-range/select-all selection (P1), dock summary↔bulk swap (P2), and that Apply calls
-      the SDK with `{ faceRepairResolveRequestDto: {...} }` matching on-screen state (P4). Run → FAIL.
+- [ ] **Step 9 — Failing component P1/P2/P4/P5.** In `page.spec.ts`: render the page with a mocked flagged
+      set; assert click/shift-range/select-all selection (P1), dock summary↔bulk swap (P2), that Apply calls
+      the SDK with `{ faceRepairResolveRequestDto: {...} }` matching on-screen state (P4), and that a
+      **stale/empty** flagged set renders the graceful empty state (P5, existing behavior preserved). Run →
+      FAIL.
 - [ ] **Step 10 — Rework `+page.svelte` to Model B (move path).** Build the grid (`data-testid="face-tile"`,
       `data-faceid`, `data-state`, per-face owner chip), selection (click · shift · Select all · Reset), the
       sticky dock swapping tally↔bulk with only `→ Owner` / `Back to owner` / Clear active, the live tally,
@@ -186,19 +252,25 @@ resolveFaces(input: FaceRepairResolveRequest): Promise<FaceRepairResolveResponse
 **Goal:** A selected face can be **kept** with the reviewed person; it writes a durable decline against its
 suspected owner and drains. A person kept/locked entirely (zero moves) still leaves the console.
 
-**Covers:** spec req 2 (soft strength); state 3. Edge E3, E13, E15 (partial). Tests **U2, M4, M11, M14
-(non-flagged reject), W1/W2 (stay)**.
+**Covers:** spec req 2 (soft strength); state 3. Edge E3, E7 (disjoint — first reachable here), E13, E15
+(stay), E20 (re-stay idempotent). Tests **U2, M4, M7, M11, M14 (stay non-flagged reject), M22, W1/W2
+(stay)**.
 
 - [ ] **Step 1 — Failing unit U2.** In `src/utils/face-repair.spec.ts`: a `(face, ownerA)` decline is dropped
       only for ownerA; the same face toward ownerB survives `applyDeclineFilters`. Run → PASS if already
       true (regression lock); else fix.
-- [ ] **Step 2 — Failing medium M4 + M11 + M14.** In `face-repair.resolve.spec.ts`: `resolveFaces({
-    personId, stay:[f1] })` writes a `face_repair_decline(f1, its suspectedOwnerId)`, a re-run scan no longer
-      flags `(f1, ownerA)` (M4), a **stay-only** resolve still removes the person from the scan (M11, E13),
-      and a `stay` id **not in the flagged snapshot** → `BadRequestException` (M14, E15). Run → FAIL.
-- [ ] **Step 3 — Service stay bucket.** In `resolveFaces`, validate `stay ⊆ flagged snapshot`; call
-      `createDeclines({ faces: stay.map(id => ({ assetFaceId: id, suspectedOwnerId: snapshot[id] })),
-    declinedBy })`. Ensure drop-on-any-resolution already covers stay-only (Slice 1 Step 3). Run → PASS.
+- [ ] **Step 2 — Failing medium M4 + M7 + M11 + M14 + M22.** In `face-repair.resolve.spec.ts`:
+      `resolveFaces({ personId, stay:[f1] })` writes a `face_repair_decline(f1, its suspectedOwnerId)`, a
+      re-run scan no longer flags `(f1, ownerA)` (M4), a **stay-only** resolve still removes the person from
+      the scan (M11, E13), a `stay` id **not in the flagged snapshot** → `BadRequestException` (M14, E15), a
+      face present in **both** `moveToPerson` and `stay` → `BadRequestException` (M7, E7 — now reachable with
+      two buckets), and re-staying an already-declined `(f1, ownerA)` is idempotent (no error, one row — M22,
+      E20). Run → FAIL.
+- [ ] **Step 3 — Service stay bucket.** In `resolveFaces`, run the Slice-1 bucket-validation helper so an
+      overlap 400s (M7) and validate `stay ⊆ flagged snapshot` (M14); call `createDeclines({ faces:
+stay.map(id => ({ assetFaceId: id, suspectedOwnerId: snapshot[id] })), declinedBy: resolvedBy })` with
+      `ON CONFLICT (assetFaceId, suspectedOwnerId) DO NOTHING` for idempotency (M22). Ensure
+      drop-on-any-resolution already covers stay-only (Slice 1 Step 3). Run → PASS.
 - [ ] **Step 4 — Failing web W1/W2 (stay) + component.** `buildResolveRequest` emits `stay` ids; the "Keep
       here" bulk action tags tiles green and updates the tally. Run → FAIL.
 - [ ] **Step 5 — Web "Keep here".** Add the bulk action + green `stay` chip ("Keeps here") + tally entry.
@@ -210,7 +282,8 @@ suspected owner and drains. A person kept/locked entirely (zero moves) still lea
 **Goal:** A selected face can be **locked** to the reviewed person; a re-scan never re-flags it, whatever
 owner it would propose (the age-gap childhood-photo case).
 
-**Covers:** spec req 2 (lock strength); state 4. Edge E2. Tests **U1, M5**.
+**Covers:** spec req 2 (lock strength); state 4. Edge E2, E15 (lock). Tests **U1, M5, M14 (lock non-flagged
+reject)**.
 
 - [ ] **Step 1 — Failing table/migration test.** Add `face_repair_lock` to schema
       (`face-repair-lock.table.ts`: `id @PrimaryGeneratedUuidV7Column`, `assetFaceId uuid` FK asset_face
@@ -218,14 +291,15 @@ owner it would propose (the age-gap childhood-photo case).
       **plain** `UNIQUE (assetFaceId)`), migration `1782000000000-AddFaceRepairLock.ts`. Run
       `pnpm migrations:run` on a scratch DB + SQL Schema Checks (`make sql` **only with a DB up**) → clean.
 - [ ] **Step 2 — Failing unit U1.** In `src/utils/face-repair.spec.ts`: `applyDeclineFilters(byPerson, {
-    declinedFaceOwners, lockedFaceIds: new Set([f1]) })` drops f1 for **every** owner. Run → FAIL.
+declinedFaceOwners, lockedFaceIds: new Set([f1]) })` drops f1 for **every** owner. Run → FAIL.
 - [ ] **Step 3 — Extend the filter seam.** `getDeclineMaps` also selects `face_repair_lock` →
       `lockedFaceIds: Set<string>`; `applyDeclineFilters` drops any face in `lockedFaceIds` before the
       per-owner check. Add `FaceRepairLockRepository` (`insertLocks(faces, personId, createdBy)` with `ON
-    CONFLICT (assetFaceId) DO NOTHING`, `getLockedFaceIds()`). Register in `medium.factory.ts`. Run Step 2
+CONFLICT (assetFaceId) DO NOTHING`, `getLockedFaceIds()`). Register in `medium.factory.ts`. Run Step 2
       → PASS.
-- [ ] **Step 4 — Failing medium M5.** `resolveFaces({ personId, lock:[f1] })` inserts a lock row; a re-run
-      scan drops f1 for any owner; re-locking is idempotent. Run → FAIL.
+- [ ] **Step 4 — Failing medium M5 + M14 (lock).** `resolveFaces({ personId, lock:[f1] })` inserts a lock
+      row; a re-run scan drops f1 for any owner; re-locking is idempotent (M5); and a `lock` id **not in the
+      flagged snapshot** → `BadRequestException` (M14, E15). Run → FAIL.
 - [ ] **Step 5 — Service lock bucket.** Validate `lock ⊆ snapshot`; `insertLocks(lock, personId, resolvedBy)`.
       Run → PASS.
 - [ ] **Step 6 — Web "Confirm / lock".** Bulk action + violet `lock` chip (lock icon "Locked") + tally.
@@ -237,20 +311,25 @@ owner it would propose (the age-gap childhood-photo case).
 **Goal:** Route a selection to **any person or unnamed cluster owned by the cluster's owner**, or a
 newly-created person under that owner. Faces never cross owners.
 
-**Covers:** spec req 3; state 2. Edge E11. Tests **M2, M12, P3**.
+**Covers:** spec req 3; state 2. Edge E11, E18 (destination gone). Tests **M2, M12, M17, M18, M20, C3, P3**.
 
 **Note (gap the spec flagged):** Immich's normal person endpoints are self-scoped, so the admin needs
 **admin, owner-scoped** helpers rather than reusing `createPerson`/`getAllPeople` directly.
 
-- [ ] **Step 1 — Failing medium M2 + M12.** `resolveFaces` moving f1 to a person owned by the cluster owner
-      succeeds; moving to a person owned by a **different** user → `BadRequestException` (E11). Run → FAIL.
-- [ ] **Step 2 — Cross-owner guard.** In `resolveFaces`, resolve each destination person's `ownerId` and
-      assert it equals the moved faces' asset owner; else 400. Run Step 1 → PASS.
-- [ ] **Step 3 — Owner-people endpoints.** Add `GET /admin/face-repair/owner/:ownerId/people?query=&page=`
-      (paginated search over that owner's `person` rows, named + unnamed) and `POST
-    /admin/face-repair/owner/:ownerId/people` (create person under `ownerId`, reusing
-      `personRepository.create`). Controller `@Authenticated({ admin: true })`. Medium + controller tests for
-      scoping (never returns another owner's people). Regen SDK. Commit server+SDK.
+- [ ] **Step 1 — Failing medium M2 + M12 + M20.** `resolveFaces` moving f1 to a person owned by the cluster
+      owner succeeds (M2); moving to a person owned by a **different** user → `BadRequestException` (M12,
+      E11); moving to a `destinationPersonId` that **no longer exists** (deleted/merged since the scan) →
+      `BadRequestException`, nothing committed (M20, E18). Run → FAIL.
+- [ ] **Step 2 — Cross-owner + existence guard.** In `resolveFaces`, resolve each destination person's
+      `ownerId`; a person that does not exist yields no row → 400 (M20/E18); one owned by a **different** user
+      than the moved faces' assets → 400 (M12/E11). Run Step 1 → PASS.
+- [ ] **Step 3 — Owner-people endpoints (failing tests M17, M18, C3 first).** Write the failing tests:
+      **M17** — `GET /admin/face-repair/owner/:ownerId/people?query=&page=` returns only that owner's people
+      (named **and** unnamed clusters), filtered by `query`, paginated, and **never** another owner's;
+      **M18** — `POST /admin/face-repair/owner/:ownerId/people` creates a person under `ownerId` whose id is
+      immediately usable as a `moveToPerson` destination; **C3** — both routes are admin-only (non-admin →
+      403). Then implement both routes (`@Authenticated({ admin: true })`, reusing `personRepository.create`
+      for POST). Regen SDK. Commit server+SDK.
 - [ ] **Step 4 — Failing component P3.** In `PersonPicker.spec.ts`: the picker lists the owner's people,
       filters on search, and **Create new** calls the create endpoint then routes the selection; if create
       **fails**, nothing is applied and the error shows (E8). Run → FAIL.
@@ -265,16 +344,20 @@ newly-created person under that owner. Faces never cross owners.
 **Goal:** A garbage crop is **detached** — unassigned from any person and stripped of its identity link — so
 it leaves every cluster and is never re-flagged; recoverable via the normal unassigned-faces UI.
 
-**Covers:** spec req 4; state 5. Edge E4, E15. Tests **M6, M14 (detach)**.
+**Covers:** spec req 4; state 5. Edge E4, E15 (detach), E19 (representative regen). Tests **M6, M14 (detach),
+M21**.
 
-- [ ] **Step 1 — Failing medium M6.** `resolveFaces({ personId, detach:[f1] })` → `asset_face.personId IS
-    NULL` for f1, no `face_identity_face` row for f1, and a subsequent `FaceIdentityBackfill` does **not**
-      reattach it. Also `detach` id not in snapshot → 400 (M14). Run → FAIL.
+- [ ] **Step 1 — Failing medium M6 + M14 + M21.** `resolveFaces({ personId, detach:[f1] })` →
+      `asset_face.personId IS NULL` for f1, no `face_identity_face` row for f1, and a subsequent
+      `FaceIdentityBackfill` does **not** reattach it (M6). Also `detach` id not in snapshot → 400 (M14). And
+      detaching the person's **representative / feature** face queues `PersonGenerateThumbnail` for that
+      person (M21, E19). Run → FAIL.
 - [ ] **Step 2 — `detachFaces` repo.** Add `FaceRepairRepository.detachFaces(personId, faceIds, trx)`:
       `updateTable('asset_face').set({ personId: null }).where('id','in',chunk).where('personId','=',personId)`
       with the same ML/visible/not-deleted guards; **in the same transaction** `deleteFrom('face_identity_face').where('assetFaceId','in',chunk)`. Return affected ids.
-- [ ] **Step 3 — Service detach bucket.** Validate `detach ⊆ snapshot`; wrap in a transaction; count into
-      `detached`. Run Step 1 → PASS.
+- [ ] **Step 3 — Service detach bucket.** Validate `detach ⊆ snapshot` (M14); wrap in a transaction; count
+      into `detached`; and if any detached face was the person's representative / feature face, queue
+      `PersonGenerateThumbnail` for that person (M21/E19). Run Step 1 → PASS.
 - [ ] **Step 4 — Web "Not a face".** Bulk action + slate `detach` chip ("Detached") + grayscale tile + tally.
       Component test. Run → PASS.
 - [ ] **Step 5 — Format + commit** `feat(face-cleanup): detach not-a-face`.
@@ -311,9 +394,9 @@ declines-only page.
       on the next scan. Run → FAIL.
 - [ ] **Step 2 — Service + repo.** Add `listResolutions` (union of decline rows + lock rows, each with
       face/person thumbnail ids + `createdAt` + `kind`) and `removeResolutions({ declineIds?, lockIds?,
-    faces? })`. Reuse decline list/remove; add lock list/remove (`z.uuid()` for v7 ids). Run → PASS.
+faces? })`. Reuse decline list/remove; add lock list/remove (`z.uuid()` for v7 ids). Run → PASS.
 - [ ] **Step 3 — Endpoints + auth C1/C2.** `GET /admin/face-repair/resolutions`, `POST
-    /admin/face-repair/resolutions/remove`; controller spec asserts admin-only (403 for non-admin) and
+/admin/face-repair/resolutions/remove`; controller spec asserts admin-only (403 for non-admin) and
       `z.uuid()` acceptance of v7 ids. Regen SDK. Commit server+SDK.
 - [ ] **Step 4 — Web page.** Rename `declined/` → `resolutions/`; render two grouped, undoable lists
       (Declines green, Locks violet) matching state colors; undo hits `resolutions/remove`. Redirect the old
@@ -324,8 +407,12 @@ declines-only page.
 
 **Goal:** Prove the whole durable-drain flow end-to-end and land the copy + green gate.
 
-**Covers:** spec req 1 (end-to-end). Tests **X1, X2**.
+**Covers:** spec req 1 (end-to-end). Tests **X1, X2** + the matrix-completeness gate.
 
+- [ ] **Step 0 — Matrix completeness gate.** Confirm every §8 ID — U1–U3, M1–M22, C1–C3, W1–W3, P1–P5,
+      X1–X2 — appears in exactly one slice's **Tests** line and has a corresponding green test in the suite;
+      fail the slice if any ID is unscheduled or red. This is the backstop for the orphaned-test class this
+      plan was revised to close (U3/M7/M8/M15/P5 previously unmapped).
 - [ ] **Step 1 — Failing e2e X1.** In `e2e/src/specs/web/face-cleanup.e2e-spec.ts`: drive select → route one
       face into each of the five states → Apply; assert the resolve payload and that the person **drains from
       the console**. Add X2 (Resolutions undo → re-scan re-flags). Run `make e2e-web-dev` → FAIL.
@@ -333,39 +420,47 @@ declines-only page.
       to `i18n/en.json` (bulk actions, chips, tally, "every face accounted for", picker, create-new,
       resolutions). Run → PASS.
 - [ ] **Step 3 — Full gate.** `make check-server check-web lint-server lint-web`; `cd server && pnpm test &&
-    pnpm test:medium`; `cd web && pnpm test`; `pnpm -C docs exec prettier --check docs/plans/2026-07-10-*`.
+pnpm test:medium`; `cd web && pnpm test`; `pnpm -C docs exec prettier --check docs/plans/2026-07-10-*`.
       Fix any red. Commit `test(face-cleanup): capstone e2e + i18n + gate`.
 
 ---
 
 ## Self-Review — spec coverage
 
-| Spec requirement / edge                          | Slice(s)         |
-| ------------------------------------------------ | ---------------- |
-| Req 1 durable drain (drop on resolve)            | 1, 2, 8          |
-| Req 2 two stay-strengths                         | 2, 3             |
-| Req 3 chosen-person picker (owner-scope)         | 4                |
-| Req 4 detach                                     | 5                |
-| Req 5 Model B interaction                        | 1                |
-| Req 6 batch Apply                                | 1                |
-| Req 7 unified Resolutions page                   | 7                |
-| Req 8 rest/entire-cluster retained               | 6                |
-| E1 skip moved-off · E9 guard · E10 zero-override | 1                |
-| E2 lock owner-agnostic                           | 3                |
-| E3 soft-stay different owner                     | 2                |
-| E4 detach + identity                             | 5                |
-| E5 detach re-cluster (accepted, no test)         | — (documented)   |
-| E6 empty-unnamed cleanup                         | 1 (reused)       |
-| E7 disjoint buckets                              | 1 (validation)   |
-| E8 create-new fails → nothing applied            | 4                |
-| E11 cross-owner reject                           | 4                |
-| E12 entire-cluster exclusive                     | 6                |
-| E13 drop on keep/lock-only                       | 2                |
-| E14 per-face owner grouping                      | 1                |
-| E15 keep/lock/detach non-flagged                 | 2, 5             |
-| Tests U1–U3, M1–M16, C1–C2, W1–W3, P1–P5, X1–X2  | mapped per slice |
+| Spec requirement / edge                                 | Slice(s)                                              |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| Req 1 durable drain (drop on resolve)                   | 1, 2, 8                                               |
+| Req 2 two stay-strengths                                | 2, 3                                                  |
+| Req 3 chosen-person picker (owner-scope)                | 4                                                     |
+| Req 4 detach                                            | 5                                                     |
+| Req 5 Model B interaction                               | 1                                                     |
+| Req 6 batch Apply                                       | 1                                                     |
+| Req 7 unified Resolutions page                          | 7                                                     |
+| Req 8 rest/entire-cluster retained                      | 6                                                     |
+| E1 skip moved-off · E9 guard · E10 zero-override (M15)  | 1                                                     |
+| E2 lock owner-agnostic                                  | 3                                                     |
+| E3 soft-stay different owner                            | 2                                                     |
+| E4 detach + identity                                    | 5                                                     |
+| E5 detach re-cluster (accepted, no test)                | — (documented)                                        |
+| E6 empty-unnamed cleanup (M8)                           | 1                                                     |
+| E7 disjoint buckets (U3 helper S1 · M7 S2)              | 1, 2                                                  |
+| E8 create-new fails → nothing applied                   | 4                                                     |
+| E11 cross-owner reject                                  | 4                                                     |
+| E12 entire-cluster exclusive                            | 6                                                     |
+| E13 drop on keep/lock-only                              | 2                                                     |
+| E14 per-face owner grouping                             | 1                                                     |
+| E15 keep/lock/detach non-flagged (M14 stay/lock/detach) | 2, 3, 5                                               |
+| E16 empty resolve (M19)                                 | 1                                                     |
+| E17 incomplete resolve (client W2 · server doc)         | 1                                                     |
+| E18 destination gone (M20)                              | 4                                                     |
+| E19 detach representative regen (M21)                   | 5                                                     |
+| E20 re-soft-stay idempotent (M22)                       | 2                                                     |
+| Owner-people endpoints (M17, M18, C3)                   | 4                                                     |
+| Tests U1–U3, M1–M22, C1–C3, W1–W3, P1–P5, X1–X2         | every ID mapped to one slice; Slice 8 Step 0 gates it |
 
-**Disjoint-bucket validation (E7)** and the `assertResolvable`/snapshot-membership helper land in Slice 1 and
-are reused by every later bucket. **Type consistency:** `resolveFaces`, `buildResolveRequest`,
-`FaceRepairResolveRequestDto`, `detachFaces`, `insertLocks`/`getLockedFaceIds`, `listResolutions`/
-`removeResolutions` are used with the same signatures across the slices that define and consume them.
+**The bucket-validation helper (U3)** — disjoint (E7) + snapshot-membership (E15) — plus `assertResolvable`
+land in Slice 1 and are reused by every later bucket; the integration checks land where each bucket first
+makes them reachable (**M7** disjoint in Slice 2; **M14** non-flagged in Slices 2 / 3 / 5). **Type
+consistency:** `resolveFaces(input, resolvedBy)`, `buildResolveRequest`, `FaceRepairResolveRequestDto`,
+`detachFaces`, `insertLocks`/`getLockedFaceIds`, `listResolutions`/`removeResolutions` are used with the same
+signatures across the slices that define and consume them.

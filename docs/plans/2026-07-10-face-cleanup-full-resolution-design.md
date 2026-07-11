@@ -12,7 +12,8 @@ review needs more than move-or-keep.
 **Implementation approach — TDD (non-negotiable).** Every slice follows red-green-refactor
 (`superpowers:test-driven-development`): write the failing test **first**, watch it fail for the right
 reason, implement the minimum to pass, then refactor. No production line lands without a test that would
-fail without it. The §8 matrix is the coverage contract — every edge case E1–E15 maps to a named test.
+fail without it. The §8 matrix is the coverage contract — every edge case E1–E20 maps to a named test
+(except E5, which is an accepted future-recognition limitation documented without a test).
 
 **Prereqs / prior designs this builds on (all on `feat/face-cleanup-console`):**
 
@@ -138,7 +139,9 @@ locks owner-agnostic and reuses the one filtering seam already applied everywher
   guards (`sourceType = MachineLearning`, `isVisible = true`, `deletedAt is null`, `personId = :personId`),
   setting `personId = null` and returning affected ids. In the **same transaction**, delete the
   `face_identity` rows for those faces so a later `FaceIdentityBackfill` cannot re-resolve them onto the old
-  person (same failure class the A1 move-transaction fix addresses).
+  person (same failure class the A1 move-transaction fix addresses). If any detached face was the person's
+  representative / feature face, queue `PersonGenerateThumbnail` for that person (as the move path does for
+  repointed representatives) so the avatar is regenerated instead of pointing at a now-unassigned crop (E19).
 
 ### 5.3 Resolve endpoint (replaces the 2-state apply for Model B)
 
@@ -182,10 +185,18 @@ Semantics, reusing existing primitives:
   (a non-flagged rest-of-cluster face has no `suspectedOwnerId` and no "keep/lock/detach" meaning). Re-apply
   `applyDeclineFilters` so faces declined/locked/moved-off since the scan are dropped.
   - `stay` → `FaceRepairDeclineRepository.createDeclines` for each `(assetFaceId, its stored
-suspectedOwnerId)`, `declinedBy` = the admin.
+suspectedOwnerId)`, `declinedBy` = the admin. Insert with `ON CONFLICT (assetFaceId, suspectedOwnerId) DO
+    NOTHING` so re-staying an already-declined pairing is idempotent — no unique-violation (E20).
   - `lock` → insert `face_repair_lock(assetFaceId, personId, createdBy)` (`ON CONFLICT DO NOTHING`).
   - `detach` → `detachFaces` (§5.2).
 - **Disjoint buckets.** A face may appear in at most one bucket; the server rejects overlaps with 400 (E7).
+- **Empty resolution rejected.** A resolve carrying no `moveToPerson` / `stay` / `lock` / `detach` faces and
+  no `entireCluster` has nothing to commit → 400 (E16); the server never drains the person on an empty body.
+- **Completeness is a client invariant, not a server one.** The UI guarantees every flagged face lands in
+  exactly one bucket (the tally sums to N — W2). The server does **not** re-verify that all flagged faces are
+  present: any flagged face a client omits is left untouched on `personId` (non-destructive) and simply
+  re-flags on the next scan — never silently lost. A server-side "all flagged faces present" guard is a
+  documented fast-follow (§9, E17).
 - **Guards reused**: refuse while `FacialRecognition` is active or a scan is pending/running; fail stale
   scans first.
 - **Drop on _any_ resolution.** After a committed resolution — moves **or** declines **or** locks **or**
@@ -288,6 +299,21 @@ Concretely, `[personId]/+page.svelte` + `review.svelte.ts` are reworked to:
   by `suspectedOwnerId`; each owner-bound face moves to **its own** owner, not one primary.
 - **E15 — Keep/lock/detach on a non-flagged face.** A rest-of-cluster face id in `stay`/`lock`/`detach` is
   rejected 400 (not in the flagged snapshot; it has no suspected owner and no such meaning).
+- **E16 — Empty resolve.** A resolve with every bucket empty and no `entireCluster` → 400; the server never
+  drains a person on an empty body (§5.3 "Empty resolution rejected").
+- **E17 — Incomplete resolve (omitted flagged faces).** Completeness is a **UI** invariant (tally = N, W2). If
+  a client omits some flagged faces from the payload, those faces stay on `personId` untouched and re-flag on
+  the next scan — non-destructive, never silently lost. The server intentionally does not enforce all-present;
+  an optional "all flagged faces must be resolved" server guard is a fast-follow (§9).
+- **E18 — Destination person gone.** A `destinationPersonId` deleted or merged between scan and resolve fails
+  the owner-resolution lookup (§5.3 owner-scoped validation returns no `ownerId`) → 400; no partial move
+  commits (the whole resolve is transactional).
+- **E19 — Detach of a representative face.** Detaching the person's feature / representative face queues
+  `PersonGenerateThumbnail` for that person in the same flow (§5.2), so the avatar is regenerated rather than
+  left pointing at a now-unassigned crop.
+- **E20 — Re-soft-stay.** Soft-staying an already-declined `(face, suspectedOwner)` is idempotent
+  (`createDeclines` uses `ON CONFLICT (assetFaceId, suspectedOwnerId) DO NOTHING`) — no unique-violation, one
+  row.
 
 **TDD is the build discipline (see the Status block).** Each slice writes its failing test first. The tests
 below are the coverage contract, not a suggestion — the matrix at the end maps every edge case to a named
@@ -330,17 +356,33 @@ test, and no slice is "done" until its rows are green.
 - **M16** resolutions list returns declines **and** locks tagged by `kind`; remove by **uuid-v7 id** _and_
   by natural key both succeed (regression guard for the `z.uuidv4` rejection); undoing a lock re-enables
   flagging on the next scan.
+- **M17** owner-people search (`GET …/owner/:ownerId/people`) returns **only** that owner's people — named
+  **and** unnamed clusters — filtered by `query` and paginated; a different owner's people never appear.
+  _(owner-scope)_
+- **M18** owner-people create (`POST …/owner/:ownerId/people`) inserts a person under `ownerId`; the returned
+  id is immediately usable as a `moveToPerson` destination for a face owned by that user. _(state 2)_
+- **M19** a resolve with every bucket empty and no `entireCluster` → 400; the person is **not** drained.
+  _(E16)_
+- **M20** a `moveToPerson` / `entireCluster` `destinationPersonId` that no longer exists (deleted or merged
+  since the scan) → 400; nothing is moved and the resolve is rolled back whole. _(E18)_
+- **M21** detaching the person's representative / feature face queues `PersonGenerateThumbnail` for that
+  person (avatar regenerated, not left on the unassigned crop). _(E19)_
+- **M22** re-soft-staying an already-declined `(face, suspectedOwner)` is idempotent — no error, exactly one
+  `face_repair_decline` row. _(E20)_
 
 ### 8.3 Server — controller (`face-repair-admin.controller.spec.ts`)
 
 - **C1** `resolve` and `resolutions*` require an **admin** session (non-admin → 403).
 - **C2** zod DTO validation is wired (malformed body → 400; `resolutions/remove` accepts `z.uuid()` v7).
+- **C3** the owner-people endpoints (`GET` / `POST …/owner/:ownerId/people`) require an **admin** session
+  (non-admin → 403).
 
 ### 8.4 Web — unit (`review.svelte.ts`)
 
 - **W1** `buildResolveRequest()` groups `owner` faces by **each face's** `suspectedOwnerId`, groups `other`
   faces by chosen destination, and emits correct `stay`/`lock`/`detach`/`entireCluster`. _(E14)_
-- **W2** the outcome tally **always sums to N** across every sequence of bulk actions (invariant test).
+- **W2** the outcome tally **always sums to N** across every sequence of bulk actions (invariant test) — this
+  is the client-side completeness guarantee the server relies on. _(E17)_
 - **W3** bulk actions mutate per-face state correctly; Reset returns all tiles to `owner`.
 
 ### 8.5 Web — component (`[personId]/page.spec.ts`, `review.spec.ts`)
@@ -362,21 +404,29 @@ test, and no slice is "done" until its rows are green.
 
 ### 8.7 Coverage map
 
-| Edge | Test(s)                                                               | Edge | Test(s) |
-| ---- | --------------------------------------------------------------------- | ---- | ------- |
-| E1   | M9                                                                    | E9   | M10     |
-| E2   | U1, M5                                                                | E10  | M15     |
-| E3   | U2, M4                                                                | E11  | M12     |
-| E4   | M6                                                                    | E12  | M13     |
-| E5   | _accepted, untestable (future recognition run) — documented, no test_ |      |         |
-| E6   | M8                                                                    | E13  | M11     |
-| E7   | U3, M7                                                                | E14  | M3, W1  |
-| E8   | P3                                                                    | E15  | U3, M14 |
+| Edge | Test(s)                                                               | Edge | Test(s)       |
+| ---- | --------------------------------------------------------------------- | ---- | ------------- |
+| E1   | M9                                                                    | E11  | M12           |
+| E2   | U1, M5                                                                | E12  | M13           |
+| E3   | U2, M4                                                                | E13  | M11           |
+| E4   | M6                                                                    | E14  | M3, W1        |
+| E5   | _accepted, untestable (future recognition run) — documented, no test_ | E15  | U3, M14       |
+| E6   | M8                                                                    | E16  | M19           |
+| E7   | U3, M7                                                                | E17  | W2 _(client)_ |
+| E8   | P3                                                                    | E18  | M20           |
+| E9   | M10                                                                   | E19  | M21           |
+| E10  | M15                                                                   | E20  | M22           |
+
+Owner-scoped picker endpoints (§5.3): **M17** (search scoping/paging), **M18** (create under owner), **C3**
+(admin-only) — beyond the edge map, they cover the new admin surface itself.
 
 ## 9. Non-goals / future
 
 - **Hard-delete of a detection** (vs detach) — deferred; users can escalate later.
 - **Detach suppression flag** so re-clustering can't resurface a known non-face — fast-follow if E5 bites.
+- **Server-side completeness guard** — require every flagged face of `personId` to be present across the
+  resolve buckets before draining (today completeness is a UI-only invariant, W2/E17). A defence-in-depth
+  fast-follow if a client is ever observed draining a person with faces left unresolved.
 - **Per-face different owner within one bulk action** — already covered: route selection A to person X,
   then selection B to person Y (two bulk actions).
 - **Mobile** — the console is web-admin only.
