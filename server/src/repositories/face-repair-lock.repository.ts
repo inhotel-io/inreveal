@@ -2,6 +2,15 @@ import { Kysely } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DB } from 'src/schema';
 
+export interface LockListRow {
+  id: string;
+  assetFaceId: string;
+  personId: string;
+  personName: string | null;
+  personThumbnailFaceId: string | null;
+  createdAt: string;
+}
+
 export class FaceRepairLockRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
@@ -27,5 +36,61 @@ export class FaceRepairLockRepository {
   async getLockedFaceIds(): Promise<Set<string>> {
     const rows = await this.db.selectFrom('face_repair_lock').select('assetFaceId').execute();
     return new Set(rows.map((row) => row.assetFaceId));
+  }
+
+  // List every lock for the unified resolutions manage page (Slice 7), newest first, joined against `person`
+  // for display (reviewed-person name + thumbnail). Mirrors `FaceRepairDeclineRepository.listDeclines()`.
+  async listLocks(): Promise<LockListRow[]> {
+    const rows = await this.db
+      .selectFrom('face_repair_lock')
+      .select(['id', 'assetFaceId', 'personId', 'createdAt'])
+      .orderBy('createdAt', 'desc')
+      .execute();
+    if (rows.length === 0) {
+      return [];
+    }
+    const personIds = [...new Set(rows.map((row) => row.personId))];
+    const people = await this.db
+      .selectFrom('person')
+      .select(['id', 'name', 'faceAssetId'])
+      .where('id', 'in', personIds)
+      .execute();
+    const byId = new Map(people.map((p) => [p.id, p]));
+    return rows.map((r) => ({
+      id: r.id,
+      assetFaceId: r.assetFaceId,
+      personId: r.personId,
+      personName: byId.get(r.personId)?.name || null,
+      personThumbnailFaceId: byId.get(r.personId)?.faceAssetId ?? null,
+      createdAt: r.createdAt as unknown as string,
+    }));
+  }
+
+  // Remove locks by row id and/or by natural key (assetFaceId — a lock's uniqueness is keyed on the face
+  // alone, unlike a decline's (assetFaceId, suspectedOwnerId) pairing). Undoing a lock this way re-enables
+  // flagging: the face drops out of `getLockedFaceIds()` and the next scan can suspect it again. Mirrors
+  // `FaceRepairDeclineRepository.removeDeclines()`. Returns the total number of rows removed.
+  async removeLocks(input: { ids?: string[]; faces?: string[] }): Promise<number> {
+    const ids = input.ids ?? [];
+    const faces = input.faces ?? [];
+    if (ids.length === 0 && faces.length === 0) {
+      return 0;
+    }
+    return this.db.transaction().execute(async (trx) => {
+      let removed = 0;
+      if (ids.length > 0) {
+        const rows = await trx.deleteFrom('face_repair_lock').where('id', 'in', ids).returning('id').execute();
+        removed += rows.length;
+      }
+      if (faces.length > 0) {
+        const rows = await trx
+          .deleteFrom('face_repair_lock')
+          .where('assetFaceId', 'in', faces)
+          .returning('id')
+          .execute();
+        removed += rows.length;
+      }
+      return removed;
+    });
   }
 }

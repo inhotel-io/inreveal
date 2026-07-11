@@ -16,6 +16,9 @@ import {
   FaceRepairOwnerPersonCreateRequestDto,
   FaceRepairPersonFacesDto,
   FaceRepairRequestDto,
+  FaceRepairResolutionsListDto,
+  FaceRepairResolutionsRemovedDto,
+  FaceRepairResolutionsRemoveRequestDto,
   FaceRepairResolveRequestDto,
   FaceRepairResolveResponseDto,
   FaceRepairResponseDto,
@@ -118,6 +121,25 @@ export class FaceRepairAdminController {
   @Endpoint({ summary: 'Remove face-repair declines', history: new HistoryBuilder().added('v1') })
   removeFaceRepairDeclines(@Body() dto: FaceRepairDeclineRemoveRequestDto): Promise<FaceRepairDeclineRemovedDto> {
     return this.service.removeDeclines(dto) as Promise<FaceRepairDeclineRemovedDto>;
+  }
+
+  // Slice 7 (unified resolutions manage page): lists every soft-decline AND lock, each tagged `kind`, replacing
+  // the declines-only `GET /decline` page. The old decline list/remove routes below are kept for now — the web
+  // still uses them until the resolutions page dispatch migrates off them.
+  @Get('resolutions')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'List face-repair resolutions (declines + locks)', history: new HistoryBuilder().added('v1') })
+  getFaceRepairResolutions(): Promise<FaceRepairResolutionsListDto> {
+    return this.service.listResolutions() as unknown as Promise<FaceRepairResolutionsListDto>;
+  }
+
+  @Post('resolutions/remove')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Remove face-repair resolutions (undo)', history: new HistoryBuilder().added('v1') })
+  removeFaceRepairResolutions(
+    @Body() dto: FaceRepairResolutionsRemoveRequestDto,
+  ): Promise<FaceRepairResolutionsRemovedDto> {
+    return this.service.removeResolutions(dto) as Promise<FaceRepairResolutionsRemovedDto>;
   }
 
   @Get('owner/:ownerId/people')

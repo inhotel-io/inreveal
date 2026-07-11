@@ -875,6 +875,96 @@
         ]
       }
     },
+    "/admin/face-repair/resolutions": {
+      "get": {
+        "operationId": "getFaceRepairResolutions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairResolutionsListDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List face-repair resolutions (declines + locks)",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
+    "/admin/face-repair/resolutions/remove": {
+      "post": {
+        "operationId": "removeFaceRepairResolutions",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaceRepairResolutionsRemoveRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairResolutionsRemovedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Remove face-repair resolutions (undo)",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
     "/admin/face-repair/resolve": {
       "post": {
         "operationId": "resolveFaces",
@@ -25904,6 +25994,134 @@
             "type": "integer"
           }
         },
+        "type": "object"
+      },
+      "FaceRepairResolutionsListDto": {
+        "properties": {
+          "resolutions": {
+            "items": {
+              "properties": {
+                "assetFaceId": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "personId": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "personName": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "personThumbnailFaceId": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "suspectedOwnerId": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "suspectedOwnerName": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "suspectedOwnerThumbnailFaceId": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "type": {
+                  "nullable": true,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "id",
+                "type",
+                "assetFaceId",
+                "suspectedOwnerId",
+                "suspectedOwnerName",
+                "suspectedOwnerThumbnailFaceId",
+                "personId",
+                "personName",
+                "personThumbnailFaceId",
+                "createdAt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "resolutions"
+        ],
+        "type": "object"
+      },
+      "FaceRepairResolutionsRemoveRequestDto": {
+        "properties": {
+          "declineIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "faces": {
+            "items": {
+              "properties": {
+                "assetFaceId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                },
+                "suspectedOwnerId": {
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "assetFaceId",
+                "suspectedOwnerId"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "lockIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "FaceRepairResolutionsRemovedDto": {
+        "properties": {
+          "removed": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "removed"
+        ],
         "type": "object"
       },
       "FaceRepairResolveRequestDto": {

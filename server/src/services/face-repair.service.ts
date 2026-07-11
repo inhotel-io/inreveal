@@ -575,6 +575,55 @@ export class FaceRepairService extends BaseService {
     return { removed };
   }
 
+  // Slice 7 (unified resolutions manage page): the union of every soft-decline AND lock, each tagged `kind` so
+  // the web page can render two grouped, undoable lists (declines green, locks violet). Locks have no
+  // suspectedOwner concept (they're owner-agnostic — see face_repair_lock's comment) so those fields are
+  // always null on a lock row; `personId`/`personName`/`personThumbnailFaceId` carry the person the lock was
+  // reviewed against, mirroring the decline row's own person fields.
+  async listResolutions() {
+    const [declines, locks] = await Promise.all([
+      this.faceRepairDeclineRepository.listDeclines(),
+      this.faceRepairLockRepository.listLocks(),
+    ]);
+    const resolutions = [
+      ...declines.map((row) => ({ kind: 'decline' as const, ...row })),
+      ...locks.map((row) => ({
+        kind: 'lock' as const,
+        id: row.id,
+        type: null,
+        assetFaceId: row.assetFaceId,
+        suspectedOwnerId: null,
+        suspectedOwnerName: null,
+        suspectedOwnerThumbnailFaceId: null,
+        personId: row.personId,
+        personName: row.personName,
+        personThumbnailFaceId: row.personThumbnailFaceId,
+        createdAt: row.createdAt,
+      })),
+    ];
+    return { resolutions };
+  }
+
+  // Undo for the resolutions manage page. `declineIds`/`lockIds` are the server-generated row ids (uuid v7);
+  // `faces` is the decline natural key (assetFaceId, suspectedOwnerId) — reused from removeDeclines for the
+  // review page's in-place undo, which knows the pairing but not the row id. A lock has no equivalent natural
+  // key surfaced here (its uniqueness is on assetFaceId alone, with no per-request pairing to disambiguate),
+  // so lock undo is always by row id. Removing a lock re-enables flagging: the face drops out of
+  // getLockedFaceIds() and the next scan can suspect it again.
+  async removeResolutions(input: {
+    declineIds?: string[];
+    lockIds?: string[];
+    faces?: { assetFaceId: string; suspectedOwnerId: string }[];
+  }): Promise<{ removed: number }> {
+    const declineRemoved =
+      (input.declineIds?.length ?? 0) > 0 || (input.faces?.length ?? 0) > 0
+        ? await this.faceRepairDeclineRepository.removeDeclines({ ids: input.declineIds, faces: input.faces })
+        : 0;
+    const lockRemoved =
+      (input.lockIds?.length ?? 0) > 0 ? await this.faceRepairLockRepository.removeLocks({ ids: input.lockIds }) : 0;
+    return { removed: declineRemoved + lockRemoved };
+  }
+
   // Slice 1 of the full per-face resolution (docs/plans/2026-07-10-face-cleanup-full-resolution-design.md):
   // replaces the 2-state `apply` for a single reviewed person. Slice 2 wires the `stay` (soft-decline) bucket
   // on top of Slice 1's move-to-owner path; Slice 3 wires `lock` (durable, owner-agnostic confirm) on the same

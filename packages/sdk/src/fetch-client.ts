@@ -172,6 +172,32 @@ export type FaceRepairOwnerPersonCreateRequestDto = {
 export type FaceRepairOwnerPersonCreatedResponseDto = {
     id: string;
 };
+export type FaceRepairResolutionsListDto = {
+    resolutions: {
+        assetFaceId: string | null;
+        createdAt: string;
+        id: string;
+        kind: string;
+        personId: string | null;
+        personName: string | null;
+        personThumbnailFaceId: string | null;
+        suspectedOwnerId: string | null;
+        suspectedOwnerName: string | null;
+        suspectedOwnerThumbnailFaceId: string | null;
+        "type": string | null;
+    }[];
+};
+export type FaceRepairResolutionsRemoveRequestDto = {
+    declineIds?: string[];
+    faces?: {
+        assetFaceId: string;
+        suspectedOwnerId: string;
+    }[];
+    lockIds?: string[];
+};
+export type FaceRepairResolutionsRemovedDto = {
+    removed: number;
+};
 export type FaceRepairResolveRequestDto = {
     detach?: string[];
     entireCluster?: {
@@ -4586,6 +4612,32 @@ export function createFaceRepairOwnerPerson({ ownerId, faceRepairOwnerPersonCrea
         ...opts,
         method: "POST",
         body: faceRepairOwnerPersonCreateRequestDto
+    })));
+}
+/**
+ * List face-repair resolutions (declines + locks)
+ */
+export function getFaceRepairResolutions(opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairResolutionsListDto;
+    }>("/admin/face-repair/resolutions", {
+        ...opts
+    }));
+}
+/**
+ * Remove face-repair resolutions (undo)
+ */
+export function removeFaceRepairResolutions({ faceRepairResolutionsRemoveRequestDto }: {
+    faceRepairResolutionsRemoveRequestDto: FaceRepairResolutionsRemoveRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairResolutionsRemovedDto;
+    }>("/admin/face-repair/resolutions/remove", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairResolutionsRemoveRequestDto
     })));
 }
 /**
