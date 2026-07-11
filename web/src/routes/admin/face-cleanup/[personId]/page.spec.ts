@@ -586,6 +586,71 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     });
   });
 
+  // ---- Slice 5: "Not a face" bulk action (detach) — mirrors the Keep here (stay) / Confirm-lock wiring ----
+
+  describe('Bulk actions — Not a face (detach)', () => {
+    it('tags the selected tile detach (slate ribbon, grayscale) and updates the tally, clearing the selection', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('bulk-detach'));
+
+      await waitFor(() => {
+        // Bulk actions clear the selection, swapping the dock back to the summary.
+        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.getByTestId('tally')).toBeInTheDocument();
+      });
+
+      const refreshedTiles = screen.getAllByTestId('face-tile');
+      expect(refreshedTiles[0]).toHaveAttribute('data-state', 'detach');
+      expect(screen.getByText('admin.face_cleanup_review_tile_detach_ribbon')).toBeInTheDocument();
+
+      // The tile's thumbnail is grayed out (mockup: filter: grayscale(1) opacity(0.55)). alt="" gives the
+      // image role="presentation" (no accessible name), so query it directly rather than via getByRole.
+      const image = refreshedTiles[0].querySelector('img');
+      expect(image).not.toBeNull();
+      expect(image?.getAttribute('style')).toContain('grayscale(1)');
+      expect(image?.getAttribute('style')).toContain('opacity(0.55)');
+
+      // The tally's "Detach" chip now reads 1 and is no longer dimmed (opacity-40 = zero-count).
+      const tally = screen.getByTestId('tally');
+      const detachLabel = within(tally).getByText('admin.face_cleanup_review_tally_detach');
+      const detachChip = detachLabel.parentElement!;
+      expect(detachChip).not.toHaveClass('opacity-40');
+      expect(detachChip).toHaveTextContent('1');
+    });
+
+    it('includes the detached face in `detach` and excludes it from `moveToPerson` on Apply', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]); // face-1, suspected owner-a
+      await fireEvent.click(screen.getByTestId('bulk-detach'));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+            ],
+            stay: [],
+            lock: [],
+            detach: ['face-1'],
+          },
+        });
+      });
+    });
+  });
+
   // ---- Rest-of-cluster (legacy `applyFaceRepair` path, retained this slice — see +page.svelte L76-79) ----
 
   describe('Rest-of-cluster legacy apply path', () => {
