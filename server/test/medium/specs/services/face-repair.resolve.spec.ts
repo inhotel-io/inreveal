@@ -253,6 +253,41 @@ describe('FaceRepairService.resolveFaces: move-to-owner (M1, M3, E14)', () => {
   });
 });
 
+// ── Slice 6a2 (§5.3): moveToPerson carries rest-of-cluster faces, not just the flagged snapshot ────
+
+describe('FaceRepairService.resolveFaces: moveToPerson carries rest-of-cluster faces (Slice 6a2, §5.3)', () => {
+  it('moves a rest-of-cluster face (on personId, eligible, never flagged) alongside a flagged face in the same moveToPerson group', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    const f1 = await seedFace(ctx, user.id, source.id);
+    // A rest-of-cluster face on the same person that was never part of the flagged snapshot — moveToPerson
+    // must still carry it (per §5.3: "any eligible face on the person"), not just flagged faces.
+    const f2 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: owner.id }]);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: owner.id, faceIds: [f1, f2] }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+
+    expect(result).toEqual({ moved: 2, declined: 0, locked: 0, detached: 0, skipped: 0 });
+
+    const byId = await personIdsOf([f1, f2]);
+    expect(byId[f1]).toBe(owner.id);
+    expect(byId[f2]).toBe(owner.id);
+  });
+});
+
 // ── M2 / M12 / M20: move to a CHOSEN person (owner-scoped, Slice 4) ─────────────────────────────────
 
 describe('FaceRepairService.resolveFaces: move to a chosen person (M2, state 2)', () => {
