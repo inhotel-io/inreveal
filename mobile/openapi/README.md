@@ -170,18 +170,22 @@ Class | Method | HTTP request | Description
 *DuplicatesApi* | [**deleteDuplicates**](doc//DuplicatesApi.md#deleteduplicates) | **DELETE** /duplicates | Delete duplicates
 *DuplicatesApi* | [**getAssetDuplicates**](doc//DuplicatesApi.md#getassetduplicates) | **GET** /duplicates | Retrieve duplicates
 *DuplicatesApi* | [**resolveDuplicates**](doc//DuplicatesApi.md#resolveduplicates) | **POST** /duplicates/resolve | Resolve duplicate groups
-*FacesApi* | [**applyFaceRepair**](doc//FacesApi.md#applyfacerepair) | **POST** /admin/face-repair/apply | Apply face re-attribution for approved persons
 *FacesApi* | [**createFace**](doc//FacesApi.md#createface) | **POST** /faces | Create a face
+*FacesApi* | [**createFaceRepairOwnerPerson**](doc//FacesApi.md#createfacerepairownerperson) | **POST** /admin/face-repair/owner/{ownerId}/people | Create a person under an owner for the move-to-chosen-person picker
 *FacesApi* | [**declineFaceRepair**](doc//FacesApi.md#declinefacerepair) | **POST** /admin/face-repair/decline | Decline flagged faces / dismiss flagged persons
 *FacesApi* | [**deleteFace**](doc//FacesApi.md#deleteface) | **DELETE** /faces/{id} | Delete a face
 *FacesApi* | [**getFaceRepairClusterFaces**](doc//FacesApi.md#getfacerepairclusterfaces) | **POST** /admin/face-repair/scan/person/{personId}/cluster-faces | List a person's cluster faces (paginated, excluding the supplied flagged ids)
 *FacesApi* | [**getFaceRepairDeclines**](doc//FacesApi.md#getfacerepairdeclines) | **GET** /admin/face-repair/decline | List face-repair declines
+*FacesApi* | [**getFaceRepairOwnerPeople**](doc//FacesApi.md#getfacerepairownerpeople) | **GET** /admin/face-repair/owner/{ownerId}/people | Search an owner's people for the move-to-chosen-person picker
 *FacesApi* | [**getFaceRepairPersonFaces**](doc//FacesApi.md#getfacerepairpersonfaces) | **GET** /admin/face-repair/scan/person/{personId} | Get a person's flagged faces for review
+*FacesApi* | [**getFaceRepairResolutions**](doc//FacesApi.md#getfacerepairresolutions) | **GET** /admin/face-repair/resolutions | List face-repair resolutions (declines + locks)
 *FacesApi* | [**getFaceRepairScanDefaults**](doc//FacesApi.md#getfacerepairscandefaults) | **GET** /admin/face-repair/scan/defaults | Get effective face-repair scan defaults
 *FacesApi* | [**getFaces**](doc//FacesApi.md#getfaces) | **GET** /faces | Retrieve faces for asset
 *FacesApi* | [**getLatestScan**](doc//FacesApi.md#getlatestscan) | **GET** /admin/face-repair/scan/latest | Get the latest face-repair scan
 *FacesApi* | [**reassignFacesById**](doc//FacesApi.md#reassignfacesbyid) | **PUT** /faces/{id} | Re-assign a face to another person
 *FacesApi* | [**removeFaceRepairDeclines**](doc//FacesApi.md#removefacerepairdeclines) | **DELETE** /admin/face-repair/decline | Remove face-repair declines
+*FacesApi* | [**removeFaceRepairResolutions**](doc//FacesApi.md#removefacerepairresolutions) | **POST** /admin/face-repair/resolutions/remove | Remove face-repair resolutions (undo)
+*FacesApi* | [**resolveFaces**](doc//FacesApi.md#resolvefaces) | **POST** /admin/face-repair/resolve | Resolve reviewed faces
 *FacesApi* | [**runFaceRepair**](doc//FacesApi.md#runfacerepair) | **POST** /admin/face-repair | Run face re-attribution repair
 *FacesApi* | [**triggerScan**](doc//FacesApi.md#triggerscan) | **POST** /admin/face-repair/scan | Trigger a face-repair scan
 *GalleryMapApi* | [**getFilteredMapMarkers**](doc//GalleryMapApi.md#getfilteredmapmarkers) | **GET** /gallery/map/markers | Get filtered map markers
@@ -530,9 +534,6 @@ Class | Method | HTTP request | Description
  - [EmailNotificationsUpdate](doc//EmailNotificationsUpdate.md)
  - [ExifResponseDto](doc//ExifResponseDto.md)
  - [FaceDto](doc//FaceDto.md)
- - [FaceRepairApplyRequestDto](doc//FaceRepairApplyRequestDto.md)
- - [FaceRepairApplyRequestDtoManualMove](doc//FaceRepairApplyRequestDtoManualMove.md)
- - [FaceRepairApplyResponseDto](doc//FaceRepairApplyResponseDto.md)
  - [FaceRepairClusterFacesRequestDto](doc//FaceRepairClusterFacesRequestDto.md)
  - [FaceRepairClusterFacesResponseDto](doc//FaceRepairClusterFacesResponseDto.md)
  - [FaceRepairClusterFacesResponseDtoFacesInner](doc//FaceRepairClusterFacesResponseDtoFacesInner.md)
@@ -544,9 +545,21 @@ Class | Method | HTTP request | Description
  - [FaceRepairDeclineRemovedDto](doc//FaceRepairDeclineRemovedDto.md)
  - [FaceRepairDeclineRequestDto](doc//FaceRepairDeclineRequestDto.md)
  - [FaceRepairDeclineRequestDtoPersonsInner](doc//FaceRepairDeclineRequestDtoPersonsInner.md)
+ - [FaceRepairOwnerPeopleResponseDto](doc//FaceRepairOwnerPeopleResponseDto.md)
+ - [FaceRepairOwnerPeopleResponseDtoPeopleInner](doc//FaceRepairOwnerPeopleResponseDtoPeopleInner.md)
+ - [FaceRepairOwnerPersonCreateRequestDto](doc//FaceRepairOwnerPersonCreateRequestDto.md)
+ - [FaceRepairOwnerPersonCreatedResponseDto](doc//FaceRepairOwnerPersonCreatedResponseDto.md)
  - [FaceRepairPersonFacesDto](doc//FaceRepairPersonFacesDto.md)
  - [FaceRepairPersonFacesDtoFlaggedFacesInner](doc//FaceRepairPersonFacesDtoFlaggedFacesInner.md)
  - [FaceRepairRequestDto](doc//FaceRepairRequestDto.md)
+ - [FaceRepairResolutionsListDto](doc//FaceRepairResolutionsListDto.md)
+ - [FaceRepairResolutionsListDtoResolutionsInner](doc//FaceRepairResolutionsListDtoResolutionsInner.md)
+ - [FaceRepairResolutionsRemoveRequestDto](doc//FaceRepairResolutionsRemoveRequestDto.md)
+ - [FaceRepairResolutionsRemovedDto](doc//FaceRepairResolutionsRemovedDto.md)
+ - [FaceRepairResolveRequestDto](doc//FaceRepairResolveRequestDto.md)
+ - [FaceRepairResolveRequestDtoEntireCluster](doc//FaceRepairResolveRequestDtoEntireCluster.md)
+ - [FaceRepairResolveRequestDtoMoveToPersonInner](doc//FaceRepairResolveRequestDtoMoveToPersonInner.md)
+ - [FaceRepairResolveResponseDto](doc//FaceRepairResolveResponseDto.md)
  - [FaceRepairResponseDto](doc//FaceRepairResponseDto.md)
  - [FaceRepairResponseDtoExecuted](doc//FaceRepairResponseDtoExecuted.md)
  - [FaceRepairResponseDtoReport](doc//FaceRepairResponseDtoReport.md)
