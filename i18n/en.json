@@ -200,6 +200,7 @@
     "face_cleanup_review_banner_body": "Default is → {ownerName}. Select the exceptions and re-route them: keep here, confirm-lock an age-gap face, send to a different person, or detach a non-face. Nothing silently re-appears next scan.",
     "face_cleanup_review_banner_title": "{count} faces need review — every one leaves the queue once you apply",
     "face_cleanup_review_bulk_clear": "Clear",
+    "face_cleanup_review_bulk_detach": "Not a face",
     "face_cleanup_review_bulk_lock": "Confirm / lock",
     "face_cleanup_review_bulk_other": "Move → person…",
     "face_cleanup_review_bulk_owner": "→ Owner",
