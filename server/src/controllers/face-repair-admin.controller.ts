@@ -14,6 +14,8 @@ import {
   FaceRepairDeclineRequestDto,
   FaceRepairPersonFacesDto,
   FaceRepairRequestDto,
+  FaceRepairResolveRequestDto,
+  FaceRepairResolveResponseDto,
   FaceRepairResponseDto,
   FaceRepairScanDefaultsDto,
   FaceRepairScanStatusDto,
@@ -90,6 +92,13 @@ export class FaceRepairAdminController {
   @Endpoint({ summary: 'Apply face re-attribution for approved persons', history: new HistoryBuilder().added('v1') })
   applyFaceRepair(@Body() dto: FaceRepairApplyRequestDto): Promise<FaceRepairApplyResponseDto> {
     return this.service.applyRepair(dto) as Promise<FaceRepairApplyResponseDto>;
+  }
+
+  @Post('resolve')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Resolve reviewed faces', history: new HistoryBuilder().added('v1') })
+  resolveFaces(@Auth() auth: AuthDto, @Body() dto: FaceRepairResolveRequestDto): Promise<FaceRepairResolveResponseDto> {
+    return this.service.resolveFaces(dto, auth.user.id) as Promise<FaceRepairResolveResponseDto>;
   }
 
   @Post('decline')

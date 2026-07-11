@@ -93,6 +93,27 @@ export const decideReattribution = (tally: ReattributionTally, params: FlagParam
   return { flagged, suspectedOwnerId: flagged ? topOtherPersonId : null };
 };
 
+// `resolve` (E7): a face may appear in at most one bucket (moveToPerson's flattened faceIds, stay, lock,
+// detach). Returns the ids that appear in more than one bucket, so the caller can 400. Pure/reusable across
+// slices — only moveToPerson carries real ids in Slice 1, but stay/lock/detach are already validated for
+// disjointness so Slices 2/3/5 don't need to revisit this check.
+export function findOverlappingIds(buckets: string[][]): string[] {
+  const seenInBuckets = new Map<string, number>();
+  for (const bucket of buckets) {
+    for (const id of new Set(bucket)) {
+      seenInBuckets.set(id, (seenInBuckets.get(id) ?? 0) + 1);
+    }
+  }
+  return [...seenInBuckets.entries()].filter(([, count]) => count > 1).map(([id]) => id);
+}
+
+// `resolve` (E15): stay/lock/detach/moveToPerson ids must be members of the person's stored flagged-face
+// snapshot (a rest-of-cluster face has no suspected owner and no "keep/lock/detach/move-to-owner" meaning).
+// Returns the ids from `ids` that are NOT present in `resolvableIds`, so the caller can 400.
+export function findUnresolvableIds(ids: string[], resolvableIds: ReadonlySet<string>): string[] {
+  return ids.filter((id) => !resolvableIds.has(id));
+}
+
 export function isSubset(subset: Set<string>, superset: Set<string>): boolean {
   for (const value of subset) {
     if (!superset.has(value)) {

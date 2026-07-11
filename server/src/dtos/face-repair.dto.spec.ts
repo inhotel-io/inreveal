@@ -2,6 +2,7 @@ import {
   FaceRepairApplyRequestSchema,
   FaceRepairClusterFacesRequestSchema,
   FaceRepairDeclineRemoveRequestSchema,
+  FaceRepairResolveRequestSchema,
   FaceRepairScanTriggerRequestSchema,
 } from 'src/dtos/face-repair.dto';
 import { describe, expect, it } from 'vitest';
@@ -126,6 +127,67 @@ describe('FaceRepairApplyRequestSchema', () => {
 
   it('rejects a non-uuid in approvedPersonIds', () => {
     expect(FaceRepairApplyRequestSchema.safeParse({ approvedPersonIds: ['not-a-uuid'] }).success).toBe(false);
+  });
+});
+
+describe('FaceRepairResolveRequestSchema', () => {
+  const PERSON_ID = '00000000-0000-4000-a000-000000000001';
+  const OWNER_A = '00000000-0000-4000-a000-000000000002';
+  const OWNER_B = '00000000-0000-4000-a000-000000000003';
+  const FACE_1 = '00000000-0000-4000-a000-000000000004';
+  const FACE_2 = '00000000-0000-4000-a000-000000000005';
+  const FACE_3 = '00000000-0000-4000-a000-000000000006';
+
+  it('accepts owner move groups and defaults stay/lock/detach to []', () => {
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: PERSON_ID,
+      moveToPerson: [
+        { destinationPersonId: OWNER_A, faceIds: [FACE_1, FACE_2] },
+        { destinationPersonId: OWNER_B, faceIds: [FACE_3] },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.stay).toEqual([]);
+      expect(result.data.lock).toEqual([]);
+      expect(result.data.detach).toEqual([]);
+    }
+  });
+
+  it('accepts an empty body beyond personId (defaults every bucket to [])', () => {
+    const result = FaceRepairResolveRequestSchema.safeParse({ personId: PERSON_ID });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.moveToPerson).toEqual([]);
+    }
+  });
+
+  it('rejects a non-uuid faceId in a moveToPerson group', () => {
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: PERSON_ID,
+      moveToPerson: [{ destinationPersonId: OWNER_A, faceIds: ['not-a-uuid'] }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-uuid personId', () => {
+    expect(FaceRepairResolveRequestSchema.safeParse({ personId: 'not-a-uuid' }).success).toBe(false);
+  });
+
+  it('rejects a moveToPerson group with an empty faceIds array', () => {
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: PERSON_ID,
+      moveToPerson: [{ destinationPersonId: OWNER_A, faceIds: [] }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a non-uuid id in stay/lock/detach', () => {
+    expect(FaceRepairResolveRequestSchema.safeParse({ personId: PERSON_ID, stay: ['not-a-uuid'] }).success).toBe(false);
+    expect(FaceRepairResolveRequestSchema.safeParse({ personId: PERSON_ID, lock: ['not-a-uuid'] }).success).toBe(false);
+    expect(FaceRepairResolveRequestSchema.safeParse({ personId: PERSON_ID, detach: ['not-a-uuid'] }).success).toBe(
+      false,
+    );
   });
 });
 
