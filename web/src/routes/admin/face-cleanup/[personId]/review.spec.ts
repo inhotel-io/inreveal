@@ -1,105 +1,189 @@
 import { describe, expect, it } from 'vitest';
-import { createReviewModel } from './review.svelte';
+import { createReviewModel, type FlaggedFace } from './review.svelte';
 
-describe('createReviewModel', () => {
-  it('starts with all faces moving (none excluded)', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }, { assetFaceId: 'b' }]);
-    expect(vm.movingCount).toBe(2);
-    expect(vm.excludeFaceIds()).toEqual([]);
+// Model B (full per-face resolution) review model. Every flagged face carries its OWN suspectedOwnerId (a
+// mixed cluster can flag faces toward different owners), so "move to owner" is a per-face grouping, not one
+// destination. Slice 1 only wires the `owner` bulk action into the UI, but the model supports the full
+// 5-state set (`owner`/`other`/`stay`/`lock`/`detach`) up front so later slices don't need another rework.
+describe('createReviewModel (Model B / full resolution)', () => {
+  const makeFaces = (): FlaggedFace[] => [
+    { assetFaceId: 'f1', suspectedOwnerId: 'owner-a' },
+    { assetFaceId: 'f2', suspectedOwnerId: 'owner-a' },
+    { assetFaceId: 'f3', suspectedOwnerId: 'owner-b' },
+  ];
+
+  const sortedGroups = (req: { moveToPerson?: { destinationPersonId: string; faceIds: string[] }[] }) =>
+    [...(req.moveToPerson ?? [])].sort((a, b) => a.destinationPersonId.localeCompare(b.destinationPersonId));
+
+  it('starts every face in the owner state with no selection', () => {
+    const vm = createReviewModel(makeFaces());
+    expect(vm.total).toBe(3);
+    expect(vm.selectedCount).toBe(0);
+    expect(vm.tally).toEqual({ owner: 3, other: 0, stay: 0, lock: 0, detach: 0 });
+    expect(vm.faces.map((f) => f.state)).toEqual(['owner', 'owner', 'owner']);
   });
 
-  it('toggling a face excludes it and decrements movingCount; re-toggle restores', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }, { assetFaceId: 'b' }]);
-    vm.toggle('a');
-    expect(vm.isExcluded('a')).toBe(true);
-    expect(vm.movingCount).toBe(1);
-    expect(vm.excludeFaceIds()).toEqual(['a']);
-    vm.toggle('a');
-    expect(vm.movingCount).toBe(2);
+  // ---- W1: buildResolveRequest groups owner faces by EACH face's own suspectedOwnerId ----
+
+  it("W1: groups default (owner-state) faces by each face's own suspectedOwnerId, not one destination", () => {
+    const vm = createReviewModel(makeFaces());
+    const req = vm.buildResolveRequest('person-1');
+
+    expect(req.personId).toBe('person-1');
+    expect(sortedGroups(req)).toEqual([
+      { destinationPersonId: 'owner-a', faceIds: ['f1', 'f2'] },
+      { destinationPersonId: 'owner-b', faceIds: ['f3'] },
+    ]);
+    expect(req.stay).toEqual([]);
+    expect(req.lock).toEqual([]);
+    expect(req.detach).toEqual([]);
+    expect(req.entireCluster).toBeUndefined();
   });
 
-  it('tracks declined faces separately from excluded', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }, { assetFaceId: 'b' }]);
-    vm.toggle('a'); // exclude a (transient)
-    vm.markDeclined('b'); // decline b (persistent intent)
-    expect(vm.isExcluded('a')).toBe(true);
-    expect(vm.isDeclined('b')).toBe(true);
-    expect(vm.isExcluded('b')).toBe(false);
-    expect(vm.declinedFaceIds()).toEqual(['b']);
+  it('W1: an "other"-state face routes to its chosen destination, not its suspected owner', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f3');
+    vm.applyToSelection('other', { personId: 'chosen-1', name: 'Chosen Person' });
+
+    const req = vm.buildResolveRequest('person-1');
+    expect(sortedGroups(req)).toEqual([
+      { destinationPersonId: 'chosen-1', faceIds: ['f3'] },
+      { destinationPersonId: 'owner-a', faceIds: ['f1', 'f2'] },
+    ]);
   });
 
-  it('unmarkDeclined reverses a decline and restores the face to moving', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }, { assetFaceId: 'b' }]);
-    vm.markDeclined('a');
-    expect(vm.isDeclined('a')).toBe(true);
-    expect(vm.movingCount).toBe(1); // a is declined → not moving
-    vm.unmarkDeclined('a');
-    expect(vm.isDeclined('a')).toBe(false);
-    expect(vm.declinedFaceIds()).toEqual([]);
-    expect(vm.movingCount).toBe(2); // restored
+  it('W1: owner and other faces sharing the same destination merge into one group', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f3');
+    vm.applyToSelection('other', { personId: 'owner-a', name: 'Owner A' });
+
+    const req = vm.buildResolveRequest('person-1');
+    expect(sortedGroups(req)).toEqual([{ destinationPersonId: 'owner-a', faceIds: ['f1', 'f2', 'f3'] }]);
   });
 
-  it('toggleManual adds/removes a manual pick and movingCount includes it', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }]); // 1 flagged moving
-    expect(vm.movingCount).toBe(1);
-    vm.toggleManual('m1');
-    expect(vm.isManualSelected('m1')).toBe(true);
-    expect(vm.movingCount).toBe(2); // 1 flagged + 1 manual
-    vm.toggleManual('m1');
-    expect(vm.isManualSelected('m1')).toBe(false);
-    expect(vm.movingCount).toBe(1);
+  it('W1: stay/lock/detach faces are emitted as id lists and excluded from moveToPerson', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f1');
+    vm.applyToSelection('stay');
+    vm.toggleSelect('f2');
+    vm.applyToSelection('lock');
+    vm.toggleSelect('f3');
+    vm.applyToSelection('detach');
+
+    const req = vm.buildResolveRequest('person-1');
+    expect(req.moveToPerson).toEqual([]);
+    expect(req.stay).toEqual(['f1']);
+    expect(req.lock).toEqual(['f2']);
+    expect(req.detach).toEqual(['f3']);
   });
 
-  it('selectAllLoaded unions the loaded ids; clearManual empties them', () => {
-    const vm = createReviewModel([]);
-    vm.toggleManual('m1');
-    vm.selectAllLoaded(['m1', 'm2', 'm3']);
-    expect([...vm.manualFaceIds()].sort()).toEqual(['m1', 'm2', 'm3']);
-    vm.clearManual();
-    expect(vm.manualFaceIds()).toEqual([]);
+  // ---- W2: the outcome tally always sums to N across every sequence of bulk actions ----
+
+  it('W2: tally always sums to N across a sequence of bulk actions', () => {
+    const vm = createReviewModel(makeFaces());
+    const sumTally = () => Object.values(vm.tally).reduce((a, b) => a + b, 0);
+    expect(sumTally()).toBe(3);
+
+    vm.toggleSelect('f1');
+    vm.applyToSelection('stay');
+    expect(sumTally()).toBe(3);
+    expect(vm.tally).toEqual({ owner: 2, other: 0, stay: 1, lock: 0, detach: 0 });
+
+    vm.toggleSelect('f2');
+    vm.toggleSelect('f3');
+    vm.applyToSelection('lock');
+    expect(sumTally()).toBe(3);
+    expect(vm.tally).toEqual({ owner: 0, other: 0, stay: 1, lock: 2, detach: 0 });
+
+    vm.selectAll();
+    vm.applyToSelection('detach');
+    expect(sumTally()).toBe(3);
+    expect(vm.tally).toEqual({ owner: 0, other: 0, stay: 0, lock: 0, detach: 3 });
+
+    vm.toggleSelect('f1');
+    vm.applyToSelection('owner');
+    expect(sumTally()).toBe(3);
+    expect(vm.tally).toEqual({ owner: 1, other: 0, stay: 0, lock: 0, detach: 2 });
   });
 
-  it('entire-cluster mode makes movingCount the cluster total and supersedes individual picks (E15)', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }, { assetFaceId: 'b' }]); // 2 flagged
-    vm.selectAllLoaded(['m1', 'm2']); // 2 manual picks
-    vm.setClusterTotal(50);
-    vm.setEntireCluster(true);
-    expect(vm.entireCluster).toBe(true);
-    expect(vm.movingCount).toBe(50); // cluster total, not 2 + 2
+  it('W2: re-routing an already-routed face keeps the tally at N (no double counting)', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f1');
+    vm.applyToSelection('other', { personId: 'chosen-1', name: 'Chosen' });
+    vm.toggleSelect('f1');
+    vm.applyToSelection('stay');
+
+    expect(Object.values(vm.tally).reduce((a, b) => a + b, 0)).toBe(3);
+    expect(vm.tally).toEqual({ owner: 2, other: 0, stay: 1, lock: 0, detach: 0 });
+    // the stale "other" destination must not leak back in once re-routed away from "other"
+    expect(vm.faces.find((f) => f.assetFaceId === 'f1')?.destinationPersonId).toBeNull();
   });
 
-  it('applyPayload (partial add): approvedPersonIds + excludeFaceIds + manualMove.faceIds', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }, { assetFaceId: 'b' }]);
-    vm.toggle('a'); // exclude a
-    vm.markDeclined('b'); // decline b
-    vm.selectAllLoaded(['m1', 'm2']);
-    const payload = vm.applyPayload({ personId: 'p1', destinationPersonId: 'owner' });
-    expect(payload.approvedPersonIds).toEqual(['p1']);
-    expect([...(payload.excludeFaceIds ?? [])].sort()).toEqual(['a', 'b']);
-    expect(payload.manualMove).toEqual({ personId: 'p1', destinationPersonId: 'owner', faceIds: ['m1', 'm2'] });
+  // ---- W3: bulk actions mutate per-face state correctly; Reset returns all tiles to owner ----
+
+  it('W3: bulk actions mutate exactly the selected faces and clear the selection afterward', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f1');
+    vm.toggleSelect('f2');
+    vm.applyToSelection('lock');
+
+    expect(vm.faces.find((f) => f.assetFaceId === 'f1')?.state).toBe('lock');
+    expect(vm.faces.find((f) => f.assetFaceId === 'f2')?.state).toBe('lock');
+    expect(vm.faces.find((f) => f.assetFaceId === 'f3')?.state).toBe('owner');
+    expect(vm.selectedCount).toBe(0); // bulk actions clear the selection (mirrors the mockup's apply(s))
   });
 
-  it('applyPayload (entire cluster): empty approvedPersonIds + manualMove.entireCluster, picks ignored', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }]);
-    vm.selectAllLoaded(['m1']); // ignored in entire-cluster mode
-    vm.setEntireCluster(true);
-    const payload = vm.applyPayload({ personId: 'p1', destinationPersonId: 'owner' });
-    expect(payload.approvedPersonIds).toEqual([]);
-    expect(payload.manualMove).toEqual({ personId: 'p1', destinationPersonId: 'owner', entireCluster: true });
+  it('W3: Reset returns every face to owner and clears any chosen destination', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f1');
+    vm.applyToSelection('other', { personId: 'chosen-1', name: 'Chosen' });
+    vm.toggleSelect('f2');
+    vm.applyToSelection('stay');
+    expect(vm.tally.owner).toBe(1);
+
+    vm.reset();
+
+    expect(vm.tally).toEqual({ owner: 3, other: 0, stay: 0, lock: 0, detach: 0 });
+    for (const face of vm.faces) {
+      expect(face.state).toBe('owner');
+      expect(face.destinationPersonId).toBeNull();
+      expect(face.destinationName).toBeNull();
+    }
+    expect(vm.selectedCount).toBe(0);
+
+    const req = vm.buildResolveRequest('person-1');
+    expect(req.stay).toEqual([]);
+    expect(
+      (req.moveToPerson ?? [])
+        .flatMap((g) => g.faceIds)
+        .slice()
+        .sort(),
+    ).toEqual(['f1', 'f2', 'f3']);
   });
 
-  it('applyPayload (legacy flagged-only): no manualMove when nothing manual is selected', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }]);
-    vm.toggle('a');
-    const payload = vm.applyPayload({ personId: 'p1', destinationPersonId: 'owner' });
-    expect(payload.approvedPersonIds).toEqual(['p1']);
-    expect(payload.manualMove).toBeUndefined();
-  });
+  // ---- selection ops backing P1 (click toggle, shift-range, select-all, clear) ----
 
-  it('applyPayload: emits no manualMove when destinationPersonId is null (E17 guard)', () => {
-    const vm = createReviewModel([{ assetFaceId: 'a' }]);
-    vm.selectAllLoaded(['m1']);
-    const payload = vm.applyPayload({ personId: 'p1', destinationPersonId: null });
-    expect(payload.manualMove).toBeUndefined();
+  it('selection: click toggles, shift-click selects a range, selectAll/clearSelection work', () => {
+    const vm = createReviewModel(makeFaces());
+
+    vm.toggleSelect('f1');
+    expect(vm.isSelected('f1')).toBe(true);
+    expect(vm.selectedCount).toBe(1);
+    vm.toggleSelect('f1'); // toggling again deselects
+    expect(vm.isSelected('f1')).toBe(false);
+    expect(vm.selectedCount).toBe(0);
+
+    vm.toggleSelect('f1'); // anchor the range at f1
+    vm.selectRange('f3'); // shift-click f3 → selects f1..f3 inclusive
+    expect(vm.isSelected('f1')).toBe(true);
+    expect(vm.isSelected('f2')).toBe(true);
+    expect(vm.isSelected('f3')).toBe(true);
+    expect(vm.selectedCount).toBe(3);
+
+    vm.clearSelection();
+    expect(vm.selectedCount).toBe(0);
+
+    vm.selectAll();
+    expect(vm.selectedCount).toBe(3);
   });
 });
