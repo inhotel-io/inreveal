@@ -29,6 +29,7 @@ import { ActivityTable } from 'src/schema/tables/activity.table';
 import { AlbumAssetAuditTable } from 'src/schema/tables/album-asset-audit.table';
 import { AlbumAssetTable } from 'src/schema/tables/album-asset.table';
 import { AlbumAuditTable } from 'src/schema/tables/album-audit.table';
+import { AlbumSpaceAssetAuditTable } from 'src/schema/tables/album-space-asset-audit.table';
 import { AlbumSpaceAssetTable } from 'src/schema/tables/album-space-asset.table';
 import { AlbumUserAuditTable } from 'src/schema/tables/album-user-audit.table';
 import { AlbumUserTable } from 'src/schema/tables/album-user.table';
@@ -126,6 +127,7 @@ export class ImmichDatabase {
     AlbumAssetTable,
     AlbumAssetAuditTable,
     AlbumSpaceAssetTable,
+    AlbumSpaceAssetAuditTable,
     AlbumAuditTable,
     AlbumUserAuditTable,
     AlbumUserTable,
@@ -253,6 +255,7 @@ export interface DB {
   album_asset: AlbumAssetTable;
   album_asset_audit: AlbumAssetAuditTable;
   album_space_asset: AlbumSpaceAssetTable;
+  album_space_asset_audit: AlbumSpaceAssetAuditTable;
   album_user: AlbumUserTable;
   album_user_audit: AlbumUserAuditTable;
 

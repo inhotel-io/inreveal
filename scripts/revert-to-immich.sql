@@ -111,6 +111,7 @@ DROP TABLE IF EXISTS "shared_space_library_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_library" CASCADE;
 
 -- Shared spaces
+DROP TABLE IF EXISTS "album_space_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "album_space_asset" CASCADE;
 DROP TABLE IF EXISTS "shared_space_activity" CASCADE;
 DROP TABLE IF EXISTS "shared_space_person_alias" CASCADE;
@@ -175,6 +176,7 @@ DROP FUNCTION IF EXISTS shared_space_member_delete_album_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_delete_album_audit() CASCADE;
 DROP FUNCTION IF EXISTS shared_space_album_user_delete_after_audit() CASCADE;
 DROP FUNCTION IF EXISTS album_soft_delete_shared_space_album() CASCADE;
+DROP FUNCTION IF EXISTS album_space_asset_delete_audit() CASCADE;
 
 -- -----------------------------------------------------------------------------
 -- 4. Drop Gallery-added columns from Immich-native tables.
@@ -231,6 +233,7 @@ DELETE FROM "migration_overrides"
    'function_shared_space_delete_album_audit',
    'function_shared_space_album_user_delete_after_audit',
    'function_album_soft_delete_shared_space_album',
+   'function_album_space_asset_delete_audit',
    'index_asset_face_personId_idx',
    'index_face_identity_representativeFaceId_idx',
    'index_person_identityId_idx',
@@ -258,6 +261,8 @@ DELETE FROM "migration_overrides"
    'trigger_shared_space_delete_album_audit',
    'trigger_shared_space_album_user_delete_after_audit',
    'trigger_album_soft_delete_shared_space_album',
+   'trigger_album_space_asset_delete_audit',
+   'trigger_album_space_asset_updatedAt',
    'trigger_shared_space_album_updatedAt',
    'trigger_shared_space_library_updatedAt',
    'trigger_shared_space_member_after_insert',
@@ -372,6 +377,7 @@ DELETE FROM "kysely_migrations"
    '1782100000000-FixSharedSpaceAlbumGrantRelinkCreateId',
    '1782300000000-AddSharedSpaceAlbumAuditSyncIndexes',
    '1783000000000-AddAlbumSpaceAssetTable',
+   '1783100000000-AddAlbumSpaceAssetSyncAndAudit',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
@@ -440,6 +446,7 @@ BEGIN
        'shared_space_album', 'shared_space_album_audit',
        'shared_space_album_user', 'shared_space_album_user_audit',
        'shared_space_album_asset_audit',
+       'album_space_asset_audit',
        'face_identity_face', 'face_identity',
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
