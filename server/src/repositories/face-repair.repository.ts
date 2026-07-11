@@ -242,6 +242,46 @@ export class FaceRepairRepository {
     return movedIds;
   }
 
+  // Detach ("Not a face", Slice 5): unassign the given faces from `personId` (same ML/visible/not-deleted
+  // eligibility re-check as reattributeFaces, and the same still-on-source guard) AND strip their identity
+  // link in the SAME chunk/transaction — never via FaceIdentityRepository.unlinkFaces, whose own `this.db`
+  // would run outside a caller-supplied `trx` and break the pair's atomicity (a crash between the two writes
+  // would leave a face still carrying `personId`'s identity, which a later FaceIdentityBackfill pass could
+  // resolve right back onto it — the exact regression this pairing (E4) guards against). Returns the ids
+  // actually detached, so the caller can regenerate the person's representative thumbnail for exactly those
+  // (E19/M21).
+  async detachFaces(
+    personId: string,
+    assetFaceIds: string[],
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<string[]> {
+    if (assetFaceIds.length === 0) {
+      return [];
+    }
+    const detachedIds: string[] = [];
+    // Chunk the IN-list for the same reason as reattributeFaces (L3): stay comfortably under the Postgres
+    // bind-parameter limit for a person with a very large number of faces.
+    for (let index = 0; index < assetFaceIds.length; index += 1000) {
+      const chunk = assetFaceIds.slice(index, index + 1000);
+      const rows = await db
+        .updateTable('asset_face')
+        .set({ personId: null })
+        .where('id', 'in', chunk)
+        .where('personId', '=', personId)
+        .where('sourceType', '=', sql.lit(SourceType.MachineLearning))
+        .where('deletedAt', 'is', null)
+        .where('isVisible', '=', true)
+        .returning('id')
+        .execute();
+      const chunkDetachedIds = rows.map((row) => row.id);
+      if (chunkDetachedIds.length > 0) {
+        await db.deleteFrom('face_identity_face').where('assetFaceId', 'in', chunkDetachedIds).execute();
+      }
+      detachedIds.push(...chunkDetachedIds);
+    }
+    return detachedIds;
+  }
+
   // Repoint any dangling representative face: if a person's faceAssetId no longer belongs to it (or is null),
   // reset it to any remaining assigned, visible, non-deleted face (or null if none remain). Returns the ids of
   // persons whose representative face actually changed so callers can regenerate their thumbnails — a fully

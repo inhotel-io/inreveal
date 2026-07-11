@@ -688,8 +688,8 @@ export class FaceRepairService extends BaseService {
   // Slice 1 of the full per-face resolution (docs/plans/2026-07-10-face-cleanup-full-resolution-design.md):
   // replaces the 2-state `apply` for a single reviewed person. Slice 2 wires the `stay` (soft-decline) bucket
   // on top of Slice 1's move-to-owner path; Slice 3 wires `lock` (durable, owner-agnostic confirm) on the same
-  // raw-snapshot membership check. `detach` is still validated (disjoint buckets + snapshot membership) but
-  // remains always empty until Slice 5 lands.
+  // raw-snapshot membership check; Slice 5 wires `detach` ("Not a face" — unassign + strip the identity link)
+  // on the same raw-snapshot membership check.
   async resolveFaces(input: FaceRepairResolveRequest, resolvedBy: string): Promise<FaceRepairResolveResponse> {
     const { personId, moveToPerson, stay, lock, detach } = input;
     const moveFaceIds = moveToPerson.flatMap((group) => group.faceIds);
@@ -827,6 +827,29 @@ export class FaceRepairService extends BaseService {
     // is a silent no-op, never a unique-violation.
     const locked = lock.length > 0 ? await this.faceRepairLockRepository.insertLocks(lock, personId, resolvedBy) : 0;
 
+    // Detach (Slice 5, state 5, "Not a face"): unassign each detached face from this person AND strip its
+    // identity link, atomically — wrapped in one transaction so a crash between the two writes can never leave
+    // a stripped-identity face still on this person (which a later FaceIdentityBackfill would silently re-link
+    // right back onto it, the E4 regression). Placed BEFORE the empty-unnamed cleanup below: detaching every
+    // remaining face can itself empty the person, and that cleanup must see the post-detach state.
+    const detachedIds =
+      detach.length > 0
+        ? await this.databaseRepository.transaction((trx) =>
+            this.faceRepairRepository.detachFaces(personId, detach, trx),
+          )
+        : [];
+    if (detachedIds.length > 0) {
+      const repointedIds = await this.faceRepairRepository.reconcileRepresentativeFaces([personId]);
+      // E19/M21: regenerate the person's thumbnail if the detached crop was its representative face — mirrors
+      // executeRepair's own representative-thumbnail regen for the move path, so a detached "not a face" crop
+      // never lingers as the person's avatar.
+      if (repointedIds.length > 0) {
+        await this.jobRepository.queueAll(
+          repointedIds.map((id) => ({ name: JobName.PersonGenerateThumbnail, data: { id } })),
+        );
+      }
+    }
+
     // Empty-unnamed cleanup, reused from applyRepair's manual-move cleanup (A2): only delete a source with
     // ZERO remaining faces of any kind, and only when it was never named.
     const remaining = await this.faceRepairRepository.countEligibleFaces({ personId });
@@ -850,7 +873,7 @@ export class FaceRepairService extends BaseService {
       moved: result.moved,
       declined,
       locked,
-      detached: 0,
+      detached: detachedIds.length,
       skipped: result.skipped + preSkipped,
     };
   }

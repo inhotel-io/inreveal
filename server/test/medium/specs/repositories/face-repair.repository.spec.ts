@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
 import { AssetVisibility, SourceType } from 'src/enum';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
@@ -13,7 +14,7 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   const { ctx } = newMediumService(BaseService, {
     database: db || defaultDatabase,
-    real: [FaceRepairRepository, PersonRepository],
+    real: [FaceRepairRepository, PersonRepository, FaceIdentityRepository],
     mock: [LoggingRepository],
   });
   return { ctx, sut: ctx.get(FaceRepairRepository) };
@@ -285,6 +286,109 @@ describe('FaceRepairRepository.reattributeFaces', () => {
       .where('id', '=', manualFace.id)
       .executeTakeFirstOrThrow();
     expect(row.personId).toBe(person.id);
+  });
+});
+
+describe('FaceRepairRepository.detachFaces', () => {
+  it('nulls personId for requested faces still on the person and deletes their identity link', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceA } = await ctx.newAssetFace({
+      assetId: assetA.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: faceB } = await ctx.newAssetFace({
+      assetId: assetB.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const identity = await faceIdentityRepo.ensurePersonIdentity(person.id);
+    await faceIdentityRepo.linkFace({ assetFaceId: faceA.id, identityId: identity.id, source: 'backfill' });
+
+    const detached = await sut.detachFaces(person.id, [faceA.id]);
+
+    expect(detached).toEqual([faceA.id]);
+
+    const rows = await ctx.database
+      .selectFrom('asset_face')
+      .select(['id', 'personId'])
+      .where('id', 'in', [faceA.id, faceB.id])
+      .execute();
+    const byId = Object.fromEntries(rows.map((r) => [r.id, r.personId]));
+    expect(byId[faceA.id]).toBeNull();
+    expect(byId[faceB.id]).toBe(person.id); // untouched — not requested
+
+    const identityRows = await ctx.database
+      .selectFrom('face_identity_face')
+      .select('assetFaceId')
+      .where('assetFaceId', '=', faceA.id)
+      .execute();
+    expect(identityRows).toHaveLength(0);
+  });
+
+  it('eligibility re-check: skips a face already moved off the source person', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: personP } = await ctx.newPerson({ ownerId: user.id });
+    const { person: personQ } = await ctx.newPerson({ ownerId: user.id });
+
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: face } = await ctx.newAssetFace({
+      assetId: asset.id,
+      personId: personQ.id,
+      sourceType: SourceType.MachineLearning,
+    });
+
+    const detached = await sut.detachFaces(personP.id, [face.id]);
+
+    expect(detached).toHaveLength(0);
+    const row = await ctx.database
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', face.id)
+      .executeTakeFirstOrThrow();
+    expect(row.personId).toBe(personQ.id);
+  });
+
+  it('eligibility re-check: does not detach manual-sourced faces', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: manualFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+    await ctx.database
+      .updateTable('asset_face')
+      .set({ sourceType: 'manual' as SourceType })
+      .where('id', '=', manualFace.id)
+      .execute();
+
+    const detached = await sut.detachFaces(person.id, [manualFace.id]);
+
+    expect(detached).toHaveLength(0);
+    const row = await ctx.database
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', manualFace.id)
+      .executeTakeFirstOrThrow();
+    expect(row.personId).toBe(person.id);
+  });
+
+  it('returns an empty array and does nothing when assetFaceIds is empty', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const detached = await sut.detachFaces(person.id, []);
+
+    expect(detached).toEqual([]);
   });
 });
 

@@ -183,6 +183,10 @@
     vm.applyToSelection('lock');
   };
 
+  const handleBulkDetach = () => {
+    vm.applyToSelection('detach');
+  };
+
   const handleBulkOther = async () => {
     if (!scanPerson || vm.selectedCount === 0) {
       return;
@@ -663,6 +667,15 @@
             >
               <span class="size-2 rounded-xs" style="background: {STATE_COLOR.other}"></span>
               {$t('admin.face_cleanup_review_bulk_other')}
+            </button>
+            <button
+              type="button"
+              onclick={handleBulkDetach}
+              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+              data-testid="bulk-detach"
+            >
+              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.detach}"></span>
+              {$t('admin.face_cleanup_review_bulk_detach')}
             </button>
             <button
               type="button"
