@@ -10,8 +10,67 @@ export interface EligibleFaceRow {
   embedding: string;
 }
 
+export interface OwnerPersonRow {
+  id: string;
+  name: string;
+  faceCount: number;
+  thumbnailFaceId: string | null;
+}
+
 export class FaceRepairRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
+
+  // Admin, owner-scoped people search for the move-to-chosen-person picker (Slice 4). Deliberately NOT
+  // `PersonRepository.getAllForUser`: that method's HAVING clause excludes unnamed clusters below the
+  // per-user `minimumFaces` preference and joins Timeline-visibility assets only — exactly the small/
+  // in-progress clusters this admin picker must still surface. Named AND unnamed people alike, any face
+  // count, paginated by a simple offset (admin-scale, not a hot path).
+  async searchOwnerPeople(
+    ownerId: string,
+    options: { query?: string; page: number; size: number },
+  ): Promise<{ people: OwnerPersonRow[]; total: number; hasMore: boolean }> {
+    const trimmed = options.query?.trim();
+    const escaped = trimmed
+      ?.replaceAll('\\', String.raw`\\`)
+      .replaceAll('%', String.raw`\%`)
+      .replaceAll('_', String.raw`\_`);
+    const namePattern = escaped ? `%${escaped}%` : undefined;
+
+    const base = this.db
+      .selectFrom('person')
+      .where('person.ownerId', '=', ownerId)
+      .$if(!!namePattern, (qb) => qb.where(() => sql`"person"."name" ILIKE ${namePattern} ESCAPE '\\'`));
+
+    const { count } = await base.select((eb) => eb.fn.countAll().as('count')).executeTakeFirstOrThrow();
+    const total = Number(count);
+
+    const rows = await base
+      .leftJoin('asset_face', (join) =>
+        join
+          .onRef('asset_face.personId', '=', 'person.id')
+          .on('asset_face.deletedAt', 'is', null)
+          .on('asset_face.isVisible', '=', true),
+      )
+      .select(['person.id as id', 'person.name as name', 'person.faceAssetId as thumbnailFaceId'])
+      .select((eb) => eb.fn.count('asset_face.id').as('faceCount'))
+      .groupBy(['person.id'])
+      .orderBy(sql`NULLIF(BTRIM(person.name), '') is null`, 'asc')
+      .orderBy('person.name', 'asc')
+      .orderBy('person.id', 'asc')
+      .limit(options.size + 1)
+      .offset(options.page * options.size)
+      .execute();
+
+    const hasMore = rows.length > options.size;
+    const people = rows.slice(0, options.size).map((row) => ({
+      id: row.id,
+      name: row.name,
+      faceCount: Number(row.faceCount),
+      thumbnailFaceId: row.thumbnailFaceId,
+    }));
+
+    return { people, total, hasMore };
+  }
 
   // Non-Timeline faces (e.g. Archive) are intentionally eligible: they may be left unassigned
   // after repair if recognition cannot re-home them, which is the accepted outcome (blank > wrong).
