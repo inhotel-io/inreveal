@@ -510,11 +510,17 @@ describe('contribution visibility parity (album_space_asset)', () => {
   it('restore bumps the contribution updateId so getUpserts re-emits it', async () => {
     const ctx = new SyncTestContext(defaultDatabase);
     const sharedSpace = ctx.get(SharedSpaceRepository);
+    const toAsset = ctx.get(SyncRepository).sharedSpaceAlbumToAsset;
     const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
     const { user: carol } = await ctx.newUser();
     const { album } = await ctx.newAlbum({ ownerId: owner.id });
     const { asset } = await ctx.newAsset({ ownerId: carol.id });
     const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    // Member of the contribution's space so the getUpserts re-emit is actually observable
+    // (and the #764/§8.3 space-correlation gate passes).
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
     await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
 
@@ -532,5 +538,60 @@ describe('contribution visibility parity (album_space_asset)', () => {
       .where('assetId', '=', asset.id)
       .executeTakeFirstOrThrow();
     expect(after.updateId).not.toBe(before.updateId);
+
+    // Stronger: the restore's updateId bump must actually drive getUpserts to re-emit the contribution
+    // to a member who acked BEFORE the restore (ack = pre-restore updateId).
+    const upserts: any[] = [];
+    for await (const row of toAsset.getUpserts({
+      nowId: NOW_ID,
+      userId: member.id,
+      ack: { type: SyncEntityType.SharedSpaceAlbumToAssetV1, updateId: before.updateId },
+    })) {
+      upserts.push(row);
+    }
+    expect(upserts.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+
+  it('C1: Locked path (removeAssetsFromAll) drops a contribution — getDeletes emits, row gone, no resurrection', async () => {
+    const ctx = new SyncTestContext(defaultDatabase);
+    const albums = ctx.get(AlbumRepository);
+    const toAsset = ctx.get(SyncRepository).sharedSpaceAlbumToAsset;
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id, visibility: AssetVisibility.Timeline });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    // The Locked branch of applyVisibilityTransitionSideEffects calls removeAssetsFromAll. This must ALSO
+    // clear the cross-owner contribution (album_space_asset), firing the delete trigger so already-synced
+    // members drop the edge — else a Locked contribution leaks on-device forever.
+    await albums.removeAssetsFromAll([asset.id]);
+
+    // The contribution row is gone.
+    const remaining = await defaultDatabase
+      .selectFrom('album_space_asset')
+      .selectAll()
+      .where('assetId', '=', asset.id)
+      .execute();
+    expect(remaining).toHaveLength(0);
+
+    // getDeletes delivers (L, X) to the member (via the album_space_asset_audit delete trigger).
+    const deletes: any[] = [];
+    for await (const row of toAsset.getDeletes({ nowId: NOW_ID, userId: member.id })) {
+      deletes.push(row);
+    }
+    expect(deletes.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+
+    // No resurrection — the row is deleted, so getUpserts must not re-emit it (matches owned-Locked A8).
+    const upserts: any[] = [];
+    for await (const row of toAsset.getUpserts({ nowId: NOW_ID, userId: member.id })) {
+      upserts.push(row);
+    }
+    expect(upserts.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);
   });
 });
