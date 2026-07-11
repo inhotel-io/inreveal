@@ -178,6 +178,10 @@
     vm.applyToSelection('stay');
   };
 
+  const handleBulkLock = () => {
+    vm.applyToSelection('lock');
+  };
+
   const loadRestPage = async () => {
     if (restLoading) {
       return;
@@ -626,6 +630,15 @@
             >
               <span class="size-2 rounded-xs" style="background: {STATE_COLOR.stay}"></span>
               {$t('admin.face_cleanup_review_bulk_stay')}
+            </button>
+            <button
+              type="button"
+              onclick={handleBulkLock}
+              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+              data-testid="bulk-lock"
+            >
+              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.lock}"></span>
+              {$t('admin.face_cleanup_review_bulk_lock')}
             </button>
             <button
               type="button"
