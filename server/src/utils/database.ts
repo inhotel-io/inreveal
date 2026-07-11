@@ -463,15 +463,40 @@ export function hasAnyPeople<O>(qb: SelectQueryBuilder<DB, 'asset', O>, filters:
   });
 }
 
-export function inAlbums<O>(qb: SelectQueryBuilder<DB, 'asset', O>, albumIds: string[]) {
+export function inAlbums<O>(
+  qb: SelectQueryBuilder<DB, 'asset', O>,
+  albumIds: string[],
+  // #764: when the viewer has live member-spaces (timelineSpaceIds, resolved from
+  // getSpaceIdsForTimeline), cross-owner contributions (`album_space_asset`) tethered to one of those
+  // spaces count as album membership too. Gating on timelineSpaceIds — not raw album membership — is
+  // the live-membership check: an album owner who has LEFT the space passes AlbumRead on their own
+  // album but has no timelineSpaceId for it, so contributions are excluded (no permanent-grant leak).
+  timelineSpaceIds?: string[],
+) {
+  const includeContributions = !!timelineSpaceIds && timelineSpaceIds.length > 0;
   return qb.innerJoin(
     (eb) =>
       eb
-        .selectFrom('album_asset')
-        .select('assetId')
-        .where('albumId', '=', anyUuid(albumIds!))
-        .groupBy('assetId')
-        .having((eb) => eb.fn.count('albumId').distinct(), '=', albumIds.length)
+        .selectFrom((inner) => {
+          const albumAssetMembers = inner
+            .selectFrom('album_asset')
+            .select(['album_asset.assetId as assetId', 'album_asset.albumId as albumId'])
+            .where('album_asset.albumId', '=', anyUuid(albumIds!));
+          return (
+            includeContributions
+              ? albumAssetMembers.unionAll(
+                  inner
+                    .selectFrom('album_space_asset')
+                    .select(['album_space_asset.assetId as assetId', 'album_space_asset.albumId as albumId'])
+                    .where('album_space_asset.albumId', '=', anyUuid(albumIds!))
+                    .where('album_space_asset.spaceId', '=', anyUuid(timelineSpaceIds!)),
+                )
+              : albumAssetMembers
+          ).as('album_members');
+        })
+        .select('album_members.assetId')
+        .groupBy('album_members.assetId')
+        .having((eb) => eb.fn.count('album_members.albumId').distinct(), '=', albumIds.length)
         .as('has_album'),
     (join) => join.onRef('has_album.assetId', '=', 'asset.id'),
   );
@@ -684,7 +709,9 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
         : qb.where('asset.visibility', '=', options.visibility!),
     )
     .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
-    .$if(!!options.albumIds && options.albumIds.length > 0, (qb) => inAlbums(qb, options.albumIds!))
+    .$if(!!options.albumIds && options.albumIds.length > 0, (qb) =>
+      inAlbums(qb, options.albumIds!, options.timelineSpaceIds),
+    )
     .$if(!!options.spaceId && !options.timelineSpaceIds, (qb) =>
       qb.where((eb) =>
         eb.and([

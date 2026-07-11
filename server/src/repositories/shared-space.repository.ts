@@ -218,6 +218,80 @@ export class SharedSpaceRepository {
     await db.deleteFrom('shared_space_member').where('spaceId', '=', spaceId).where('userId', '=', userId).execute();
   }
 
+  /**
+   * Cross-owner contribution eligibility (#764). For each of `assetIds`, returns the space it may be
+   * contributed to `albumId` through — i.e. a space `S` such that: the album is linked to `S`, the
+   * caller is an Owner/Editor of `S`, and the asset is space-visible to the caller via `S` (direct
+   * pool ∪ linked library ∪ another linked album) under the visibility gate (no Hidden/Locked). Only
+   * NON-owned assets are eligible (the caller's own photos take the ordinary `album_asset` path). One
+   * row per eligible asset (the tether space); assets with no eligible space are simply absent.
+   */
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, [DummyValue.UUID]] })
+  @ChunkedArray({ paramIndex: 2 })
+  async getContributableAssetSpaces(
+    userId: string,
+    albumId: string,
+    assetIds: string[],
+  ): Promise<{ assetId: string; spaceId: string }[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    return this.db
+      .selectFrom('shared_space_album as link')
+      .innerJoin('shared_space_member as m', (join) =>
+        join
+          .onRef('m.spaceId', '=', 'link.spaceId')
+          .on('m.userId', '=', userId)
+          .on('m.role', 'in', [SharedSpaceRole.Owner, SharedSpaceRole.Editor]),
+      )
+      .innerJoin(
+        'asset',
+        (join) =>
+          join
+            .on('asset.id', 'in', assetIds)
+            .on('asset.deletedAt', 'is', null)
+            .on('asset.ownerId', '!=', userId) // owned assets take the ordinary album_asset path
+            .on('asset.visibility', 'in', spaceVisibleAssetVisibilities), // gate out Hidden/Locked
+      )
+      .where('link.albumId', '=', albumId)
+      .where((eb) =>
+        eb.or([
+          // Directly shared into the space's pool.
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset as sd')
+              .select(sql`1`.as('x'))
+              .whereRef('sd.spaceId', '=', 'link.spaceId')
+              .whereRef('sd.assetId', '=', 'asset.id'),
+          ),
+          // In a library linked to the space.
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library as sl')
+              .select(sql`1`.as('x'))
+              .whereRef('sl.spaceId', '=', 'link.spaceId')
+              .whereRef('sl.libraryId', '=', 'asset.libraryId')
+              .where('asset.isOffline', '=', false),
+          ),
+          // Already in another (non-deleted) album linked to the space.
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album as sa2')
+              .innerJoin('album_asset as aa2', 'aa2.albumId', 'sa2.albumId')
+              .innerJoin('album as al2', (j2) => j2.onRef('al2.id', '=', 'sa2.albumId').on('al2.deletedAt', 'is', null))
+              .select(sql`1`.as('x'))
+              .whereRef('sa2.spaceId', '=', 'link.spaceId')
+              .whereRef('aa2.assetId', '=', 'asset.id'),
+          ),
+        ]),
+      )
+      .select(['asset.id as assetId', 'link.spaceId as spaceId'])
+      .distinctOn('asset.id')
+      .orderBy('asset.id')
+      .execute();
+  }
+
   @GenerateSql({ params: [DummyValue.UUID] })
   getSpaceIdsForTimeline(userId: string) {
     return this.db
