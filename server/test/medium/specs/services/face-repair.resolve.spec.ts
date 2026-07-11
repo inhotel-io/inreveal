@@ -368,6 +368,187 @@ describe('FaceRepairService.resolveFaces: destination person gone (M20, E18)', (
   });
 });
 
+// ── M13: entireCluster (whole-cluster move) + exclusivity (E12) ────────────────────────────────────
+
+describe('FaceRepairService.resolveFaces: entireCluster (M13, E12)', () => {
+  it('moves EVERY eligible face of personId — including one never in the flagged snapshot — server-enumerated with no client paging, and drains the person', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    // The scan's suggestion — deliberately NOT the entireCluster destination below, proving the request's
+    // destination wins rather than each face's stored suspectedOwnerId (mirrors the M2 review-gap coverage).
+    const { person: suggested } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: dest } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    const f1 = await seedFace(ctx, user.id, source.id);
+    // A rest-of-cluster face that was never part of any flagged snapshot — entireCluster must still move it,
+    // since it enumerates every ELIGIBLE face of personId, not just the flagged ones.
+    const f2 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: suggested.id }]);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [],
+        stay: [],
+        lock: [],
+        detach: [],
+        entireCluster: { destinationPersonId: dest.id },
+      },
+      user.id,
+    );
+
+    expect(result).toEqual({ moved: 2, declined: 0, locked: 0, detached: 0, skipped: 0 });
+
+    const byId = await personIdsOf([f1, f2]);
+    expect(byId[f1]).toBe(dest.id);
+    expect(byId[f2]).toBe(dest.id);
+
+    // Drained from the console...
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).not.toContain(source.id);
+
+    // ...and the now-fully-drained UNNAMED source is auto-deleted (same cleanup applyRepair's manual move used).
+    const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
+    expect(sourceRow).toBeUndefined();
+  });
+
+  it('rejects entireCluster combined with a non-empty moveToPerson bucket, and commits nothing', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: dest } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await expect(
+      sut.resolveFaces(
+        {
+          personId: source.id,
+          moveToPerson: [{ destinationPersonId: ownerA.id, faceIds: [f1] }],
+          stay: [],
+          lock: [],
+          detach: [],
+          entireCluster: { destinationPersonId: dest.id },
+        },
+        user.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+
+  it('rejects entireCluster combined with a non-empty stay, lock, or detach bucket, and commits nothing', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: dest } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    for (const bucket of ['stay', 'lock', 'detach'] as const) {
+      const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+      const f1 = await seedFace(ctx, user.id, source.id);
+      await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+      await expect(
+        sut.resolveFaces(
+          {
+            personId: source.id,
+            moveToPerson: [],
+            stay: bucket === 'stay' ? [f1] : [],
+            lock: bucket === 'lock' ? [f1] : [],
+            detach: bucket === 'detach' ? [f1] : [],
+            entireCluster: { destinationPersonId: dest.id },
+          },
+          user.id,
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      const byId = await personIdsOf([f1]);
+      expect(byId[f1]).toBe(source.id);
+      const latest = await scanRepo.getLatestScan();
+      const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+      expect(snapshotPersonIds).toContain(source.id);
+    }
+  });
+});
+
+describe('FaceRepairService.resolveFaces: entireCluster cross-owner destination rejected (M13, E11)', () => {
+  it('throws BadRequestException when entireCluster.destinationPersonId is owned by a DIFFERENT user, and commits nothing', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { user: otherUser } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: strangerPerson } = await ctx.newPerson({ ownerId: otherUser.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await expect(
+      sut.resolveFaces(
+        {
+          personId: source.id,
+          moveToPerson: [],
+          stay: [],
+          lock: [],
+          detach: [],
+          entireCluster: { destinationPersonId: strangerPerson.id },
+        },
+        user.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: entireCluster destination person gone (M13, E18)', () => {
+  it('throws BadRequestException when entireCluster.destinationPersonId no longer exists, and commits nothing', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    // A destination that was deleted/merged since the scan ran — never existed under this id.
+    const goneId = '22222222-2222-4222-8222-222222222222';
+
+    await expect(
+      sut.resolveFaces(
+        {
+          personId: source.id,
+          moveToPerson: [],
+          stay: [],
+          lock: [],
+          detach: [],
+          entireCluster: { destinationPersonId: goneId },
+        },
+        user.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+});
+
 // ── M17 / M18: owner-scoped people endpoints for the move-to-chosen-person picker ───────────────────
 
 describe('FaceRepairService.searchOwnerPeople (M17, owner-scope)', () => {

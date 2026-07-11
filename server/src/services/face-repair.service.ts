@@ -689,21 +689,23 @@ export class FaceRepairService extends BaseService {
   // replaces the 2-state `apply` for a single reviewed person. Slice 2 wires the `stay` (soft-decline) bucket
   // on top of Slice 1's move-to-owner path; Slice 3 wires `lock` (durable, owner-agnostic confirm) on the same
   // raw-snapshot membership check; Slice 5 wires `detach` ("Not a face" — unassign + strip the identity link)
-  // on the same raw-snapshot membership check.
+  // on the same raw-snapshot membership check; Slice 6 wires `entireCluster` (server-enumerated whole-cluster
+  // move, mutually exclusive with the per-face buckets) — the old `apply` endpoint is retired in a later slice.
   async resolveFaces(input: FaceRepairResolveRequest, resolvedBy: string): Promise<FaceRepairResolveResponse> {
-    const { personId, moveToPerson, stay, lock, detach } = input;
+    const { personId, moveToPerson, stay, lock, detach, entireCluster } = input;
     const moveFaceIds = moveToPerson.flatMap((group) => group.faceIds);
+
+    // E12/M13: entireCluster (server-enumerated whole-cluster move) is mutually exclusive with every per-face
+    // bucket — combining them is ambiguous (which wins for a face requested both ways?), so reject outright.
+    // Pure input validation, so it runs before the person is ever touched.
+    if (entireCluster && (moveFaceIds.length > 0 || stay.length > 0 || lock.length > 0 || detach.length > 0)) {
+      throw new BadRequestException('entireCluster cannot be combined with per-face resolution buckets');
+    }
 
     // E16/M19: an empty resolve (nothing to move/stay/lock/detach, and no entireCluster) must be rejected
     // outright rather than silently falling through to an unconditional drain — a plain 400, no side effects.
     // Pure input validation, so it runs before the person is ever touched (concurrency guards included).
-    if (
-      moveFaceIds.length === 0 &&
-      stay.length === 0 &&
-      lock.length === 0 &&
-      detach.length === 0 &&
-      !input.entireCluster
-    ) {
+    if (moveFaceIds.length === 0 && stay.length === 0 && lock.length === 0 && detach.length === 0 && !entireCluster) {
       throw new BadRequestException('Resolve request has no faces to act on');
     }
 
@@ -730,13 +732,17 @@ export class FaceRepairService extends BaseService {
     // (deleted/merged since the scan) or cross-owner destination 400s the whole resolve rather than
     // partially committing. The picker only ever lists the cluster owner's own people, but the server
     // independently re-validates: a destination can go stale between scan and resolve, and this also covers
-    // any client that bypasses the picker.
-    if (moveToPerson.length > 0) {
+    // any client that bypasses the picker. Slice 6 (M13) extends the same guard to entireCluster's
+    // destination — it is just another destination the reviewed cluster's faces get routed to.
+    if (moveToPerson.length > 0 || entireCluster) {
       const reviewedPerson = await this.personRepository.getById(personId);
       if (!reviewedPerson) {
         throw new BadRequestException('Reviewed person not found');
       }
       const destinationIds = new Set(moveToPerson.map((group) => group.destinationPersonId));
+      if (entireCluster) {
+        destinationIds.add(entireCluster.destinationPersonId);
+      }
       for (const destinationId of destinationIds) {
         const destination = await this.personRepository.getById(destinationId);
         if (!destination) {
@@ -795,6 +801,17 @@ export class FaceRepairService extends BaseService {
         } else {
           preSkipped++;
         }
+      }
+    }
+
+    // entireCluster (Slice 6, M13/E12): enumerate every eligible face of `personId` server-side — no client
+    // paging — and route each to destinationPersonId. Not gated on the flagged snapshot/`resolvable` set above:
+    // a whole-cluster move also drains rest-of-cluster faces the admin never had individually flagged. This is
+    // exclusive with the per-face buckets (rejected above), so `toRepair` is still empty at this point.
+    if (entireCluster) {
+      const clusterFaceIds = await this.collectClusterFaceIds(personId);
+      for (const assetFaceId of clusterFaceIds) {
+        toRepair.push({ assetFaceId, currentPersonId: personId, suspectedOwnerId: entireCluster.destinationPersonId });
       }
     }
 
