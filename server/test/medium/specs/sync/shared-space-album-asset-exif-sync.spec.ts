@@ -239,3 +239,23 @@ describe('SharedSpaceAlbumAssetExifSync.getUpdates', () => {
     expect(resultMax.map((r: any) => r.assetId)).toContain(asset.id);
   });
 });
+
+describe('SharedSpaceAlbumAssetExifSync — contributions (album_space_asset)', () => {
+  it('getCreates emits the contributed asset exif to a member', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    await ctx.newExif({ assetId: asset.id, make: 'TestCamera' });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const out: any[] = [];
+    for await (const row of sut.getCreates({ nowId: NOW_ID, userId: member.id })) out.push(row);
+    expect(out.some((r: any) => r.assetId === asset.id)).toBe(true);
+  });
+});

@@ -5,6 +5,12 @@ import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
 
+const drain = async (stream: AsyncIterable<any>) => {
+  const out: any[] = [];
+  for await (const row of stream) out.push(row);
+  return out;
+};
+
 // Repo-level tests for SharedSpaceAlbumAssetSync:
 //   - getBackfill: per-album backfill of full asset rows
 //   - getCreates: new album_asset join rows via grant
@@ -267,5 +273,35 @@ describe('SharedSpaceAlbumAssetSync.getUpdates', () => {
 
     // With ack ABOVE the asset's album_asset.updateId → asset must be returned.
     expect(resultMax.map((r: any) => r.id)).toContain(asset.id);
+  });
+});
+
+describe('SharedSpaceAlbumAssetSync — contributions (album_space_asset)', () => {
+  const seed = async (ctx: SyncTestContext) => {
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id }); // owned by someone else
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+    return { owner, member, carol, album, asset, space };
+  };
+
+  it('getCreates emits the contributed asset payload to a member', async () => {
+    const { ctx, sut } = setup();
+    const { member, asset } = await seed(ctx);
+    const rows = await drain(sut.getCreates({ nowId: NOW_ID, userId: member.id }));
+    expect(rows.some((r: any) => r.id === asset.id)).toBe(true);
+  });
+
+  it('getBackfill emits the contributed asset payload for the album', async () => {
+    const { ctx, sut } = setup();
+    const { member, album, asset } = await seed(ctx);
+    const rows = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, member.id));
+    expect(rows.some((r: any) => r.id === asset.id)).toBe(true);
   });
 });
