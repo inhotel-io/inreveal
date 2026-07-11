@@ -410,6 +410,9 @@ order by
 delete from "album_asset"
 where
   "album_asset"."assetId" in ($1)
+delete from "album_space_asset"
+where
+  "album_space_asset"."assetId" in ($1)
 
 -- AlbumRepository.getAssetIds
 select
