@@ -6,6 +6,8 @@ import {
   applyDeclineFilters,
   classifyFlaggedPerson,
   decideReattribution,
+  findOverlappingIds,
+  findUnresolvableIds,
   isSubset,
   tallyReattribution,
 } from 'src/utils/face-repair';
@@ -302,5 +304,42 @@ describe('applyDeclineFilters', () => {
     });
     // face1 dropped (declined); face2 toward NEW owner S keeps the person on the board
     expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
+  });
+});
+
+describe('findOverlappingIds', () => {
+  it('returns [] when every bucket is disjoint', () => {
+    expect(findOverlappingIds([['a', 'b'], ['c'], [], ['d']])).toEqual([]);
+  });
+
+  it('flags an id present in two different buckets (E7)', () => {
+    expect(
+      findOverlappingIds([
+        ['a', 'b'],
+        ['b', 'c'],
+      ]),
+    ).toEqual(['b']);
+  });
+
+  it('flags an id present in three buckets only once', () => {
+    expect(findOverlappingIds([['a'], ['a'], ['a']])).toEqual(['a']);
+  });
+
+  it('does not flag a duplicate id within the SAME bucket', () => {
+    expect(findOverlappingIds([['a', 'a'], ['b']])).toEqual([]);
+  });
+});
+
+describe('findUnresolvableIds', () => {
+  it('returns [] when every id is in the resolvable set', () => {
+    expect(findUnresolvableIds(['a', 'b'], new Set(['a', 'b', 'c']))).toEqual([]);
+  });
+
+  it('returns ids not present in the resolvable set (E15)', () => {
+    expect(findUnresolvableIds(['a', 'x', 'b', 'y'], new Set(['a', 'b']))).toEqual(['x', 'y']);
+  });
+
+  it('returns [] for an empty input', () => {
+    expect(findUnresolvableIds([], new Set(['a']))).toEqual([]);
   });
 });
