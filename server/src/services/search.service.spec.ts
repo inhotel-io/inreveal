@@ -1730,6 +1730,68 @@ describe(SearchService.name, () => {
     });
   });
 
+  describe('H-1: trash / offline params rejected under a shared-space scope', () => {
+    const runners: Array<{ name: string; run: (dto: Record<string, unknown>) => Promise<unknown> }> = [
+      { name: 'searchMetadata', run: (dto) => sut.searchMetadata(authStub.user1, dto) },
+      { name: 'searchRandom', run: (dto) => sut.searchRandom(authStub.user1, dto) },
+      { name: 'searchLargeAssets', run: (dto) => sut.searchLargeAssets(authStub.user1, dto) },
+      { name: 'searchStatistics', run: (dto) => sut.searchStatistics(authStub.user1, dto) },
+      { name: 'searchSmart', run: (dto) => sut.searchSmart(authStub.user1, { query: 'test', ...dto }) },
+    ];
+
+    const trashParams: Array<{ label: string; param: Record<string, unknown>; needsWithDeleted?: boolean }> = [
+      { label: 'withDeleted', param: { withDeleted: true }, needsWithDeleted: true },
+      { label: 'trashedAfter', param: { trashedAfter: new Date('1970-01-01T00:00:00.000Z') } },
+      { label: 'trashedBefore', param: { trashedBefore: new Date('2999-01-01T00:00:00.000Z') } },
+      { label: 'isOffline', param: { isOffline: true } },
+    ];
+
+    const scopes: Array<{ label: string; scope: Record<string, unknown> }> = [
+      { label: 'spaceId', scope: { spaceId: newUuid() } },
+      { label: 'withSharedSpaces', scope: { withSharedSpaces: true } },
+    ];
+
+    const message = 'Trashed and offline assets are not available when searching a shared space';
+
+    for (const runner of runners) {
+      for (const scope of scopes) {
+        for (const tp of trashParams) {
+          // StatisticsSearchDto has no `withDeleted` field (zod strips it); it can only be reached
+          // via the implicit-flip params (trashedAfter/trashedBefore/isOffline), so withDeleted is
+          // not a real code path there.
+          if (runner.name === 'searchStatistics' && tp.needsWithDeleted) {
+            continue;
+          }
+          it(`${runner.name} rejects ${tp.label} with ${scope.label}`, async () => {
+            await expect(runner.run({ ...scope.scope, ...tp.param })).rejects.toThrow(message);
+          });
+        }
+      }
+    }
+
+    it('does not reject a plain space search with no trash params (searchMetadata)', async () => {
+      const spaceId = newUuid();
+      mocks.access.sharedSpace.checkMemberAccess.mockResolvedValue(new Set([spaceId]));
+      mocks.search.searchMetadata.mockResolvedValue({ hasNextPage: false, items: [] });
+
+      await expect(sut.searchMetadata(authStub.user1, { spaceId })).resolves.toBeDefined();
+    });
+
+    it('does not reject withDeleted outside a space scope (searchMetadata)', async () => {
+      mocks.search.searchMetadata.mockResolvedValue({ hasNextPage: false, items: [] });
+
+      await expect(sut.searchMetadata(authStub.user1, { withDeleted: true })).resolves.toBeDefined();
+    });
+
+    it('does not over-block isOffline=false under a space scope (searchMetadata)', async () => {
+      const spaceId = newUuid();
+      mocks.access.sharedSpace.checkMemberAccess.mockResolvedValue(new Set([spaceId]));
+      mocks.search.searchMetadata.mockResolvedValue({ hasNextPage: false, items: [] });
+
+      await expect(sut.searchMetadata(authStub.user1, { spaceId, isOffline: false })).resolves.toBeDefined();
+    });
+  });
+
   describe('getAssetsByCity', () => {
     it('should get assets by city', async () => {
       const asset = AssetFactory.from().build();

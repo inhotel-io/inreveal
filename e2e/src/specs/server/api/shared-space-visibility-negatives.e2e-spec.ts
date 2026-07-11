@@ -712,4 +712,71 @@ describe('shared-space visibility negatives (Slice 11)', () => {
       expect(deletes.some((d) => d.data.albumId === album.id && d.data.assetId === assetA.id)).toBe(true);
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // H-1 — the DIRECT space arm + withSharedSpaces arm of searchAssetBuilder. A member
+  // (incl. a read-only Viewer) must not reach another member's TRASHED asset by flipping
+  // withDeleted / trashedAfter / trashedBefore / isOffline (each of which flips withDeleted
+  // in the builder, database.ts:676). The service rejects the whole class with 400 (mirrors
+  // timeBucketChecks); the caller-proof SQL gate is proven in the search-space-trash-gate
+  // medium spec. The album arm is covered above (H1); this covers the two non-album space arms.
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('POST /search/{metadata,statistics,random} — trash/offline params rejected under a space scope (H-1)', () => {
+    const bodyEndpoints = ['/search/metadata', '/search/statistics', '/search/random'] as const;
+    const trashParams: Array<[string, Record<string, unknown>, boolean]> = [
+      ['withDeleted', { withDeleted: true }, true],
+      ['trashedAfter', { trashedAfter: '1970-01-01T00:00:00.000Z' }, false],
+      ['trashedBefore', { trashedBefore: '2999-01-01T00:00:00.000Z' }, false],
+      ['isOffline', { isOffline: true }, false],
+    ];
+
+    for (const endpoint of bodyEndpoints) {
+      for (const [label, param, needsWithDeleted] of trashParams) {
+        // StatisticsSearchDto has no withDeleted field (zod strips it) — only reachable via implicit-flip params.
+        if (endpoint === '/search/statistics' && needsWithDeleted) {
+          continue;
+        }
+        it(`${endpoint} rejects ${label} with spaceId → 400`, async () => {
+          const spaceId = await freshSpaceWithViewer(`h1-${basename(endpoint)}-${label}`);
+          const { status } = await request(app)
+            .post(endpoint)
+            .set('Authorization', `Bearer ${member.accessToken}`)
+            .send({ spaceId, ...param });
+          expect(status).toBe(400);
+        });
+      }
+    }
+
+    it('POST /search/metadata rejects withDeleted with withSharedSpaces → 400', async () => {
+      await freshSpaceWithViewer('h1-metadata-withSharedSpaces');
+      const { status } = await request(app)
+        .post('/search/metadata')
+        .set('Authorization', `Bearer ${member.accessToken}`)
+        .send({ withSharedSpaces: true, withDeleted: true });
+      expect(status).toBe(400);
+    });
+
+    it('POST /search/smart rejects withDeleted with spaceId → 400 (guard fires before the ML-enabled check)', async () => {
+      const spaceId = await freshSpaceWithViewer('h1-smart-spaceId');
+      const { status, body } = await request(app)
+        .post('/search/smart')
+        .set('Authorization', `Bearer ${member.accessToken}`)
+        .send({ query: 'noodle', spaceId, withDeleted: true });
+      expect(status).toBe(400);
+      // Distinguish the trash-scope guard from a "smart search not enabled" 400.
+      expect(String(body.message)).toContain('shared space');
+    });
+
+    it('positive control: a plain spaceId search (no trash params) returns the live direct asset, not the trashed sibling', async () => {
+      const spaceId = await freshSpaceWithViewer('h1-space-positive');
+      const liveAsset = await utils.createAsset(owner.accessToken);
+      const trashedAsset = await utils.createAsset(owner.accessToken);
+      await utils.addSpaceAssets(owner.accessToken, spaceId, [liveAsset.id, trashedAsset.id]);
+      await utils.deleteAssets(owner.accessToken, [trashedAsset.id]);
+
+      const ids = await searchAlbumIds({ spaceId });
+      expect(ids).toContain(liveAsset.id);
+      expect(ids).not.toContain(trashedAsset.id);
+    });
+  });
 });
