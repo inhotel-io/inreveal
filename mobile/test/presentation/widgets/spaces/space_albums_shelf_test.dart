@@ -151,6 +151,29 @@ void main() {
     expect(called, isTrue);
   });
 
+  testWidgets('regression: album cover tile is HitTestBehavior.opaque so cover taps register', (tester) async {
+    // The cover art is an image (Thumbnail) whose render object does NOT
+    // participate in hit-testing. With the GestureDetector's default
+    // `deferToChild` behavior, a tap on the cover — where users actually tap an
+    // album — found no hittable child and was a dead no-op (only the small name
+    // Text below was tappable), so tapping an album "did nothing". The fix sets
+    // `HitTestBehavior.opaque` so the whole tile is tappable. This asserts that
+    // behavior on the tile's own GestureDetector; it fails on the default
+    // (null) behavior.
+    final albums = [_album(id: 'a1', name: 'Hawaii')];
+
+    await tester.pumpConsumerWidget(
+      SpaceAlbumsShelf(spaceId: spaceId, canEdit: false, onLinkTap: () {}, onAlbumTap: (_) {}),
+      overrides: _overrides(spaceId: spaceId, albums: albums),
+    );
+
+    final gesture = tester.widget<GestureDetector>(
+      find.descendant(of: find.byKey(const Key('space-album-tile-a1')), matching: find.byType(GestureDetector)),
+    );
+    expect(gesture.onTap, isNotNull);
+    expect(gesture.behavior, HitTestBehavior.opaque);
+  });
+
   testWidgets('album WITH thumbnailAssetId resolving to asset shows Thumbnail cover (not placeholder icon)', (
     tester,
   ) async {

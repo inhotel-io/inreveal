@@ -316,6 +316,11 @@ class _AlbumCard extends ConsumerWidget {
     final isOffTimeline = !album.showInTimeline;
 
     return GestureDetector(
+      // The cover art is an image (Thumbnail) / placeholder that does not
+      // register itself in hit-testing, so the default deferToChild behavior
+      // makes a tap on the cover — where users actually tap — a no-op (only the
+      // name Text was hittable). Opaque makes the whole card tappable.
+      behavior: HitTestBehavior.opaque,
       onTap: () => onTap(album.id),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

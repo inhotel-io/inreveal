@@ -209,6 +209,10 @@ class _SpaceAlbumCoverTile extends ConsumerWidget {
     final isOffTimeline = !album.showInTimeline;
 
     return GestureDetector(
+      // Cover art is an image/placeholder that does not register in hit-testing,
+      // so the default deferToChild behavior would ignore taps on the cover
+      // (only the name Text below was hittable). Opaque makes the whole tile tap.
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: SizedBox(
         width: _kTileSize,
@@ -256,6 +260,9 @@ class _LinkTile extends StatelessWidget {
     final cs = context.colorScheme;
 
     return GestureDetector(
+      // Match the cover tiles: the dashed box / icon do not fully register in
+      // hit-testing, so make the whole Link tile tappable.
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: SizedBox(
         width: _kTileSize,

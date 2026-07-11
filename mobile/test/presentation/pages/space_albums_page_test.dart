@@ -382,4 +382,26 @@ void main() {
     expect(find.byKey(const Key('space-album-card-hawaii1')), findsNothing);
     expect(find.byKey(const Key('space-album-card-nz1')), findsNothing);
   });
+
+  testWidgets('regression: album card is HitTestBehavior.opaque so cover taps register', (tester) async {
+    // The card cover is an image whose render object does NOT participate in
+    // hit-testing, so with the GestureDetector's default `deferToChild`
+    // behavior a tap on the cover — where users tap an album — was a dead no-op
+    // (only the small name Text was hittable), so opening an album "did
+    // nothing". The fix sets `HitTestBehavior.opaque`; this fails on the
+    // default (null) behavior.
+    await tester.pumpConsumerWidget(
+      const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
+      overrides: _overrides(
+        spaceId: spaceId,
+        albums: [_album(id: 'a1', name: 'Hawaii')],
+      ),
+    );
+
+    final gesture = tester.widget<GestureDetector>(
+      find.descendant(of: find.byKey(const Key('space-album-card-a1')), matching: find.byType(GestureDetector)),
+    );
+    expect(gesture.onTap, isNotNull);
+    expect(gesture.behavior, HitTestBehavior.opaque);
+  });
 }
