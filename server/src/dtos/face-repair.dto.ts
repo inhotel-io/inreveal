@@ -256,3 +256,40 @@ export const FaceRepairResolveResponseSchema = z
   .meta({ id: 'FaceRepairResolveResponseDto' });
 export class FaceRepairResolveResponseDto extends createZodDto(FaceRepairResolveResponseSchema) {}
 export type FaceRepairResolveResponse = z.infer<typeof FaceRepairResolveResponseSchema>;
+
+// Slice 4 (owner-scoped people for the move-to-chosen-person picker): Immich's own `getAllPeople` /
+// `createPerson` are self-scoped to the calling user, so the admin move-to-person picker needs dedicated,
+// admin-only, owner-scoped helpers instead — always the reviewed CLUSTER's owner (`:ownerId` in the route),
+// never the admin's own people.
+export const FaceRepairOwnerPeopleQuerySchema = z
+  .object({
+    query: z.string().optional(),
+    page: z.coerce.number().int().min(0).default(0),
+  })
+  .meta({ id: 'FaceRepairOwnerPeopleQueryDto' });
+export class FaceRepairOwnerPeopleQueryDto extends createZodDto(FaceRepairOwnerPeopleQuerySchema) {}
+
+const FaceRepairOwnerPersonRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  faceCount: z.number(),
+  thumbnailFaceId: z.string().nullable(),
+});
+export const FaceRepairOwnerPeopleResponseSchema = z
+  .object({
+    people: z.array(FaceRepairOwnerPersonRowSchema),
+    total: z.number(),
+    hasMore: z.boolean(),
+  })
+  .meta({ id: 'FaceRepairOwnerPeopleResponseDto' });
+export class FaceRepairOwnerPeopleResponseDto extends createZodDto(FaceRepairOwnerPeopleResponseSchema) {}
+
+export const FaceRepairOwnerPersonCreateRequestSchema = z
+  .object({ name: z.string().min(1) })
+  .meta({ id: 'FaceRepairOwnerPersonCreateRequestDto' });
+export class FaceRepairOwnerPersonCreateRequestDto extends createZodDto(FaceRepairOwnerPersonCreateRequestSchema) {}
+
+export const FaceRepairOwnerPersonCreatedResponseSchema = z
+  .object({ id: z.string() })
+  .meta({ id: 'FaceRepairOwnerPersonCreatedResponseDto' });
+export class FaceRepairOwnerPersonCreatedResponseDto extends createZodDto(FaceRepairOwnerPersonCreatedResponseSchema) {}
