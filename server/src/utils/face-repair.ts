@@ -1,6 +1,10 @@
 export interface DeclineMaps {
   declinedFaceOwners: Map<string, Set<string>>; // assetFaceId -> Set<suspectedOwnerId>
   dismissedPersons: Map<string, Set<string>>; // personId -> Set<suspectedOwnerId>
+  // Slice 3 (Confirm/lock): faces locked via the Face Cleanup console. Owner-agnostic — unlike
+  // declinedFaceOwners, a locked face is dropped no matter which owner is suspected. Optional so existing
+  // callers/tests that only care about declines don't need to thread an empty set through.
+  lockedFaceIds?: Set<string>;
 }
 
 export interface ReattributionNeighbor {
@@ -129,13 +133,19 @@ interface FlaggedLike {
   suspectedOwnerId: string;
 }
 
-// Mutates flaggedByPerson in place. (1) face-level: drop any face declined toward its current suspected owner.
-// (2) person-level: if the person was dismissed and its REMAINING suspected-owner set is a subset of the stored
-// fingerprint (no new evidence), drop the whole person. Face-level runs first so a face re-flagged toward a new
-// owner keeps its person surfaced.
+// Mutates flaggedByPerson in place. (0) lock: drop any face locked via "Confirm/lock", regardless of its
+// suspected owner (owner-agnostic — the age-gap childhood-photo case). (1) face-level: drop any face declined
+// toward its current suspected owner. (2) person-level: if the person was dismissed and its REMAINING
+// suspected-owner set is a subset of the stored fingerprint (no new evidence), drop the whole person. Lock and
+// face-level both run before person-level so a face re-flagged toward a new owner keeps its person surfaced.
 export function applyDeclineFilters<T extends FlaggedLike>(flaggedByPerson: Map<string, T[]>, maps: DeclineMaps): void {
+  const lockedFaceIds = maps?.lockedFaceIds ?? new Set<string>();
   for (const [personId, faces] of flaggedByPerson) {
-    const kept = faces.filter((face) => !maps.declinedFaceOwners.get(face.assetFaceId)?.has(face.suspectedOwnerId));
+    const kept = faces.filter(
+      (face) =>
+        !lockedFaceIds.has(face.assetFaceId) &&
+        !maps.declinedFaceOwners.get(face.assetFaceId)?.has(face.suspectedOwnerId),
+    );
     const fingerprint = maps.dismissedPersons.get(personId);
     if (fingerprint && kept.length > 0) {
       const currentOwners = new Set(kept.map((face) => face.suspectedOwnerId));
