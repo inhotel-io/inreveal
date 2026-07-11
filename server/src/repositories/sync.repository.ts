@@ -1737,7 +1737,11 @@ class SharedSpaceAlbumToAssetSync extends BaseSync {
 class SharedSpaceAlbumAssetSync extends BaseSync {
   @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID, DummyValue.UUID], stream: true })
   getBackfill(options: SyncBackfillOptions, albumId: string, userId: string) {
-    return this.backfillQuery('album_asset', options)
+    const { nowId, beforeUpdateId, afterUpdateId } = options;
+
+    // album_asset arm — the album owner's own membership (unchanged).
+    const albumAssetArm = this.db
+      .selectFrom('album_asset')
       .innerJoin('asset', 'asset.id', 'album_asset.assetId')
       .innerJoin('album', 'album.id', 'album_asset.albumId')
       .select(columns.syncAlbumAsset)
@@ -1753,15 +1757,46 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
       .select('album_asset.updateId')
       .where('album_asset.albumId', '=', albumId)
       .where('album.deletedAt', 'is', null)
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+      .where('album_asset.updateId', '<', nowId)
+      .where('album_asset.updateId', '<=', beforeUpdateId)
+      .$if(!!afterUpdateId, (qb) => qb.where('album_asset.updateId', '>', afterUpdateId!))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    // album_space_asset arm — cross-owner contributions (#764). Mechanical mirror keyed on updateId.
+    const contributedArm = this.db
+      .selectFrom('album_space_asset')
+      .innerJoin('asset', 'asset.id', 'album_space_asset.assetId')
+      .innerJoin('album', 'album.id', 'album_space_asset.albumId')
+      .select(columns.syncAlbumAsset)
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
+      .select('album_space_asset.updateId')
+      .where('album_space_asset.albumId', '=', albumId)
+      .where('album.deletedAt', 'is', null)
+      .where('album_space_asset.updateId', '<', nowId)
+      .where('album_space_asset.updateId', '<=', beforeUpdateId)
+      .$if(!!afterUpdateId, (qb) => qb.where('album_space_asset.updateId', '>', afterUpdateId!))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    return albumAssetArm.union(contributedArm).orderBy('updateId', 'asc').stream();
   }
 
   @GenerateSql({ params: [dummyQueryOptions, { updateId: DummyValue.UUID }], stream: true })
   getUpdates(options: SyncQueryOptions, albumToAssetAck: SyncAck) {
-    const userId = options.userId;
-    return this.upsertQuery('asset', options)
+    const { userId, nowId, ack } = options;
+
+    // album_asset arm — the album owner's own membership (unchanged).
+    const albumAssetArm = this.db
+      .selectFrom('asset')
       .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .select(columns.syncAlbumAsset)
       .select((eb) =>
         eb
@@ -1773,20 +1808,18 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
           .as('isFavorite'),
       )
       .select('asset.updateId')
+      .where('asset.updateId', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('asset.updateId', '>', ack!.updateId))
       .where('album_asset.updateId', '<=', albumToAssetAck.updateId) // Ensure we only send updates for assets that the client already knows about
-      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
-  }
+      .where((eb) => spaceVisibilityGate(eb));
 
-  @GenerateSql({ params: [dummyQueryOptions], stream: true })
-  getCreates(options: SyncQueryOptions) {
-    const userId = options.userId;
-    return this.upsertQuery('album_asset', options)
-      .select('album_asset.updateId')
-      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+    // album_space_asset arm — cross-owner contributions (#764). Mechanical mirror keyed on updateId.
+    const contributedArm = this.db
+      .selectFrom('asset')
+      .innerJoin('album_space_asset', 'album_space_asset.assetId', 'asset.id')
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_space_asset.albumId')
       .select(columns.syncAlbumAsset)
       .select((eb) =>
         eb
@@ -1797,11 +1830,66 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
           .end()
           .as('isFavorite'),
       )
+      .select('asset.updateId')
+      .where('asset.updateId', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('asset.updateId', '>', ack!.updateId))
+      .where('album_space_asset.updateId', '<=', albumToAssetAck.updateId)
+      .where('shared_space_album_user.userId', '=', userId)
+      .where('album_space_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    return albumAssetArm.union(contributedArm).orderBy('updateId', 'asc').stream();
+  }
+
+  @GenerateSql({ params: [dummyQueryOptions], stream: true })
+  getCreates(options: SyncQueryOptions) {
+    const { userId, nowId, ack } = options;
+
+    // album_asset arm — the album owner's own membership (unchanged).
+    const albumAssetArm = this.db
+      .selectFrom('album_asset')
+      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
+      .select(columns.syncAlbumAsset)
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
+      .select('album_asset.updateId')
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+      .where('album_asset.updateId', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('album_asset.updateId', '>', ack!.updateId))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    // album_space_asset arm — cross-owner contributions (#764). Mechanical mirror keyed on updateId.
+    const contributedArm = this.db
+      .selectFrom('album_space_asset')
+      .innerJoin('asset', 'asset.id', 'album_space_asset.assetId')
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_space_asset.albumId')
+      .select(columns.syncAlbumAsset)
+      .select((eb) =>
+        eb
+          .case()
+          .when('asset.ownerId', '=', userId)
+          .then(eb.ref('asset.isFavorite'))
+          .else(eb.val(false))
+          .end()
+          .as('isFavorite'),
+      )
+      .select('album_space_asset.updateId')
+      .where('shared_space_album_user.userId', '=', userId)
+      .where('album_space_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where('album_space_asset.updateId', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('album_space_asset.updateId', '>', ack!.updateId))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    return albumAssetArm.union(contributedArm).orderBy('updateId', 'asc').stream();
   }
 }
 
@@ -1811,7 +1899,11 @@ class SharedSpaceAlbumAssetSync extends BaseSync {
 class SharedSpaceAlbumAssetExifSync extends BaseSync {
   @GenerateSql({ params: [dummyBackfillOptions, DummyValue.UUID], stream: true })
   getBackfill(options: SyncBackfillOptions, albumId: string) {
-    return this.backfillQuery('album_asset', options)
+    const { nowId, beforeUpdateId, afterUpdateId } = options;
+
+    // album_asset arm — the album owner's own membership (unchanged).
+    const albumAssetArm = this.db
+      .selectFrom('album_asset')
       .innerJoin('asset_exif', 'asset_exif.assetId', 'album_asset.assetId')
       .innerJoin('album', 'album.id', 'album_asset.albumId')
       .innerJoin('asset', 'asset.id', 'album_asset.assetId')
@@ -1819,39 +1911,99 @@ class SharedSpaceAlbumAssetExifSync extends BaseSync {
       .select('album_asset.updateId')
       .where('album_asset.albumId', '=', albumId)
       .where('album.deletedAt', 'is', null)
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+      .where('album_asset.updateId', '<', nowId)
+      .where('album_asset.updateId', '<=', beforeUpdateId)
+      .$if(!!afterUpdateId, (qb) => qb.where('album_asset.updateId', '>', afterUpdateId!))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    // album_space_asset arm — cross-owner contributions (#764). Mechanical mirror keyed on updateId.
+    const contributedArm = this.db
+      .selectFrom('album_space_asset')
+      .innerJoin('asset_exif', 'asset_exif.assetId', 'album_space_asset.assetId')
+      .innerJoin('album', 'album.id', 'album_space_asset.albumId')
+      .innerJoin('asset', 'asset.id', 'album_space_asset.assetId')
+      .select(columns.syncAssetExif)
+      .select('album_space_asset.updateId')
+      .where('album_space_asset.albumId', '=', albumId)
+      .where('album.deletedAt', 'is', null)
+      .where('album_space_asset.updateId', '<', nowId)
+      .where('album_space_asset.updateId', '<=', beforeUpdateId)
+      .$if(!!afterUpdateId, (qb) => qb.where('album_space_asset.updateId', '>', afterUpdateId!))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    return albumAssetArm.union(contributedArm).orderBy('updateId', 'asc').stream();
   }
 
   @GenerateSql({ params: [dummyQueryOptions, { updateId: DummyValue.UUID }], stream: true })
   getUpdates(options: SyncQueryOptions, albumToAssetAck: SyncAck) {
-    const userId = options.userId;
-    return this.upsertQuery('asset_exif', options)
+    const { userId, nowId, ack } = options;
+
+    // album_asset arm — the album owner's own membership (unchanged).
+    const albumAssetArm = this.db
+      .selectFrom('asset_exif')
       .innerJoin('album_asset', 'album_asset.assetId', 'asset_exif.assetId')
       .innerJoin('asset', 'asset.id', 'asset_exif.assetId')
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .select(columns.syncAssetExif)
       .select('asset_exif.updateId')
+      .where('asset_exif.updateId', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('asset_exif.updateId', '>', ack!.updateId))
       .where('album_asset.updateId', '<=', albumToAssetAck.updateId) // Ensure we only send exif updates for assets that the client already knows about
-      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+      .where((eb) => spaceVisibilityGate(eb));
+
+    // album_space_asset arm — cross-owner contributions (#764). Mechanical mirror keyed on updateId.
+    const contributedArm = this.db
+      .selectFrom('asset_exif')
+      .innerJoin('album_space_asset', 'album_space_asset.assetId', 'asset_exif.assetId')
+      .innerJoin('asset', 'asset.id', 'asset_exif.assetId')
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_space_asset.albumId')
+      .select(columns.syncAssetExif)
+      .select('asset_exif.updateId')
+      .where('asset_exif.updateId', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('asset_exif.updateId', '>', ack!.updateId))
+      .where('album_space_asset.updateId', '<=', albumToAssetAck.updateId)
+      .where('shared_space_album_user.userId', '=', userId)
+      .where('album_space_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    return albumAssetArm.union(contributedArm).orderBy('updateId', 'asc').stream();
   }
 
   @GenerateSql({ params: [dummyQueryOptions], stream: true })
   getCreates(options: SyncQueryOptions) {
-    const userId = options.userId;
-    return this.upsertQuery('album_asset', options)
-      .select('album_asset.updateId')
+    const { userId, nowId, ack } = options;
+
+    // album_asset arm — the album owner's own membership (unchanged).
+    const albumAssetArm = this.db
+      .selectFrom('album_asset')
       .innerJoin('asset_exif', 'asset_exif.assetId', 'album_asset.assetId')
       .innerJoin('asset', 'asset.id', 'album_asset.assetId')
-      .select(columns.syncAssetExif)
       .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_asset.albumId')
+      .select(columns.syncAssetExif)
+      .select('album_asset.updateId')
       .where('shared_space_album_user.userId', '=', userId)
       .where('album_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
-      .where((eb) => spaceVisibilityGate(eb))
-      .stream();
+      .where('album_asset.updateId', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('album_asset.updateId', '>', ack!.updateId))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    // album_space_asset arm — cross-owner contributions (#764). Mechanical mirror keyed on updateId.
+    const contributedArm = this.db
+      .selectFrom('album_space_asset')
+      .innerJoin('asset_exif', 'asset_exif.assetId', 'album_space_asset.assetId')
+      .innerJoin('asset', 'asset.id', 'album_space_asset.assetId')
+      .innerJoin('shared_space_album_user', 'shared_space_album_user.albumId', 'album_space_asset.albumId')
+      .select(columns.syncAssetExif)
+      .select('album_space_asset.updateId')
+      .where('shared_space_album_user.userId', '=', userId)
+      .where('album_space_asset.albumId', 'in', (eb) => accessibleSpaceAlbums(eb, userId))
+      .where('album_space_asset.updateId', '<', nowId)
+      .$if(!!ack, (qb) => qb.where('album_space_asset.updateId', '>', ack!.updateId))
+      .where((eb) => spaceVisibilityGate(eb));
+
+    return albumAssetArm.union(contributedArm).orderBy('updateId', 'asc').stream();
   }
 }
 
