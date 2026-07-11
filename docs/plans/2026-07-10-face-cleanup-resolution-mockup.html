@@ -788,6 +788,12 @@
       function closePicker() {
         document.getElementById('modalBg').classList.remove('open');
       }
+      function escHtml(s) {
+        return s.replace(
+          /[&<>"']/g,
+          (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+        );
+      }
       function renderPeople() {
         const q = document.getElementById('psearch').value.toLowerCase();
         const list = PEOPLE.filter((p) => p.n.toLowerCase().includes(q) || p.s.toLowerCase().includes(q));
@@ -797,8 +803,10 @@
       <img src="https://i.pravatar.cc/120?img=${p.img}"/><div><div class="pn">${p.n}</div><div class="ps ${p.mono ? 'mono' : ''}">${p.s}</div></div></div>`,
           )
           .join('');
-        if (q)
-          html += `<div class="prow create" onclick="chosePerson('${q.replace(/'/g, '')} (new)')"><div class="plus">+</div><div>Create new person “${q}”</div></div>`;
+        if (q) {
+          const qEsc = escHtml(q);
+          html += `<div class="prow create" onclick="chosePerson('${qEsc} (new)')"><div class="plus">+</div><div>Create new person “${qEsc}”</div></div>`;
+        }
         document.getElementById('people').innerHTML =
           html || '<div class="prow"><div class="ps">No matches</div></div>';
       }
