@@ -253,6 +253,208 @@ describe('FaceRepairService.resolveFaces: move-to-owner (M1, M3, E14)', () => {
   });
 });
 
+// ── M2 / M12 / M20: move to a CHOSEN person (owner-scoped, Slice 4) ─────────────────────────────────
+
+describe('FaceRepairService.resolveFaces: move to a chosen person (M2, state 2)', () => {
+  it('applies TWO distinct chosen-person destinations in one resolve — the REQUEST destination wins over the stored suspected owner', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    // The scan's suggestion (stored suspectedOwnerId) — deliberately NOT either chosen destination below, so
+    // this proves the request's destinationPersonId wins rather than the snapshot's suspectedOwnerId (the
+    // Slice-1 review gap: M1/M3 only ever exercised destination === suspectedOwnerId).
+    const { person: suggested } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: chosenA } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+    const { person: chosenB } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const f2 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: f1, suspectedOwnerId: suggested.id },
+      { assetFaceId: f2, suspectedOwnerId: suggested.id },
+    ]);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [
+          { destinationPersonId: chosenA.id, faceIds: [f1] },
+          { destinationPersonId: chosenB.id, faceIds: [f2] },
+        ],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+
+    expect(result).toEqual({ moved: 2, declined: 0, locked: 0, detached: 0, skipped: 0 });
+
+    const byId = await personIdsOf([f1, f2]);
+    expect(byId[f1]).toBe(chosenA.id);
+    expect(byId[f2]).toBe(chosenB.id);
+    expect(byId[f1]).not.toBe(suggested.id);
+    expect(byId[f2]).not.toBe(suggested.id);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: cross-owner destination rejected (M12, E11)', () => {
+  it('throws BadRequestException when destinationPersonId is owned by a DIFFERENT user, and commits nothing', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { user: otherUser } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: strangerPerson } = await ctx.newPerson({ ownerId: otherUser.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await expect(
+      sut.resolveFaces(
+        {
+          personId: source.id,
+          moveToPerson: [{ destinationPersonId: strangerPerson.id, faceIds: [f1] }],
+          stay: [],
+          lock: [],
+          detach: [],
+        },
+        user.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    // Nothing committed: face untouched, person still in the scan snapshot.
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: destination person gone (M20, E18)', () => {
+  it('throws BadRequestException when destinationPersonId no longer exists (deleted/merged since the scan), and commits nothing', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    // A destination that was deleted/merged since the scan ran — never existed under this id.
+    const goneId = '11111111-1111-4111-8111-111111111111';
+
+    await expect(
+      sut.resolveFaces(
+        {
+          personId: source.id,
+          moveToPerson: [{ destinationPersonId: goneId, faceIds: [f1] }],
+          stay: [],
+          lock: [],
+          detach: [],
+        },
+        user.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    // Nothing committed — the resolve is rolled back whole.
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+});
+
+// ── M17 / M18: owner-scoped people endpoints for the move-to-chosen-person picker ───────────────────
+
+describe('FaceRepairService.searchOwnerPeople (M17, owner-scope)', () => {
+  it("returns only that owner's people (named + unnamed clusters), filtered by query, and never another owner's", async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { user: otherUser } = await ctx.newUser();
+    const { person: alice } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+    const { person: albert } = await ctx.newPerson({ ownerId: user.id, name: 'Albert' });
+    const { person: unnamed } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: strangerPerson } = await ctx.newPerson({ ownerId: otherUser.id, name: 'Alice' });
+
+    const all = await sut.searchOwnerPeople(user.id, { page: 0 });
+    const allIds = all.people.map((p) => p.id);
+    expect(allIds).toEqual(expect.arrayContaining([alice.id, albert.id, unnamed.id]));
+    expect(allIds).not.toContain(strangerPerson.id);
+    expect(all.total).toBe(3);
+
+    const filtered = await sut.searchOwnerPeople(user.id, { query: 'al', page: 0 });
+    const filteredIds = filtered.people.map((p) => p.id);
+    expect(filteredIds).toEqual(expect.arrayContaining([alice.id, albert.id]));
+    expect(filteredIds).not.toContain(unnamed.id);
+    expect(filteredIds).not.toContain(strangerPerson.id);
+  });
+
+  it('paginates results', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    for (let index = 0; index < 25; index++) {
+      await ctx.newPerson({ ownerId: user.id, name: `Person ${index}` });
+    }
+
+    const firstPage = await sut.searchOwnerPeople(user.id, { page: 0 });
+    expect(firstPage.people.length).toBeLessThanOrEqual(20);
+    expect(firstPage.hasMore).toBe(true);
+    expect(firstPage.total).toBe(25);
+
+    const secondPage = await sut.searchOwnerPeople(user.id, { page: 1 });
+    expect(secondPage.people.length).toBeGreaterThan(0);
+
+    const firstIds = new Set(firstPage.people.map((p) => p.id));
+    for (const person of secondPage.people) {
+      expect(firstIds.has(person.id)).toBe(false);
+    }
+  });
+});
+
+describe('FaceRepairService.createOwnerPerson (M18, state 2)', () => {
+  it('creates a person under ownerId whose id is immediately usable as a moveToPerson destination', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const created = await sut.createOwnerPerson(user.id, 'New Person');
+    expect(created.id).toBeDefined();
+
+    const row = await db
+      .selectFrom('person')
+      .select(['id', 'ownerId', 'name'])
+      .where('id', '=', created.id)
+      .executeTakeFirst();
+    expect(row?.ownerId).toBe(user.id);
+    expect(row?.name).toBe('New Person');
+
+    // Immediately usable as a moveToPerson destination for a face owned by the same user (passes the
+    // Step-2 cross-owner guard).
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: created.id, faceIds: [f1] }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+    expect(result.moved).toBe(1);
+
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(created.id);
+  });
+});
+
 // ── M15: zero-override — the default owner group covers every flagged face (E10) ───────────────────
 
 describe('FaceRepairService.resolveFaces: zero-override all-to-owner (M15, E10)', () => {
