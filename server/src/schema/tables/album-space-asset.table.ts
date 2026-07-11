@@ -1,5 +1,13 @@
-import { CreateDateColumn, ForeignKeyColumn, Generated, Index, Table, Timestamp } from '@immich/sql-tools';
-import { CreateIdColumn } from 'src/decorators';
+import {
+  CreateDateColumn,
+  ForeignKeyColumn,
+  Generated,
+  Index,
+  Table,
+  Timestamp,
+  UpdateDateColumn,
+} from '@immich/sql-tools';
+import { CreateIdColumn, UpdatedAtTrigger, UpdateIdColumn } from 'src/decorators';
 import { AlbumTable } from 'src/schema/tables/album.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
@@ -9,9 +17,15 @@ import { UserTable } from 'src/schema/tables/user.table';
 // space-linked album (#764). Deliberately NOT `album_asset` — it must never become a permanent
 // `checkAlbumAccess` grant for the album owner. Visibility is re-derived from live space membership
 // + the live album↔space link on every read (see spaceContributedAssetExists). The adder's OWN
-// photos take the ordinary `album_asset` path instead. `createId` is the sync watermark for the
-// per-album asset backfill (Slice 5); no update trigger — rows are immutable once created.
+// photos take the ordinary `album_asset` path instead.
+//
+// Sync watermarks mirror `shared_space_asset` (spec §4): `createId` anchors the per-album backfill,
+// `updateId` (bumped by the `album_space_asset_updatedAt` BEFORE-UPDATE trigger) drives incremental
+// upserts. The row's DATA columns are immutable; `updateId` is bumped only on a deliberate
+// `updatedAt` touch (visibility restore — see SharedSpaceRepository.emitAlbumAssetVisibilityRestore)
+// so a contribution re-appears on devices that purged it when its asset was un-hidden.
 @Table({ name: 'album_space_asset' })
+@UpdatedAtTrigger('album_space_asset_updatedAt')
 @Index({ name: 'album_space_asset_spaceId_idx', columns: ['spaceId'] })
 export class AlbumSpaceAssetTable {
   // index: false — albumId is the leading column of the composite PK, so a separate FK index is redundant.
@@ -44,4 +58,10 @@ export class AlbumSpaceAssetTable {
 
   @CreateDateColumn()
   createdAt!: Generated<Timestamp>;
+
+  @UpdateIdColumn({ index: true })
+  updateId!: Generated<string>;
+
+  @UpdateDateColumn()
+  updatedAt!: Generated<Timestamp>;
 }
