@@ -800,6 +800,131 @@
         ]
       }
     },
+    "/admin/face-repair/owner/{ownerId}/people": {
+      "get": {
+        "operationId": "getFaceRepairOwnerPeople",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "default": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "query",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairOwnerPeopleResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Search an owner's people for the move-to-chosen-person picker",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "createFaceRepairOwnerPerson",
+        "parameters": [
+          {
+            "name": "ownerId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaceRepairOwnerPersonCreateRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairOwnerPersonCreatedResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Create a person under an owner for the move-to-chosen-person picker",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
     "/admin/face-repair/resolve": {
       "post": {
         "operationId": "resolveFaces",
@@ -25749,6 +25874,72 @@
             "type": "array"
           }
         },
+        "type": "object"
+      },
+      "FaceRepairOwnerPeopleResponseDto": {
+        "properties": {
+          "hasMore": {
+            "type": "boolean"
+          },
+          "people": {
+            "items": {
+              "properties": {
+                "faceCount": {
+                  "type": "number"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "thumbnailFaceId": {
+                  "nullable": true,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "faceCount",
+                "thumbnailFaceId"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "hasMore",
+          "people",
+          "total"
+        ],
+        "type": "object"
+      },
+      "FaceRepairOwnerPersonCreateRequestDto": {
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "FaceRepairOwnerPersonCreatedResponseDto": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
         "type": "object"
       },
       "FaceRepairPersonFacesDto": {

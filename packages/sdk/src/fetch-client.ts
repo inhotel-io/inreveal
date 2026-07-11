@@ -170,6 +170,22 @@ export type FaceRepairDeclineRequestDto = {
 export type FaceRepairDeclineCreatedDto = {
     created: number;
 };
+export type FaceRepairOwnerPeopleResponseDto = {
+    hasMore: boolean;
+    people: {
+        faceCount: number;
+        id: string;
+        name: string;
+        thumbnailFaceId: string | null;
+    }[];
+    total: number;
+};
+export type FaceRepairOwnerPersonCreateRequestDto = {
+    name: string;
+};
+export type FaceRepairOwnerPersonCreatedResponseDto = {
+    id: string;
+};
 export type FaceRepairResolveRequestDto = {
     detach?: string[];
     entireCluster?: {
@@ -4565,6 +4581,40 @@ export function declineFaceRepair({ faceRepairDeclineRequestDto }: {
         ...opts,
         method: "POST",
         body: faceRepairDeclineRequestDto
+    })));
+}
+/**
+ * Search an owner's people for the move-to-chosen-person picker
+ */
+export function getFaceRepairOwnerPeople({ ownerId, page, query }: {
+    ownerId: string;
+    page?: number;
+    query?: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairOwnerPeopleResponseDto;
+    }>(`/admin/face-repair/owner/${encodeURIComponent(ownerId)}/people${QS.query(QS.explode({
+        page,
+        query
+    }))}`, {
+        ...opts
+    }));
+}
+/**
+ * Create a person under an owner for the move-to-chosen-person picker
+ */
+export function createFaceRepairOwnerPerson({ ownerId, faceRepairOwnerPersonCreateRequestDto }: {
+    ownerId: string;
+    faceRepairOwnerPersonCreateRequestDto: FaceRepairOwnerPersonCreateRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairOwnerPersonCreatedResponseDto;
+    }>(`/admin/face-repair/owner/${encodeURIComponent(ownerId)}/people`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairOwnerPersonCreateRequestDto
     })));
 }
 /**

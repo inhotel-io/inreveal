@@ -426,4 +426,81 @@ describe(FaceRepairAdminController.name, () => {
       expect(service.removeDeclines).not.toHaveBeenCalled();
     });
   });
+
+  describe('GET /admin/face-repair/owner/:ownerId/people', () => {
+    const ownerId = '00000000-0000-4000-a000-000000000040';
+
+    it('should be an authenticated route (C3)', async () => {
+      await request(ctx.getHttpServer()).get(`/admin/face-repair/owner/${ownerId}/people`);
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates to service.searchOwnerPeople with query + page', async () => {
+      service.searchOwnerPeople.mockResolvedValue({ people: [], total: 0, hasMore: false });
+      const { status, body } = await request(ctx.getHttpServer())
+        .get(`/admin/face-repair/owner/${ownerId}/people`)
+        .query({ query: 'al', page: 1 })
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(service.searchOwnerPeople).toHaveBeenCalledWith(
+        ownerId,
+        expect.objectContaining({ query: 'al', page: 1 }),
+      );
+      expect(body).toEqual({ people: [], total: 0, hasMore: false });
+    });
+
+    it('defaults page to 0 when omitted', async () => {
+      service.searchOwnerPeople.mockResolvedValue({ people: [], total: 0, hasMore: false });
+      await request(ctx.getHttpServer())
+        .get(`/admin/face-repair/owner/${ownerId}/people`)
+        .set('Authorization', 'Bearer token');
+      expect(service.searchOwnerPeople).toHaveBeenCalledWith(ownerId, expect.objectContaining({ page: 0 }));
+    });
+
+    it('rejects a non-uuid ownerId with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/owner/not-a-uuid/people')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(400);
+      expect(service.searchOwnerPeople).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /admin/face-repair/owner/:ownerId/people', () => {
+    const ownerId = '00000000-0000-4000-a000-000000000041';
+
+    it('should be an authenticated route (C3)', async () => {
+      await request(ctx.getHttpServer()).post(`/admin/face-repair/owner/${ownerId}/people`);
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates to service.createOwnerPerson with the given name', async () => {
+      service.createOwnerPerson.mockResolvedValue({ id: '00000000-0000-4000-a000-000000000042' });
+      const { status, body } = await request(ctx.getHttpServer())
+        .post(`/admin/face-repair/owner/${ownerId}/people`)
+        .set('Authorization', 'Bearer token')
+        .send({ name: 'New Person' });
+      expect(status).toBe(201);
+      expect(service.createOwnerPerson).toHaveBeenCalledWith(ownerId, 'New Person');
+      expect(body).toEqual({ id: '00000000-0000-4000-a000-000000000042' });
+    });
+
+    it('rejects an empty name with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/admin/face-repair/owner/${ownerId}/people`)
+        .set('Authorization', 'Bearer token')
+        .send({ name: '' });
+      expect(status).toBe(400);
+      expect(service.createOwnerPerson).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-uuid ownerId with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/owner/not-a-uuid/people')
+        .set('Authorization', 'Bearer token')
+        .send({ name: 'New Person' });
+      expect(status).toBe(400);
+      expect(service.createOwnerPerson).not.toHaveBeenCalled();
+    });
+  });
 });

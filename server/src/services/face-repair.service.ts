@@ -3,6 +3,7 @@ import { OnJob } from 'src/decorators';
 import { FaceRepairResolveRequest, FaceRepairResolveResponse, FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
 import { ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
+import { OwnerPersonRow } from 'src/repositories/face-repair.repository';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
 import { JobOf } from 'src/types';
@@ -43,6 +44,8 @@ const DEFAULT_VOTE_MARGIN = 2;
 const DEFAULT_MAX_ATTRIBUTION_DISTANCE = 0.35;
 const DEFAULT_MAX_FLAGGED_FRACTION = 0.5;
 export const DEFAULT_LARGE_CLUSTER_THRESHOLD = 50;
+// Page size for the move-to-chosen-person picker's owner-scoped people search (admin-scale, not tunable).
+const OWNER_PEOPLE_PAGE_SIZE = 20;
 
 const SCAN_PROGRESS_INTERVAL = 200;
 // Keyset page size for the eligible-face scan (B6: paged, not a single streaming cursor) and the number of
@@ -722,6 +725,29 @@ export class FaceRepairService extends BaseService {
       throw new BadRequestException('A face cannot be resolved more than one way in the same request');
     }
 
+    // Slice 4 (M12/M20, E11/E18): every requested moveToPerson destination must exist and be owned by the
+    // SAME user as the reviewed cluster — validated before any snapshot read or mutation, so a stale
+    // (deleted/merged since the scan) or cross-owner destination 400s the whole resolve rather than
+    // partially committing. The picker only ever lists the cluster owner's own people, but the server
+    // independently re-validates: a destination can go stale between scan and resolve, and this also covers
+    // any client that bypasses the picker.
+    if (moveToPerson.length > 0) {
+      const reviewedPerson = await this.personRepository.getById(personId);
+      if (!reviewedPerson) {
+        throw new BadRequestException('Reviewed person not found');
+      }
+      const destinationIds = new Set(moveToPerson.map((group) => group.destinationPersonId));
+      for (const destinationId of destinationIds) {
+        const destination = await this.personRepository.getById(destinationId);
+        if (!destination) {
+          throw new BadRequestException(`Destination person ${destinationId} does not exist`);
+        }
+        if (destination.ownerId !== reviewedPerson.ownerId) {
+          throw new BadRequestException(`Destination person ${destinationId} is owned by a different user`);
+        }
+      }
+    }
+
     // Read this person's stored flagged-face snapshot (per-face suspected owner) and apply the same
     // declined-since-scan filtering the review page and applyRepair both use.
     const stored = latest
@@ -827,6 +853,28 @@ export class FaceRepairService extends BaseService {
       detached: 0,
       skipped: result.skipped + preSkipped,
     };
+  }
+
+  // Owner-scoped people search for the move-to-chosen-person picker (Slice 4, M17). `ownerId` comes from the
+  // route (the reviewed cluster's owner), never from the calling admin — Immich's own `getAllPeople` is
+  // self-scoped and cannot serve an admin browsing another user's people.
+  async searchOwnerPeople(
+    ownerId: string,
+    options: { query?: string; page: number },
+  ): Promise<{ people: OwnerPersonRow[]; total: number; hasMore: boolean }> {
+    return this.faceRepairRepository.searchOwnerPeople(ownerId, {
+      query: options.query,
+      page: options.page,
+      size: OWNER_PEOPLE_PAGE_SIZE,
+    });
+  }
+
+  // Create a new person under `ownerId` for the move-to-chosen-person picker's "Create new person" row
+  // (Slice 4, M18). The returned id is immediately usable as a `moveToPerson[].destinationPersonId` for a
+  // face owned by the same user — it passes the cross-owner guard above by construction.
+  async createOwnerPerson(ownerId: string, name: string): Promise<{ id: string }> {
+    const person = await this.personRepository.create({ ownerId, name });
+    return { id: person.id };
   }
 
   private async collectClusterFaceIds(personId: string): Promise<string[]> {

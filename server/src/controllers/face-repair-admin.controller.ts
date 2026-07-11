@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
@@ -9,9 +9,13 @@ import {
   FaceRepairClusterFacesResponseDto,
   FaceRepairDeclineCreatedDto,
   FaceRepairDeclineListDto,
-  FaceRepairDeclineRemoveRequestDto,
   FaceRepairDeclineRemovedDto,
+  FaceRepairDeclineRemoveRequestDto,
   FaceRepairDeclineRequestDto,
+  FaceRepairOwnerPeopleQueryDto,
+  FaceRepairOwnerPeopleResponseDto,
+  FaceRepairOwnerPersonCreatedResponseDto,
+  FaceRepairOwnerPersonCreateRequestDto,
   FaceRepairPersonFacesDto,
   FaceRepairRequestDto,
   FaceRepairResolveRequestDto,
@@ -123,5 +127,31 @@ export class FaceRepairAdminController {
   @Endpoint({ summary: 'Remove face-repair declines', history: new HistoryBuilder().added('v1') })
   removeFaceRepairDeclines(@Body() dto: FaceRepairDeclineRemoveRequestDto): Promise<FaceRepairDeclineRemovedDto> {
     return this.service.removeDeclines(dto) as Promise<FaceRepairDeclineRemovedDto>;
+  }
+
+  @Get('owner/:ownerId/people')
+  @Authenticated({ admin: true })
+  @Endpoint({
+    summary: "Search an owner's people for the move-to-chosen-person picker",
+    history: new HistoryBuilder().added('v1'),
+  })
+  getFaceRepairOwnerPeople(
+    @Param('ownerId', new ParseUUIDPipe({ version: '4' })) ownerId: string,
+    @Query() dto: FaceRepairOwnerPeopleQueryDto,
+  ): Promise<FaceRepairOwnerPeopleResponseDto> {
+    return this.service.searchOwnerPeople(ownerId, dto) as Promise<FaceRepairOwnerPeopleResponseDto>;
+  }
+
+  @Post('owner/:ownerId/people')
+  @Authenticated({ admin: true })
+  @Endpoint({
+    summary: 'Create a person under an owner for the move-to-chosen-person picker',
+    history: new HistoryBuilder().added('v1'),
+  })
+  createFaceRepairOwnerPerson(
+    @Param('ownerId', new ParseUUIDPipe({ version: '4' })) ownerId: string,
+    @Body() dto: FaceRepairOwnerPersonCreateRequestDto,
+  ): Promise<FaceRepairOwnerPersonCreatedResponseDto> {
+    return this.service.createOwnerPerson(ownerId, dto.name) as Promise<FaceRepairOwnerPersonCreatedResponseDto>;
   }
 }
