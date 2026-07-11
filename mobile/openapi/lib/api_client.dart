@@ -393,12 +393,6 @@ class ApiClient {
           return ExifResponseDto.fromJson(value);
         case 'FaceDto':
           return FaceDto.fromJson(value);
-        case 'FaceRepairApplyRequestDto':
-          return FaceRepairApplyRequestDto.fromJson(value);
-        case 'FaceRepairApplyRequestDtoManualMove':
-          return FaceRepairApplyRequestDtoManualMove.fromJson(value);
-        case 'FaceRepairApplyResponseDto':
-          return FaceRepairApplyResponseDto.fromJson(value);
         case 'FaceRepairClusterFacesRequestDto':
           return FaceRepairClusterFacesRequestDto.fromJson(value);
         case 'FaceRepairClusterFacesResponseDto':
@@ -421,12 +415,36 @@ class ApiClient {
           return FaceRepairDeclineRequestDto.fromJson(value);
         case 'FaceRepairDeclineRequestDtoPersonsInner':
           return FaceRepairDeclineRequestDtoPersonsInner.fromJson(value);
+        case 'FaceRepairOwnerPeopleResponseDto':
+          return FaceRepairOwnerPeopleResponseDto.fromJson(value);
+        case 'FaceRepairOwnerPeopleResponseDtoPeopleInner':
+          return FaceRepairOwnerPeopleResponseDtoPeopleInner.fromJson(value);
+        case 'FaceRepairOwnerPersonCreateRequestDto':
+          return FaceRepairOwnerPersonCreateRequestDto.fromJson(value);
+        case 'FaceRepairOwnerPersonCreatedResponseDto':
+          return FaceRepairOwnerPersonCreatedResponseDto.fromJson(value);
         case 'FaceRepairPersonFacesDto':
           return FaceRepairPersonFacesDto.fromJson(value);
         case 'FaceRepairPersonFacesDtoFlaggedFacesInner':
           return FaceRepairPersonFacesDtoFlaggedFacesInner.fromJson(value);
         case 'FaceRepairRequestDto':
           return FaceRepairRequestDto.fromJson(value);
+        case 'FaceRepairResolutionsListDto':
+          return FaceRepairResolutionsListDto.fromJson(value);
+        case 'FaceRepairResolutionsListDtoResolutionsInner':
+          return FaceRepairResolutionsListDtoResolutionsInner.fromJson(value);
+        case 'FaceRepairResolutionsRemoveRequestDto':
+          return FaceRepairResolutionsRemoveRequestDto.fromJson(value);
+        case 'FaceRepairResolutionsRemovedDto':
+          return FaceRepairResolutionsRemovedDto.fromJson(value);
+        case 'FaceRepairResolveRequestDto':
+          return FaceRepairResolveRequestDto.fromJson(value);
+        case 'FaceRepairResolveRequestDtoEntireCluster':
+          return FaceRepairResolveRequestDtoEntireCluster.fromJson(value);
+        case 'FaceRepairResolveRequestDtoMoveToPersonInner':
+          return FaceRepairResolveRequestDtoMoveToPersonInner.fromJson(value);
+        case 'FaceRepairResolveResponseDto':
+          return FaceRepairResolveResponseDto.fromJson(value);
         case 'FaceRepairResponseDto':
           return FaceRepairResponseDto.fromJson(value);
         case 'FaceRepairResponseDtoExecuted':
