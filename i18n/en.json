@@ -202,6 +202,7 @@
     "face_cleanup_review_bulk_clear": "Clear",
     "face_cleanup_review_bulk_owner": "→ Owner",
     "face_cleanup_review_bulk_selected_suffix": "selected",
+    "face_cleanup_review_bulk_stay": "Keep here",
     "face_cleanup_review_cancel": "Cancel",
     "face_cleanup_review_grid_hint": "Tap to select · Shift-tap for a range",
     "face_cleanup_review_grid_title": "Faces flagged on {name}",

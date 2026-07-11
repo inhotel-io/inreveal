@@ -683,11 +683,9 @@ export class FaceRepairService extends BaseService {
   }
 
   // Slice 1 of the full per-face resolution (docs/plans/2026-07-10-face-cleanup-full-resolution-design.md):
-  // replaces the 2-state `apply` for a single reviewed person. Only the move-to-owner path is wired this
-  // slice — `stay`/`lock`/`detach` are validated (disjoint buckets + snapshot membership) but always empty
-  // until Slices 2/3/5 land; `resolvedBy` is threaded through now (unused here) so those slices' controller
-  // wiring never needs to change (C2).
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // replaces the 2-state `apply` for a single reviewed person. Slice 2 wires the `stay` (soft-decline) bucket
+  // on top of Slice 1's move-to-owner path; `lock`/`detach` are validated (disjoint buckets + snapshot
+  // membership) but still always empty until Slices 3/5 land.
   async resolveFaces(input: FaceRepairResolveRequest, resolvedBy: string): Promise<FaceRepairResolveResponse> {
     const { personId, moveToPerson, stay, lock, detach } = input;
     const moveFaceIds = moveToPerson.flatMap((group) => group.faceIds);
@@ -716,8 +714,8 @@ export class FaceRepairService extends BaseService {
     }
 
     // E7: a face may resolve only one way in a single request. moveToPerson's groups flatten to one bucket;
-    // stay/lock/detach are always [] this slice, so this is a no-op until Slices 2/3/5 populate them — but the
-    // check is already in place so those slices don't need to revisit it.
+    // `stay` is real from this slice on, `lock`/`detach` are still always [] until Slices 3/5 populate them —
+    // the check already covers all four buckets so those slices don't need to revisit it.
     const overlapping = findOverlappingIds([moveFaceIds, stay, lock, detach]);
     if (overlapping.length > 0) {
       throw new BadRequestException('A face cannot be resolved more than one way in the same request');
@@ -728,6 +726,13 @@ export class FaceRepairService extends BaseService {
     const stored = latest
       ? await this.faceRepairScanRepository.getScanFlaggedFacesForPersons(latest.id, [personId])
       : [];
+    // Raw snapshot membership (E15/M14) — a face that was genuinely never flagged for this person has no
+    // suspected owner and no keep/lock/detach meaning, and is rejected. This is intentionally NOT
+    // decline-filtered: a face already declined toward its stored suspected owner is still a legitimate
+    // re-stay target (M22/E20, idempotent via `createDeclines`'s ON CONFLICT DO NOTHING) — only moveToPerson
+    // needs the decline-filtered view below, to silently skip rather than re-apply a declined pairing.
+    const flaggedIds = new Set(stored.map((face) => face.assetFaceId));
+    const snapshotOwnerByFace = new Map(stored.map((face) => [face.assetFaceId, face.suspectedOwnerId]));
     const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
       personIds: [personId],
       assetFaceIds: stored.map((face) => face.assetFaceId),
@@ -745,9 +750,8 @@ export class FaceRepairService extends BaseService {
     applyDeclineFilters(byPerson, declineMaps);
     const resolvable = new Set((byPerson.get(personId) ?? []).map((face) => face.assetFaceId));
 
-    // stay/lock/detach (E15) act only on this stored, still-flagged snapshot — a rest-of-cluster face has no
-    // suspected owner and no keep/lock/detach meaning. Always [] this slice, so a no-op today.
-    const unresolvable = findUnresolvableIds([...stay, ...lock, ...detach], resolvable);
+    // stay/lock/detach (E15) act only on this person's raw flagged snapshot.
+    const unresolvable = findUnresolvableIds([...stay, ...lock, ...detach], flaggedIds);
     if (unresolvable.length > 0) {
       throw new BadRequestException('Some faces are not in the flagged snapshot for this person');
     }
@@ -775,6 +779,21 @@ export class FaceRepairService extends BaseService {
       perPerson: [],
     });
 
+    // Soft-stay (M4, state 3): write a durable decline against each stayed face's OWN stored suspected owner
+    // (never one shared owner — a mixed cluster can point faces at different owners). `createDeclines` is
+    // idempotent via its `(assetFaceId, suspectedOwnerId)` ON CONFLICT DO NOTHING, so re-staying an
+    // already-declined pairing is a no-op here (M22/E20) rather than a unique-violation.
+    const declined =
+      stay.length > 0
+        ? await this.faceRepairDeclineRepository.createDeclines({
+            faces: stay.map((assetFaceId) => ({
+              assetFaceId,
+              suspectedOwnerId: snapshotOwnerByFace.get(assetFaceId)!,
+            })),
+            declinedBy: resolvedBy,
+          })
+        : 0;
+
     // Empty-unnamed cleanup, reused from applyRepair's manual-move cleanup (A2): only delete a source with
     // ZERO remaining faces of any kind, and only when it was never named.
     const remaining = await this.faceRepairRepository.countEligibleFaces({ personId });
@@ -789,14 +808,14 @@ export class FaceRepairService extends BaseService {
     }
 
     // Drop-on-any-resolution (C5, E13): unlike applyRepair's `moved > 0` gate, a committed resolve always
-    // drains the person from the console immediately, even when every flagged face was kept/locked (zero
-    // moves, wired in Slices 2/3). moveToPerson destinations only ever gain faces from this call, so there is
-    // no destination to additionally drain this slice.
+    // drains the person from the console immediately, even when every flagged face was kept/stayed (zero
+    // moves) — the M11 stay-only case, with `lock` still to come in Slice 3. moveToPerson destinations only
+    // ever gain faces from this call, so there is no destination to additionally drain this slice.
     await this.faceRepairScanRepository.removePersonsFromLatestScan([personId]);
 
     return {
       moved: result.moved,
-      declined: 0,
+      declined,
       locked: 0,
       detached: 0,
       skipped: result.skipped + preSkipped,

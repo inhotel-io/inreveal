@@ -174,6 +174,10 @@
     vm.applyToSelection('owner');
   };
 
+  const handleBulkStay = () => {
+    vm.applyToSelection('stay');
+  };
+
   const loadRestPage = async () => {
     if (restLoading) {
       return;
@@ -613,6 +617,15 @@
             >
               <span class="size-2 rounded-xs" style="background: {STATE_COLOR.owner}"></span>
               {$t('admin.face_cleanup_review_bulk_owner')}
+            </button>
+            <button
+              type="button"
+              onclick={handleBulkStay}
+              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+              data-testid="bulk-stay"
+            >
+              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.stay}"></span>
+              {$t('admin.face_cleanup_review_bulk_stay')}
             </button>
             <button
               type="button"
