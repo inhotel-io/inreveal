@@ -692,6 +692,19 @@ export class FaceRepairService extends BaseService {
     const { personId, moveToPerson, stay, lock, detach } = input;
     const moveFaceIds = moveToPerson.flatMap((group) => group.faceIds);
 
+    // E16/M19: an empty resolve (nothing to move/stay/lock/detach, and no entireCluster) must be rejected
+    // outright rather than silently falling through to an unconditional drain — a plain 400, no side effects.
+    // Pure input validation, so it runs before the person is ever touched (concurrency guards included).
+    if (
+      moveFaceIds.length === 0 &&
+      stay.length === 0 &&
+      lock.length === 0 &&
+      detach.length === 0 &&
+      !input.entireCluster
+    ) {
+      throw new BadRequestException('Resolve request has no faces to act on');
+    }
+
     // Guards reused verbatim from applyRepair (C5), before any snapshot read.
     if (await this.jobRepository.isActive(QueueName.FacialRecognition)) {
       throw new ConflictException('Refusing to apply while facial recognition is active');
