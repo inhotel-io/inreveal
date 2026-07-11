@@ -313,8 +313,8 @@
           </span>
         {/if}
         <div class="flex items-center gap-2">
-          <Button color="secondary" variant="ghost" size="small" href={Route.faceCleanupDeclined()}>
-            {$t('admin.face_cleanup_view_declined')}
+          <Button color="secondary" variant="ghost" size="small" href={Route.faceCleanupResolutions()}>
+            {$t('admin.face_cleanup_view_resolutions')}
           </Button>
           <div class="mx-0.5 h-5 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true"></div>
           <Button
