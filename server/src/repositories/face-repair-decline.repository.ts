@@ -83,10 +83,11 @@ export class FaceRepairDeclineRepository {
     });
   }
 
-  // Load declines into the two lookup maps the planner consults. The full-library scan loads everything (no
-  // scope). The review/apply read paths, which know exactly which persons and faces are in play, pass a scope so
-  // the load stays bounded as `type='face'` rows accumulate over the instance's lifetime — a scoped read only
-  // fetches the declines that can affect the faces/persons being planned.
+  // Load declines into the two lookup maps the planner consults, plus (Slice 3) every locked face id. The
+  // full-library scan loads everything (no scope). The review/apply read paths, which know exactly which
+  // persons and faces are in play, pass a scope so the load stays bounded as `type='face'` rows accumulate over
+  // the instance's lifetime — a scoped read only fetches the declines/locks that can affect the faces/persons
+  // being planned.
   async getDeclineMaps(scope?: { personIds?: string[]; assetFaceIds?: string[] }): Promise<DeclineMaps> {
     const faceIds = scope?.assetFaceIds ?? [];
     const personIds = scope?.personIds ?? [];
@@ -118,7 +119,19 @@ export class FaceRepairDeclineRepository {
         dismissedPersons.set(row.personId, new Set(row.suspectedOwnerIds as unknown as string[]));
       }
     }
-    return { declinedFaceOwners, dismissedPersons };
+
+    // Locks are keyed by assetFaceId alone (owner-agnostic) — scope them the same bounded way, but on
+    // assetFaceId only (a lock has no suspectedOwnerId/personId scoping concept).
+    const lockRows = await this.db
+      .selectFrom('face_repair_lock')
+      .select(['assetFaceId'])
+      .$if(scope !== undefined, (qb) =>
+        faceIds.length > 0 ? qb.where('assetFaceId', 'in', faceIds) : qb.where(sql<boolean>`false`),
+      )
+      .execute();
+    const lockedFaceIds = new Set(lockRows.map((row) => row.assetFaceId));
+
+    return { declinedFaceOwners, dismissedPersons, lockedFaceIds };
   }
 
   async listDeclines(): Promise<DeclineListRow[]> {

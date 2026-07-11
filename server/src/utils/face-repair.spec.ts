@@ -305,6 +305,18 @@ describe('applyDeclineFilters', () => {
     // face1 dropped (declined); face2 toward NEW owner S keeps the person on the board
     expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
   });
+
+  // U1 (Slice 3): a locked face is dropped for EVERY suspected owner — owner-agnostic, independent of the
+  // decline map — unlike a decline, which only mutes one specific (face, suspectedOwner) pairing.
+  it('drops a locked face regardless of its suspected owner, whether or not it is also declined', () => {
+    const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face1', 'P', 'R'), f('face2', 'P', 'Q')]]]);
+    applyDeclineFilters(flagged, {
+      declinedFaceOwners: new Map(),
+      dismissedPersons: new Map(),
+      lockedFaceIds: new Set(['face1']),
+    });
+    expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
+  });
 });
 
 describe('findOverlappingIds', () => {
