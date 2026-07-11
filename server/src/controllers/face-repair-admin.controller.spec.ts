@@ -290,6 +290,16 @@ describe(FaceRepairAdminController.name, () => {
       expect(ctx.authenticate).toHaveBeenCalled();
     });
 
+    it('is admin-only: a non-admin caller gets 403 (C1)', async () => {
+      ctx.authenticate.mockRejectedValue(new ForbiddenException('Forbidden'));
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson: [] });
+      expect(status).toBe(403);
+      expect(service.resolveFaces).not.toHaveBeenCalled();
+    });
+
     it('delegates to service.resolveFaces with the auth user id as resolvedBy (C2)', async () => {
       ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
       service.resolveFaces.mockResolvedValue({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });
@@ -387,6 +397,15 @@ describe(FaceRepairAdminController.name, () => {
       expect(ctx.authenticate).toHaveBeenCalled();
     });
 
+    it('is admin-only: a non-admin caller gets 403 (C3)', async () => {
+      ctx.authenticate.mockRejectedValue(new ForbiddenException('Forbidden'));
+      const { status } = await request(ctx.getHttpServer())
+        .get(`/admin/face-repair/owner/${ownerId}/people`)
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(403);
+      expect(service.searchOwnerPeople).not.toHaveBeenCalled();
+    });
+
     it('delegates to service.searchOwnerPeople with query + page', async () => {
       service.searchOwnerPeople.mockResolvedValue({ people: [], total: 0, hasMore: false });
       const { status, body } = await request(ctx.getHttpServer())
@@ -424,6 +443,16 @@ describe(FaceRepairAdminController.name, () => {
     it('should be an authenticated route (C3)', async () => {
       await request(ctx.getHttpServer()).post(`/admin/face-repair/owner/${ownerId}/people`);
       expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('is admin-only: a non-admin caller gets 403 (C3)', async () => {
+      ctx.authenticate.mockRejectedValue(new ForbiddenException('Forbidden'));
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/admin/face-repair/owner/${ownerId}/people`)
+        .set('Authorization', 'Bearer token')
+        .send({ name: 'New Person' });
+      expect(status).toBe(403);
+      expect(service.createOwnerPerson).not.toHaveBeenCalled();
     });
 
     it('delegates to service.createOwnerPerson with the given name', async () => {
