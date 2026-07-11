@@ -83,7 +83,7 @@
   let restPage = $state(0);
   let restHasMore = $state(false);
   let restLoading = $state(false);
-  let restSelected = new SvelteSet<string>();
+  const restSelected = new SvelteSet<string>();
   let restMoving = $state(false);
   let showEntireConfirm = $state(false);
 
