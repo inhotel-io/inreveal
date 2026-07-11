@@ -1,5 +1,4 @@
 import {
-  applyFaceRepair,
   getFaceRepairClusterFaces,
   getFaceRepairPersonFaces,
   getLatestScan,
@@ -20,7 +19,6 @@ vi.mock('@immich/sdk', async (importOriginal) => {
     ...actual,
     getLatestScan: vi.fn(),
     resolveFaces: vi.fn(),
-    applyFaceRepair: vi.fn(),
     getFaceRepairPersonFaces: vi.fn(),
     getFaceRepairClusterFaces: vi.fn(),
     getPeopleThumbnailPath: (id: string) => `/people/${id}/thumbnail`,
@@ -169,7 +167,6 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     } as unknown as FaceRepairPersonFacesDto);
     vi.mocked(resolveFaces).mockResolvedValue({ moved: 0, declined: 0, locked: 0, detached: 0, skipped: 0 });
     vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(emptyRest());
-    vi.mocked(applyFaceRepair).mockResolvedValue({ moved: 0, skipped: 0 });
     showModal.mockResolvedValue(undefined);
   });
 
@@ -651,10 +648,10 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     });
   });
 
-  // ---- Rest-of-cluster (legacy `applyFaceRepair` path, retained this slice — see +page.svelte L76-79) ----
+  // ---- Rest-of-cluster (own self-contained flow, now also posting through `resolve` — Slice 6) ----
 
-  describe('Rest-of-cluster legacy apply path', () => {
-    it('Move entire cluster: confirming the modal calls applyFaceRepair with entireCluster: true', async () => {
+  describe('Rest-of-cluster via resolve', () => {
+    it('Move entire cluster: confirming the modal calls resolveFaces with entireCluster', async () => {
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
@@ -664,18 +661,17 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
 
       await waitFor(() => {
-        expect(applyFaceRepair).toHaveBeenCalledWith({
-          faceRepairApplyRequestDto: {
-            approvedPersonIds: [],
-            excludeFaceIds: [],
-            manualMove: { personId: PERSON_ID, destinationPersonId: OWNER_A_ID, entireCluster: true },
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            entireCluster: { destinationPersonId: OWNER_A_ID },
           },
         });
       });
       expect(screen.queryByTestId('entire-confirm')).not.toBeInTheDocument();
     });
 
-    it('Move selected rest faces calls applyFaceRepair with the selected rest faceIds', async () => {
+    it('Move selected rest faces calls resolveFaces with a moveToPerson bucket of the selected rest faceIds', async () => {
       vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
         faces: [{ assetFaceId: 'rest-1' }, { assetFaceId: 'rest-2' }],
         total: 2,
@@ -692,11 +688,10 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('move-rest-selection-btn'));
 
       await waitFor(() => {
-        expect(applyFaceRepair).toHaveBeenCalledWith({
-          faceRepairApplyRequestDto: {
-            approvedPersonIds: [],
-            excludeFaceIds: [],
-            manualMove: { personId: PERSON_ID, destinationPersonId: OWNER_A_ID, faceIds: ['rest-1'] },
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [{ destinationPersonId: OWNER_A_ID, faceIds: ['rest-1'] }],
           },
         });
       });

@@ -3,7 +3,7 @@
   import { Route } from '$lib/route';
   import { createFaceCleanupModel, type FaceCleanupModel } from './face-cleanup.svelte';
   import FaceCleanupTable from './FaceCleanupTable.svelte';
-  import { applyFaceRepair, declineFaceRepair, getLatestScan, triggerScan } from '@immich/sdk';
+  import { declineFaceRepair, getFaceRepairPersonFaces, getLatestScan, resolveFaces, triggerScan } from '@immich/sdk';
   import { Button, Icon, modalManager, toastManager } from '@immich/ui';
   import { mdiClose, mdiRefresh, mdiTune } from '@mdi/js';
   import AdvancedScanModal, { type AdvancedScanParams } from './AdvancedScanModal.svelte';
@@ -200,6 +200,36 @@
     });
   };
 
+  // Bulk-approve migrated off the old single-call `apply` onto a per-person zero-override `resolve`
+  // (Slice 6, web part B): a mixed cluster can flag its faces toward different owners, so each person's
+  // flagged faces are grouped into `moveToPerson` buckets by their own `suspectedOwnerId` before resolving.
+  const resolvePersonToOwners = async (personId: string) => {
+    const result = await getFaceRepairPersonFaces({ personId });
+    const flaggedFaces =
+      (result as unknown as { flaggedFaces: { assetFaceId: string; suspectedOwnerId: string }[] }).flaggedFaces ?? [];
+    if (flaggedFaces.length === 0) {
+      // An empty resolve 400s (E16) — a person can end up with zero flagged faces between scan and apply
+      // (e.g. already resolved elsewhere), so skip it rather than fail the whole batch.
+      return;
+    }
+    // Plain Map: local bookkeeping scoped to this single call, discarded on return.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const moveGroups = new Map<string, string[]>();
+    for (const face of flaggedFaces) {
+      const group = moveGroups.get(face.suspectedOwnerId);
+      if (group) {
+        group.push(face.assetFaceId);
+      } else {
+        moveGroups.set(face.suspectedOwnerId, [face.assetFaceId]);
+      }
+    }
+    const moveToPerson = [...moveGroups.entries()].map(([destinationPersonId, faceIds]) => ({
+      destinationPersonId,
+      faceIds,
+    }));
+    await resolveFaces({ faceRepairResolveRequestDto: { personId, moveToPerson } });
+  };
+
   const handleApply = async () => {
     if (!vm || vm.selectedCount === 0 || applying) {
       return;
@@ -208,7 +238,7 @@
     applyError = null;
     try {
       const approvedPersonIds = [...vm.selected];
-      await applyFaceRepair({ faceRepairApplyRequestDto: { approvedPersonIds } });
+      await Promise.all(approvedPersonIds.map((personId) => resolvePersonToOwners(personId)));
       toastManager.success($t('admin.face_cleanup_apply_success', { values: { count: approvedPersonIds.length } }));
       // Refetch to get updated scan state
       await fetchLatestScan();
