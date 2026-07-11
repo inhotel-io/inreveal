@@ -437,3 +437,202 @@ describe('FaceRepairService.resolveFaces: empty resolve is rejected (M19, E16)',
     expect(sourceRow).toBeDefined();
   });
 });
+
+// ── Slice 2: soft-stay ("Keep here") ────────────────────────────────────────────────────────────────
+
+const declineRowsFor = (assetFaceId: string, suspectedOwnerId: string) =>
+  db
+    .selectFrom('face_repair_decline')
+    .select(['id', 'declinedBy'])
+    .where('type', '=', 'face')
+    .where('assetFaceId', '=', assetFaceId)
+    .where('suspectedOwnerId', '=', suspectedOwnerId)
+    .execute();
+
+describe('FaceRepairService.resolveFaces: soft-stay (M4, E3)', () => {
+  it('writes a face_repair_decline row for the stayed face and its stored suspected owner', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [] },
+      user.id,
+    );
+
+    expect(result).toEqual({ moved: 0, declined: 1, locked: 0, detached: 0, skipped: 0 });
+
+    const rows = await declineRowsFor(f1, ownerA.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].declinedBy).toBe(user.id);
+
+    // The face itself is untouched (soft-stay never moves anything).
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+  });
+
+  it('a re-flagged pairing toward the SAME declined owner is silently skipped by move-to-owner, but a genuinely different owner still moves', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: ownerB } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+    await sut.resolveFaces({ personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [] }, user.id);
+
+    // Simulate a later scan flagging the exact same (face, owner) pairing again (the real scan never would —
+    // it consults declines before flagging — but resolveFaces re-applies the decline filter independently of
+    // how the snapshot got there, so this exercises that seam directly).
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+    const skippedResult = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: ownerA.id, faceIds: [f1] }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+    expect(skippedResult.moved).toBe(0);
+    expect(skippedResult.skipped).toBe(1);
+    const stillOnSource = await personIdsOf([f1]);
+    expect(stillOnSource[f1]).toBe(source.id);
+
+    // A genuinely different owner is a real new problem (E3) and still moves.
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerB.id }]);
+    const movedResult = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: ownerB.id, faceIds: [f1] }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+    expect(movedResult.moved).toBe(1);
+    const movedOwner = await personIdsOf([f1]);
+    expect(movedOwner[f1]).toBe(ownerB.id);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: stay-only drains the person (M11, E13)', () => {
+  it('removes the person from the latest scan snapshot even though nothing moved', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [] },
+      user.id,
+    );
+
+    expect(result.moved).toBe(0);
+
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).not.toContain(source.id);
+
+    // The (unnamed) source is not auto-deleted — the face is still there, just no longer flagged (E13 is
+    // about draining from the CONSOLE, not deleting the person).
+    const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
+    expect(sourceRow).toBeDefined();
+  });
+});
+
+describe('FaceRepairService.resolveFaces: disjoint buckets — stay overlapping move (M7, E7)', () => {
+  it('throws BadRequestException when a face is present in both moveToPerson and stay', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await expect(
+      sut.resolveFaces(
+        {
+          personId: source.id,
+          moveToPerson: [{ destinationPersonId: ownerA.id, faceIds: [f1] }],
+          stay: [f1],
+          lock: [],
+          detach: [],
+        },
+        user.id,
+      ),
+    ).rejects.toThrow(new BadRequestException('A face cannot be resolved more than one way in the same request'));
+
+    // No side effects: untouched, no decline written, person still in the scan snapshot.
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+    const rows = await declineRowsFor(f1, ownerA.id);
+    expect(rows).toHaveLength(0);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: stay on a non-flagged face (M14, E15)', () => {
+  it('throws BadRequestException when a stay id is not in the flagged snapshot for this person', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    // A rest-of-cluster face on the same person that was never part of the flagged snapshot.
+    const notFlagged = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await expect(
+      sut.resolveFaces({ personId: source.id, moveToPerson: [], stay: [notFlagged], lock: [], detach: [] }, user.id),
+    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+
+    const byId = await personIdsOf([notFlagged]);
+    expect(byId[notFlagged]).toBe(source.id);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: re-soft-stay is idempotent (M22, E20)', () => {
+  it('re-staying an already-declined (face, suspectedOwner) succeeds with no error and exactly one decline row', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const first = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [] },
+      user.id,
+    );
+    expect(first.declined).toBe(1);
+
+    // Re-submit the identical stay request (double-click / retry) against the same still-standing snapshot row.
+    const second = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [] },
+      user.id,
+    );
+    expect(second).toEqual({ moved: 0, declined: 0, locked: 0, detached: 0, skipped: 0 });
+
+    const rows = await declineRowsFor(f1, ownerA.id);
+    expect(rows).toHaveLength(1);
+  });
+});
