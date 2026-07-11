@@ -555,6 +555,21 @@ export class SharedSpaceRepository {
           ),
       )
       .execute();
+
+    // #764: contributions live in album_space_asset (not album_asset); tombstone the contributed
+    // (albumId, assetId) pairs too so SharedSpaceAlbumToAssetSync.getDeletes drops a now-Hidden
+    // contribution on member devices. Only space-linked albums are targeted (the album_space_asset FK already
+    // guarantees that, but keep the space-link filter symmetric with the album_asset arm).
+    await this.db
+      .insertInto('album_space_asset_audit')
+      .columns(['albumId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('album_space_asset')
+          .select(['album_space_asset.albumId', 'album_space_asset.assetId'])
+          .where('album_space_asset.assetId', 'in', assetIds),
+      )
+      .execute();
   }
 
   /**
@@ -580,6 +595,14 @@ export class SharedSpaceRepository {
       .set({ updatedAt: sql`clock_timestamp()` })
       .where('assetId', 'in', assetIds)
       .where('albumId', 'in', (eb) => eb.selectFrom('shared_space_album').select('shared_space_album.albumId'))
+      .execute();
+
+    // #764: bump contributed rows too so getUpserts re-emits an un-hidden contribution to devices
+    // that purged it. The album_space_asset_updatedAt BEFORE-UPDATE trigger regenerates updateId.
+    await this.db
+      .updateTable('album_space_asset')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
       .execute();
   }
 

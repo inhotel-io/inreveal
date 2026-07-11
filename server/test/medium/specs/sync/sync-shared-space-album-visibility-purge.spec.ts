@@ -18,6 +18,8 @@ import { v4 } from 'uuid';
 
 let defaultDatabase: Kysely<DB>;
 
+const NOW_ID = 'ffffffff-ffff-7fff-bfff-ffffffffffff';
+
 const setup = async (db?: Kysely<DB>) => {
   const ctx = new SyncTestContext(db || defaultDatabase);
   const { auth, user, session } = await ctx.newSyncAuthUser();
@@ -471,5 +473,64 @@ describe('SharedSpaceAlbumToAssetSync — album visibility purge/restore', () =>
       const upserts = afterAck.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1);
       expect(upserts.map((e) => (e as { data: { assetId: string } }).data.assetId)).not.toContain(asset.id);
     }
+  });
+});
+
+describe('contribution visibility parity (album_space_asset)', () => {
+  it('purge tombstones a contributed asset so getDeletes drops it for members', async () => {
+    const ctx = new SyncTestContext(defaultDatabase);
+    const sharedSpace = ctx.get(SharedSpaceRepository);
+    const toAsset = ctx.get(SyncRepository).sharedSpaceAlbumToAsset;
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    await sharedSpace.emitAlbumAssetVisibilityPurge([asset.id]);
+
+    const audit = await defaultDatabase
+      .selectFrom('album_space_asset_audit')
+      .selectAll()
+      .where('assetId', '=', asset.id)
+      .execute();
+    expect(audit).toHaveLength(1);
+
+    const deletes: any[] = [];
+    for await (const row of toAsset.getDeletes({ nowId: NOW_ID, userId: member.id })) {
+      deletes.push(row);
+    }
+    expect(deletes.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+
+  it('restore bumps the contribution updateId so getUpserts re-emits it', async () => {
+    const ctx = new SyncTestContext(defaultDatabase);
+    const sharedSpace = ctx.get(SharedSpaceRepository);
+    const { user: owner } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const before = await defaultDatabase
+      .selectFrom('album_space_asset')
+      .select('updateId')
+      .where('assetId', '=', asset.id)
+      .executeTakeFirstOrThrow();
+
+    await sharedSpace.emitAlbumAssetVisibilityRestore([asset.id]);
+
+    const after = await defaultDatabase
+      .selectFrom('album_space_asset')
+      .select('updateId')
+      .where('assetId', '=', asset.id)
+      .executeTakeFirstOrThrow();
+    expect(after.updateId).not.toBe(before.updateId);
   });
 });
