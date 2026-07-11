@@ -432,12 +432,18 @@ export class AssetService extends BaseService {
     }
 
     // nextVisibility is non-shareable (Hidden or Locked).
-    if (nextVisibility === AssetVisibility.Locked) {
-      // Strip album membership exactly once — skip assets already Locked (re-lock = no-op).
-      const lockIds = ids.filter((id) => priorVisibilities.get(id) !== AssetVisibility.Locked);
-      if (lockIds.length > 0) {
-        await this.albumRepository.removeAssetsFromAll(lockIds);
-      }
+    // M-1: strip album membership UNCONDITIONALLY on Locked — do NOT gate on prior !== Locked. The old
+    // "lock-once" gate was not retry-convergent: a crash between the visibility UPDATE and this strip left
+    // the album_asset rows in place with no tombstone, and on retry priorVisibilities read Locked so the
+    // strip was skipped FOREVER — a durable on-device leak, plus a silent re-share into the space when the
+    // asset was later unlocked (the surviving album_asset rows were restored). Calling removeAssetsFromAll
+    // on every id is idempotent: an already-stripped asset matches zero rows (a no-op), while a
+    // crashed-first-attempt asset gets its surviving rows deleted and the album delete-audit trigger fires
+    // the tombstone the crashed attempt never sent (delivered via SharedSpaceAlbumToAssetSync.getDeletes).
+    // Keep the empty-batch guard (removeAssetsFromAll has none — an empty `IN ()` is invalid SQL), matching
+    // the purge/restore branches in this method.
+    if (nextVisibility === AssetVisibility.Locked && ids.length > 0) {
+      await this.albumRepository.removeAssetsFromAll(ids);
     }
 
     // Purge: unconditional on every id whenever nextVisibility is non-shareable (M3, retry-convergent).
