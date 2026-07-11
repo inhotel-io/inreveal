@@ -262,3 +262,119 @@ describe('SharedSpaceAlbumToAssetSync.getDeletes', () => {
     expect(result).toHaveLength(0);
   });
 });
+
+const drain = async (stream: AsyncIterable<any>) => {
+  const out: any[] = [];
+  for await (const row of stream) {
+    out.push(row);
+  }
+  return out;
+};
+
+describe('SharedSpaceAlbumToAssetSync — contributions (album_space_asset)', () => {
+  it('getBackfill returns a contributed (albumId, assetId) row for the album', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id }); // owned by someone else
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const rows = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id));
+    expect(rows.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+
+  it('getBackfill excludes a contributed row whose asset is Hidden (visibility gate)', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id, visibility: AssetVisibility.Hidden });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const rows = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id));
+    expect(rows.some((r) => r.assetId === asset.id)).toBe(false);
+  });
+
+  it('getUpserts returns a contributed row for a member with an album grant', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const rows = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
+    expect(rows.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+
+  it('getUpserts does not return a contributed row for a non-member', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: stranger } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const rows = await drain(sut.getUpserts({ nowId: NOW_ID, userId: stranger.id }));
+    expect(rows.some((r) => r.assetId === asset.id)).toBe(false);
+  });
+
+  it('getDeletes emits the contributed edge to every member (incl. asset owner) after removal', async () => {
+    const { ctx, db, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: carol.id, role: SharedSpaceRole.Viewer });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    await db.deleteFrom('album_space_asset').where('albumId', '=', album.id).where('assetId', '=', asset.id).execute();
+
+    for (const viewer of [member.id, carol.id]) {
+      const rows = await drain(sut.getDeletes({ nowId: NOW_ID, userId: viewer }));
+      expect(rows.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+    }
+  });
+
+  it('getUpserts stops returning a contribution after the member leaves S (grant revoked by #752 trigger)', async () => {
+    const { ctx, db, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const before = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
+    expect(before.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+
+    // Member leaves S → shared_space_member_delete_album_audit revokes the album grant (#752), same
+    // path that drops the album (and thus its contribution edges) on device.
+    await db.deleteFrom('shared_space_member').where('spaceId', '=', space.id).where('userId', '=', member.id).execute();
+
+    const after = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
+    expect(after.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);
+  });
+});
