@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import AsyncLock from 'async-lock';
 import { randomUUID } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { unlink } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { SystemConfig } from 'src/config';
@@ -89,14 +87,12 @@ export class MediaService extends BaseService {
       return localPath;
     }
     // S3 mode: upload the locally-generated file
-    const stream = createReadStream(localPath);
+    const stream = this.storageRepository.createPlainReadStream(localPath);
     await writeBackend.put(relativeKey, stream, { contentType });
     // Clean up local temp file
-    try {
-      await unlink(localPath);
-    } catch {
+    await this.storageRepository.unlink(localPath).catch(() => {
       /* ignore */
-    }
+    });
     return relativeKey;
   }
 
@@ -314,7 +310,7 @@ export class MediaService extends BaseService {
       await this.storageRepository.rename(trimTempPath, outputPath);
     } catch (error) {
       this.logger.error(`FFmpeg trim failed for asset ${asset.id}: ${error}`);
-      await unlink(trimTempPath).catch(() => {});
+      await this.storageRepository.unlink(trimTempPath).catch(() => {});
       return JobStatus.Failed;
     }
 
@@ -349,7 +345,7 @@ export class MediaService extends BaseService {
     );
 
     // Clean up temp frame
-    await unlink(framePath).catch(() => {});
+    await this.storageRepository.unlink(framePath).catch(() => {});
 
     // Sync both edited encoded video and edited thumbnail files
     const editedVideoFile: UpsertFileOptions = {
