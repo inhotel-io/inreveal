@@ -118,6 +118,10 @@ export interface FilterState {
   country?: string;
   make?: string;
   model?: string;
+  lensModel?: string;
+  state?: string;
+  albumId?: string;
+  ownerId?: string;
   description?: string;
   originalFileName?: string;
   ocr?: string;
@@ -149,9 +153,11 @@ export function getActiveFilterCount(state: FilterState): number {
 
   return (
     (state.personIds.length > 0 ? 1 : 0) +
-    (state.city ? 1 : 0) +
-    (state.country && !state.city ? 1 : 0) +
-    (state.make ? 1 : 0) +
+    (state.city || state.country || state.state ? 1 : 0) + // location counts once (city/state/country)
+    (state.make ? 1 : 0) + // `model` is intentionally not counted separately from `make`
+    (state.lensModel ? 1 : 0) +
+    (state.albumId ? 1 : 0) +
+    (state.ownerId ? 1 : 0) +
     (state.tagIds.length > 0 ? 1 : 0) +
     (state.rating === undefined ? 0 : 1) +
     (state.mediaType === 'all' ? 0 : 1) +
@@ -330,6 +336,10 @@ export function clearFilters(state: FilterState): FilterState {
     country: undefined,
     make: undefined,
     model: undefined,
+    lensModel: undefined,
+    state: undefined,
+    albumId: undefined,
+    ownerId: undefined,
     description: undefined,
     originalFileName: undefined,
     ocr: undefined,
