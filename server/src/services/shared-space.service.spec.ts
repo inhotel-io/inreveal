@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { FACE_THUMBNAIL_SIZE } from 'src/constants';
 import { AssetEditAction } from 'src/dtos/editing.dto';
+import { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import {
   AlbumUserRole,
@@ -11578,6 +11579,42 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
         expect.not.objectContaining({ timelineSpaceIds: expect.anything() }),
       );
+    });
+
+    it('forwards lensModel to the repository', async () => {
+      const auth = factory.auth();
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, { lensModel: 'RF24-70mm F2.8 L IS USM' } as FilteredMapMarkerDto);
+
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({ lensModel: 'RF24-70mm F2.8 L IS USM' }),
+      );
+    });
+
+    it('forwards state to the repository', async () => {
+      const auth = factory.auth();
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, { state: 'State of Berlin' } as FilteredMapMarkerDto);
+
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({ state: 'State of Berlin' }),
+      );
+    });
+
+    it('forwards ownerId as a contributor filter, NOT as userIds', async () => {
+      const auth = factory.auth();
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+      const ownerId = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
+
+      await sut.getFilteredMapMarkers(auth, { ownerId } as FilteredMapMarkerDto);
+
+      const args = mocks.sharedSpace.getFilteredMapMarkers.mock.calls[0][0];
+      expect(args.ownerId).toBe(ownerId);
+      // The trap: userIds is the OWNER SCOPING predicate. A contributor filter must never be
+      // merged into it, or it widens the result set instead of narrowing it.
+      expect(args.userIds).not.toContain(ownerId);
     });
   });
 

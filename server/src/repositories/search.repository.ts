@@ -45,6 +45,12 @@ export interface SearchAssetIdOptions {
 export interface SearchUserIdOptions {
   libraryId?: string | null;
   userIds?: string[];
+  /**
+   * Contributor filter: a plain AND on asset.ownerId. Deliberately separate from `userIds`, which
+   * is the owner SCOPING predicate (database.ts:677/687/770). Merging a contributor filter into
+   * userIds would widen the result set instead of narrowing it.
+   */
+  ownerId?: string;
 }
 
 export type SearchIdOptions = SearchAssetIdOptions & SearchUserIdOptions;

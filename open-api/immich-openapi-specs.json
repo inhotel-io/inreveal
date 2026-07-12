@@ -6553,6 +6553,15 @@
             }
           },
           {
+            "name": "lensModel",
+            "required": false,
+            "in": "query",
+            "description": "Camera lens model",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "make",
             "required": false,
             "in": "query",
@@ -6589,6 +6598,17 @@
             }
           },
           {
+            "name": "ownerId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by asset owner (contributor). Narrows within the current scope; never widens it.",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
             "name": "personIds",
             "required": false,
             "in": "query",
@@ -6621,6 +6641,15 @@
             "schema": {
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by state/province",
+            "schema": {
               "type": "string"
             }
           },
