@@ -64,6 +64,12 @@ const TimeBucketQueryBaseSchema = z
     model: z.string().optional().describe('Filter by camera model'),
     lensModel: z.string().optional().describe('Filter by camera lens model'),
     state: z.string().optional().describe('Filter by state/province name'),
+    ownerId: z
+      .uuidv4()
+      .optional()
+      .describe(
+        'Filter by asset owner (contributor). Narrows within the current scope and never widens it. This is NOT the same as userId, which selects whose timeline is being composed.',
+      ),
     originalFileName: z
       .string()
       .optional()
