@@ -30,13 +30,13 @@ the map link becomes an ordinary filter URL.
 
 - **Mobile (Flutter).** Web only. Mobile keeps its current asset-viewer behavior.
 - **Smart-search (`q`) on the map.** The map-markers endpoint has no embedding search; see §7.
-- **Filter-panel dropdowns for the new dimensions.** The four new dimensions are settable from the
-  asset viewer, round-trip through the URL, and are removable as chips — but they get no dropdown in
-  the filter panel. Deliberate follow-up. **Note:** this is cheaper than it looks — the suggestion
-  repository _already_ supports both new EXIF fields (`getExifField` is typed
+- **Filter-panel dropdowns for `lens` / `state`.** They are settable from the asset viewer, round-trip
+  through the URL, and are removable as chips — but they get **no dropdown** in the filter panel.
+  Deliberate follow-up. **Note:** this is cheaper than it looks — the suggestion repository _already_
+  supports both fields (`getExifField` is typed
   `'city' | 'state' | 'country' | 'make' | 'model' | 'lensModel'`; `getStates()` at
   `search.repository.ts:1042` and `getCameraLensModels()` at `:1088` already exist). Only the
-  _timeline filter_ side is missing. We are scoping the dropdowns out for size, not for difficulty.
+  _timeline filter_ side is missing. Scoped out for size, not difficulty.
 - **Retiring the `/search` page itself.** This spec removes the asset viewer's _links_ to it.
 - Making `/albums/{id}` a ⌘K "searchable page". `getSearchablePageBasePath` is deliberately left
   alone so ⌘K's behavior does not change.
@@ -62,7 +62,7 @@ albums and the map do the same thing.
 
 It does **not** support `lensModel`, `state`, or an owner filter.
 
-### 4.2 Two traps found while verifying (do not re-derive these)
+### 4.2 Three traps found while verifying (do not re-derive these)
 
 - **`userId` is NOT an owner filter.** `timeline.service.ts:67-91` maps `dto.userId` →
   `userIds = [userId, ...partnerIds]`, and `withTimeBucketAssetFilters:359-373` **OR**s that against
@@ -72,6 +72,13 @@ It does **not** support `lensModel`, `state`, or an owner filter.
   `asset.ownerId = X`.
 - **`albumId` already takes precedence over `isInAlbum`/`isNotInAlbum`** — both are guarded with
   `&& !options.albumId` (`asset.repository.ts:321,326`). The URL codec must never emit both.
+- **The two array filters have OPPOSITE semantics.** `personIds` → `hasPeople`
+  (`database.ts:259-277`) uses `HAVING count(DISTINCT personId) = ids.length` → **ALL / AND**
+  (adding a person _narrows_). `tagIds` → `withAnyTagId` (`database.ts:535-545`) uses
+  `id_ancestor = ANY(tagIds)` → **ANY / OR** (adding a tag _widens_). This is why §5.6 mandates
+  **replace, never append**.
+  _(Note: `TimeBucketQueryBaseSchema` documents `personIds` as "containing **any** of these persons" —
+  the description contradicts the `HAVING` clause. Pre-existing; not fixed here.)_
 
 ### 4.3 No migration is required
 
@@ -108,7 +115,7 @@ predicate, so they narrow _within_ the space without re-scoping to the viewer. �
 | `:1257-1274` | `spaceId` set      | **none** — space membership only ✅                                        |
 | `:1217-1253` | `albumId` set      | in-album AND (owner OR album participant OR timeline space) — the #655 fix |
 
-Access control itself is enforced upstream of all this:
+Access control itself is enforced upstream:
 `requireAccess({ permission: Permission.SharedSpaceRead, ids: [dto.spaceId] })`
 (`search.service.ts:388-389`).
 
@@ -120,8 +127,8 @@ can only ever shrink the result set:
 - In a Space: `spaceId` scope AND `ownerId=<member>` → that member's contributions to that space. ✅
 - On `/photos`: `ownerId = ANY(me, partners)` AND `ownerId=<stranger>` → **empty**. No leak. ✅
 
-This must be tested explicitly (E17–E21) — it is the one place in this spec where a mistake could
-create a data leak rather than merely a broken filter.
+This is the one place in this spec where a mistake could create a **data leak** rather than merely a
+broken filter (E20, E21).
 
 ## 5. Architecture
 
@@ -137,8 +144,7 @@ export interface FilterState {
 }
 ```
 
-`createFilterState()`, `clearFilters()` and `getActiveFilterCount()` must all account for the four
-new fields.
+`createFilterState()`, `clearFilters()` and `getActiveFilterCount()` must all account for all four.
 
 ### 5.2 Shared filter-URL codec — `web/src/lib/utils/filter-url.ts` (new)
 
@@ -148,12 +154,16 @@ into a standalone module so all four surfaces share one implementation.
 
 New URL params:
 
-| Param     | FilterState field | Notes                                                           |
-| --------- | ----------------- | --------------------------------------------------------------- |
-| `lens`    | `lensModel`       |                                                                 |
-| `state`   | `state`           |                                                                 |
-| `albumId` | `albumId`         | Distinct from the existing `album` param, which is `has`/`none` |
-| `owner`   | `ownerId`         |                                                                 |
+| Web URL param | `FilterState` field | Server DTO field | Notes                                                           |
+| ------------- | ------------------- | ---------------- | --------------------------------------------------------------- |
+| `lens`        | `lensModel`         | `lensModel`      |                                                                 |
+| `state`       | `state`             | `state`          |                                                                 |
+| `albumId`     | `albumId`           | `albumId`        | Distinct from the existing `album` param, which is `has`/`none` |
+| `owner`       | `ownerId`           | `ownerId`        | **Web param is `owner`; server field is `ownerId`.** Not a typo |
+
+**Naming note (avoids a real trap):** the web URL param is deliberately short (`owner`) while the
+server DTO field is `ownerId`. There is precedent — web `filename` ⇄ server `originalFileName`. Use
+`owner` in URLs and `ownerId` in API calls; never mix them.
 
 **Codec invariant:** when `albumId` is set, the encoder MUST NOT emit `album=has` / `album=none`
 (mirrors the server precedence in §4.2). The decoder must likewise drop `isInAlbum`/`isNotInAlbum`
@@ -178,6 +188,9 @@ Deliberately **separate** from `getSearchablePageBasePath` (which drives ⌘K an
 Returns `null` for `/favorites`, `/archive`, `/trash`, `/folders`, `/memories`, person pages, tag
 pages, `/search`, and shared links.
 
+**`/map` is a filter target** (E23): an asset viewer opened from the map (`/map/photos/{assetId}`)
+resolves to `kind: 'map'`, and a filter click lands back on `/map` with the filter applied.
+
 ### 5.4 Applying a filter — `applyContextualFilter`
 
 A pure URL builder plus a thin navigating wrapper, so the interesting logic is unit-testable:
@@ -191,19 +204,13 @@ function applyContextualFilter(patch: Partial<FilterState>, opts?: { global?: bo
 
 Semantics:
 
-1. Resolve the target from `page.url`. If `null` → **fall back to `/photos`** (authenticated
-   contexts only). If `authManager.isSharedLink` → the affordance is not rendered at all.
-2. `opts.global === true` forces the `/photos` target regardless of context (the 🔍 "search
-   everywhere" icon).
-3. Decode current filters from the URL, **merge** the patch (set those fields; preserve all others),
-   re-encode.
-4. Drop the `at` param (one-shot grid scroll target — see the existing rationale at
-   `searchable-page-search.ts:122-128`).
+1. Resolve the target from `page.url`. If `null` → **fall back to `/photos`** (authenticated contexts
+   only). If `authManager.isSharedLink` → the affordance is not rendered at all.
+2. `opts.global === true` forces the `/photos` target regardless of context (the 🔍 icon).
+3. Decode current filters from the URL, apply the patch per §5.6, re-encode.
+4. Drop the `at` param (one-shot grid scroll target — see `searchable-page-search.ts:122-128`).
 5. The resulting URL is the target's **base path**, which does not include the `assetId`. So a single
    `goto()` both closes the asset viewer and applies the filter.
-
-**Merge, don't replace.** Clicking the camera on an asset while a `people` filter is active yields
-_both_ filters. Clicking a camera again overwrites only `make`/`model`.
 
 ### 5.5 Per-field filter patches
 
@@ -216,12 +223,33 @@ _both_ filters. Clicking a camera again overwrites only `make`/`model`.
 | Location — country line | `{ country }`                                                                                                 |
 | Date                    | `{ dateAfter: D, dateBefore: D }` where `D` = the asset's **local** date (`YYYY-MM-DD`), not a UTC conversion |
 | Filename                | `{ originalFileName: <basename without extension> }` — surfaces RAW/JPEG pairs and edited variants            |
-| Tag chip                | `{ tagIds: [tag.id] }`                                                                                        |
-| Person chip             | `{ personIds: [getPhotosPersonFilterId(person)] }` (scoped token — `person:` / `space-person:`)               |
+| Tag chip                | `{ tagIds: [tag.id] }` — **replaces** the array (§5.6)                                                        |
+| Person chip             | `{ personIds: [getPhotosPersonFilterId(person)] }` — scoped token; **replaces** the array (§5.6)              |
 | Shared by               | `{ ownerId: asset.ownerId }`                                                                                  |
 | Rating (icon)           | `{ rating: asset.exifInfo.rating }` — server semantics are `>= N`                                             |
-| Description (icon)      | `{ description: <description text> }`                                                                         |
+| Description (icon)      | `{ description: <description text, truncated to 200 chars> }`                                                 |
 | Appears-in album (icon) | `{ albumId: album.id }`                                                                                       |
+
+### 5.6 Merge semantics — set the patched fields, preserve the rest; **arrays replace, never append**
+
+Fields named in the patch are **set**. Every other active filter is **preserved**. So clicking the
+camera while a `people` filter is active yields _both_ filters.
+
+For the two array fields (`personIds`, `tagIds`), the patch **replaces the whole array** — it never
+appends. This is not arbitrary: per §4.2 the server treats the two arrays **oppositely**
+(`personIds` = AND/narrowing, `tagIds` = OR/widening), so "append" would make two adjacent rows of the
+same panel move the result set in **opposite directions**. Replace gives both rows one mental model:
+_"filter by the thing I clicked."_ The filter panel remains the place to build up multi-select.
+
+**P1 — the universal invariant (property test).** For every filterable row, on every surface:
+
+> After clicking a metadata value on asset _A_, the resulting filtered result set **contains _A_**.
+
+Replace satisfies P1 by construction. Append would violate it — OR-ing a second tag can drop _A_ from
+the result set. P1 is a cheap, high-value property test across all row types (§9, Slice 7).
+
+**Idempotency (E24).** Clicking the same value twice produces the identical URL, so the second click
+is a **no-op** — it does not toggle the filter off. Removal is the chip's `✕`.
 
 ## 6. Interaction grammar
 
@@ -231,7 +259,7 @@ _both_ filters. Clicking a camera again overwrites only `make`/`model`.
 | ------------------------------------------------- | ------------------------------------- | --------------------------------------- |
 | Camera `Apple iPhone 17 Pro Max`                  | `make` + `model`                      | 🔍 filter across whole library          |
 | Lens                                              | `lensModel`                           | 🔍                                      |
-| Location `Berlin` / `Germany` / `State of Berlin` | `city` / `country` / `state`          | 🗺️ full map (carries context) · ✏️ edit |
+| Location `Berlin` / `State of Berlin` / `Germany` | `city` / `state` / `country`          | 🗺️ full map (carries context) · ✏️ edit |
 | Date                                              | that day                              | ✏️ edit date                            |
 | Filename                                          | `originalFileName`                    | ⓘ toggle path → folder                  |
 | Tags (chips)                                      | `tagIds`                              | ↗ `/tags/{path}`                        |
@@ -250,7 +278,7 @@ icon):
 
 **The 🔍 "search everywhere" icon** replaces the deprecated `Route.search(...)` link: it applies the
 same patch against `/photos` globally. It is **hidden when the current target is already `/photos`**
-(where it would be a no-op duplicate of the primary click).
+(E5).
 
 ## 7. #767 — map ignores active filters
 
@@ -267,39 +295,398 @@ map-markers endpoint without new server work, which is out of scope. **But the w
 is that the map silently renders the entire library**, giving no hint the filter was dropped.
 
 Slice 5 therefore: carry `q` in the URL, apply every structured filter, and render an explicit notice
-that the smart-search term is not applied on the map. The user sees _why_ the result set differs
-instead of being silently misled. The `q`-on-map gap is filed as a follow-up issue.
+that the smart-search term is not applied on the map. The `q`-on-map gap is filed as a follow-up.
 
 ## 8. Edge-case matrix
 
-| #       | Edge case                                                                                        | Expected behavior                                                                                     |
-| ------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| E1      | `albumId` + `isInAlbum`/`isNotInAlbum` both present                                              | Codec drops `album=has\|none`; `albumId` wins (mirrors server)                                        |
-| E2      | Asset viewer open on a **shared link**                                                           | No filter affordances rendered at all (no `/photos` to reach)                                         |
-| E3      | Filter clicked from `/favorites`, `/archive`, `/trash`, `/folders`, `/memories`, person/tag page | Falls back to `/photos` with the filter applied                                                       |
-| E4      | Person clicked inside a **Space**                                                                | Patch must carry the **scoped** token (`space-person:<uuid>`), not a bare uuid                        |
-| E5      | Already on `/photos`                                                                             | 🔍 "search everywhere" icon is hidden (would duplicate the primary click)                             |
-| E6      | Asset has no EXIF                                                                                | Camera/lens/location rows absent — nothing to click                                                   |
-| E7      | Empty / whitespace-only metadata value (`make: ''`)                                              | Not rendered as clickable; no filter emitted                                                          |
-| E8      | Non-owner viewing an asset in a Space                                                            | Can filter; **cannot** edit (✏️ stays owner-gated as today)                                           |
-| E9      | `albumId` filter param on the album page itself                                                  | Ignored (redundant with the route); the ⚗️ icon is not offered for the album you are already in       |
-| E10     | Location pin (🗺️) from within a Space                                                            | Map URL carries `spaceId` **and** the active filters, centered on the asset                           |
-| E11     | `Route.map` uses a **hash** (`#zoom/lat/lng`), not query params                                  | Pin link must combine hash **and** query string correctly                                             |
-| E12     | Metadata value with URL-special characters (`/`, `+`, `&` in a lens name)                        | Round-trips through `URLSearchParams` intact                                                          |
-| E13     | Very long description used as a filter                                                           | Truncate the emitted `description` param to 200 chars to bound URL length                             |
-| E14     | Date filter across a timezone boundary                                                           | Uses the asset's **local** date as displayed; no UTC re-bucketing                                     |
-| E15     | Rating filter                                                                                    | Server is `>= N`; chip label must read "≥ N stars", not "N stars"                                     |
-| E16     | Existing `/photos` + `/spaces` behavior                                                          | **Unchanged** — codec extraction is a pure refactor (regression-tested)                               |
-| **E17** | **Space viewer** (non-owner) filters by camera/lens/state                                        | Sees matching assets **owned by other members**. The #655 bug class — must not re-scope to the viewer |
-| **E18** | **Space editor** (non-owner) filters by camera/lens/state                                        | Same as E17                                                                                           |
-| **E19** | Camera/lens/state **suggestions** inside a Space                                                 | Include values drawn from **non-owned** assets (`applySuggestionScope:1257-1274`)                     |
-| **E20** | `owner=<user who is not a member of this space>`                                                 | Returns **empty**. Narrows, never widens. No leak                                                     |
-| **E21** | `/photos?owner=<stranger>`                                                                       | Returns **empty** (owner-scope `AND` stranger = ∅). No leak                                           |
-| E22     | **Album viewer** filters by camera on an album owned by someone else                             | Sees the album owner's matching assets (the `:1217-1253` participant branch)                          |
+| #       | Edge case                                                                                        | Expected behavior                                                                                                                                                                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1      | `albumId` + `isInAlbum`/`isNotInAlbum` both present                                              | Codec drops `album=has\|none`; `albumId` wins (mirrors server)                                                                                                                                                                                        |
+| E2      | Asset viewer open on a **shared link**                                                           | No filter affordances rendered at all (no `/photos` to reach)                                                                                                                                                                                         |
+| E3      | Filter clicked from `/favorites`, `/archive`, `/trash`, `/folders`, `/memories`, person/tag page | Falls back to `/photos` with the filter applied                                                                                                                                                                                                       |
+| E4      | Person clicked inside a **Space**                                                                | Patch carries the **scoped** token (`space-person:<uuid>`), not a bare uuid                                                                                                                                                                           |
+| E5      | Already on `/photos`                                                                             | 🔍 "search everywhere" icon is hidden (would duplicate the primary click)                                                                                                                                                                             |
+| E6      | Asset has no EXIF                                                                                | Camera/lens/location rows absent — nothing to click                                                                                                                                                                                                   |
+| E7      | Empty / whitespace-only metadata value (`make: ''`)                                              | Not rendered as clickable; no filter emitted                                                                                                                                                                                                          |
+| E8      | Non-owner viewing an asset in a Space                                                            | Can filter; **cannot** edit (✏️ stays owner-gated as today)                                                                                                                                                                                           |
+| E9      | `albumId` filter param while already on `/albums/{id}`                                           | **Ignored.** Not merely redundant — the server's `albumId` is a **scalar** driving one inner join, so a second album cannot be AND-ed. Album∩album is impossible without a server change. The ⚗️ icon is not offered for the album you are already in |
+| E10     | Location pin (🗺️) from within a Space                                                            | Map URL carries `spaceId` **and** the active filters, centered on the asset                                                                                                                                                                           |
+| E11     | `Route.map` currently emits **only** `/map` + a hash (`route.ts:89-90`) — **no query support**   | `Route.map` must be **extended** to take query params, emitting `/map?<filters>#<zoom>/<lat>/<lng>`                                                                                                                                                   |
+| E12     | Metadata value with URL-special characters (`/`, `+`, `&` in a lens name)                        | Round-trips through `URLSearchParams` intact                                                                                                                                                                                                          |
+| E13     | Very long description used as a filter                                                           | Emitted `description` param truncated to **200 chars** to bound URL length                                                                                                                                                                            |
+| E14     | Date filter across a timezone boundary                                                           | Uses the asset's **local** date as displayed; no UTC re-bucketing                                                                                                                                                                                     |
+| E15     | Rating chip label                                                                                | Must read "≥ N stars", not "N stars". **This corrects an existing mislabel** — an intentional fix, not covered by E16                                                                                                                                 |
+| E16     | Existing `/photos` + `/spaces` **filter behavior**                                               | **Unchanged** — codec extraction is a pure refactor (regression-tested)                                                                                                                                                                               |
+| **E17** | **Space viewer** (non-owner) filters by camera/lens/state                                        | Sees matching assets **owned by other members**. The #655 bug class — must not re-scope to the viewer                                                                                                                                                 |
+| **E18** | **Space editor** (non-owner) filters by camera/lens/state                                        | Same as E17                                                                                                                                                                                                                                           |
+| **E19** | **Camera (make/model)** suggestions inside a Space                                               | Include values from **non-owned** assets (`applySuggestionScope:1257-1274`). **Scoped to camera only** — `lens`/`state` have no dropdown in this spec (§3), so there is nothing to suggest                                                            |
+| **E20** | `owner=<user who is not a member of this space>`                                                 | Returns **empty**. Narrows, never widens. No leak                                                                                                                                                                                                     |
+| **E21** | `/photos?owner=<stranger>`                                                                       | Returns **empty** (owner-scope `AND` stranger = ∅). No leak                                                                                                                                                                                           |
+| E22     | **Album viewer** filters by camera on an album owned by someone else                             | Sees the album owner's matching assets (the `:1217-1253` participant branch)                                                                                                                                                                          |
+| E23     | Asset viewer opened **from `/map`** (`/map/photos/{assetId}`)                                    | `/map` **is** a filter target — the click lands back on `/map` with the filter applied                                                                                                                                                                |
+| E24     | Clicking the **same** value twice                                                                | Identical URL → **no-op**. Not a toggle. Removal is the chip's `✕`                                                                                                                                                                                    |
+| E25     | Clicking a person/tag while a person/tag filter is already active                                | Array is **replaced**, never appended (§5.6). Guarantees **P1**                                                                                                                                                                                       |
+| **P1**  | **Property, all rows, all surfaces**                                                             | After filtering by a value on asset _A_, the result set **contains _A_**                                                                                                                                                                              |
 
-## 9. BDD scenarios
+## 9. Slices
 
-### Contextual filtering
+Each slice is independently shippable and **strictly test-first: write the failing test (RED), then
+the code (GREEN).** Every slice lists its BDD scenarios.
+
+**Dependency order.** Slices 1 and 2 are independent and may run in parallel. Slice 2 blocks 3, 4, 6
+and 7. Slice 4 blocks 5. Slice 8 requires all.
+
+```
+1 (server) ─────────────────────────────────┐
+2 (pure web) ──┬── 3 (album) ──┐            ├── 8 (e2e)
+               ├── 4 (map) ── 5 (q notice) ─┤
+               ├── 6 (chips) ───────────────┤
+               └── 7 (panel) ───────────────┘
+```
+
+---
+
+### Slice 1 — Server: `lensModel`, `state`, `ownerId`
+
+**Files:** `server/src/dtos/time-bucket.dto.ts`, `server/src/repositories/asset.repository.ts`
+
+**BDD**
+
+```gherkin
+Scenario: Filter a timeline by lens model
+  Given assets taken with the "iPhone 17 Pro Max back triple camera" lens
+  When I request a time bucket with lensModel="iPhone 17 Pro Max back triple camera"
+  Then only assets with that lens are returned
+
+Scenario: Filter a timeline by EXIF state
+  When I request a time bucket with state="State of Berlin"
+  Then only assets whose asset_exif.state equals "State of Berlin" are returned
+
+Scenario: The owner filter narrows within a Space
+  Given Space "Fotos Berlin" contains assets owned by Anna and by Ben
+  When I request the Space timeline with ownerId=<Anna>
+  Then only Anna's contributions to that Space are returned
+    And Ben's assets are NOT returned
+    And nothing of Anna's outside the Space is returned
+
+Scenario: A Space VIEWER filters by a camera they do not own   # E17 — the #655 bug class
+  Given Space "Fotos Berlin" contains Anna's iPhone assets and Ben's Canon assets
+    And I am a VIEWER of the Space and own neither
+  When I request the Space timeline with make="Apple"
+  Then Anna's iPhone assets ARE returned
+    And the result is NOT re-scoped to assets I own
+
+Scenario: A Space EDITOR filters by a lens they do not own     # E18
+  Given I am an EDITOR of a Space containing another member's assets
+  When I filter the Space timeline by that member's lensModel
+  Then their matching assets are returned
+
+Scenario: Camera suggestions in a Space include other members' cameras   # E19
+  Given a Space contains Anna's iPhone assets and Ben's Canon assets
+    And I am a viewer who owns neither
+  When I request filter suggestions for that Space
+  Then both "Apple" and "Canon" appear in cameraMakes
+
+Scenario: The owner filter cannot leak a non-member's library   # E20/E21
+  Given "Carol" is not a member of any Space I belong to
+  When I request a time bucket with ownerId=<Carol>
+  Then the result is EMPTY
+    And no asset of Carol's is disclosed
+
+Scenario: An album viewer filters by the album owner's camera   # E22
+  Given an album shared with me, owned by Anna, containing Anna's assets
+  When I filter that album by Anna's camera make
+  Then Anna's matching assets are returned
+```
+
+**TDD steps**
+
+1. **RED** — unit tests in the asset-repository suite asserting the generated SQL for `lensModel`,
+   `state` and `ownerId`.
+2. **GREEN** —
+   - Add the three fields to `TimeBucketQueryBaseSchema` and `TimeBucketOptions`.
+   - In `withTimeBucketAssetFilters`: extend the `asset_exif` inner-join `$if` predicate (`:267-274`)
+     to include `lensModel` and `state`; add exact-match `=` conditions alongside `make`/`model`.
+   - Add `ownerId` as a **separate top-level** condition:
+     `.$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', asUuid(options.ownerId!)))`.
+     **Do not** route it through `userIds` (§4.2).
+3. **RED → GREEN, RBAC medium tests (E17–E22) — the highest-value tests in this spec.**
+   They require a **two-owner Space fixture** (Anna + Ben both contributing to one Space; the acting
+   user is a member who owns neither). **A single-owner fixture passes vacuously** and would hide both
+   the #655 bug class and the `ownerId`/`userIds` trap.
+4. `pnpm build && pnpm sync:open-api && make open-api`.
+
+**Done when:** timeline queries honor the three new fields; **non-owners can filter assets they do
+not own inside a Space**; `ownerId` provably narrows and never widens; SDK regenerated; **no migration
+added**.
+
+---
+
+### Slice 2 — Web: shared filter-URL codec + `resolveFilterTarget` (pure functions, no UI)
+
+**Files:** `web/src/lib/utils/filter-url.ts` (new), `web/src/lib/utils/filter-target.ts` (new),
+`web/src/lib/components/filter-panel/filter-panel.ts`, `web/src/lib/utils/searchable-page-search.ts`
+
+This slice carries most of the edge-case burden — everything here is a plain function, so the cases
+are cheap unit tests rather than component tests.
+
+**BDD**
+
+```gherkin
+Scenario: Every filter field round-trips through the URL
+  Given a FilterState with every field populated
+  When it is encoded to URL params and decoded back
+  Then the decoded FilterState equals the original
+
+Scenario: The codec never emits albumId together with album=has|none   # E1
+  Given a FilterState with albumId=<A> AND isInAlbum=true
+  When it is encoded
+  Then the params contain "albumId=<A>"
+    And the params do NOT contain "album=has" or "album=none"
+
+Scenario: Empty and whitespace-only values emit no param            # E7
+  Given a FilterState with make="   "
+  When it is encoded
+  Then no "make" param is emitted
+
+Scenario: Values with URL-special characters round-trip intact       # E12
+  Given a lens model "FE 24-70mm F2.8 GM / II + adapter & hood"
+  When it is encoded and decoded
+  Then the decoded lensModel equals the original exactly
+
+Scenario: A long description is truncated                            # E13
+  Given a description of 500 characters
+  When it is encoded
+  Then the "description" param is exactly 200 characters
+
+Scenario: Resolving a filter target from each surface
+  Given the URL "/photos/<assetId>"          Then the target is photos
+  Given the URL "/spaces/<id>/photos/<a>"    Then the target is space with that spaceId
+  Given the URL "/albums/<id>/photos/<a>"    Then the target is album with that albumId
+  Given the URL "/map/photos/<assetId>"      Then the target is map            # E23
+  Given the URL "/favorites/<assetId>"       Then the target is null           # E3
+
+Scenario: A filter patch merges with, rather than replaces, active filters
+  Given the URL "/spaces/<id>?people=<anna>"
+  When I build a contextual filter URL with patch { make: "Apple" }
+  Then the result contains BOTH "people=<anna>" AND "make=Apple"
+
+Scenario: Array patches REPLACE rather than append                   # E25
+  Given the URL "/photos?tags=<beach>"
+  When I build a contextual filter URL with patch { tagIds: ["<sunset>"] }
+  Then the result contains "tags=<sunset>"
+    And it does NOT contain "<beach>"
+
+Scenario: The global option escapes the current context
+  Given the URL "/spaces/<id>/photos/<assetId>"
+  When I build a contextual filter URL with { global: true }
+  Then the result base path is "/photos", not the space
+
+Scenario: The one-shot scroll target is dropped
+  Given the URL "/photos?at=<assetId>"
+  When I build any contextual filter URL
+  Then the result contains no "at" param
+
+Scenario: Clicking the same value twice is a no-op                   # E24
+  Given the URL "/photos?make=Apple&model=iPhone%2017%20Pro%20Max"
+  When I build a contextual filter URL with the same { make, model } patch
+  Then the resulting URL is identical to the current URL
+
+Scenario: Existing photos/spaces behavior is unchanged               # E16
+  Given the codec has been extracted into filter-url.ts
+  Then every pre-existing searchable-page-search test still passes unmodified
+```
+
+**TDD steps**
+
+1. **RED** — port the existing `searchable-page-search` tests as-is (they must pass **unmodified** —
+   that is the E16 regression guard), then add the new scenarios above as failing tests.
+2. **GREEN** — extract the codec; add `lens`/`state`/`albumId`/`owner`; add the four `FilterState`
+   fields; update `createFilterState`, `clearFilters`, `getActiveFilterCount`.
+3. **RED → GREEN** — `resolveFilterTarget(url)`.
+4. **RED → GREEN** — `buildContextualFilterUrl(url, patch, opts)`.
+
+**Done when:** the pure layer is fully covered and `/photos` + `/spaces` behave identically.
+
+---
+
+### Slice 3 — Web: album page becomes URL-backed
+
+**Files:** `albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
+
+**BDD**
+
+```gherkin
+Scenario: Album filters survive a reload
+  Given I am on an album filtered to make=Apple
+  When I reload the page
+  Then the camera filter is still active
+
+Scenario: Album filters are shareable
+  When I open "/albums/<id>?make=Apple" directly
+  Then the album timeline is filtered to make=Apple
+    And the filter panel shows the camera filter as active
+
+Scenario: Browser back/forward steps through album filter states
+  Given I apply a camera filter, then a rating filter, on an album
+  When I press Back
+  Then only the camera filter is active
+
+Scenario: An albumId filter param on its own album page is ignored   # E9
+  When I open "/albums/<A>?albumId=<B>"
+  Then the albumId param is ignored and the album <A> timeline renders normally
+```
+
+**TDD steps**
+
+1. **RED** — page tests for hydrate-from-URL, write-to-URL, and react-to-URL-change.
+2. **GREEN** — mirror the photos page loop exactly: hydrate `albumFilters` from the codec on load,
+   `syncFilterUrl` on change, and a `$effect` reacting to URL changes
+   (`photos/…/+page.svelte:434-452`, `:506-534`). **Copy the `lastHandledSearchState` token guard
+   (`:508-513`) verbatim** or you will create a `goto` → `$effect` → `goto` loop.
+
+**Done when:** an album's filters survive reload, back/forward, and a shared URL. E9.
+
+---
+
+### Slice 4 — Web: map page becomes URL-backed + map links carry filters (#767 a+b)
+
+**Files:** `map/…/+page.svelte`, `web/src/lib/components/spaces/space-map.svelte`,
+`web/src/lib/components/album-page/AlbumMap.svelte`, `web/src/lib/route.ts`
+
+**BDD**
+
+```gherkin
+Scenario: Structured filters carry from a Space to the map          # E10
+  Given I am on Space "Fotos Berlin" filtered to make=Apple
+  When I click the map icon in the top bar
+  Then the map URL carries spaceId AND make=Apple
+    And the map shows only geotagged assets in that Space with make=Apple
+
+Scenario: Map filters round-trip through the URL
+  When I open "/map?spaceId=X&make=Apple" directly
+  Then the map's filter panel shows the camera filter as active
+
+Scenario: The album map link carries the album's active filters
+  Given I am on an album filtered to rating>=4
+  When I open the album map
+  Then the map URL carries the album scope AND rating=4
+
+Scenario: Route.map emits query params AND a hash                   # E11
+  When I build a map route with filters and a centre point
+  Then the URL is "/map?<filters>#<zoom>/<lat>/<lng>"
+```
+
+**TDD steps**
+
+1. **RED** — tests: `/map?spaceId=X&make=Apple` hydrates the camera filter; `space-map.svelte`'s link
+   carries active filters; `AlbumMap.svelte`'s link carries the album's filters; `Route.map` emits
+   query + hash together (E11).
+2. **GREEN** —
+   - Extend `Route.map` to accept filter params (`route.ts:89-90` currently emits hash only).
+   - Hydrate the map's `filters` from the codec, replacing the always-empty `createFilterState()`
+     (`map/…/+page.svelte:72`). Reuse the `lastHandledSearchState` guard.
+   - Build `space-map.svelte`'s `mapUrl` from live filter state instead of the hardcoded
+     `/map?spaceId=<id>` (`:13`); do the same for `AlbumMap.svelte`.
+
+**Done when:** #767 (a) and (b) are fixed. E10, E11.
+
+---
+
+### Slice 5 — Web: honest `q` handling on the map (#767 c)
+
+**Files:** `map/…/+page.svelte`, `i18n/en.json`
+
+**BDD**
+
+```gherkin
+Scenario: The map is honest about a smart search it cannot apply
+  Given I am on a Space with an active smart search "?q=ski"
+  When I switch to the map view
+  Then every structured filter IS applied
+    And an explicit notice states the smart-search term is not applied on the map
+    And the map does NOT silently render the entire library
+
+Scenario: No notice when there is no smart search
+  Given I am on the map with only structured filters
+  Then no smart-search notice is shown
+```
+
+**TDD steps**
+
+1. **RED** — component test: with `q` in the URL, the notice renders and structured filters still
+   apply; without `q`, no notice.
+2. **GREEN** — render the notice; add the i18n key to **`i18n/en.json` only** (other locales fall
+   back — see the shared web+mobile `i18n/` dir).
+
+**Done when:** the reporter's `?q=ski` repro shows filtered results plus a clear explanation, never a
+silent full library.
+
+---
+
+### Slice 6 — Web: active-filter chips for the new dimensions
+
+**Files:** `web/src/lib/components/filter-panel/active-filters-bar.svelte`,
+`web/src/lib/utils/photos-filter-options.ts`, **`web/src/lib/utils/space-filter-options.ts`**,
+their two spec files, `i18n/en.json`
+
+> ⚠️ **There are TWO remove handlers**, not one: `handlePhotosRemoveFilter`
+> (`photos-filter-options.ts:115`, used by `/photos`, `/albums` and `/map`) **and**
+> `handleSpaceRemoveFilter` (`space-filter-options.ts:63`, used by `/spaces`). **Both** need the new
+> cases, or the new chips will be **unremovable inside a Space**.
+
+**BDD**
+
+```gherkin
+Scenario: The new dimensions render as removable chips
+  Given a filter with lens, albumId and owner active
+  Then a chip is shown for each, with a resolved display name (not a raw UUID)
+
+Scenario: Removing a chip clears its filter — on /photos AND in a Space
+  Given a lens filter is active
+  When I click the chip's ✕ on /photos
+  Then the lens filter is cleared
+  And likewise when I click it inside a Space
+
+Scenario: The location chip clears city, state AND country together
+  Given city, state and country are all active
+  When I remove the location chip
+  Then all three are cleared
+
+Scenario: The rating chip reads "≥ N stars"                          # E15
+  Given a rating filter of 4
+  Then the chip label reads "≥ 4 stars", not "4 stars"
+```
+
+**TDD steps**
+
+1. **RED** — chip-rendering tests + removal tests against **both** handler spec files
+   (`photos-filter-options.spec.ts` and `space-filter-options.spec.ts`).
+2. **GREEN** — add chips for `lens`, `albumId`, `owner`; fold `state` into the existing `location`
+   chip (which already clears `city` + `country` together — it now clears all three, matching how the
+   `camera` chip clears `make` + `model`). Add album/owner name resolution following the existing
+   `personNames` / `tagNames` map pattern. Fix the rating label (E15). New i18n keys in `en.json`.
+
+---
+
+### Slice 7 — Web: the DetailPanel grammar (4 sub-slices)
+
+Component tests for every row: correct patch emitted, correct target URL, owner vs non-owner,
+shared-link suppression (E2), and **P1** (the result contains the source asset).
+
+**7a — Camera + lens.** Replace both `Route.search(...)` links (`DetailPanel.svelte:225,259`) with
+value→filter plus the 🔍 global icon. Hide 🔍 on `/photos` (E5).
+
+**7b — Location.** Rewrite `DetailPanelLocation.svelte`. It is currently a single `<button>` wrapping
+both the value and the pencil; split it into three clickable value lines (city / state / country), a
+🗺️ pin, and an owner-gated ✏️. E8, E10.
+
+**7c — Date + filename.** Local date for the date row (E14); basename-without-extension for filename.
+
+**7d — Tags, people, shared-by, and the three inverted rows** (rating, description, appears-in).
+Array patches **replace** (E25). Person patches carry the scoped token (E4).
+
+**BDD**
 
 ```gherkin
 Scenario: Filter a Space by camera from the asset viewer
@@ -308,74 +695,52 @@ Scenario: Filter a Space by camera from the asset viewer
   When I click the camera value in the info panel
   Then the asset viewer closes
     And I land on the Space timeline
-    And the URL contains "make=Apple" and "model=iPhone 17 Pro Max"
-    And only assets from that camera in that Space are shown
-    And a removable "camera" chip is shown in the active-filters bar
-
-Scenario: Filter an Album by tag from the asset viewer
-  Given I am viewing an asset inside Album "Holiday"
-    And the asset is tagged "beach"
-  When I click the "beach" tag chip
-  Then I land on the Album timeline filtered to tag "beach"
-    And the URL contains "tags=<beachId>"
-
-Scenario: Contextual filters merge rather than replace
-  Given I am on the Space timeline filtered to person "Anna"
-    And I open an asset and click its camera value
-  Then both the person filter AND the camera filter are active
+    And the URL contains make=Apple and model=iPhone 17 Pro Max
+    And a removable "camera" chip is shown
 
 Scenario: Search everywhere escapes the current context
-  Given I am viewing an asset inside Space "Fotos Berlin"
+  Given I am viewing an asset inside a Space
   When I click the 🔍 icon on the camera row
   Then I land on /photos filtered by that camera, not on the Space
 
-Scenario: The search-everywhere icon is hidden where it is redundant
+Scenario: The search-everywhere icon is hidden where redundant     # E5
   Given I am viewing an asset opened from /photos
   Then the camera row shows no 🔍 icon
 
-Scenario: Fallback from a non-filterable context
+Scenario: Fallback from a non-filterable context                   # E3
   Given I am viewing an asset opened from /favorites
   When I click the camera value
   Then I land on /photos filtered by that camera
 
-Scenario: Shared links expose no filter affordances
+Scenario: Shared links expose no filter affordances                # E2
   Given I am viewing an asset via a shared link
   Then no metadata value in the info panel is clickable as a filter
 
-Scenario: Person filters inside a Space use the scoped token
-  Given I am viewing an asset inside a Space
-  When I click a person chip
-  Then the emitted filter uses the "space-person:<uuid>" scoped token
-```
-
-### Location row (separating value / map / edit)
-
-```gherkin
 Scenario: Clicking the city filters the current context
-  Given I am viewing an asset located in Berlin, Germany, inside a Space
+  Given an asset located in Berlin, Germany, viewed inside a Space
   When I click "Berlin"
-  Then I land on the Space timeline filtered to city=Berlin and country=Germany
+  Then the Space timeline is filtered to city=Berlin AND country=Germany
 
-Scenario: The map pin opens the map, carrying context and filters
-  Given I am viewing an asset in a Space, with a person filter active
-  When I click the 🗺️ pin icon on the location row
+Scenario: The map pin opens the map, carrying context and filters  # E10
+  Given I am viewing an asset in a Space with a person filter active
+  When I click the 🗺️ pin on the location row
   Then I land on /map centered on the asset's coordinates
-    And the map URL carries the spaceId AND the active person filter
+    And the map URL carries the spaceId AND the person filter
 
 Scenario: The pencil still edits the location
   Given I own the asset
-  When I click the ✏️ icon on the location row
+  When I click the ✏️ on the location row
   Then the geolocation picker modal opens
 
-Scenario: Non-owners cannot edit but can filter
+Scenario: Non-owners cannot edit but can filter                    # E8
   Given I do NOT own the asset
-  Then the ✏️ icon is not shown
+  Then the ✏️ is not shown
     And clicking "Berlin" still filters the current context
-```
 
-### Inverted rows
+Scenario: A row with no filter field is not clickable              # E6/E7
+  Given an asset with no EXIF, or with an empty make
+  Then the camera row is absent, or its value is not clickable
 
-```gherkin
 Scenario: Rating stars still set the rating
   Given I own the asset
   When I click the 4th star
@@ -383,242 +748,113 @@ Scenario: Rating stars still set the rating
 
 Scenario: The rating filter icon filters by rating
   When I click the ⚗️ icon on the rating row
-  Then the current context is filtered to rating >= the asset's rating
-    And the chip reads "≥ 4 stars"
+  Then the context is filtered to rating >= the asset's rating
 
 Scenario: Album cards still navigate
   Given the asset appears in album "Holiday"
   When I click the "Holiday" card
   Then I open the Holiday album (unchanged behavior)
   But when I click the ⚗️ icon on that card
-  Then the current context is filtered to albumId=<Holiday>
+  Then the context is filtered to albumId=<Holiday>
+
+Scenario: Person filters inside a Space use the scoped token       # E4
+  Given I am viewing an asset inside a Space
+  When I click a person chip
+  Then the emitted filter uses the "space-person:<uuid>" token
+
+Scenario: Clicking a tag replaces the active tag filter            # E25
+  Given the context is filtered to tag "beach"
+  When I click the "sunset" tag on an asset
+  Then the context is filtered to "sunset" only
+
+Scenario Outline: P1 — the result always contains the source asset  # P1
+  Given I am viewing asset A on any surface
+  When I click the <row> value
+  Then the resulting filtered result set contains A
+  Examples: | row |
+            | camera | lens | city | country | date | filename | tag | person | owner | rating |
 ```
-
-### #767 — map
-
-```gherkin
-Scenario: Structured filters carry from a Space to the map
-  Given I am on Space "Fotos Berlin" filtered to make=Apple
-  When I click the map icon in the top bar
-  Then the map shows only geotagged assets in that Space with make=Apple
-    And the map URL carries spaceId and make=Apple
-
-Scenario: The map is honest about smart search it cannot apply
-  Given I am on a Space with an active smart search "?q=ski"
-  When I click the map icon
-  Then the map applies every structured filter
-    And an explicit notice states the smart-search term is not applied on the map
-    And the map does NOT silently render the entire library
-
-Scenario: Map filters round-trip through the URL
-  Given I open /map?spaceId=X&make=Apple directly
-  Then the map's filter panel shows the camera filter as active
-```
-
-### RBAC (§4.4) — the highest-risk scenarios
-
-```gherkin
-Scenario: A Space viewer filters by a camera they do not own
-  Given Space "Fotos Berlin" contains assets owned by Anna and by Ben
-    And Anna's assets were taken with an "Apple iPhone 17 Pro Max"
-    And I am a VIEWER of the Space, and I own none of Anna's assets
-  When I open one of Anna's assets and click its camera value
-  Then the Space timeline is filtered to make=Apple, model=iPhone 17 Pro Max
-    And Anna's matching assets ARE shown
-    And the result set is NOT re-scoped to assets I own
-    # This is the issue #655 bug class — see search.repository.ts:1210-1213
-
-Scenario: A Space editor filters by lens they do not own
-  Given I am an EDITOR of a Space containing another member's assets
-  When I filter by that member's lens model
-  Then their matching assets are shown
-
-Scenario: Camera suggestions in a Space include other members' cameras
-  Given a Space contains assets from Anna's iPhone and Ben's Canon
-    And I am a viewer who owns neither
-  When I open the Space's camera filter dropdown
-  Then both "Apple" and "Canon" are suggested
-    # applySuggestionScope:1257-1274 — the spaceId branch carries NO ownerId predicate
-
-Scenario: The owner filter narrows but never widens — Space
-  Given I am a member of Space "Fotos Berlin"
-  When I filter that Space by owner=<Anna>
-  Then I see exactly Anna's contributions to that Space
-    And I see nothing of Anna's that is outside the Space
-
-Scenario: The owner filter cannot leak a stranger's library
-  Given "Carol" is not a member of any Space I belong to
-  When I request /photos?owner=<Carol>
-  Then the result is EMPTY
-    And no asset of Carol's is disclosed
-
-Scenario: An album viewer filters by the album owner's camera
-  Given an album shared with me, owned by Anna, containing Anna's assets
-  When I filter that album by Anna's camera
-  Then Anna's matching assets are shown
-```
-
-### Regression
-
-```gherkin
-Scenario: Existing photos/spaces filtering is unchanged
-  Given the filter codec has been extracted into filter-url.ts
-  Then every existing /photos and /spaces filter behavior is byte-identical
-```
-
-## 10. Slices
-
-Each slice is independently shippable and test-first. **Write the failing test, then the code.**
-
----
-
-### Slice 1 — Server: `lensModel`, `state`, `ownerId`
-
-**Files:** `server/src/dtos/time-bucket.dto.ts`, `server/src/repositories/asset.repository.ts`
-
-1. **RED** — unit tests in `asset.repository.spec.ts` (or the medium suite) asserting the generated
-   SQL / result set for `lensModel`, `state`, and `ownerId`.
-2. **GREEN** —
-   - Add the three fields to `TimeBucketQueryBaseSchema` and `TimeBucketOptions`.
-   - In `withTimeBucketAssetFilters`: extend the `asset_exif` inner-join `$if` predicate (`:267-274`)
-     to include `lensModel` and `state`; add exact-match `=` conditions alongside `make`/`model`.
-   - Add `ownerId` as a **separate** top-level condition: `.$if(!!options.ownerId, qb => qb.where('asset.ownerId','=', asUuid(options.ownerId!)))`.
-     **Do not** route it through `userIds` (§4.2).
-3. **RBAC medium tests — the highest-value tests in this spec (§4.4).** These require a
-   **two-owner Space fixture** (Anna + Ben both contributing to one Space, viewer owns neither).
-   A single-owner fixture passes vacuously and would hide both the #655 bug class and the
-   `ownerId`/`userIds` trap:
-   - E17/E18: a Space **viewer** and **editor** filtering by `make`/`model`/`lensModel`/`state` see
-     the **other owner's** matching assets.
-   - E19: suggestions inside the Space surface the other owner's camera values.
-   - E20: `ownerId=<non-member>` inside a Space → empty.
-   - E21: `/photos?ownerId=<stranger>` → empty (no leak).
-   - E22: album viewer filtering by the album owner's camera sees their assets.
-4. `pnpm build && pnpm sync:open-api && make open-api`.
-
-**Done when:** timeline queries honor the three new fields; **non-owners can filter assets they do
-not own inside a Space**; `ownerId` provably narrows and never widens; SDK regenerated; no migration
-added.
-
----
-
-### Slice 2 — Web: shared filter-URL codec + `resolveFilterTarget` (pure, no UI)
-
-**Files:** `web/src/lib/utils/filter-url.ts` (new), `web/src/lib/utils/filter-target.ts` (new),
-`web/src/lib/components/filter-panel/filter-panel.ts`, `web/src/lib/utils/searchable-page-search.ts`
-
-1. **RED** — exhaustive unit tests: encode/decode round-trip for every param; E1, E7, E12, E13, E16.
-2. **GREEN** — extract the codec; add `lens`/`state`/`albumId`/`owner`; add the four `FilterState`
-   fields; update `createFilterState`, `clearFilters`, `getActiveFilterCount`.
-3. `resolveFilterTarget(url)` + tests for photos / space / album / map / asset-viewer URLs (with
-   `assetId` present) / `null` cases (E3).
-4. `buildContextualFilterUrl(url, patch, opts)` + tests for merge semantics, `global`, `at`-stripping
-   (E5, and the merge scenario).
-
-**Done when:** the pure layer is fully covered and `/photos` + `/spaces` still behave identically.
-
----
-
-### Slice 3 — Web: album page becomes URL-backed
-
-**Files:** `albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]/+page.svelte`
-
-Mirror the photos page loop: hydrate `albumFilters` from the URL on load, `syncFilterUrl` on change,
-and a `$effect` reacting to URL changes (`photos/…/+page.svelte:434-452`, `:506-534`).
-
-**Done when:** an album's filters survive reload, back/forward, and a shared link to the URL. E9.
-
----
-
-### Slice 4 — Web: map page becomes URL-backed + space map link carries filters (#767 a+b)
-
-**Files:** `map/…/+page.svelte`, `web/src/lib/components/spaces/space-map.svelte`,
-`web/src/lib/components/album-page/AlbumMap.svelte`
-
-1. **RED** — test that `/map?spaceId=X&make=Apple` hydrates the camera filter; test that the space
-   map link carries active filters.
-2. **GREEN** — hydrate map `filters` from the URL codec (replacing the always-empty
-   `createFilterState()` at `:72`); build `space-map.svelte`'s `mapUrl` from live filter state
-   instead of the hardcoded `/map?spaceId=<id>`.
-
-**Done when:** #767 (a) and (b) are fixed. E10, E11.
-
----
-
-### Slice 5 — Web: honest `q` handling on the map (#767 c)
-
-When `q` is present on `/map`, render an explicit notice that the smart-search term is not applied,
-while still applying every structured filter. New i18n key in `i18n/en.json` **only** (other locales
-fall back).
-
-**Done when:** the reporter's `?q=ski` repro shows filtered results + a clear explanation, never a
-silent full library.
-
----
-
-### Slice 6 — Web: active-filter chips for the new dimensions
-
-**Files:** `web/src/lib/components/filter-panel/active-filters-bar.svelte`,
-`web/src/lib/utils/photos-filter-options.ts` (`handlePhotosRemoveFilter`)
-
-- New chips: `lens`, `albumId`, `owner`. **`state` folds into the existing `location` chip**, which
-  already clears `city` + `country` together — it now clears all three (matching how the `camera`
-  chip clears `make` + `model`).
-- Name resolution: album and owner chips need display names — follow the existing
-  `personNames` / `tagNames` map pattern.
-- Rating chip label must read **"≥ N stars"** (E15).
-
----
-
-### Slice 7 — Web: the DetailPanel grammar (3 sub-slices)
-
-**7a — Camera + lens.** Replace both `Route.search(...)` links (`DetailPanel.svelte:225,259`) with
-value→filter + 🔍 global. Hide 🔍 on `/photos` (E5).
-
-**7b — Location.** Rewrite `DetailPanelLocation.svelte`: the row is currently a single `<button>`
-wrapping both value and pencil. Split into three clickable value lines (city/state/country) + a 🗺️
-pin + an owner-gated ✏️. E8, E10.
-
-**7c — Date, filename, tags, people, shared-by, and the three inverted rows** (rating, description,
-appears-in). Basename-without-extension for filename; local date for the date row (E14).
-
-Component tests per row: correct patch emitted, correct target URL, owner vs non-owner, shared-link
-suppression (E2).
 
 ---
 
 ### Slice 8 — e2e (Playwright)
 
-Against the `make e2e` stack on **:2285** (not the dev :2283 stack):
+Against the `make e2e` stack on **:2285** (not the dev `:2283` stack).
 
-- Space → open asset → click camera → space timeline filtered, chip present.
-- Album → same.
-- `/photos` → same, and no 🔍 icon.
-- Location pin → `/map` centered, carrying `spaceId`.
-- Space with a filter → map icon → filtered map (#767).
-- **RBAC (E17):** as a Space **viewer**, open an asset owned by **another member**, click its camera
-  value → that member's assets are shown. This is the end-to-end proof of §4.4 and the one e2e case
-  that must not be dropped for time.
+**BDD**
+
+```gherkin
+Scenario: Filter within a Space, an Album, and /photos
+  Given an asset open in a Space / an Album / /photos
+  When I click its camera value
+  Then that surface's timeline is filtered and a camera chip is shown
+    And on /photos, no 🔍 icon is present
+
+Scenario: The location pin reaches the map with context
+  When I click the 🗺️ pin on an asset inside a Space
+  Then /map opens centered on the asset, carrying the spaceId
+
+Scenario: A filtered Space carries its filter to the map           # #767
+  Given a Space filtered to make=Apple
+  When I click the map icon
+  Then the map is filtered to make=Apple
+
+Scenario: RBAC — a viewer filters by another member's camera       # E17, MUST NOT be cut
+  Given I am a VIEWER of a Space containing another member's assets
+  When I open one of THEIR assets and click its camera value
+  Then THEIR matching assets are shown
+```
+
+The RBAC scenario is the end-to-end proof of §4.4 and **must not be dropped for time**.
+
+## 10. Coverage traceability
+
+| Case     | Covered by                  | Test type              |
+| -------- | --------------------------- | ---------------------- |
+| E1       | Slice 2                     | unit (codec)           |
+| E2       | Slice 7 (all sub-slices)    | component              |
+| E3       | Slice 2, Slice 7            | unit + component       |
+| E4       | Slice 7d                    | component              |
+| E5       | Slice 2, Slice 7a, Slice 8  | unit + component + e2e |
+| E6, E7   | Slice 2, Slice 7            | unit + component       |
+| E8       | Slice 7b                    | component              |
+| E9       | Slice 3                     | page                   |
+| E10      | Slice 4, Slice 7b, Slice 8  | unit + component + e2e |
+| E11      | Slice 4                     | unit (`Route.map`)     |
+| E12, E13 | Slice 2                     | unit (codec)           |
+| E14      | Slice 7c                    | component              |
+| E15      | Slice 6                     | component              |
+| E16      | Slice 2                     | unit (regression)      |
+| E17–E19  | **Slice 1** + Slice 8 (E17) | **medium** + e2e       |
+| E20–E22  | **Slice 1**                 | **medium**             |
+| E23      | Slice 2                     | unit (target)          |
+| E24      | Slice 2                     | unit                   |
+| E25      | Slice 2, Slice 7d           | unit + component       |
+| **P1**   | Slice 7 (scenario outline)  | component (property)   |
 
 ## 11. Testing strategy
 
-- **TDD throughout.** Every slice starts with a failing test.
-- **The pure layer (Slice 2) carries the edge-case burden** — codec, target resolution and URL merge
-  are plain functions, so E1/E3/E5/E7/E12/E13/E16 are cheap unit tests rather than component tests.
-- **RBAC (§4.4) is the highest-risk area and gets the most rigorous coverage** — medium tests in
-  Slice 1 (E17–E22) plus one e2e in Slice 8. Both **require a two-owner Space fixture**; with a
-  single owner every RBAC assertion passes vacuously and the #655 bug class stays invisible.
-- **Regression:** `/photos` and `/spaces` behavior must be byte-identical after the codec extraction.
+- **Strictly TDD.** Every slice starts with a failing test; no production code before RED.
+- **The pure layer (Slice 2) carries the edge-case burden** — the codec, target resolution and URL
+  merge are plain functions, so most cases are cheap unit tests rather than component tests.
+- **RBAC (§4.4) is the highest-risk area** — medium tests in Slice 1 (E17–E22) plus one e2e in
+  Slice 8. Both **require a two-owner Space fixture**; with a single owner every RBAC assertion
+  passes vacuously and the #655 bug class stays invisible.
+- **P1 is a property test** across every filterable row — the cheapest possible guard against a whole
+  class of merge bugs.
+- **Regression:** the pre-existing `searchable-page-search` tests must pass **unmodified** after the
+  codec extraction.
 
 ## 12. Verification gates
 
 - Server: `cd server && pnpm test`, `pnpm test:medium`, `make check-server`, `make lint-server`
   (**zero warnings** — server only).
-- Web: `cd web && pnpm check:typescript && pnpm lint` (web lint has **no** `--max-warnings 0`;
-  the ~650 pre-existing `better-tailwindcss` warnings are expected and must not be "fixed" here).
-  Note `check:svelte` reports 0 files locally — rely on CI Lint/Test Web.
-- E2E: `make e2e-web-dev` / the `:2285` stack.
+- Web: `cd web && pnpm check:typescript && pnpm lint`. Web lint has **no** `--max-warnings 0`; the
+  ~650 pre-existing `better-tailwindcss` warnings are expected — **do not** `eslint --fix` them here.
+  `check:svelte` reports 0 files locally; rely on CI Lint/Test Web.
+- E2E: the `:2285` `make e2e` stack.
 - OpenAPI: `make open-api` after Slice 1; commit the regenerated SDK + Dart client.
+- Docs: `prettier --write` on this file (CI Docs Build runs `--check` over all of `docs/`).
 
 ## 13. Risks
 
@@ -626,15 +862,17 @@ Against the `make e2e` stack on **:2285** (not the dev :2283 stack):
 | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | **Non-owners silently get empty results when filtering in a Space (the #655 bug class)** | §4.4; E17–E22 medium tests + an e2e, all on a **two-owner Space fixture**                    |
 | **`ownerId` widens instead of narrows → data leak**                                      | §4.4; `ownerId` is a plain AND inside the existing scope; E20/E21 assert empty for strangers |
-| Codec extraction silently changes `/photos`/`/spaces` behavior                           | Slice 2 is a pure refactor with round-trip regression tests before any new param is added    |
-| `ownerId` accidentally wired through `userIds`                                           | §4.2 documented; medium test with a ≥2-owner space                                           |
-| Album/map URL-backing introduces navigation loops (`goto` → `$effect` → `goto`)          | Copy the photos page's `lastHandledSearchState` token guard verbatim (`:508-513`)            |
-| Icon clutter in the location row (pin + pencil)                                          | Accepted; validated against the mockup                                                       |
+| **Array append would make people narrow and tags widen**                                 | §5.6 mandates replace; **P1** property test catches any regression                           |
+| **New chips unremovable in a Space** (only the photos handler updated)                   | Slice 6 explicitly covers **both** `handlePhotosRemoveFilter` and `handleSpaceRemoveFilter`  |
+| Codec extraction silently changes `/photos`/`/spaces` behavior                           | Slice 2 replays the existing tests **unmodified** before adding any new param                |
+| Album/map URL-backing introduces a `goto` → `$effect` → `goto` loop                      | Copy the photos page's `lastHandledSearchState` token guard verbatim (`:508-513`)            |
+| Icon clutter in the location row (pin + pencil)                                          | Accepted                                                                                     |
 | Users expect album cards to navigate                                                     | Kept as an exception (§6)                                                                    |
 
 ## 14. Follow-ups (explicitly out of scope)
 
 1. Smart-search (`q`) support on `/map/markers` — the remaining half of #767.
-2. Filter-panel dropdowns + suggestion endpoints for `lens` / `state`.
+2. Filter-panel dropdowns for `lens` / `state` (suggestion repo support already exists — see §3).
 3. Mobile (Flutter) asset-viewer parity.
 4. Retiring the `/search` page itself.
+5. Correcting the `personIds` DTO description, which says "any" but implements "all" (§4.2).
