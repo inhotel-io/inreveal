@@ -154,7 +154,7 @@ const emptyRest = () => ({ faces: [], total: 0, hasMore: false }) as unknown as 
 // so `vi.mocked(modalManager.show)` can't infer a concrete signature at this call site. Cast once to a plain
 // mock of the shape the picker's `onClose` actually resolves with (see PersonPicker.svelte).
 const showModal = modalManager.show as unknown as ReturnType<
-  typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string } | undefined>>
+  typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | undefined>>
 >;
 
 describe('+page.svelte (face-cleanup review — Model B)', () => {
@@ -314,9 +314,10 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
         expect(resolveFaces).toHaveBeenCalledWith({
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
+            // owner-state groups never auto-lock (Slice 3, move-and-lock).
             moveToPerson: [
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-1', 'face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-1', 'face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: [],
             lock: [],
@@ -411,8 +412,8 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
             moveToPerson: [
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: ['face-1'],
             lock: [],
@@ -469,8 +470,8 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
             moveToPerson: [
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: [],
             lock: ['face-1'],
@@ -552,10 +553,43 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
         expect(resolveFaces).toHaveBeenCalledWith({
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
+            // The mock resolves without `lock` — same as an unchecked picker toggle — so the chosen-person
+            // group defaults to lock:false, same as the untouched owner-state groups (Slice 3).
             moveToPerson: [
-              { destinationPersonId: 'chosen-1', faceIds: ['face-1'] },
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: 'chosen-1', faceIds: ['face-1'], lock: false },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
+            ],
+            stay: [],
+            lock: [],
+            detach: [],
+          },
+        });
+      });
+    });
+
+    // ---- Slice 3 (move-and-lock): the picker's lock toggle rides through +page.svelte's wiring ----
+    it("W1: threads the picker's lock:true onto the chosen-person group only, never onto owner-state groups", async () => {
+      showModal.mockResolvedValueOnce({ personId: 'chosen-1', name: 'Chosen Person', lock: true });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]); // face-1, suspected owner-a
+      await fireEvent.click(screen.getByTestId('bulk-other'));
+      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [
+              { destinationPersonId: 'chosen-1', faceIds: ['face-1'], lock: true },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: [],
             lock: [],
@@ -636,8 +670,8 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
             moveToPerson: [
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: [],
             lock: [],

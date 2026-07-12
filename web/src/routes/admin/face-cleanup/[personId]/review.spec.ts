@@ -12,7 +12,7 @@ describe('createReviewModel (Model B / full resolution)', () => {
     { assetFaceId: 'f3', suspectedOwnerId: 'owner-b' },
   ];
 
-  const sortedGroups = (req: { moveToPerson?: { destinationPersonId: string; faceIds: string[] }[] }) =>
+  const sortedGroups = (req: { moveToPerson?: { destinationPersonId: string; faceIds: string[]; lock?: boolean }[] }) =>
     [...(req.moveToPerson ?? [])].sort((a, b) => a.destinationPersonId.localeCompare(b.destinationPersonId));
 
   it('starts every face in the owner state with no selection', () => {
@@ -30,9 +30,10 @@ describe('createReviewModel (Model B / full resolution)', () => {
     const req = vm.buildResolveRequest('person-1');
 
     expect(req.personId).toBe('person-1');
+    // owner-state groups never auto-lock (Slice 3, move-and-lock: only a deliberate "other" pick can).
     expect(sortedGroups(req)).toEqual([
-      { destinationPersonId: 'owner-a', faceIds: ['f1', 'f2'] },
-      { destinationPersonId: 'owner-b', faceIds: ['f3'] },
+      { destinationPersonId: 'owner-a', faceIds: ['f1', 'f2'], lock: false },
+      { destinationPersonId: 'owner-b', faceIds: ['f3'], lock: false },
     ]);
     expect(req.stay).toEqual([]);
     expect(req.lock).toEqual([]);
@@ -47,8 +48,8 @@ describe('createReviewModel (Model B / full resolution)', () => {
 
     const req = vm.buildResolveRequest('person-1');
     expect(sortedGroups(req)).toEqual([
-      { destinationPersonId: 'chosen-1', faceIds: ['f3'] },
-      { destinationPersonId: 'owner-a', faceIds: ['f1', 'f2'] },
+      { destinationPersonId: 'chosen-1', faceIds: ['f3'], lock: false },
+      { destinationPersonId: 'owner-a', faceIds: ['f1', 'f2'], lock: false },
     ]);
   });
 
@@ -58,7 +59,43 @@ describe('createReviewModel (Model B / full resolution)', () => {
     vm.applyToSelection('other', { personId: 'owner-a', name: 'Owner A' });
 
     const req = vm.buildResolveRequest('person-1');
-    expect(sortedGroups(req)).toEqual([{ destinationPersonId: 'owner-a', faceIds: ['f1', 'f2', 'f3'] }]);
+    expect(sortedGroups(req)).toEqual([{ destinationPersonId: 'owner-a', faceIds: ['f1', 'f2', 'f3'], lock: false }]);
+  });
+
+  // ---- W1 (Slice 3, move-and-lock): the picker's lock toggle rides along on "other"-state groups only ----
+
+  it('W1: an "other"-state group carries lock:true when the picker toggle is on; the owner-state group never auto-locks', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f3');
+    vm.applyToSelection('other', { personId: 'chosen-1', name: 'Chosen Person', lock: true });
+
+    const req = vm.buildResolveRequest('person-1');
+    const chosenGroup = req.moveToPerson?.find((g) => g.destinationPersonId === 'chosen-1');
+    const ownerGroup = req.moveToPerson?.find((g) => g.destinationPersonId === 'owner-a');
+
+    expect(chosenGroup?.lock).toBe(true);
+    // f1/f2 are still on the default `owner` state — a suggested-owner move must never auto-lock.
+    expect(ownerGroup?.lock ?? false).toBe(false);
+  });
+
+  it('W2: toggling the picker lock off emits lock:false for that group', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f3');
+    vm.applyToSelection('other', { personId: 'chosen-1', name: 'Chosen Person', lock: false });
+
+    const req = vm.buildResolveRequest('person-1');
+    const chosenGroup = req.moveToPerson?.find((g) => g.destinationPersonId === 'chosen-1');
+    expect(chosenGroup?.lock).toBe(false);
+  });
+
+  it('W1: omitting lock on an "other"-state destination defaults that group to lock:false', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f3');
+    vm.applyToSelection('other', { personId: 'chosen-1', name: 'Chosen Person' });
+
+    const req = vm.buildResolveRequest('person-1');
+    const chosenGroup = req.moveToPerson?.find((g) => g.destinationPersonId === 'chosen-1');
+    expect(chosenGroup?.lock).toBe(false);
   });
 
   it('W1: stay/lock/detach faces are emitted as id lists and excluded from moveToPerson', () => {

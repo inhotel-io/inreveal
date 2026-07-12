@@ -363,6 +363,77 @@ describe(FaceRepairAdminController.name, () => {
       expect(status).toBe(400);
       expect(service.resolveFaces).not.toHaveBeenCalled();
     });
+
+    // ---- C1 (temporal-consistency hardening, Slice 3, move-and-lock): the resolve route's `lock` flag ----
+
+    it('C1: accepts a moveToPerson group with lock:true and passes it through', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 1, detached: 0, skipped: 0 });
+      const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: true }];
+
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson });
+
+      expect(status).toBe(201);
+      expect(service.resolveFaces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          personId,
+          moveToPerson: [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: true }],
+        }),
+        adminUserId,
+      );
+    });
+
+    it('C1: accepts a moveToPerson group with lock:false and passes it through', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: false }];
+
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson });
+
+      expect(status).toBe(201);
+      expect(service.resolveFaces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          personId,
+          moveToPerson: [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: false }],
+        }),
+        adminUserId,
+      );
+    });
+
+    it("C1: defaults a moveToPerson group's lock to false when omitted", async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1] }];
+
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson });
+
+      expect(status).toBe(201);
+      expect(service.resolveFaces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          personId,
+          moveToPerson: [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: false }],
+        }),
+        adminUserId,
+      );
+    });
+
+    it('C1: rejects a non-boolean lock on a moveToPerson group with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson: [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: 'yes' }] });
+      expect(status).toBe(400);
+      expect(service.resolveFaces).not.toHaveBeenCalled();
+    });
   });
 
   describe('DELETE /admin/face-repair/decline', () => {

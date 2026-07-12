@@ -41,8 +41,10 @@ export interface ReviewModel {
   /** Returns every face to `owner` (clearing any chosen destination) and clears the selection. */
   reset(): void;
   /** Applies `state` (+ optional destination for `other`) to every currently-selected face, then clears the
-   *  selection — mirrors the mockup's `apply(s)` bulk-bar action. */
-  applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null }): void;
+   *  selection — mirrors the mockup's `apply(s)` bulk-bar action. `destination.lock` (Slice 3, move-and-lock)
+   *  is the PersonPicker's "Lock so it won't re-flag" toggle; it defaults to false and only ever applies to
+   *  `other`-state (chosen-person) destinations — a suggested-owner move never auto-locks. */
+  applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null; lock?: boolean }): void;
   /** Pure builder: groups `owner`/`other` faces by destination (owner destination = each face's own
    *  suspectedOwnerId) and emits `stay`/`lock`/`detach` id lists. Never touches the network. */
   buildResolveRequest(personId: string): FaceRepairResolveRequestDto;
@@ -56,7 +58,7 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
   const indexById = new Map(order.map((id, i) => [id, i]));
 
   const states: SvelteMap<string, FaceState> = new SvelteMap(order.map((id) => [id, 'owner' as FaceState]));
-  const destinations: SvelteMap<string, { personId: string; name: string | null }> = new SvelteMap();
+  const destinations: SvelteMap<string, { personId: string; name: string | null; lock: boolean }> = new SvelteMap();
   const selected: SvelteSet<string> = new SvelteSet();
   let lastToggledIndex: number | null = null;
 
@@ -139,11 +141,15 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
       clearSelectionState();
     },
 
-    applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null }): void {
+    applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null; lock?: boolean }): void {
       for (const id of selected) {
         states.set(id, state);
         if (state === 'other' && destination) {
-          destinations.set(id, { personId: destination.personId, name: destination.name ?? null });
+          destinations.set(id, {
+            personId: destination.personId,
+            name: destination.name ?? null,
+            lock: destination.lock ?? false,
+          });
         } else {
           destinations.delete(id);
         }
@@ -155,17 +161,23 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
       // Plain Map: local bookkeeping scoped to this single pure-function call, discarded on return — no UI
       // reads it, so it never needs to be reactive.
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const moveGroups = new Map<string, string[]>();
+      const moveGroups = new Map<string, { faceIds: string[]; lock: boolean }>();
       const stay: string[] = [];
       const lock: string[] = [];
       const detach: string[] = [];
 
-      const addToMoveGroup = (destinationPersonId: string, assetFaceId: string) => {
+      // `lock` (Slice 3, move-and-lock): a suggested-owner (`owner`-state) move always passes `lock: false` —
+      // never auto-lock a face the admin didn't explicitly move. A chosen-person (`other`-state) move passes
+      // whatever the PersonPicker's toggle recorded. If both kinds of face land in the same destination group
+      // (owner-state coincidentally matching a chosen destination), the group locks if any contributing face
+      // asked for it.
+      const addToMoveGroup = (destinationPersonId: string, assetFaceId: string, faceLock: boolean) => {
         const group = moveGroups.get(destinationPersonId);
         if (group) {
-          group.push(assetFaceId);
+          group.faceIds.push(assetFaceId);
+          group.lock = group.lock || faceLock;
         } else {
-          moveGroups.set(destinationPersonId, [assetFaceId]);
+          moveGroups.set(destinationPersonId, { faceIds: [assetFaceId], lock: faceLock });
         }
       };
 
@@ -173,13 +185,13 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
         const state = states.get(face.assetFaceId) ?? 'owner';
         switch (state) {
           case 'owner': {
-            addToMoveGroup(face.suspectedOwnerId, face.assetFaceId);
+            addToMoveGroup(face.suspectedOwnerId, face.assetFaceId, false);
             break;
           }
           case 'other': {
-            const destinationPersonId = destinations.get(face.assetFaceId)?.personId;
-            if (destinationPersonId) {
-              addToMoveGroup(destinationPersonId, face.assetFaceId);
+            const destination = destinations.get(face.assetFaceId);
+            if (destination) {
+              addToMoveGroup(destination.personId, face.assetFaceId, destination.lock);
             }
             break;
           }
@@ -200,9 +212,10 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
 
       return {
         personId,
-        moveToPerson: [...moveGroups.entries()].map(([destinationPersonId, faceIds]) => ({
+        moveToPerson: [...moveGroups.entries()].map(([destinationPersonId, group]) => ({
           destinationPersonId,
-          faceIds,
+          faceIds: group.faceIds,
+          lock: group.lock,
         })),
         stay,
         lock,

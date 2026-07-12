@@ -222,6 +222,7 @@
     "face_cleanup_review_picker_create_error": "Failed to create the new person. Please try again.",
     "face_cleanup_review_picker_empty": "No matches",
     "face_cleanup_review_picker_load_error": "Failed to load people. Please try again.",
+    "face_cleanup_review_picker_lock_label": "Lock so it won't re-flag",
     "face_cleanup_review_picker_search_placeholder": "Search people…",
     "face_cleanup_review_picker_subtitle": "Any person or cluster in the library — not just this scan's suggestion.",
     "face_cleanup_review_picker_suggestion": "this scan's suggestion",
