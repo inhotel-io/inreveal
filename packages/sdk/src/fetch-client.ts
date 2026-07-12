@@ -8551,7 +8551,7 @@ export function tagAssets({ id, bulkIdsDto }: {
 /**
  * Get time bucket
  */
-export function getTimeBucket({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, ocr, order, orderBy, originalFileName, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBucket({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, lensModel, make, model, ocr, order, orderBy, originalFileName, ownerId, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, state, tagId, tagIds, takenAfter, takenBefore, timeBucket, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
     bucketSize?: TimeBucketSize;
@@ -8563,12 +8563,14 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, descri
     isNotInAlbum?: boolean;
     isTrashed?: boolean;
     key?: string;
+    lensModel?: string;
     make?: string;
     model?: string;
     ocr?: string;
     order?: AssetOrder;
     orderBy?: AssetOrderBy;
     originalFileName?: string;
+    ownerId?: string;
     personId?: string;
     personIds?: string[];
     rating?: number;
@@ -8576,6 +8578,7 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, descri
     spaceId?: string;
     spacePersonId?: string;
     spacePersonIds?: string[];
+    state?: string;
     tagId?: string;
     tagIds?: string[];
     takenAfter?: string;
@@ -8604,12 +8607,14 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, descri
         isNotInAlbum,
         isTrashed,
         key,
+        lensModel,
         make,
         model,
         ocr,
         order,
         orderBy,
         originalFileName,
+        ownerId,
         personId,
         personIds,
         rating,
@@ -8617,6 +8622,7 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, descri
         spaceId,
         spacePersonId,
         spacePersonIds,
+        state,
         tagId,
         tagIds,
         takenAfter,
@@ -8636,7 +8642,7 @@ export function getTimeBucket({ albumId, bbox, bucketSize, city, country, descri
 /**
  * Get time bucket covers
  */
-export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, ocr, order, orderBy, originalFileName, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, timeBuckets, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, lensModel, make, model, ocr, order, orderBy, originalFileName, ownerId, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, state, tagId, tagIds, takenAfter, takenBefore, timeBuckets, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
     bucketSize?: TimeBucketSize;
@@ -8648,12 +8654,14 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
     isNotInAlbum?: boolean;
     isTrashed?: boolean;
     key?: string;
+    lensModel?: string;
     make?: string;
     model?: string;
     ocr?: string;
     order?: AssetOrder;
     orderBy?: AssetOrderBy;
     originalFileName?: string;
+    ownerId?: string;
     personId?: string;
     personIds?: string[];
     rating?: number;
@@ -8661,6 +8669,7 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
     spaceId?: string;
     spacePersonId?: string;
     spacePersonIds?: string[];
+    state?: string;
     tagId?: string;
     tagIds?: string[];
     takenAfter?: string;
@@ -8689,12 +8698,14 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
         isNotInAlbum,
         isTrashed,
         key,
+        lensModel,
         make,
         model,
         ocr,
         order,
         orderBy,
         originalFileName,
+        ownerId,
         personId,
         personIds,
         rating,
@@ -8702,6 +8713,7 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
         spaceId,
         spacePersonId,
         spacePersonIds,
+        state,
         tagId,
         tagIds,
         takenAfter,
@@ -8721,7 +8733,7 @@ export function getTimeBucketCovers({ albumId, bbox, bucketSize, city, country, 
 /**
  * Get time buckets
  */
-export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, make, model, ocr, order, orderBy, originalFileName, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
+export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, description, isFavorite, isInAlbum, isNotInAlbum, isTrashed, key, lensModel, make, model, ocr, order, orderBy, originalFileName, ownerId, personId, personIds, rating, slug, spaceId, spacePersonId, spacePersonIds, state, tagId, tagIds, takenAfter, takenBefore, $type, userId, visibility, withCoordinates, withPartners, withSharedSpaces, withStacked }: {
     albumId?: string;
     bbox?: string;
     bucketSize?: TimeBucketSize;
@@ -8733,12 +8745,14 @@ export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, descr
     isNotInAlbum?: boolean;
     isTrashed?: boolean;
     key?: string;
+    lensModel?: string;
     make?: string;
     model?: string;
     ocr?: string;
     order?: AssetOrder;
     orderBy?: AssetOrderBy;
     originalFileName?: string;
+    ownerId?: string;
     personId?: string;
     personIds?: string[];
     rating?: number;
@@ -8746,6 +8760,7 @@ export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, descr
     spaceId?: string;
     spacePersonId?: string;
     spacePersonIds?: string[];
+    state?: string;
     tagId?: string;
     tagIds?: string[];
     takenAfter?: string;
@@ -8773,12 +8788,14 @@ export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, descr
         isNotInAlbum,
         isTrashed,
         key,
+        lensModel,
         make,
         model,
         ocr,
         order,
         orderBy,
         originalFileName,
+        ownerId,
         personId,
         personIds,
         rating,
@@ -8786,6 +8803,7 @@ export function getTimeBuckets({ albumId, bbox, bucketSize, city, country, descr
         spaceId,
         spacePersonId,
         spacePersonIds,
+        state,
         tagId,
         tagIds,
         takenAfter,
