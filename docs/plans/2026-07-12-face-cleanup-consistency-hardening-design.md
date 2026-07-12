@@ -76,7 +76,7 @@ accumulate over months/years.
 5. **Bounded per-scan filter load.** The scan scopes its decline/lock load to the flagged set instead of two
    full-table scans; behavior is identical.
 
-## 3. The four fixes
+## 3. The five fixes
 
 | #   | Fix                          | Surface                                   | Severity |
 | --- | ---------------------------- | ----------------------------------------- | -------- |
@@ -100,32 +100,43 @@ nullable: true, index: true })`). Add the migration name to `scripts/revert-to-i
   `kysely_migrations` DELETE list (fork switch-back requirement); no new table, so no extra DROP.
 - **`mergePersonProfile`** (`server/src/repositories/person.repository.ts`): **before** the source-person
   delete, re-point `face_repair_lock.personId` from `sourcePersonId` → `targetPersonId`
-  (`UPDATE face_repair_lock SET personId = target WHERE personId = source`). No unique index on `personId`, so
-  no conflict. The lock filter is keyed on `assetFaceId` and is unaffected either way — re-pointing only keeps
-  the audit reference accurate.
+  (`UPDATE face_repair_lock SET personId = target WHERE personId = source`), on the **same `db`/transaction
+  handle** `mergePersonProfile` already uses (atomic with the merge; never `this.db`, per the #595
+  in-transaction trap). No unique index on `personId`, so no conflict. The lock filter is keyed on
+  `assetFaceId` and is unaffected either way — re-pointing only keeps the audit reference accurate.
 
 ### 4.2 Decline survives owner-merge (req 2)
 
 - **`mergePersonProfile`**: before the source delete, re-point `face_repair_decline.suspectedOwnerId` from
-  `sourcePersonId` → `targetPersonId`. The unique index `(assetFaceId, suspectedOwnerId)` means a `(face,
-target)` decline may already exist, so the re-point must **dedup on conflict**: insert the re-pointed rows
-  `ON CONFLICT (assetFaceId, suspectedOwnerId) DO NOTHING`, then delete the `suspectedOwnerId = source` rows
-  (or an equivalent conflict-safe `UPDATE`). No migration — the existing `CASCADE` FK still correctly drops a
-  decline whose owner is **hard-deleted** (that owner's votes vanish, so the pairing is moot).
-- **`type='person'` dismiss rows** whose `personId = sourcePersonId` also re-point `personId` → target for
-  parity (a dismissed cluster that gets merged stays dismissed under the target). Same conflict-safe pattern.
-  _(Lower-frequency; specified for completeness — see E11.)_
+  `sourcePersonId` → `targetPersonId`, on the **same `db`/transaction handle** (atomic with the merge; never
+  `this.db`). Only `type='face'` rows carry `suspectedOwnerId`. The unique index `(assetFaceId,
+suspectedOwnerId)` means a `(face, target)` decline may already exist, so the re-point must **dedup on
+  conflict**: insert the re-pointed rows `ON CONFLICT (assetFaceId, suspectedOwnerId) DO NOTHING`, then delete
+  the `suspectedOwnerId = source` rows (or an equivalent conflict-safe `UPDATE`). No migration — the existing
+  `CASCADE` FK still correctly drops a decline whose owner is **hard-deleted** (that owner's votes vanish, so
+  the pairing is moot).
+- The face-level decline's own `personId` column is always **null** (`createDeclines` sets `personId: null`
+  for `type='face'` rows — only `type='person'` dismiss rows set it), so deleting or merging the _reviewed_
+  person does not affect a face-level decline; only the `suspectedOwnerId` side matters here. The
+  **person-level dismiss** (`type='person'`) surviving an owner merge — which would additionally require
+  re-pointing the `personId` column **and** the `suspectedOwnerIds` jsonb fingerprint — is deferred (§9); it
+  is neither req 2 nor req 4 and adds materially more surface.
 
 ### 4.3 Move-and-lock (req 3)
 
 - **DTO** (`server/src/dtos/face-repair.dto.ts`): add an optional `lock` boolean to the move-group schema —
   `MoveGroupSchema = z.object({ destinationPersonId: z.uuidv4(), faceIds: z.array(z.uuidv4()).min(1), lock:
 z.boolean().default(false) })`. No SDK-facing enum; a plain boolean.
+- **`executeRepair` must surface the moved ids.** Today it returns only `{ moved, skipped }` counts — it
+  computes the per-route `movedIds` (from `reattributeFaces`, which returns the ids it actually re-pointed)
+  but discards them. Extend `RepairExecution` to also carry the set of moved `assetFaceId`s (accumulate the
+  per-route `movedIds`). This is the only way to lock **exactly** the faces that moved; a re-query of
+  `asset_face.personId = destination` would misattribute a face that was already on the destination.
 - **`resolveFaces`** (`server/src/services/face-repair.service.ts`): after `executeRepair` commits the moves,
   for each `moveToPerson` group with `lock === true`, insert `face_repair_lock(assetFaceId,
-personId=group.destinationPersonId, createdBy=resolvedBy)` for the faces that actually moved (intersect with
-  `executeRepair`'s moved ids, so a skipped/moved-off face is not spuriously locked). Count these into the
-  response `locked`. Two rules that distinguish this from the standalone `lock` bucket:
+personId=group.destinationPersonId, createdBy=resolvedBy)` for each of the group's faces **that is in the
+  returned moved-id set** (so a skipped / moved-off face is not spuriously locked — E8). Count the inserted
+  locks into the response `locked`. Two rules that distinguish this from the standalone `lock` bucket:
   - **Snapshot-membership bypass.** The standalone `stay`/`lock`/`detach` buckets are validated against the
     flagged snapshot (`findUnresolvableIds`); a **move-lock is tied to the move**, which accepts any eligible
     face on the person (including rest-of-cluster faces), so it is **not** subject to that check.
@@ -139,11 +150,15 @@ personId=group.destinationPersonId, createdBy=resolvedBy)` for the faces that ac
 
 ### 4.4 Dismiss drains snapshot (req 4)
 
-- The dismiss path (`declineFaceRepair` with `persons: [...]`, i.e. `type='person'`) also calls
-  `removePersonsFromLatestScan(personIds)` server-side, mirroring resolve's unconditional drop-on-resolution.
-  The dismissed person leaves the latest scan snapshot immediately, so the unfiltered `getLatestScanStatus`
-  reader no longer surfaces it on reload. The persisted person-decline still governs future scans (unchanged —
-  the person re-surfaces only under genuinely new suspected-owner evidence, the existing subset check).
+- The service `createDeclines` currently only writes rows and never drains (only `resolveFaces` calls
+  `removePersonsFromLatestScan`). In its **`persons` branch** (the dismiss path — `declineFaceRepair` with
+  `persons: [...]`, `type='person'`), after writing the dismiss rows, also call
+  `removePersonsFromLatestScan(persons.map((p) => p.personId))`, mirroring resolve's unconditional
+  drop-on-resolution. (The `faces` branch is reached only from `resolveFaces`, which already drains its person
+  — so scope the drain to the `persons` branch to avoid a double call.) The dismissed person leaves the latest
+  scan snapshot immediately, so the unfiltered `getLatestScanStatus` reader no longer surfaces it on reload.
+  The persisted person-decline still governs future scans (unchanged — the person re-surfaces only under
+  genuinely new suspected-owner evidence, the existing subset check).
 - The web dismiss handler drops its client-only list mutation (or keeps it as an optimistic update backed by
   the server drain); the source of truth is the server snapshot.
 
@@ -153,8 +168,9 @@ personId=group.destinationPersonId, createdBy=resolvedBy)` for the faces that ac
   Scope the load to that set: `getDeclineMaps({ assetFaceIds: <all flagged assetFaceIds>, personIds: <all
 flagged personIds> })` — the same scoped API the review/resolve paths already use — instead of the unscoped
   two-full-table load. `applyDeclineFilters` needs `assetFaceIds` (lock + face-decline) and `personIds`
-  (person-dismiss subset check); both are known from `flaggedByPerson`. Result is byte-identical to the full
-  load restricted to the flagged set.
+  (person-dismiss subset check); both are known from `flaggedByPerson`. The resulting `applyDeclineFilters`
+  drops are identical — the scoped maps are smaller (only the flagged faces' declines/locks) but cover every
+  flagged face, which is all the filter reads.
 
 ## 5. Web architecture
 
@@ -197,8 +213,8 @@ personId` set null, row kept; the next scan still drops the face for all owners.
   the **move is not undone** (the face stays on the destination).
 - **E11 — Dismiss drains + re-surfaces only on new evidence.** Dismissing a person removes it from the latest
   scan (reload does not show it); the persisted person-decline still lets it re-surface on a future scan only
-  when a genuinely new suspected owner appears (unchanged subset check). A dismissed person merged into another
-  keeps the dismiss (§4.2 person-row re-point).
+  when a genuinely new suspected owner appears (unchanged subset check). _(A dismissed person that is later
+  merged is a deferred edge — see §9.)_
 - **E12 — Scoped `getDeclineMaps` equivalence.** The scoped load yields the identical `applyDeclineFilters`
   result as the full-table load; a decline/lock for a face outside the flagged set is neither loaded nor needed.
 - **E13 — Move-lock idempotency.** Move-locking a face that is already locked inserts nothing new (`ON CONFLICT
@@ -250,8 +266,6 @@ contract — no slice is "done" until its rows are green.
   set. _(E12)_
 - **M12** — **move-lock composes with merge**: move-lock f1 to `dest`, then merge `dest` into `dest'` → the
   lock survives (re-pointed); a re-run scan does not re-flag f1. _(E9)_
-- **M13** — **dismiss survives merge**: dismiss P, then merge P into P′ → the `type='person'` dismiss re-points
-  to P′; P′ stays dismissed under the subset check. _(E11 person-merge)_
 
 ### 7.3 Server — controller (`face-repair-admin.controller.spec.ts`)
 
@@ -286,7 +300,7 @@ contract — no slice is "done" until its rows are green.
 | ---- | ------------------ | ---- | ------------------------------ |
 | E1   | M1                 | E9   | M12                            |
 | E2   | M2, X2             | E10  | M10                            |
-| E3   | M3                 | E11  | M9, M13, C2, P2                |
+| E3   | M3                 | E11  | M9, C2, P2                     |
 | E4   | M4                 | E12  | U1, M11                        |
 | E5   | M5, C1, W1, P1, X1 | E13  | M5 (idempotency asserted)      |
 | E6   | M6, C1, W2         | E14  | M2 (single-row invariant)      |
@@ -298,14 +312,16 @@ contract — no slice is "done" until its rows are green.
 Linear vertical slices; each cuts DB → server → SDK → web → tests and ends in a shippable increment.
 
 - **Slice 1 — Lock & decline survive merge/delete.** Migration (`face_repair_lock.personId` nullable + SET
-  NULL) + table + `revert-to-immich.sql` entry; `mergePersonProfile` re-points lock, face-decline, and
-  person-dismiss rows source→target with conflict-safe dedup. Tests **M1, M2, M3, M4, M13** plus the
-  merge-repository medium coverage. Covers reqs 1, 2. _(Server only; no SDK/web.)_
+  NULL) + table + `revert-to-immich.sql` entry; `mergePersonProfile` re-points lock and face-decline
+  (`type='face'`) rows source→target on its own transaction handle, with conflict-safe dedup for the decline.
+  Tests **M1, M2, M3, M4** plus the merge-repository medium coverage. Covers reqs 1, 2. _(Server only; no
+  SDK/web.)_
 - **Slice 2 — Dismiss drains the snapshot.** Dismiss service/controller path calls
   `removePersonsFromLatestScan`; web dismiss relies on the server drain. Tests **M9, C2, P2**. Covers req 4.
-- **Slice 3 — Move-and-lock.** DTO `lock` flag; `resolveFaces` inserts locks for `lock:true` moved faces
-  (snapshot-membership bypass, intersect moved ids, idempotent); SDK regen (TS + Dart); PersonPicker toggle
-  (default on) + `buildResolveRequest`. Tests **M5, M6, M7, M8, M10, M12, C1, W1, W2, P1**. Covers req 3.
+- **Slice 3 — Move-and-lock.** DTO `lock` flag; extend `executeRepair` to return the moved-id set;
+  `resolveFaces` inserts locks for the `lock:true` faces that are in that set (snapshot-membership bypass,
+  idempotent); SDK regen (TS + Dart); PersonPicker toggle (default on) + `buildResolveRequest`. Tests **M5,
+  M6, M7, M8, M10, M12, C1, W1, W2, P1**. Covers req 3.
 - **Slice 4 — Scope the per-scan load + capstone.** Scope `getDeclineMaps` in `buildRepairPlan` (**U1, M11**);
   e2e **X1, X2**; i18n for the new picker copy; the §7 matrix-completeness gate + full check/lint/test/medium
   gate. Covers req 5 + end-to-end proof.
@@ -322,6 +338,11 @@ Slices 1, 2, 4 are server-heavy (small web in 2); Slice 3 carries the SDK regen 
   locking them would prevent legitimate future re-evaluation.
 - **Reader-side defensive filter on `getLatestScanStatus`.** Fixing dismiss at the write side (drain) is
   sufficient for the known gap; a defensive read-side re-filter of the persisted `persons` JSON is deferred.
+- **Person-level dismiss surviving an owner merge/delete.** A `type='person'` dismiss row keys on `personId`
+  (the dismissed person, `ON DELETE CASCADE`) and stores a `suspectedOwnerIds` jsonb fingerprint; surviving a
+  merge would require re-pointing **both** through `mergePersonProfile` — materially more surface than the
+  face-level `suspectedOwnerId` re-point, and lower-frequency. Deferred: a dismissed cluster that is later
+  merged may re-surface. Documented, not fixed here (distinct from req 2, which is the face-level decline).
 - **Mobile.** The console is web-admin only.
 
 ## 10. Rollout
