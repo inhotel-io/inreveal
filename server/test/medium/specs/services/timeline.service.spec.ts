@@ -1,11 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import { Insertable, Kysely } from 'kysely';
-import { AssetOrder, AssetType, AssetVisibility, SharedLinkType, TimeBucketSize } from 'src/enum';
+import { AuthDto } from 'src/dtos/auth.dto';
+import { TimeBucketDto } from 'src/dtos/time-bucket.dto';
+import { AssetOrder, AssetType, AssetVisibility, SharedLinkType, SharedSpaceRole, TimeBucketSize } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
 import { SharedLinkRepository } from 'src/repositories/shared-link.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { TimelineService } from 'src/services/timeline.service';
@@ -18,7 +21,7 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db?: Kysely<DB>) => {
   return newMediumService(TimelineService, {
     database: db || defaultDatabase,
-    real: [AssetRepository, AccessRepository, PartnerRepository],
+    real: [AssetRepository, AccessRepository, PartnerRepository, SharedSpaceRepository],
     mock: [LoggingRepository],
   });
 };
@@ -40,6 +43,80 @@ const createTimelineAsset = async (
   });
   await ctx.newExif({ assetId: asset.id, make: 'Canon', timeZone: 'UTC' });
   return asset;
+};
+
+const SPACE_BUCKET = '2026-01-01';
+const SPACE_DATE = new Date('2026-01-15T10:00:00Z');
+
+/** An asset owned by `ownerId`, added to `spaceId`, with the given EXIF. */
+const newSpaceAssetWithExif = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  spaceId: string,
+  ownerId: string,
+  exif: { make?: string; model?: string; lensModel?: string; state?: string; city?: string; country?: string },
+) => {
+  const { asset } = await ctx.newAsset({
+    ownerId,
+    fileCreatedAt: SPACE_DATE,
+    localDateTime: SPACE_DATE,
+    width: 400,
+    height: 200,
+    thumbhash: Buffer.from('thumbhash'),
+  });
+  await ctx.newExif({ assetId: asset.id, timeZone: 'UTC', ...exif });
+  await ctx.newSharedSpaceAsset({ spaceId, assetId: asset.id, addedById: ownerId });
+  return asset;
+};
+
+/**
+ * A Space with TWO contributing owners (anna, ben) plus a viewer and an editor who own NOTHING.
+ *
+ * The two-owner shape is load-bearing: with a single owner every RBAC assertion below passes
+ * vacuously and the #655 bug class ("viewers get empty facets for assets owned by someone else")
+ * stays invisible. Do not collapse this to one owner.
+ */
+const createTwoOwnerSpace = async (ctx: ReturnType<typeof setup>['ctx']) => {
+  const { user: anna } = await ctx.newUser();
+  const { user: ben } = await ctx.newUser();
+  const { user: viewer } = await ctx.newUser();
+  const { user: editor } = await ctx.newUser();
+
+  const { space } = await ctx.newSharedSpace({ createdById: anna.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: anna.id, role: SharedSpaceRole.Owner });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: ben.id, role: SharedSpaceRole.Editor });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: editor.id, role: SharedSpaceRole.Editor });
+
+  const annaAsset = await newSpaceAssetWithExif(ctx, space.id, anna.id, {
+    make: 'Apple',
+    model: 'iPhone 17 Pro Max',
+    lensModel: 'iPhone 17 Pro Max back triple camera',
+    city: 'Berlin',
+    state: 'State of Berlin',
+    country: 'Germany',
+  });
+  const benAsset = await newSpaceAssetWithExif(ctx, space.id, ben.id, {
+    make: 'Canon',
+    model: 'EOS R5',
+    lensModel: 'RF24-70mm F2.8 L IS USM',
+    city: 'Hamburg',
+    state: 'Hamburg',
+    country: 'Germany',
+  });
+
+  return { space, anna, ben, viewer, editor, annaAsset, benAsset };
+};
+
+/** Asset ids returned by the Space timeline for the given filter. */
+const spaceBucketAssetIds = async (
+  sut: ReturnType<typeof setup>['sut'],
+  auth: AuthDto,
+  spaceId: string,
+  filter: Partial<TimeBucketDto>,
+): Promise<string[]> => {
+  const json = await sut.getTimeBucket(auth, { ...filter, spaceId, timeBucket: SPACE_BUCKET });
+  const parsed = JSON.parse(json) as { id?: string[] };
+  return parsed.id ?? [];
 };
 
 beforeAll(async () => {
@@ -477,5 +554,65 @@ describe(TimelineService.name, () => {
     await expect(
       sut.getTimeBucket(auth, { albumId: album.id, timeBucket: '1970-02-01', isTrashed: true }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  describe('contextual filters — lensModel / state (Slice 1)', () => {
+    it('E17: a Space VIEWER filters by a lens model on an asset they do not own', async () => {
+      const { sut, ctx } = setup();
+      const { space, viewer, annaAsset } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, {
+        lensModel: 'iPhone 17 Pro Max back triple camera',
+      });
+
+      // The viewer owns NOTHING in this space. Anna's asset must still come back.
+      expect(ids).toEqual([annaAsset.id]);
+    });
+
+    it('E18: a Space EDITOR filters by a lens model on an asset they do not own', async () => {
+      const { sut, ctx } = setup();
+      const { space, editor, benAsset } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: editor });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, {
+        lensModel: 'RF24-70mm F2.8 L IS USM',
+      });
+
+      expect(ids).toEqual([benAsset.id]);
+    });
+
+    it('E17: a Space VIEWER filters by state on an asset they do not own', async () => {
+      const { sut, ctx } = setup();
+      const { space, viewer, annaAsset } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, { state: 'State of Berlin' });
+
+      expect(ids).toEqual([annaAsset.id]);
+    });
+
+    it('filters by lensModel are exact-match, not substring', async () => {
+      const { sut, ctx } = setup();
+      const { space, viewer } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, { lensModel: 'RF24-70mm' });
+
+      expect(ids).toEqual([]);
+    });
+
+    it('lensModel and state compose with make as an AND', async () => {
+      const { sut, ctx } = setup();
+      const { space, viewer } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, {
+        make: 'Canon',
+        state: 'State of Berlin', // Anna's state, but Ben's make → no asset has both
+      });
+
+      expect(ids).toEqual([]);
+    });
   });
 });

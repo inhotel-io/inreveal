@@ -62,6 +62,8 @@ const TimeBucketQueryBaseSchema = z
     country: z.string().optional().describe('Filter by country name'),
     make: z.string().optional().describe('Filter by camera make'),
     model: z.string().optional().describe('Filter by camera model'),
+    lensModel: z.string().optional().describe('Filter by camera lens model'),
+    state: z.string().optional().describe('Filter by state/province name'),
     originalFileName: z
       .string()
       .optional()
