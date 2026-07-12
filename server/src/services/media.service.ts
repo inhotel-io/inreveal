@@ -96,6 +96,22 @@ export class MediaService extends BaseService {
     return relativeKey;
   }
 
+  /**
+   * Persists every generated image file and rewrites its path to the stored location.
+   * Every ffmpeg/sharp output path must go through this — forgetting it is how the
+   * trim thumbnails ended up unpersisted on S3 (gh#671).
+   */
+  private async persistImageFiles(asset: ThumbnailAsset, files: UpsertFileOptions[]): Promise<void> {
+    for (const file of files) {
+      const relativeKey = StorageCore.getRelativeImagePath(asset, {
+        fileType: file.type,
+        format: file.path.split('.').pop() as ImageFormat,
+        isEdited: file.isEdited,
+      });
+      file.path = await this.persistFile(file.path, relativeKey, mimeTypes.lookup(file.path));
+    }
+  }
+
   @OnJob({ name: JobName.AssetGenerateThumbnailsQueueAll, queue: QueueName.ThumbnailGeneration })
   async handleQueueGenerateThumbnails({ force }: JobOf<JobName.AssetGenerateThumbnailsQueueAll>): Promise<JobStatus> {
     const config = await this.getConfig({ withCache: true });
@@ -253,14 +269,7 @@ export class MediaService extends BaseService {
 
       // Persist output files to S3 if needed
       if (generated?.files) {
-        for (const file of generated.files) {
-          const relativeKey = StorageCore.getRelativeImagePath(asset, {
-            fileType: file.type,
-            format: file.path.split('.').pop() as ImageFormat,
-            isEdited: file.isEdited,
-          });
-          file.path = await this.persistFile(file.path, relativeKey, mimeTypes.lookup(file.path));
-        }
+        await this.persistImageFiles(asset, generated.files);
       }
 
       await this.syncFiles(
@@ -358,6 +367,9 @@ export class MediaService extends BaseService {
     // Clean up temp frame
     await this.storageRepository.unlink(framePath).catch(() => {});
 
+    // Persist output files to S3 if needed
+    await this.persistImageFiles(asset, thumbnailResult.files);
+
     // persistFile unlinks the local file after uploading, so this must come AFTER
     // probe() and extractFrame() have read outputPath.
     const editedVideoPath = await this.persistFile(
@@ -424,25 +436,11 @@ export class MediaService extends BaseService {
       }
 
       // Persist output files to S3 if needed
-      for (const file of generated.files) {
-        const relativeKey = StorageCore.getRelativeImagePath(asset, {
-          fileType: file.type,
-          format: file.path.split('.').pop() as ImageFormat,
-          isEdited: file.isEdited,
-        });
-        file.path = await this.persistFile(file.path, relativeKey, mimeTypes.lookup(file.path));
-      }
+      await this.persistImageFiles(asset, generated.files);
 
       const editedGenerated = await this.generateEditedThumbnails(asset, config, localPath);
       if (editedGenerated) {
-        for (const file of editedGenerated.files) {
-          const relativeKey = StorageCore.getRelativeImagePath(asset, {
-            fileType: file.type,
-            format: file.path.split('.').pop() as ImageFormat,
-            isEdited: file.isEdited,
-          });
-          file.path = await this.persistFile(file.path, relativeKey, mimeTypes.lookup(file.path));
-        }
+        await this.persistImageFiles(asset, editedGenerated.files);
         generated.files.push(...editedGenerated.files);
       }
 

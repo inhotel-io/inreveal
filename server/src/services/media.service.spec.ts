@@ -1984,6 +1984,73 @@ describe(MediaService.name, () => {
           .flatMap(([job]) => (job as any).data.files as string[]);
         expect(deletedFiles).not.toContain(editedKey);
       });
+
+      it('uploads the trim thumbnails under _edited keys and stores those keys (S3)', async () => {
+        const put = vi.fn().mockResolvedValue(void 0);
+        const { StorageService } = await import('src/services/storage.service.js');
+        vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+        mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('data')]) as any);
+
+        const asset = AssetFactory.from({ type: AssetType.Video })
+          .exif()
+          .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+          .build();
+        mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+        mocks.media.probe.mockResolvedValue({
+          ...videoInfoStub.noAudioStreams,
+          format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+        });
+        mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+        mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+        await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+        const putKeys = put.mock.calls.map((call) => call[0] as string);
+        const thumbnailKeys = putKeys.filter((key) => key.startsWith('thumbs/'));
+
+        // preview + thumbnail at minimum (fullsize too, when the config generates one)
+        expect(thumbnailKeys.length).toBeGreaterThanOrEqual(2);
+        for (const key of thumbnailKeys) {
+          expect(key).toContain('_edited');
+        }
+
+        // and the keys — not local paths — are what get written to the DB
+        const upserted = mocks.asset.upsertFiles.mock.calls.flatMap(([files]) => files as any[]);
+        const upsertedThumbs = upserted.filter((file) => file.type !== AssetFileType.EncodedVideo);
+        expect(upsertedThumbs.length).toBeGreaterThanOrEqual(2);
+        for (const file of upsertedThumbs) {
+          expect(file.path.startsWith('/')).toBe(false);
+          expect(file.path).toContain('_edited');
+        }
+      });
+
+      it('never overwrites the non-edited preview or thumbnail objects (S3)', async () => {
+        const put = vi.fn().mockResolvedValue(void 0);
+        const { StorageService } = await import('src/services/storage.service.js');
+        vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+        mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('data')]) as any);
+
+        const asset = AssetFactory.from({ type: AssetType.Video })
+          .exif()
+          .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+          .build();
+        mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+        mocks.media.probe.mockResolvedValue({
+          ...videoInfoStub.noAudioStreams,
+          format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+        });
+        mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+        mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+        await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+        // A trim must not clobber the asset's normal preview/thumbnail objects: every
+        // image key it writes carries the _edited marker.
+        const putKeys = put.mock.calls.map((call) => call[0] as string);
+        for (const key of putKeys.filter((k) => k.startsWith('thumbs/'))) {
+          expect(key).toContain('_edited');
+        }
+      });
     });
   });
 
