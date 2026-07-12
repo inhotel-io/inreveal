@@ -195,6 +195,12 @@ export class S3StorageBackend implements StorageBackend {
     return { type: 'redirect', url };
   }
 
+  async getReadableUrl(key: string): Promise<string> {
+    return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
+      expiresIn: this.presignedUrlExpiry,
+    });
+  }
+
   async downloadToTemp(key: string): Promise<{ tempPath: string; cleanup: () => Promise<void> }> {
     const tempPath = join(tmpdir(), `immich-${randomUUID()}.tmp`);
     const { stream } = await this.get(key);

@@ -365,6 +365,17 @@ describe('S3StorageBackend', () => {
     });
   });
 
+  describe('getReadableUrl', () => {
+    it('returns a presigned GET url for the key', async () => {
+      const url = await backend.getReadableUrl('upload/admin/ab/cd/video.mp4');
+
+      expect(url).toBe('https://bucket.s3.amazonaws.com/key?X-Amz-Signature=abc123');
+      expect(GetObjectCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ Key: 'upload/admin/ab/cd/video.mp4' }),
+      );
+    });
+  });
+
   describe('deletePrefix', () => {
     it('should not send DeleteObjectsCommand when the prefix matches nothing', async () => {
       mockSend.mockResolvedValueOnce({ Contents: [], IsTruncated: false });
