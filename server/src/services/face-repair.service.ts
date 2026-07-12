@@ -147,7 +147,17 @@ export class FaceRepairService extends BaseService {
       await options.onProgress?.(scanned);
     }
 
-    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps();
+    // Slice 4 (temporal-consistency hardening, req 5): bound the decline/lock load to exactly the faces/
+    // persons this scan just flagged — an unscoped read re-fetches the whole (ever-growing) decline/lock
+    // tables on every scan pass. Scope must be built from the pre-filter flaggedByPerson (not the post-filter
+    // toRepair/reviewOnlyFaces below) so a decline/lock on any candidate face is still fetched even though its
+    // whole purpose is to drop that very face.
+    const flaggedFaceIds = [...flaggedByPerson.values()].flat().map((f) => f.assetFaceId);
+    const flaggedPersonIds = [...flaggedByPerson.keys()];
+    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
+      assetFaceIds: flaggedFaceIds,
+      personIds: flaggedPersonIds,
+    });
     applyDeclineFilters(flaggedByPerson, declineMaps);
 
     const reviewOnlyPersonIds = new Set<string>();

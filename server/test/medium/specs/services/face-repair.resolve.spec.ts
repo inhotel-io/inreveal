@@ -1491,6 +1491,38 @@ describe('FaceRepairService.resolveFaces: move-and-lock (M5, E13)', () => {
   });
 });
 
+describe('FaceRepairService.resolveFaces: move without lock writes no lock row (M6, E6)', () => {
+  it('moves the face to the destination but writes no lock row when lock: false', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: dest } = await ctx.newPerson({ ownerId: user.id, name: 'Dest' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: dest.id }]);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: dest.id, faceIds: [f1], lock: false }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+
+    expect(result.moved).toBe(1);
+    expect(result.locked).toBe(0);
+
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(dest.id);
+
+    const rows = await lockRowsFor(f1);
+    expect(rows).toHaveLength(0);
+  });
+});
+
 describe('FaceRepairService.resolveFaces: move-and-lock skips a face that moved off personId before the call (M8, E1)', () => {
   it('locks only the face that actually moved, never the stale one — no orphan lock', async () => {
     const { sut, ctx, scanRepo } = setup();
