@@ -21,8 +21,11 @@ export class FaceRepairLockTable {
   assetFaceId!: string;
 
   // The person this lock was confirmed on (display/audit only — the lock check itself is owner-agnostic).
-  @ForeignKeyColumn(() => PersonTable, { onDelete: 'CASCADE', index: true })
-  personId!: string;
+  // Nullable + ON DELETE SET NULL (not CASCADE): the lock must survive the reviewed person being merged away
+  // or hard-deleted (Face Cleanup temporal-consistency hardening, Slice 1) — losing the audit trail on the
+  // reviewed person is fine, losing the lock itself (and re-exposing the face to future scans) is not.
+  @ForeignKeyColumn(() => PersonTable, { onDelete: 'SET NULL', nullable: true, index: true })
+  personId!: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   createdBy!: string | null;
