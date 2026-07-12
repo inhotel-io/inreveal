@@ -1,6 +1,6 @@
 import { Kysely } from 'kysely';
 import { FilterSuggestionsResponseDto, SearchSuggestionType } from 'src/dtos/search.dto';
-import { AlbumUserRole, AssetVisibility } from 'src/enum';
+import { AlbumUserRole, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -1103,6 +1103,34 @@ describe(SearchService.name, () => {
       expect(result.countries).toContain('Germany');
       expect(result.cameraMakes).toContain('Sony');
       expect(result.people.map((p) => p.name)).toContain('Ada');
+    });
+
+    it('E19: camera suggestions in a Space include cameras from assets the viewer does not own', async () => {
+      const { sut, ctx } = setup();
+      const { user: anna } = await ctx.newUser();
+      const { user: ben } = await ctx.newUser();
+      const { user: viewer } = await ctx.newUser();
+
+      const { space } = await ctx.newSharedSpace({ createdById: anna.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: anna.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: ben.id, role: SharedSpaceRole.Editor });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+
+      for (const [ownerId, make] of [
+        [anna.id, 'Apple'],
+        [ben.id, 'Canon'],
+      ] as const) {
+        const { asset } = await ctx.newAsset({ ownerId });
+        await ctx.newExif({ assetId: asset.id, make, timeZone: 'UTC' });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: ownerId });
+      }
+
+      const auth = factory.auth({ user: { id: viewer.id } });
+      const result = await sut.getFilterSuggestions(auth, { spaceId: space.id });
+
+      // applySuggestionScope's spaceId branch (search.repository.ts:1257-1274) carries NO ownerId
+      // predicate. If someone reintroduces one, the viewer sees an empty dropdown — issue #655.
+      expect(result.cameraMakes).toEqual(expect.arrayContaining(['Apple', 'Canon']));
     });
   });
 

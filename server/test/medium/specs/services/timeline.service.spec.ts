@@ -2,7 +2,15 @@ import { BadRequestException } from '@nestjs/common';
 import { Insertable, Kysely } from 'kysely';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { TimeBucketDto } from 'src/dtos/time-bucket.dto';
-import { AssetOrder, AssetType, AssetVisibility, SharedLinkType, SharedSpaceRole, TimeBucketSize } from 'src/enum';
+import {
+  AlbumUserRole,
+  AssetOrder,
+  AssetType,
+  AssetVisibility,
+  SharedLinkType,
+  SharedSpaceRole,
+  TimeBucketSize,
+} from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -614,6 +622,21 @@ describe(TimelineService.name, () => {
 
       expect(ids).toEqual([]);
     });
+
+    it('E17: a Space VIEWER filters by a CAMERA MAKE on an asset they do not own', async () => {
+      const { sut, ctx } = setup();
+      const { space, viewer, annaAsset } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, {
+        make: 'Apple',
+        model: 'iPhone 17 Pro Max',
+      });
+
+      // Regression guard: passes today. If someone reintroduces an ownerId predicate into the
+      // Space timeline scope, this flips to [] — issue #655.
+      expect(ids).toEqual([annaAsset.id]);
+    });
   });
 
   describe('contextual filters — ownerId (Slice 1)', () => {
@@ -754,5 +777,27 @@ describe(TimelineService.name, () => {
       expect(ids).toContain(annaAsset.id);
       expect(ids).not.toContain(benAsset.id);
     });
+  });
+
+  it("E22: an album viewer filters by the album owner's camera and sees their assets", async () => {
+    const { sut, ctx } = setup();
+    const { user: anna } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+
+    const date = new Date('2026-01-15T10:00:00Z');
+    const { asset } = await ctx.newAsset({ ownerId: anna.id, fileCreatedAt: date, localDateTime: date });
+    await ctx.newExif({ assetId: asset.id, make: 'Apple', timeZone: 'UTC' });
+
+    const { album } = await ctx.newAlbum({ ownerId: anna.id }, [asset.id]);
+    await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer });
+
+    const auth = factory.auth({ user: viewer });
+    const json = await sut.getTimeBucket(auth, {
+      albumId: album.id,
+      make: 'Apple',
+      timeBucket: SPACE_BUCKET,
+    });
+
+    expect((JSON.parse(json) as { id?: string[] }).id ?? []).toEqual([asset.id]);
   });
 });
