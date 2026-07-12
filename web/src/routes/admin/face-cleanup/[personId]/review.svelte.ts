@@ -161,23 +161,24 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
       // Plain Map: local bookkeeping scoped to this single pure-function call, discarded on return — no UI
       // reads it, so it never needs to be reactive.
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const moveGroups = new Map<string, { faceIds: string[]; lock: boolean }>();
+      const moveGroups = new Map<string, { destinationPersonId: string; faceIds: string[]; lock: boolean }>();
       const stay: string[] = [];
       const lock: string[] = [];
       const detach: string[] = [];
 
       // `lock` (Slice 3, move-and-lock): a suggested-owner (`owner`-state) move always passes `lock: false` —
       // never auto-lock a face the admin didn't explicitly move. A chosen-person (`other`-state) move passes
-      // whatever the PersonPicker's toggle recorded. If both kinds of face land in the same destination group
-      // (owner-state coincidentally matching a chosen destination), the group locks if any contributing face
-      // asked for it.
+      // whatever the PersonPicker's toggle recorded. Groups are keyed by the PAIR (destinationPersonId, lock),
+      // not destinationPersonId alone: if an owner-state face and an other-state face happen to share a
+      // destination but disagree on lock, they must emit as two separate `moveToPerson` groups so the
+      // owner-state group is never swept into a lock:true it never asked for.
       const addToMoveGroup = (destinationPersonId: string, assetFaceId: string, faceLock: boolean) => {
-        const group = moveGroups.get(destinationPersonId);
+        const key = `${destinationPersonId}|${faceLock}`;
+        const group = moveGroups.get(key);
         if (group) {
           group.faceIds.push(assetFaceId);
-          group.lock = group.lock || faceLock;
         } else {
-          moveGroups.set(destinationPersonId, { faceIds: [assetFaceId], lock: faceLock });
+          moveGroups.set(key, { destinationPersonId, faceIds: [assetFaceId], lock: faceLock });
         }
       };
 
@@ -212,8 +213,8 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
 
       return {
         personId,
-        moveToPerson: [...moveGroups.entries()].map(([destinationPersonId, group]) => ({
-          destinationPersonId,
+        moveToPerson: [...moveGroups.values()].map((group) => ({
+          destinationPersonId: group.destinationPersonId,
           faceIds: group.faceIds,
           lock: group.lock,
         })),

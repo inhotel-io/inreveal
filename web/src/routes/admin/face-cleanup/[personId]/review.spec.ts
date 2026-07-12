@@ -78,6 +78,25 @@ describe('createReviewModel (Model B / full resolution)', () => {
     expect(ownerGroup?.lock ?? false).toBe(false);
   });
 
+  it('W1 (Slice 3 fix): an owner-state face never auto-locks when an other-state face shares its destination with lock:true', () => {
+    const vm = createReviewModel(makeFaces());
+    // f1/f2 stay in the default owner state (suspectedOwnerId 'owner-a' — the "P" from the bug report).
+    // f3 is explicitly routed via the picker to that SAME destination ('owner-a') with the lock toggle on.
+    vm.toggleSelect('f3');
+    vm.applyToSelection('other', { personId: 'owner-a', name: 'Owner A', lock: true });
+
+    const req = vm.buildResolveRequest('person-1');
+    const groupsForOwnerA = (req.moveToPerson ?? []).filter((g) => g.destinationPersonId === 'owner-a');
+
+    // Two separate groups to the same destination — the owner-state group must NOT inherit the other-state
+    // group's lock:true (that would silently auto-lock a face the admin never asked to lock).
+    expect(groupsForOwnerA).toHaveLength(2);
+    const lockedGroup = groupsForOwnerA.find((g) => g.lock);
+    const unlockedGroup = groupsForOwnerA.find((g) => !g.lock);
+    expect(lockedGroup?.faceIds).toEqual(['f3']);
+    expect(unlockedGroup?.faceIds).toEqual(['f1', 'f2']);
+  });
+
   it('W2: toggling the picker lock off emits lock:false for that group', () => {
     const vm = createReviewModel(makeFaces());
     vm.toggleSelect('f3');
