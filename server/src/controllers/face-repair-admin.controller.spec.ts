@@ -205,6 +205,26 @@ describe(FaceRepairAdminController.name, () => {
       expect(status).toBe(400);
       expect(service.createDeclines).not.toHaveBeenCalled();
     });
+
+    // Temporal-consistency hardening, Slice 2 (C2, E11): dismiss (a persons-payload decline) delegates to
+    // service.createDeclines exactly like a faces-payload decline — the drain of the latest scan snapshot is
+    // an internal service concern covered at the service layer by the medium M9 test; this controller test
+    // only mocks the service, so it can assert delegation, not the drain itself.
+    it('should delegate a persons-payload dismiss to service.createDeclines with auth user id', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.createDeclines.mockResolvedValue({ created: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token')
+        .send({ persons: [{ personId: uuid1, suspectedOwnerIds: [uuid2] }] });
+      expect(status).toBe(201);
+      expect(service.createDeclines).toHaveBeenCalledWith(
+        expect.objectContaining({
+          persons: [{ personId: uuid1, suspectedOwnerIds: [uuid2] }],
+          declinedBy: adminUserId,
+        }),
+      );
+    });
   });
 
   describe('GET /admin/face-repair/decline', () => {

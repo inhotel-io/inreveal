@@ -1387,3 +1387,42 @@ describe('FaceRepairService.resolveFaces: detach regenerates the representative 
     expect(queuedJobs.some((job) => job.name === JobName.PersonGenerateThumbnail)).toBe(false);
   });
 });
+
+// ── Temporal-consistency hardening, Slice 2: dismiss drains the latest scan snapshot (M9, E11) ─────
+
+describe('FaceRepairService.createDeclines: dismiss drains the latest scan snapshot (M9, E11)', () => {
+  it('removes the dismissed person from the latest scan snapshot while keeping the person-decline row', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerQ } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerQ.id }]);
+
+    // Sanity: the person starts out present in the latest scan snapshot.
+    const before = await scanRepo.getLatestScan();
+    const beforeIds = ((before!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(beforeIds).toContain(source.id);
+
+    await sut.createDeclines({
+      persons: [{ personId: source.id, suspectedOwnerIds: [ownerQ.id] }],
+      declinedBy: user.id,
+    });
+
+    // Drained from the latest scan snapshot — a dashboard reload no longer resurfaces it.
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).not.toContain(source.id);
+
+    // The persisted person-decline row still exists — it governs future scans independently of the drain
+    // (a genuinely new suspected owner can still resurface the person, per the existing subset check).
+    const declineRow = await db
+      .selectFrom('face_repair_decline')
+      .select(['id', 'personId'])
+      .where('type', '=', 'person')
+      .where('personId', '=', source.id)
+      .executeTakeFirst();
+    expect(declineRow).toBeDefined();
+  });
+});

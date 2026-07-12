@@ -566,6 +566,12 @@ export class FaceRepairService extends BaseService {
     declinedBy: string;
   }): Promise<{ created: number }> {
     const created = await this.faceRepairDeclineRepository.createDeclines(input);
+    // Drain the dismissed persons from the latest scan snapshot so a dashboard reload no longer resurfaces
+    // them (mirrors resolveFaces's unconditional drop-on-resolution). Scoped to the `persons` branch only:
+    // the `faces` branch is reached solely from resolveFaces, which already drains its own person.
+    if (input.persons?.length) {
+      await this.faceRepairScanRepository.removePersonsFromLatestScan(input.persons.map((p) => p.personId));
+    }
     return { created };
   }
 

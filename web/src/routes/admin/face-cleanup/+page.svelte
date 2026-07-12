@@ -267,9 +267,9 @@
     const suspectedOwnerIds = person.suspectedOwners.map((o) => o.ownerPersonId);
     try {
       await declineFaceRepair({ faceRepairDeclineRequestDto: { persons: [{ personId, suspectedOwnerIds }] } });
-      if (scan) {
-        setScan({ ...scan, persons: scan.persons.filter((p) => p.personId !== personId) });
-      }
+      // The server drains the dismissed person from the latest scan snapshot (createDeclines's persons
+      // branch), so trust that snapshot via a refetch rather than only mutating the client-held list.
+      await fetchLatestScan();
       toastManager.success($t('admin.face_cleanup_dismiss'));
     } catch {
       toastManager.danger($t('admin.face_cleanup_dismiss_error'));
