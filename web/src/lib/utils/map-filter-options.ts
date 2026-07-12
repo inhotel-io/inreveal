@@ -54,6 +54,17 @@ function applyCommonMapFilters(base: Record<string, unknown>, filters: FilterSta
 export function buildMapMarkerOptions(filters: FilterState, spaceId?: string): Record<string, unknown> {
   const base = applyCommonMapFilters(spaceId ? { spaceId } : { withSharedSpaces: true }, filters);
 
+  if (filters.lensModel) {
+    base.lensModel = filters.lensModel;
+  }
+  if (filters.state) {
+    base.state = filters.state;
+  }
+  if (filters.ownerId) {
+    base.ownerId = filters.ownerId;
+  }
+  // The map-markers endpoint has no albumId param — deliberately not forwarded here.
+
   if (filters.mediaType !== 'all') {
     base.$type = filters.mediaType === 'image' ? MapMediaType.Image : MapMediaType.Video;
   }
@@ -70,6 +81,19 @@ export function buildMapTimeBucketOptions(filters: FilterState, spaceId?: string
 
   if (spaceId && filters.personIds.length > 0) {
     base.spacePersonIds = filters.personIds;
+  }
+
+  if (filters.lensModel) {
+    base.lensModel = filters.lensModel;
+  }
+  if (filters.state) {
+    base.state = filters.state;
+  }
+  if (filters.ownerId) {
+    base.ownerId = filters.ownerId;
+  }
+  if (filters.albumId) {
+    base.albumId = filters.albumId;
   }
 
   if (filters.mediaType !== 'all') {

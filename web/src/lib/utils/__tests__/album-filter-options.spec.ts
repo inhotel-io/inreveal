@@ -61,6 +61,34 @@ describe('buildAlbumTimelineOptions', () => {
       }),
     );
   });
+
+  it('forwards lensModel, state and ownerId to the album timeline query', () => {
+    const filters = {
+      ...createFilterState(),
+      lensModel: 'RF24-70mm F2.8 L IS USM',
+      state: 'State of Berlin',
+      ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+    };
+
+    expect(buildAlbumTimelineOptions('album-1', AssetOrder.Desc, filters)).toEqual(
+      expect.objectContaining({
+        lensModel: 'RF24-70mm F2.8 L IS USM',
+        state: 'State of Berlin',
+        ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+      }),
+    );
+  });
+
+  // The album page's route ALREADY scopes the query to its album, and the server's albumId is a
+  // scalar driving one inner join — a second album cannot be AND-ed. So an albumId FILTER is
+  // meaningless here and must not overwrite the route's album scope.
+  it('ignores an albumId filter and keeps the route album', () => {
+    const filters = { ...createFilterState(), albumId: 'some-other-album' };
+
+    const options = buildAlbumTimelineOptions('route-album-id', AssetOrder.Desc, filters);
+
+    expect(options.albumId).toBe('route-album-id');
+  });
 });
 
 describe('buildAlbumAssetPickerOptions', () => {

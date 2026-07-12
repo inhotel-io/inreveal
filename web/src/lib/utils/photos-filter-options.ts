@@ -37,6 +37,18 @@ export function buildPhotosTimelineOptions(filters: FilterState): Record<string,
   if (filters.model) {
     base.model = filters.model;
   }
+  if (filters.lensModel) {
+    base.lensModel = filters.lensModel;
+  }
+  if (filters.state) {
+    base.state = filters.state;
+  }
+  if (filters.ownerId) {
+    base.ownerId = filters.ownerId;
+  }
+  if (filters.albumId) {
+    base.albumId = filters.albumId;
+  }
   applyTextFilters(base, filters);
   if (filters.tagIds.length > 0) {
     base.tagIds = filters.tagIds;

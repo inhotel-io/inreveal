@@ -30,6 +30,13 @@ export function filterStateToSearchTerms(filters: FilterState): SearchTerms {
   if (filters.model) {
     terms.model = filters.model;
   }
+  if (filters.lensModel) {
+    terms.lensModel = filters.lensModel;
+  }
+  if (filters.state) {
+    terms.state = filters.state;
+  }
+  // MetadataSearchDto has no ownerId field, so it is intentionally not forwarded here.
   if (filters.description?.trim()) {
     terms.description = filters.description.trim();
   }

@@ -53,7 +53,22 @@ export function buildAlbumTimelineOptions(
   order: AssetOrder,
   filters: FilterState,
 ): Record<string, unknown> {
-  return applyCommonFilterFields({ albumId, order }, filters);
+  const base = applyCommonFilterFields({ albumId, order }, filters);
+
+  // The route already scopes the query to `albumId`; the server's albumId is a scalar driving one
+  // inner join, so a second album cannot be AND-ed. A stray albumId filter is therefore never
+  // forwarded here — it must not hijack the route's own album scope.
+  if (filters.lensModel) {
+    base.lensModel = filters.lensModel;
+  }
+  if (filters.state) {
+    base.state = filters.state;
+  }
+  if (filters.ownerId) {
+    base.ownerId = filters.ownerId;
+  }
+
+  return base;
 }
 
 export function buildAlbumAssetPickerOptions(albumId: string, filters: FilterState): Record<string, unknown> {

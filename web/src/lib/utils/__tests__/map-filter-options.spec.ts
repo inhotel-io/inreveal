@@ -41,6 +41,18 @@ describe('buildMapMarkerOptions', () => {
 
     expect(buildMapMarkerOptions(filters)).not.toHaveProperty('isInAlbum');
   });
+
+  // The map-markers endpoint has no albumId param (its builder takes albumIds, which this
+  // endpoint's DTO does not expose). Forward the other three, not this one.
+  it('forwards lensModel/state/ownerId but not albumId', () => {
+    const options = buildMapMarkerOptions(
+      { ...createFilterState(), lensModel: 'RF24', state: 'Hamburg', ownerId: 'u1', albumId: 'a1' },
+      undefined,
+    );
+
+    expect(options).toMatchObject({ lensModel: 'RF24', state: 'Hamburg', ownerId: 'u1' });
+    expect(options.albumId).toBeUndefined();
+  });
 });
 
 describe('buildMapTimeBucketOptions', () => {
@@ -119,6 +131,23 @@ describe('buildMapTimeBucketOptions', () => {
     expect(buildMapTimeBucketOptions(filters)).toEqual(
       expect.objectContaining({ takenBefore: '2025-01-01T00:00:00.000Z' }),
     );
+  });
+
+  it('forwards the new filter dimensions to the map time bucket query', () => {
+    const filters = {
+      ...createFilterState(),
+      lensModel: 'RF24-70mm F2.8 L IS USM',
+      state: 'State of Berlin',
+      albumId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+      ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+    };
+
+    expect(buildMapTimeBucketOptions(filters)).toMatchObject({
+      lensModel: 'RF24-70mm F2.8 L IS USM',
+      state: 'State of Berlin',
+      albumId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+      ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+    });
   });
 });
 
