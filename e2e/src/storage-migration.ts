@@ -2007,7 +2007,7 @@ async function phaseVideoTrimS3(): Promise<void> {
   // the trim job's preferred input, and it is what makes gh#671's defect 3
   // (an S3 key handed straight to ffmpeg) reachable.
   const originalConfig = await api('GET', '/system-config', { token });
-  const trimConfig = JSON.parse(JSON.stringify(originalConfig));
+  const trimConfig = structuredClone(originalConfig);
   trimConfig.ffmpeg.transcode = 'all';
   await api('PUT', '/system-config', { body: trimConfig, token });
   console.log('  ffmpeg.transcode = all');
@@ -2018,16 +2018,24 @@ async function phaseVideoTrimS3(): Promise<void> {
 
   try {
     // 4s test video, tiny frame size. Must be >= 2s or editAsset rejects the trim.
+    //
+    // -g 10 -keyint_min 10 -sc_threshold 0 puts a keyframe on every second (10fps).
+    // MediaRepository.trim runs ffmpeg with `-c copy`, so its seek is keyframe-snapped:
+    // with x264's default GOP a 4s clip has only the frame-0 keyframe, `-ss 1` would snap
+    // back to 0, and the "2s" trim would come out 3.2s long. Real videos carry regular
+    // keyframes; the fixture must too, or it tests a scenario that does not exist.
     const base64 = dockerExec(
       'immich-server',
       'ffmpeg -y -loglevel error -f lavfi -i testsrc=duration=4:size=192x144:rate=10 ' +
-        '-c:v libx264 -pix_fmt yuv420p /tmp/trim-src.mp4 && base64 /tmp/trim-src.mp4 | tr -d "\\n"',
+        '-c:v libx264 -pix_fmt yuv420p -g 10 -keyint_min 10 -sc_threshold 0 /tmp/trim-src.mp4 ' +
+        String.raw`&& base64 /tmp/trim-src.mp4 | tr -d "\n"`,
     );
     const video = Buffer.from(base64, 'base64');
     assert.ok(video.length > 1000, `Generated video looks too small: ${video.length} bytes`);
     console.log(`  Generated test video (${video.length} bytes)`);
 
-    assetId = (await uploadAsset(token, 'trim-s3.mp4', video)).id;
+    const uploaded = await uploadAsset(token, 'trim-s3.mp4', video);
+    assetId = uploaded.id;
     console.log(`  Uploaded asset ${assetId}`);
     await waitForProcessing(token, 120_000);
 
@@ -2095,14 +2103,17 @@ async function phaseVideoTrimS3(): Promise<void> {
     const localEditedPath = `${MEDIA_LOCATION}/encoded-video/${ownerId}/${assetId.slice(0, 2)}/${assetId.slice(2, 4)}/${assetId}_edited.mp4`;
     assert.ok(!diskFileExists(localEditedPath), `Trimmed video left on local disk: ${localEditedPath}`);
 
-    // Duration reflects the trim (2s), not the original (4s).
+    // Duration reflects the trim (~2s), not the original (4s). The trim is a `-c copy`
+    // stream copy, so ffmpeg snaps to keyframes and the result is close to, not exactly,
+    // the requested 2s — which is why handleVideoTrim re-probes the output instead of
+    // trusting the requested duration. The window allows one keyframe interval of slack.
     const trimmedRows = await queryDb<{ duration: string | null }>('SELECT duration FROM asset WHERE id = $1', [
       assetId,
     ]);
     const durationMs = Number(trimmedRows[0].duration);
     assert.ok(
-      durationMs >= 1500 && durationMs <= 2500,
-      `Expected trimmed duration ~2000ms, got ${trimmedRows[0].duration}`,
+      durationMs >= 1500 && durationMs <= 2600,
+      `Expected trimmed duration ~2000ms (keyframe-snapped), got ${trimmedRows[0].duration}`,
     );
 
     // Playback serves the trimmed video from S3.
