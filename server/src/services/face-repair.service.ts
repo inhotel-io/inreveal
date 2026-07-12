@@ -87,6 +87,12 @@ export interface RunRepairOptions {
 export interface RepairExecution {
   moved: number;
   skipped: number;
+  // Temporal-consistency hardening, Slice 3 (move-and-lock): every face id that ACTUALLY moved (i.e. was still
+  // on its source person at write time — the same set `moved` counts), across every route. resolveFaces uses
+  // this to lock only the faces a moveToPerson `lock: true` group actually moved, never a stale one that
+  // turned out to have moved off the source before this call (M8) — an orphan lock on an untouched face would
+  // be meaningless (locks are keyed to the destination the face is confirmed on).
+  movedFaceIds: string[];
 }
 
 export interface RunRepairResult {
@@ -203,6 +209,7 @@ export class FaceRepairService extends BaseService {
 
     let moved = 0;
     let skipped = 0;
+    const movedFaceIds: string[] = [];
     const affectedPersonIds = new Set<string>();
     const ownerExists = new Map<string, boolean>();
 
@@ -236,6 +243,7 @@ export class FaceRepairService extends BaseService {
         continue;
       }
       moved += movedIds.length;
+      movedFaceIds.push(...movedIds);
       affectedPersonIds.add(from);
       affectedPersonIds.add(to);
     }
@@ -251,7 +259,7 @@ export class FaceRepairService extends BaseService {
       }
     }
 
-    return { moved, skipped };
+    return { moved, skipped, movedFaceIds };
   }
 
   async runRepair(options: RunRepairOptions = {}): Promise<RunRepairResult> {
@@ -779,6 +787,27 @@ export class FaceRepairService extends BaseService {
       perPerson: [],
     });
 
+    // Move-and-lock (temporal-consistency hardening, Slice 3, E5-E10/E13): a moveToPerson group with
+    // `lock: true` durably, owner-agnostically locks the faces it moved to its own destination — never a face
+    // requested in the same group that turned out to be stale (M8: moved off `personId` before this call, so
+    // it's absent from `movedFaceIds`) — an orphan lock on an untouched face would be meaningless. Bypasses
+    // the flagged-snapshot membership check entirely (M7): unlike the standalone `lock` bucket above, a
+    // move-lock is tied to the move itself, not to a pre-existing suspected-owner pairing. `insertLocks` is
+    // idempotent via the plain unique index on assetFaceId, so re-issuing an identical move-lock request never
+    // inserts a second row (E13) — and since the face is already on its destination the second time, it also
+    // won't be in `movedFaceIds` again, so insertLocks is not even called for it.
+    const movedSet = new Set(result.movedFaceIds);
+    let moveLocked = 0;
+    for (const group of moveToPerson) {
+      if (!group.lock) {
+        continue;
+      }
+      const toLock = group.faceIds.filter((id) => movedSet.has(id));
+      if (toLock.length > 0) {
+        moveLocked += await this.faceRepairLockRepository.insertLocks(toLock, group.destinationPersonId, resolvedBy);
+      }
+    }
+
     // Soft-stay (M4, state 3): write a durable decline against each stayed face's OWN stored suspected owner
     // (never one shared owner — a mixed cluster can point faces at different owners). `createDeclines` is
     // idempotent via its `(assetFaceId, suspectedOwnerId)` ON CONFLICT DO NOTHING, so re-staying an
@@ -797,8 +826,10 @@ export class FaceRepairService extends BaseService {
     // Confirm/lock (Slice 3, state 4): durably, owner-agnostically lock each `lock`-bucket face to this
     // reviewed person. `insertLocks` is idempotent via the plain unique index on assetFaceId — re-locking an
     // already-locked face (even one whose flaggedIds membership above passed via a stale/declined snapshot row)
-    // is a silent no-op, never a unique-violation.
-    const locked = lock.length > 0 ? await this.faceRepairLockRepository.insertLocks(lock, personId, resolvedBy) : 0;
+    // is a silent no-op, never a unique-violation. Summed with `moveLocked` (temporal-consistency hardening,
+    // Slice 3): a single resolve can both stand-alone-lock some faces AND move-and-lock others.
+    const locked =
+      (lock.length > 0 ? await this.faceRepairLockRepository.insertLocks(lock, personId, resolvedBy) : 0) + moveLocked;
 
     // Detach (Slice 5, state 5, "Not a face"): unassign each detached face from this person AND strip its
     // identity link, atomically — wrapped in one transaction so a crash between the two writes can never leave

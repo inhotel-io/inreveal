@@ -25679,6 +25679,10 @@
                   },
                   "minItems": 1,
                   "type": "array"
+                },
+                "lock": {
+                  "default": false,
+                  "type": "boolean"
                 }
               },
               "required": [

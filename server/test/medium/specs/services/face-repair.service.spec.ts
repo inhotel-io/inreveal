@@ -1325,7 +1325,9 @@ describe('FaceRepairService decline filter', () => {
     const result = await sut.resolveFaces(
       {
         personId: alexia.id,
-        moveToPerson: [{ destinationPersonId: karina.id, faceIds: leakedToRepair.map((f) => f.assetFaceId) }],
+        moveToPerson: [
+          { destinationPersonId: karina.id, faceIds: leakedToRepair.map((f) => f.assetFaceId), lock: false },
+        ],
         stay: [],
         lock: [],
         detach: [],

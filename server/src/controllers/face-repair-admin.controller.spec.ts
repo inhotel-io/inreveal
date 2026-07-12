@@ -91,7 +91,7 @@ describe(FaceRepairAdminController.name, () => {
       const result = {
         dryRun: false,
         mutated: true,
-        executed: { moved: 3, skipped: 0 },
+        executed: { moved: 3, skipped: 0, movedFaceIds: [] },
         report: {
           totals: {
             eligibleFaces: 50,
@@ -333,7 +333,14 @@ describe(FaceRepairAdminController.name, () => {
         .send({ personId, moveToPerson });
       expect(status).toBe(201);
       expect(service.resolveFaces).toHaveBeenCalledWith(
-        expect.objectContaining({ personId, moveToPerson, stay: [], lock: [], detach: [] }),
+        expect.objectContaining({
+          personId,
+          // Each group's `lock` (temporal-consistency hardening, Slice 3) defaults to false when omitted.
+          moveToPerson: moveToPerson.map((group) => ({ ...group, lock: false })),
+          stay: [],
+          lock: [],
+          detach: [],
+        }),
         adminUserId,
       );
       expect(body).toEqual({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });

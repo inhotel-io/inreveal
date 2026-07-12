@@ -251,7 +251,14 @@ export class FaceRepairClusterFacesResponseDto extends createZodDto(FaceRepairCl
 // docs/plans/2026-07-10-face-cleanup-full-resolution-design.md). Only `moveToPerson` is wired end-to-end this
 // slice; `stay`/`lock`/`detach` default to [] and are validated (disjoint buckets) but not yet acted on —
 // Slices 2/3/5 wire them without another DTO/SDK change.
-const MoveGroupSchema = z.object({ destinationPersonId: z.uuidv4(), faceIds: z.array(z.uuidv4()).min(1) });
+// `lock` (temporal-consistency hardening, Slice 3, "move-and-lock"): a deliberate move can also durably,
+// owner-agnostically lock the moved faces to their destination, so a later re-scan never re-flags them.
+// Defaults to false — plain moves stay undurable unless the caller opts in.
+const MoveGroupSchema = z.object({
+  destinationPersonId: z.uuidv4(),
+  faceIds: z.array(z.uuidv4()).min(1),
+  lock: z.boolean().default(false),
+});
 export const FaceRepairResolveRequestSchema = z
   .object({
     personId: z.uuidv4(),

@@ -207,6 +207,7 @@ export type FaceRepairResolveRequestDto = {
     moveToPerson?: {
         destinationPersonId: string;
         faceIds: string[];
+        lock?: boolean;
     }[];
     personId: string;
     stay?: string[];
