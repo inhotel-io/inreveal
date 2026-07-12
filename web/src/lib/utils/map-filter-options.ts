@@ -63,7 +63,9 @@ export function buildMapMarkerOptions(filters: FilterState, spaceId?: string): R
   if (filters.ownerId) {
     base.ownerId = filters.ownerId;
   }
-  // The map-markers endpoint has no albumId param — deliberately not forwarded here.
+  if (filters.albumId) {
+    base.albumId = filters.albumId;
+  }
 
   if (filters.mediaType !== 'all') {
     base.$type = filters.mediaType === 'image' ? MapMediaType.Image : MapMediaType.Video;

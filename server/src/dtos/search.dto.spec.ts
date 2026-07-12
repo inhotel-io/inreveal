@@ -1,5 +1,6 @@
 import {
   FilterSuggestionsRequestDto,
+  MetadataSearchDto,
   SearchSuggestionRequestDto,
   SearchSuggestionType,
   SmartSearchDto,
@@ -66,6 +67,17 @@ describe('search DTO albumless filters', () => {
 
     expect(result.success).toBe(true);
     expect(result.data?.isInAlbum).toBe(true);
+  });
+
+  // ownerId is a narrowing contributor filter, distinct from the owner-scoping userIds resolved by
+  // the service. Without a schema field for it, the ZodValidationPipe would silently strip ownerId
+  // from incoming requests before the service ever sees it — the metadata-search DTO must declare it.
+  it('should accept ownerId on metadata search requests', () => {
+    const ownerId = '00000000-0000-4000-8000-000000000001';
+    const result = MetadataSearchDto.schema.safeParse({ ownerId });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.ownerId).toBe(ownerId);
   });
 
   it('should coerce isInAlbum on filter suggestion requests', () => {

@@ -36,7 +36,15 @@ export function filterStateToSearchTerms(filters: FilterState): SearchTerms {
   if (filters.state) {
     terms.state = filters.state;
   }
-  // MetadataSearchDto has no ownerId field, so it is intentionally not forwarded here.
+  if (filters.ownerId) {
+    terms.ownerId = filters.ownerId;
+  }
+  if (filters.albumId) {
+    // MetadataSearchDto's albumIds field is plural/array; wrap the single contextual filter value.
+    // The album ROUTE overrides this downstream with albumIds: [album.id], so the album page's own
+    // "add all" stays correct regardless.
+    terms.albumIds = [filters.albumId];
+  }
   if (filters.description?.trim()) {
     terms.description = filters.description.trim();
   }

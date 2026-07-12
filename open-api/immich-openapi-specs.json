@@ -6499,6 +6499,17 @@
         "operationId": "getFilteredMapMarkers",
         "parameters": [
           {
+            "name": "albumId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by album",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
             "name": "city",
             "required": false,
             "in": "query",
@@ -11357,6 +11368,17 @@
             "in": "query",
             "description": "Filter by OCR text content",
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ownerId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by asset owner (contributor). Narrows within the current scope; never widens it.",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -26722,6 +26744,12 @@
             "description": "Filter by original file path",
             "type": "string"
           },
+          "ownerId": {
+            "description": "Filter by asset owner (contributor). Narrows within the current scope; never widens it.",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
           "page": {
             "description": "Page number",
             "maximum": 9007199254740991,
@@ -28741,6 +28769,12 @@
           },
           "ocr": {
             "description": "Filter by OCR text content",
+            "type": "string"
+          },
+          "ownerId": {
+            "description": "Filter by asset owner (contributor). Narrows within the current scope; never widens it.",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
           "personIds": {
@@ -31150,6 +31184,12 @@
             "$ref": "#/components/schemas/AssetOrder",
             "description": "Sort order (omit for relevance)"
           },
+          "ownerId": {
+            "description": "Filter by asset owner (contributor). Narrows within the current scope; never widens it.",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          },
           "page": {
             "description": "Page number",
             "maximum": 9007199254740991,
@@ -31696,6 +31736,12 @@
           },
           "ocr": {
             "description": "Filter by OCR text content",
+            "type": "string"
+          },
+          "ownerId": {
+            "description": "Filter by asset owner (contributor). Narrows within the current scope; never widens it.",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
             "type": "string"
           },
           "personIds": {

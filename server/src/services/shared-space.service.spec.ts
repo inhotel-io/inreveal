@@ -11616,6 +11616,31 @@ describe(SharedSpaceService.name, () => {
       // merged into it, or it widens the result set instead of narrowing it.
       expect(args.userIds).not.toContain(ownerId);
     });
+
+    // searchAssetBuilder already supports albums via inAlbums(), which takes an array (albumIds).
+    // Without this, the map's timeline picker would honour ?albumId= while its pins ignored it —
+    // a fresh instance of the #767 bug.
+    it('forwards albumId to the repository as albumIds', async () => {
+      const auth = factory.auth();
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+      const albumId = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
+
+      await sut.getFilteredMapMarkers(auth, { albumId } as FilteredMapMarkerDto);
+
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({ albumIds: [albumId] }),
+      );
+    });
+
+    it('omits albumIds when albumId is not provided', async () => {
+      const auth = factory.auth();
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, {});
+
+      const args = mocks.sharedSpace.getFilteredMapMarkers.mock.calls[0][0];
+      expect(args.albumIds).toBeUndefined();
+    });
   });
 
   describe('deduplicateSpacePeople', () => {

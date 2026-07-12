@@ -79,12 +79,30 @@ describe('filterStateToSearchTerms', () => {
     );
   });
 
-  // MetadataSearchDto has no ownerId field, so it is intentionally not forwarded here (unlike the
-  // timeline/map option builders, which do forward it to their own DTOs).
-  it('does not forward ownerId, which MetadataSearchDto does not support', () => {
+  // MetadataSearchDto's albumIds field is plural/array, so a single albumId filter must be wrapped.
+  // Dropping this would make "add all filtered results to a collection" collect every album's assets
+  // instead of just the one the user is viewing (live over-collection bug).
+  it('maps albumId to albumIds on the search terms', () => {
+    const terms = filterStateToSearchTerms({
+      ...createFilterState(),
+      albumId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+    });
+
+    expect(terms).toEqual(
+      expect.objectContaining({
+        albumIds: ['aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'],
+      }),
+    );
+  });
+
+  // MetadataSearchDto now has an ownerId field (server-side fix landed alongside this test), so the
+  // owner/contributor filter must be forwarded like every other narrowing filter. Dropping it would
+  // make "add all filtered results to a collection" collect every owner's assets instead of just the
+  // filtered owner's (live over-collection bug).
+  it('maps ownerId to the search terms', () => {
     const terms = filterStateToSearchTerms({ ...createFilterState(), ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb' });
 
-    expect(terms).not.toHaveProperty('ownerId');
+    expect(terms).toEqual(expect.objectContaining({ ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb' }));
   });
 
   it('maps a custom date range to takenAfter / takenBefore', () => {

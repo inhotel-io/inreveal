@@ -44,6 +44,10 @@ const BaseSearchSchema = z.object({
   make: z.string().nullable().optional().describe('Filter by camera make'),
   model: z.string().nullable().optional().describe('Filter by camera model'),
   lensModel: z.string().nullable().optional().describe('Filter by lens model'),
+  ownerId: z
+    .uuidv4()
+    .optional()
+    .describe('Filter by asset owner (contributor). Narrows within the current scope; never widens it.'),
   isNotInAlbum: z.boolean().optional().describe('Filter assets not in any album'),
   isInAlbum: z.boolean().optional().describe('Filter assets in at least one album'),
   personIds: z.array(ScopedPersonTokenSchema).optional().describe('Filter by person IDs'),

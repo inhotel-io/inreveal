@@ -1089,6 +1089,7 @@ export class SharedSpaceService extends BaseService {
       lensModel: dto.lensModel,
       state: dto.state,
       ownerId: dto.ownerId,
+      albumIds: dto.albumId ? [dto.albumId] : undefined,
       visibility: AssetVisibility.Timeline,
       personMatchAny: true,
       tagMatchAny: true,

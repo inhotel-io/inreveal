@@ -42,16 +42,16 @@ describe('buildMapMarkerOptions', () => {
     expect(buildMapMarkerOptions(filters)).not.toHaveProperty('isInAlbum');
   });
 
-  // The map-markers endpoint has no albumId param (its builder takes albumIds, which this
-  // endpoint's DTO does not expose). Forward the other three, not this one.
-  it('forwards lensModel/state/ownerId but not albumId', () => {
+  // The map-markers DTO now exposes albumId (server forwards it as albumIds: [albumId] to
+  // searchAssetBuilder's inAlbums()), so it must be forwarded here too — otherwise the map's pins
+  // would ignore the album filter that the map's own timeline picker honours (a fresh instance of #767).
+  it('forwards lensModel/state/ownerId/albumId', () => {
     const options = buildMapMarkerOptions(
       { ...createFilterState(), lensModel: 'RF24', state: 'Hamburg', ownerId: 'u1', albumId: 'a1' },
       undefined,
     );
 
-    expect(options).toMatchObject({ lensModel: 'RF24', state: 'Hamburg', ownerId: 'u1' });
-    expect(options.albumId).toBeUndefined();
+    expect(options).toMatchObject({ lensModel: 'RF24', state: 'Hamburg', ownerId: 'u1', albumId: 'a1' });
   });
 });
 
