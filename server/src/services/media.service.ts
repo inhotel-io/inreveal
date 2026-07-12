@@ -235,6 +235,16 @@ export class MediaService extends BaseService {
           asset.files.filter((file) => file.isEdited),
           [],
         );
+
+        // asset.files never contains EncodedVideo rows (getForGenerateThumbnailJob only loads
+        // thumbnail/preview/fullsize), so syncFiles cannot see the trimmed video. Without this,
+        // getForVideo (isEdited DESC) would keep serving the trimmed video after an undo.
+        const editedVideo = await this.assetRepository.getEditedEncodedVideo(asset.id);
+        if (editedVideo) {
+          await this.assetRepository.deleteFiles([editedVideo]);
+          await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [editedVideo.path] } });
+        }
+
         await this.jobRepository.queue({ name: JobName.AssetGenerateThumbnails, data: { id } });
         return JobStatus.Success;
       }
@@ -293,9 +303,10 @@ export class MediaService extends BaseService {
     const params = trimEdit.parameters as TrimParameters & { originalDuration: number };
     const duration = params.endTime - params.startTime;
 
-    // Select input: prefer non-edited encoded video, fall back to original
-    const existingEncoded = asset.files.find((f) => f.type === AssetFileType.EncodedVideo && !f.isEdited);
-    const inputPath = existingEncoded?.path || localPath;
+    // ffmpeg always reads the original. The asset's encoded video is not a candidate:
+    // getForGenerateThumbnailJob never loads EncodedVideo rows (asset-job.repository.ts),
+    // and on S3 its path would be a relative key ffmpeg cannot open anyway.
+    const inputPath = localPath;
 
     // Output path for edited encoded video in EncodedVideo directory
     const outputPath = StorageCore.getNestedPath(StorageFolder.EncodedVideo, asset.ownerId, `${asset.id}_edited.mp4`);

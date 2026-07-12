@@ -1632,6 +1632,27 @@ describe(MediaService.name, () => {
       expect(mocks.media.trim).toHaveBeenCalledWith(expect.any(String), expect.any(String), 5, 20);
     });
 
+    it('always trims the original, even if an encoded video row is present', async () => {
+      const asset = AssetFactory.from({ type: AssetType.Video })
+        .exif()
+        .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+        .files([{ type: AssetFileType.EncodedVideo, isEdited: false, path: 'encoded-video/owner/ab/cd/video.mp4' }])
+        .build();
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+      mocks.media.probe.mockResolvedValue({
+        ...videoInfoStub.noAudioStreams,
+        format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+      });
+      mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+      mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+      await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+      // The encoded video is never a valid ffmpeg input: on S3 its path is a relative key.
+      // The original is both readable and higher quality.
+      expect(mocks.media.trim).toHaveBeenCalledWith(asset.originalPath, expect.any(String), 5, 20);
+    });
+
     it('should update asset duration after trimming', async () => {
       const asset = AssetFactory.from({ type: AssetType.Video })
         .exif()
@@ -1789,6 +1810,49 @@ describe(MediaService.name, () => {
         name: JobName.AssetGenerateThumbnails,
         data: { id: asset.id },
       });
+    });
+
+    it('deletes the edited encoded video when the trim is undone', async () => {
+      const asset = AssetFactory.from({ type: AssetType.Video })
+        .exif()
+        .files([{ type: AssetFileType.Preview, isEdited: true, path: '/data/preview_edited.jpeg' }])
+        .build();
+      // no edits => the undo path
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+        ...getForGenerateThumbnail(asset),
+        edits: [],
+      } as any);
+      mocks.asset.getEditedEncodedVideo.mockResolvedValue({
+        id: 'file-id-1',
+        path: 'encoded-video/owner/ab/cd/video_edited.mp4',
+      });
+
+      await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+      // Without this, getForVideo (isEdited DESC) keeps serving the TRIMMED video after an undo.
+      expect(mocks.asset.deleteFiles).toHaveBeenCalledWith([expect.objectContaining({ id: 'file-id-1' })]);
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.FileDelete,
+        data: { files: ['encoded-video/owner/ab/cd/video_edited.mp4'] },
+      });
+    });
+
+    it('undoes cleanly when there is no edited encoded video', async () => {
+      // No edited files at all — unlike U1, this isolates the assertion to the
+      // getEditedEncodedVideo guard: an unrelated edited Preview row would also
+      // produce a deleteFiles call via syncFiles' own cleanup, which would make
+      // the "no deleteFiles call" assertion below pass/fail for the wrong reason.
+      const asset = AssetFactory.from({ type: AssetType.Video }).exif().build();
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+        ...getForGenerateThumbnail(asset),
+        edits: [],
+      } as any);
+      mocks.asset.getEditedEncodedVideo.mockResolvedValue(undefined);
+
+      const result = await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+      expect(result).toBe(JobStatus.Success);
+      expect(mocks.asset.deleteFiles).not.toHaveBeenCalled();
     });
   });
 
