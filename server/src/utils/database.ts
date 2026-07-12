@@ -867,6 +867,10 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
         .innerJoin('asset_exif', 'asset.id', 'asset_exif.assetId')
         .where('asset_exif.lensModel', options.lensModel === null ? 'is' : '=', options.lensModel!),
     )
+    // Contributor filter: a standalone AND on asset.ownerId. Deliberately NOT merged into the
+    // options.userIds clauses above/below, which are the owner SCOPING predicate — merging a
+    // contributor filter into userIds would widen the result set instead of narrowing it.
+    .$if(options.ownerId !== undefined, (qb) => qb.where('asset.ownerId', '=', asUuid(options.ownerId!)))
     .$if(options.rating !== undefined, (qb) =>
       qb
         .innerJoin('asset_exif', 'asset.id', 'asset_exif.assetId')

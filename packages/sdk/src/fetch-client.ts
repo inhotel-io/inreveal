@@ -5762,20 +5762,23 @@ export function reassignFacesById({ id, faceDto }: {
 /**
  * Get filtered map markers
  */
-export function getFilteredMapMarkers({ city, country, description, isFavorite, isInAlbum, isNotInAlbum, make, model, ocr, originalFileName, personIds, rating, spaceId, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
+export function getFilteredMapMarkers({ city, country, description, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, model, ocr, originalFileName, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
     city?: string;
     country?: string;
     description?: string;
     isFavorite?: boolean;
     isInAlbum?: boolean;
     isNotInAlbum?: boolean;
+    lensModel?: string;
     make?: string;
     model?: string;
     ocr?: string;
     originalFileName?: string;
+    ownerId?: string;
     personIds?: string[];
     rating?: number;
     spaceId?: string;
+    state?: string;
     tagIds?: string[];
     takenAfter?: string;
     takenBefore?: string;
@@ -5792,13 +5795,16 @@ export function getFilteredMapMarkers({ city, country, description, isFavorite, 
         isFavorite,
         isInAlbum,
         isNotInAlbum,
+        lensModel,
         make,
         model,
         ocr,
         originalFileName,
+        ownerId,
         personIds,
         rating,
         spaceId,
+        state,
         tagIds,
         takenAfter,
         takenBefore,

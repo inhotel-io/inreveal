@@ -45,6 +45,12 @@ const FilteredMapMarkerSchema = z
     description: z.string().optional().describe('Filter by description text'),
     originalFileName: z.string().optional().describe('Filter by original file name'),
     ocr: z.string().optional().describe('Filter by text recognised in the image'),
+    lensModel: z.string().optional().describe('Camera lens model'),
+    state: z.string().optional().describe('Filter by state/province'),
+    ownerId: z
+      .uuidv4()
+      .optional()
+      .describe('Filter by asset owner (contributor). Narrows within the current scope; never widens it.'),
     withSharedSpaces: stringToBool.optional().describe('Include shared space assets'),
   })
   .meta({ id: 'FilteredMapMarkerDto' });
