@@ -4,8 +4,8 @@ Fixes [#671](https://github.com/open-noodle/gallery/issues/671).
 
 ## Problem
 
-Video trim does not work on S3-backed deployments. There are **two layers** to that, and #671 only describes the
-inner one.
+Video trim does not work on S3-backed deployments. There are **three layers** to that, and #671 describes only the
+middle one — and describes it partly wrongly. Layers 1 and 3 were found by running the code, not reading it.
 
 ### Layer 1 — the feature is fenced off at the API (the reason nobody has hit the inner bugs)
 
@@ -40,13 +40,36 @@ that never persists its outputs to the write backend, and it can hand an S3-rela
    the DB would record a local path.
 2. **Trim thumbnails never persisted.** The files returned by `generateImageThumbnails` (local paths) go straight
    into `syncFiles` with no persist loop, unlike `handleAssetEditThumbnailGeneration`.
-3. **S3 key fed to ffmpeg.** `const inputPath = existingEncoded?.path || localPath` — when a prior non-edited
-   `EncodedVideo` exists in S3, `existingEncoded.path` is a relative key, passed to `mediaRepository.trim` without
-   `ensureLocalFile`, so ffmpeg fails with ENOENT.
+3. ~~**S3 key fed to ffmpeg.**~~ **This defect does not exist.** `const inputPath = existingEncoded?.path || localPath`
+   looks dangerous, but `existingEncoded` is **always `undefined`**: `getForGenerateThumbnailJob`
+   (`asset-job.repository.ts:135`) loads only `Thumbnail`, `Preview` and `FullSize` files, never `EncodedVideo`. The
+   branch is unreachable, ffmpeg always reads the original, and no ENOENT is possible. Verified by running the trim
+   against a real S3 server with a transcoded video present: the trim **succeeded**. #671's third claim was
+   code-read, not executed.
 
-Lift the guard without fixing these and the common case (asset already transcoded, so a non-edited `EncodedVideo`
-exists in S3) fails immediately with ENOENT; the rarer case writes the video and its thumbnails to the pod's local
-disk with absolute paths in the DB, which survives until the pod is replaced and then 404s forever.
+Lift the guard without fixing defects 1 and 2 and the trim writes the video and its thumbnails to the pod's local
+disk with absolute paths in the DB, which survives until the pod is replaced and then 404s forever. Confirmed live:
+after Slices 2–3 the e2e phase gets past the API and produces
+`/usr/src/app/upload/encoded-video/…/{id}_edited.mp4` in the DB while the bucket holds nothing.
+
+### Layer 3 — undo never deletes the edited encoded video (a live bug on disk too)
+
+Same root cause as the phantom defect 3: because `asset.files` cannot contain `EncodedVideo` rows, the undo path
+(`media.service.ts:227` — `syncFiles(asset.files.filter((file) => file.isEdited), [])`) deletes the edited
+thumbnails but **never the edited encoded video**. `AssetRepository.getForVideo` orders `asset_file.isEdited DESC
+LIMIT 1`, so after a user undoes a trim, playback keeps serving the **trimmed** video forever.
+
+Verified live (disk-backed rows shown mid-fix):
+
+```
+--- AFTER TRIM ---                        --- AFTER UNDO ---
+encoded_video  isEdited=false  <key>      encoded_video  isEdited=false  <key>
+encoded_video  isEdited=true   <path>     encoded_video  isEdited=true   <path>   ← survives
+preview/thumbnail/fullsize isEdited=true  preview/thumbnail isEdited=false only
+```
+
+This is **not S3-specific** — it is broken on disk installs today. It is in scope because it is the same feature and
+because this PR's own e2e phase asserts that undo removes the edited objects from the bucket.
 
 ### Why CI never caught it
 
@@ -70,6 +93,9 @@ inherits the `StorageCore` helpers added here to locate it.
 
 **Enable video trim on S3.** That is a feature enablement for every S3 install, not a pure bugfix — it wants a
 release-note line.
+
+Also fixes the Layer-3 undo bug, which affects disk installs too. It is the same root cause and the same feature, and
+this PR's e2e phase asserts it.
 
 Fix forward only. No repair job and no migration: nothing to repair, because the guard means no S3 install has ever
 produced a broken trim.
@@ -227,10 +253,8 @@ All four loops are fork-only lines, so this adds no upstream-rebase risk.
 ### 6. `handleVideoTrim`: the three fixes and their ordering
 
 ```
-existingEncoded → ensureLocalFile()                     ← fix 3
-  inputPath = encodedLocal?.localPath ?? localPath
-  trim(inputPath, outputPath)                            ← outputPath = getEditedEncodedVideoPath(asset)
-  finally: await encodedLocal?.cleanup()
+trim(localPath, outputPath)                              ← outputPath = getEditedEncodedVideoPath(asset)
+                                                            (input is always the original — see Slice 4a)
 probe(outputPath)                        ─┐
 extractFrame(outputPath, framePath)      ─┤ every local read of outputPath
 generateImageThumbnails(frame)           ─┘
@@ -252,9 +276,8 @@ is today.
 
 ### 7. Error handling
 
-Unchanged in shape: an ffmpeg failure logs, unlinks the partial output, returns `JobStatus.Failed`. One addition —
-the encoded-input temp file is released in a `finally` around the trim, so a failed trim does not leak a downloaded
-S3 temp. The original's temp is already cleaned by the caller's `finally` in `handleAssetEditThumbnailGeneration`.
+Unchanged: an ffmpeg failure logs, unlinks the partial output, returns `JobStatus.Failed`. The original's temp file
+is cleaned by the caller's `finally` in `handleAssetEditThumbnailGeneration`.
 
 ## Test mechanics (get these wrong and the suite lies)
 
@@ -376,20 +399,28 @@ Design §3. Enables every S3 test that follows.
 **Done when:** A1, A2 pass; A2 is mutation-proved; `media.service.spec.ts` is green with **zero changes to existing
 tests**.
 
-### Slice 4 — Defect 3: never hand ffmpeg an S3 key
+### Slice 4 — The `EncodedVideo` blind spot: dead input branch, and undo
 
-`ensureLocalFile` the encoded input; release it in a `finally` around the trim.
+`asset.files` never contains `EncodedVideo` rows. That one fact produces both the phantom defect 3 and the live undo
+bug, so both are fixed here.
 
-- **B1 (RED)** S3, asset has a non-edited `EncodedVideo` with a relative key → `mediaRepository.trim` receives the
-  temp local path, not the key, and that temp's `cleanup` runs. _Expected red:_ `trim` is called with the relative key.
-- **D2 (RED)** S3 trim failure → returns `JobStatus.Failed`, calls no `put`, runs the encoded temp's `cleanup`, and
-  unlinks the partial output. _Expected red:_ `cleanup` is never called (nothing is downloaded today).
-- **B2 (GUARD)** Disk, existing non-edited `EncodedVideo` with an absolute path → `trim` receives it unchanged, no
-  download. _Mutation:_ make `ensureLocalFile` treat absolute paths as keys; B2 must fail.
-- **B3 (GUARD)** No `EncodedVideo` at all → `trim` receives the caller's already-materialized `localPath`, no extra
-  download. _Mutation:_ pass `existingEncoded?.path ?? ''` into `ensureLocalFile`; B3 must fail.
+**(a) Delete the dead input branch.** `existingEncoded` is always `undefined`, so `handleVideoTrim` already trims the
+original — which is also the better source (higher quality than re-trimming a transcoded copy). Remove the lookup and
+read `localPath` directly. No `ensureLocalFile`, no behaviour change, and the phantom S3 hazard goes with it.
 
-**Done when:** B1, D2 pass; B2, B3 pass and are mutation-proved; the suite is green.
+**(b) Delete the edited encoded video on undo.** Add `AssetRepository.getEditedEncodedVideo(assetId)` returning the
+row's `{ id, path }`, and in the video-undo branch delete that row and queue a `FileDelete` for its path.
+`FileDelete` already resolves disk paths and S3 keys through `StorageService.resolveBackendForKey`.
+
+- **B1 (RED)** Even when an asset's `files` contain a non-edited `EncodedVideo` (which production never produces, but
+  a unit test can construct), `mediaRepository.trim` receives the **original**, not the encoded video's path.
+  _Expected red:_ `trim` is called with the encoded video's path.
+- **U1 (RED)** Video undo (`asset.edits` empty) → `assetRepository.deleteFiles` is called with the edited encoded
+  video's row, and a `FileDelete` job is queued for its path. _Expected red:_ neither happens — the row survives.
+- **U2 (GUARD)** Video undo with no edited encoded video → no `deleteFiles` call for one, no crash. _Mutation:_ drop
+  the `if (editedVideo)` guard so it deletes unconditionally; U2 must fail.
+
+**Done when:** B1 and U1 pass; U2 passes and is mutation-proved; the suite is green.
 
 ### Slice 5 — Defect 1: persist the trimmed video
 
@@ -457,9 +488,10 @@ If the phase proves unstable in CI but not locally, it stays a local `make` targ
 - `server/src/services/base.service.ts` — `getProbeInput` (Slice 2).
 - `server/src/interfaces/storage-backend.interface.ts` — `getReadableUrl` (Slice 2).
 - `server/src/backends/s3-storage.backend.ts`, `disk-storage.backend.ts` — `getReadableUrl` (Slice 2).
-- `server/src/services/media.service.ts` — `persistFile` streaming source and the two trim unlinks (Slice 3);
-  `ensureLocalFile` on the trim input (Slice 4); `StorageCore` keys and video persistence (Slice 5);
-  `persistImageFiles` extraction and its four call sites (Slice 6).
+- `server/src/services/media.service.ts` — `persistFile` streaming source and the two trim unlinks (Slice 3); dead
+  input branch removed + undo deletes the edited encoded video (Slice 4); `StorageCore` keys and video persistence
+  (Slice 5); `persistImageFiles` extraction and its four call sites (Slice 6).
+- `server/src/repositories/asset.repository.ts` — `getEditedEncodedVideo` (Slice 4).
 - `server/src/cores/storage.core.ts` — three fork-only statics (Slice 5).
 - Specs: `asset.service.spec.ts` (E1–E4 + rewrite), `s3-storage.backend.spec.ts` (E5),
   `disk-storage.backend.spec.ts` (E6), `media.service.spec.ts` (A1–A2, B1–B3, C1–C4, D1–D3).

@@ -1,223 +1,239 @@
-# Video Trim on S3 — Slice 4: Defect 3, never hand ffmpeg an S3 key
+# Video Trim on S3 — Slice 4: The `EncodedVideo` blind spot (dead input branch + undo)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** When the trim job picks the asset's existing (non-edited) encoded video as its ffmpeg input, materialize it locally first — on S3 that path is a relative key ffmpeg cannot open.
+**Goal:** Remove the unreachable "prefer the encoded video as ffmpeg input" branch, and make undo actually delete the trimmed video.
 
-**Architecture:** `handleVideoTrim` selects `existingEncoded?.path || localPath` as the ffmpeg input. `localPath` is already materialized by the caller, but `existingEncoded.path` comes straight from the DB, and on S3 that is a relative key → ENOENT. Route it through `BaseService.ensureLocalFile` (which downloads to a temp file and hands back a cleanup) and release the temp in a `finally` around the trim, so a failed trim does not leak it.
+**Architecture:** `getForGenerateThumbnailJob` (`asset-job.repository.ts:135`) loads only `Thumbnail`, `Preview` and `FullSize` files — never `EncodedVideo`. One fact, two consequences.
 
-**Tech Stack:** NestJS, vitest.
+(a) `handleVideoTrim`'s `existingEncoded = asset.files.find(f => f.type === EncodedVideo && !f.isEdited)` is **always `undefined`**, so the trim already reads the original. The branch is dead — and the issue's "S3 key fed to ffmpeg" defect cannot happen. Delete it; trimming the original is also the better source.
+
+(b) The undo path does `syncFiles(asset.files.filter(f => f.isEdited), [])`, and since `asset.files` cannot hold the edited **encoded video**, undo deletes the edited thumbnails but leaves the trimmed video row behind. `AssetRepository.getForVideo` orders `isEdited DESC LIMIT 1`, so playback keeps serving the trimmed video after an undo — **on disk installs too**. Fix by fetching that row explicitly and deleting it.
+
+**Tech Stack:** NestJS, Kysely, vitest.
 
 ## Global Constraints
 
-- Spec: `docs/superpowers/specs/2026-07-12-video-trim-s3-design.md`, Slice 4 (design §6, fix 3).
-- Slices 1–3 are complete. Slice 3 moved `persistFile` and `handleVideoTrim`'s unlinks onto `storageRepository`, so `mocks.storage.unlink` is assertable.
-- This slice adds **only** the input materialization. Do NOT add `persistFile` for the video, the `StorageCore` statics, or `persistImageFiles` — Slices 5 and 6.
-- **`server/test/vitest.config.mjs` sets no `restoreMocks` and there are no `setupFiles`.** Every test that spies on `StorageService` must restore in `afterEach`, or the disk-mode tests silently run against S3.
-- Disk mode works in this spec file because `StorageService.diskBackend` is `undefined`; `ensureLocalFile` returns absolute paths unchanged with a no-op cleanup, without consulting any backend.
-- Run tests from `server/`: `pnpm test -- --run src/services/media.service.spec.ts`.
+- Spec: `docs/superpowers/specs/2026-07-12-video-trim-s3-design.md`, Slice 4 (and Problem → Layer 2 defect 3, Layer 3).
+- Slices 1–3 are complete.
+- Both findings were confirmed by running the real stack, not by reading code. Do not "restore" the encoded-video preference — it was never working.
+- Do NOT add `ensureLocalFile` for the trim input. There is nothing to materialize: the input is always `localPath`, which the caller already materialized.
+- Do NOT add `@GenerateSql` to the new repository method — that would require regenerating the SQL query docs (`make sql`), which needs a running dev DB. Undecorated repository methods are simply not documented; several already are.
+- Do NOT touch `getForGenerateThumbnailJob`'s file-type filter. Adding `EncodedVideo` there looks tempting but `handleGenerateThumbnails` calls `syncFiles(asset.files, generated.files)` — encoded videos would then be unmatched old files and get **deleted on every thumbnail regen**. That is a data-loss landmine; the targeted query below avoids it.
+- **`server/test/vitest.config.mjs` sets no `restoreMocks`.** Restore any `StorageService` spies in `afterEach`.
+- Run tests from `server/`: `pnpm test -- --run src/services/media.service.spec.ts`, then the full suite.
 
 ---
 
-### Task 1: Materialize the encoded-video input
+### Task 1: Delete the dead encoded-video input branch
 
 **Files:**
-- Modify: `server/src/services/media.service.ts`, `handleVideoTrim` (lines ~291–305)
-- Test: `server/src/services/media.service.spec.ts` (add to the existing `describe` that holds the trim tests — the one containing `'should trim video when edits contain Trim action'`)
 
-**Interfaces:**
-- Consumes: `BaseService.ensureLocalFile(filePath: string): Promise<{ localPath: string; cleanup: () => Promise<void> }>` — absolute paths pass through with a no-op cleanup; relative keys are downloaded via `StorageService.resolveBackendForKey(key).downloadToTemp(key)`.
-- Produces: no signature change to `handleVideoTrim`.
+- Modify: `server/src/services/media.service.ts`, `handleVideoTrim` (lines ~291–294)
+- Test: `server/src/services/media.service.spec.ts` (with the other trim tests)
 
-- [ ] **Step 1: Write the failing tests**
+**Interfaces:** no signature changes.
 
-Add these four tests alongside the existing trim tests in `server/src/services/media.service.spec.ts`. They drive `handleVideoTrim` through its only caller, `sut.handleAssetEditThumbnailGeneration({ id })`, exactly as the existing trim tests do.
+- [ ] **Step 1: Write the failing test**
 
-Add an `afterEach(() => vi.restoreAllMocks())` to the enclosing `describe` if one is not already present.
+Production never puts an `EncodedVideo` row in `asset.files`, but a unit test can construct one — which is exactly what pins the behaviour: even then, ffmpeg must read the original.
 
 ```ts
-    it('materializes an S3 encoded-video input before handing it to ffmpeg', async () => {
-      const cleanup = vi.fn().mockResolvedValue(void 0);
-      const { StorageService } = await import('src/services/storage.service.js');
-      vi.spyOn(StorageService, 'resolveBackendForKey').mockReturnValue({
-        downloadToTemp: vi.fn().mockResolvedValue({ tempPath: '/tmp/dl-encoded.mp4', cleanup }),
-      } as any);
+it('always trims the original, even if an encoded video row is present', async () => {
+  const asset = AssetFactory.from({ type: AssetType.Video })
+    .exif()
+    .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+    .files([{ type: AssetFileType.EncodedVideo, isEdited: false, path: 'encoded-video/owner/ab/cd/video.mp4' }])
+    .build();
+  mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+  mocks.media.probe.mockResolvedValue({
+    ...videoInfoStub.noAudioStreams,
+    format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+  });
+  mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+  mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
 
-      const asset = AssetFactory.from({ type: AssetType.Video })
-        .exif()
-        .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
-        .files([
-          {
-            type: AssetFileType.EncodedVideo,
-            isEdited: false,
-            path: 'encoded-video/owner/ab/cd/video.mp4',
-          },
-        ])
-        .build();
-      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
-      mocks.media.probe.mockResolvedValue({
-        ...videoInfoStub.noAudioStreams,
-        format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
-      });
-      mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
-      mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+  await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
 
-      await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
-
-      expect(mocks.media.trim).toHaveBeenCalledWith('/tmp/dl-encoded.mp4', expect.any(String), 5, 20);
-      expect(cleanup).toHaveBeenCalled();
-    });
-
-    it('releases the downloaded encoded-video temp when ffmpeg fails', async () => {
-      const cleanup = vi.fn().mockResolvedValue(void 0);
-      const { StorageService } = await import('src/services/storage.service.js');
-      vi.spyOn(StorageService, 'resolveBackendForKey').mockReturnValue({
-        downloadToTemp: vi.fn().mockResolvedValue({ tempPath: '/tmp/dl-encoded.mp4', cleanup }),
-      } as any);
-
-      const asset = AssetFactory.from({ type: AssetType.Video })
-        .exif()
-        .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
-        .files([
-          {
-            type: AssetFileType.EncodedVideo,
-            isEdited: false,
-            path: 'encoded-video/owner/ab/cd/video.mp4',
-          },
-        ])
-        .build();
-      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
-      mocks.media.trim.mockRejectedValue(new Error('FFmpeg error'));
-
-      const result = await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
-
-      expect(result).toBe(JobStatus.Failed);
-      expect(cleanup).toHaveBeenCalled();
-      expect(mocks.storage.unlink).toHaveBeenCalledWith(expect.stringContaining('_edited.mp4'));
-    });
-
-    it('passes a disk encoded-video path to ffmpeg unchanged, without downloading', async () => {
-      const { StorageService } = await import('src/services/storage.service.js');
-      const resolveSpy = vi.spyOn(StorageService, 'resolveBackendForKey');
-
-      const asset = AssetFactory.from({ type: AssetType.Video })
-        .exif()
-        .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
-        .files([{ type: AssetFileType.EncodedVideo, isEdited: false, path: '/data/encoded-video/video.mp4' }])
-        .build();
-      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
-      mocks.media.probe.mockResolvedValue({
-        ...videoInfoStub.noAudioStreams,
-        format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
-      });
-      mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
-      mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
-
-      await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
-
-      expect(mocks.media.trim).toHaveBeenCalledWith('/data/encoded-video/video.mp4', expect.any(String), 5, 20);
-      expect(resolveSpy).not.toHaveBeenCalled();
-    });
-
-    it('falls back to the original when the asset has no encoded video', async () => {
-      const { StorageService } = await import('src/services/storage.service.js');
-      const resolveSpy = vi.spyOn(StorageService, 'resolveBackendForKey');
-
-      const asset = AssetFactory.from({ type: AssetType.Video })
-        .exif()
-        .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
-        .build();
-      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
-      mocks.media.probe.mockResolvedValue({
-        ...videoInfoStub.noAudioStreams,
-        format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
-      });
-      mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
-      mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
-
-      await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
-
-      expect(mocks.media.trim).toHaveBeenCalledWith(asset.originalPath, expect.any(String), 5, 20);
-      expect(resolveSpy).not.toHaveBeenCalled();
-    });
+  // The encoded video is never a valid ffmpeg input: on S3 its path is a relative key.
+  // The original is both readable and higher quality.
+  expect(mocks.media.trim).toHaveBeenCalledWith(asset.originalPath, expect.any(String), 5, 20);
+});
 ```
 
-The factory's default `originalPath` is absolute, so `ensureLocalFile` passes it through and the last test's expectation holds. If `AssetFactory`'s `.files([...])` entries need more fields (e.g. `isProgressive`, `isTransparent`), copy the shape used by the existing test `'should handle video undo by cleaning up edited files'` in the same file.
+If `AssetFactory`'s `.files([...])` entries need more fields, copy the shape used by the existing `'should handle video undo by cleaning up edited files'` test in the same file.
 
-- [ ] **Step 2: Run the tests to verify the reds**
+- [ ] **Step 2: Run it — expect RED**
 
 ```bash
 cd server
 pnpm test -- --run src/services/media.service.spec.ts
 ```
 
-Expected:
-- **B1** "materializes an S3 encoded-video input…" → **FAILS**: `trim` was called with `'encoded-video/owner/ab/cd/video.mp4'` (the raw key), not `/tmp/dl-encoded.mp4`. This is #671's defect 3, reproduced in a unit test.
-- **D2** "releases the downloaded encoded-video temp when ffmpeg fails" → **FAILS**: `cleanup` was never called (nothing is downloaded today).
-- **B2** "passes a disk encoded-video path… unchanged" → **PASSES already** (GUARD).
-- **B3** "falls back to the original…" → **PASSES already** (GUARD).
+Expected: **FAILS** — `trim` was called with `'encoded-video/owner/ab/cd/video.mp4'` instead of the original's path. (Note: `getForGenerateThumbnail` is a test mapper, so it happily passes through the `EncodedVideo` row the real query would never return.)
 
 - [ ] **Step 3: Implement**
 
-In `server/src/services/media.service.ts`, `handleVideoTrim`, replace the input selection and the trim block:
+In `handleVideoTrim`, replace the input selection:
 
 ```ts
-    // Select input: prefer non-edited encoded video, fall back to original.
-    // On S3 the encoded video's path is a relative key ffmpeg cannot open, so
-    // materialize it locally first and release it as soon as ffmpeg is done.
-    const existingEncoded = asset.files.find((f) => f.type === AssetFileType.EncodedVideo && !f.isEdited);
-    const encodedLocal = existingEncoded ? await this.ensureLocalFile(existingEncoded.path) : undefined;
-    const inputPath = encodedLocal?.localPath ?? localPath;
-
-    // Output path for edited encoded video in EncodedVideo directory
-    const outputPath = StorageCore.getNestedPath(StorageFolder.EncodedVideo, asset.ownerId, `${asset.id}_edited.mp4`);
-    this.storageCore.ensureFolders(outputPath);
-
-    try {
-      await this.mediaRepository.trim(inputPath, outputPath, params.startTime, duration);
-    } catch (error) {
-      this.logger.error(`FFmpeg trim failed for asset ${asset.id}: ${error}`);
-      await this.storageRepository.unlink(outputPath).catch(() => {});
-      return JobStatus.Failed;
-    } finally {
-      await encodedLocal?.cleanup();
-    }
+// ffmpeg always reads the original. The asset's encoded video is not a candidate:
+// getForGenerateThumbnailJob never loads EncodedVideo rows (asset-job.repository.ts),
+// and on S3 its path would be a relative key ffmpeg cannot open anyway.
+const inputPath = localPath;
 ```
 
-The `finally` runs on the `return JobStatus.Failed` path too, which is what D2 asserts.
+Delete the `existingEncoded` lookup entirely.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 4: Run — expect GREEN**
 
 ```bash
 pnpm test -- --run src/services/media.service.spec.ts
 ```
 
-Expected: PASS — all four new tests plus every existing test in the file.
+Expected: PASS, and every existing trim test still green.
 
-- [ ] **Step 5: Mutation-prove the two guards**
+---
 
-**B2** — make `ensureLocalFile` treat absolute paths as keys, in `server/src/services/base.service.ts`:
+### Task 2: Undo deletes the edited encoded video
+
+**Files:**
+
+- Modify: `server/src/repositories/asset.repository.ts` (new method near `getForVideo`, ~line 1667)
+- Modify: `server/src/services/media.service.ts`, the video-undo branch (~lines 227–235)
+- Test: `server/src/services/media.service.spec.ts`
+
+**Interfaces:**
+
+- Produces: `AssetRepository.getEditedEncodedVideo(assetId: string): Promise<{ id: string; path: string } | undefined>` — the asset's edited `EncodedVideo` `asset_file` row, if any.
+- Consumes: `AssetRepository.deleteFiles(files: Pick<Selectable<AssetFileTable>, 'id'>[])` (existing, `asset.repository.ts:1548`); `JobName.FileDelete` (already used by `syncFiles`).
+
+- [ ] **Step 1: Write the failing tests**
 
 ```ts
-  protected async ensureLocalFile(filePath: string): Promise<{ localPath: string; cleanup: () => Promise<void> }> {
-    // if (isAbsolute(filePath)) { return { localPath: filePath, cleanup: async () => {} }; }   // MUTATION: commented out
-    const { StorageService } = await import('./storage.service.js');
-    ...
+it('deletes the edited encoded video when the trim is undone', async () => {
+  const asset = AssetFactory.from({ type: AssetType.Video })
+    .exif()
+    .files([{ type: AssetFileType.Preview, isEdited: true, path: '/data/preview_edited.jpeg' }])
+    .build();
+  // no edits => the undo path
+  mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+    ...getForGenerateThumbnail(asset),
+    edits: [],
+  } as any);
+  mocks.asset.getEditedEncodedVideo.mockResolvedValue({
+    id: 'file-id-1',
+    path: 'encoded-video/owner/ab/cd/video_edited.mp4',
+  });
+
+  await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+  // Without this, getForVideo (isEdited DESC) keeps serving the TRIMMED video after an undo.
+  expect(mocks.asset.deleteFiles).toHaveBeenCalledWith([expect.objectContaining({ id: 'file-id-1' })]);
+  expect(mocks.job.queue).toHaveBeenCalledWith({
+    name: JobName.FileDelete,
+    data: { files: ['encoded-video/owner/ab/cd/video_edited.mp4'] },
+  });
+});
+
+it('undoes cleanly when there is no edited encoded video', async () => {
+  const asset = AssetFactory.from({ type: AssetType.Video })
+    .exif()
+    .files([{ type: AssetFileType.Preview, isEdited: true, path: '/data/preview_edited.jpeg' }])
+    .build();
+  mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue({
+    ...getForGenerateThumbnail(asset),
+    edits: [],
+  } as any);
+  mocks.asset.getEditedEncodedVideo.mockResolvedValue(undefined);
+
+  const result = await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+  expect(result).toBe(JobStatus.Success);
+  expect(mocks.asset.deleteFiles).not.toHaveBeenCalledWith([expect.objectContaining({ id: expect.anything() })]);
+});
 ```
 
-Run the file. Expected: **B2 FAILS** (`resolveBackendForKey` was called). Revert.
+If the existing undo test (`'should handle video undo by cleaning up edited files'`) now needs `mocks.asset.getEditedEncodedVideo` stubbed, the automock returns `undefined` by default, which is the no-op path — it should keep passing untouched. If it does not, report rather than editing it.
 
-**B3** — in `handleVideoTrim`, force the download branch:
+- [ ] **Step 2: Run — expect RED**
+
+```bash
+pnpm test -- --run src/services/media.service.spec.ts
+```
+
+Expected:
+
+- **U1** "deletes the edited encoded video when the trim is undone" → **FAILS**: `mocks.asset.getEditedEncodedVideo` is not a function (the repository method does not exist yet). After Step 3's repository addition it will fail on the assertion instead — `deleteFiles` never called. Both are the same red.
+- **U2** "undoes cleanly when there is no edited encoded video" → **PASSES** once the method exists (GUARD).
+
+- [ ] **Step 3: Add the repository method**
+
+In `server/src/repositories/asset.repository.ts`, next to `getForVideo`:
 
 ```ts
-    const encodedLocal = await this.ensureLocalFile(existingEncoded?.path ?? '');   // MUTATION
+  async getEditedEncodedVideo(assetId: string) {
+    return this.db
+      .selectFrom('asset_file')
+      .select(['asset_file.id', 'asset_file.path'])
+      .where('asset_file.assetId', '=', assetId)
+      .where('asset_file.type', '=', AssetFileType.EncodedVideo)
+      .where('asset_file.isEdited', '=', true)
+      .executeTakeFirst();
+  }
 ```
 
-Run the file. Expected: **B3 FAILS** (`resolveBackendForKey` was called even with no encoded video). Revert, and confirm the suite is green again.
+No `@GenerateSql` decorator — see Global Constraints.
 
-If either guard survives its mutation, the test is broken — fix it before continuing.
+- [ ] **Step 4: Wire it into the undo branch**
 
-- [ ] **Step 6: Run the full server unit suite**
+In `server/src/services/media.service.ts`, the video-undo branch:
+
+```ts
+if (asset.type === AssetType.Video && asset.edits.length === 0) {
+  // Video undo path — clean up edited files and regenerate thumbnails from original
+  await this.syncFiles(
+    asset.files.filter((file) => file.isEdited),
+    [],
+  );
+
+  // asset.files never contains EncodedVideo rows (getForGenerateThumbnailJob only loads
+  // thumbnail/preview/fullsize), so syncFiles cannot see the trimmed video. Without this,
+  // getForVideo (isEdited DESC) would keep serving the trimmed video after an undo.
+  const editedVideo = await this.assetRepository.getEditedEncodedVideo(asset.id);
+  if (editedVideo) {
+    await this.assetRepository.deleteFiles([editedVideo]);
+    await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [editedVideo.path] } });
+  }
+
+  await this.jobRepository.queue({ name: JobName.AssetGenerateThumbnails, data: { id } });
+  return JobStatus.Success;
+}
+```
+
+`FileDelete` resolves both disk paths and S3 keys via `StorageService.resolveBackendForKey`, so this works on either backend.
+
+- [ ] **Step 5: Run — expect GREEN**
+
+```bash
+pnpm test -- --run src/services/media.service.spec.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 6: Mutation-prove the U2 guard**
+
+Drop the `if (editedVideo)` guard so it deletes unconditionally:
+
+```ts
+const editedVideo = await this.assetRepository.getEditedEncodedVideo(asset.id);
+await this.assetRepository.deleteFiles([editedVideo!]); // MUTATION
+await this.jobRepository.queue({ name: JobName.FileDelete, data: { files: [editedVideo!.path] } });
+```
+
+Run the file. Expected: **U2 FAILS** (it throws on `undefined.path`, or `deleteFiles` is called with `[undefined]`). Revert, confirm green.
+
+- [ ] **Step 7: Full server unit suite**
 
 ```bash
 pnpm test -- --run
@@ -225,27 +241,36 @@ pnpm test -- --run
 
 Expected: green.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add server/src/services/media.service.ts server/src/services/media.service.spec.ts
-git commit -m "fix(media): materialize the encoded-video trim input on S3 (#671)
+git add server/src/services/media.service.ts server/src/services/media.service.spec.ts server/src/repositories/asset.repository.ts
+git commit -m "fix(media): drop the dead trim-input branch, delete the trimmed video on undo
 
-handleVideoTrim preferred the asset's existing non-edited encoded video as
-its ffmpeg input, but passed asset_file.path straight to ffmpeg. On S3 that
-is a relative key, so the trim died with ENOENT for any asset that had
-already been transcoded — the common case. Route it through ensureLocalFile
-and release the temp in a finally, so a failed trim leaks nothing."
+Two consequences of one fact: getForGenerateThumbnailJob never loads
+EncodedVideo rows, so asset.files cannot contain them.
+
+1. handleVideoTrim's 'prefer the non-edited encoded video as ffmpeg input'
+   branch was unreachable — existingEncoded is always undefined. The trim
+   already read the original (which is the better source anyway), so gh#671's
+   'S3 key fed to ffmpeg' defect could not actually occur. Delete the branch.
+
+2. Undo called syncFiles over asset.files, which cannot see the edited encoded
+   video, so the trimmed video row survived an undo — and getForVideo orders by
+   isEdited DESC, so playback kept serving the trimmed video forever. This was
+   broken on disk installs too. Fetch the row explicitly and delete it.
+
+Both confirmed against a live server before fixing."
 ```
 
 ---
 
 ## Self-Review
 
-**Spec coverage:** B1 (RED, S3 input materialized + cleanup), D2 (RED, failure path releases the temp and unlinks the partial output), B2 (GUARD, disk path untouched, mutation-proved), B3 (GUARD, no encoded video → original, mutation-proved). All four from the spec's Slice 4.
+**Spec coverage:** B1 (RED, ffmpeg always gets the original), U1 (RED, undo deletes the edited encoded video row + queues its file delete), U2 (GUARD, no edited video → clean no-op, mutation-proved). Matches the spec's revised Slice 4.
 
 **Placeholders:** none.
 
-**Type consistency:** `ensureLocalFile` returns `{ localPath, cleanup }` — matches `base.service.ts:398`. `mocks.storage.unlink` is assertable because Slice 3 routed the trim unlinks through `storageRepository`. `AssetFileType.EncodedVideo`, `AssetEditAction.Trim`, `JobStatus.Failed`, `videoInfoStub`, `rawBuffer`, `rawInfo`, `getForGenerateThumbnail` are all already imported in this spec.
+**Type consistency:** `getEditedEncodedVideo` returns `{ id, path } | undefined`, which is exactly what `deleteFiles(files: Pick<Selectable<AssetFileTable>, 'id'>[])` accepts and what the `FileDelete` job's `{ files: string[] }` needs. `mocks.asset` is the `AssetRepository` automock, so `getEditedEncodedVideo` appears on it automatically once the method exists.
 
-**Not in this slice:** the `StorageCore` statics and video persistence (Slice 5) — note `outputPath` still uses the inline `getNestedPath(...)` here and is replaced in Slice 5; `persistImageFiles` (Slice 6); e2e wiring (Slice 7).
+**Not in this slice:** persisting the trimmed video (Slice 5), persisting its thumbnails (Slice 6), e2e wiring (Slice 7). The e2e phase stays red until Slice 6.
