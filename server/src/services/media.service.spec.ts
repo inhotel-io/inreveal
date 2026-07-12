@@ -2046,10 +2046,46 @@ describe(MediaService.name, () => {
 
         // A trim must not clobber the asset's normal preview/thumbnail objects: every
         // image key it writes carries the _edited marker.
+        //
+        // Asserted without a bare for-of over a filtered array: with zero thumbnail uploads
+        // such a loop never executes and the test passes with no assertions at all.
         const putKeys = put.mock.calls.map((call) => call[0] as string);
-        for (const key of putKeys.filter((k) => k.startsWith('thumbs/'))) {
-          expect(key).toContain('_edited');
+        const thumbnailKeys = putKeys.filter((key) => key.startsWith('thumbs/'));
+
+        expect(thumbnailKeys.length).toBeGreaterThanOrEqual(2);
+        expect(thumbnailKeys.every((key) => key.includes('_edited'))).toBe(true);
+
+        // and specifically not the non-edited keys, which belong to the untrimmed asset.
+        // Derived from the edited keys themselves, so this cannot pass by comparing against
+        // a key string that was never a real target.
+        for (const editedKey of thumbnailKeys) {
+          expect(putKeys).not.toContain(editedKey.replace('_edited', ''));
         }
+      });
+
+      it('keeps disk-mode trim paths absolute and uploads nothing (regression guard)', async () => {
+        // No getWriteBackend spy: StorageService.diskBackend is undefined in this spec file,
+        // so persistFile takes its disk branch. Nothing here may become a relative key.
+        const asset = AssetFactory.from({ type: AssetType.Video })
+          .exif()
+          .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+          .build();
+        mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+        mocks.media.probe.mockResolvedValue({
+          ...videoInfoStub.noAudioStreams,
+          format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+        });
+        mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+        mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+        await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+        const upserted = mocks.asset.upsertFiles.mock.calls.flatMap(([files]) => files);
+        expect(upserted.length).toBeGreaterThanOrEqual(3); // edited video + preview + thumbnail
+        for (const file of upserted) {
+          expect(file.path.startsWith('/')).toBe(true);
+        }
+        expect(mocks.storage.createPlainReadStream).not.toHaveBeenCalled();
       });
     });
   });
