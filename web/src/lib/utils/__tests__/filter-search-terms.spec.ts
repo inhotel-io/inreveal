@@ -64,6 +64,29 @@ describe('filterStateToSearchTerms', () => {
     expect(terms).toEqual({});
   });
 
+  it('maps lensModel and state to search terms', () => {
+    const terms = filterStateToSearchTerms({
+      ...createFilterState(),
+      lensModel: 'RF24-70mm F2.8 L IS USM',
+      state: 'State of Berlin',
+    });
+
+    expect(terms).toEqual(
+      expect.objectContaining({
+        lensModel: 'RF24-70mm F2.8 L IS USM',
+        state: 'State of Berlin',
+      }),
+    );
+  });
+
+  // MetadataSearchDto has no ownerId field, so it is intentionally not forwarded here (unlike the
+  // timeline/map option builders, which do forward it to their own DTOs).
+  it('does not forward ownerId, which MetadataSearchDto does not support', () => {
+    const terms = filterStateToSearchTerms({ ...createFilterState(), ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb' });
+
+    expect(terms).not.toHaveProperty('ownerId');
+  });
+
   it('maps a custom date range to takenAfter / takenBefore', () => {
     const terms = filterStateToSearchTerms({
       ...createFilterState(),

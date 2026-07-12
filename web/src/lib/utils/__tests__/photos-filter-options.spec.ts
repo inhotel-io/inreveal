@@ -177,6 +177,23 @@ describe('buildPhotosTimelineOptions', () => {
     expect(options).not.toHaveProperty('isInAlbum');
   });
 
+  it('forwards the new filter dimensions to the timeline query', () => {
+    const options = buildPhotosTimelineOptions({
+      ...createFilterState(),
+      lensModel: 'RF24-70mm F2.8 L IS USM',
+      state: 'State of Berlin',
+      albumId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+      ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+    });
+
+    expect(options).toMatchObject({
+      lensModel: 'RF24-70mm F2.8 L IS USM',
+      state: 'State of Berlin',
+      albumId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+      ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+    });
+  });
+
   it('should handle multiple simultaneous filters', () => {
     const filters = {
       ...createFilterState(),
