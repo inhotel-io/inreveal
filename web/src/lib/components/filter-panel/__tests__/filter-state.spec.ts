@@ -196,6 +196,38 @@ describe('FilterState utilities', () => {
     expect(cleared.originalFileName).toBeUndefined();
     expect(cleared.ocr).toBeUndefined();
   });
+
+  it('counts each new dimension as one active filter', () => {
+    const filters = { ...createFilterState(), lensModel: 'RF24-70mm', albumId: 'a1', ownerId: 'u1' };
+
+    expect(getActiveFilterCount(filters)).toBe(3);
+  });
+
+  it('counts city, state and country together as a single location filter', () => {
+    const location = { ...createFilterState(), city: 'Berlin', state: 'State of Berlin', country: 'Germany' };
+    expect(getActiveFilterCount(location)).toBe(1);
+
+    // …and a state without a city is still just one location filter, not two
+    const noCity = { ...createFilterState(), state: 'Hamburg', country: 'Germany' };
+    expect(getActiveFilterCount(noCity)).toBe(1);
+  });
+
+  it('clearFilters clears the four new dimensions', () => {
+    const filters = {
+      ...createFilterState(),
+      lensModel: 'RF24-70mm',
+      state: 'Hamburg',
+      albumId: 'a1',
+      ownerId: 'u1',
+    };
+
+    expect(clearFilters(filters)).toMatchObject({
+      lensModel: undefined,
+      state: undefined,
+      albumId: undefined,
+      ownerId: undefined,
+    });
+  });
 });
 
 describe('buildFilterContext', () => {
