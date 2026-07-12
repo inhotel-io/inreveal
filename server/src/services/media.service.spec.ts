@@ -1848,7 +1848,7 @@ describe(MediaService.name, () => {
         ...getForGenerateThumbnail(asset),
         edits: [],
       } as any);
-      mocks.asset.getEditedEncodedVideo.mockResolvedValue(undefined);
+      mocks.asset.getEditedEncodedVideo.mockResolvedValue(void 0);
 
       const result = await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
 
