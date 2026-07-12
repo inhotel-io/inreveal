@@ -122,6 +122,8 @@ interface AssetBuilderOptions {
   country?: string;
   make?: string;
   model?: string;
+  lensModel?: string;
+  state?: string;
   originalFileName?: string;
   description?: string;
   ocr?: string;
@@ -276,8 +278,10 @@ export function withTimeBucketAssetFilters<O>(
       !!options.bbox ||
         !!options.city ||
         !!options.country ||
+        !!options.state ||
         !!options.make ||
         !!options.model ||
+        !!options.lensModel ||
         !!options.description ||
         options.rating !== undefined,
       (qb) => {
@@ -304,6 +308,12 @@ export function withTimeBucketAssetFilters<O>(
         }
         if (options.model) {
           q = q.where('asset_exif.model', '=', options.model) as any;
+        }
+        if (options.lensModel) {
+          q = q.where('asset_exif.lensModel', '=', options.lensModel) as any;
+        }
+        if (options.state) {
+          q = q.where('asset_exif.state', '=', options.state) as any;
         }
         if (options.rating !== undefined) {
           q = q.where('asset_exif.rating', '>=', options.rating) as any;
