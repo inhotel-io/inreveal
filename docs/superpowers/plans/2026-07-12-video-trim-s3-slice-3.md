@@ -23,10 +23,12 @@
 ### Task 1: Route `persistFile` and the trim unlinks through `storageRepository`
 
 **Files:**
+
 - Modify: `server/src/services/media.service.ts` (lines 2–3 imports; `persistFile` at 78–94; `handleVideoTrim` unlinks at 303 and 335)
 - Test: `server/src/services/media.service.spec.ts` (new `describe('persistFile', …)` block)
 
 **Interfaces:**
+
 - Consumes: `StorageRepository.createPlainReadStream(filepath: string): Readable` and `StorageRepository.unlink(file: string): Promise<void>` (both exist; `unlink` warns on ENOENT and rethrows other errors). `StorageService.getWriteBackend(): StorageBackend` (static).
 - Produces: no signature change. `private async persistFile(localPath: string, relativeKey: string, contentType?: string): Promise<string>` keeps its contract: disk → returns `localPath` and touches nothing; S3 → uploads, unlinks the local temp, returns `relativeKey`.
 
@@ -35,39 +37,39 @@
 Add this `describe` block to `server/src/services/media.service.spec.ts`, at the top level inside the outermost `describe('MediaService', …)` (place it directly before the first `describe('handleQueueGenerateThumbnails'…)` or any other existing block — order does not matter, but it must be a sibling):
 
 ```ts
-  describe('persistFile', () => {
-    afterEach(() => {
-      // vitest.config.mjs sets no restoreMocks and there are no setupFiles, so a
-      // getWriteBackend spy would leak into every later test in this file and
-      // silently run the disk-mode tests against S3.
-      vi.restoreAllMocks();
-    });
-
-    it('uploads to the write backend and removes the local temp (S3 mode)', async () => {
-      const put = vi.fn().mockResolvedValue(void 0);
-      const stream = makeStream([Buffer.from('data')]);
-      const { StorageService } = await import('src/services/storage.service.js');
-      vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
-      mocks.storage.createPlainReadStream.mockReturnValue(stream as any);
-
-      const result = await (sut as any).persistFile('/local/out.jpg', 'thumbs/aa/bb/x.jpg', 'image/jpeg');
-
-      expect(mocks.storage.createPlainReadStream).toHaveBeenCalledWith('/local/out.jpg');
-      expect(put).toHaveBeenCalledWith('thumbs/aa/bb/x.jpg', stream, { contentType: 'image/jpeg' });
-      expect(mocks.storage.unlink).toHaveBeenCalledWith('/local/out.jpg');
-      expect(result).toBe('thumbs/aa/bb/x.jpg');
-    });
-
-    it('returns the local path and deletes nothing (disk mode)', async () => {
-      // StorageService.diskBackend is undefined in this spec file, so getWriteBackend()
-      // returns undefined and persistFile takes its disk branch.
-      const result = await (sut as any).persistFile('/local/out.jpg', 'thumbs/aa/bb/x.jpg', 'image/jpeg');
-
-      expect(result).toBe('/local/out.jpg');
-      expect(mocks.storage.createPlainReadStream).not.toHaveBeenCalled();
-      expect(mocks.storage.unlink).not.toHaveBeenCalled();
-    });
+describe('persistFile', () => {
+  afterEach(() => {
+    // vitest.config.mjs sets no restoreMocks and there are no setupFiles, so a
+    // getWriteBackend spy would leak into every later test in this file and
+    // silently run the disk-mode tests against S3.
+    vi.restoreAllMocks();
   });
+
+  it('uploads to the write backend and removes the local temp (S3 mode)', async () => {
+    const put = vi.fn().mockResolvedValue(void 0);
+    const stream = makeStream([Buffer.from('data')]);
+    const { StorageService } = await import('src/services/storage.service.js');
+    vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+    mocks.storage.createPlainReadStream.mockReturnValue(stream as any);
+
+    const result = await (sut as any).persistFile('/local/out.jpg', 'thumbs/aa/bb/x.jpg', 'image/jpeg');
+
+    expect(mocks.storage.createPlainReadStream).toHaveBeenCalledWith('/local/out.jpg');
+    expect(put).toHaveBeenCalledWith('thumbs/aa/bb/x.jpg', stream, { contentType: 'image/jpeg' });
+    expect(mocks.storage.unlink).toHaveBeenCalledWith('/local/out.jpg');
+    expect(result).toBe('thumbs/aa/bb/x.jpg');
+  });
+
+  it('returns the local path and deletes nothing (disk mode)', async () => {
+    // StorageService.diskBackend is undefined in this spec file, so getWriteBackend()
+    // returns undefined and persistFile takes its disk branch.
+    const result = await (sut as any).persistFile('/local/out.jpg', 'thumbs/aa/bb/x.jpg', 'image/jpeg');
+
+    expect(result).toBe('/local/out.jpg');
+    expect(mocks.storage.createPlainReadStream).not.toHaveBeenCalled();
+    expect(mocks.storage.unlink).not.toHaveBeenCalled();
+  });
+});
 ```
 
 `makeStream` is already imported in this spec (`test/utils`). Add `afterEach` and `vi` to the existing `vitest` import if they are not already there.
@@ -80,6 +82,7 @@ pnpm test -- --run src/services/media.service.spec.ts -t "persistFile"
 ```
 
 Expected:
+
 - **A1** ("uploads to the write backend and removes the local temp (S3 mode)") → **FAILS**: `mocks.storage.createPlainReadStream` was never called (the code uses raw `node:fs`). You may also see an unhandled ENOENT error from the real `createReadStream` — that is the exact hazard this slice removes.
 - **A2** ("returns the local path and deletes nothing (disk mode)") → **PASSES already**. It is the GUARD; Step 5 proves it.
 
@@ -112,13 +115,13 @@ In `server/src/services/media.service.ts`:
 3. In `handleVideoTrim`, replace the two raw unlinks:
 
 ```ts
-      // line ~303, in the trim catch block
-      await this.storageRepository.unlink(outputPath).catch(() => {});
+// line ~303, in the trim catch block
+await this.storageRepository.unlink(outputPath).catch(() => {});
 ```
 
 ```ts
-      // line ~335, after extractFrame
-      await this.storageRepository.unlink(framePath).catch(() => {});
+// line ~335, after extractFrame
+await this.storageRepository.unlink(framePath).catch(() => {});
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**

@@ -370,9 +370,7 @@ describe('S3StorageBackend', () => {
       const url = await backend.getReadableUrl('upload/admin/ab/cd/video.mp4');
 
       expect(url).toBe('https://bucket.s3.amazonaws.com/key?X-Amz-Signature=abc123');
-      expect(GetObjectCommand).toHaveBeenCalledWith(
-        expect.objectContaining({ Key: 'upload/admin/ab/cd/video.mp4' }),
-      );
+      expect(GetObjectCommand).toHaveBeenCalledWith(expect.objectContaining({ Key: 'upload/admin/ab/cd/video.mp4' }));
     });
   });
 

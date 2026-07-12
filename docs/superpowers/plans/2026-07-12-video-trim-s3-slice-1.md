@@ -22,11 +22,13 @@
 ### Task 1: Add the `video-trim-s3` phase and observe the expected RED
 
 **Files:**
+
 - Modify: `e2e/src/storage-migration.ts` (add `phaseVideoTrimS3` before `main()`; add a `case` in the `main()` switch and to the "Valid phases" error string)
 
 **Interfaces:**
 
 Consumes (all already exported from the same file):
+
 - `api(method: string, path: string, opts?: { body?: unknown; formData?: FormData; token?: string }): Promise<any>`
 - `loginAdmin(): Promise<string>`
 - `uploadAsset(token: string, filename: string, data: Buffer, sidecar?: Buffer, extraFields?: Record<string,string>): Promise<{ id: string; status: number }>`
@@ -119,7 +121,10 @@ async function phaseVideoTrimS3(): Promise<void> {
       `SELECT path, type FROM asset_file WHERE "assetId" = $1 AND "isEdited" = true ORDER BY type`,
       [assetId],
     );
-    assert.ok(editedRows.length >= 3, `Expected >= 3 edited asset_file rows (video+preview+thumbnail), got ${editedRows.length}`);
+    assert.ok(
+      editedRows.length >= 3,
+      `Expected >= 3 edited asset_file rows (video+preview+thumbnail), got ${editedRows.length}`,
+    );
 
     for (const row of editedRows) {
       assert.ok(!row.path.startsWith('/'), `Edited ${row.type} path must be an S3 key, got ${row.path}`);

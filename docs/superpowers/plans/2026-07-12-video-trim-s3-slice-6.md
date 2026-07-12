@@ -21,10 +21,12 @@
 ### Task 1: Extract `persistImageFiles` and use it in `handleVideoTrim`
 
 **Files:**
+
 - Modify: `server/src/services/media.service.ts`
 - Test: `server/src/services/media.service.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `persistFile(localPath, relativeKey, contentType)` (Slice 3); `StorageCore.getRelativeImagePath(asset, { fileType, format, isEdited })` (existing).
 - Produces: `private async persistImageFiles(asset: ThumbnailAsset, files: UpsertFileOptions[]): Promise<void>` — mutates each file's `path` in place to the persisted location (the key on S3, the unchanged local path on disk).
 
@@ -33,72 +35,72 @@
 Add to the trim `describe` in `media.service.spec.ts`:
 
 ```ts
-    it('uploads the trim thumbnails under _edited keys and stores those keys (S3)', async () => {
-      const put = vi.fn().mockResolvedValue(void 0);
-      const { StorageService } = await import('src/services/storage.service.js');
-      vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
-      mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('data')]) as any);
+it('uploads the trim thumbnails under _edited keys and stores those keys (S3)', async () => {
+  const put = vi.fn().mockResolvedValue(void 0);
+  const { StorageService } = await import('src/services/storage.service.js');
+  vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+  mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('data')]) as any);
 
-      const asset = AssetFactory.from({ type: AssetType.Video })
-        .exif()
-        .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
-        .build();
-      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
-      mocks.media.probe.mockResolvedValue({
-        ...videoInfoStub.noAudioStreams,
-        format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
-      });
-      mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
-      mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+  const asset = AssetFactory.from({ type: AssetType.Video })
+    .exif()
+    .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+    .build();
+  mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+  mocks.media.probe.mockResolvedValue({
+    ...videoInfoStub.noAudioStreams,
+    format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+  });
+  mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+  mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
 
-      await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+  await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
 
-      const putKeys = put.mock.calls.map((call) => call[0] as string);
-      const thumbnailKeys = putKeys.filter((key) => key.startsWith('thumbs/'));
+  const putKeys = put.mock.calls.map((call) => call[0] as string);
+  const thumbnailKeys = putKeys.filter((key) => key.startsWith('thumbs/'));
 
-      // preview + thumbnail at minimum (fullsize too, when the config generates one)
-      expect(thumbnailKeys.length).toBeGreaterThanOrEqual(2);
-      for (const key of thumbnailKeys) {
-        expect(key).toContain('_edited');
-      }
+  // preview + thumbnail at minimum (fullsize too, when the config generates one)
+  expect(thumbnailKeys.length).toBeGreaterThanOrEqual(2);
+  for (const key of thumbnailKeys) {
+    expect(key).toContain('_edited');
+  }
 
-      // and the keys — not local paths — are what get written to the DB
-      const upserted = mocks.asset.upsertFiles.mock.calls.flatMap(([files]) => files as any[]);
-      const upsertedThumbs = upserted.filter((file) => file.type !== AssetFileType.EncodedVideo);
-      expect(upsertedThumbs.length).toBeGreaterThanOrEqual(2);
-      for (const file of upsertedThumbs) {
-        expect(file.path.startsWith('/')).toBe(false);
-        expect(file.path).toContain('_edited');
-      }
-    });
+  // and the keys — not local paths — are what get written to the DB
+  const upserted = mocks.asset.upsertFiles.mock.calls.flatMap(([files]) => files as any[]);
+  const upsertedThumbs = upserted.filter((file) => file.type !== AssetFileType.EncodedVideo);
+  expect(upsertedThumbs.length).toBeGreaterThanOrEqual(2);
+  for (const file of upsertedThumbs) {
+    expect(file.path.startsWith('/')).toBe(false);
+    expect(file.path).toContain('_edited');
+  }
+});
 
-    it('never overwrites the non-edited preview or thumbnail objects (S3)', async () => {
-      const put = vi.fn().mockResolvedValue(void 0);
-      const { StorageService } = await import('src/services/storage.service.js');
-      vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
-      mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('data')]) as any);
+it('never overwrites the non-edited preview or thumbnail objects (S3)', async () => {
+  const put = vi.fn().mockResolvedValue(void 0);
+  const { StorageService } = await import('src/services/storage.service.js');
+  vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+  mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('data')]) as any);
 
-      const asset = AssetFactory.from({ type: AssetType.Video })
-        .exif()
-        .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
-        .build();
-      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
-      mocks.media.probe.mockResolvedValue({
-        ...videoInfoStub.noAudioStreams,
-        format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
-      });
-      mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
-      mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+  const asset = AssetFactory.from({ type: AssetType.Video })
+    .exif()
+    .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+    .build();
+  mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+  mocks.media.probe.mockResolvedValue({
+    ...videoInfoStub.noAudioStreams,
+    format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+  });
+  mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+  mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
 
-      await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+  await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
 
-      // A trim must not clobber the asset's normal preview/thumbnail objects: every
-      // image key it writes carries the _edited marker.
-      const putKeys = put.mock.calls.map((call) => call[0] as string);
-      for (const key of putKeys.filter((k) => k.startsWith('thumbs/'))) {
-        expect(key).toContain('_edited');
-      }
-    });
+  // A trim must not clobber the asset's normal preview/thumbnail objects: every
+  // image key it writes carries the _edited marker.
+  const putKeys = put.mock.calls.map((call) => call[0] as string);
+  for (const key of putKeys.filter((k) => k.startsWith('thumbs/'))) {
+    expect(key).toContain('_edited');
+  }
+});
 ```
 
 - [ ] **Step 2: Run to verify the reds**
@@ -109,7 +111,8 @@ pnpm test -- --run src/services/media.service.spec.ts
 ```
 
 Expected:
-- **C2** "uploads the trim thumbnails under _edited keys…" → **FAILS**: no `thumbs/` key is ever passed to `put` — only the video key from Slice 5. `thumbnailKeys.length` is 0. This is #671's defect 2.
+
+- **C2** "uploads the trim thumbnails under \_edited keys…" → **FAILS**: no `thumbs/` key is ever passed to `put` — only the video key from Slice 5. `thumbnailKeys.length` is 0. This is #671's defect 2.
 - **C3b** "never overwrites the non-edited preview or thumbnail objects" → **FAILS** for the same reason (no thumbnail `put` at all, so the loop body never runs and `putKeys.filter(...)` is empty — verify it fails on C2's assertion first, then treat C3b as meaningful only once C2 is green).
 
 Note: C3b is only informative once thumbnails are uploaded at all. Its job is to pin that they carry `_edited` **forever after** — including if someone later changes `getRelativeImagePath`'s arguments.
@@ -141,33 +144,33 @@ Replace **all four** call sites:
 1. `handleAssetEditThumbnailGeneration` (~line 240), the loop over `generated.files`:
 
 ```ts
-      // Persist output files to S3 if needed
-      if (generated?.files) {
-        await this.persistImageFiles(asset, generated.files);
-      }
+// Persist output files to S3 if needed
+if (generated?.files) {
+  await this.persistImageFiles(asset, generated.files);
+}
 ```
 
 2. `handleGenerateThumbnails` (~line 394), the loop over `generated.files`:
 
 ```ts
-      // Persist output files to S3 if needed
-      await this.persistImageFiles(asset, generated.files);
+// Persist output files to S3 if needed
+await this.persistImageFiles(asset, generated.files);
 ```
 
 3. `handleGenerateThumbnails` (~line 406), the loop over `editedGenerated.files`:
 
 ```ts
-      const editedGenerated = await this.generateEditedThumbnails(asset, config, localPath);
-      if (editedGenerated) {
-        await this.persistImageFiles(asset, editedGenerated.files);
-        generated.files.push(...editedGenerated.files);
-      }
+const editedGenerated = await this.generateEditedThumbnails(asset, config, localPath);
+if (editedGenerated) {
+  await this.persistImageFiles(asset, editedGenerated.files);
+  generated.files.push(...editedGenerated.files);
+}
 ```
 
 4. `handleVideoTrim`, immediately after the frame temp is unlinked and **before** the video's `persistFile` call added in Slice 5:
 
 ```ts
-    await this.persistImageFiles(asset, thumbnailResult.files);
+await this.persistImageFiles(asset, thumbnailResult.files);
 ```
 
 - [ ] **Step 4: Run to verify they pass**

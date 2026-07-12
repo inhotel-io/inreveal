@@ -71,6 +71,7 @@ If any run fails, that is a real defect (most likely a race with `waitForProcess
 ### Task 2: Wire the phase into CI and the full workflow
 
 **Files:**
+
 - Modify: `.github/workflows/storage-migration-tests.yml`
 - Modify: `e2e/storage-migration.sh`
 - Modify: `e2e/README-storage-migration.md`
@@ -80,8 +81,8 @@ If any run fails, that is a real defect (most likely a race with `waitForProcess
 In `.github/workflows/storage-migration-tests.yml`, in the `backend=s3` phase group, immediately after the `'Phase: copy-asset-sidecar-s3'` step:
 
 ```yaml
-      - name: 'Phase: video-trim-s3'
-        run: pnpm tsx src/storage-migration.ts video-trim-s3
+- name: 'Phase: video-trim-s3'
+  run: pnpm tsx src/storage-migration.ts video-trim-s3
 ```
 
 It must sit inside the s3 group (the server is restarted into `IMMICH_STORAGE_BACKEND=s3` there) and **before** the later `migrate-to-disk` step.
