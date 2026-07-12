@@ -109,6 +109,12 @@ interface AssetBuilderOptions {
   forceEmptyResult?: boolean;
   tagIds?: string[];
   userIds?: string[];
+  /**
+   * Contributor filter: a plain AND on asset.ownerId. Deliberately separate from `userIds`,
+   * which expresses timeline COMPOSITION and is OR-ed with `timelineSpaceIds` below. Routing a
+   * contributor filter through `userIds` would WIDEN results inside a Space instead of narrowing.
+   */
+  ownerId?: string;
   timelineSpaceIds?: string[];
   withStacked?: boolean;
   withPartners?: boolean;
@@ -338,6 +344,7 @@ export function withTimeBucketAssetFilters<O>(
     )
     .$if(options.visibility === undefined, withDefaultVisibility)
     .$if(!!options.visibility, (qb) => qb.where('asset.visibility', '=', options.visibility!))
+    .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', asUuid(options.ownerId!)))
     .$if(!!options.albumId, (qb) =>
       qb
         // Fork RBAC (Slice 1 / security-3 defense-in-depth): an explicit visibility=HIDDEN/LOCKED

@@ -615,4 +615,144 @@ describe(TimelineService.name, () => {
       expect(ids).toEqual([]);
     });
   });
+
+  describe('contextual filters — ownerId (Slice 1)', () => {
+    it('narrows a Space timeline to one contributor', async () => {
+      const { sut, ctx } = setup();
+      const { space, anna, viewer, annaAsset } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, { ownerId: anna.id });
+
+      // Anna's contribution only — Ben's asset is excluded.
+      expect(ids).toEqual([annaAsset.id]);
+    });
+
+    it('E20: ownerId of a non-member returns EMPTY inside a Space (narrows, never widens)', async () => {
+      const { sut, ctx } = setup();
+      const { space, viewer } = await createTwoOwnerSpace(ctx);
+      const { user: carol } = await ctx.newUser(); // not a member of the space
+      const auth = factory.auth({ user: viewer });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, { ownerId: carol.id });
+
+      expect(ids).toEqual([]);
+    });
+
+    it('E21: ownerId of a stranger on the personal timeline returns EMPTY (no leak)', async () => {
+      const { sut, ctx } = setup();
+      const { user: me } = await ctx.newUser();
+      const { user: carol } = await ctx.newUser();
+
+      // I MUST own an asset in the same bucket. Without this the assertion is vacuous:
+      // an empty timeline returns [] whether or not the filter is applied at all, so the
+      // test would pass on the RED run and prove nothing.
+      const date = new Date('2026-01-15T10:00:00Z');
+      const { asset: myAsset } = await ctx.newAsset({
+        ownerId: me.id,
+        fileCreatedAt: date,
+        localDateTime: date,
+      });
+      await ctx.newExif({ assetId: myAsset.id, make: 'Apple', timeZone: 'UTC' });
+
+      // Carol has an asset. It must never surface on my timeline.
+      const { asset: carolAsset } = await ctx.newAsset({
+        ownerId: carol.id,
+        fileCreatedAt: date,
+        localDateTime: date,
+      });
+      await ctx.newExif({ assetId: carolAsset.id, make: 'Apple', timeZone: 'UTC' });
+
+      const auth = factory.auth({ user: me });
+
+      // Baseline: my timeline is NOT empty. This is what makes the assertion below meaningful.
+      const unfiltered = await sut.getTimeBuckets(auth, {});
+      expect(unfiltered).not.toEqual([]);
+
+      // timeBucketChecks defaults dto.userId to auth.user.id when no album/space scope is set
+      // (timeline.service.ts:132), so the query is (ownerId = me) AND (ownerId = carol) = empty.
+      const buckets = await sut.getTimeBuckets(auth, { ownerId: carol.id });
+      expect(buckets).toEqual([]);
+    });
+
+    it('ownerId does NOT widen: it must not be OR-ed with the space predicate', async () => {
+      const { sut, ctx } = setup();
+      const { space, anna, viewer, annaAsset } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      // Anna also owns an asset OUTSIDE the space, in the SAME bucket. Filtering the space by
+      // owner=anna must not pull it in.
+      const { asset: outsideAsset } = await ctx.newAsset({
+        ownerId: anna.id,
+        fileCreatedAt: SPACE_DATE,
+        localDateTime: SPACE_DATE,
+      });
+      await ctx.newExif({ assetId: outsideAsset.id, timeZone: 'UTC' });
+
+      const ids = await spaceBucketAssetIds(sut, auth, space.id, { ownerId: anna.id });
+
+      expect(ids).toEqual([annaAsset.id]);
+      expect(ids).not.toContain(outsideAsset.id);
+    });
+
+    /**
+     * THE ACTUAL WIDENING VECTOR. The userIds/timelineSpaceIds OR-group at
+     * asset.repository.ts:362-380 only fires when `timelineSpaceIds` is set, and that only
+     * happens under `withSharedSpaces: true` (timeline.service.ts:81-86).
+     *
+     * Every other test in this file leaves timelineSpaceIds undefined, so the `:359` clause
+     * already ANDs — meaning an implementer who WRONGLY merged ownerId into options.userIds
+     * would still pass all of them. These two tests are the only thing standing between that
+     * mistake and a data leak. Do not delete them.
+     */
+    it('E21b: ownerId of a stranger under withSharedSpaces returns EMPTY (the real leak vector)', async () => {
+      const { sut, ctx } = setup();
+      const { viewer } = await createTwoOwnerSpace(ctx);
+      const { user: carol } = await ctx.newUser();
+
+      // Carol is a stranger with an asset, outside every space the viewer can see.
+      const { asset: carolAsset } = await ctx.newAsset({
+        ownerId: carol.id,
+        fileCreatedAt: SPACE_DATE,
+        localDateTime: SPACE_DATE,
+      });
+      await ctx.newExif({ assetId: carolAsset.id, make: 'Apple', timeZone: 'UTC' });
+
+      const auth = factory.auth({ user: viewer });
+
+      // withSharedSpaces sets timelineSpaceIds, which activates the userIds OR-group.
+      // If ownerId were routed through userIds, Carol's asset would be OR-ed in => LEAK.
+      //
+      // `visibility` is REQUIRED here: timeline.service.ts:158-168 throws BadRequestException
+      // when withSharedSpaces is combined with an undefined visibility. Omit it and the test
+      // fails for the wrong reason and can never go green.
+      const json = await sut.getTimeBucket(auth, {
+        withSharedSpaces: true,
+        visibility: AssetVisibility.Timeline,
+        ownerId: carol.id,
+        timeBucket: SPACE_BUCKET,
+      });
+      const ids = (JSON.parse(json) as { id?: string[] }).id ?? [];
+
+      expect(ids).toEqual([]);
+      expect(ids).not.toContain(carolAsset.id);
+    });
+
+    it('E21c: ownerId under withSharedSpaces narrows to that member, not to everything', async () => {
+      const { sut, ctx } = setup();
+      const { anna, viewer, annaAsset, benAsset } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      const json = await sut.getTimeBucket(auth, {
+        withSharedSpaces: true,
+        visibility: AssetVisibility.Timeline,
+        ownerId: anna.id,
+        timeBucket: SPACE_BUCKET,
+      });
+      const ids = (JSON.parse(json) as { id?: string[] }).id ?? [];
+
+      expect(ids).toContain(annaAsset.id);
+      expect(ids).not.toContain(benAsset.id);
+    });
+  });
 });
