@@ -18,8 +18,8 @@
 - **The generated TypeScript SDK source lives at `packages/sdk/src/fetch-client.ts`**, NOT `open-api/typescript-sdk/src/` (that directory contains only `build/`). See `mise.toml:58`.
 - **Prettier is a CI gate for the server** (`pnpm format` = `prettier --check .`). Run `pnpm format:fix` before committing.
 - **No relative imports in `server/`** — use the `src/` path alias.
-- **Server lint is zero-warning**: `make lint-server` runs `--max-warnings 0`.
-- **`ownerId` must never be routed through `options.userIds`.** See §4.2 of the spec: `userIds` is OR-ed with `timelineSpaceIds` at `asset.repository.ts:359-373`, so using it as a contributor filter would **widen** results inside a Space.
+- **Server lint is zero-warning**: `pnpm lint` runs `--max-warnings 0` (`server/package.json:22`), and `no-unused-vars` is a _warning_, so a single unused import fails the gate.
+- **`ownerId` must never be routed through `options.userIds`.** See §4.2 of the spec: the `userIds` clause has an AND arm (`asset.repository.ts:359-361`) and an **OR arm** (`:362-380`) that activates once `timelineSpaceIds` is set. Routing a contributor filter through it would **widen** results — that OR arm is precisely what tests E21b/E21c exist to catch.
 - **No `Co-Authored-By` or `Generated-with` trailers in commits.**
 
 ## File Structure
@@ -56,10 +56,8 @@ very first failing test uses a Space viewer filtering by an asset owned by someo
 
 - [ ] **Step 1: Add the two-owner Space fixture helper to the medium spec**
 
-Add these imports to `server/test/medium/specs/services/timeline.service.spec.ts` (merge with the existing
-import block; `AlbumUserRole` and `SharedSpaceRole` join the existing `src/enum` import):
-
-Add **only** `SharedSpaceRole` to the existing `src/enum` import. Do **not** add `AlbumUserRole` yet — it is
+In `server/test/medium/specs/services/timeline.service.spec.ts`, add **only** `SharedSpaceRole` to the
+existing `src/enum` import. Do **not** add `AlbumUserRole` yet — it is
 not used until Task 3, and `@typescript-eslint/no-unused-vars` is a **warning** (`server/eslint.config.mjs:73`)
 while `pnpm lint` runs `--max-warnings 0` (`server/package.json:22`), so an unused import would **fail this
 task's own lint gate**.
