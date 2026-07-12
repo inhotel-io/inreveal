@@ -50,8 +50,15 @@ type PgClient = Awaited<ReturnType<typeof utils.connectDatabase>>;
 // embedding) resolve the seeded faces. Same value the server's own medium tests use.
 const EMBEDDING = '[' + Array.from({ length: 512 }, () => 1).join(',') + ']';
 
+// Idempotent: the consistency specs seed a SECOND flagged scan over the same faces (to simulate a later
+// re-scan), so re-inserting a face's embedding must not collide on `face_search`'s primary key. The embedding
+// is identical on every seed, so DO NOTHING is the correct no-op.
 const seedFaceSearch = (db: PgClient, faceId: string) =>
-  db.query(`INSERT INTO "face_search" ("faceId", "embedding") VALUES ($1, $2::vector)`, [faceId, EMBEDDING]);
+  db.query(
+    `INSERT INTO "face_search" ("faceId", "embedding") VALUES ($1, $2::vector)
+     ON CONFLICT ("faceId") DO NOTHING`,
+    [faceId, EMBEDDING],
+  );
 
 /**
  * Seeds a completed face-repair scan flagging every face in `faceIds` (already created via
