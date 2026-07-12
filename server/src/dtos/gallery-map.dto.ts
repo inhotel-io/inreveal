@@ -51,6 +51,7 @@ const FilteredMapMarkerSchema = z
       .uuidv4()
       .optional()
       .describe('Filter by asset owner (contributor). Narrows within the current scope; never widens it.'),
+    albumId: z.uuidv4().optional().describe('Filter by album'),
     withSharedSpaces: stringToBool.optional().describe('Include shared space assets'),
   })
   .meta({ id: 'FilteredMapMarkerDto' });

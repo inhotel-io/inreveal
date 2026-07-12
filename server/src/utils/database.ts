@@ -754,6 +754,10 @@ const joinDeduplicationPlugin = new DeduplicateJoinsPlugin();
 export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuilderOptions) {
   options.withDeleted ||= !!(options.trashedAfter || options.trashedBefore || options.isOffline);
 
+  // Contributor filter (options.ownerId, applied below): a standalone AND on asset.ownerId.
+  // Deliberately NOT merged into the options.userIds clauses elsewhere in this chain, which are the
+  // owner SCOPING predicate — merging a contributor filter into userIds would widen the result set
+  // instead of narrowing it.
   return kysely
     .withPlugin(joinDeduplicationPlugin)
     .selectFrom('asset')
@@ -867,9 +871,6 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
         .innerJoin('asset_exif', 'asset.id', 'asset_exif.assetId')
         .where('asset_exif.lensModel', options.lensModel === null ? 'is' : '=', options.lensModel!),
     )
-    // Contributor filter: a standalone AND on asset.ownerId. Deliberately NOT merged into the
-    // options.userIds clauses above/below, which are the owner SCOPING predicate — merging a
-    // contributor filter into userIds would widen the result set instead of narrowing it.
     .$if(options.ownerId !== undefined, (qb) => qb.where('asset.ownerId', '=', asUuid(options.ownerId!)))
     .$if(options.rating !== undefined, (qb) =>
       qb
