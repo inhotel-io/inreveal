@@ -309,7 +309,7 @@ export class MediaService extends BaseService {
     const inputPath = localPath;
 
     // Output path for edited encoded video in EncodedVideo directory
-    const outputPath = StorageCore.getNestedPath(StorageFolder.EncodedVideo, asset.ownerId, `${asset.id}_edited.mp4`);
+    const outputPath = StorageCore.getEditedEncodedVideoPath(asset);
     this.storageCore.ensureFolders(outputPath);
 
     // Trim to a unique temp path and atomically rename into place — ffmpeg writing
@@ -358,11 +358,19 @@ export class MediaService extends BaseService {
     // Clean up temp frame
     await this.storageRepository.unlink(framePath).catch(() => {});
 
+    // persistFile unlinks the local file after uploading, so this must come AFTER
+    // probe() and extractFrame() have read outputPath.
+    const editedVideoPath = await this.persistFile(
+      outputPath,
+      StorageCore.getRelativeEditedEncodedVideoPath(asset),
+      'video/mp4',
+    );
+
     // Sync both edited encoded video and edited thumbnail files
     const editedVideoFile: UpsertFileOptions = {
       assetId: asset.id,
       type: AssetFileType.EncodedVideo,
-      path: outputPath,
+      path: editedVideoPath,
       isEdited: true,
       isProgressive: false,
       isTransparent: false,

@@ -1,6 +1,7 @@
 import { ShallowDehydrateObject } from 'kysely';
 import { OutputInfo } from 'sharp';
 import { SystemConfig } from 'src/config';
+import { StorageCore } from 'src/cores/storage.core';
 import { Exif } from 'src/database';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import {
@@ -1853,6 +1854,136 @@ describe(MediaService.name, () => {
 
       expect(result).toBe(JobStatus.Success);
       expect(mocks.asset.deleteFiles).not.toHaveBeenCalled();
+    });
+
+    describe('trim video persistence (S3)', () => {
+      afterEach(() => {
+        // vitest.config.mjs sets no restoreMocks and there are no setupFiles, so a
+        // getWriteBackend spy would leak into every later test in this file and
+        // silently run the disk-mode tests against S3.
+        vi.restoreAllMocks();
+      });
+
+      it('uploads the trimmed video under the _edited key and stores that key (S3)', async () => {
+        const put = vi.fn().mockResolvedValue(void 0);
+        const { StorageService } = await import('src/services/storage.service.js');
+        vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+        mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('mp4')]) as any);
+
+        const asset = AssetFactory.from({ type: AssetType.Video })
+          .exif()
+          .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+          .build();
+        mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+        mocks.media.probe.mockResolvedValue({
+          ...videoInfoStub.noAudioStreams,
+          format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+        });
+        mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+        mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+        await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+        const editedKey = StorageCore.getRelativeEditedEncodedVideoPath(asset as any);
+        expect(put).toHaveBeenCalledWith(editedKey, expect.anything(), { contentType: 'video/mp4' });
+        expect(mocks.asset.upsertFiles).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({ type: AssetFileType.EncodedVideo, isEdited: true, path: editedKey }),
+          ]),
+        );
+      });
+
+      it('never uploads the trimmed video over the transcoded original (S3)', async () => {
+        const put = vi.fn().mockResolvedValue(void 0);
+        const { StorageService } = await import('src/services/storage.service.js');
+        vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+        mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('mp4')]) as any);
+
+        const asset = AssetFactory.from({ type: AssetType.Video })
+          .exif()
+          .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+          .build();
+        mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+        mocks.media.probe.mockResolvedValue({
+          ...videoInfoStub.noAudioStreams,
+          format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+        });
+        mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+        mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+        await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+        const nonEditedKey = StorageCore.getRelativeEncodedVideoPath(asset as any);
+        const keys = put.mock.calls.map((call) => call[0]);
+        expect(keys).not.toContain(nonEditedKey);
+      });
+
+      it('uploads the trimmed video only after the thumbnail frame is extracted (S3)', async () => {
+        const put = vi.fn().mockResolvedValue(void 0);
+        const { StorageService } = await import('src/services/storage.service.js');
+        vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+        mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('mp4')]) as any);
+
+        const asset = AssetFactory.from({ type: AssetType.Video })
+          .exif()
+          .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+          .build();
+        mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+        mocks.media.probe.mockResolvedValue({
+          ...videoInfoStub.noAudioStreams,
+          format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+        });
+        mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+        mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+        await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+        // persistFile unlinks the local file after upload, so extractFrame MUST run first.
+        const extractOrder = mocks.media.extractFrame.mock.invocationCallOrder[0];
+        const putOrder = put.mock.invocationCallOrder[0];
+        expect(extractOrder).toBeLessThan(putOrder);
+      });
+
+      it('does not delete the edited video it just re-uploaded when re-trimming (S3)', async () => {
+        const put = vi.fn().mockResolvedValue(void 0);
+        const { StorageService } = await import('src/services/storage.service.js');
+        vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+        mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('mp4')]) as any);
+
+        const asset = AssetFactory.from({ type: AssetType.Video })
+          .exif()
+          .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+          .build();
+        const editedKey = StorageCore.getRelativeEditedEncodedVideoPath(asset as any);
+        const withExistingEdit = {
+          ...getForGenerateThumbnail(asset),
+          files: [
+            {
+              type: AssetFileType.EncodedVideo,
+              isEdited: true,
+              path: editedKey,
+              isProgressive: false,
+              isTransparent: false,
+            },
+          ],
+        };
+        mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(withExistingEdit as any);
+        mocks.media.probe.mockResolvedValue({
+          ...videoInfoStub.noAudioStreams,
+          format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+        });
+        mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+        mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+        await sut.handleAssetEditThumbnailGeneration({ id: asset.id });
+
+        // The key is deterministic, so the re-trim overwrote the same object. syncFiles must
+        // NOT then queue a delete for it — that would erase what we just uploaded.
+        const deletedFiles = mocks.job.queue.mock.calls
+          .filter(([job]) => job.name === JobName.FileDelete)
+          .flatMap(([job]) => (job as any).data.files as string[]);
+        expect(deletedFiles).not.toContain(editedKey);
+      });
     });
   });
 
