@@ -10,6 +10,7 @@ import { basename, join } from 'node:path';
 import { Socket } from 'socket.io-client';
 import { authHeaders, type Actor } from 'src/actors';
 import { createUserDto } from 'src/fixtures';
+import { makeRandomImage } from 'src/generators';
 import { app, asBearerAuth, testAssetDir, utils } from 'src/utils';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -24,7 +25,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 //   - When `spaceId` is set: requireAccess(SharedSpaceRead) → 400 for non-member.
 //     personIds get re-routed as spacePersonIds (same DTO field, different semantics).
 //   - Without spaceId: scoped to auth.user.id.
-//   - Always filters visibility=Timeline (no archived).
+//   - Visibility: Timeline for the plain and space queries; Archive | Timeline for an
+//     albumId query, which matches the album grid (D4). Hidden/Locked/Trashed never show.
 //
 // Setup uploads two real geotagged fixture images so the EXIF-based filters
 // (make, country, takenAfter/Before) have real data to match.
@@ -151,10 +153,11 @@ describe('/gallery/map/markers', () => {
     expect(status).toBe(400);
   });
 
-  it('archived assets are excluded — service hardcodes visibility=Timeline', async () => {
-    // shared-space.service.ts:581 sets `visibility: AssetVisibility.Timeline` on the
-    // repository call regardless of any client-supplied parameter. Toggle the asset
-    // to archive via PUT /assets/:id and verify it disappears from the marker list.
+  it('archived assets are excluded from the plain (non-album) map — visibility=Timeline', async () => {
+    // shared-space.service.ts pins the plain and space queries to visibility=Timeline,
+    // regardless of any client-supplied parameter. (Only the album-boundary query widens
+    // to Archive | Timeline, to match the album grid — see the D4 describe below.) Toggle
+    // the asset to archive via PUT /assets/:id and verify it disappears from the marker list.
     try {
       await request(app)
         .put(`/assets/${assetWithGps.id}`)
@@ -443,6 +446,128 @@ describe('/gallery/map/markers', () => {
     });
   });
 
+  describe('albumId visibility: the album map matches the album GRID (D4)', () => {
+    // The album grid shows Archive | Timeline (withDefaultVisibility, database.ts) and hides
+    // Hidden / Locked / Trashed. The album map used to hard-code visibility=Timeline, so an
+    // archived geotagged album asset appeared in the grid with NO pin. D4: the map matches the
+    // grid. The accepted caveat is that another member's archived asset in the album gets a pin —
+    // both actors below therefore expect the same set.
+    //
+    // The widening must be EXACTLY one visibility state: Hidden, Locked and Trashed album assets
+    // must still have no pin. That is the whole risk of the change, so each is asserted, for both
+    // the album owner and a viewer of the shared album.
+    let owner: LoginResponseDto;
+    let viewer: LoginResponseDto;
+    let visibilityAlbumId: string;
+    let timelineAssetId: string;
+    let archivedAssetId: string;
+    let hiddenAssetId: string;
+    let lockedAssetId: string;
+    let trashedAssetId: string;
+
+    beforeAll(async () => {
+      [owner, viewer] = await Promise.all([
+        utils.userSetup(admin.accessToken, createUserDto.create('t22-vis-owner')),
+        utils.userSetup(admin.accessToken, createUserDto.create('t22-vis-viewer')),
+      ]);
+
+      // Random images (distinct checksums, no EXIF) + an explicit GPS write. latitude/longitude are
+      // lockable exif properties (database.ts lockableProperties), so a user-set value is not
+      // clobbered by the metadata-extraction pass that follows the upload.
+      const createGeotagged = async () => {
+        const { id } = await utils.createAsset(owner.accessToken);
+        const { status } = await request(app)
+          .put(`/assets/${id}`)
+          .set(asBearerAuth(owner.accessToken))
+          .send({ latitude: 48.858_37, longitude: 2.294_48 });
+        expect(status).toBe(200);
+        return id;
+      };
+
+      timelineAssetId = await createGeotagged();
+      archivedAssetId = await createGeotagged();
+      hiddenAssetId = await createGeotagged();
+      lockedAssetId = await createGeotagged();
+      trashedAssetId = await createGeotagged();
+
+      const album = await utils.createAlbum(owner.accessToken, {
+        albumName: 't22 visibility album',
+        assetIds: [timelineAssetId, archivedAssetId, hiddenAssetId, lockedAssetId, trashedAssetId],
+        albumUsers: [{ userId: viewer.userId, role: AlbumUserRole.Viewer }],
+      });
+      visibilityAlbumId = album.id;
+
+      // Non-vacuity pin: while all five are Timeline, all five have a marker. Without this, the
+      // `not.toContain` assertions below could pass forever because an asset silently lost its GPS.
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?albumId=${visibilityAlbumId}`)
+        .set(asBearerAuth(owner.accessToken));
+      expect(status).toBe(200);
+      expect(markerIds(body).toSorted()).toEqual(
+        [timelineAssetId, archivedAssetId, hiddenAssetId, lockedAssetId, trashedAssetId].toSorted(),
+      );
+
+      // Now move four of them out of Timeline. The single-asset PUT is used deliberately: the BULK
+      // update strips Locked assets from every album (asset.service.ts updateAll), which would make
+      // the locked case vacuous — this keeps the album_asset link and leaves the query itself as the
+      // only thing standing between a locked asset and a pin.
+      for (const [id, visibility] of [
+        [archivedAssetId, AssetVisibility.Archive],
+        [hiddenAssetId, AssetVisibility.Hidden],
+        [lockedAssetId, AssetVisibility.Locked],
+      ] as const) {
+        const { status } = await request(app)
+          .put(`/assets/${id}`)
+          .set(asBearerAuth(owner.accessToken))
+          .send({ visibility });
+        expect(status).toBe(200);
+      }
+
+      await utils.deleteAssets(owner.accessToken, [trashedAssetId]);
+    });
+
+    it('pins an ARCHIVED album asset, for the album owner and for a viewer of the shared album', async () => {
+      for (const actor of [owner, viewer]) {
+        const { status, body } = await request(app)
+          .get(`/gallery/map/markers?albumId=${visibilityAlbumId}`)
+          .set(asBearerAuth(actor.accessToken));
+
+        expect(status).toBe(200);
+        const ids = markerIds(body);
+        expect(ids).toContain(timelineAssetId);
+        expect(ids).toContain(archivedAssetId);
+      }
+    });
+
+    it('still gives Hidden, Locked and Trashed album assets NO pin', async () => {
+      for (const actor of [owner, viewer]) {
+        const { status, body } = await request(app)
+          .get(`/gallery/map/markers?albumId=${visibilityAlbumId}`)
+          .set(asBearerAuth(actor.accessToken));
+
+        expect(status).toBe(200);
+        const ids = markerIds(body);
+        expect(ids).not.toContain(hiddenAssetId);
+        expect(ids).not.toContain(lockedAssetId);
+        expect(ids).not.toContain(trashedAssetId);
+      }
+    });
+
+    it('leaves the non-album map on Timeline only — an archived asset gets no pin there', async () => {
+      // The widening is scoped to the album-boundary query. The owner's plain map must not start
+      // showing their archived assets.
+      const { status, body } = await request(app).get('/gallery/map/markers').set(asBearerAuth(owner.accessToken));
+
+      expect(status).toBe(200);
+      const ids = markerIds(body);
+      expect(ids).toContain(timelineAssetId);
+      expect(ids).not.toContain(archivedAssetId);
+      expect(ids).not.toContain(hiddenAssetId);
+      expect(ids).not.toContain(lockedAssetId);
+      expect(ids).not.toContain(trashedAssetId);
+    });
+  });
+
   describe('description / originalFileName filters (finding 2: wire-name pin, #767 fresh instance)', () => {
     // A prior fix added originalFileName/description/ocr to FilteredMapMarkerSchema and forwarded
     // them from the web marker-option builders (map-filter-options.ts), but nothing exercised the
@@ -513,6 +638,61 @@ describe('/gallery/map/markers', () => {
       const ids = (body as Array<{ id: string }>).map((m) => m.id);
       expect(ids).toContain(matchingAssetId);
       expect(ids).not.toContain(otherAssetId);
+    });
+  });
+
+  describe('text filters treat ILIKE wildcards literally', () => {
+    // The map's text filters go through searchAssetBuilder's ILIKE, which used to interpolate the
+    // raw user value: `_` acted as a single-char wildcard and `%` matched everything — while the
+    // timeline (time-bucket) path escaped both. `_` is in nearly every camera filename prefix
+    // (IMG_, DSC_, PXL_), so the map showed more pins than the timeline had assets.
+    let wildcardUser: LoginResponseDto;
+    let underscoreAssetId: string;
+    let dashAssetId: string;
+    let percentAssetId: string;
+
+    beforeAll(async () => {
+      wildcardUser = await utils.userSetup(admin.accessToken, createUserDto.create('t23-wildcard-user'));
+
+      // Random images so each filename gets its own asset row, geotagged so each can produce a pin.
+      const createNamed = async (filename: string) => {
+        const { id } = await utils.createAsset(wildcardUser.accessToken, {
+          assetData: { bytes: makeRandomImage(), filename },
+        });
+        const { status } = await request(app)
+          .put(`/assets/${id}`)
+          .set(asBearerAuth(wildcardUser.accessToken))
+          .send({ latitude: 48.858_37, longitude: 2.294_48 });
+        expect(status).toBe(200);
+        return id;
+      };
+
+      underscoreAssetId = await createNamed('IMG_0001.png');
+      dashAssetId = await createNamed('IMG-0001.png');
+      percentAssetId = await createNamed('battery-100%.png');
+    });
+
+    it('does not treat `_` in an originalFileName filter as a single-char wildcard', async () => {
+      const { status, body } = await request(app)
+        .get('/gallery/map/markers?originalFileName=IMG_0001')
+        .set(asBearerAuth(wildcardUser.accessToken));
+
+      expect(status).toBe(200);
+      const ids = markerIds(body);
+      expect(ids).toContain(underscoreAssetId);
+      expect(ids).not.toContain(dashAssetId);
+    });
+
+    it('treats `%` in a filter value as a literal instead of matching everything', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?originalFileName=${encodeURIComponent('%')}`)
+        .set(asBearerAuth(wildcardUser.accessToken));
+
+      expect(status).toBe(200);
+      const ids = markerIds(body);
+      expect(ids).toContain(percentAssetId);
+      expect(ids).not.toContain(underscoreAssetId);
+      expect(ids).not.toContain(dashAssetId);
     });
   });
 

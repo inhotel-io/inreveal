@@ -160,6 +160,20 @@ export function withDefaultVisibility<O>(qb: SelectQueryBuilder<DB, 'asset', O>)
   return qb.where('asset.visibility', 'in', [sql.lit(AssetVisibility.Archive), sql.lit(AssetVisibility.Timeline)]);
 }
 
+/**
+ * Escape ILIKE wildcards so user-supplied filter text matches literally — e.g. a filename search for
+ * "IMG_2024" must not treat "_" as a single-char wildcard, and "%" must not match everything. Pairs
+ * with an `ESCAPE '\'` clause on the ILIKE. Backslash is escaped first so it does not double-escape
+ * the wildcard escapes added afterwards. Used by both text-filter paths (the time-bucket queries in
+ * asset.repository.ts and searchAssetBuilderLegacy below), which must agree: the map and the timeline
+ * read the same filter chips.
+ */
+export const escapeLikePattern = (value: string): string =>
+  value
+    .replaceAll('\\', String.raw`\\`)
+    .replaceAll('%', String.raw`\%`)
+    .replaceAll('_', String.raw`\_`);
+
 const selectExifInfo = (eb: AssetExpressionBuilder) =>
   eb.fn
     .toJson(eb.table('asset_exif'))
@@ -784,11 +798,28 @@ export function searchAssetBuilderLegacy(kysely: Kysely<DB>, options: AssetSearc
     kysely
       .withPlugin(joinDeduplicationPlugin)
       .selectFrom('asset')
-      .$if(!!options.visibility, (qb) =>
-        options.visibility === 'not-locked'
-          ? qb.where('asset.visibility', '!=', AssetVisibility.Locked)
-          : qb.where('asset.visibility', '=', options.visibility!),
-      )
+      // Visibility modes (AssetSearchBuilderOptions.visibility):
+      //   - a concrete AssetVisibility  -> exactly that state
+      //   - 'not-locked'                -> everything except Locked (STILL admits Hidden)
+      //   - 'timeline-or-archive'       -> Archive | Timeline, i.e. what the timeline and the album
+      //                                    GRID show (withDefaultVisibility, above). Hidden, Locked
+      //                                    and Trashed stay out. Added for the album map (D4), which
+      //                                    must match the grid it is reached from; no other caller
+      //                                    uses it.
+      //   - undefined                   -> no clause at all (admits Hidden AND Locked)
+      .$if(!!options.visibility, (qb) => {
+        switch (options.visibility) {
+          case 'not-locked': {
+            return qb.where('asset.visibility', '!=', AssetVisibility.Locked);
+          }
+          case 'timeline-or-archive': {
+            return withDefaultVisibility(qb);
+          }
+          default: {
+            return qb.where('asset.visibility', '=', options.visibility!);
+          }
+        }
+      })
       .$if(!!options.forceEmptyResult, (qb) => qb.where(sql<SqlBool>`false`))
       .$if(!!options.albumIds && options.albumIds.length > 0, (qb) =>
         inAlbums(qb, options.albumIds!, options.timelineSpaceIds),
@@ -925,18 +956,24 @@ export function searchAssetBuilderLegacy(kysely: Kysely<DB>, options: AssetSearc
           )
           .where('asset_file.path', '=', options.encodedVideoPath!),
       )
+      // The three ILIKE text filters escape their wildcards (escapeLikePattern + `escape '\'`), so a
+      // filter of `IMG_0001` matches `_` literally rather than as a single-char wildcard and a `%`
+      // matches a literal percent sign. This mirrors the time-bucket path (asset.repository.ts): the
+      // map and the timeline are driven by the same filter chips and must agree on what they match.
+      // Escaping does not cost the trigram index. OCR (below) is unaffected — it uses the `%>>`
+      // trigram operator, not ILIKE.
       .$if(!!options.originalPath, (qb) =>
         qb.where(
           sql`f_unaccent(asset."originalPath")`,
           'ilike',
-          sql`'%' || f_unaccent(${options.originalPath}) || '%'`,
+          sql`'%' || f_unaccent(${escapeLikePattern(options.originalPath!)}) || '%' escape '\\'`,
         ),
       )
       .$if(!!options.originalFileName, (qb) =>
         qb.where(
           sql`f_unaccent(asset."originalFileName")`,
           'ilike',
-          sql`'%' || f_unaccent(${options.originalFileName}) || '%'`,
+          sql`'%' || f_unaccent(${escapeLikePattern(options.originalFileName!)}) || '%' escape '\\'`,
         ),
       )
       .$if(!!options.description, (qb) =>
@@ -945,7 +982,7 @@ export function searchAssetBuilderLegacy(kysely: Kysely<DB>, options: AssetSearc
           .where(
             sql`f_unaccent(asset_exif.description)`,
             'ilike',
-            sql`'%' || f_unaccent(${options.description}) || '%'`,
+            sql`'%' || f_unaccent(${escapeLikePattern(options.description!)}) || '%' escape '\\'`,
           ),
       )
       .$if(!!options.ocr, (qb) =>

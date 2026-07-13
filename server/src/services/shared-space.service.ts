@@ -1068,13 +1068,14 @@ export class SharedSpaceService extends BaseService {
     // OWNER'S flag, so widening would pin other members' favourites on the caller's favourites map
     // (timeline.service.ts:158-168 refuses the same combination outright rather than answer it).
     //
-    // The album map matches the album grid: album ACCESS (AlbumRead, checked above) IS the boundary
-    // for an album query — same as the album grid (asset.repository.ts withTimeBucketAssetFilters,
-    // a plain album_asset join with no space scoping) and the pre-fork GET /albums/{id}/map-markers
-    // endpoint (map.repository.ts). Re-gating an album query by the caller's shared-space timeline
-    // visibility on top of that hid pins the grid shows — whenever a shared album asset also lived
-    // in a space the caller wasn't a member of, or had simply toggled out of their timeline (#656).
-    // On the album path timelineSpaceIds is therefore inert for the gate (albumAccessIsBoundary
+    // The album map matches the album grid on SCOPE: album ACCESS (AlbumRead, checked above) IS the
+    // boundary for an album query — same as the album grid (asset.repository.ts
+    // withTimeBucketAssetFilters, a plain album_asset join with no space scoping) and the pre-fork
+    // GET /albums/{id}/map-markers endpoint (map.repository.ts). Re-gating an album query by the
+    // caller's shared-space timeline visibility on top of that hid pins the grid shows — whenever a
+    // shared album asset also lived in a space the caller wasn't a member of, or had simply toggled
+    // out of their timeline (#656). (It matches the grid on VISIBILITY too — see the `visibility`
+    // option below.) On the album path timelineSpaceIds is therefore inert for the gate (albumAccessIsBoundary
     // skips albumSharedSpaceScope, and with userIds unset the widening arm cannot fire either).
     const spaceScopeWidensToTimelineSpaces = !dto.spaceId && dto.withSharedSpaces === true && dto.isFavorite !== true;
 
@@ -1150,7 +1151,14 @@ export class SharedSpaceService extends BaseService {
       state: dto.state,
       ownerId: dto.ownerId,
       albumIds: dto.albumId ? [dto.albumId] : undefined,
-      visibility: AssetVisibility.Timeline,
+      // D4: an album query matches the album GRID, which shows Archive | Timeline
+      // (withDefaultVisibility, database.ts) — an archived, geotagged album asset appeared in the
+      // grid with no pin on the map. The accepted caveat is that another member's archived asset in
+      // the album now gets a pin, exactly as the grid already shows it. The widening is EXACTLY one
+      // visibility state: Hidden and Locked stay out (the mode is a two-value IN, not the absence of
+      // a clause, which would admit both), and Trashed stays out via the deletedAt predicate.
+      // Every other branch (plain map, space map) is unchanged: Timeline only.
+      visibility: dto.albumId ? 'timeline-or-archive' : AssetVisibility.Timeline,
       // D1: personMatchAny/tagMatchAny are deliberately NOT set. This was the only caller in the
       // server that asked searchAssetBuilder for OR matching (database.ts:721,724) — every timeline
       // path ANDs. The map is reached from a surface whose chips it carries verbatim (/photos' map

@@ -1,6 +1,6 @@
 // server/src/repositories/search.repository.spec.ts
 import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
-import { AssetOrder } from 'src/enum';
+import { AssetOrder, AssetVisibility } from 'src/enum';
 import { SearchRepository } from 'src/repositories/search.repository';
 import type { DB } from 'src/schema';
 import { searchAssetBuilderLegacy } from 'src/utils/database';
@@ -25,10 +25,12 @@ const buildQueries = (
   options: Record<string, unknown>,
 ) => (sut as any).buildSearchSmartQueries(offlineKysely(), pagination, options);
 
-const buildAssetSearchSql = (options: Record<string, unknown>) =>
+const compileAssetSearch = (options: Record<string, unknown>) =>
   searchAssetBuilderLegacy(offlineKysely(), options as any)
     .selectAll('asset')
-    .compile().sql;
+    .compile();
+
+const buildAssetSearchSql = (options: Record<string, unknown>) => compileAssetSearch(options).sql;
 
 const compileFilteredAssetIds = (sut: SearchRepository, options: Record<string, unknown>) =>
   (sut as any).buildFilteredAssetIds(['00000000-0000-0000-0000-000000000000'], options).compile().sql;
@@ -658,6 +660,84 @@ describe(SearchRepository.name, () => {
       expect(sql).toContain('"has_face_identities"');
       expect(sql).toContain('"shared_space_person_face"');
       expect(sql).not.toMatch(/\bor\b/i);
+    });
+  });
+
+  describe('searchAssetBuilder visibility modes', () => {
+    // D4: the album map matches the album GRID, which uses withDefaultVisibility
+    // (Archive | Timeline — database.ts). Neither pre-existing mode expresses that:
+    // `undefined` skips the clause entirely (admitting Hidden AND Locked) and
+    // 'not-locked' still admits Hidden. Hence the explicit 'timeline-or-archive' mode,
+    // used only by the album-boundary map query (shared-space.service.ts).
+    it('timeline-or-archive admits exactly Archive and Timeline', () => {
+      const sql = buildAssetSearchSql({ visibility: 'timeline-or-archive' });
+
+      expect(sql).toMatch(/"asset"\."visibility" in \('archive', 'timeline'\)/i);
+      expect(sql).not.toContain(`'${AssetVisibility.Hidden}'`);
+      expect(sql).not.toContain(`'${AssetVisibility.Locked}'`);
+    });
+
+    it('keeps a concrete visibility as an exact match', () => {
+      const { sql, parameters } = compileAssetSearch({ visibility: AssetVisibility.Timeline });
+
+      expect(sql).toMatch(/"asset"\."visibility" = \$\d+/i);
+      expect(parameters).toContain(AssetVisibility.Timeline);
+      expect(sql).not.toMatch(/"asset"\."visibility" in \(/i);
+    });
+
+    it('keeps not-locked as an inequality (it still admits Hidden — why the new mode exists)', () => {
+      const { sql, parameters } = compileAssetSearch({ visibility: 'not-locked' });
+
+      expect(sql).toMatch(/"asset"\."visibility" != \$\d+/i);
+      expect(parameters).toContain(AssetVisibility.Locked);
+    });
+
+    it('applies no visibility clause when visibility is undefined', () => {
+      const sql = buildAssetSearchSql({});
+
+      expect(sql).not.toContain('"asset"."visibility"');
+    });
+  });
+
+  describe('searchAssetBuilder ILIKE wildcard escaping', () => {
+    // The map and metadata search route text filters through ILIKE. Without escaping, a
+    // filename filter of `IMG_0001` treats `_` as a single-char wildcard (matching
+    // `IMG-0001` too) while the time-bucket/timeline path — which DOES escape
+    // (asset.repository.ts) — treats it literally. Same divergence for `%`.
+    const ESCAPE_CLAUSE = String.raw`escape '\'`;
+
+    it('escapes wildcards in the originalFileName filter and pairs them with an ESCAPE clause', () => {
+      const { sql, parameters } = compileAssetSearch({ originalFileName: 'IMG_0001' });
+
+      expect(sql).toContain(ESCAPE_CLAUSE);
+      expect(parameters).toContain(String.raw`IMG\_0001`);
+    });
+
+    it('escapes wildcards in the description filter', () => {
+      const { sql, parameters } = compileAssetSearch({ description: '100% sun_set' });
+
+      expect(sql).toContain(ESCAPE_CLAUSE);
+      expect(parameters).toContain(String.raw`100\% sun\_set`);
+    });
+
+    it('escapes wildcards in the originalPath filter', () => {
+      const { sql, parameters } = compileAssetSearch({ originalPath: 'upload/IMG_0001' });
+
+      expect(sql).toContain(ESCAPE_CLAUSE);
+      expect(parameters).toContain(String.raw`upload/IMG\_0001`);
+    });
+
+    it('escapes a literal backslash before the wildcards it introduces', () => {
+      const { parameters } = compileAssetSearch({ originalFileName: String.raw`back\slash_1` });
+
+      expect(parameters).toContain(String.raw`back\\slash\_1`);
+    });
+
+    it('leaves OCR alone — it uses the trigram operator, not ILIKE', () => {
+      const { sql } = compileAssetSearch({ ocr: 'IMG_0001' });
+
+      expect(sql).toContain('%>>');
+      expect(sql).not.toContain(ESCAPE_CLAUSE);
     });
   });
 });

@@ -172,8 +172,19 @@ type BaseAssetSearchOptions = SearchDateOptions &
   SearchOcrOptions &
   SearchSpaceOptions;
 
+/**
+ * Visibility modes `searchAssetBuilder` (src/utils/database.ts) understands:
+ * - a concrete `AssetVisibility` — exactly that state
+ * - `'not-locked'` — everything except Locked; note this STILL admits Hidden
+ * - `'timeline-or-archive'` — Archive | Timeline, what the timeline and the album grid show
+ *   (`withDefaultVisibility`). Used only by the album-boundary map query (shared-space.service.ts),
+ *   which must match the grid it is reached from.
+ * - `undefined` — no visibility clause at all (admits Hidden and Locked)
+ */
+export type AssetSearchVisibility = AssetVisibility | 'not-locked' | 'timeline-or-archive';
+
 export type AssetSearchOptions = Omit<BaseAssetSearchOptions, 'visibility'> &
-  SearchRelationOptions & { visibility?: AssetVisibility | 'not-locked' };
+  SearchRelationOptions & { visibility?: AssetSearchVisibility };
 
 export type AssetSearchBuilderOptions = Omit<AssetSearchOptions, 'orderDirection'>;
 
