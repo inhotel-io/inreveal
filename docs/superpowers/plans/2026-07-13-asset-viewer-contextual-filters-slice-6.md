@@ -100,14 +100,24 @@ That fallback is unacceptable _here specifically_, because this entire branch ex
 
 **TDD:**
 
+> **⚠️ Added by the slice-1-to-5 audit (2026-07-13).** The chip ✕ handlers today leave **sibling fields set**, so removing a chip drops the count while the result set is unchanged — and the orphan field is re-encoded into the URL on the very next sync. This is a live "counted but not applied" lie, and slice 7 makes every one of these one-click reachable:
+>
+> - `'location'` clears `city` + `country` but **not `state`**
+> - `'camera'` clears `make` + `model` but **not `lensModel`**
+> - `'albums'` clears the has/none flags but **not `albumId`**
+>
+> There is also a filter with **no UI at all**: `model` without `make` is forwarded by all eight builders, counted by neither, and chipped by nothing (`/photos?model=iPhone%2017` silently filters the timeline while the bar isn't even rendered).
+
 - [ ] **Step 1 (RED):** create `web/src/lib/utils/__tests__/filter-remove.spec.ts` covering, via the shared `handleRemoveFilter`:
   - `lens` clears `lensModel`; `album` clears `albumId`; `owner` clears `ownerId`.
   - `location` clears **`city` + `state` + `country`** (all three — R2).
+  - `camera` clears **`make` + `model` + `lensModel`** (the sibling bug above).
+  - `albums` clears **`isInAlbum` + `isNotInAlbum` + `albumId`** (same).
   - each case **preserves every other filter** (follow the existing "preserves other filters" convention, `photos-filter-options.spec.ts:334-340`).
   - an unknown type is a no-op (returns the input unchanged).
     Run it: **FAIL** — `$lib/utils/filter-remove` does not exist.
 
-- [ ] **Step 2 (GREEN):** create `filter-remove.ts` with the shared `handleRemoveFilter(filters, type, id)`: the existing switch **verbatim** (keep every alias — `media`/`mediaType`, `favorites`/`isFavorite`, `albums`/`isNotInAlbum`/`isInAlbum` — dropping one would silently break existing chips), **plus** the `lens` / `album` / `owner` cases, and `location` extended to clear `state`.
+- [ ] **Step 2 (GREEN):** create `filter-remove.ts` with the shared `handleRemoveFilter(filters, type, id)`: the existing switch **verbatim** (keep every alias — `media`/`mediaType`, `favorites`/`isFavorite`, `albums`/`isNotInAlbum`/`isInAlbum` — dropping one would silently break existing chips), **plus** the `lens` / `album` / `owner` cases, and the sibling-clearing above (`location` → +`state`; `camera` → +`lensModel`; `albums` → +`albumId`).
       Point both `handlePhotosRemoveFilter` and `handleSpaceRemoveFilter` at it as one-line delegates. **Do not change their signatures or their call sites.**
 
 - [ ] **Step 3 (prove the refactor):** run `photos-filter-options.spec.ts` and `space-filter-options.spec.ts` **UNMODIFIED**. Both must pass. That is the behavior-preservation proof — if either fails, the switch was not copied faithfully.
@@ -121,6 +131,7 @@ That fallback is unacceptable _here specifically_, because this entire branch ex
 **TDD:**
 
 - [ ] **Step 1 (RED):** extend `active-filters-bar.spec.ts`:
+  - **`isFavorite === false` renders a chip too** (audit finding). It is counted (`filter-panel.ts:109`) but never chipped (`active-filters-bar.svelte:137` chips only `=== true`), so `/photos?favorite=false` renders "N results" with **zero chips and no Clear-all** — that button is gated on `chips.length > 0` — while the query is filtered. It additionally flips `photos-filter-options.ts:18`, silently dropping `withPartners` + `withSharedSpaces`.
   - a `lensModel` filter renders a chip showing the lens name, removable as type `lens`.
   - an `albumId` filter renders a chip showing the **resolved album name** (via an `albumNames` prop), removable as type `album`; with no map entry it falls back to the id.
   - an `ownerId` filter renders a chip showing the **resolved owner name** (`ownerNames` prop), removable as type `owner`.
