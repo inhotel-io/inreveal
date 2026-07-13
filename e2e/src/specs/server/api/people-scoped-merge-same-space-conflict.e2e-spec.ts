@@ -4,16 +4,18 @@ import { app, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-// REPRO (investigation of the follow-up report on issue #733).
+// Regression coverage for the #733 follow-up: a scoped merge whose two identities BOTH already have a
+// profile in the same space.
 //
 // Same fixture as people-cross-owner-merge.e2e-spec.ts, with ONE extra row: the actor's own person
-// (identity T) ALSO has a shared_space_person profile in the same space. That is not exotic — a space
-// grows a person profile for every identity whose faces are on the space's assets, so it is what you
-// get as soon as your own photos of that person are in the space (guaranteed when both users'
-// external libraries are connected to it, which is the setup issue #733 describes).
+// (identity T) also has a shared_space_person profile in the same space. That is not exotic — a space grows
+// a person profile for every identity whose faces are on its assets, so it is what you get as soon as your
+// own photos of that person are in the space (guaranteed when both users' external libraries are connected
+// to it, which is the setup issue #733 describes).
 //
-// Both identities then hold a profile in the SAME space, so mergeScopedPeople short-circuits on
-// `hasScopedProfileConflict` and 400s before the cross-owner gate is ever consulted.
+// The scoped merge used to refuse this outright ("Cannot merge people that already have separate profiles in
+// the same scope") because the raw merge engine cannot collapse two profiles that would land in the same
+// scope. It now runs through the propagation planner, which collapses them.
 
 const RESET_TABLES = [
   'face_identity_face',
@@ -130,10 +132,19 @@ describe('scoped people merge with a same-space profile conflict (#733 follow-up
     return rows[0].identityId as string;
   };
 
-  it('REPRO: the global People-page merge is refused even with the toggle on and the merge confirmed', async () => {
+  const spacePeopleForIdentity = async (identityId: string) => {
+    const db = await utils.connectDatabase();
+    const { rows } = await db.query(
+      `SELECT id FROM "shared_space_person" WHERE "spaceId" = $1 AND "identityId" = $2 ORDER BY id`,
+      [fx.spaceId, identityId],
+    );
+    return rows.map((row) => row.id as string);
+  };
+
+  it('commits the merge, collapsing the two same-space profiles into one', async () => {
     await enableCrossOwnerMerge();
 
-    const { status, body } = await request(app)
+    const { status } = await request(app)
       .post('/people/same-person')
       .set('Authorization', `Bearer ${fx.actor.accessToken}`)
       .send({
@@ -142,10 +153,14 @@ describe('scoped people merge with a same-space profile conflict (#733 follow-up
         confirmCrossOwner: true,
       });
 
-    // What the user sees today.
-    expect(status).toBe(400);
-    expect(body.message).toBe('Cannot merge people that already have separate profiles in the same scope');
-    expect(await otherOwnerIdentity()).toBe(fx.identityS);
+    expect(status).toBe(204);
+
+    // The space is left holding exactly one profile for the merged identity — the conflict that used to make
+    // this merge impossible is now resolved by collapsing it.
+    expect(await spacePeopleForIdentity(fx.identityT)).toEqual([fx.targetSpacePersonId]);
+    expect(await spacePeopleForIdentity(fx.identityS)).toEqual([]);
+    // The other owner's person is re-pointed onto the surviving identity.
+    expect(await otherOwnerIdentity()).toBe(fx.identityT);
   });
 
   it('CONTROL: the in-space merge endpoint collapses the very same pair and commits the identity merge', async () => {

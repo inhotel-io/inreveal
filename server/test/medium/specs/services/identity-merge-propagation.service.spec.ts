@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { JobName, SharedSpaceActivityType } from 'src/enum';
+import { JobName, SharedSpaceActivityType, SharedSpaceRole } from 'src/enum';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -114,6 +114,99 @@ const getIdentityIds = (db: Kysely<DB>, ids: string[]) => {
 };
 
 describe('IdentityMergePropagationService medium tests', () => {
+  // The #733 topology, end to end against a real database: userA's own person and userB's person (from a
+  // connected library) BOTH also projected into the shared space. Two profiles of the two identities live in
+  // the same space, so the raw merge engine could never commit this — it is exactly the merge the scoped
+  // endpoint used to refuse with "Cannot merge people that already have separate profiles in the same scope".
+  it('collapses a same-space profile conflict and re-points the other owner (scoped merge)', async () => {
+    const { ctx, sut } = setup();
+    const { user: actor } = await ctx.newUser();
+    const { user: otherOwner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: actor.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: actor.id, role: SharedSpaceRole.Owner });
+
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentity = await createIdentity(ctx.database);
+    const myPerson = await createPersonProfile(ctx, {
+      ownerId: actor.id,
+      identityId: targetIdentity.id,
+      name: 'Ada',
+    });
+    const theirPerson = await createPersonProfile(ctx, {
+      ownerId: otherOwner.id,
+      identityId: sourceIdentity.id,
+      name: 'Ada (theirs)',
+    });
+    const spaceMine = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: targetIdentity.id });
+    const spaceTheirs = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: sourceIdentity.id });
+
+    await expect(
+      sut.mergeScopedProfiles(factory.auth({ user: actor }), {
+        target: { type: 'person', id: myPerson.id },
+        sources: [{ type: 'space-person', id: spaceTheirs.id, spaceId: space.id }],
+      }),
+    ).resolves.toBeUndefined();
+
+    // The space keeps exactly one profile for the merged identity: the conflict was collapsed, not refused.
+    const spacePeople = await getSpacePeople(ctx.database, [spaceMine.id, spaceTheirs.id]);
+    expect(spacePeople).toEqual([{ id: spaceMine.id, identityId: targetIdentity.id }]);
+
+    // The other owner's person survives intact — only its identity moves (a re-point, not a collapse).
+    const people = await getPeople(ctx.database, [myPerson.id, theirPerson.id]);
+    expect(people).toEqual(
+      expect.arrayContaining([
+        { id: myPerson.id, identityId: targetIdentity.id },
+        { id: theirPerson.id, identityId: targetIdentity.id },
+      ]),
+    );
+  });
+
+  it('refuses a scoped merge naming a space person the actor may only view', async () => {
+    const { ctx, sut } = setup();
+    const { user: actor } = await ctx.newUser();
+    const { user: spaceOwner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: spaceOwner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: actor.id, role: SharedSpaceRole.Viewer });
+
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentity = await createIdentity(ctx.database);
+    const myPerson = await createPersonProfile(ctx, { ownerId: actor.id, identityId: targetIdentity.id });
+    const theirSpacePerson = await createSpacePerson(ctx.database, {
+      spaceId: space.id,
+      identityId: sourceIdentity.id,
+    });
+
+    await expect(
+      sut.mergeScopedProfiles(factory.auth({ user: actor }), {
+        target: { type: 'person', id: myPerson.id },
+        sources: [{ type: 'space-person', id: theirSpacePerson.id, spaceId: space.id }],
+      }),
+    ).rejects.toThrow('One or more people were not found or are not accessible');
+
+    const people = await getPeople(ctx.database, [myPerson.id]);
+    expect(people).toEqual([{ id: myPerson.id, identityId: targetIdentity.id }]);
+    await expect(getIdentityIds(ctx.database, [sourceIdentity.id])).resolves.toEqual([{ id: sourceIdentity.id }]);
+  });
+
+  it('mints an identity for a scoped merge origin that has none', async () => {
+    const { ctx, sut } = setup();
+    const { user: actor } = await ctx.newUser();
+    const target = await createPersonProfile(ctx, { ownerId: actor.id, identityId: null, name: 'Legacy target' });
+    const source = await createPersonProfile(ctx, { ownerId: actor.id, identityId: null, name: 'Legacy source' });
+
+    await expect(
+      sut.mergeScopedProfiles(factory.auth({ user: actor }), {
+        target: { type: 'person', id: target.id },
+        sources: [{ type: 'person', id: source.id }],
+      }),
+    ).resolves.toBeUndefined();
+
+    const people = await getPeople(ctx.database, [target.id, source.id]);
+    expect(people).toHaveLength(1);
+    expect(people[0].id).toBe(target.id);
+    expect(people[0].identityId).not.toBeNull();
+  });
+
   it('rolls back all profile and identity changes when one profile merge fails', async () => {
     const { ctx, sut } = setup();
     const personRepository = ctx.get(PersonRepository);

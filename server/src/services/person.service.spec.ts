@@ -173,6 +173,7 @@ describe(PersonService.name, () => {
   const useIdentityMergePropagation = () => {
     const identityMergePropagation = {
       mergePersonalPeople: vi.fn(),
+      mergeScopedProfiles: vi.fn(),
     };
     (
       sut as unknown as { identityMergePropagationService: typeof identityMergePropagation }
@@ -4736,8 +4737,16 @@ describe(PersonService.name, () => {
       expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
     });
 
-    it('merges same-person repair only after access and repairability checks', async () => {
+    // The scoped merge delegates to the propagation planner, which is the only engine that can collapse two
+    // profiles landing in the same scope. It queues its own metadata backfill as a plan follow-up, so the
+    // service no longer queues one itself, and the raw mergeIdentities is no longer used here at all (#733).
+    it('delegates same-person repair to the propagation planner after access and repairability checks', async () => {
+      const identityMergePropagation = useIdentityMergePropagation();
       const auth = AuthFactory.create();
+      const dto = {
+        target: { type: 'person' as const, id: newUuid() },
+        sources: [{ type: 'space-person' as const, id: newUuid(), spaceId: newUuid() }],
+      };
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({
         accessible: true,
         targetIdentityId: 'identity-1',
@@ -4745,25 +4754,11 @@ describe(PersonService.name, () => {
         type: 'person',
         allAttachedProfilesRepairable: true,
       } as any);
-      mocks.faceIdentity.mergeIdentities.mockResolvedValue({
-        personalProfileConflictCount: 0,
-        spaceProfileConflictCount: 0,
-      });
 
-      await sut.mergeScopedPeople(auth, {
-        target: { type: 'person', id: newUuid() },
-        sources: [{ type: 'space-person', id: newUuid(), spaceId: newUuid() }],
-      });
+      await sut.mergeScopedPeople(auth, dto);
 
-      expect(mocks.faceIdentity.mergeIdentities).toHaveBeenCalledWith({
-        targetIdentityId: 'identity-1',
-        sourceIdentityIds: ['identity-2'],
-        source: 'manual',
-      });
-      expect(mocks.job.queue).toHaveBeenCalledWith({
-        name: JobName.SharedSpacePersonMetadataBackfill,
-        data: {},
-      });
+      expect(identityMergePropagation.mergeScopedProfiles).toHaveBeenCalledWith(auth, dto);
+      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
     });
 
     it('blocks a cross-owner merge for any user when the toggle is off', async () => {
@@ -4804,21 +4799,15 @@ describe(PersonService.name, () => {
     it('performs a cross-owner merge for any user when the toggle is on and confirmed, without notifying owners', async () => {
       const auth = AuthFactory.create({ isAdmin: false });
       mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
+      const identityMergePropagation = useIdentityMergePropagation();
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(
         crossOwnerResolution({ impactedOwnerIds: ['owner-b', 'owner-c'] }),
       );
-      mocks.faceIdentity.mergeIdentities.mockResolvedValue({
-        personalProfileConflictCount: 0,
-        spaceProfileConflictCount: 0,
-      });
+      const dto = crossOwnerMergeDto({ confirmCrossOwner: true });
 
-      await sut.mergeScopedPeople(auth, crossOwnerMergeDto({ confirmCrossOwner: true }));
+      await sut.mergeScopedPeople(auth, dto);
 
-      expect(mocks.faceIdentity.mergeIdentities).toHaveBeenCalledWith({
-        targetIdentityId: 'identity-1',
-        sourceIdentityIds: ['identity-2'],
-        source: 'manual',
-      });
+      expect(identityMergePropagation.mergeScopedProfiles).toHaveBeenCalledWith(auth, dto);
       // Affected owners are intentionally not notified (issue #733 revision): once the instance opts
       // in, a cross-owner merge is a normal action and commits silently.
       expect(mocks.notification.create).not.toHaveBeenCalled();
@@ -4860,40 +4849,28 @@ describe(PersonService.name, () => {
       expect(mocks.notification.create).not.toHaveBeenCalled();
     });
 
-    it('surfaces the same-scope conflict (400) before asking for cross-owner confirmation', async () => {
-      const auth = AuthFactory.create({ isAdmin: false });
-      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
-      mocks.faceIdentity.resolveRepairRefs.mockResolvedValue(
-        crossOwnerResolution({ impactedOwnerIds: ['owner-b'], hasScopedProfileConflict: true }),
-      );
-
-      const error = await sut.mergeScopedPeople(auth, crossOwnerMergeDto()).catch((error_: unknown) => error_);
-
-      expect(error).toBeInstanceOf(BadRequestException);
-      expect((error as BadRequestException).message).toMatch(/separate profiles in the same scope/i);
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
-      expect(mocks.notification.create).not.toHaveBeenCalled();
-    });
-
-    it('rejects same-person repair when the scoped profiles conflict in the same owner or space', async () => {
+    // A same-scope profile conflict used to be a terminal 400 here, because the raw mergeIdentities cannot
+    // collapse two profiles that would land in the same scope. The planner can, so the merge now proceeds and
+    // the conflict is resolved rather than refused (#733). The collapse itself is covered by the planner's own
+    // unit and medium tests.
+    it('delegates a merge whose profiles conflict in the same owner or space instead of refusing it', async () => {
+      const identityMergePropagation = useIdentityMergePropagation();
       const auth = AuthFactory.create();
+      const dto = {
+        target: { type: 'person' as const, id: newUuid() },
+        sources: [{ type: 'person' as const, id: newUuid() }],
+      };
       mocks.faceIdentity.resolveRepairRefs.mockResolvedValue({
         accessible: true,
         targetIdentityId: 'identity-1',
         sourceIdentityIds: ['identity-2'],
         type: 'person',
         allAttachedProfilesRepairable: true,
-        hasScopedProfileConflict: true,
       } as any);
 
-      await expect(
-        sut.mergeScopedPeople(auth, {
-          target: { type: 'person', id: newUuid() },
-          sources: [{ type: 'person', id: newUuid() }],
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await sut.mergeScopedPeople(auth, dto);
 
-      expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
+      expect(identityMergePropagation.mergeScopedProfiles).toHaveBeenCalledWith(auth, dto);
     });
 
     it('detaches a scoped profile after access and backing-face checks', async () => {

@@ -214,6 +214,20 @@ type RepairProfile = {
   representativeFaceId: string | null;
 };
 
+/**
+ * An origin profile of a scoped merge, resolved with the merge RBAC: the actor's own `person`, or a
+ * `shared_space_person` in a space where they are Owner/Editor. `identityId` may be null — a profile that
+ * predates the identity model gets one minted by the planner rather than being refused.
+ */
+export type ScopedMergeOrigin = {
+  kind: ProfileKind;
+  id: string;
+  ownerId?: string;
+  spaceId?: string;
+  identityId: string | null;
+  type: string;
+};
+
 type AccessiblePeopleIdentityPageRow = {
   identityId: string;
   visibleAssetCount: string | number;
@@ -1356,6 +1370,81 @@ export class FaceIdentityRepository {
 
   private isRepairRole(role: string | null | undefined): boolean {
     return role === SharedSpaceRole.Owner || role === SharedSpaceRole.Editor;
+  }
+
+  /**
+   * Resolve the origin profiles a scoped merge names, applying the merge RBAC to each: a `person` ref must
+   * be the actor's own, a `space-person` ref must sit in a space where the actor is Owner/Editor. Returns
+   * null if any ref fails to resolve, so the caller refuses the whole merge rather than silently dropping a
+   * source. Unlike the profiles the planner later fans out to, these are the ones the actor explicitly named
+   * — the fan-out is deliberately not RBAC-filtered (see IdentityMergePropagationService).
+   */
+  async resolveScopedMergeOrigins(
+    actorUserId: string,
+    refs: ScopedPersonProfileRefDto[],
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<ScopedMergeOrigin[] | null> {
+    const origins: ScopedMergeOrigin[] = [];
+
+    for (const ref of refs) {
+      if (ref.type === 'person') {
+        const row = await db
+          .selectFrom('person')
+          .select(['person.id', 'person.ownerId', 'person.identityId', 'person.type'])
+          .where('person.id', '=', ref.id)
+          .where('person.ownerId', '=', actorUserId)
+          .executeTakeFirst();
+
+        if (!row) {
+          return null;
+        }
+
+        origins.push({
+          kind: 'person',
+          id: row.id,
+          ownerId: row.ownerId,
+          identityId: row.identityId,
+          type: row.type,
+        });
+        continue;
+      }
+
+      if (!ref.spaceId) {
+        return null;
+      }
+
+      const row = await db
+        .selectFrom('shared_space_person')
+        .innerJoin('shared_space_member', (join) =>
+          join
+            .onRef('shared_space_member.spaceId', '=', 'shared_space_person.spaceId')
+            .on('shared_space_member.userId', '=', actorUserId),
+        )
+        .select([
+          'shared_space_person.id',
+          'shared_space_person.spaceId',
+          'shared_space_person.identityId',
+          'shared_space_person.type',
+          'shared_space_member.role',
+        ])
+        .where('shared_space_person.id', '=', ref.id)
+        .where('shared_space_person.spaceId', '=', ref.spaceId)
+        .executeTakeFirst();
+
+      if (!row || !this.isRepairRole(row.role)) {
+        return null;
+      }
+
+      origins.push({
+        kind: 'space-person',
+        id: row.id,
+        spaceId: row.spaceId,
+        identityId: row.identityId,
+        type: row.type,
+      });
+    }
+
+    return origins;
   }
 
   private async resolveRepairProfile(

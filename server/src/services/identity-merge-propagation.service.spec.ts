@@ -420,7 +420,8 @@ const profile = (overrides: Partial<MergeProfile> & Pick<MergeProfile, 'kind' | 
     ...overrides,
   }) as MergeProfile;
 
-const makeService = (profiles: MergeProfile[]) => {
+const makeService = (profiles: MergeProfile[], options: { unrepairableSpaceIds?: string[] } = {}) => {
+  const unrepairableSpaceIds = new Set(options.unrepairableSpaceIds);
   const transaction = { transaction: true };
   const databaseRepository = {
     transaction: vi.fn((callback: (db: typeof transaction) => Promise<unknown>) => callback(transaction)),
@@ -466,6 +467,24 @@ const makeService = (profiles: MergeProfile[]) => {
     ),
     linkPersonFaces: vi.fn().mockResolvedValue(void 0),
     mergeIdentitiesAfterProfileResolution: vi.fn().mockResolvedValue(void 0),
+    // Mirrors the repository contract: a ref resolves only to a profile the actor may repair — their own
+    // person, or a space person in a space where they are Owner/Editor. Anything else resolves to null and
+    // the whole merge is refused.
+    resolveScopedMergeOrigins: vi.fn((actorUserId: string, refs: { type: string; id: string; spaceId?: string }[]) => {
+      const origins = refs.map((ref) => {
+        if (ref.type === 'person') {
+          const found = profiles.find((profile) => profile.kind === 'person' && profile.id === ref.id);
+          return found && found.ownerId === actorUserId ? found : null;
+        }
+
+        const found = profiles.find((profile) => profile.kind === 'space-person' && profile.id === ref.id);
+        return found?.spaceId && found.spaceId === ref.spaceId && !unrepairableSpaceIds.has(found.spaceId)
+          ? found
+          : null;
+      });
+
+      return origins.some((origin) => !origin) ? null : origins;
+    }),
   };
   const jobRepository = {
     queue: vi.fn().mockResolvedValue(void 0),
@@ -1155,6 +1174,121 @@ describe('IdentityMergePropagationService', () => {
           },
         },
       ]);
+    });
+  });
+
+  describe('buildScopedMergePlan', () => {
+    // The #733 shape: the actor's own person and a space person from someone else's connected library, with
+    // BOTH identities also projected into the same space. The raw merge path refused this outright; the
+    // planner collapses the same-space pair and re-points the other owner.
+    it('collapses a same-space profile conflict and re-points the other owner', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'person', id: 'mine-x', ownerId: 'actor-1', identityId: 'identity-x', faceCount: 5 }),
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 3 }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', faceCount: 2 }),
+        profile({ kind: 'person', id: 'theirs-y', ownerId: 'owner-2', identityId: 'identity-y', faceCount: 9 }),
+      ]);
+
+      const plan = await sut.buildScopedMergePlan({
+        actorUserId: 'actor-1',
+        target: { type: 'person', id: 'mine-x' },
+        sources: [{ type: 'space-person', id: 'space-a-y', spaceId: 'space-a' }],
+      });
+
+      expect(plan.targetIdentityId).toBe('identity-x');
+      expect(plan.sourceIdentityIds).toEqual(['identity-y']);
+      // The same-space conflict is collapsed rather than refused.
+      expect(plan.spaceProfileMerges).toEqual([
+        { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
+      ]);
+      // The other owner keeps their person; only its identity moves (a re-point, not a collapse).
+      expect(plan.personalProfileMerges).toEqual([]);
+      expect(plan.profileIdentityUpdates).toContainEqual({
+        kind: 'person',
+        profileId: 'theirs-y',
+        identityId: 'identity-x',
+      });
+      expect(plan.origin).toEqual({
+        type: 'person',
+        targetProfileId: 'mine-x',
+        sourceProfileIds: ['space-a-y'],
+        ownerId: 'actor-1',
+      });
+    });
+
+    it('pins the survivor to the actor’s target profile even when a sibling has more faces', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'person', id: 'mine-x', ownerId: 'actor-1', identityId: 'identity-x', faceCount: 1 }),
+        profile({ kind: 'person', id: 'mine-y', ownerId: 'actor-1', identityId: 'identity-y', faceCount: 99 }),
+      ]);
+
+      const plan = await sut.buildScopedMergePlan({
+        actorUserId: 'actor-1',
+        target: { type: 'person', id: 'mine-x' },
+        sources: [{ type: 'person', id: 'mine-y' }],
+      });
+
+      expect(plan.personalProfileMerges).toEqual([
+        { ownerId: 'actor-1', targetPersonId: 'mine-x', sourcePersonIds: ['mine-y'] },
+      ]);
+      expect(plan.targetIdentityId).toBe('identity-x');
+    });
+
+    it('treats a space-person target as the initiating space', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x' }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y' }),
+      ]);
+
+      const plan = await sut.buildScopedMergePlan({
+        actorUserId: 'actor-1',
+        target: { type: 'space-person', id: 'space-a-x', spaceId: 'space-a' },
+        sources: [{ type: 'space-person', id: 'space-a-y', spaceId: 'space-a' }],
+      });
+
+      expect(plan.origin).toEqual({
+        type: 'space-person',
+        targetProfileId: 'space-a-x',
+        sourceProfileIds: ['space-a-y'],
+        spaceId: 'space-a',
+      });
+      expect(plan.activityEvents).toEqual([
+        expect.objectContaining({ spaceId: 'space-a', data: expect.objectContaining({ activityRole: 'initiating' }) }),
+      ]);
+    });
+
+    it('refuses a ref the actor cannot repair', async () => {
+      const { sut } = makeService(
+        [
+          profile({ kind: 'person', id: 'mine-x', ownerId: 'actor-1', identityId: 'identity-x' }),
+          profile({ kind: 'space-person', id: 'space-v-y', spaceId: 'space-viewer', identityId: 'identity-y' }),
+        ],
+        { unrepairableSpaceIds: ['space-viewer'] },
+      );
+
+      await expect(
+        sut.buildScopedMergePlan({
+          actorUserId: 'actor-1',
+          target: { type: 'person', id: 'mine-x' },
+          sources: [{ type: 'space-person', id: 'space-v-y', spaceId: 'space-viewer' }],
+        }),
+      ).rejects.toThrow('One or more people were not found or are not accessible');
+    });
+
+    it('mints identities for profiles that have none', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'person', id: 'mine-x', ownerId: 'actor-1', identityId: null }),
+        profile({ kind: 'person', id: 'mine-y', ownerId: 'actor-1', identityId: null }),
+      ]);
+
+      const plan = await sut.buildScopedMergePlan({
+        actorUserId: 'actor-1',
+        target: { type: 'person', id: 'mine-x' },
+        sources: [{ type: 'person', id: 'mine-y' }],
+      });
+
+      expect(plan.targetIdentityId).toBe('identity-for-mine-x');
+      expect(plan.sourceIdentityIds).toEqual(['identity-for-mine-y']);
     });
   });
 

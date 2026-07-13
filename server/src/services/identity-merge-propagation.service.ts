@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Kysely, sql, Transaction } from 'kysely';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
+import { MergeScopedPeopleDto, ScopedPersonProfileRefDto } from 'src/dtos/person.dto';
 import { JobName, SharedSpaceActivityType } from 'src/enum';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
@@ -23,6 +24,12 @@ export type MergeProfile = {
   name: string;
   faceCount: number;
 };
+
+/**
+ * The subset of a profile the plan builder needs from an origin: which scope it lives in, and which identity
+ * it carries. Survivor selection reads face counts and names from the *attached* profiles, not from these.
+ */
+export type MergeOriginProfile = Pick<MergeProfile, 'kind' | 'id' | 'ownerId' | 'spaceId' | 'identityId' | 'type'>;
 
 export type ProfileMergeStep = {
   targetPersonId: string;
@@ -121,6 +128,28 @@ export class IdentityMergePropagationService {
     await this.queueFollowUpsBestEffort(plan, followUps);
 
     return sourcePersonIds.map((id) => ({ id, success: true }));
+  }
+
+  /**
+   * The scoped merge (POST /people/same-person). Same engine as the personal and in-space merges — it is only
+   * the origin refs that differ, so a same-scope profile conflict is collapsed here exactly as it is there.
+   */
+  async mergeScopedProfiles(auth: AuthDto, dto: MergeScopedPeopleDto): Promise<void> {
+    const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
+      await this.lockMergePropagation(db);
+      const plan = await this.buildScopedMergePlan(
+        {
+          actorUserId: auth.user.id,
+          target: dto.target,
+          sources: dto.sources,
+        },
+        db,
+      );
+      await this.lockPlanForExecution(plan, db);
+      return { plan, followUps: await this.executePlanInTransaction(plan, db) };
+    });
+
+    await this.queueFollowUpsBestEffort(plan, followUps);
   }
 
   async mergeSpacePeople(
@@ -348,28 +377,124 @@ export class IdentityMergePropagationService {
     });
 
     const ensuredOriginProfiles = await this.ensureOriginIdentities([targetProfile, ...sourceProfiles], db);
-    const ensuredTargetProfile = ensuredOriginProfiles[0];
-    const ensuredSourceProfiles = ensuredOriginProfiles.slice(1);
-    const targetIdentityId = ensuredTargetProfile.identityId;
+
+    return this.buildPlanFromOrigins(
+      {
+        actorUserId: input.actorUserId,
+        ensuredTarget: ensuredOriginProfiles[0],
+        ensuredSources: ensuredOriginProfiles.slice(1),
+        sourceProfileIds: sourcePersonIds,
+      },
+      db,
+    );
+  }
+
+  /**
+   * The scoped merge (POST /people/same-person): the target and each source are named by a scoped ref, so a
+   * single merge can span the actor's own library and any space they can repair. This is the merge the global
+   * People page issues whenever one of the selected people is only visible through a space (issue #733).
+   *
+   * The refs are RBAC-checked on resolution; everything the identities are *attached* to is then collapsed by
+   * the shared tail, exactly as for the personal and in-space merges.
+   */
+  async buildScopedMergePlan(
+    input: {
+      actorUserId: string;
+      target: ScopedPersonProfileRefDto;
+      sources: ScopedPersonProfileRefDto[];
+    },
+    db?: DbOrTransaction,
+  ): Promise<IdentityMergePropagationPlan> {
+    const origins = await this.deps.faceIdentityRepository.resolveScopedMergeOrigins(
+      input.actorUserId,
+      [input.target, ...input.sources],
+      db,
+    );
+    if (!origins) {
+      throw new BadRequestException('One or more people were not found or are not accessible');
+    }
+
+    const [targetOrigin, ...sourceOrigins] = origins;
+    const uniqueSourceOrigins = sourceOrigins.filter(
+      (origin, index) =>
+        !(origin.kind === targetOrigin.kind && origin.id === targetOrigin.id) &&
+        sourceOrigins.findIndex((other) => other.kind === origin.kind && other.id === origin.id) === index,
+    );
+
+    const originProfiles = [targetOrigin, ...uniqueSourceOrigins];
+    const personIds = originProfiles.filter(({ kind }) => kind === 'person').map(({ id }) => id);
+    const spacePersonIds = originProfiles.filter(({ kind }) => kind === 'space-person').map(({ id }) => id);
+    if (personIds.length > 0) {
+      await this.deps.personRepository.lockPeopleForMerge(personIds, db);
+    }
+    if (spacePersonIds.length > 0) {
+      await this.deps.sharedSpaceRepository.lockSpacePeopleForMerge(spacePersonIds, db);
+    }
+
+    const ensuredOriginProfiles: MergeOriginProfile[] = [];
+    for (const origin of originProfiles) {
+      const identity =
+        origin.kind === 'person'
+          ? await this.deps.faceIdentityRepository.ensurePersonIdentity(origin.id, db)
+          : await this.deps.faceIdentityRepository.ensureSpacePersonIdentity(origin.id, db);
+      ensuredOriginProfiles.push({ ...origin, identityId: identity.id });
+    }
+
+    return this.buildPlanFromOrigins(
+      {
+        actorUserId: input.actorUserId,
+        ensuredTarget: ensuredOriginProfiles[0],
+        ensuredSources: ensuredOriginProfiles.slice(1),
+        sourceProfileIds: uniqueSourceOrigins.map(({ id }) => id),
+      },
+      db,
+    );
+  }
+
+  /**
+   * The shared tail of every merge plan, and the only place profile conflicts are resolved: fan out to every
+   * profile attached to the involved identities, group them by scope (owner, space), pick one survivor per
+   * scope and collapse the rest into it. A scope may hold only one profile per identity
+   * (person_ownerId_identityId_key / shared_space_person_spaceId_identityId_key), so without this collapse the
+   * identity merge could not commit at all.
+   *
+   * The survivor of the actor's *own* scope is pinned to the profile they targeted; every other scope picks by
+   * face count, then name, then id.
+   */
+  private async buildPlanFromOrigins(
+    input: {
+      actorUserId: string;
+      ensuredTarget: MergeOriginProfile;
+      ensuredSources: MergeOriginProfile[];
+      sourceProfileIds: string[];
+    },
+    db?: DbOrTransaction,
+  ): Promise<IdentityMergePropagationPlan> {
+    const { actorUserId, ensuredTarget, ensuredSources, sourceProfileIds } = input;
+    const targetIdentityId = ensuredTarget.identityId;
     if (!targetIdentityId) {
       throw new BadRequestException('Target person identity not found');
     }
 
     const sourceIdentityIds = [
       ...new Set(
-        ensuredSourceProfiles
+        ensuredSources
           .map((profile) => profile.identityId)
           .filter((identityId): identityId is string => !!identityId && identityId !== targetIdentityId),
       ),
     ];
-    const planIdentityIds = [targetIdentityId, ...sourceIdentityIds];
     const attachedProfiles = (await this.deps.faceIdentityRepository.getMergePropagationProfiles(
       {
         mode: 'identities',
-        identityIds: planIdentityIds,
+        identityIds: [targetIdentityId, ...sourceIdentityIds],
       },
       db,
     )) as MergeProfile[];
+
+    // The scope the merge was initiated from: its survivor is pinned to the profile the actor targeted, and
+    // (for a space origin) its activity event is the initiating one.
+    const initiatingOwnerId = ensuredTarget.kind === 'person' ? ensuredTarget.ownerId : undefined;
+    const initiatingSpaceId = ensuredTarget.kind === 'space-person' ? ensuredTarget.spaceId : undefined;
 
     const personalGroups = this.groupProfiles(attachedProfiles, 'person');
     const spaceGroups = this.groupProfiles(attachedProfiles, 'space-person');
@@ -382,7 +507,7 @@ export class IdentityMergePropagationService {
     for (const [ownerId, profiles] of [...personalGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
       const survivor = this.chooseSurvivor(profiles, {
         targetIdentityId,
-        initiatingTargetProfileId: ownerId === targetProfile.ownerId ? ensuredTargetProfile.id : undefined,
+        initiatingTargetProfileId: ownerId === initiatingOwnerId ? ensuredTarget.id : undefined,
       });
       const sources = this.sortMergeSources(profiles.filter((profile) => profile.id !== survivor.id));
 
@@ -400,7 +525,10 @@ export class IdentityMergePropagationService {
     }
 
     for (const [spaceId, profiles] of [...spaceGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
-      const survivor = this.chooseSurvivor(profiles, { targetIdentityId });
+      const survivor = this.chooseSurvivor(profiles, {
+        targetIdentityId,
+        initiatingTargetProfileId: spaceId === initiatingSpaceId ? ensuredTarget.id : undefined,
+      });
       const sources = this.sortMergeSources(profiles.filter((profile) => profile.id !== survivor.id));
 
       if (sources.length > 0) {
@@ -415,13 +543,21 @@ export class IdentityMergePropagationService {
     const sortedAffectedOwnerIds = [...affectedOwnerIds].toSorted();
     const sortedAffectedSpaceIds = [...affectedSpaceIds].toSorted();
     const plan: IdentityMergePropagationPlan = {
-      actorUserId: input.actorUserId,
-      origin: {
-        type: 'person',
-        targetProfileId: ensuredTargetProfile.id,
-        sourceProfileIds: sourcePersonIds,
-        ownerId: ensuredTargetProfile.ownerId,
-      },
+      actorUserId,
+      origin:
+        ensuredTarget.kind === 'person'
+          ? {
+              type: 'person',
+              targetProfileId: ensuredTarget.id,
+              sourceProfileIds,
+              ownerId: ensuredTarget.ownerId,
+            }
+          : {
+              type: 'space-person',
+              targetProfileId: ensuredTarget.id,
+              sourceProfileIds,
+              spaceId: ensuredTarget.spaceId,
+            },
       targetIdentityId,
       sourceIdentityIds,
       personalProfileMerges,
@@ -440,9 +576,9 @@ export class IdentityMergePropagationService {
 
     plan.activityEvents = sortedAffectedSpaceIds.map((spaceId) => ({
       spaceId,
-      userId: input.actorUserId,
+      userId: actorUserId,
       type: SharedSpaceActivityType.PersonMerge,
-      data: this.buildActivityPayload(plan, 'propagated', spaceId),
+      data: this.buildActivityPayload(plan, spaceId === initiatingSpaceId ? 'initiating' : 'propagated', spaceId),
     }));
 
     return plan;
@@ -482,104 +618,16 @@ export class IdentityMergePropagationService {
     }
 
     const ensuredOriginProfiles = await this.ensureSpaceOriginIdentities([targetProfile, ...sourceProfiles], db);
-    const ensuredTargetProfile = ensuredOriginProfiles[0];
-    const ensuredSourceProfiles = ensuredOriginProfiles.slice(1);
-    const targetIdentityId = ensuredTargetProfile.identityId;
-    if (!targetIdentityId) {
-      throw new BadRequestException('Target person identity not found');
-    }
 
-    const sourceIdentityIds = [
-      ...new Set(
-        ensuredSourceProfiles
-          .map((profile) => profile.identityId)
-          .filter((identityId): identityId is string => !!identityId && identityId !== targetIdentityId),
-      ),
-    ];
-    const planIdentityIds = [targetIdentityId, ...sourceIdentityIds];
-    const attachedProfiles = (await this.deps.faceIdentityRepository.getMergePropagationProfiles(
+    return this.buildPlanFromOrigins(
       {
-        mode: 'identities',
-        identityIds: planIdentityIds,
+        actorUserId: input.actorUserId,
+        ensuredTarget: ensuredOriginProfiles[0],
+        ensuredSources: ensuredOriginProfiles.slice(1),
+        sourceProfileIds: sourcePersonIds,
       },
       db,
-    )) as MergeProfile[];
-
-    const personalGroups = this.groupProfiles(attachedProfiles, 'person');
-    const spaceGroups = this.groupProfiles(attachedProfiles, 'space-person');
-    const personalProfileMerges: PersonalProfileMergeStep[] = [];
-    const spaceProfileMerges: SpaceProfileMergeStep[] = [];
-    const profileIdentityUpdates: IdentityMergePropagationPlan['profileIdentityUpdates'] = [];
-    const affectedOwnerIds = new Set<string>();
-    const affectedSpaceIds = new Set<string>();
-
-    for (const [ownerId, profiles] of [...personalGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
-      const survivor = this.chooseSurvivor(profiles, { targetIdentityId });
-      const sources = this.sortMergeSources(profiles.filter((profile) => profile.id !== survivor.id));
-
-      if (sources.length > 0) {
-        personalProfileMerges.push({
-          ownerId,
-          targetPersonId: survivor.id,
-          sourcePersonIds: sources.map(({ id }) => id),
-        });
-        affectedOwnerIds.add(ownerId);
-      } else if (survivor.identityId !== targetIdentityId) {
-        profileIdentityUpdates.push({ kind: 'person', profileId: survivor.id, identityId: targetIdentityId });
-        affectedOwnerIds.add(ownerId);
-      }
-    }
-
-    for (const [spaceId, profiles] of [...spaceGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
-      const survivor = this.chooseSurvivor(profiles, {
-        targetIdentityId,
-        initiatingTargetProfileId: spaceId === input.spaceId ? ensuredTargetProfile.id : undefined,
-      });
-      const sources = this.sortMergeSources(profiles.filter((profile) => profile.id !== survivor.id));
-
-      if (sources.length > 0) {
-        spaceProfileMerges.push({ spaceId, targetPersonId: survivor.id, sourcePersonIds: sources.map(({ id }) => id) });
-        affectedSpaceIds.add(spaceId);
-      } else if (survivor.identityId !== targetIdentityId) {
-        profileIdentityUpdates.push({ kind: 'space-person', profileId: survivor.id, identityId: targetIdentityId });
-        affectedSpaceIds.add(spaceId);
-      }
-    }
-
-    const sortedAffectedOwnerIds = [...affectedOwnerIds].toSorted();
-    const sortedAffectedSpaceIds = [...affectedSpaceIds].toSorted();
-    const plan: IdentityMergePropagationPlan = {
-      actorUserId: input.actorUserId,
-      origin: {
-        type: 'space-person',
-        targetProfileId: ensuredTargetProfile.id,
-        sourceProfileIds: sourcePersonIds,
-        spaceId: input.spaceId,
-      },
-      targetIdentityId,
-      sourceIdentityIds,
-      personalProfileMerges,
-      spaceProfileMerges,
-      profileIdentityUpdates,
-      affectedOwnerIds: sortedAffectedOwnerIds,
-      affectedSpaceIds: sortedAffectedSpaceIds,
-      followUpJobs: [
-        { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: targetIdentityId } },
-        ...sortedAffectedSpaceIds.map(
-          (spaceId): MergePropagationFollowUpJob => ({ name: JobName.SharedSpacePersonDedup, data: { spaceId } }),
-        ),
-      ],
-      activityEvents: [],
-    };
-
-    plan.activityEvents = sortedAffectedSpaceIds.map((spaceId) => ({
-      spaceId,
-      userId: input.actorUserId,
-      type: SharedSpaceActivityType.PersonMerge,
-      data: this.buildActivityPayload(plan, spaceId === input.spaceId ? 'initiating' : 'propagated', spaceId),
-    }));
-
-    return plan;
+    );
   }
 
   private buildActivityPayload(
