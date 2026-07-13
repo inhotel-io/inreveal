@@ -339,7 +339,7 @@
         </div>
       {/if}
 
-      <DetailPanelLocation {isOwner} {asset} />
+      <DetailPanelLocation {isOwner} {canFilter} {asset} />
     </div>
   </section>
 

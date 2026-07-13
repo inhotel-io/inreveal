@@ -1,6 +1,7 @@
 import { goto } from '$app/navigation';
 import { page } from '$app/state';
 import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
+import { Route } from '$lib/route';
 import { clearFilterParams, decodeFilterParams, encodeFilterParams } from '$lib/utils/filter-url';
 
 export type FilterTarget =
@@ -99,6 +100,38 @@ export function buildContextualFilterUrl(url: URL, patch: Partial<FilterState>, 
  */
 export function applyContextualFilter(patch: Partial<FilterState>, opts?: { global?: boolean }): void {
   void goto(buildContextualFilterUrl(page.url, patch, opts));
+}
+
+/**
+ * The map URL for the CURRENT context (E10): the surface's scope plus its active filters, optionally
+ * centered on a point.
+ *
+ * This is the 🗺️ pin on the asset viewer's location row: "show me this, on the full map, without
+ * losing what I am looking at". It carries the Space scope (`spaceId`), the active search term and
+ * every active filter over to `/map` — dropping them is bug #767.
+ *
+ * Returns **null when there is nothing honest to link to**, which today means the ALBUM surface:
+ * there is no album-map URL at all (`AlbumMap` is a modal rendered over the album page). A pin there
+ * would land on the GLOBAL map carrying the album's filters but NOT its album scope — silently
+ * widening "this album" to "the whole library". Callers must not render the pin when this is null.
+ *
+ * A non-filterable surface (`resolveFilterTarget` → null, e.g. /search) carries nothing over, exactly
+ * like `buildContextualFilterUrl`'s fallback: there is no scope to preserve, so there is none to lie
+ * about either.
+ */
+export function buildContextualMapUrl(url: URL, point?: { lat: number; lng: number; zoom?: number }): string | null {
+  const target = resolveFilterTarget(url);
+
+  if (target?.kind === 'album') {
+    return null;
+  }
+
+  const carryOver = target !== null;
+  const filters: FilterState = { ...createFilterState(), ...(carryOver ? decodeFilterParams(url) : {}) };
+  const spaceId = target && (target.kind === 'space' || target.kind === 'map') ? target.spaceId : undefined;
+  const query = carryOver ? (url.searchParams.get('q') ?? undefined) : undefined;
+
+  return Route.map({ spaceId, query, filters, ...point });
 }
 
 /**
