@@ -1,11 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
 import {
+  applyContextualFilter,
   buildContextualFilterUrl,
   buildFilterStateUrl,
   isFilterStateUrlUnchanged,
   resolveFilterTarget,
 } from '$lib/utils/filter-target';
+import { reactivePageMock as mockPage } from '@test-data/mocks/reactive-page.mock.svelte';
+
+const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn().mockResolvedValue(undefined) }));
+
+vi.mock('$app/navigation', () => ({
+  goto: gotoMock,
+}));
+
+// applyContextualFilter reads the reactive `page` from `$app/state` — see reactive-page.mock's own
+// docs for why this needs to be a real $state object rather than a plain vi.hoisted literal.
+vi.mock('$app/state', async () => {
+  const { reactivePageMock } = await import('@test-data/mocks/reactive-page.mock.svelte');
+  return { page: reactivePageMock };
+});
 
 const u = (path: string) => new URL(`https://g.test${path}`);
 
@@ -180,6 +195,73 @@ describe('buildContextualFilterUrl', () => {
 
   it('does not leak a hash onto non-map surfaces', () => {
     expect(buildContextualFilterUrl(u('/photos/a1#foo'), { make: 'Apple' })).not.toContain('#');
+  });
+});
+
+// applyContextualFilter is the navigating wrapper — Task 1 of Slice 7 (R1). It did not exist before
+// this: only the pure buildContextualFilterUrl shipped in Slice 2. Kept thin on purpose, so these
+// tests are about the WIRING (does it read page.url, forward opts, and call goto with the exact
+// result), not the merge/target logic already covered above.
+describe('applyContextualFilter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPage.reset('https://g.test/photos');
+  });
+
+  it('goto()s exactly the URL that buildContextualFilterUrl(page.url, patch, opts) returns', () => {
+    mockPage.reset('https://g.test/spaces/s1/photos/a1?people=person:p1');
+    const patch = { make: 'Apple', model: 'iPhone 17 Pro Max' };
+
+    applyContextualFilter(patch);
+
+    const expected = buildContextualFilterUrl(mockPage.url, patch);
+    expect(gotoMock).toHaveBeenCalledTimes(1);
+    expect(gotoMock).toHaveBeenCalledWith(expected);
+  });
+
+  // global: true escapes to /photos and carries NOTHING over — not filters, not q, not sort.
+  it('{ global: true } lands on /photos, carrying nothing over', () => {
+    mockPage.reset('https://g.test/spaces/s1/photos/a1?q=beach&sort=asc&people=space-person:p1&city=Berlin');
+
+    applyContextualFilter({ make: 'Apple' }, { global: true });
+
+    expect(gotoMock).toHaveBeenCalledWith('/photos?make=Apple');
+  });
+
+  // A single goto() must close the asset viewer: the target is the surface's BASE path, which
+  // never contains the open assetId.
+  it("navigates to the surface's base path, closing the asset viewer in one goto()", () => {
+    mockPage.reset('https://g.test/photos/asset-1');
+
+    applyContextualFilter({ make: 'Apple' });
+
+    const [url] = gotoMock.mock.calls[0] as [string];
+    expect(url).not.toContain('asset-1');
+    expect(url.startsWith('/photos')).toBe(true);
+  });
+
+  // E24 — clicking the same value twice must be a no-op, not a toggle. Removal is the chip's ✕.
+  it('E24: applying the same patch twice produces the identical URL (idempotent, not a toggle)', () => {
+    mockPage.reset('https://g.test/photos');
+    const patch = { make: 'Apple', model: 'iPhone 17 Pro Max' };
+
+    applyContextualFilter(patch);
+    const [firstUrl] = gotoMock.mock.calls[0] as [string];
+
+    mockPage.reset(`https://g.test${firstUrl}`);
+    applyContextualFilter(patch);
+    const [secondUrl] = gotoMock.mock.calls[1] as [string];
+
+    expect(secondUrl).toBe(firstUrl);
+  });
+
+  // E3 — a non-filterable surface (resolveFilterTarget returns null) must not throw; it falls back
+  // to /photos.
+  it('does not throw from a non-filterable surface, falling back to /photos', () => {
+    mockPage.reset('https://g.test/favorites/asset-1');
+
+    expect(() => applyContextualFilter({ make: 'Apple' })).not.toThrow();
+    expect(gotoMock).toHaveBeenCalledWith('/photos?make=Apple');
   });
 });
 

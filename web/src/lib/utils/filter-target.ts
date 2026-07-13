@@ -1,3 +1,5 @@
+import { goto } from '$app/navigation';
+import { page } from '$app/state';
 import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
 import { clearFilterParams, decodeFilterParams, encodeFilterParams } from '$lib/utils/filter-url';
 
@@ -82,6 +84,21 @@ export function buildContextualFilterUrl(url: URL, patch: Partial<FilterState>, 
 
   const search = params.toString();
   return basePath + (search ? `?${search}` : '') + hash;
+}
+
+/**
+ * The navigating counterpart to `buildContextualFilterUrl`: apply a metadata patch to the CURRENT
+ * page (`page.url` from `$app/state`) and navigate there.
+ *
+ * Thin on purpose — all the interesting logic (target resolution, merge semantics, the `global`
+ * escape hatch, dropping `at`) already lives in `buildContextualFilterUrl` and is tested there. This
+ * is just the wiring: it is what a DetailPanel row's `onclick` calls.
+ *
+ * The resulting `goto()` targets the surface's base path (no `assetId`), so a single call both
+ * closes the asset viewer and applies the filter.
+ */
+export function applyContextualFilter(patch: Partial<FilterState>, opts?: { global?: boolean }): void {
+  void goto(buildContextualFilterUrl(page.url, patch, opts));
 }
 
 /**
