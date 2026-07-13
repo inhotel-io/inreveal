@@ -373,3 +373,93 @@ describe('Map page query intersection', () => {
     expect(await screen.findByTestId('add-all-to-collection')).toBeInTheDocument();
   });
 });
+
+describe('Map page filters are URL-backed', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.resetAllMocks();
+    gotoMock.mockResolvedValue(undefined);
+    mockPage.url = new URL('https://gallery.test/map');
+    sdkMock.getTimeBuckets.mockResolvedValue([]);
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('hydrates the filters from the URL into the marker query', async () => {
+    mockPage.url = new URL('https://gallery.test/map?spaceId=space-1&make=Apple&rating=4&lens=RF24-70mm');
+
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() =>
+      expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({ spaceId: 'space-1', make: 'Apple', rating: 4, lensModel: 'RF24-70mm' }),
+      ),
+    );
+    expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument();
+  });
+
+  // NB: the panel stub's `filter-panel-set-year` is deliberately NOT used here. It sets only the
+  // transient selectedYear, which encodeFilterParams does not emit — so the rebuilt URL would be
+  // identical, the no-op guard would fire, and goto would never be called. Use a stub button that
+  // sets a URL-ENCODED filter: `filter-panel-set-country` (bindable-filter-panel.stub.svelte:112-122,
+  // sets country: 'Germany' -> `country=Germany`).
+  it('writes a filter change back to the URL, preserving spaceId, q and the viewport hash', async () => {
+    mockPage.url = new URL('https://gallery.test/map?spaceId=space-1&q=ski#12/48.85/2.35');
+
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
+
+    await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+    const [target] = gotoMock.mock.calls.at(-1) as [string];
+    expect(target).toContain('/map?');
+    expect(target).toContain('spaceId=space-1');
+    expect(target).toContain('q=ski');
+    expect(target).toContain('country=Germany');
+    expect(target).toContain('#12/48.85/2.35');
+  });
+
+  // The transient-only case, from the other side: a year is not a URL param, so the rebuilt URL is
+  // unchanged and the guard must swallow the write rather than churn history. (The full year +
+  // URL-filter round trip is pinned on the album page, which has a reactive page mock — Task 2.)
+  it('does not write the URL for a transient-only (year) filter change', async () => {
+    mockPage.url = new URL('https://gallery.test/map?spaceId=space-1');
+
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+
+    await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
+    expect(gotoMock).not.toHaveBeenCalled();
+  });
+
+  // The NIT decision, client side: a space and an album are two different scopes and the server
+  // rejects their combination with a 400. Drop the album at hydrate so a hand-typed URL degrades to
+  // a plain space map instead of an error.
+  it('drops a stray albumId when the map is scoped to a space', async () => {
+    mockPage.url = new URL('https://gallery.test/map?spaceId=space-1&albumId=album-9&make=Apple');
+
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalled());
+    const [options] = sdkMock.getFilteredMapMarkers.mock.calls.at(-1) as [Record<string, unknown>];
+    expect(options).toMatchObject({ spaceId: 'space-1', make: 'Apple' });
+    expect(options.albumId).toBeUndefined();
+  });
+
+  // …but WITHOUT a space, an albumId IS a legitimate map scope (that is what the server-side album
+  // access fix in Step 1 is for).
+  it('keeps an albumId scope on the global map', async () => {
+    mockPage.url = new URL('https://gallery.test/map?albumId=album-9');
+
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() =>
+      expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-9' })),
+    );
+  });
+});

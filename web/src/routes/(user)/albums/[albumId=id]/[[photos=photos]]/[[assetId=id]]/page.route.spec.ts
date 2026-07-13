@@ -15,11 +15,14 @@ import { userAdminFactory } from '@test-data/factories/user-factory';
 import { reactivePageMock as mockPage } from '@test-data/mocks/reactive-page.mock.svelte';
 import AlbumPage from './+page.svelte';
 
-const { registerAlbumContextMock, registerSelectionContextMock, gotoMock } = vi.hoisted(() => ({
-  registerAlbumContextMock: vi.fn(),
-  registerSelectionContextMock: vi.fn(),
-  gotoMock: vi.fn(),
-}));
+const { registerAlbumContextMock, registerSelectionContextMock, gotoMock, mockFeatureFlagsManager } = vi.hoisted(
+  () => ({
+    registerAlbumContextMock: vi.fn(),
+    registerSelectionContextMock: vi.fn(),
+    gotoMock: vi.fn(),
+    mockFeatureFlagsManager: { init: vi.fn(), loadFeatureFlags: vi.fn(), value: { map: false } },
+  }),
+);
 
 vi.mock('$app/navigation', () => ({
   goto: gotoMock,
@@ -44,11 +47,7 @@ vi.mock('$lib/managers/command-context-manager.svelte', () => ({
 }));
 
 vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
-  featureFlagsManager: {
-    init: vi.fn(),
-    loadFeatureFlags: vi.fn(),
-    value: { map: false },
-  } as never,
+  featureFlagsManager: mockFeatureFlagsManager as never,
 }));
 
 vi.mock('$lib/utils/navigation', async (importOriginal) => {
@@ -138,6 +137,7 @@ describe('album detail filter panel route', () => {
     });
     assetMultiSelectManager.clear();
     Element.prototype.animate = getAnimateMock();
+    mockFeatureFlagsManager.value.map = false;
   });
 
   afterAll(() => {
@@ -637,6 +637,21 @@ describe('album detail filter panel route', () => {
 
       expect(screen.getByTestId('active-chip')).toHaveTextContent('Picker Person');
       expect(gotoMock).not.toHaveBeenCalled();
+    });
+
+    it('passes the album filters to the album map', async () => {
+      mockFeatureFlagsManager.value.map = true;
+      sdkMock.getFilteredMapMarkers.mockResolvedValue([]);
+      mockPage.url = new URL('https://gallery.test/albums/album-1?make=Apple');
+
+      renderPage(albumFactory.build({ id: 'album-1', assetCount: 2 }));
+
+      await waitFor(() =>
+        expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledWith(
+          expect.objectContaining({ albumId: 'album-1', make: 'Apple' }),
+          expect.anything(),
+        ),
+      );
     });
   });
 });

@@ -1,6 +1,7 @@
 import { AssetTypeEnum, AssetVisibility } from '@immich/sdk';
 import { createFilterState } from '$lib/components/filter-panel/filter-panel';
 import {
+  buildAlbumMapMarkerOptions,
   buildMapMarkerOptions,
   buildMapTimeBucketOptions,
   buildMapTimelineOptions,
@@ -412,5 +413,27 @@ describe('text filters (#802)', () => {
       expect(options).not.toHaveProperty('originalFileName');
       expect(options).not.toHaveProperty('ocr');
     });
+  });
+});
+
+describe('buildAlbumMapMarkerOptions', () => {
+  it('scopes to the album and forwards the active filters', () => {
+    const options = buildAlbumMapMarkerOptions('album-1', {
+      ...createFilterState(),
+      make: 'Apple',
+      rating: 4,
+      lensModel: 'RF24-70mm',
+    });
+
+    expect(options).toMatchObject({ albumId: 'album-1', make: 'Apple', rating: 4, lensModel: 'RF24-70mm' });
+  });
+
+  it('sends the album scope alone — no spaceId, no withSharedSpaces, no owner scope', () => {
+    // The server derives everything else from albumId: it checks AlbumRead, leaves userIds unset,
+    // and computes timelineSpaceIds itself so albumSharedSpaceScope can keep unreachable space
+    // assets out (R4). The client must NOT try to help by adding withSharedSpaces — that flag also
+    // changes how person tokens are resolved (resolveScopedMapPersonFilters), which is not what an
+    // album query wants.
+    expect(buildAlbumMapMarkerOptions('album-1', createFilterState())).toEqual({ albumId: 'album-1' });
   });
 });

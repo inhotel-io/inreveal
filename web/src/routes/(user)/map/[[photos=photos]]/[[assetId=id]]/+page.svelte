@@ -26,7 +26,13 @@
   import { handlePromiseError } from '$lib/utils';
   import { delay } from '$lib/utils/asset-utils';
   import { buildMapFilterConfig } from '$lib/utils/map-filter-config';
+  import { buildFilterStateUrl, isFilterStateUrlUnchanged } from '$lib/utils/filter-target';
+  import { decodeFilterParams } from '$lib/utils/filter-url';
   import { navigate } from '$lib/utils/navigation';
+  import {
+    preserveTransientTemporalFilters,
+    type SearchablePageTransientTemporalState,
+  } from '$lib/utils/searchable-page-search';
   import { buildSmartSearchParams, SEARCH_FILTER_DEBOUNCE_MS } from '$lib/utils/space-search';
   import {
     AssetVisibility,
@@ -42,7 +48,7 @@
   import { lang } from '$lib/stores/preferences.store';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { mdiArrowLeft } from '@mdi/js';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
   import LoadingSpinner from '$lib/components/shared-components/LoadingSpinner.svelte';
@@ -78,8 +84,28 @@
     return () => window.removeEventListener('resize', checkMobile);
   });
 
+  // #767(b): this used to be an always-empty createFilterState(), so every filter active on the
+  // surface you came from was dropped the moment you reached the map. The URL is the source of
+  // truth now.
+  //
+  // Unlike the album page, the map KEEPS an albumId filter — /map?albumId=X is a legitimate scope
+  // (that is what the server-side album-access fix in this slice exists for) — EXCEPT when the map is
+  // already scoped to a space. Space ∩ album is unsatisfiable (the space scope demands the asset be
+  // in the space; albumSharedSpaceScope, run with no timelineSpaceIds under a spaceId query, demands
+  // it be in no space at all) and the server 400s it. Dropping it here means a hand-typed
+  // /map?spaceId=S&albumId=A degrades to the space map instead of erroring.
+  const hydrateMapFilters = (url: URL): FilterState => {
+    const decoded = decodeFilterParams(url);
+    const urlSpaceId = url.searchParams.get(QueryParameter.SPACE_ID) || undefined;
+    return { ...createFilterState(), ...decoded, albumId: urlSpaceId ? undefined : decoded.albumId };
+  };
+
   // Filter state
-  let filters = $state<FilterState>(createFilterState());
+  let filters = $state<FilterState>(hydrateMapFilters(page.url));
+  let lastHandledFilterSearch = $state(page.url.search);
+  let pendingFilterUrlSync = $state<
+    { search: string; transientTemporal?: SearchablePageTransientTemporalState } | undefined
+  >();
   let mapMarkers = $state<MapMarkerResponseDto[]>([]);
   let timeBuckets = $state<Array<{ timeBucket: string; count: number }>>([]);
   let personNames = new SvelteMap<string, string>();
@@ -233,6 +259,43 @@
     };
   });
 
+  function syncMapFilterUrl(nextFilters: FilterState) {
+    const nextUrl = buildFilterStateUrl(page.url, nextFilters);
+    // NOT a string compare — buildFilterStateUrl re-appends the filter params last, so a URL like
+    // /map?make=Apple&spaceId=s1 rebuilds re-ordered. See filter-target.ts.
+    if (isFilterStateUrlUnchanged(page.url, nextUrl)) {
+      return;
+    }
+    pendingFilterUrlSync = {
+      search: new URL(nextUrl, page.url).search,
+      transientTemporal: {
+        selectedYear: nextFilters.selectedYear,
+        selectedMonth: nextFilters.selectedMonth,
+      },
+    };
+    void goto(nextUrl, { replaceState: true, keepFocus: true, noScroll: true });
+  }
+
+  $effect(() => {
+    const nextSearch = page.url.search;
+    if (nextSearch === lastHandledFilterSearch) {
+      return;
+    }
+
+    untrack(() => {
+      const transientTemporal =
+        pendingFilterUrlSync?.search === nextSearch ? pendingFilterUrlSync.transientTemporal : undefined;
+      filters = {
+        ...createFilterState(),
+        ...preserveTransientTemporalFilters(hydrateMapFilters(page.url), transientTemporal),
+      };
+      if (pendingFilterUrlSync?.search === nextSearch) {
+        pendingFilterUrlSync = undefined;
+      }
+      lastHandledFilterSearch = nextSearch;
+    });
+  });
+
   function clearCommittedQuery() {
     const url = new URL(page.url);
     url.searchParams.delete('q');
@@ -357,6 +420,7 @@
               {timeBuckets}
               storageKey="gallery-filter-visible-sections-map"
               persistCollapsed={false}
+              onFiltersChange={syncMapFilterUrl}
             />
           </div>
         </div>
@@ -371,6 +435,7 @@
           config={filterConfig}
           {timeBuckets}
           storageKey="gallery-filter-visible-sections-map"
+          onFiltersChange={syncMapFilterUrl}
         />
       {/if}
       <div class="relative flex min-h-0 min-w-0 flex-1 flex-col sm:flex-row">
@@ -385,9 +450,11 @@
               {tagNames}
               onRemoveFilter={(type, id) => {
                 filters = handlePhotosRemoveFilter(filters, type, id);
+                syncMapFilterUrl(filters);
               }}
               onClearAll={() => {
                 filters = clearFilters(filters);
+                syncMapFilterUrl(filters);
               }}
               onAddAllToCollection={handleAddAllToCollection}
             />

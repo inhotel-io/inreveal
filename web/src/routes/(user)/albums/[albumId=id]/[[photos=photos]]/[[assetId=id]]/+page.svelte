@@ -887,7 +887,7 @@
             <ActionButton action={Share} />
 
             {#if featureFlagsManager.value.map}
-              <AlbumMap {album} />
+              <AlbumMap {album} filters={albumFilters} />
             {/if}
 
             {#if album.assetCount > 0}
