@@ -1,6 +1,7 @@
 <script lang="ts">
   import { lazyComponent } from '$lib/utils/lazy-component.svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import DetailPanelDate from '$lib/components/asset-viewer/DetailPanelDate.svelte';
   import DetailPanelDescription from '$lib/components/asset-viewer/DetailPanelDescription.svelte';
   import DetailPanelLocation from '$lib/components/asset-viewer/DetailPanelLocation.svelte';
@@ -16,6 +17,7 @@
   import { delay, getDimensions } from '$lib/utils/asset-utils';
   import { getByteUnitString } from '$lib/utils/byte-units';
   import { getMapProviderLinks } from '$lib/utils/exif-utils';
+  import { applyContextualFilter, resolveFilterTarget } from '$lib/utils/filter-target';
   import { handleError } from '$lib/utils/handle-error';
   import { getParentPath } from '$lib/utils/tree-utils';
   import {
@@ -26,7 +28,7 @@
     type AssetResponseDto,
   } from '@immich/sdk';
   import { Icon, IconButton, Link, Text } from '@immich/ui';
-  import { mdiCamera, mdiCameraIris, mdiClose, mdiImageOutline, mdiInformationOutline } from '@mdi/js';
+  import { mdiCamera, mdiCameraIris, mdiClose, mdiImageOutline, mdiInformationOutline, mdiMagnify } from '@mdi/js';
   import { onDestroy } from 'svelte';
   import { t } from 'svelte-i18n';
   import { slide } from 'svelte/transition';
@@ -48,6 +50,31 @@
   let effectiveSpaceId = $derived(spaceId || asset.resolvedSpaceId);
 
   let isOwner = $derived(authManager.authenticated && authManager.user.id === asset.ownerId);
+
+  // R4/E2 — shared links get NO filter affordance at all (they have no /photos to land on).
+  // Threaded down to child rows the same way `isOwner` is; camera/lens live inline here.
+  let canFilter = $derived(!authManager.isSharedLink);
+
+  // E5 — the 🔍 "search everywhere" icon is redundant (a no-op) when already on /photos.
+  let isOnPhotos = $derived(resolveFilterTarget(page.url)?.kind === 'photos');
+
+  // R9/E6/E7 — a value that is empty or whitespace-only trims to nothing (filter-url.ts's
+  // setTrimmed), so it must not render as a clickable filter affordance: the click would close the
+  // viewer and apply no filter at all.
+  let cameraLabel = $derived(
+    [asset.exifInfo?.make, asset.exifInfo?.model]
+      .map((value) => value?.trim())
+      .filter(Boolean)
+      .join(' '),
+  );
+  let lensLabel = $derived(asset.exifInfo?.lensModel?.trim() ?? '');
+
+  const cameraFilterPatch = () => ({
+    make: asset.exifInfo?.make ?? undefined,
+    model: asset.exifInfo?.model ?? undefined,
+  });
+  const lensFilterPatch = () => ({ lensModel: asset.exifInfo?.lensModel ?? undefined });
+
   let latlng = $derived(
     (() => {
       const lat = asset.exifInfo?.latitude;
@@ -225,26 +252,31 @@
 
           <div>
             {#if asset.exifInfo?.make || asset.exifInfo?.model}
-              <!--
-                withSharedSpaces:true — /search is scoped to own + partner assets without it, so a
-                Space member clicking the camera of a photo another member shared into the Space got
-                zero results, not even the photo they clicked on (#732). Same omission the palette
-                had in #894. Safe unconditionally: the server rejects withSharedSpaces only when it
-                is combined with spaceId/albumId, which these links never send.
-              -->
-              <p>
-                <a
-                  href={Route.search({
-                    make: asset.exifInfo?.make ?? undefined,
-                    model: asset.exifInfo?.model ?? undefined,
-                    withSharedSpaces: true,
-                  })}
-                  title="{$t('search_for')} {asset.exifInfo.make || ''} {asset.exifInfo.model || ''}"
-                  class="hover:text-primary"
-                >
-                  {asset.exifInfo.make || ''}
-                  {asset.exifInfo.model || ''}
-                </a>
+              <p class="flex items-center gap-1">
+                {#if canFilter && cameraLabel}
+                  <button
+                    type="button"
+                    class="text-left hover:text-primary"
+                    aria-label="{$t('filter_by_camera')}: {cameraLabel}"
+                    onclick={() => applyContextualFilter(cameraFilterPatch())}
+                  >
+                    {asset.exifInfo.make || ''}
+                    {asset.exifInfo.model || ''}
+                  </button>
+                  {#if !isOnPhotos}
+                    <IconButton
+                      icon={mdiMagnify}
+                      aria-label="{$t('search_everywhere')}: {cameraLabel}"
+                      size="small"
+                      shape="round"
+                      color="secondary"
+                      variant="ghost"
+                      onclick={() => applyContextualFilter(cameraFilterPatch(), { global: true })}
+                    />
+                  {/if}
+                {:else}
+                  <span>{asset.exifInfo.make || ''} {asset.exifInfo.model || ''}</span>
+                {/if}
               </p>
             {/if}
 
@@ -267,14 +299,30 @@
 
           <div>
             {#if asset.exifInfo?.lensModel}
-              <p>
-                <a
-                  href={Route.search({ lensModel: asset.exifInfo.lensModel, withSharedSpaces: true })}
-                  title="{$t('search_for')} {asset.exifInfo.lensModel}"
-                  class="line-clamp-1 hover:text-primary"
-                >
-                  {asset.exifInfo.lensModel}
-                </a>
+              <p class="flex items-center gap-1">
+                {#if canFilter && lensLabel}
+                  <button
+                    type="button"
+                    class="line-clamp-1 text-left hover:text-primary"
+                    aria-label="{$t('filter_by_lens')}: {lensLabel}"
+                    onclick={() => applyContextualFilter(lensFilterPatch())}
+                  >
+                    {asset.exifInfo.lensModel}
+                  </button>
+                  {#if !isOnPhotos}
+                    <IconButton
+                      icon={mdiMagnify}
+                      aria-label="{$t('search_everywhere')}: {lensLabel}"
+                      size="small"
+                      shape="round"
+                      color="secondary"
+                      variant="ghost"
+                      onclick={() => applyContextualFilter(lensFilterPatch(), { global: true })}
+                    />
+                  {/if}
+                {:else}
+                  <span class="line-clamp-1">{asset.exifInfo.lensModel}</span>
+                {/if}
               </p>
             {/if}
 
