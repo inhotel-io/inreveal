@@ -65,10 +65,33 @@ describe('AlbumMap', () => {
   });
 
   // M6: the album page reassigns `albumFilters` (a whole new object) on every keystroke, including
-  // into text filters that buildAlbumMapMarkerOptions does not even read. Depending on the raw
-  // `filters` object identity (rather than the marker-relevant options) would abort and refetch
-  // markers on every one of those keystrokes.
-  it('does not refetch markers when a filter the album map does not read changes (e.g. description)', async () => {
+  // into fields that buildAlbumMapMarkerOptions does not even read. Depending on the raw `filters`
+  // object identity (rather than the marker-relevant options) would abort and refetch markers on
+  // every one of those keystrokes.
+  //
+  // `sortOrder` is the genuinely-unused pick here: description/filename/ocr used to qualify (M6's
+  // original example) but Finding 2 (#767 fresh instance) made them marker-relevant — see the
+  // "refetches" test below — so this now has to pick a field the album map truly never reads.
+  it('does not refetch markers when a filter the album map does not read changes (e.g. sortOrder)', async () => {
+    const album = albumFactory.build({ id: 'album-1' });
+    const { rerender } = renderWithTooltips(AlbumMap, { album, filters: { ...createFilterState(), make: 'Apple' } });
+
+    await vi.waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(1));
+
+    await rerender({
+      component: AlbumMap,
+      componentProps: { album, filters: { ...createFilterState(), make: 'Apple', sortOrder: 'asc' } },
+    });
+
+    // Give an (incorrect) effect rerun a chance to fire before asserting it didn't.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(1);
+  });
+
+  // Finding 2 (#767 fresh instance): description/filename/ocr are now forwarded to the marker
+  // query (buildAlbumMapMarkerOptions -> applyCommonMapFilters), so — unlike sortOrder above —
+  // changing one of them IS marker-relevant and must trigger a refetch with the new value applied.
+  it('refetches markers when the description filter changes (now marker-relevant)', async () => {
     const album = albumFactory.build({ id: 'album-1' });
     const { rerender } = renderWithTooltips(AlbumMap, { album, filters: { ...createFilterState(), make: 'Apple' } });
 
@@ -79,9 +102,13 @@ describe('AlbumMap', () => {
       componentProps: { album, filters: { ...createFilterState(), make: 'Apple', description: 'sunset' } },
     });
 
-    // Give an (incorrect) effect rerun a chance to fire before asserting it didn't.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() =>
+      expect(sdkMock.getFilteredMapMarkers).toHaveBeenLastCalledWith(
+        expect.objectContaining({ albumId: 'album-1', make: 'Apple', description: 'sunset' }),
+        expect.anything(),
+      ),
+    );
+    expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(2);
   });
 
   // Markers now load from an $effect, not once from onMount — so every filter change aborts the

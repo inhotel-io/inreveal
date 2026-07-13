@@ -503,6 +503,7 @@
               onClose={closeTimelinePanel}
               {spaceId}
               bind:filters
+              onFiltersChange={syncMapFilterUrl}
             />
           </div>
         {/if}

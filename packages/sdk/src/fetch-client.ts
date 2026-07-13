@@ -5762,7 +5762,15 @@ export function reassignFacesById({ id, faceDto }: {
 /**
  * Get filtered map markers
  */
+<<<<<<< HEAD
 export function getFilteredMapMarkers({ city, country, description, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, model, ocr, originalFileName, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
+||||||| parent of e13beb08bd5 (fix(map): sync timeline-panel temporal chip to URL + forward text filters to map markers (#767))
+export function getFilteredMapMarkers({ albumId, city, country, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, model, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
+    albumId?: string;
+=======
+export function getFilteredMapMarkers({ albumId, city, country, description, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, model, ocr, originalFileName, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
+    albumId?: string;
+>>>>>>> e13beb08bd5 (fix(map): sync timeline-panel temporal chip to URL + forward text filters to map markers (#767))
     city?: string;
     country?: string;
     description?: string;
