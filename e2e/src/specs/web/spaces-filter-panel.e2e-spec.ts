@@ -894,7 +894,7 @@ test.describe('Spaces FilterPanel', () => {
 
       await expect(page.locator('[data-testid="active-filters-bar"]')).toBeVisible();
       const chip = page.locator('[data-testid="active-chip"]');
-      await expect(chip.first()).toContainText('5+');
+      await expect(chip.first()).toContainText('≥ 5 stars');
 
       // Result count should be visible — since no test assets have 5-star rating, expect 0
       const resultCount = page.locator('[data-testid="result-count"]');
@@ -941,7 +941,7 @@ test.describe('Spaces FilterPanel', () => {
       await page.locator('[data-testid="rating-star-3"]').click();
 
       const chip = page.locator('[data-testid="active-chip"]');
-      await expect(chip.first()).toContainText('3+');
+      await expect(chip.first()).toContainText('≥ 3 stars');
     });
 
     test('should clear rating filter when removing rating chip', async ({ context, page }) => {
@@ -1195,7 +1195,7 @@ test.describe('Spaces FilterPanel', () => {
 
       await page.locator('[data-testid="rating-star-3"]').click();
       const chip = page.locator('[data-testid="active-chip"]');
-      await expect(chip.first()).toContainText('3+');
+      await expect(chip.first()).toContainText('≥ 3 stars');
     });
 
     test('should show "Photos only" chip when applying media type filter', async ({ context, page }) => {
@@ -1278,7 +1278,7 @@ test.describe('Spaces FilterPanel', () => {
       await gotoSpace(context, page, space.id);
 
       await page.locator('[data-testid="rating-star-3"]').click();
-      await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: '3+' })).toHaveCount(1);
+      await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: '≥ 3 stars' })).toHaveCount(1);
 
       await page.locator('[data-testid="media-type-image"]').click();
 
