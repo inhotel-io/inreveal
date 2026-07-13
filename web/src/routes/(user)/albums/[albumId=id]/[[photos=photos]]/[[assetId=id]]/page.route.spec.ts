@@ -665,6 +665,19 @@ describe('album detail filter panel route', () => {
       expect(screen.getByTestId('active-chip')).toHaveTextContent('First Album Tag');
     });
 
+    // Finding (#767c): the grid and the map of one album must agree on what a shared/bookmarked
+    // filter URL means. The map already forwards description/filename/ocr/isInAlbum/isNotInAlbum
+    // (buildAlbumMapMarkerOptions); the timeline query must forward them too, or a URL like this
+    // renders a "1 filter" chip over the ENTIRE unfiltered album.
+    it('hydrates the album description filter from the URL and forwards it to the timeline query', async () => {
+      mockPage.url = new URL('https://gallery.test/albums/album-1?description=beach');
+      renderPage(album1());
+
+      const options = await screen.findByTestId('timeline-options');
+      await waitFor(() => expect(options.textContent).toContain('"description":"beach"'));
+      expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument();
+    });
+
     it('passes the album filters to the album map', async () => {
       mockFeatureFlagsManager.value.map = true;
       sdkMock.getFilteredMapMarkers.mockResolvedValue([]);

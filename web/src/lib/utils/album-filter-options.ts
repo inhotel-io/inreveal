@@ -71,6 +71,14 @@ export function buildAlbumTimelineOptions(
   return base;
 }
 
+// Intentionally does NOT forward lensModel/state/ownerId, unlike its buildAlbumTimelineOptions
+// sibling above. This is safe today only because the picker's FilterState is component-local
+// (never URL-hydrated) and the shared `sections` const in album-filter-config.ts has no control
+// that can ever set these three fields on it — so they can never actually be present here. If
+// `sections` (shared by BOTH the album-detail and picker filter configs) ever grows a control that
+// sets one of these three, this omission becomes the same "filter honesty" lie #767c fixed for
+// description/originalFileName/ocr/isInAlbum/isNotInAlbum above: forward the field here too, in
+// the same change that adds the control. See album-filter-options.spec.ts for the pinning test.
 export function buildAlbumAssetPickerOptions(albumId: string, filters: FilterState): Record<string, unknown> {
   return applyCommonFilterFields(
     {
