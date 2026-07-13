@@ -2,6 +2,7 @@ import { mergeScopedPeople, type MergeScopedPeopleDto } from '@immich/sdk';
 import {
   CrossOwnerMergeErrorCode,
   getCrossOwnerMergeErrorCode,
+  runMergeWithCrossOwnerConfirmation,
   runScopedMergeWithCrossOwnerConfirmation,
 } from '$lib/utils/cross-owner-merge';
 
@@ -151,6 +152,102 @@ describe('runScopedMergeWithCrossOwnerConfirmation', () => {
 
     await expect(
       runScopedMergeWithCrossOwnerConfirmation(dto, { confirmCrossOwner: vi.fn(), onBlocked: vi.fn() }),
+    ).rejects.toThrow('network');
+  });
+});
+
+// Generic runner: wraps ANY merge call (classic `mergePerson`, scoped `mergeScopedPeople`, in-space
+// `mergeSpacePeople`), not just the scoped endpoint. `runScopedMergeWithCrossOwnerConfirmation` above
+// is now a thin wrapper over this — these tests exercise it directly with a bare merge function so
+// they don't depend on any particular SDK call shape.
+describe('runMergeWithCrossOwnerConfirmation', () => {
+  it('commits when the merge succeeds, without asking for confirmation', async () => {
+    const merge = vi.fn().mockResolvedValue(undefined);
+    const confirmCrossOwner = vi.fn();
+    const onBlocked = vi.fn();
+
+    const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
+
+    expect(committed).toBe(true);
+    expect(merge).toHaveBeenCalledTimes(1);
+    expect(merge).toHaveBeenCalledWith();
+    expect(confirmCrossOwner).not.toHaveBeenCalled();
+    expect(onBlocked).not.toHaveBeenCalled();
+  });
+
+  it('shows the descriptive message and does not retry when blocked', async () => {
+    const merge = vi
+      .fn()
+      .mockRejectedValueOnce(
+        httpError(403, { code: CrossOwnerMergeErrorCode.Blocked, message: 'An administrator can enable it.' }),
+      );
+    const confirmCrossOwner = vi.fn();
+    const onBlocked = vi.fn();
+
+    const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
+
+    expect(committed).toBe(false);
+    expect(onBlocked).toHaveBeenCalledWith('An administrator can enable it.');
+    expect(confirmCrossOwner).not.toHaveBeenCalled();
+    expect(merge).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes onBlocked (not a rethrow) when the blocked code arrives in a raw string body', async () => {
+    const merge = vi
+      .fn()
+      .mockRejectedValueOnce(
+        httpErrorRaw(403, { code: CrossOwnerMergeErrorCode.Blocked, message: 'An administrator can enable it.' }),
+      );
+    const confirmCrossOwner = vi.fn();
+    const onBlocked = vi.fn();
+
+    const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
+
+    expect(committed).toBe(false);
+    expect(onBlocked).toHaveBeenCalledWith('An administrator can enable it.');
+    expect(confirmCrossOwner).not.toHaveBeenCalled();
+    expect(merge).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the confirm dialog and re-runs with the cross-owner acknowledgement once the user confirms', async () => {
+    const merge = vi
+      .fn()
+      .mockRejectedValueOnce(
+        httpError(409, { code: CrossOwnerMergeErrorCode.ConfirmationRequired, impactedOwnerCount: 2 }),
+      )
+      .mockResolvedValueOnce(undefined);
+    const confirmCrossOwner = vi.fn().mockResolvedValue(true);
+    const onBlocked = vi.fn();
+
+    const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
+
+    expect(committed).toBe(true);
+    expect(confirmCrossOwner).toHaveBeenCalledTimes(1);
+    expect(merge).toHaveBeenCalledTimes(2);
+    expect(merge).toHaveBeenLastCalledWith(true);
+  });
+
+  it('does not merge when the user declines the confirmation', async () => {
+    const merge = vi
+      .fn()
+      .mockRejectedValueOnce(
+        httpError(409, { code: CrossOwnerMergeErrorCode.ConfirmationRequired, impactedOwnerCount: 1 }),
+      );
+    const confirmCrossOwner = vi.fn().mockResolvedValue(false);
+    const onBlocked = vi.fn();
+
+    const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
+
+    expect(committed).toBe(false);
+    expect(confirmCrossOwner).toHaveBeenCalledTimes(1);
+    expect(merge).toHaveBeenCalledTimes(1);
+  });
+
+  it('rethrows unrelated errors', async () => {
+    const merge = vi.fn().mockRejectedValueOnce(new Error('network'));
+
+    await expect(
+      runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner: vi.fn(), onBlocked: vi.fn() }),
     ).rejects.toThrow('network');
   });
 });

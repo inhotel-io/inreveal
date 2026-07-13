@@ -65,20 +65,24 @@ export const createCrossOwnerMergeHandlers = (): CrossOwnerMergeHandlers => ({
 });
 
 /**
- * Run a scoped people-merge, transparently handling the cross-owner boundary (issue #733):
- * - a `blocked` response invokes `onBlocked` with the server's descriptive message;
- * - a `confirmationRequired` response asks `confirmCrossOwner`, and — only if accepted — re-runs the
- *   merge with the acknowledgement so the server commits it.
+ * Run any people-merge call, transparently handling the cross-owner boundary (issue #733):
+ * - a `blocked` response invokes `handlers.onBlocked` with the server's descriptive message;
+ * - a `confirmationRequired` response asks `handlers.confirmCrossOwner`, and — only if accepted —
+ *   re-runs `merge` with `confirmCrossOwner: true` so the server commits it.
+ *
+ * `merge` is called once with no argument, and — on a confirmed retry — once more with `true`. It
+ * is the caller's responsibility to fold that flag into whichever merge request body it sends
+ * (`MergePersonDto`, `MergeScopedPeopleDto`, `SharedSpacePersonMergeDto` all carry it).
  *
  * Returns `true` when the merge committed, `false` when it was blocked or the user declined. Any
  * other error propagates to the caller.
  */
-export const runScopedMergeWithCrossOwnerConfirmation = async (
-  mergeScopedPeopleDto: MergeScopedPeopleDto,
+export const runMergeWithCrossOwnerConfirmation = async (
+  merge: (confirmCrossOwner?: boolean) => Promise<unknown>,
   handlers: CrossOwnerMergeHandlers,
 ): Promise<boolean> => {
   try {
-    await mergeScopedPeople({ mergeScopedPeopleDto });
+    await merge();
     return true;
   } catch (error) {
     const code = getCrossOwnerMergeErrorCode(error);
@@ -96,7 +100,25 @@ export const runScopedMergeWithCrossOwnerConfirmation = async (
       return false;
     }
 
-    await mergeScopedPeople({ mergeScopedPeopleDto: { ...mergeScopedPeopleDto, confirmCrossOwner: true } });
+    await merge(true);
     return true;
   }
 };
+
+/**
+ * Thin wrapper over {@link runMergeWithCrossOwnerConfirmation} for the scoped merge endpoint
+ * (`POST /people/same-person`).
+ */
+export const runScopedMergeWithCrossOwnerConfirmation = (
+  mergeScopedPeopleDto: MergeScopedPeopleDto,
+  handlers: CrossOwnerMergeHandlers,
+): Promise<boolean> =>
+  runMergeWithCrossOwnerConfirmation(
+    (confirmCrossOwner) =>
+      mergeScopedPeople({
+        mergeScopedPeopleDto: confirmCrossOwner
+          ? { ...mergeScopedPeopleDto, confirmCrossOwner: true }
+          : mergeScopedPeopleDto,
+      }),
+    handlers,
+  );

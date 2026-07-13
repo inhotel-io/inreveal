@@ -9,6 +9,7 @@ import { SharedSpaceRepository } from 'src/repositories/shared-space.repository'
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
 import { IdentityMergePropagationService } from 'src/services/identity-merge-propagation.service';
+import { asDateString } from 'src/utils/date';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
@@ -58,9 +59,22 @@ const setPersonIdentity = async (
 
 const createPersonProfile = async (
   ctx: ReturnType<typeof setup>['ctx'],
-  input: { ownerId: string; identityId?: string | null; name?: string },
+  input: {
+    ownerId: string;
+    identityId?: string | null;
+    name?: string;
+    birthDate?: string | null;
+    isHidden?: boolean;
+    isFavorite?: boolean;
+  },
 ) => {
-  const { person } = await ctx.newPerson({ ownerId: input.ownerId, name: input.name ?? 'Person' });
+  const { person } = await ctx.newPerson({
+    ownerId: input.ownerId,
+    name: input.name ?? 'Person',
+    ...(input.birthDate === undefined ? {} : { birthDate: input.birthDate }),
+    ...(input.isHidden === undefined ? {} : { isHidden: input.isHidden }),
+    ...(input.isFavorite === undefined ? {} : { isFavorite: input.isFavorite }),
+  });
   if (input.identityId !== undefined) {
     await setPersonIdentity(ctx.database, { personId: person.id, identityId: input.identityId });
   }
@@ -812,5 +826,367 @@ describe('IdentityMergePropagationService medium tests', () => {
         .where('type', '=', SharedSpaceActivityType.PersonMerge)
         .execute(),
     ).resolves.toEqual([]);
+  });
+
+  // Coverage gap audit (#733 follow-up, plan §5.3/§7 Slice 6): the behaviours below were previously asserted
+  // only against the in-memory mocked row store in identity-merge-propagation.service.spec.ts. These drive the
+  // same entry points against a real Postgres database.
+
+  // Matrix row T14 — blank-fill: a blank target field is filled from the source, but a target field that
+  // already has a value is never overwritten by the source's.
+  it('T14: fills a blank target name/birthDate from the source, but never overwrites a non-blank target field', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+
+    // A blank target picks up the source's name and birth date.
+    const blankTargetIdentity = await createIdentity(ctx.database);
+    const namedSourceIdentity = await createIdentity(ctx.database);
+    const blankTarget = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: blankTargetIdentity.id,
+      name: '',
+      birthDate: null,
+    });
+    const namedSource = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: namedSourceIdentity.id,
+      name: 'Ada Lovelace',
+      birthDate: '1990-01-01',
+    });
+
+    await sut.mergePersonalPeople(factory.auth({ user }), blankTarget.id, [namedSource.id]);
+
+    const filled = await ctx.database
+      .selectFrom('person')
+      .select(['name', 'birthDate'])
+      .where('id', '=', blankTarget.id)
+      .executeTakeFirstOrThrow();
+    expect(filled.name).toBe('Ada Lovelace');
+    expect(asDateString(filled.birthDate)).toBe('1990-01-01');
+
+    // A target that already has a name/birthDate keeps them — the source's values are never applied.
+    const namedTargetIdentity = await createIdentity(ctx.database);
+    const otherSourceIdentity = await createIdentity(ctx.database);
+    const namedTarget = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: namedTargetIdentity.id,
+      name: 'Original Name',
+      birthDate: '1975-05-05',
+    });
+    const otherSource = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: otherSourceIdentity.id,
+      name: 'Should Not Apply',
+      birthDate: '2000-12-12',
+    });
+
+    await sut.mergePersonalPeople(factory.auth({ user }), namedTarget.id, [otherSource.id]);
+
+    const kept = await ctx.database
+      .selectFrom('person')
+      .select(['name', 'birthDate'])
+      .where('id', '=', namedTarget.id)
+      .executeTakeFirstOrThrow();
+    expect(kept.name).toBe('Original Name');
+    expect(asDateString(kept.birthDate)).toBe('1975-05-05');
+  });
+
+  // Matrix row T13 — the survivor always keeps the TARGET's isHidden/isFavorite, regardless of the source's.
+  it('T13: the survivor keeps the target isHidden/isFavorite flags, never the source', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+
+    // A visible, non-favorite target merged with a hidden, favorite source stays visible/non-favorite.
+    const visibleTargetIdentity = await createIdentity(ctx.database);
+    const hiddenSourceIdentity = await createIdentity(ctx.database);
+    const visibleTarget = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: visibleTargetIdentity.id,
+      name: 'Visible Target',
+      isHidden: false,
+      isFavorite: false,
+    });
+    const hiddenSource = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: hiddenSourceIdentity.id,
+      name: 'Hidden Source',
+      isHidden: true,
+      isFavorite: true,
+    });
+
+    await sut.mergePersonalPeople(factory.auth({ user }), visibleTarget.id, [hiddenSource.id]);
+
+    await expect(
+      ctx.database
+        .selectFrom('person')
+        .select(['isHidden', 'isFavorite'])
+        .where('id', '=', visibleTarget.id)
+        .executeTakeFirstOrThrow(),
+    ).resolves.toEqual({ isHidden: false, isFavorite: false });
+
+    // A hidden, favorite target merged with a visible, non-favorite source stays hidden/favorite.
+    const hiddenTargetIdentity = await createIdentity(ctx.database);
+    const visibleSourceIdentity = await createIdentity(ctx.database);
+    const hiddenTarget = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: hiddenTargetIdentity.id,
+      name: 'Hidden Target',
+      isHidden: true,
+      isFavorite: true,
+    });
+    const visibleSource = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: visibleSourceIdentity.id,
+      name: 'Visible Source',
+      isHidden: false,
+      isFavorite: false,
+    });
+
+    await sut.mergePersonalPeople(factory.auth({ user }), hiddenTarget.id, [visibleSource.id]);
+
+    await expect(
+      ctx.database
+        .selectFrom('person')
+        .select(['isHidden', 'isFavorite'])
+        .where('id', '=', hiddenTarget.id)
+        .executeTakeFirstOrThrow(),
+    ).resolves.toEqual({ isHidden: true, isFavorite: true });
+  });
+
+  // Space alias migration: a per-user alias on the losing shared_space_person survives on the winner, and the
+  // winner's own alias for that same user is never clobbered by the loser's.
+  it('migrates per-user shared-space aliases from the loser to the winner without clobbering the winner’s own alias', async () => {
+    const { ctx, sut } = setup();
+    const { user: actor } = await ctx.newUser();
+    const { user: loserOnlyAliasUser } = await ctx.newUser();
+    const { user: winnerOnlyAliasUser } = await ctx.newUser();
+    const { user: bothAliasUser } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: actor.id });
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentity = await createIdentity(ctx.database);
+    const target = await createSpacePerson(ctx.database, {
+      spaceId: space.id,
+      identityId: targetIdentity.id,
+      name: 'Target',
+    });
+    const source = await createSpacePerson(ctx.database, {
+      spaceId: space.id,
+      identityId: sourceIdentity.id,
+      name: 'Source',
+    });
+
+    await ctx.database
+      .insertInto('shared_space_person_alias')
+      .values([
+        { personId: source.id, userId: loserOnlyAliasUser.id, alias: 'Loser-only alias' },
+        { personId: target.id, userId: winnerOnlyAliasUser.id, alias: 'Winner-only alias' },
+        { personId: target.id, userId: bothAliasUser.id, alias: 'Winner keeps this' },
+        { personId: source.id, userId: bothAliasUser.id, alias: 'Loser must not win' },
+      ])
+      .execute();
+
+    await sut.mergeSpacePeople(factory.auth({ user: actor }), space.id, target.id, [source.id]);
+
+    const survivingAliases = await ctx.database
+      .selectFrom('shared_space_person_alias')
+      .select(['personId', 'userId', 'alias'])
+      .where('personId', 'in', [target.id, source.id])
+      .orderBy('userId')
+      .execute();
+
+    expect(survivingAliases).toEqual(
+      [
+        { personId: target.id, userId: loserOnlyAliasUser.id, alias: 'Loser-only alias' },
+        { personId: target.id, userId: winnerOnlyAliasUser.id, alias: 'Winner-only alias' },
+        { personId: target.id, userId: bothAliasUser.id, alias: 'Winner keeps this' },
+      ].toSorted((a, b) => a.userId.localeCompare(b.userId)),
+    );
+  });
+
+  // Counts: after an in-space merge, the surviving shared_space_person's denormalised faceCount/assetCount
+  // reflect a real recount rather than a naive sum of the pre-merge values.
+  it('recounts the surviving shared-space person’s faceCount/assetCount after an in-space merge', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id });
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentity = await createIdentity(ctx.database);
+    const target = await createSpacePerson(ctx.database, {
+      spaceId: space.id,
+      identityId: targetIdentity.id,
+      name: 'Target',
+    });
+    const source = await createSpacePerson(ctx.database, {
+      spaceId: space.id,
+      identityId: sourceIdentity.id,
+      name: 'Source',
+    });
+
+    const { asset: targetAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: targetAsset.id });
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values({ personId: target.id, assetFaceId: targetFace.id })
+      .execute();
+
+    // Two faces from the SAME asset on the source: faceCount and assetCount diverge after the merge, which
+    // rules out a test that would pass with a naive "sum the old counts" implementation.
+    const { asset: sourceAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: sourceFaceOne } = await ctx.newAssetFace({ assetId: sourceAsset.id });
+    const { assetFace: sourceFaceTwo } = await ctx.newAssetFace({ assetId: sourceAsset.id });
+    await ctx.database
+      .insertInto('shared_space_person_face')
+      .values([
+        { personId: source.id, assetFaceId: sourceFaceOne.id },
+        { personId: source.id, assetFaceId: sourceFaceTwo.id },
+      ])
+      .execute();
+
+    // The faces were inserted directly, bypassing recount, so the stored counts start at their column default.
+    await expect(
+      ctx.database
+        .selectFrom('shared_space_person')
+        .select(['faceCount', 'assetCount'])
+        .where('id', '=', target.id)
+        .executeTakeFirstOrThrow(),
+    ).resolves.toEqual({ faceCount: 0, assetCount: 0 });
+
+    await sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]);
+
+    await expect(
+      ctx.database
+        .selectFrom('shared_space_person')
+        .select(['faceCount', 'assetCount'])
+        .where('id', '=', target.id)
+        .executeTakeFirstOrThrow(),
+    ).resolves.toEqual({ faceCount: 3, assetCount: 2 });
+  });
+
+  // Multi-source: 3+ sources collapsed in ONE personal-merge call, and every source row is gone afterwards.
+  it('collapses 3+ sources in a single personal merge call, deleting every source person and identity', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentityA = await createIdentity(ctx.database);
+    const sourceIdentityB = await createIdentity(ctx.database);
+    const sourceIdentityC = await createIdentity(ctx.database);
+    const target = await createPersonProfile(ctx, { ownerId: user.id, identityId: targetIdentity.id, name: 'Target' });
+    const sourceA = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: sourceIdentityA.id,
+      name: 'Source A',
+    });
+    const sourceB = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: sourceIdentityB.id,
+      name: 'Source B',
+    });
+    const sourceC = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: sourceIdentityC.id,
+      name: 'Source C',
+    });
+
+    await expect(
+      sut.mergePersonalPeople(factory.auth({ user }), target.id, [sourceA.id, sourceB.id, sourceC.id]),
+    ).resolves.toEqual([
+      { id: sourceA.id, success: true },
+      { id: sourceB.id, success: true },
+      { id: sourceC.id, success: true },
+    ]);
+
+    await expect(getPeople(ctx.database, [target.id, sourceA.id, sourceB.id, sourceC.id])).resolves.toEqual([
+      { id: target.id, identityId: targetIdentity.id },
+    ]);
+    await expect(
+      getIdentityIds(ctx.database, [sourceIdentityA.id, sourceIdentityB.id, sourceIdentityC.id]),
+    ).resolves.toEqual([]);
+  });
+
+  // Idempotency (§5.2 row 5): naming a source ref whose profile is ALREADY on the target's identity is a
+  // harmless no-op — nothing is merged, nothing is deleted, and no exception is thrown.
+  it('is a harmless no-op when a scoped source ref already carries the target identity', async () => {
+    const { ctx, sut } = setup();
+    const { user: actor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: actor.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: actor.id, role: SharedSpaceRole.Owner });
+    const identity = await createIdentity(ctx.database);
+    const target = await createPersonProfile(ctx, {
+      ownerId: actor.id,
+      identityId: identity.id,
+      name: 'Already Merged',
+    });
+    const alreadyFusedSpacePerson = await createSpacePerson(ctx.database, {
+      spaceId: space.id,
+      identityId: identity.id,
+      name: 'Already Fused',
+    });
+
+    await expect(
+      sut.mergeScopedProfiles(factory.auth({ user: actor }), {
+        target: { type: 'person', id: target.id },
+        sources: [{ type: 'space-person', id: alreadyFusedSpacePerson.id, spaceId: space.id }],
+      }),
+    ).resolves.toBeUndefined();
+
+    await expect(getPeople(ctx.database, [target.id])).resolves.toEqual([{ id: target.id, identityId: identity.id }]);
+    await expect(getSpacePeople(ctx.database, [alreadyFusedSpacePerson.id])).resolves.toEqual([
+      { id: alreadyFusedSpacePerson.id, identityId: identity.id },
+    ]);
+    await expect(getIdentityIds(ctx.database, [identity.id])).resolves.toEqual([{ id: identity.id }]);
+  });
+
+  // Degenerate identity (§5.1): a person with zero faces at all merges cleanly and the source row is deleted.
+  it('merges a person with zero faces, deleting the source row and its identity', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentity = await createIdentity(ctx.database);
+    const target = await createPersonProfile(ctx, { ownerId: user.id, identityId: targetIdentity.id, name: 'Target' });
+    const source = await createPersonProfile(ctx, {
+      ownerId: user.id,
+      identityId: sourceIdentity.id,
+      name: 'Zero Face Source',
+    });
+
+    await expect(sut.mergePersonalPeople(factory.auth({ user }), target.id, [source.id])).resolves.toEqual([
+      { id: source.id, success: true },
+    ]);
+
+    await expect(getPeople(ctx.database, [target.id, source.id])).resolves.toEqual([
+      { id: target.id, identityId: targetIdentity.id },
+    ]);
+    await expect(getIdentityIds(ctx.database, [sourceIdentity.id])).resolves.toEqual([]);
+  });
+
+  // Feature-face repair (T15): when the merge invalidates the target's faceAssetId (here: the target has none
+  // at all), the survivor's faceAssetId is repaired from a reassigned face and a thumbnail job is queued.
+  it('repairs the target faceAssetId when the merge invalidates it', async () => {
+    const { ctx, sut } = setup();
+    const jobRepository = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+    const { user } = await ctx.newUser();
+    const targetIdentity = await createIdentity(ctx.database);
+    const sourceIdentity = await createIdentity(ctx.database);
+    const target = await createPersonProfile(ctx, { ownerId: user.id, identityId: targetIdentity.id, name: 'Target' });
+    const source = await createPersonProfile(ctx, { ownerId: user.id, identityId: sourceIdentity.id, name: 'Source' });
+    const sourceFace = await createIdentityLinkedFace(ctx, {
+      ownerId: user.id,
+      identityId: sourceIdentity.id,
+      personId: source.id,
+    });
+
+    await expect(
+      ctx.database.selectFrom('person').select('faceAssetId').where('id', '=', target.id).executeTakeFirstOrThrow(),
+    ).resolves.toEqual({ faceAssetId: null });
+
+    await sut.mergePersonalPeople(factory.auth({ user }), target.id, [source.id]);
+
+    await expect(
+      ctx.database.selectFrom('person').select('faceAssetId').where('id', '=', target.id).executeTakeFirstOrThrow(),
+    ).resolves.toEqual({ faceAssetId: sourceFace.id });
+    expect(jobRepository.queue).toHaveBeenCalledWith({
+      name: JobName.PersonGenerateThumbnail,
+      data: { id: target.id },
+    });
   });
 });
