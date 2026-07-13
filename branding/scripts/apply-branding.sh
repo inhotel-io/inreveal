@@ -19,6 +19,10 @@ BUNDLE_ID_DEBUG=$(jq -r '.mobile.bundle_id_debug' "$CONFIG")
 BUNDLE_ID_PROFILE=$(jq -r '.mobile.bundle_id_profile' "$CONFIG")
 DEEP_LINK_SCHEME=$(jq -r '.mobile.deep_link_scheme' "$CONFIG")
 OAUTH_CALLBACK=$(jq -r '.mobile.oauth_callback' "$CONFIG")
+# Not read in this file — patch_oauth_callback() uses ${BUNDLE_ID} directly. Exported as a
+# global so branding/scripts/test-oauth-callback-branding.sh, which sources this script, can
+# use it without recomputing the scheme.
+# shellcheck disable=SC2034
 OAUTH_CALLBACK_SCHEME="${OAUTH_CALLBACK%%:*}"
 SHARED_GROUP=$(jq -r '.mobile.shared_group' "$CONFIG")
 BG_TASK_PREFIX=$(jq -r '.mobile.background_task_prefix' "$CONFIG")
