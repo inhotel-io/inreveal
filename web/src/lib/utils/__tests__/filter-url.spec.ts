@@ -115,6 +115,48 @@ describe('filter-url codec', () => {
     expect(decoded.description).toHaveLength(200);
   });
 
+  // The description clamp exists because a pasted 10KB value goes straight into the URL and reverse
+  // proxies commonly cap request headers at ~8KB. filename and ocr are the same free-text inputs on
+  // the same panel, so they need the same bound — symmetrically, on both sides of the codec.
+  it('E13: truncates filename and ocr to 200 characters when encoding', () => {
+    const params = encode({ originalFileName: 'f'.repeat(500), ocr: 'o'.repeat(500) });
+
+    expect(params.get('filename')).toHaveLength(200);
+    expect(params.get('ocr')).toHaveLength(200);
+  });
+
+  it('E13: clamps over-long filename and ocr params when decoding', () => {
+    const decoded = decodeFilterParams(
+      new URL(`https://g.test/photos?filename=${'f'.repeat(500)}&ocr=${'o'.repeat(500)}`),
+    );
+
+    expect(decoded.originalFileName).toHaveLength(200);
+    expect(decoded.ocr).toHaveLength(200);
+  });
+
+  // A UTF-16 code-unit clamp (`.slice(0, 200)`) cuts an emoji that straddles the boundary in half:
+  // the surviving lone surrogate is not serializable, so URLSearchParams writes U+FFFD instead —
+  // silent, irreversible corruption of one character. Clamp on CODE POINTS.
+  it('E13: does not split a surrogate pair that straddles the clamp boundary', () => {
+    const value = 'x'.repeat(199) + '😀'; // 200 code points, 201 UTF-16 code units
+    const params = encode({ description: value, originalFileName: value, ocr: value });
+    const decoded = decodeFilterParams(new URL(`https://g.test/photos?${params.toString()}`));
+
+    expect(decoded.description).toBe(value);
+    expect(decoded.originalFileName).toBe(value);
+    expect(decoded.ocr).toBe(value);
+    expect(params.toString()).not.toContain('%EF%BF%BD');
+  });
+
+  it('E13: clamps a long emoji value to 200 code points, not 200 code units', () => {
+    const decoded = decodeFilterParams(
+      new URL(`https://g.test/photos?${encode({ description: '😀'.repeat(250) }).toString()}`),
+    );
+
+    expect([...decoded.description!]).toHaveLength(200);
+    expect(decoded.description).not.toContain('�');
+  });
+
   it('clearFilterParams removes every filter param but leaves q and sort alone', () => {
     const params = new URLSearchParams(
       'q=beach&sort=asc&make=Apple&lens=RF24&owner=u1&albumId=a1&state=Hamburg&year=2023&month=6',

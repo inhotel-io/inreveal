@@ -1,7 +1,31 @@
 import type { FilterState } from '$lib/components/filter-panel/filter-panel';
 
-/** Bounds the URL length when a long description is used as a filter (E13). */
-export const DESCRIPTION_PARAM_MAX_LENGTH = 200;
+/**
+ * Bounds the URL length when a long free-text value is used as a filter (E13).
+ *
+ * Applies to ALL THREE free-text filters — description, filename and OCR — symmetrically on encode
+ * and decode. A pasted 10KB value would otherwise go straight into the URL, and reverse proxies
+ * commonly cap request headers at ~8KB. `text-filter.svelte` mirrors it as the inputs' `maxlength`.
+ */
+export const TEXT_FILTER_PARAM_MAX_LENGTH = 200;
+
+/**
+ * Clamp a free-text filter value to TEXT_FILTER_PARAM_MAX_LENGTH **code points**.
+ *
+ * NOT `.slice(0, n)`: that cuts UTF-16 code units, so an emoji (or any astral character) straddling
+ * the boundary is split into a lone surrogate — which is not serializable, so URLSearchParams emits
+ * U+FFFD in its place. That is a silent, irreversible corruption of the user's last character.
+ */
+function clampTextFilterParam(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const codePoints = [...value];
+  return codePoints.length <= TEXT_FILTER_PARAM_MAX_LENGTH
+    ? value
+    : codePoints.slice(0, TEXT_FILTER_PARAM_MAX_LENGTH).join('');
+}
 
 export const FILTER_URL_PARAMS = [
   'people',
@@ -82,9 +106,9 @@ export function encodeFilterParams(params: URLSearchParams, filters: FilterState
   setTrimmed('model', filters.model);
   setTrimmed('lens', filters.lensModel);
   setTrimmed('owner', filters.ownerId);
-  setTrimmed('description', filters.description?.trim().slice(0, DESCRIPTION_PARAM_MAX_LENGTH));
-  setTrimmed('filename', filters.originalFileName);
-  setTrimmed('ocr', filters.ocr);
+  setTrimmed('description', clampTextFilterParam(filters.description?.trim()));
+  setTrimmed('filename', clampTextFilterParam(filters.originalFileName?.trim()));
+  setTrimmed('ocr', clampTextFilterParam(filters.ocr?.trim()));
 
   if (filters.mediaType !== 'all') {
     params.set('type', filters.mediaType);
@@ -151,9 +175,9 @@ export function decodeFilterParams(url: URL): DecodedFilterState {
   result.ownerId = get('owner');
   // Clamp on decode as well as encode: a hand-written or legacy URL can carry more than the
   // encoder would ever emit, and without this, encode(decode(url)) would rewrite the user's URL.
-  result.description = get('description')?.slice(0, DESCRIPTION_PARAM_MAX_LENGTH);
-  result.originalFileName = get('filename');
-  result.ocr = get('ocr');
+  result.description = clampTextFilterParam(get('description'));
+  result.originalFileName = clampTextFilterParam(get('filename'));
+  result.ocr = clampTextFilterParam(get('ocr'));
   result.albumId = get('albumId');
 
   const mediaType = parseMediaType(url.searchParams.get('type'));
