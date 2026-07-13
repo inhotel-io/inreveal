@@ -29,6 +29,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 // Setup uploads two real geotagged fixture images so the EXIF-based filters
 // (make, country, takenAfter/Before) have real data to match.
 
+/** Asset ids of the markers in a `/gallery/map/markers` response body. */
+const markerIds = (body: unknown) => (body as Array<{ id: string }>).map((m) => m.id);
+
 describe('/gallery/map/markers', () => {
   let admin: LoginResponseDto;
   let user: LoginResponseDto;
@@ -510,6 +513,158 @@ describe('/gallery/map/markers', () => {
       const ids = (body as Array<{ id: string }>).map((m) => m.id);
       expect(ids).toContain(matchingAssetId);
       expect(ids).not.toContain(otherAssetId);
+    });
+  });
+
+  describe('ownerId (contributor) filter — RBAC', () => {
+    // `ownerId` NARROWS within the caller's current scope; it must never WIDEN it. Both directions
+    // are pinned here, because both are one-line mutations away in searchAssetBuilder
+    // (server/src/utils/database.ts), the single builder behind this endpoint AND all four search
+    // endpoints:
+    //
+    //   - Drop the AND (`.$if(false, …)`) ⇒ ?ownerId=<stranger> returns the caller's whole visible
+    //     scope instead of []. The "returns []" tests below catch it.
+    //   - Merge ownerId into the `userIds` SCOPING predicate (anyUuid([...userIds, ownerId])) ⇒ the
+    //     stranger's OWN assets come back: a genuine cross-owner leak. `strangerAssetId` exists, is
+    //     geotagged, and is sanity-pinned to produce a marker for its owner, precisely so the
+    //     not.toContain assertions below are load-bearing rather than vacuously true.
+    //
+    // Space shape mirrors the two-owner medium fixture (test/medium/fixtures/two-owner-space.ts):
+    // anna and ben BOTH contribute, and `spaceViewer` owns nothing — so "only anna's pins" cannot
+    // be satisfied by the caller's own ownership scope, only by the filter under test.
+    let anna: LoginResponseDto;
+    let ben: LoginResponseDto;
+    let spaceViewer: LoginResponseDto;
+    let stranger: LoginResponseDto;
+    let ownerSpaceId: string;
+    let annaAssetId: string;
+    let benAssetId: string;
+    let strangerAssetId: string;
+
+    beforeAll(async () => {
+      [anna, ben, spaceViewer, stranger] = await Promise.all([
+        utils.userSetup(admin.accessToken, createUserDto.create('t22-anna')),
+        utils.userSetup(admin.accessToken, createUserDto.create('t22-ben')),
+        utils.userSetup(admin.accessToken, createUserDto.create('t22-viewer')),
+        utils.userSetup(admin.accessToken, createUserDto.create('t22-stranger')),
+      ]);
+
+      // Three DISTINCT geotagged fixtures. Uploads dedupe on (owner, checksum), so distinct owners
+      // could reuse one file — but distinct files keep each asset id unambiguous in the assertions.
+      const upload = async (actor: LoginResponseDto, input: string) => {
+        const ws = await utils.connectWebsocket(actor.accessToken);
+        const filepath = join(testAssetDir, input);
+        const { id } = await utils.createAsset(actor.accessToken, {
+          assetData: { bytes: await readFile(filepath), filename: basename(filepath) },
+        });
+        await utils.waitForWebsocketEvent({ event: 'assetUpload', id });
+        utils.disconnectWebsocket(ws);
+        return id;
+      };
+
+      annaAssetId = await upload(anna, 'metadata/gps-position/thompson-springs.jpg');
+      benAssetId = await upload(ben, 'metadata/dates/datetimeoriginal-gps.jpg');
+      strangerAssetId = await upload(stranger, 'metadata/dates/gps-datetime.jpg');
+
+      const space = await utils.createSpace(anna.accessToken, { name: 't22 two-owner space' });
+      ownerSpaceId = space.id;
+      await utils.addSpaceMember(anna.accessToken, ownerSpaceId, {
+        userId: ben.userId,
+        role: SharedSpaceRole.Editor,
+      });
+      await utils.addSpaceMember(anna.accessToken, ownerSpaceId, {
+        userId: spaceViewer.userId,
+        role: SharedSpaceRole.Viewer,
+      });
+
+      // Each contributor adds their OWN asset — the space genuinely has two owners in it.
+      await utils.addSpaceAssets(anna.accessToken, ownerSpaceId, [annaAssetId]);
+      await utils.addSpaceAssets(ben.accessToken, ownerSpaceId, [benAssetId]);
+    });
+
+    it('sanity: the stranger asset DOES produce a marker for its own owner', async () => {
+      // Without this, every `not.toContain(strangerAssetId)` below could pass forever for the wrong
+      // reason (e.g. the fixture silently lost its GPS EXIF and never produces a marker at all).
+      const { status, body } = await request(app).get('/gallery/map/markers').set(asBearerAuth(stranger.accessToken));
+      expect(status).toBe(200);
+      expect(markerIds(body)).toContain(strangerAssetId);
+    });
+
+    it('baseline: a space viewer who owns nothing sees BOTH contributors pins', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?spaceId=${ownerSpaceId}`)
+        .set(asBearerAuth(spaceViewer.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body)).toEqual(expect.arrayContaining([annaAssetId, benAssetId]));
+    });
+
+    it('ownerId narrows a space query to one contributor', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?spaceId=${ownerSpaceId}&ownerId=${anna.userId}`)
+        .set(asBearerAuth(spaceViewer.accessToken));
+
+      expect(status).toBe(200);
+      const ids = markerIds(body);
+      expect(ids).toContain(annaAssetId);
+      expect(ids).not.toContain(benAssetId);
+    });
+
+    it('ownerId of a NON-MEMBER inside a space returns [] (narrows, never widens)', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?spaceId=${ownerSpaceId}&ownerId=${stranger.userId}`)
+        .set(asBearerAuth(spaceViewer.accessToken));
+
+      expect(status).toBe(200);
+      expect(body).toEqual([]);
+    });
+
+    it('ownerId of a stranger on the PERSONAL map returns [] (the leak direction)', async () => {
+      // Anna's unfiltered map is non-empty — so [] below is the filter doing its job, not an
+      // unrelatedly broken query.
+      const unfiltered = await request(app).get('/gallery/map/markers').set(asBearerAuth(anna.accessToken));
+      expect(unfiltered.status).toBe(200);
+      expect(markerIds(unfiltered.body)).toContain(annaAssetId);
+
+      // No space, no album ⇒ userIds is the scoping predicate ([anna]). If ownerId were merged into
+      // it, the stranger's pin would come back here. It must not.
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?ownerId=${stranger.userId}`)
+        .set(asBearerAuth(anna.accessToken));
+
+      expect(status).toBe(200);
+      expect(body).toEqual([]);
+      expect(markerIds(body)).not.toContain(strangerAssetId);
+    });
+
+    it('ownerId of a stranger under withSharedSpaces returns [] (the second leak vector)', async () => {
+      // withSharedSpaces swaps the personal userIds AND for a different OR-group, so this vector
+      // needs its own pin — a merge into THAT group would survive every test above.
+      const unfiltered = await request(app)
+        .get('/gallery/map/markers?withSharedSpaces=true')
+        .set(asBearerAuth(spaceViewer.accessToken));
+      expect(unfiltered.status).toBe(200);
+      expect(markerIds(unfiltered.body)).toEqual(expect.arrayContaining([annaAssetId, benAssetId]));
+      expect(markerIds(unfiltered.body)).not.toContain(strangerAssetId);
+
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?withSharedSpaces=true&ownerId=${stranger.userId}`)
+        .set(asBearerAuth(spaceViewer.accessToken));
+
+      expect(status).toBe(200);
+      expect(body).toEqual([]);
+      expect(markerIds(body)).not.toContain(strangerAssetId);
+    });
+
+    it('ownerId under withSharedSpaces narrows to that member, not to everything', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?withSharedSpaces=true&ownerId=${anna.userId}`)
+        .set(asBearerAuth(spaceViewer.accessToken));
+
+      expect(status).toBe(200);
+      const ids = markerIds(body);
+      expect(ids).toContain(annaAssetId);
+      expect(ids).not.toContain(benAssetId);
     });
   });
 });
