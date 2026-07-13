@@ -11664,12 +11664,15 @@ describe(SharedSpaceService.name, () => {
       );
     });
 
-    // R4 — the OTHER half of the fix. albumSharedSpaceScope's "…or it's in a space you can see" arms
-    // only exist when timelineSpaceIds is set; with it undefined the gate keeps ONLY assets that are in
-    // no shared space at all. So an album query must compute timelineSpaceIds even though the album map
-    // sends no withSharedSpaces — otherwise every album asset that also lives in a space loses its pin.
-    // (This is a shape assertion; the behaviour it protects is pinned by the e2e test in Step 1c.)
-    it('computes timelineSpaceIds for an albumId query even without withSharedSpaces', async () => {
+    // The album map matches the album grid (issue #656 follow-up): album ACCESS (AlbumRead) is the
+    // whole boundary for an album query, so it must NOT be re-gated by the caller's shared-space
+    // timeline preference. Before this fix, an album query computed timelineSpaceIds and
+    // searchAssetBuilder fed it into albumSharedSpaceScope, so a shared album asset lost its pin
+    // whenever the caller wasn't a member of that space, or had simply toggled it out of their
+    // timeline — even though the grid kept showing it. Now the album branch opts out entirely via
+    // albumAccessIsBoundary, so getSpaceIdsForTimeline is never even called for an album query.
+    // (The behaviour this protects is pinned by the e2e test in gallery-map.e2e-spec.ts.)
+    it('does not space-gate an albumId query: no timelineSpaceIds is computed or forwarded', async () => {
       const albumId = factory.uuid();
       const spaceId = newUuid();
       const auth = factory.auth();
@@ -11679,9 +11682,14 @@ describe(SharedSpaceService.name, () => {
 
       await sut.getFilteredMapMarkers(auth, { albumId });
 
-      expect(mocks.sharedSpace.getSpaceIdsForTimeline).toHaveBeenCalledWith(auth.user.id);
+      expect(mocks.sharedSpace.getSpaceIdsForTimeline).not.toHaveBeenCalled();
       expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
-        expect.objectContaining({ albumIds: [albumId], userIds: undefined, timelineSpaceIds: [spaceId] }),
+        expect.objectContaining({
+          albumIds: [albumId],
+          userIds: undefined,
+          albumAccessIsBoundary: true,
+          timelineSpaceIds: undefined,
+        }),
       );
     });
 

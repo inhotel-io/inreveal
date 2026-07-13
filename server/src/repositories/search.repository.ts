@@ -134,6 +134,14 @@ export interface SearchTagOptions {
 
 export interface SearchAlbumOptions {
   albumIds?: string[];
+  /**
+   * Opts an `albumIds` query OUT of `albumSharedSpaceScope` (database.ts:608), for a caller whose
+   * album ACCESS check (e.g. Permission.AlbumRead) is already the access boundary — matching the
+   * album grid and the pre-fork `GET /albums/{id}/map-markers` endpoint (issue #656). Defaults to
+   * false/absent, which preserves the existing shared-space re-gate for album-scoped
+   * SearchService queries (database.ts:600-607) — do not flip this default.
+   */
+  albumAccessIsBoundary?: boolean;
 }
 
 export interface SearchSpaceOptions {

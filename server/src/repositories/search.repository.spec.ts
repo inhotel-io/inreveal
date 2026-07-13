@@ -567,6 +567,32 @@ describe(SearchRepository.name, () => {
     });
   });
 
+  describe('searchAssetBuilder album shared-space scope (albumAccessIsBoundary)', () => {
+    // Default OFF is load-bearing: SearchService's album-scoped search (search.service.ts:142-153)
+    // relies on searchAssetBuilder re-gating album results by shared-space timeline visibility
+    // (albumSharedSpaceScope, database.ts:600-607) whenever albumAccessIsBoundary is absent. If a
+    // future change ever flips this default, album-scoped search would leak a shared-space asset's
+    // content to a caller who lost (or never had) space access — guard against that regression here.
+    it('applies albumSharedSpaceScope by default for an album-scoped query (search re-gate stays intact)', () => {
+      const sql = buildAssetSearchSql({ albumIds: ['11111111-1111-1111-1111-111111111111'] });
+
+      expect(sql).toContain('"shared_space_asset"');
+      expect(sql).toContain('"shared_space_library"');
+    });
+
+    // The opt-out (shared-space.service.ts getFilteredMapMarkers, issue #656): album ACCESS is
+    // already the boundary for the album map, so it must not re-gate by shared-space visibility.
+    it('skips albumSharedSpaceScope when albumAccessIsBoundary is set', () => {
+      const sql = buildAssetSearchSql({
+        albumIds: ['11111111-1111-1111-1111-111111111111'],
+        albumAccessIsBoundary: true,
+      });
+
+      expect(sql).not.toContain('"shared_space_asset"');
+      expect(sql).not.toContain('"shared_space_library"');
+    });
+  });
+
   describe('searchAssetBuilder rating semantics', () => {
     it('keeps non-smart rating filters as exact match', () => {
       const sql = buildAssetSearchSql({ rating: 2 });

@@ -1040,11 +1040,11 @@ export class SharedSpaceService extends BaseService {
   }
 
   async getFilteredMapMarkers(auth: AuthDto, dto: FilteredMapMarkerDto): Promise<MapMarkerResponseDto[]> {
-    // A space and an album are two different scopes, and their AND is unsatisfiable: the space scope
-    // requires the asset to be in shared_space_asset for this space, while albumSharedSpaceScope —
-    // which runs for any `albumIds && !userIds` query — is handed no timelineSpaceIds under a spaceId
-    // query and therefore requires the asset to be in NO shared space at all. Return a loud 400
-    // rather than a silently empty map. (Mirrors search.service.ts:122-124.)
+    // A space and an album are two different, mutually-exclusive scopes for this endpoint — the
+    // space scope requires shared_space_asset membership in that specific space, while the album
+    // scope (see below) is bounded by album access alone. Combining them isn't a query this endpoint
+    // supports; reject loudly with a 400 rather than guess at an intersection. (Mirrors
+    // search.service.ts:122-124.)
     if (dto.spaceId && dto.albumId) {
       throw new BadRequestException('Cannot use both spaceId and albumId');
     }
@@ -1058,18 +1058,17 @@ export class SharedSpaceService extends BaseService {
       await this.requireAccess({ auth, permission: Permission.AlbumRead, ids: [dto.albumId] });
     }
 
-    // timelineSpaceIds plays TWO different roles and both are needed here:
-    //  - for a plain (non-album) query it WIDENS the result to shared-space assets in the caller's
-    //    timeline — skipped for a favorites-only query, whose favorites are the caller's own;
-    //  - for an album query it is the RBAC GATE inside albumSharedSpaceScope (database.ts:608-618).
-    //    That gate's "…or the asset is in a space you can see" arms EXIST ONLY when timelineSpaceIds
-    //    is set; leave it undefined and the gate keeps only assets that are in no shared space at
-    //    all — so every album asset that also lives in a space silently loses its pin, and an album
-    //    over a space-shared library goes completely empty. So compute it for ANY album query,
-    //    regardless of withSharedSpaces or isFavorite. Same rule as searchMetadata
-    //    (search.service.ts:152: `dto.withSharedSpaces || !!dto.albumIds?.length`).
+    // The album map matches the album grid: album ACCESS (AlbumRead, checked above) IS the boundary
+    // for an album query — same as the album grid (asset.repository.ts withTimeBucketAssetFilters,
+    // a plain album_asset join with no space scoping) and the pre-fork GET /albums/{id}/map-markers
+    // endpoint (map.repository.ts). Re-gating an album query by the caller's shared-space timeline
+    // visibility on top of that hid pins the grid shows — whenever a shared album asset also lived
+    // in a space the caller wasn't a member of, or had simply toggled out of their timeline (#656).
+    // So timelineSpaceIds is computed ONLY for the plain (non-album, non-space) query below, where it
+    // WIDENS the result to shared-space assets in the caller's timeline — skipped for a
+    // favorites-only query, whose favorites are the caller's own.
     const needsTimelineSpaceIds =
-      !dto.spaceId && (!!dto.albumId || (dto.withSharedSpaces === true && dto.isFavorite !== true));
+      !dto.spaceId && !dto.albumId && dto.withSharedSpaces === true && dto.isFavorite !== true;
 
     let timelineSpaceIds: string[] | undefined;
     if (needsTimelineSpaceIds) {
@@ -1090,12 +1089,12 @@ export class SharedSpaceService extends BaseService {
     const markers = await this.sharedSpaceRepository.getFilteredMapMarkers({
       // Album ACCESS is the scope (checked above), never asset ownership: leaving userIds set would
       // hide the album owner's pins from a viewer of a shared album — the issue #656 bug class, which
-      // album.service.ts:112-123 calls out by name. With userIds unset, searchAssetBuilder takes its
-      // album branch (`albumIds && !userIds` -> albumSharedSpaceScope, database.ts:713), which is what
-      // keeps space assets the caller cannot reach out of the result — provided timelineSpaceIds is
-      // computed above.
+      // album.service.ts:112-123 calls out by name. albumAccessIsBoundary opts the album branch out of
+      // albumSharedSpaceScope's shared-space re-gate (database.ts:713): album membership is already the
+      // boundary here, matching the grid and the old map endpoint — see the comment above.
       userIds: dto.spaceId || dto.albumId ? undefined : [auth.user.id],
       spaceId: dto.spaceId,
+      albumAccessIsBoundary: !!dto.albumId,
       timelineSpaceIds,
       personIds: scopedPersonFilters.personIds,
       spacePersonIds: scopedPersonFilters.spacePersonIds,

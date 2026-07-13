@@ -299,6 +299,7 @@ describe('/gallery/map/markers', () => {
     let albumViewer: LoginResponseDto;
     let outsider: LoginResponseDto;
     let albumId: string;
+    let spaceId: string; // the shared space spaceAssetId lives in
     let plainAssetId: string; // in the album only
     let spaceAssetId: string; // in the album AND in a shared space both users can see
     let outOfAlbumAssetId: string; // owned by albumOwner, geotagged, NOT in the album — proves narrowing
@@ -330,13 +331,15 @@ describe('/gallery/map/markers', () => {
       utils.disconnectWebsocket(ownerWebsocket);
 
       // The space asset lives in a space BOTH users have in their timeline (showInTimeline defaults
-      // to true — shared-space-member.table.ts:74-75).
+      // to true — shared-space-member.table.ts:74-75). createSpace makes albumOwner an Owner-role
+      // member of their own space, so both actors below can self-PATCH their own timeline pref.
       const space = await utils.createSpace(albumOwner.accessToken, { name: 't20 space' });
-      await utils.addSpaceMember(albumOwner.accessToken, space.id, {
+      spaceId = space.id;
+      await utils.addSpaceMember(albumOwner.accessToken, spaceId, {
         userId: albumViewer.userId,
         role: SharedSpaceRole.Viewer,
       });
-      await utils.addSpaceAssets(albumOwner.accessToken, space.id, [spaceAssetId]);
+      await utils.addSpaceAssets(albumOwner.accessToken, spaceId, [spaceAssetId]);
 
       const album = await utils.createAlbum(albumOwner.accessToken, {
         albumName: 't20 shared album',
@@ -357,19 +360,40 @@ describe('/gallery/map/markers', () => {
       expect((body as Array<{ id: string }>).map((m) => m.id)).toContain(plainAssetId);
     });
 
-    it('an album asset that also lives in a shared space KEEPS its pin (R4 regression)', async () => {
-      // The R4 hole: drop userIds but leave timelineSpaceIds undefined and albumSharedSpaceScope
-      // degenerates to "the asset must be in no shared space at all" — this pin disappears for the
-      // viewer AND for the owner.
+    it('an album asset that also lives in a shared space KEEPS its pin even when the caller has toggled that space out of their own timeline (R4 regression, #656)', async () => {
+      // The R4 hole: the album query used to compute timelineSpaceIds from the caller's OWN
+      // showInTimeline preference and feed it into albumSharedSpaceScope as the RBAC gate. Toggling
+      // showInTimeline=false for this space made that gate degenerate to "the asset must be in no
+      // shared space at all", dropping spaceAssetId's pin for that caller — even though the album
+      // grid kept showing it regardless. Since the fix, album ACCESS (checked above) is the whole
+      // boundary for this query, so the caller's timeline preference must have ZERO effect on it.
       for (const actor of [albumViewer, albumOwner]) {
-        const { status, body } = await request(app)
-          .get(`/gallery/map/markers?albumId=${albumId}`)
-          .set(asBearerAuth(actor.accessToken));
+        const toggleOff = await request(app)
+          .patch(`/shared-spaces/${spaceId}/members/me/timeline`)
+          .set(asBearerAuth(actor.accessToken))
+          .send({ showInTimeline: false });
+        expect(toggleOff.status).toBe(200);
+      }
 
-        expect(status).toBe(200);
-        const ids = (body as Array<{ id: string }>).map((m) => m.id);
-        expect(ids).toContain(spaceAssetId);
-        expect(ids).toContain(plainAssetId);
+      try {
+        for (const actor of [albumViewer, albumOwner]) {
+          const { status, body } = await request(app)
+            .get(`/gallery/map/markers?albumId=${albumId}`)
+            .set(asBearerAuth(actor.accessToken));
+
+          expect(status).toBe(200);
+          const ids = (body as Array<{ id: string }>).map((m) => m.id);
+          expect(ids).toContain(spaceAssetId);
+          expect(ids).toContain(plainAssetId);
+        }
+      } finally {
+        // Restore so later tests in this describe don't inherit the off state.
+        for (const actor of [albumViewer, albumOwner]) {
+          await request(app)
+            .patch(`/shared-spaces/${spaceId}/members/me/timeline`)
+            .set(asBearerAuth(actor.accessToken))
+            .send({ showInTimeline: true });
+        }
       }
     });
 
