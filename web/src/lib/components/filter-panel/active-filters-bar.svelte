@@ -76,7 +76,7 @@
     icon: string;
     label?: string;
     labelKey?: Translations;
-    labelValues?: Record<string, string>;
+    labelValues?: Record<string, string | number>;
   }
 
   function formatDateOnly(value: string): string {
@@ -133,7 +133,9 @@
         type: 'rating',
         icon: mdiStar,
         labelKey: 'filter_chip_rating',
-        labelValues: { rating: `${filters.rating}` },
+        // A number, not a string: the ICU plural in `filter_chip_rating` needs a real numeric
+        // value to pick the "one"/"other" category (matches `filter_result_count`'s `count`).
+        labelValues: { rating: filters.rating },
       });
     }
 

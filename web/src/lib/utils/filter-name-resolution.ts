@@ -20,12 +20,19 @@ import type { FilterState } from '$lib/components/filter-panel/filter-panel';
 
 /**
  * In-flight resolutions, keyed `album:<id>` / `user:<id>`, so a re-render (or two surfaces sharing
- * a map) cannot issue a second request for an id whose first request has not landed yet. A settled
+ * an id) cannot issue a second request for an id whose first request has not landed yet. A settled
  * id needs no entry: it is either in the names map (hit) or worth retrying (miss).
+ *
+ * The cached promise resolves to the fetched VALUE (`string | undefined`), not to a map write.
+ * Two surfaces can call `resolveFilterNames` with the *same id* but *different* `names` map
+ * instances (e.g. a client-side nav from `/photos?albumId=X` to `/map?albumId=X` while the first
+ * request is still in flight) — each caller must still write the resolved name into its own map.
+ * If the shared closure captured and wrote only the first caller's map, the second caller's map —
+ * and the chip reading from it — would never receive the name.
  */
-const inFlight = new Map<string, Promise<void>>();
+const inFlight = new Map<string, Promise<string | undefined>>();
 
-async function resolveOnce(key: string, resolve: () => Promise<void>): Promise<void> {
+async function resolveOnce(key: string, resolve: () => Promise<string | undefined>): Promise<string | undefined> {
   const pending = inFlight.get(key);
   if (pending) {
     return pending;
@@ -55,11 +62,14 @@ export async function resolveFilterNames(
       resolveOnce(`album:${albumId}`, async () => {
         try {
           const album = await getAlbumInfo({ id: albumId });
-          if (album?.albumName) {
-            names.albumNames.set(albumId, album.albumName);
-          }
+          return album?.albumName;
         } catch {
           // Fail soft — the chip keeps showing the id.
+          return undefined;
+        }
+      }).then((albumName) => {
+        if (albumName) {
+          names.albumNames.set(albumId, albumName);
         }
       }),
     );
@@ -70,11 +80,14 @@ export async function resolveFilterNames(
       resolveOnce(`user:${ownerId}`, async () => {
         try {
           const user = await getUser({ id: ownerId });
-          if (user?.name) {
-            names.ownerNames.set(ownerId, user.name);
-          }
+          return user?.name;
         } catch {
           // Fail soft — the chip keeps showing the id.
+          return undefined;
+        }
+      }).then((ownerName) => {
+        if (ownerName) {
+          names.ownerNames.set(ownerId, ownerName);
         }
       }),
     );

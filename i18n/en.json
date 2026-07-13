@@ -1460,7 +1460,7 @@
   "filter_button_active": "Filter, active",
   "filter_chip_after": "After {date}",
   "filter_chip_before": "Before {date}",
-  "filter_chip_rating": "≥ {rating} stars",
+  "filter_chip_rating": "≥ {rating, plural, one {# star} other {# stars}}",
   "filter_description": "Conditions to filter the target assets",
   "filter_favorites_section": "Starred filter section",
   "filter_from": "From",

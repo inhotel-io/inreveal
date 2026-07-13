@@ -29,7 +29,7 @@ describe('handleRemoveFilter', () => {
     expect(result.country).toBeUndefined();
   });
 
-  it('clears make, model, and lensModel together for the camera chip', () => {
+  it('clears make and model together for the camera chip, but keeps lensModel — it has its own chip', () => {
     const filters = {
       ...createFilterState(),
       make: 'Sony',
@@ -39,10 +39,10 @@ describe('handleRemoveFilter', () => {
     const result = handleRemoveFilter(filters, 'camera');
     expect(result.make).toBeUndefined();
     expect(result.model).toBeUndefined();
-    expect(result.lensModel).toBeUndefined();
+    expect(result.lensModel).toBe('RF24-70mm F2.8 L IS USM');
   });
 
-  it('clears isInAlbum, isNotInAlbum, and albumId together for the albums chip', () => {
+  it('clears isInAlbum and isNotInAlbum together for the albums chip, but keeps albumId — it has its own chip', () => {
     const filters = {
       ...createFilterState(),
       isInAlbum: true,
@@ -52,7 +52,7 @@ describe('handleRemoveFilter', () => {
     const result = handleRemoveFilter(filters, 'albums');
     expect(result.isInAlbum).toBeUndefined();
     expect(result.isNotInAlbum).toBeUndefined();
-    expect(result.albumId).toBeUndefined();
+    expect(result.albumId).toBe('aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa');
   });
 
   it('preserves every other filter when clearing the lens chip', () => {
