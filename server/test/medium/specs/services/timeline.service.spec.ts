@@ -2,7 +2,15 @@ import { BadRequestException } from '@nestjs/common';
 import { Insertable, Kysely } from 'kysely';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { TimeBucketDto } from 'src/dtos/time-bucket.dto';
-import { AlbumUserRole, AssetOrder, AssetType, AssetVisibility, SharedLinkType, TimeBucketSize } from 'src/enum';
+import {
+  AlbumUserRole,
+  AssetOrder,
+  AssetType,
+  AssetVisibility,
+  SharedLinkType,
+  SharedSpaceRole,
+  TimeBucketSize,
+} from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -61,6 +69,47 @@ const spaceBucketAssetIds = async (
   const json = await sut.getTimeBucket(auth, { ...filter, spaceId, timeBucket: SPACE_BUCKET });
   const parsed = JSON.parse(json) as { id?: string[] };
   return parsed.id ?? [];
+};
+
+/**
+ * An album on the viewer's PERSONAL timeline, holding a mix of owners (D3 fixture — see the
+ * '/photos: albumId ANDs with userId' describe for what each asset is there to prove).
+ */
+const createPhotosAlbumFixture = async (ctx: ReturnType<typeof setup>['ctx']) => {
+  // viewer is a member of the two-owner space (timeline-enabled) and owns nothing in it.
+  const { viewer, annaAsset } = await createTwoOwnerSpace(ctx);
+  const { user: carol } = await ctx.newUser(); // in NO space of the viewer's
+
+  const myAsset = await createTimelineAsset(ctx, viewer.id, SPACE_DATE);
+  const myFavoriteAsset = await createTimelineAsset(ctx, viewer.id, SPACE_DATE, { isFavorite: true });
+  // Album-only assets of another user: the co-member contributions the D3 bug leaked.
+  const carolAsset = await createTimelineAsset(ctx, carol.id, SPACE_DATE);
+  const carolFavoriteAsset = await createTimelineAsset(ctx, carol.id, SPACE_DATE, { isFavorite: true });
+
+  const { album } = await ctx.newAlbum({ ownerId: viewer.id }, [
+    myAsset.id,
+    myFavoriteAsset.id,
+    carolAsset.id,
+    carolFavoriteAsset.id,
+    annaAsset.id,
+  ]);
+
+  return { viewer, album, myAsset, myFavoriteAsset, carolAsset, carolFavoriteAsset, annaAsset };
+};
+
+/** Asset ids returned for the exact shape /photos sends: personal scope + a time bucket. */
+const photosBucketAssetIds = async (
+  sut: ReturnType<typeof setup>['sut'],
+  auth: AuthDto,
+  dto: Partial<TimeBucketDto>,
+): Promise<string[]> => {
+  const json = await sut.getTimeBucket(auth, {
+    visibility: AssetVisibility.Timeline,
+    withStacked: true,
+    ...dto,
+    timeBucket: SPACE_BUCKET,
+  });
+  return (JSON.parse(json) as { id?: string[] }).id ?? [];
 };
 
 beforeAll(async () => {
@@ -735,5 +784,143 @@ describe(TimelineService.name, () => {
     });
 
     expect((JSON.parse(json) as { id?: string[] }).id ?? []).toEqual([asset.id]);
+  });
+
+  /**
+   * D3 — the album gate ANDs with the owner gate on the PERSONAL timeline.
+   *
+   * `timeBucketChecks` deliberately does NOT default `userId` under an `albumId` (that branch is
+   * what E22 above depends on: on the ALBUM page, album ACCESS is the entire scope, and a viewer
+   * must see the owner's assets). So the *caller* decides the scope, and /photos — which is my
+   * personal timeline — must send `userId` alongside the album chip
+   * (web/src/lib/utils/photos-filter-options.ts). The tests below pin what each shape means, so a
+   * "fix" that defaults userId server-side (breaking E22) or a web regression that drops it (the
+   * D3 bug: `?albumId=A&ownerId=<co-member>` listing a co-member's assets, and the Favorites chip
+   * the album OWNER's favourites, on MY timeline) both get caught.
+   *
+   * THE FIXTURE TRAP: /photos also sends `withPartners` + `withSharedSpaces`, so `userIds` is not a
+   * plain AND — asset.repository.ts makes the scope `ownerId IN userIds` **OR** "in one of my
+   * timeline spaces". A co-member asset that ALSO lives in one of my timeline spaces therefore
+   * stays visible, correctly. The asset that must drop out is the **album-only** one: owned by
+   * someone else, in the album, in NO shared space of mine (`carolAsset` / `carolFavoriteAsset`).
+   * `annaAsset` (in the album AND in my space) is asserted present in the same test to keep that
+   * distinction honest — a fixture without it would pass an over-narrow implementation too.
+   */
+  describe('/photos: albumId ANDs with userId (D3)', () => {
+    it("an album chip does not put a co-member's album-only asset on my personal timeline", async () => {
+      const { sut, ctx } = setup();
+      const { viewer, album, myAsset, carolAsset, annaAsset } = await createPhotosAlbumFixture(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      const ids = await photosBucketAssetIds(sut, auth, {
+        userId: viewer.id,
+        albumId: album.id,
+        withPartners: true,
+        withSharedSpaces: true,
+      });
+
+      // Mine, in the album: present (non-vacuity — the query is not simply empty).
+      expect(ids).toContain(myAsset.id);
+      // Anna's, in the album AND in a space that IS in my timeline: present, and correctly so —
+      // withSharedSpaces widens the owner scope to my timeline spaces.
+      expect(ids).toContain(annaAsset.id);
+      // Carol's, in the album but in NO space of mine: NOT on my personal timeline. This is D3.
+      expect(ids).not.toContain(carolAsset.id);
+    });
+
+    it('the same album query WITHOUT userId returns it — the album-scoped branch E22 relies on', async () => {
+      const { sut, ctx } = setup();
+      const { viewer, album, carolAsset } = await createPhotosAlbumFixture(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      // Exactly what /photos used to send. `userId` is the ONLY difference from the test above, so
+      // this pins that the exclusion there is the owner gate doing its job — and that the
+      // album-only scope (album ACCESS is the boundary) still exists for the album page.
+      const ids = await photosBucketAssetIds(sut, auth, {
+        albumId: album.id,
+        withPartners: true,
+        withSharedSpaces: true,
+      });
+
+      expect(ids).toContain(carolAsset.id);
+    });
+
+    it("the favorites chip returns MY favourites, not the album owner's", async () => {
+      const { sut, ctx } = setup();
+      const { viewer, album, myFavoriteAsset, carolFavoriteAsset } = await createPhotosAlbumFixture(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      // `isFavorite` is the asset OWNER's flag, and /photos drops withPartners/withSharedSpaces for
+      // a favourites query (the server 400s that combination anyway) — so here `userId` is the ONLY
+      // thing standing between me and a co-member's favourites.
+      const ids = await photosBucketAssetIds(sut, auth, {
+        userId: viewer.id,
+        albumId: album.id,
+        isFavorite: true,
+      });
+
+      expect(ids).toEqual([myFavoriteAsset.id]);
+      expect(ids).not.toContain(carolFavoriteAsset.id);
+    });
+  });
+
+  /**
+   * `spaceId` + `albumId` together: BOTH permissions must be checked.
+   *
+   * The check used to be an `else if` chain, so with both set only AlbumRead was verified while the
+   * space predicate still applied to the query — letting a caller with album access learn WHICH of
+   * that album's assets belong to a space they are not a member of (a membership oracle; no asset
+   * leaks, since every returned asset is in an album they can read). The filtered map endpoint
+   * refuses the same combination outright (shared-space.service.ts getFilteredMapMarkers), but the
+   * timeline answers it — so it must at least enforce the space boundary it is querying.
+   */
+  describe('spaceId + albumId requires access to BOTH', () => {
+    it('rejects an album query that also scopes to a space the caller is not a member of', async () => {
+      const { sut, ctx } = setup();
+      const { user: me } = await ctx.newUser();
+      const { user: stranger } = await ctx.newUser();
+
+      const myAsset = await createTimelineAsset(ctx, me.id, SPACE_DATE);
+      const { album } = await ctx.newAlbum({ ownerId: me.id }, [myAsset.id]);
+
+      // A space I am not a member of.
+      const { space } = await ctx.newSharedSpace({ createdById: stranger.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: stranger.id, role: SharedSpaceRole.Owner });
+
+      const auth = factory.auth({ user: me });
+
+      // Baseline: the album alone is readable — so the rejection below is the space check firing,
+      // not a broken album fixture.
+      const albumOnly = await sut.getTimeBucket(auth, { albumId: album.id, timeBucket: SPACE_BUCKET });
+      expect((JSON.parse(albumOnly) as { id?: string[] }).id ?? []).toEqual([myAsset.id]);
+
+      const response = sut.getTimeBucket(auth, {
+        albumId: album.id,
+        spaceId: space.id,
+        timeBucket: SPACE_BUCKET,
+      });
+      await expect(response).rejects.toBeInstanceOf(BadRequestException);
+      await expect(response).rejects.toThrow('Not found or no sharedSpace.read access');
+    });
+
+    it('allows it when the caller can read both, and intersects them', async () => {
+      const { sut, ctx } = setup();
+      const { space, anna, viewer, annaAsset, benAsset } = await createTwoOwnerSpace(ctx);
+      const auth = factory.auth({ user: viewer });
+
+      // An album (owned by anna, shared with the viewer) holding only ONE of the space's assets.
+      const { album } = await ctx.newAlbum({ ownerId: anna.id }, [annaAsset.id]);
+      await ctx.newAlbumUser({ albumId: album.id, userId: viewer.id, role: AlbumUserRole.Viewer });
+
+      const json = await sut.getTimeBucket(auth, {
+        albumId: album.id,
+        spaceId: space.id,
+        timeBucket: SPACE_BUCKET,
+      });
+      const ids = (JSON.parse(json) as { id?: string[] }).id ?? [];
+
+      expect(ids).toEqual([annaAsset.id]);
+      expect(ids).not.toContain(benAsset.id);
+    });
   });
 });

@@ -135,7 +135,7 @@
   // Bumped to force a re-run of the search (undo-delete restores the removed assets).
   let searchReloadToken = $state(0);
   const options = $derived({
-    ...buildPhotosTimelineOptions(filters),
+    ...buildPhotosTimelineOptions(filters, authManager.user.id),
     grouping: timelineGrouping,
   });
   $effect(() => {

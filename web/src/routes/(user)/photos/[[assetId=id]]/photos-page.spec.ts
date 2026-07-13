@@ -28,6 +28,7 @@ const {
   },
   mockAuthManager: {
     preferences: { memories: { enabled: false } },
+    user: { id: 'cccccccc-cccc-4ccc-cccc-cccccccccccc' },
   },
   mockMemoryManager: {
     memories: [] as unknown[],
@@ -232,6 +233,9 @@ vi.mock('$lib/utils/timeline-util', () => ({
   toTimelineAsset: vi.fn((asset) => asset),
 }));
 
+/** Must match mockAuthManager.user.id — the signed-in user whose personal timeline /photos is. */
+const MY_USER_ID = 'cccccccc-cccc-4ccc-cccc-cccccccccccc';
+
 function renderPage() {
   return render(TestWrapper as Component<{ component: typeof PhotosPage; componentProps: Record<string, never> }>, {
     component: PhotosPage,
@@ -370,7 +374,10 @@ describe('Photos page search URL state', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(expect.objectContaining({ isNotInAlbum: true }));
+      expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(
+        expect.objectContaining({ isNotInAlbum: true }),
+        MY_USER_ID,
+      );
     });
   });
 
@@ -382,8 +389,33 @@ describe('Photos page search URL state', () => {
     await waitFor(() => {
       expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(
         expect.objectContaining({ description: 'beach', originalFileName: 'IMG', ocr: 'invoice' }),
+        MY_USER_ID,
       );
     });
+  });
+
+  it('D3: an album chip on /photos still carries the owner gate (userId) into the timeline query', async () => {
+    // /photos is MY timeline. The server leaves `userId` undefined under an `albumId` — that branch
+    // belongs to the ALBUM page, where album ACCESS is the scope (medium E22). If /photos sends the
+    // album chip without stating its own owner scope, `?albumId=A&owner=<co-member>` lists that
+    // co-member's assets, and the Favorites chip the album OWNER's favourites, on my personal
+    // timeline. The two gates AND in the query — the page just has to send both.
+    mockPage.url = new URL(
+      'https://gallery.test/photos?albumId=aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa&owner=bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          albumId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
+          ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+        }),
+        MY_USER_ID,
+      );
+    });
+    expect(screen.getByTestId('timeline-options')).toHaveTextContent(`"userId":"${MY_USER_ID}"`);
   });
 
   it('passes has-album into photos timeline options when hydrated from the URL', async () => {
@@ -392,7 +424,7 @@ describe('Photos page search URL state', () => {
     renderPage();
 
     await waitFor(() => {
-      expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(expect.objectContaining({ isInAlbum: true }));
+      expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(expect.objectContaining({ isInAlbum: true }), MY_USER_ID);
     });
   });
 
@@ -437,7 +469,10 @@ describe('Photos page search URL state', () => {
     await fireEvent.click(screen.getByTestId('select-favorites-filter'));
 
     await waitFor(() => {
-      expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(expect.objectContaining({ isFavorite: true }));
+      expect(buildPhotosTimelineOptions).toHaveBeenCalledWith(
+        expect.objectContaining({ isFavorite: true }),
+        MY_USER_ID,
+      );
     });
   });
 
@@ -718,6 +753,7 @@ describe('Photos page search URL state', () => {
         dateAfter: undefined,
         dateBefore: undefined,
       }),
+      MY_USER_ID,
     );
     expect(goto).not.toHaveBeenCalled();
   });
@@ -746,6 +782,7 @@ describe('Photos page search URL state', () => {
         dateAfter: undefined,
         dateBefore: undefined,
       }),
+      MY_USER_ID,
     );
     expect(goto).not.toHaveBeenCalled();
   });
@@ -788,6 +825,7 @@ describe('Photos page search URL state', () => {
         selectedYear: 2015,
         selectedMonth: undefined,
       }),
+      MY_USER_ID,
     );
     // D2 — the year rides along in the URL now, rather than in a carry-over slot beside it.
     expect(goto).toHaveBeenLastCalledWith('/photos?country=Germany&year=2015', {
@@ -823,6 +861,7 @@ describe('Photos page search URL state', () => {
         selectedYear: undefined,
         selectedMonth: undefined,
       }),
+      MY_USER_ID,
     );
     expect(goto).toHaveBeenLastCalledWith('/photos?people=person-1&from=2024-01-01&to=2024-12-31', {
       replaceState: true,
@@ -851,6 +890,7 @@ describe('Photos page search URL state', () => {
         selectedYear: undefined,
         selectedMonth: undefined,
       }),
+      MY_USER_ID,
     );
   });
 
@@ -876,6 +916,7 @@ describe('Photos page search URL state', () => {
         selectedYear: undefined,
         selectedMonth: undefined,
       }),
+      MY_USER_ID,
     );
     expect(goto).not.toHaveBeenCalled();
   });
