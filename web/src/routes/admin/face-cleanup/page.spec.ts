@@ -290,25 +290,6 @@ describe('+page.svelte (face cleanup)', () => {
       expect(screen.getByTestId('step-apply')).toHaveAttribute('data-inactive', 'false');
     });
 
-    it('step 1 sends the admin straight to the clusters that need a decision', async () => {
-      const persons = [
-        makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
-        makeScanPerson({ personId: 'r1', recommendation: 'review-first', reviewReasons: ['named'] }),
-      ];
-      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
-
-      render(Page, { props: { data: makePageData() } });
-      await waitFor(() => expect(screen.getByTestId('scan-checklist')).toBeInTheDocument());
-
-      await fireEvent.click(screen.getByTestId('step-review-cta'));
-
-      // The confident group is filtered out of the table — only the review-first ones remain.
-      await waitFor(() => {
-        expect(screen.queryByText('admin.face_cleanup_group_confident')).not.toBeInTheDocument();
-      });
-      expect(screen.getByText('admin.face_cleanup_group_review')).toBeInTheDocument();
-    });
-
     it('is not rendered when the scan found nothing to clean up', async () => {
       vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([]) as unknown as object);
 

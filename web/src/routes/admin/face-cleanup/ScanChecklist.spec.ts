@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { render, screen } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import ScanChecklist from './ScanChecklist.svelte';
 
 // The post-scan console throws five stat cards, four filters, a search box, a pre-selected bulk bar and a
@@ -20,7 +20,6 @@ const props = (over: Partial<Record<string, unknown>> = {}) => ({
   reviewFirstOpened: 3,
   confidentTotal: 90,
   selectedCount: 90,
-  onReviewFirst: vi.fn(),
   ...over,
 });
 
@@ -81,18 +80,12 @@ describe('ScanChecklist', () => {
     expect(screen.getByTestId('step-apply')).toHaveAttribute('data-inactive', 'true');
   });
 
-  it('sends the admin to the review-first clusters', async () => {
-    const onReviewFirst = vi.fn();
-    render(ScanChecklist, { props: props({ onReviewFirst }) });
+  // The checklist tells you what to do; the filter toolbar is what you act with. A button here that merely
+  // flipped the "Review first" chip read as navigation, and its effect landed far below the fold — so it looked
+  // broken. The checklist stays purely informational.
+  it('is guidance, not a control surface — it offers no buttons of its own', () => {
+    render(ScanChecklist, { props: props() });
 
-    await fireEvent.click(screen.getByTestId('step-review-cta'));
-
-    expect(onReviewFirst).toHaveBeenCalled();
-  });
-
-  it('offers no shortcut once there is nothing left to review', () => {
-    render(ScanChecklist, { props: props({ reviewFirstOpened: 16 }) });
-
-    expect(screen.queryByTestId('step-review-cta')).not.toBeInTheDocument();
+    expect(screen.getByTestId('scan-checklist').querySelector('button')).toBeNull();
   });
 });

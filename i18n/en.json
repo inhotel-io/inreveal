@@ -288,7 +288,6 @@
     "face_cleanup_steps_confident_none": "No confident clusters in this scan",
     "face_cleanup_steps_confident_title": "{count} confident clusters are already selected",
     "face_cleanup_steps_review_body": "The scan isn't confident about these: named, large, or routing into another flagged cluster. They stay out of the bulk selection until you open them.",
-    "face_cleanup_steps_review_cta": "Review first",
     "face_cleanup_steps_review_done": "Nothing left to review",
     "face_cleanup_steps_review_progress": "{opened} of {total} opened",
     "face_cleanup_steps_review_title": "Open the {count} that need a decision",

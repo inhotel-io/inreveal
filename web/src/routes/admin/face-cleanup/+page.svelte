@@ -405,7 +405,6 @@
             reviewFirstOpened={vm.reviewFirst.filter((person) => vm!.opened.has(person.personId)).length}
             confidentTotal={vm.confident.length}
             selectedCount={vm.selectedCount}
-            onReviewFirst={() => (filter = 'review-first')}
           />
         </div>
       {/if}

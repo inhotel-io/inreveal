@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button, Icon } from '@immich/ui';
-  import { mdiArrowRight, mdiCheckCircle } from '@mdi/js';
+  import { Icon } from '@immich/ui';
+  import { mdiCheckCircle } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
   // The post-scan console is dense — five stat cards, four filters, a search box, a pre-selected bulk bar and a
@@ -16,9 +16,8 @@
     reviewFirstOpened: number;
     confidentTotal: number;
     selectedCount: number;
-    onReviewFirst: () => void;
   };
-  const { reviewFirstTotal, reviewFirstOpened, confidentTotal, selectedCount, onReviewFirst }: Props = $props();
+  const { reviewFirstTotal, reviewFirstOpened, confidentTotal, selectedCount }: Props = $props();
 
   // Done when every review-first cluster has been opened — or when the scan flagged none for review at all.
   const reviewDone = $derived(reviewFirstOpened >= reviewFirstTotal);
@@ -56,22 +55,14 @@
             <p class="text-sm font-semibold">
               {$t('admin.face_cleanup_steps_review_title', { values: { count: reviewFirstTotal } })}
             </p>
+            <!-- No shortcut button here: one that merely flipped the filter chip read as navigation and its
+                 effect landed far below the fold, so it looked broken. The "Review first" chip is right there
+                 in the toolbar. -->
             <span class="text-xs font-semibold text-gray-400" data-testid="step-review-progress">
               {$t('admin.face_cleanup_steps_review_progress', {
                 values: { opened: reviewFirstOpened, total: reviewFirstTotal },
               })}
             </span>
-            <Button
-              color="secondary"
-              size="tiny"
-              variant="outline"
-              shape="round"
-              onclick={onReviewFirst}
-              data-testid="step-review-cta"
-            >
-              {$t('admin.face_cleanup_steps_review_cta')}
-              <Icon icon={mdiArrowRight} size="14" />
-            </Button>
           </div>
           <p class="mt-0.5 max-w-3xl text-sm text-gray-500 dark:text-gray-400">
             {$t('admin.face_cleanup_steps_review_body')}
