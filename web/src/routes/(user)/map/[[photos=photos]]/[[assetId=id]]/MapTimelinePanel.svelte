@@ -48,6 +48,7 @@
     onClose: () => void;
     spaceId?: string;
     filters?: FilterState;
+    onFiltersChange?: (filters: FilterState) => void;
   }
 
   let {
@@ -57,6 +58,7 @@
     onClose,
     spaceId,
     filters = $bindable(createFilterState()),
+    onFiltersChange,
   }: Props = $props();
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
@@ -116,6 +118,10 @@
   const clearTemporalFilter = () => {
     filters = clearTimelineTemporalFilter(filters);
     temporalAnchor = undefined;
+    // #767 fresh instance: this used to only mutate the bound `filters`, leaving the map page's
+    // URL-backed from/to params in place — a reload, Back, or shared link brought the "cleared"
+    // filter right back. Mirror the page's other mutation sites (FilterPanel's onFiltersChange).
+    onFiltersChange?.(filters);
   };
 
   const timelineBoundingBox = $derived(

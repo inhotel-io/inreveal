@@ -11392,6 +11392,30 @@ describe(SharedSpaceService.name, () => {
       );
     });
 
+    // Finding 2 (#767 fresh instance): a Space filtered by description/filename/OCR carries those
+    // filters to the map (encodeFilterParams), which hydrates, counts, and shows a chip for each —
+    // but the marker query silently dropped all three, so the map showed EVERY pin in the space
+    // while claiming the filter was active. searchAssetBuilder already supports all three
+    // (database.ts); this proves the DTO -> repository forwarding.
+    it('should pass description/originalFileName/ocr to repository', async () => {
+      const auth = factory.auth();
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, {
+        description: 'sunset',
+        originalFileName: 'IMG_1234',
+        ocr: 'stop sign',
+      });
+
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: 'sunset',
+          originalFileName: 'IMG_1234',
+          ocr: 'stop sign',
+        }),
+      );
+    });
+
     it('should pass all filters together to repository', async () => {
       const auth = factory.auth();
       mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);

@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
-import { createFilterState } from '$lib/components/filter-panel/filter-panel';
+import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
 import MapTimelinePanel from './MapTimelinePanel.svelte';
 
 const { mockAssetMultiSelectManager } = vi.hoisted(() => ({
@@ -115,7 +115,7 @@ vi.mock('$lib/services/asset.service', () => ({
   getAssetBulkActions: vi.fn(() => ({})),
 }));
 
-function renderPanel(filters = createFilterState()) {
+function renderPanel(filters = createFilterState(), onFiltersChange?: (filters: FilterState) => void) {
   return render(
     TestWrapper as Component<{ component: typeof MapTimelinePanel; componentProps: Record<string, unknown> }>,
     {
@@ -126,6 +126,7 @@ function renderPanel(filters = createFilterState()) {
         assetCount: 2,
         filters,
         onClose: vi.fn(),
+        ...(onFiltersChange ? { onFiltersChange } : {}),
       },
     },
   );
@@ -208,6 +209,32 @@ describe('MapTimelinePanel grouping', () => {
       expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"takenBefore"');
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
+    });
+  });
+
+  // Finding 1 (#767 fresh instance): clearing the temporal chip INSIDE the panel used to only
+  // mutate the bound `filters` in memory — the map page's URL (from/to) never got told, so a
+  // reload / Back / shared link brought the "cleared" filter right back. The panel must notify the
+  // page (onFiltersChange), exactly like FilterPanel does, so the caller can sync the URL.
+  it('notifies onFiltersChange with the temporal fields cleared when the chip is removed inside the panel', async () => {
+    const onFiltersChange = vi.fn();
+    renderPanel({ ...createFilterState(), dateAfter: '2024-01-01', dateBefore: '2024-06-30' }, onFiltersChange);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-filters-bar')).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'filter_remove_chip' }));
+
+    await waitFor(() => {
+      expect(onFiltersChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dateAfter: undefined,
+          dateBefore: undefined,
+          selectedYear: undefined,
+          selectedMonth: undefined,
+        }),
+      );
     });
   });
 

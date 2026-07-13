@@ -491,6 +491,26 @@ describe('Map page filters are URL-backed', () => {
     );
   });
 
+  // Finding 1 (#767 fresh instance): clearing the temporal chip INSIDE the timeline panel used to
+  // only mutate the bound `filters` — the page never wrote the URL back, so from/to survived a
+  // reload/Back/shared link. MapTimelinePanel must be wired with onFiltersChange={syncMapFilterUrl}
+  // exactly like FilterPanel is (see the wiring above), so this proves the PAGE side of the fix.
+  it('writes the URL when the temporal filter is cleared from inside the timeline panel', async () => {
+    mockPage.url = new URL('https://gallery.test/map?from=2024-01-01&to=2024-06-30');
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
+
+    renderPage();
+    await flushQueryDebounce();
+    await flushMapLoad();
+    await fireEvent.click(screen.getByTestId('map-cluster-asset-1'));
+    await fireEvent.click(screen.getByTestId('map-panel-clear-temporal-filter'));
+
+    await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+    const [target] = gotoMock.mock.calls.at(-1) as [string];
+    expect(target).not.toContain('from=');
+    expect(target).not.toContain('to=');
+  });
+
   // Back/forward: SvelteKit swaps page.url without remounting the page component. The $effect must
   // notice and re-hydrate — this is the same code path a reload and a shared URL take. Only provable
   // now that this suite's page mock is reactive (I5) — the old plain vi.hoisted object registered no

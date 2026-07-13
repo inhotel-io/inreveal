@@ -54,6 +54,21 @@ describe('buildMapMarkerOptions', () => {
 
     expect(options).toMatchObject({ lensModel: 'RF24', state: 'Hamburg', ownerId: 'u1', albumId: 'a1' });
   });
+
+  // Finding 2 (#767 fresh instance): a Space filtered by description/filename/OCR carries those
+  // filters to the map via encodeFilterParams — the map hydrates them, counts them, and shows a
+  // chip for each — but the marker query silently dropped all three, so the map showed EVERY pin
+  // in the space while claiming the filter was active. Forward them for real.
+  it('forwards description/filename/ocr filters carried from a space', () => {
+    const options = buildMapMarkerOptions({
+      ...createFilterState(),
+      description: 'sunset',
+      originalFileName: 'IMG_1234',
+      ocr: 'stop sign',
+    });
+
+    expect(options).toMatchObject({ description: 'sunset', originalFileName: 'IMG_1234', ocr: 'stop sign' });
+  });
 });
 
 describe('buildMapTimeBucketOptions', () => {
@@ -148,6 +163,23 @@ describe('buildMapTimeBucketOptions', () => {
       state: 'State of Berlin',
       albumId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa',
       ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb',
+    });
+  });
+
+  // Finding 2: the temporal picker's time buckets must agree with the marker pins — both read the
+  // same active filters, so a Space's description/filename/OCR filter must narrow both alike.
+  it('forwards description/filename/ocr filters to the map time bucket query', () => {
+    const filters = {
+      ...createFilterState(),
+      description: 'sunset',
+      originalFileName: 'IMG_1234',
+      ocr: 'stop sign',
+    };
+
+    expect(buildMapTimeBucketOptions(filters)).toMatchObject({
+      description: 'sunset',
+      originalFileName: 'IMG_1234',
+      ocr: 'stop sign',
     });
   });
 });
@@ -435,5 +467,23 @@ describe('buildAlbumMapMarkerOptions', () => {
     // widens person-token resolution scope in SharedSpaceService.getFilteredMapMarkers
     // (server/src/services/shared-space.service.ts), which is not what an album query wants.
     expect(buildAlbumMapMarkerOptions('album-1', createFilterState())).toEqual({ albumId: 'album-1' });
+  });
+
+  // Finding 2: description/filename/OCR must narrow the album map the same way they narrow the
+  // album grid — this is also what AlbumMap's marker-options refetch key now keys on.
+  it('forwards description/filename/ocr filters', () => {
+    const options = buildAlbumMapMarkerOptions('album-1', {
+      ...createFilterState(),
+      description: 'sunset',
+      originalFileName: 'IMG_1234',
+      ocr: 'stop sign',
+    });
+
+    expect(options).toMatchObject({
+      albumId: 'album-1',
+      description: 'sunset',
+      originalFileName: 'IMG_1234',
+      ocr: 'stop sign',
+    });
   });
 });

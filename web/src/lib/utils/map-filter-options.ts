@@ -37,6 +37,19 @@ function applyCommonMapFilters(base: Record<string, unknown>, filters: FilterSta
   if (filters.country) {
     base.country = filters.country;
   }
+  // #767 fresh instance: a Space filtered by description/filename/OCR carries those filters to the
+  // map (encodeFilterParams), which hydrates them, counts them, and shows a removable chip for
+  // each — but until now the marker/time-bucket queries never sent them, so the map showed every
+  // pin in the space while claiming the filter was active. Mirror buildPhotosTimelineOptions.
+  if (filters.description?.trim()) {
+    base.description = filters.description.trim();
+  }
+  if (filters.originalFileName?.trim()) {
+    base.originalFileName = filters.originalFileName.trim();
+  }
+  if (filters.ocr?.trim()) {
+    base.ocr = filters.ocr.trim();
+  }
 
   applyTextFilters(base, filters);
 
