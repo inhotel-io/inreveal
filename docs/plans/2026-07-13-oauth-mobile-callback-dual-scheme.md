@@ -18,6 +18,16 @@
 - **`http`/`https` URLs must never be rewritten** by the callback-matching logic — the web login flow shares `resolveRedirectUri`.
 - Run `pnpm prettier --write` on any markdown under `docs/` before committing — CI Docs Build is strict.
 
+## Task Order (dependencies — do not reorder)
+
+Tasks are **not** independent. Running them out of order fails:
+
+- **Task 3 requires Task 2.** `patch_oauth_callback()` rewrites the literal `kOAuthCallbackUri = 'app.immich:///oauth-callback'`, and `test-oauth-callback-branding.sh` asserts it. That symbol does not exist until Task 2 lands — before then the `sed` is a silent no-op and the test fails on a missing string.
+- **Task 5 requires Task 1.** The branded-scheme e2e assertions depend on the scheme-agnostic `MOBILE_CALLBACK_URI`.
+- Task 4 (docs) is independent and can run any time.
+
+Order: **1 → 2 → 3 → 4 → 5.**
+
 ---
 
 ## Background: why it's broken
@@ -34,6 +44,10 @@ The IdP redirects the browser to `app.immich:///oauth-callback?code=…`, no ins
 Unaffected: **web** (separate https redirect) and **iOS** (`ASWebAuthenticationSession` intercepts the scheme itself, no OS-level registration). It was never caught because dev builds aren't branded, so both halves agree locally and OIDC works fine in development.
 
 Culprit: `branding/scripts/apply-branding.sh:592` rewrites the manifest half only. `branding/config.json`'s `mobile.oauth_callback` key — clearly meant to drive exactly this — is read by nothing.
+
+**Why it happened, systemically:** `apply-branding.sh` currently rewrites **zero** files under `mobile/lib/`. It was built for native/config surfaces (`AndroidManifest.xml`, `Info.plist`, `build.gradle`, `project.pbxproj`) and web. The OAuth callback is the one value that needs a native **and** a Dart change to stay coherent — so only the native half got written. `patch_oauth_callback()` is the script's first Dart-source rewrite, and the invariant check exists because nothing else in the codebase would catch this class of drift.
+
+**Shipping note:** the fix is **app-only**. With the mobile redirect override disabled (the default, and what the reporting user runs), `resolveRedirectUri` is the identity function even on an unpatched server — so a fixed APK logs in against a stock, un-upgraded server. Tasks 1 and 5 harden the server for the branded scheme and for the override path; they are not required to unblock the reporter.
 
 ---
 
@@ -689,6 +703,43 @@ present "$CONSTANTS" "MOBILE_REDIRECT = '${OAUTH_CALLBACK}'" "server MOBILE_REDI
 echo "Admins are shown the same URI:"
 present "$SETTINGS" "callback: '${OAUTH_CALLBACK}'" "AuthSettings.svelte shows ${OAUTH_CALLBACK}"
 
+# --- Phase 2 flip simulation -------------------------------------------------
+# The plan claims flipping mobile.oauth_callback to the branded URI is a one-line
+# change. Prove it: re-run the real patch against a FRESH mirror with OAUTH_CALLBACK
+# overridden, and assert the invariant still holds (all four sites agree, and the
+# legacy scheme stays registered so older installed app builds keep working).
+FLIPPED="${BUNDLE_ID}:///oauth-callback"
+TMP2="$(mktemp -d)"
+trap 'rm -rf "$TMP" "$TMP2"' EXIT
+mkdir -p "$TMP2/mobile/lib/services" \
+  "$TMP2/mobile/android/app/src/main" \
+  "$TMP2/server/src" \
+  "$TMP2/web/src/routes/admin/system-settings"
+cp "$REPO/mobile/lib/services/oauth.service.dart" "$TMP2/mobile/lib/services/"
+cp "$REPO/mobile/android/app/src/main/AndroidManifest.xml" "$TMP2/mobile/android/app/src/main/"
+cp "$REPO/server/src/constants.ts" "$TMP2/server/src/"
+cp "$REPO/web/src/routes/admin/system-settings/AuthSettings.svelte" "$TMP2/web/src/routes/admin/system-settings/"
+
+REPO_ROOT="$TMP2" OAUTH_CALLBACK="$FLIPPED" OAUTH_CALLBACK_SCHEME="$BUNDLE_ID" patch_oauth_callback >/dev/null
+
+flipped_present() { # <file> <literal> <description>
+  if grep -Fq "$2" "$TMP2/$1"; then
+    echo "  ok:   $3"
+  else
+    echo "  FAIL: $3 — '$2' missing from $1"
+    fails=$((fails + 1))
+  fi
+}
+
+echo "Phase 2 flip (oauth_callback -> ${FLIPPED}) keeps the invariant:"
+flipped_present "$DART" "kOAuthCallbackUri = '${FLIPPED}'" "app would send ${FLIPPED}"
+flipped_present "$CONSTANTS" "MOBILE_REDIRECT = '${FLIPPED}'" "server would emit ${FLIPPED}"
+flipped_present "$SETTINGS" "callback: '${FLIPPED}'" "admins would be shown ${FLIPPED}"
+flipped_present "$MANIFEST" "android:scheme=\"${BUNDLE_ID}\" android:pathPrefix=\"/oauth-callback\"" \
+  "the flipped scheme is already registered (no manifest change needed)"
+flipped_present "$MANIFEST" 'android:scheme="app.immich" android:pathPrefix="/oauth-callback"' \
+  "the legacy scheme survives the flip (older installed apps keep working)"
+
 if [[ $fails -gt 0 ]]; then
   echo "FAILED: $fails assertion(s)"
   exit 1
@@ -1008,10 +1059,12 @@ Task 5 covers the custom-scheme flow against a real IdP, and `test-oauth-callbac
 
 ## Deferred: Phase 2 — flip the sent scheme to branded
 
-Out of scope here, but this plan is shaped to make it a one-liner. Once a release has shipped with the updated docs and admins have had a cycle to register `de.opennoodle.gallery:///oauth-callback`:
+Out of scope here, but this plan is shaped to make it a one-liner, and `test-oauth-callback-branding.sh` **proves** it with a flip simulation rather than just asserting it. Once a release has shipped with the updated docs and admins have had a cycle to register `de.opennoodle.gallery:///oauth-callback`:
 
 1. Set `branding/config.json` → `mobile.oauth_callback` to `de.opennoodle.gallery:///oauth-callback`.
 2. That's it — the manifest already registers the scheme, the server already accepts it, `verify-branding.sh` already checks the invariant, and the tests already cover both schemes.
+
+**Fail-closed safety.** If a callback ever arrives on a scheme the app did not send (mismatched IdP config, half-flipped deploy), the token exchange fails at the provider with a `redirect_uri` mismatch — `openid-client` sends the same `redirect_uri` it authorized with. The user sees a failed login, never a silently wrong one.
 
 **Why flip at all?** While we send `app.immich`, a phone with **both Immich and Gallery installed** has two apps registering that scheme, so Android shows a disambiguation chooser at the callback — and if the user taps Immich, the code lands in an app with no pending auth session and the login dies. Migrating Immich users are exactly the cohort most likely to have both installed.
 
