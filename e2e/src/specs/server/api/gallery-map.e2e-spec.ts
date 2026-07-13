@@ -301,6 +301,7 @@ describe('/gallery/map/markers', () => {
     let albumId: string;
     let plainAssetId: string; // in the album only
     let spaceAssetId: string; // in the album AND in a shared space both users can see
+    let outOfAlbumAssetId: string; // owned by albumOwner, geotagged, NOT in the album — proves narrowing
 
     beforeAll(async () => {
       [albumOwner, albumViewer, outsider] = await Promise.all([
@@ -319,9 +320,13 @@ describe('/gallery/map/markers', () => {
         return id;
       };
 
-      // Two DIFFERENT geotagged fixtures — same-checksum re-uploads return the existing asset id.
+      // Three DIFFERENT geotagged fixtures — same-checksum re-uploads return the existing asset id.
       plainAssetId = await upload('formats/heic/IMG_2682.heic');
       spaceAssetId = await upload('metadata/dates/datetimeoriginal-gps.jpg');
+      // Real (non-degenerate) GPS EXIF, distinct checksum from the other two fixtures used in this
+      // suite — confirmed via EXIF inspection: GPSLatitude (37, 46, 29.64) N, GPSLongitude
+      // (122, 25, 9.84) W. Deliberately left out of both the album and the space below.
+      outOfAlbumAssetId = await upload('metadata/dates/gps-datetime.jpg');
       utils.disconnectWebsocket(ownerWebsocket);
 
       // The space asset lives in a space BOTH users have in their timeline (showInTimeline defaults
@@ -374,6 +379,31 @@ describe('/gallery/map/markers', () => {
         .set(asBearerAuth(outsider.accessToken));
 
       expect(status).toBe(400);
+    });
+
+    it('albumId NARROWS: an owner asset outside the album is excluded, even though it has a marker', async () => {
+      // The over-inclusion direction. Dropping userIds for an album query means the whole safety of
+      // the album branch rests on inAlbums() inside albumSharedSpaceScope — whose first arm admits
+      // ANY asset that is in no shared space at all, for ANY caller. If a future refactor lost the
+      // albumIds `$if` in searchAssetBuilder, or the service stopped forwarding albumIds, `?albumId=`
+      // would silently widen to every non-space-shared geotagged asset on the instance, and every
+      // other test in this describe (all `toContain`) would keep passing.
+      //
+      // Sanity-pin FIRST: prove outOfAlbumAssetId actually produces a marker at all for its owner
+      // with no filters. Without this, the not.toContain below could pass vacuously forever (e.g. if
+      // the fixture had no GPS data and never produced a marker for anyone).
+      const unfiltered = await request(app).get('/gallery/map/markers').set(asBearerAuth(albumOwner.accessToken));
+      expect(unfiltered.status).toBe(200);
+      expect((unfiltered.body as Array<{ id: string }>).map((m) => m.id)).toContain(outOfAlbumAssetId);
+
+      // Now the real assertion: the album VIEWER's albumId query must not surface an owner asset that
+      // was never added to the album. albumViewer owns nothing, so nothing but the album filter itself
+      // stands between this asset and the result.
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?albumId=${albumId}`)
+        .set(asBearerAuth(albumViewer.accessToken));
+      expect(status).toBe(200);
+      expect((body as Array<{ id: string }>).map((m) => m.id)).not.toContain(outOfAlbumAssetId);
     });
 
     it('rejects spaceId together with albumId', async () => {
