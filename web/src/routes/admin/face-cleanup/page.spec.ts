@@ -266,6 +266,59 @@ describe('+page.svelte (face cleanup)', () => {
     });
   });
 
+  // ---- post-scan guidance ----
+  // The console never told the admin what to do, nor that the confident clusters arrive pre-selected (making
+  // its biggest button a bulk action over every one of them). The checklist's own copy and state matrix are
+  // covered by ScanChecklist.spec.ts; here we only verify the page feeds it real scan state and wires its CTA.
+
+  describe('What-to-do-now checklist', () => {
+    it('renders after a scan, counting the review-first and confident clusters', async () => {
+      const persons = [
+        makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
+        makeScanPerson({ personId: 'c2', recommendation: 'confident' }),
+        makeScanPerson({ personId: 'r1', recommendation: 'review-first', reviewReasons: ['named'] }),
+      ];
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('scan-checklist')).toBeInTheDocument());
+
+      // 1 review-first, none opened yet; 2 confident, and those 2 are what the page has pre-selected.
+      expect(screen.getByTestId('step-review')).toHaveAttribute('data-done', 'false');
+      expect(screen.getByTestId('step-confident')).toHaveAttribute('data-inactive', 'false');
+      expect(screen.getByTestId('step-apply')).toHaveAttribute('data-inactive', 'false');
+    });
+
+    it('step 1 sends the admin straight to the clusters that need a decision', async () => {
+      const persons = [
+        makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
+        makeScanPerson({ personId: 'r1', recommendation: 'review-first', reviewReasons: ['named'] }),
+      ];
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('scan-checklist')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('step-review-cta'));
+
+      // The confident group is filtered out of the table — only the review-first ones remain.
+      await waitFor(() => {
+        expect(screen.queryByText('admin.face_cleanup_group_confident')).not.toBeInTheDocument();
+      });
+      expect(screen.getByText('admin.face_cleanup_group_review')).toBeInTheDocument();
+    });
+
+    it('is not rendered when the scan found nothing to clean up', async () => {
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByText('admin.face_cleanup_empty_clean')).toBeInTheDocument());
+      expect(screen.queryByTestId('scan-checklist')).not.toBeInTheDocument();
+    });
+  });
+
   // ---- grouping ----
 
   it('renders review-first group before confident group regardless of input order', async () => {
