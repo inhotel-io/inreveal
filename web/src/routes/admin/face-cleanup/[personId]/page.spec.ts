@@ -11,6 +11,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Page from './+page.svelte';
+import ActionsHelpModal from './ActionsHelpModal.svelte';
 
 // Mock @immich/sdk before any imports that use it
 vi.mock('@immich/sdk', async (importOriginal) => {
@@ -729,6 +730,49 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           },
         });
       });
+    });
+  });
+
+  // ---- Actions help: two entry points, one modal ----
+  // The bulk bar only exists once a face is selected, so the banner (i) is the one a confused admin finds
+  // before touching anything; the bulk-bar (i) is the one they reach for mid-task. The modal's own content is
+  // covered by ActionsHelpModal.spec.ts — here we only verify both buttons open it.
+
+  describe('Actions help modal', () => {
+    it('opens the help modal from the review banner, before anything is selected', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+      await fireEvent.click(screen.getByTestId('banner-help'));
+
+      expect(showModal).toHaveBeenCalledWith(ActionsHelpModal, {});
+    });
+
+    it('opens the same help modal from the bulk bar once a face is selected', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('bulk-help'));
+
+      expect(showModal).toHaveBeenCalledWith(ActionsHelpModal, {});
+    });
+
+    it('keeps the selection intact when the help modal is dismissed', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('bulk-help'));
+
+      // The bar only renders while something is selected, so its survival IS the selection surviving.
+      expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('bulk-bar')).toHaveTextContent('1');
+      expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'owner');
     });
   });
 

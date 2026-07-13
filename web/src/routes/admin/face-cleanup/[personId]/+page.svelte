@@ -10,14 +10,15 @@
     resolveFaces,
   } from '@immich/sdk';
   import { Button, Icon, modalManager } from '@immich/ui';
-  import { mdiArrowLeft, mdiArrowRight, mdiCheckBold, mdiClose, mdiLock } from '@mdi/js';
+  import { mdiArrowLeft, mdiArrowRight, mdiCheckBold, mdiClose, mdiInformationOutline, mdiLock } from '@mdi/js';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
+  import ActionsHelpModal from './ActionsHelpModal.svelte';
   import type { PageData } from './$types';
   import PersonPicker from './PersonPicker.svelte';
-  import { createReviewModel, type FaceEntry, type FaceState, type FlaggedFace } from './review.svelte';
+  import { createReviewModel, STATE_COLOR, type FaceEntry, type FaceState, type FlaggedFace } from './review.svelte';
 
   interface ScanPerson {
     personId: string;
@@ -49,17 +50,6 @@
     finishedAt: string | null;
     createdAt: string;
   }
-
-  // Model B state colors (docs/plans/2026-07-10-face-cleanup-resolution-mockup.html :root vars) — the visual
-  // source of truth for this page. Only `owner` is reachable this slice (Slice 1 wires the move-to-owner
-  // path only); the rest are rendered so the full 5-state model already has its final look.
-  const STATE_COLOR: Record<FaceState, string> = {
-    owner: '#4f46e5',
-    other: '#d97706',
-    stay: '#16a34a',
-    lock: '#7c3aed',
-    detach: '#475569',
-  };
 
   type Props = { data: PageData };
   const { data }: Props = $props();
@@ -183,6 +173,14 @@
 
   const handleBulkDetach = () => {
     vm.applyToSelection('detach');
+  };
+
+  // The five bulk actions carry terse labels and no explanation of what they do on apply. Two entry points open
+  // the same modal: the banner (always visible, so a confused admin finds it BEFORE selecting anything) and the
+  // bulk bar (which only exists once a face is selected, i.e. mid-task). Read-only — it never touches the
+  // review model, so an open/close leaves the selection and the staged states exactly as they were.
+  const handleOpenHelp = () => {
+    void modalManager.show(ActionsHelpModal, {});
   };
 
   const handleBulkOther = async () => {
@@ -363,7 +361,7 @@
             <path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
           </svg>
         </div>
-        <div>
+        <div class="flex-1">
           <h3 class="mb-1 text-sm font-semibold">
             {$t('admin.face_cleanup_review_banner_title', { values: { count: flaggedFaces.length } })}
           </h3>
@@ -371,6 +369,19 @@
             {$t('admin.face_cleanup_review_banner_body', { values: { ownerName } })}
           </p>
         </div>
+        <!-- Plain button, not <IconButton>: @immich/ui wraps any titled button in a Tooltip, which needs a
+             TooltipProvider from the app root — absent when this page is rendered in isolation. A native title
+             gives the same hover hint, and plain buttons are already this page's idiom. -->
+        <button
+          type="button"
+          onclick={handleOpenHelp}
+          aria-label={$t('admin.face_cleanup_review_help_open')}
+          title={$t('admin.face_cleanup_review_help_open')}
+          class="flex-none rounded-full p-1.5 text-amber-600 transition-colors hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-900/30"
+          data-testid="banner-help"
+        >
+          <Icon icon={mdiInformationOutline} size="18" />
+        </button>
       </div>
 
       <!-- Apply error banner -->
@@ -672,6 +683,18 @@
             >
               <span class="size-2 rounded-xs" style="background: {STATE_COLOR.detach}"></span>
               {$t('admin.face_cleanup_review_bulk_detach')}
+            </button>
+            <!-- Same modal as the banner's (i). A plain button rather than <IconButton>: the bar is a dark
+                 surface, and the @immich/ui ghost variant styles for the page background, not for this one. -->
+            <button
+              type="button"
+              onclick={handleOpenHelp}
+              aria-label={$t('admin.face_cleanup_review_help_open')}
+              title={$t('admin.face_cleanup_review_help_open')}
+              class="inline-flex items-center rounded-md border border-white/15 bg-white/10 p-1.5 hover:bg-white/20"
+              data-testid="bulk-help"
+            >
+              <Icon icon={mdiInformationOutline} size="15" />
             </button>
             <button
               type="button"

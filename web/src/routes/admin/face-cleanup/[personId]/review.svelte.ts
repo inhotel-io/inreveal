@@ -7,6 +7,19 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 // don't need another rework of this file.
 export type FaceState = 'owner' | 'other' | 'stay' | 'lock' | 'detach';
 
+// Model B state colors (docs/plans/2026-07-10-face-cleanup-resolution-mockup.html :root vars) — the visual
+// source of truth for the review page. Lives here, next to `FaceState`, because both the page (tile badges,
+// ribbons, bulk bar, tally) and ActionsHelpModal (the per-action rails and swatches) render them: the modal's
+// swatch is what ties an explanation back to the button and the tile it describes, so the two must never
+// drift apart.
+export const STATE_COLOR: Record<FaceState, string> = {
+  owner: '#4f46e5',
+  other: '#d97706',
+  stay: '#16a34a',
+  lock: '#7c3aed',
+  detach: '#475569',
+};
+
 export interface FlaggedFace {
   assetFaceId: string;
   // Per-face suspected owner from the persisted scan snapshot — a mixed cluster can flag faces toward
