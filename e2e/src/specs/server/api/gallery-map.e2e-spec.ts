@@ -1,4 +1,10 @@
-import { AssetMediaResponseDto, AssetVisibility, SharedSpaceRole, type LoginResponseDto } from '@immich/sdk';
+import {
+  AlbumUserRole,
+  AssetMediaResponseDto,
+  AssetVisibility,
+  SharedSpaceRole,
+  type LoginResponseDto,
+} from '@immich/sdk';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { Socket } from 'socket.io-client';
@@ -284,5 +290,99 @@ describe('/gallery/map/markers', () => {
     // returns []  (proving the join didn't fall back to the global table).
     // That fixture setup is more involved than T19's scope justifies. The
     // re-routing is covered by unit tests at shared-space.service.spec.ts.
+  });
+
+  describe('albumId scoping (#656 class)', () => {
+    // A shared album is scoped by album ACCESS, not by asset ownership. `albumViewer` owns nothing:
+    // every pin they see here belongs to `albumOwner`.
+    let albumOwner: LoginResponseDto;
+    let albumViewer: LoginResponseDto;
+    let outsider: LoginResponseDto;
+    let albumId: string;
+    let plainAssetId: string; // in the album only
+    let spaceAssetId: string; // in the album AND in a shared space both users can see
+
+    beforeAll(async () => {
+      [albumOwner, albumViewer, outsider] = await Promise.all([
+        utils.userSetup(admin.accessToken, createUserDto.create('t20-album-owner')),
+        utils.userSetup(admin.accessToken, createUserDto.create('t20-album-viewer')),
+        utils.userSetup(admin.accessToken, createUserDto.create('t20-outsider')),
+      ]);
+
+      const ownerWebsocket = await utils.connectWebsocket(albumOwner.accessToken);
+      const upload = async (input: string) => {
+        const filepath = join(testAssetDir, input);
+        const { id } = await utils.createAsset(albumOwner.accessToken, {
+          assetData: { bytes: await readFile(filepath), filename: basename(filepath) },
+        });
+        await utils.waitForWebsocketEvent({ event: 'assetUpload', id });
+        return id;
+      };
+
+      // Two DIFFERENT geotagged fixtures — same-checksum re-uploads return the existing asset id.
+      plainAssetId = await upload('formats/heic/IMG_2682.heic');
+      spaceAssetId = await upload('metadata/dates/datetimeoriginal-gps.jpg');
+      utils.disconnectWebsocket(ownerWebsocket);
+
+      // The space asset lives in a space BOTH users have in their timeline (showInTimeline defaults
+      // to true — shared-space-member.table.ts:74-75).
+      const space = await utils.createSpace(albumOwner.accessToken, { name: 't20 space' });
+      await utils.addSpaceMember(albumOwner.accessToken, space.id, {
+        userId: albumViewer.userId,
+        role: SharedSpaceRole.Viewer,
+      });
+      await utils.addSpaceAssets(albumOwner.accessToken, space.id, [spaceAssetId]);
+
+      const album = await utils.createAlbum(albumOwner.accessToken, {
+        albumName: 't20 shared album',
+        assetIds: [plainAssetId, spaceAssetId],
+        albumUsers: [{ userId: albumViewer.userId, role: AlbumUserRole.Viewer }],
+      });
+      albumId = album.id;
+    });
+
+    it('a viewer of a shared album sees the OWNER pins (#656)', async () => {
+      // Before the fix this returned [] — userIds was hard-coded to [caller], and the viewer owns
+      // no assets at all.
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?albumId=${albumId}`)
+        .set(asBearerAuth(albumViewer.accessToken));
+
+      expect(status).toBe(200);
+      expect((body as Array<{ id: string }>).map((m) => m.id)).toContain(plainAssetId);
+    });
+
+    it('an album asset that also lives in a shared space KEEPS its pin (R4 regression)', async () => {
+      // The R4 hole: drop userIds but leave timelineSpaceIds undefined and albumSharedSpaceScope
+      // degenerates to "the asset must be in no shared space at all" — this pin disappears for the
+      // viewer AND for the owner.
+      for (const actor of [albumViewer, albumOwner]) {
+        const { status, body } = await request(app)
+          .get(`/gallery/map/markers?albumId=${albumId}`)
+          .set(asBearerAuth(actor.accessToken));
+
+        expect(status).toBe(200);
+        const ids = (body as Array<{ id: string }>).map((m) => m.id);
+        expect(ids).toContain(spaceAssetId);
+        expect(ids).toContain(plainAssetId);
+      }
+    });
+
+    it('a user with no access to the album gets 400', async () => {
+      const { status } = await request(app)
+        .get(`/gallery/map/markers?albumId=${albumId}`)
+        .set(asBearerAuth(outsider.accessToken));
+
+      expect(status).toBe(400);
+    });
+
+    it('rejects spaceId together with albumId', async () => {
+      const space = await utils.createSpace(albumOwner.accessToken, { name: 't20 combo space' });
+      const { status } = await request(app)
+        .get(`/gallery/map/markers?spaceId=${space.id}&albumId=${albumId}`)
+        .set(asBearerAuth(albumOwner.accessToken));
+
+      expect(status).toBe(400);
+    });
   });
 });
