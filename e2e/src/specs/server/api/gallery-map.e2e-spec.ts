@@ -373,6 +373,30 @@ describe('/gallery/map/markers', () => {
       // shared space at all", dropping spaceAssetId's pin for that caller — even though the album
       // grid kept showing it regardless. Since the fix, album ACCESS (checked above) is the whole
       // boundary for this query, so the caller's timeline preference must have ZERO effect on it.
+      //
+      // `withSharedSpaces=true` is what makes the PATCH below load-bearing — it is NOT decoration.
+      // getFilteredMapMarkers only reads getSpaceIdsForTimeline (the showInTimeline preference this
+      // test toggles) when `withSharedSpaces === true`; on a bare `?albumId=` request timelineSpaceIds
+      // is undefined whatever the preference says, so the toggle has no input to change and the whole
+      // scenario is inert. The shape is real: an album chip on /photos plus its map icon produces
+      // exactly `?withSharedSpaces=true&albumId=…` (buildMapMarkerOptions, map-filter-options.ts).
+      // It is accepted by FilteredMapMarkerSchema — the 400 guard is on spaceId+albumId, not
+      // albumId+withSharedSpaces (see 'rejects spaceId together with albumId' below).
+      const albumMarkers = `/gallery/map/markers?albumId=${albumId}&withSharedSpaces=true`;
+      const albumMarkerIdsFor = async (actor: LoginResponseDto) => {
+        const { status, body } = await request(app).get(albumMarkers).set(asBearerAuth(actor.accessToken));
+        expect(status).toBe(200);
+        return markerIds(body);
+      };
+
+      // Baseline with the space IN the caller's timeline (showInTimeline defaults to true): both
+      // album pins are there. This is the "before" half the toggle has to leave untouched.
+      for (const actor of [albumViewer, albumOwner]) {
+        const ids = await albumMarkerIdsFor(actor);
+        expect(ids).toContain(spaceAssetId);
+        expect(ids).toContain(plainAssetId);
+      }
+
       for (const actor of [albumViewer, albumOwner]) {
         const toggleOff = await request(app)
           .patch(`/shared-spaces/${spaceId}/members/me/timeline`)
@@ -383,12 +407,7 @@ describe('/gallery/map/markers', () => {
 
       try {
         for (const actor of [albumViewer, albumOwner]) {
-          const { status, body } = await request(app)
-            .get(`/gallery/map/markers?albumId=${albumId}`)
-            .set(asBearerAuth(actor.accessToken));
-
-          expect(status).toBe(200);
-          const ids = (body as Array<{ id: string }>).map((m) => m.id);
+          const ids = await albumMarkerIdsFor(actor);
           expect(ids).toContain(spaceAssetId);
           expect(ids).toContain(plainAssetId);
         }
@@ -638,6 +657,90 @@ describe('/gallery/map/markers', () => {
       const ids = (body as Array<{ id: string }>).map((m) => m.id);
       expect(ids).toContain(matchingAssetId);
       expect(ids).not.toContain(otherAssetId);
+    });
+  });
+
+  describe('lensModel / state filters (wire-name pins)', () => {
+    // Same bug class as the description/originalFileName pins above, and the reason they exist: the
+    // web marker builders return `Record<string, unknown>` (map-filter-options.ts), so a misspelt
+    // key still typechecks, and an unknown query key is silently dropped by the zod query schema —
+    // the filter just no-ops and the map keeps showing every pin while the chip claims otherwise.
+    // The ONLY other coverage for lensModel/state on the map casts an object literal
+    // (`{ lensModel: … } as FilteredMapMarkerDto`) straight into the service, which bypasses
+    // FilteredMapMarkerSchema entirely and would keep passing after either of those mistakes.
+    // (`ownerId` is already pinned over the wire by the RBAC describe below.)
+    //
+    // Two DISTINCT geotagged fixtures with different lens/state values, so each assertion narrows in
+    // both directions (`toContain` + `not.toContain`) and cannot pass vacuously:
+    //   thompson-springs.jpg  lensModel 'Canon EF 24-105mm f/4L IS II USM' (exif LensID), Colorado
+    //   IMG_2682.heic         lensModel 'iPhone 7 back camera 3.99mm f/1.8',                Nebraska
+    // (state comes from reverse geocoding the GPS EXIF — see map.e2e-spec.ts, which pins the same
+    // two places for these two fixtures.)
+    let exifFilterUser: LoginResponseDto;
+    let coloradoAssetId: string;
+    let nebraskaAssetId: string;
+
+    beforeAll(async () => {
+      exifFilterUser = await utils.userSetup(admin.accessToken, createUserDto.create('t25-exif-filter'));
+      const ws = await utils.connectWebsocket(exifFilterUser.accessToken);
+
+      const upload = async (input: string) => {
+        const filepath = join(testAssetDir, input);
+        const { id } = await utils.createAsset(exifFilterUser.accessToken, {
+          assetData: { bytes: await readFile(filepath), filename: basename(filepath) },
+        });
+        await utils.waitForWebsocketEvent({ event: 'assetUpload', id });
+        return id;
+      };
+
+      coloradoAssetId = await upload('metadata/gps-position/thompson-springs.jpg');
+      nebraskaAssetId = await upload('formats/heic/IMG_2682.heic');
+      utils.disconnectWebsocket(ws);
+    });
+
+    it('sanity: both fixtures produce a marker with no filters', async () => {
+      // Without this, every `not.toContain` below could pass forever for the wrong reason (a fixture
+      // that silently lost its GPS EXIF, or metadata extraction that never populated lens/state).
+      const { status, body } = await request(app)
+        .get('/gallery/map/markers')
+        .set(asBearerAuth(exifFilterUser.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body).toSorted()).toEqual([coloradoAssetId, nebraskaAssetId].toSorted());
+    });
+
+    it('lensModel narrows to the matching asset over the wire', async () => {
+      const lens = encodeURIComponent('Canon EF 24-105mm f/4L IS II USM');
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?lensModel=${lens}`)
+        .set(asBearerAuth(exifFilterUser.accessToken));
+
+      expect(status).toBe(200);
+      const ids = markerIds(body);
+      expect(ids).toContain(coloradoAssetId);
+      expect(ids).not.toContain(nebraskaAssetId);
+    });
+
+    it('state narrows to the matching asset over the wire', async () => {
+      const { status, body } = await request(app)
+        .get('/gallery/map/markers?state=Colorado')
+        .set(asBearerAuth(exifFilterUser.accessToken));
+
+      expect(status).toBe(200);
+      const ids = markerIds(body);
+      expect(ids).toContain(coloradoAssetId);
+      expect(ids).not.toContain(nebraskaAssetId);
+    });
+
+    it('state narrows the other way too (the filter is not a one-sided no-op)', async () => {
+      const { status, body } = await request(app)
+        .get('/gallery/map/markers?state=Nebraska')
+        .set(asBearerAuth(exifFilterUser.accessToken));
+
+      expect(status).toBe(200);
+      const ids = markerIds(body);
+      expect(ids).toContain(nebraskaAssetId);
+      expect(ids).not.toContain(coloradoAssetId);
     });
   });
 
