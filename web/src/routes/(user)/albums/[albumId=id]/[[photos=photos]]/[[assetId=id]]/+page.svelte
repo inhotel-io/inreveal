@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto, invalidate, onNavigate } from '$app/navigation';
+  import { page } from '$app/state';
   import { scrollMemoryClearer } from '$lib/actions/scroll-memory';
   import AlbumMap from '$lib/components/album-page/AlbumMap.svelte';
   import AlbumSharedSpaceLinks from '$lib/components/album-page/AlbumSharedSpaceLinks.svelte';
@@ -65,10 +66,16 @@
   import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
   import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
+  import { buildFilterStateUrl, isFilterStateUrlUnchanged } from '$lib/utils/filter-target';
+  import { decodeFilterParams } from '$lib/utils/filter-url';
   import { lang } from '$lib/stores/preferences.store';
   import { handleError } from '$lib/utils/handle-error';
   import { isAlbumsRoute, navigate, type AssetGridRouteSearchParams } from '$lib/utils/navigation';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
+  import {
+    preserveTransientTemporalFilters,
+    type SearchablePageTransientTemporalState,
+  } from '$lib/utils/searchable-page-search';
   import {
     type ActivatableTimelineBucket,
     getTimelineBucketZoomTarget,
@@ -100,7 +107,7 @@
     mdiPlus,
     mdiPresentationPlay,
   } from '@mdi/js';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { t } from 'svelte-i18n';
   import { fly } from 'svelte/transition';
   import { SvelteMap } from 'svelte/reactivity';
@@ -116,7 +123,28 @@
   let { slideshowState, slideshowNavigation } = slideshowStore;
   let oldAt: AssetGridRouteSearchParams | null | undefined = $state();
   let album = $state(data.album);
-  let albumFilters = $state(createFilterState());
+  /**
+   * E9 — the route already scopes the timeline to this album, and the server's `albumId` is a
+   * SCALAR driving one inner join, so album ∩ album is impossible. A stray `?albumId=` must be
+   * IGNORED: dropping it here keeps it out of the active-filter count, out of the chip bar, and
+   * out of the next URL write. buildAlbumTimelineOptions already refuses to forward it.
+   */
+  const hydrateAlbumFilters = (url: URL): FilterState => ({
+    ...createFilterState(),
+    ...decodeFilterParams(url),
+    albumId: undefined,
+  });
+
+  let albumFilters = $state<FilterState>(hydrateAlbumFilters(page.url));
+  // Token guard for the URL $effect below. Copied in spirit from photos/…/+page.svelte:508-513:
+  // without it, our own goto() re-runs the effect, which re-runs goto(), forever.
+  let lastHandledFilterSearch = $state(page.url.search);
+  // selectedYear/selectedMonth are NOT in the URL codec but DO drive takenAfter/takenBefore via
+  // buildFilterContext. Carry them across our own round trip, or the temporal picker resets itself
+  // on every unrelated filter change.
+  let pendingFilterUrlSync = $state<
+    { search: string; transientTemporal?: SearchablePageTransientTemporalState } | undefined
+  >();
   let pickerFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
@@ -270,7 +298,13 @@
     }
 
     album = data.album;
-    albumFilters = createFilterState();
+    // In real navigation, page.params.albumId always updates in lockstep with data.album (the
+    // URL change is what drives the new load in the first place), so this is normally true. It
+    // only goes false when something swaps data.album without a matching URL/route change —
+    // guard against hydrating this album's filters from what is then a FOREIGN album's URL.
+    albumFilters = page.params.albumId === album.id ? hydrateAlbumFilters(page.url) : createFilterState();
+    lastHandledFilterSearch = page.url.search;
+    pendingFilterUrlSync = undefined;
     pickerFilters = createFilterState();
     albumPersonNames.clear();
     albumTagNames.clear();
@@ -282,6 +316,26 @@
     timelineGrouping = 'day';
     temporalAnchor = undefined;
     oldAt = null;
+  });
+
+  $effect(() => {
+    const nextSearch = page.url.search;
+    if (nextSearch === lastHandledFilterSearch) {
+      return;
+    }
+
+    untrack(() => {
+      const transientTemporal =
+        pendingFilterUrlSync?.search === nextSearch ? pendingFilterUrlSync.transientTemporal : undefined;
+      albumFilters = {
+        ...createFilterState(),
+        ...preserveTransientTemporalFilters(hydrateAlbumFilters(page.url), transientTemporal),
+      };
+      if (pendingFilterUrlSync?.search === nextSearch) {
+        pendingFilterUrlSync = undefined;
+      }
+      lastHandledFilterSearch = nextSearch;
+    });
   });
 
   const containsEditors = $derived(album?.shared && album.albumUsers.some(({ role }) => role === AlbumUserRole.Editor));
@@ -427,9 +481,31 @@
     temporalAnchor = result.anchor;
   }
 
+  function syncAlbumFilterUrl(nextFilters: FilterState) {
+    const nextUrl = buildFilterStateUrl(page.url, nextFilters);
+    // NOT a string compare: buildFilterStateUrl re-appends the filter params last, so an unchanged
+    // state on `?make=Apple&at=…`-style URLs can come back re-ordered. See filter-target.ts.
+    if (isFilterStateUrlUnchanged(page.url, nextUrl)) {
+      return;
+    }
+    pendingFilterUrlSync = {
+      search: new URL(nextUrl, page.url).search,
+      transientTemporal: {
+        selectedYear: nextFilters.selectedYear,
+        selectedMonth: nextFilters.selectedMonth,
+      },
+    };
+    void goto(nextUrl, { replaceState: true, keepFocus: true, noScroll: true });
+  }
+
+  function handleAlbumFiltersChange(nextFilters: FilterState) {
+    syncAlbumFilterUrl(nextFilters);
+  }
+
   function clearAlbumTemporalFilter() {
     albumFilters = clearTimelineTemporalFilter(albumFilters);
     temporalAnchor = undefined;
+    syncAlbumFilterUrl(albumFilters);
   }
 
   const onSharedLinkCreate = async () => {
@@ -535,6 +611,7 @@
                   {timeBuckets}
                   storageKey="gallery-filter-visible-sections-album-detail"
                   hidden={isTimelineEmpty}
+                  onFiltersChange={handleAlbumFiltersChange}
                 />
               {/key}
             {/if}
@@ -568,11 +645,13 @@
                     clearAlbumTemporalFilter();
                   } else {
                     albumFilters = handlePhotosRemoveFilter(albumFilters, type, id);
+                    syncAlbumFilterUrl(albumFilters);
                   }
                 }}
                 onClearAll={() => {
                   albumFilters = clearFilters(albumFilters);
                   temporalAnchor = undefined;
+                  syncAlbumFilterUrl(albumFilters);
                 }}
                 onAddAllToCollection={handleAddAllToCollection}
               />
@@ -609,6 +688,7 @@
                   } else {
                     albumFilters = clearFilters(albumFilters);
                     temporalAnchor = undefined;
+                    syncAlbumFilterUrl(albumFilters);
                   }
                 }}
               >
