@@ -2,12 +2,16 @@
   import { Icon } from '@immich/ui';
   import {
     mdiAccount,
+    mdiAccountOutline,
     mdiCalendar,
     mdiCalendarRange,
     mdiCamera,
+    mdiCameraIris,
     mdiClose,
     mdiFileOutline,
+    mdiFolderMultipleImage,
     mdiHeart,
+    mdiHeartOutline,
     mdiImage,
     mdiImageAlbum,
     mdiImageMultipleOutline,
@@ -36,6 +40,8 @@
     resultCount?: number;
     personNames?: Map<string, string>;
     tagNames?: Map<string, string>;
+    albumNames?: Map<string, string>;
+    ownerNames?: Map<string, string>;
     onRemoveFilter: (type: string, id?: string) => void;
     onClearAll: () => void;
     searchQuery?: string;
@@ -54,6 +60,8 @@
     resultCount,
     personNames,
     tagNames,
+    albumNames,
+    ownerNames,
     onRemoveFilter,
     onClearAll,
     searchQuery = '',
@@ -99,13 +107,11 @@
       result.push({ type: 'person', id: personId, icon: mdiAccount, label: name });
     }
 
-    // Location chip
-    if (filters.city && filters.country) {
-      result.push({ type: 'location', icon: mdiMapMarker, label: `${filters.city}, ${filters.country}` });
-    } else if (filters.city) {
-      result.push({ type: 'location', icon: mdiMapMarker, label: filters.city });
-    } else if (filters.country) {
-      result.push({ type: 'location', icon: mdiMapMarker, label: filters.country });
+    // Location chip (city + state + country fold into ONE chip — getActiveFilterCount already
+    // counts all three as a single filter, so all three must render — and clear — together)
+    const locationParts = [filters.city, filters.state, filters.country].filter(Boolean);
+    if (locationParts.length > 0) {
+      result.push({ type: 'location', icon: mdiMapMarker, label: locationParts.join(', ') });
     }
 
     // Camera chip
@@ -123,7 +129,12 @@
 
     // Rating chip
     if (filters.rating !== undefined) {
-      result.push({ type: 'rating', icon: mdiStar, label: `${filters.rating}+` });
+      result.push({
+        type: 'rating',
+        icon: mdiStar,
+        labelKey: 'filter_chip_rating',
+        labelValues: { rating: `${filters.rating}` },
+      });
     }
 
     // Media type chip
@@ -133,9 +144,12 @@
       result.push({ type: 'mediaType', icon: mdiVideo, labelKey: 'videos_only' });
     }
 
-    // Favorites chip
+    // Favorites chip (isFavorite === false is also an active, counted filter and must render too —
+    // it silently had no chip and no Clear-all before this)
     if (filters.isFavorite === true) {
       result.push({ type: 'favorites', icon: mdiHeart, labelKey: 'favorites' });
+    } else if (filters.isFavorite === false) {
+      result.push({ type: 'favorites', icon: mdiHeartOutline, labelKey: 'filter_not_favorite' });
     }
 
     // Albums chip
@@ -167,6 +181,24 @@
           ? String(filters.selectedYear)
           : `${MONTH_LABELS[filters.selectedMonth - 1]} ${filters.selectedYear}`;
       result.push({ type: 'timeline', icon: mdiCalendar, label });
+    }
+
+    // Lens chip (appended: distinct dimension from the camera make/model chip above)
+    if (filters.lensModel) {
+      result.push({ type: 'lens', icon: mdiCameraIris, label: filters.lensModel });
+    }
+
+    // Album chip (resolved to a name via the albumNames prop — falls back to the raw id, same
+    // pattern as personNames/tagNames)
+    if (filters.albumId) {
+      const name = albumNames?.get(filters.albumId) ?? filters.albumId;
+      result.push({ type: 'album', id: filters.albumId, icon: mdiFolderMultipleImage, label: name });
+    }
+
+    // Owner chip (resolved to a name via the ownerNames prop — falls back to the raw id)
+    if (filters.ownerId) {
+      const name = ownerNames?.get(filters.ownerId) ?? filters.ownerId;
+      result.push({ type: 'owner', id: filters.ownerId, icon: mdiAccountOutline, label: name });
     }
 
     return result;
