@@ -11717,6 +11717,54 @@ describe(SharedSpaceService.name, () => {
       );
     });
 
+    // Regression: timelineSpaceIds has a SECOND, unrelated consumer besides the space-scope gate
+    // above — shared-space person-token resolution (resolveScopedMapPersonFilters ->
+    // faceIdentityRepository.resolveScopedPersonTokens -> face-identity.repository.ts's
+    // spaceMatchesScope), which requires timelineSpaceIds.size > 0 whenever withSharedSpaces is
+    // truthy, regardless of albumId. A prior fix narrowed needsTimelineSpaceIds to exclude album
+    // queries entirely (so the album-map scope decision above wouldn't recompute it needlessly),
+    // but that starved this second consumer: an album query with withSharedSpaces=true and a
+    // space-person token got timelineSpaceIds: undefined -> resolveScopedPersonTokens saw an empty
+    // scope -> every space-person token looked inaccessible -> forceEmptyResult=true -> zero pins,
+    // even though the album access check already authorized the query and albumAccessIsBoundary
+    // makes timelineSpaceIds inert for the space-scope gate itself.
+    it('resolves timelineSpaceIds for shared-space person-token resolution on an albumId query', async () => {
+      const albumId = factory.uuid();
+      const spaceId = newUuid();
+      const token = `space-person:${newUuid()}`;
+      const auth = factory.auth();
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+      mocks.faceIdentity.resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: [],
+        legacyPersonIds: [],
+        legacySpacePersonIds: ['space-person-1'],
+        hasInaccessibleToken: false,
+      });
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, {
+        albumId,
+        withSharedSpaces: true,
+        personIds: [token],
+      });
+
+      expect(mocks.sharedSpace.getSpaceIdsForTimeline).toHaveBeenCalledWith(auth.user.id);
+      expect(mocks.faceIdentity.resolveScopedPersonTokens).toHaveBeenCalledWith({
+        userId: auth.user.id,
+        tokens: [token],
+        scope: { withSharedSpaces: true, timelineSpaceIds: [spaceId], spaceId: undefined },
+      });
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          albumIds: [albumId],
+          albumAccessIsBoundary: true,
+          spacePersonIds: ['space-person-1'],
+          forceEmptyResult: false,
+        }),
+      );
+    });
+
     it('rejects an albumId the caller cannot read', async () => {
       const albumId = factory.uuid();
       const auth = factory.auth();

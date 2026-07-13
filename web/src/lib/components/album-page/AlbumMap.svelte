@@ -52,8 +52,8 @@
   /**
    * Stable, value-comparable key for the $effect below. `markerOptions` is a fresh object every time
    * `filters` changes reference, and the album page reassigns `albumFilters` wholesale on every
-   * keystroke — including into text filters (description/filename/ocr) that
-   * buildAlbumMapMarkerOptions doesn't even read (M6). A Svelte `$derived` only re-notifies
+   * keystroke — including into text filters (description/filename/ocr), which
+   * buildAlbumMapMarkerOptions DOES read and forward (M6). A Svelte `$derived` only re-notifies
    * subscribers when its OUTPUT changes by value, so a plain string is what actually stops a marker
    * refetch on every keystroke — depending on `markerOptions` (an object, never `===` its previous
    * self) or `filters` directly would not.

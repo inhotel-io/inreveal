@@ -1064,11 +1064,19 @@ export class SharedSpaceService extends BaseService {
     // endpoint (map.repository.ts). Re-gating an album query by the caller's shared-space timeline
     // visibility on top of that hid pins the grid shows — whenever a shared album asset also lived
     // in a space the caller wasn't a member of, or had simply toggled out of their timeline (#656).
-    // So timelineSpaceIds is computed ONLY for the plain (non-album, non-space) query below, where it
-    // WIDENS the result to shared-space assets in the caller's timeline — skipped for a
-    // favorites-only query, whose favorites are the caller's own.
-    const needsTimelineSpaceIds =
-      !dto.spaceId && !dto.albumId && dto.withSharedSpaces === true && dto.isFavorite !== true;
+    // So for the space-scope gate itself, timelineSpaceIds only matters for the plain (non-album,
+    // non-space) query below, where it WIDENS the result to shared-space assets in the caller's
+    // timeline — skipped for a favorites-only query, whose favorites are the caller's own.
+    //
+    // BUT timelineSpaceIds has a SECOND, unrelated consumer: resolveScopedMapPersonFilters below
+    // forwards it to faceIdentityRepository.resolveScopedPersonTokens to resolve `space-person:<id>`
+    // tokens (face-identity.repository.ts's spaceMatchesScope requires timelineSpaceIds.size > 0
+    // whenever withSharedSpaces is truthy, or it treats the token as inaccessible and force-empties
+    // the whole result). That consumer is NOT conditioned on albumId — a caller can combine
+    // ?albumId=&withSharedSpaces=true&personIds=space-person:<id> — so do NOT re-add `!dto.albumId`
+    // here. On the album path this makes timelineSpaceIds inert for the gate above (albumAccessIsBoundary
+    // skips albumSharedSpaceScope) while still feeding the person-token resolution that needs it.
+    const needsTimelineSpaceIds = !dto.spaceId && dto.withSharedSpaces === true && dto.isFavorite !== true;
 
     let timelineSpaceIds: string[] | undefined;
     if (needsTimelineSpaceIds) {
