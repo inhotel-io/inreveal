@@ -65,6 +65,7 @@ packageExtensions:
       typescript: '*'
 patchedDependencies:
   '@immich/ui@0.81.1': patches/@immich__ui@0.81.1.patch
+  svelte@5.56.3: patches/svelte@5.56.3.patch
 preferWorkspacePackages: true
 shamefullyHoist: false
 verifyDepsBeforeRun: install

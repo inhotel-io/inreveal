@@ -1,0 +1,36 @@
+diff --git a/src/internal/client/reactivity/batch.js b/src/internal/client/reactivity/batch.js
+index 7d14b80519a4a2ca5e8913ed05dc4bf3a6a64447..35263db2087e06a32d3bb2dc0df63efcd9ae63f7 100644
+--- a/src/internal/client/reactivity/batch.js
++++ b/src/internal/client/reactivity/batch.js
+@@ -959,16 +959,25 @@ export class Batch {
+ 			}
+ 
+ 			if ((flags & (ROOT_EFFECT | BRANCH_EFFECT)) !== 0) {
+-				if ((flags & CLEAN) === 0) {
+-					// branch is already dirty, bail
+-					return;
++				// Gallery patch (fix: stale/unreactive asset viewer on reopen): do NOT bail when an
++				// ancestor branch is already not-CLEAN. The early bail assumes that branch is
++				// registered on a root path of some live batch, but interleaved traversals (e.g.
++				// closing and reopening the asset viewer during navigation) can reset intermediate
++				// branches to CLEAN without executing the dirty descendants, leaving effects
++				// permanently DIRTY-but-unscheduled: mark_reactions never re-schedules an
++				// already-DIRTY effect and batch traversal skips CLEAN branches, so the whole
++				// subtree stops reacting until a full page reload. Walking the entire ancestor
++				// chain and pushing the deduplicated root restores the invariant that a scheduled
++				// effect always sits under a not-CLEAN path from a queued root.
++				if ((flags & CLEAN) !== 0) {
++					e.f ^= CLEAN;
+ 				}
+-
+-				e.f ^= CLEAN;
+ 			}
+ 		}
+ 
+-		this.#roots.push(e);
++		if (!this.#roots.includes(e)) {
++			this.#roots.push(e);
++		}
+ 	}
+ 
+ 	#unlink() {
