@@ -1,4 +1,4 @@
-import { getAssetInfo, SharedSpaceRole, updateAssets, type LoginResponseDto } from '@immich/sdk';
+import { getAssetInfo, getFilteredMapMarkers, SharedSpaceRole, updateAssets, type LoginResponseDto } from '@immich/sdk';
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -41,20 +41,34 @@ const readCamera = async (accessToken: string, id: string) => {
   return { make, model, label: [make, model].filter(Boolean).join(' ') };
 };
 
+/**
+ * `commit`, not the default `load`: the asset viewer downloads the FULL-SIZE original, and waiting
+ * for the page's load event therefore waits for that image. Nothing here needs the pixels — the
+ * detail panel is driven by the asset's JSON — and the two waits below are the real barrier.
+ */
 const openDetailPanel = async (page: Page, path: string) => {
-  await page.goto(path);
+  await page.goto(path, { waitUntil: 'commit' });
   await page.waitForSelector('#immich-asset-viewer');
   await page.getByRole('button', { name: 'Info' }).click();
   await expect(page.locator('#detail-panel')).toBeVisible();
 };
 
-const markerIds = async (page: Page, accessToken: string, query: string) => {
-  const response = await page.request.get(`/api/gallery/map/markers?${query}`, {
-    headers: asBearerAuth(accessToken),
-  });
-  expect(response.status(), await response.text()).toBe(200);
-  return ((await response.json()) as Array<{ id: string }>).map((marker) => marker.id);
+/**
+ * The map's markers, straight from the API — deliberately NOT through `page.request`, which shares
+ * the browser context's cookie jar and turned this pure data-setup call into a flake.
+ */
+const markerIds = async (accessToken: string, params: Parameters<typeof getFilteredMapMarkers>[0]) => {
+  const markers = await getFilteredMapMarkers(params, { headers: asBearerAuth(accessToken) });
+  return markers.map((marker) => marker.id);
 };
+
+/**
+ * `/map` mounts MapLibre, which pulls its style and tiles from an EXTERNAL host. Waiting for the
+ * page's `load` event (waitForURL's default) therefore waits on a third party and times out under
+ * load. Nothing asserted here needs a rendered tile: the URL, the marker query and the chip bar all
+ * come from the app itself, so commit is the right barrier.
+ */
+const waitForMapUrl = (page: Page) => page.waitForURL((url) => url.pathname === '/map', { waitUntil: 'commit' });
 
 /**
  * Slice 7's headline scenario, end to end (spec §5.4/§6, plan R8, P1).
@@ -241,6 +255,9 @@ test.describe('Asset viewer contextual filters on an album and /photos', () => {
     const plain = await utils.createAsset(admin.accessToken);
     plainId = plain.id;
     await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+    // Drain the previews too: a grid tile or a viewer waiting on a thumbnail that is still queued is
+    // a page-load stall, not a filter bug.
+    await utils.waitForQueueFinish(admin.accessToken, 'thumbnailGeneration');
 
     const album = await utils.createAlbum(admin.accessToken, {
       albumName: 'Nature',
@@ -342,6 +359,9 @@ test.describe('Asset viewer contextual filters — the map handoff', () => {
     const apple = await upload(admin.accessToken, APPLE_FIXTURE);
     appleId = apple.id;
     await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+    // Drain the previews too: a grid tile or a viewer waiting on a thumbnail that is still queued is
+    // a page-load stall, not a filter bug.
+    await utils.waitForQueueFinish(admin.accessToken, 'thumbnailGeneration');
 
     // The Apple fixture is geotagged in EXIF; the Canon one is not, so give it a point of its own.
     // Both are on the map — with different cameras.
@@ -365,7 +385,7 @@ test.describe('Asset viewer contextual filters — the map handoff', () => {
     await expect(page.locator('[data-testid="detail-panel-location"]')).toBeVisible();
     await page.getByLabel('View in map').click();
 
-    await page.waitForURL((url) => url.pathname === '/map');
+    await waitForMapUrl(page);
     expect(new URL(page.url()).searchParams.get('spaceId')).toBe(spaceId);
   });
 
@@ -377,7 +397,7 @@ test.describe('Asset viewer contextual filters — the map handoff', () => {
 
     // Sanity — unfiltered, the Space's map has BOTH markers. Without it, every exclusion below could
     // pass because a fixture silently lost its GPS.
-    const unfiltered = await markerIds(page, admin.accessToken, `spaceId=${spaceId}`);
+    const unfiltered = await markerIds(admin.accessToken, { spaceId });
     expect(unfiltered.toSorted()).toEqual([canonId, appleId].toSorted());
 
     // #767's exact repro, step 1: filter the Space to the Canon, from the asset viewer.
@@ -398,7 +418,7 @@ test.describe('Asset viewer contextual filters — the map handoff', () => {
     );
     await page.locator('a[aria-label="Map"][href*="spaceId="]').click();
 
-    await page.waitForURL((url) => url.pathname === '/map');
+    await waitForMapUrl(page);
     const url = new URL(page.url());
     expect(url.searchParams.get('spaceId')).toBe(spaceId);
     expect(url.searchParams.get('make')).toBe(camera.make);
@@ -454,6 +474,9 @@ test.describe('Asset viewer contextual filters — a Space VIEWER filters anothe
     const apple = await upload(admin.accessToken, APPLE_FIXTURE);
     appleId = apple.id;
     await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+    // Drain the previews too: a grid tile or a viewer waiting on a thumbnail that is still queued is
+    // a page-load stall, not a filter bug.
+    await utils.waitForQueueFinish(admin.accessToken, 'thumbnailGeneration');
 
     // A location on A's asset, so the row renders for B — and so the missing pencil below is a real
     // absence rather than a row that was never drawn.
