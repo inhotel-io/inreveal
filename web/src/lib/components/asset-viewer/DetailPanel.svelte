@@ -75,6 +75,20 @@
   });
   const lensFilterPatch = () => ({ lensModel: asset.exifInfo?.lensModel ?? undefined });
 
+  /**
+   * The filename WITHOUT its extension — that is what surfaces a RAW/JPEG pair (IMG_1234.CR3 +
+   * IMG_1234.jpg) and edited variants of the same shot, which is the whole point of the filter.
+   *
+   * Only the LAST dot is an extension separator (`my.photo.v2.jpg` → `my.photo.v2`), and a
+   * leading-dot name (`.jpg`) has an EMPTY basename — R9: no affordance is rendered for it.
+   */
+  const getFilenameBasename = (filename: string) => {
+    const lastDot = filename.lastIndexOf('.');
+    return (lastDot === -1 ? filename : filename.slice(0, lastDot)).trim();
+  };
+
+  let filenameBasename = $derived(getFilenameBasename(asset.originalFileName));
+
   let latlng = $derived(
     (() => {
       const lat = asset.exifInfo?.latitude;
@@ -199,14 +213,25 @@
         <Text size="small" color="muted">{$t('no_exif_info_available')}</Text>
       {/if}
 
-      <DetailPanelDate {asset} />
+      <DetailPanelDate {asset} {isOwner} {canFilter} />
 
       <div class="flex gap-4 py-4" data-testid="detail-panel-filename">
         <div><Icon icon={mdiImageOutline} size="24" /></div>
 
         <div>
           <p class="flex place-items-center gap-2 break-all whitespace-pre-wrap">
-            {asset.originalFileName}
+            {#if canFilter && filenameBasename}
+              <button
+                type="button"
+                class="text-left break-all whitespace-pre-wrap hover:text-primary"
+                aria-label="{$t('filter_by_filename')}: {filenameBasename}"
+                onclick={() => applyContextualFilter({ originalFileName: filenameBasename })}
+              >
+                {asset.originalFileName}
+              </button>
+            {:else}
+              {asset.originalFileName}
+            {/if}
             {#if asset.originalPath}
               <IconButton
                 icon={mdiInformationOutline}
