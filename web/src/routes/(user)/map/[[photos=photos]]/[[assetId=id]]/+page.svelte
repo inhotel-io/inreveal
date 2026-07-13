@@ -185,9 +185,10 @@
     const options = mapMarkerOptions;
     const currentSpaceId = spaceId;
     const query = committedQuery.trim();
-    // Admin-only config: only the server can tell us whether smart search actually narrows
-    // anything (clip.maxDistance). Without a cutoff the ranked result set is the whole scoped
-    // library, so the loop below would page it to exhaustion and match every marker — see R2.
+    // Admin-only config: only the server can tell us whether machineLearning.clip.maxDistance is
+    // configured in (0, 2), which is what makes searchSmart return a cutoff-limited result set.
+    // Only then can the intersection loop below actually narrow anything — with no cutoff the
+    // ranked result set isn't narrowed, and the loop would otherwise page it to exhaustion.
     const canApplySmartSearch = featureFlagsManager.value.smartSearchHasCutoff;
 
     clearTimeout(fetchTimeout);
@@ -484,8 +485,12 @@
           </div>
         {/if}
         {#if hasUnappliedSmartSearch}
-          <div class="absolute inset-x-0 top-0 z-10 mt-12 px-4" data-testid="map-smart-search-notice" role="status">
-            <p class="rounded-lg bg-warning/90 px-4 py-2 text-sm text-dark shadow">
+          <div
+            class="pointer-events-none absolute inset-x-0 top-0 z-10 mt-12 flex justify-center px-4"
+            data-testid="map-smart-search-notice"
+            role="status"
+          >
+            <p class="pointer-events-auto rounded-lg bg-warning/90 px-4 py-2 text-sm text-dark shadow">
               {$t('map_smart_search_not_applied')}
             </p>
           </div>

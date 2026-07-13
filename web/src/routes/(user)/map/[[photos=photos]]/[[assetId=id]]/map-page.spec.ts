@@ -114,8 +114,9 @@ describe('Map page query intersection', () => {
       albums: { items: [], nextPage: null },
     } as never);
     // This whole describe block pins the pre-existing intersection loop, which only ever runs
-    // when the instance has a smart-search cutoff configured (R2/#767c) — arrange onto that
-    // instance explicitly rather than relying on an ambient default.
+    // when machineLearning.clip.maxDistance is configured in (0, 2) — a cutoff-limited
+    // smart-search result set (#767c) — arrange onto that instance explicitly rather than
+    // relying on an ambient default.
     featureFlagsMock.value = { ...featureFlagsMock.value, map: true, smartSearchHasCutoff: true };
   });
 
