@@ -37,15 +37,32 @@ The brief says "`buildMapMarkerOptions` has no `query`, so `?q=ski` cannot be ho
 
 `map/…/+page.svelte:157-205` (added by #412) already intersects markers with smart-search results client-side: it fetches all structured-filter markers, then pages `searchSmart` 100 at a time, breaking when `unmatchedMarkerIds.size === 0`, and keeps only markers whose ids appeared.
 
-That loop only narrows anything if smart search has a **relevance cutoff**. It does not, by default:
+**Be precise about what is and isn't broken here — the imprecise version of this claim is wrong and misleading.**
 
+**Smart search itself is fine without `maxDistance`.** A `searchSmart` call is `LIMIT size + 1 OFFSET …` over a distance-**ordered** result set (`:443`, `:499`), so one call returns 100 ranked hits, best first. A cutoff makes results tighter; its absence does not break search and does not dump the library on the user. Any claim like "smart search returns the whole library" is **false** — do not write it, and do not let the notice copy imply it.
+
+**What is broken is the map's paging loop**, and only because of an interaction:
+
+- `search.repository.ts:434-436` — the `(embedding <=> …) <= maxDistance` predicate is the **only** relevance `WHERE`, and it is applied `$if(hasDistanceThreshold, …)`.
 - `search.repository.ts:303-304` — `isActiveDistanceThreshold(maxDistance)` is `(maxDistance ?? 0) > 0 && … < 2`.
-- `search.repository.ts:423,435` — the `<=> maxDistance` predicate is applied only `$if(hasDistanceThreshold, …)`.
 - `config.ts:334-338` — **`machineLearning.clip.maxDistance` defaults to `0`.**
 
-So on a default install `searchSmart` returns **every asset in scope**, merely _ranked_ by embedding distance. The loop therefore keeps paging until every marker id has been seen, ends with `matchingIds ⊇ every marker`, and renders **all** markers — after firing `library_size / 100` search requests. That is precisely the reporter's "map shows everything", plus a request storm.
+So with no cutoff, nothing is _excluded_: the ordered result set is the whole scoped library, sorted by distance. The map does not take page 1 and stop — it pages `while (nextPage !== null)` until `unmatchedMarkerIds.size === 0`, and `hasNextPage = items.length > take` (`utils/pagination.ts:12`) keeps `nextPage` advancing until the library is exhausted. Every marker's asset therefore surfaces sooner or later, `matchingIds` ends up ⊇ every marker, and `markers.filter(…)` keeps **all** of them — after up to `library_size / 100` search requests.
 
-**Consequence:** Task 4 **deletes** the intersection loop rather than adding a notice beside it (a notice that said "not applied" next to a half-working filter would be a second lie). Two existing tests in `map-page.spec.ts` pin the loop and are deleted with it — they are green today only because they mock `nextPage: null` after one page, which the default server never returns. Instances that _have_ configured `clip.maxDistance > 0` lose a client-side narrowing that worked only there; the honest replacement is the spec's own follow-up (§14.1: server-side `query` on `/map/markers`).
+The bug is **"the map walks the ranked list to exhaustion, so its intersection cannot narrow"** — not "smart search is broken". Same user-visible symptom as the reporter's #767 ("map shows everything"), plus a request storm; entirely different sentence.
+
+**Two edges this also explains** (do not regress them, but do not scope-creep onto them either): assets with no `smart_search` row never appear in the results at all (`innerJoin`, `:432`), so under today's loop their markers are silently **dropped** while embeddings are still being generated — and with ML disabled outright the loop yields an empty result set and the map goes **blank** under a `q`. The gate below removes both, since the loop stops running in exactly those configurations.
+
+**Consequence — the loop is _conditionally_ correct, so Task 4 gates it rather than deleting it.** On an instance that _has_ configured `clip.maxDistance ∈ (0, 2)`, `searchSmart` genuinely returns only assets inside the cutoff, the loop terminates on real matches, and the intersection is the feature working as intended. On a default instance it narrows nothing and costs `library_size / 100` requests. Deleting it outright would fix the default install by regressing the configured one.
+
+So the server publishes **one derived boolean** and the client obeys it:
+
+- The client cannot compute this itself — `machineLearning.clip.maxDistance` is admin-only config, and the map is a user page.
+- The boolean is `smartSearchHasCutoff`, derived exactly like the existing `smartSearch` / `facialRecognition` flags: `isSmartSearchEnabled(machineLearning) && isActiveDistanceThreshold(machineLearning.clip.maxDistance)`. ML off ⇒ no cutoff ⇒ `false`, which is correct (there is nothing to intersect against).
+- It goes on **`ServerFeaturesDto`**, not `ServerConfigDto`: `ServerFeatures` is already a bag of config-derived booleans (`server.service.ts:126-130`), and the map page **already** imports `featureFlagsManager` (`+page.svelte:17`) — so the web side needs no new store wiring. (An earlier draft put it on `ServerConfigDto` beside `minFaces`; same precedent, strictly more plumbing.)
+- `smartSearchHasCutoff === true` ⇒ run the intersection loop, no notice. `false` ⇒ skip the loop entirely (no request storm) and render an explicit notice that the term is not applied.
+
+The notice therefore appears **exactly when it is telling the truth**, and no instance loses working behaviour. Carrying `q` honestly on every instance (server-side `query` on `/map/markers`) remains the spec's follow-up (§14.1) and would retire both branches.
 
 ### R3 — Album and map are **not** "searchable pages", so `buildSearchablePageUrl` cannot serve them
 
@@ -119,8 +136,8 @@ Copy it: **AlbumRead + no `userIds` + `timelineSpaceIds` computed whenever an al
 | `e2e/src/specs/server/api/gallery-map.e2e-spec.ts`               | Modify     | **Behavioural** album-scope tests: viewer sees owner pins; space asset keeps its pin |
 | `web/src/lib/route.ts`                                           | Modify     | `Route.map` gains query params → `/map?<filters>#<zoom>/<lat>/<lng>` (E11)           |
 | `web/src/lib/route.spec.ts`                                      | Modify     | `Route.map` query + hash tests (E11)                                                 |
-| `web/src/routes/(user)/map/…/+page.svelte`                       | Modify     | Map filters hydrate from / write to the URL (Slice 4b); `q` notice (Slice 5)         |
-| `web/src/routes/(user)/map/…/map-page.spec.ts`                   | Modify     | Hydrate / write tests; **delete** the two intersection tests; notice tests           |
+| `web/src/routes/(user)/map/…/+page.svelte`                       | Modify     | Map filters hydrate from / write to the URL (Slice 4b); gated `q` notice (Slice 5)   |
+| `web/src/routes/(user)/map/…/map-page.spec.ts`                   | Modify     | Hydrate / write tests; **re-point** the two intersection tests at the gate; notice   |
 | `web/src/lib/components/spaces/space-map.svelte`                 | Modify     | Build the map URL from the space's live filter state (#767 a, E10)                   |
 | `web/src/lib/components/spaces/space-map.spec.ts`                | Modify     | Link carries `spaceId` + `q` + filters                                               |
 | `web/src/routes/(user)/spaces/[spaceId]/…/+page.svelte`          | Modify     | Pass `filters` + `searchQuery` into `<SpaceMap>` (`:994`)                            |
@@ -128,6 +145,10 @@ Copy it: **AlbumRead + no `userIds` + `timelineSpaceIds` computed whenever an al
 | `web/src/lib/utils/__tests__/map-filter-options.spec.ts`         | Modify     | Tests for the album marker options                                                   |
 | `web/src/lib/components/album-page/AlbumMap.svelte`              | Modify     | Optional `filters` prop → filtered markers + abort/stale guards                      |
 | `web/src/lib/components/album-page/__tests__/AlbumMap.spec.ts`   | **Create** | Filtered vs shared-link marker source; no toast on a superseded request              |
+| `server/src/dtos/server.dto.ts`                                  | Modify     | `ServerFeaturesSchema` gains `smartSearchHasCutoff` (Slice 5)                        |
+| `server/src/services/server.service.ts`                          | Modify     | Derive `smartSearchHasCutoff` in `getFeatures()` (Slice 5)                           |
+| `server/src/services/server.service.spec.ts`                     | Modify     | `smartSearchHasCutoff` true/false/ML-off cases (Slice 5)                             |
+| `open-api/…` (generated)                                         | Regenerate | SDK carries the new feature flag (`make open-api`)                                   |
 | `i18n/en.json`                                                   | Modify     | `map_smart_search_not_applied` (Slice 5)                                             |
 
 ---
@@ -1990,26 +2011,119 @@ URL-backed and building every map link from live filter state:
 
 **Files:**
 
+- Modify: `server/src/dtos/server.dto.ts`, `server/src/services/server.service.ts`, `server/src/services/server.service.spec.ts`
+- Regenerate: OpenAPI + SDK (`make open-api`)
 - Modify: `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/+page.svelte`, `…/map-page.spec.ts`
 - Modify: `i18n/en.json`
 
-**Read Reality check R2 first.** The map's existing `q` handling is a client-side intersection against `searchSmart` (`+page.svelte:157-205`) that, under the default `machineLearning.clip.maxDistance: 0`, has **no relevance cutoff** — so it pages the whole library and ends up keeping every marker. It does not filter; it just costs `library_size / 100` requests to render the same full map. This task removes it and replaces it with an explicit notice.
+**Read Reality check R2 first.** The map's existing `q` handling is a client-side intersection against `searchSmart` (`+page.svelte:157-205`). It is **conditionally correct**: with `machineLearning.clip.maxDistance ∈ (0, 2)` it genuinely narrows; with the default `0` it has no relevance cutoff, so it pages the whole library and keeps every marker — costing `library_size / 100` requests to render the same full map.
+
+The client cannot tell which world it is in (`maxDistance` is admin-only config). So the **server publishes the fact** and the map obeys it:
+
+- Cutoff configured ⇒ run the loop exactly as today. **No behaviour change, no regression.**
+- No cutoff (the default) ⇒ **skip the loop entirely** (no request storm) and say plainly that the smart-search term is not applied.
+
+This is a **gate**, not a deletion: the loop, `buildSmartSearchParams`, `SvelteSet`, the `searchSmart` import and the two existing tests that pin the loop all **stay**. Do not delete them.
 
 **Interfaces:**
 
-- Produces: i18n key `map_smart_search_not_applied`.
-- Consumes: nothing new. `committedQuery` (`+page.svelte:50`) already reads `?q=` and the `ActiveFiltersBar` already renders it as a clearable chip (`:321-325`) — that chip is exactly what makes the current silence dishonest, and it stays.
+- Produces: `ServerFeaturesDto.smartSearchHasCutoff: boolean`; i18n key `map_smart_search_not_applied`.
+- Consumes: `featureFlagsManager` — **already imported** by the map page (`+page.svelte:17`, used at `:242` / `:260`), so no new store wiring.
+- `committedQuery` (`+page.svelte:50`) already reads `?q=` and `ActiveFiltersBar` already renders it as a clearable chip (`:321-325`) — that chip is what makes today's silence dishonest, and it stays.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1a: Server — failing test for the derived flag**
+
+In `server/src/services/server.service.spec.ts`, inside the existing `describe('getFeatures', …)`, append:
+
+```ts
+it('reports a smart-search cutoff when clip.maxDistance is an active threshold', async () => {
+  mocks.systemMetadata.get.mockResolvedValue({
+    machineLearning: { enabled: true, clip: { enabled: true, maxDistance: 1.2 } },
+  });
+
+  await expect(sut.getFeatures()).resolves.toMatchObject({ smartSearchHasCutoff: true });
+});
+
+it('reports no smart-search cutoff on the default maxDistance of 0', async () => {
+  mocks.systemMetadata.get.mockResolvedValue({
+    machineLearning: { enabled: true, clip: { enabled: true, maxDistance: 0 } },
+  });
+
+  await expect(sut.getFeatures()).resolves.toMatchObject({ smartSearchHasCutoff: false });
+});
+
+it('reports no smart-search cutoff when machine learning is disabled entirely', async () => {
+  mocks.systemMetadata.get.mockResolvedValue({
+    machineLearning: { enabled: false, clip: { enabled: true, maxDistance: 1.2 } },
+  });
+
+  await expect(sut.getFeatures()).resolves.toMatchObject({ smartSearchHasCutoff: false });
+});
+```
+
+Match the surrounding tests' arrangement style for `mocks.systemMetadata.get` — read the existing `getFeatures` block first and mirror it rather than copying the shape above verbatim; a partial config mock must still merge over `defaults`.
+
+Run:
+
+```bash
+cd server && pnpm test -- --run src/services/server.service.spec.ts
+```
+
+Expected: **FAIL** — three failures, each `smartSearchHasCutoff: undefined` not matching the expected boolean.
+
+- [ ] **Step 1b: Server — add the flag**
+
+In `server/src/dtos/server.dto.ts`, add to `ServerFeaturesSchema` (`:132-…`), keeping it beside the other machine-learning booleans:
+
+```ts
+smartSearch: z.boolean().describe('Whether smart search is enabled'),
+smartSearchHasCutoff: z
+  .boolean()
+  .describe('Whether smart search has an active relevance cutoff (clip.maxDistance)'),
+```
+
+In `server/src/services/server.service.ts`, `getFeatures()` (`:126-130`) — derive it exactly like its neighbours:
+
+```ts
+smartSearch: isSmartSearchEnabled(machineLearning),
+smartSearchHasCutoff:
+  isSmartSearchEnabled(machineLearning) && isActiveDistanceThreshold(machineLearning.clip.maxDistance),
+```
+
+Import `isActiveDistanceThreshold` from `src/repositories/search.repository` (it is already exported at `:303`; server forbids relative imports). Reusing it — rather than re-writing `maxDistance > 0` inline — is the point: the flag and the query predicate must never drift apart.
+
+Run the same command.
+
+Expected: **PASS** — the three new tests and the whole existing `server.service.spec.ts`.
+
+- [ ] **Step 1c: Regenerate the SDK**
+
+```bash
+cd server && pnpm build && pnpm sync:open-api && cd .. && make open-api
+```
+
+Then confirm the flag reached the TypeScript SDK (the web build consumes it):
+
+```bash
+grep -rn "smartSearchHasCutoff" open-api/typescript-sdk/src/fetch-client.ts
+```
+
+Expected: it appears on `ServerFeaturesDto`. Commit the regenerated `open-api/` output with the rest (this branch already carries one SDK regen, `fd40935e4f`).
+
+- [ ] **Step 2: Web — write the failing tests**
 
 In `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts`:
 
-**Delete** these two tests, which pin the intersection loop:
+**Keep both intersection tests** — `it('intersects map markers with paginated searchSmart ids when q is present', …)` (`:152-176`) and `it('stops paging once every currently fetched marker id has been matched', …)` (`:178-193`). They now describe the **cutoff-configured** instance, which is a real supported configuration. Arrange them onto it explicitly (see the mock below): set `smartSearchHasCutoff: true` in their `beforeEach`, or per-test if the file's structure makes that cleaner. Do **not** leave them relying on an ambient default — the whole point of this task is that the two worlds are now distinguishable, so each test must say which one it is in.
 
-- `it('intersects map markers with paginated searchSmart ids when q is present', …)` (`:152-176`)
-- `it('stops paging once every currently fetched marker id has been matched', …)` (`:178-193`)
+The map page reads `featureFlagsManager.value` (`:17`, `:242`, `:260`), so the spec must already stub it. **Find that existing stub and extend it** with `smartSearchHasCutoff`; do not add a second competing mock. If the stub is a shared object, give it a per-test override, e.g.:
 
-They are green today only because they mock `nextPage: null` after one page — a response the default server never produces (R2). Also drop the now-dead `sdkMock.searchSmart` arrangements: the one in the `beforeEach` (`:99-102`) and the `mockResolvedValueOnce` inside `shows the add-all-to-collection button when the map is filtered with markers` (`:278-281` — that test keeps working, because with `q=beach` the map still has an active filter and one marker). Keep the assertion `expect(sdkMock.searchSmart).not.toHaveBeenCalled()` in `keeps the existing marker flow when q is absent` (`:118`) — it now holds unconditionally, which is the point.
+```ts
+// alongside the file's existing featureFlagsManager mock
+featureFlagsMock.value = { ...featureFlagsMock.value, map: true, smartSearchHasCutoff: false };
+```
+
+Note `featureFlagsManager.value` is a **throwing getter** when unloaded (`feature-flags-manager.svelte.ts:17-22`) — an under-specified mock fails loudly rather than silently defaulting, which is what we want.
 
 Then append:
 
@@ -2022,6 +2136,8 @@ describe('Map page smart-search honesty (#767c)', () => {
     mockPage.url = new URL('https://gallery.test/map');
     sdkMock.getTimeBuckets.mockResolvedValue([]);
     sdkMock.getFilteredMapMarkers.mockResolvedValue([]);
+    // Default instance: clip.maxDistance = 0 ⇒ smart search cannot narrow anything.
+    featureFlagsMock.value = { ...featureFlagsMock.value, map: true, smartSearchHasCutoff: false };
   });
 
   afterEach(() => {
@@ -2042,11 +2158,34 @@ describe('Map page smart-search honesty (#767c)', () => {
       expect(screen.getByTestId('map-smart-search-notice')).toBeInTheDocument();
     });
 
-    // No client-side "intersection" that pages the entire library and narrows nothing (R2).
+    // The loop that pages the entire library and narrows nothing never runs here (R2).
     expect(sdkMock.searchSmart).not.toHaveBeenCalled();
     // The markers matching the structured filters are still shown — not a silent full library, and
     // not a silently empty map either.
     expect(screen.getByTestId('map-stub')).toHaveAttribute('data-marker-ids', 'asset-1');
+  });
+
+  it('intersects and shows NO notice when the instance has a smart-search cutoff', async () => {
+    // The regression guard for the configured instance: this is the test that fails if someone
+    // "simplifies" the gate away by deleting the loop.
+    featureFlagsMock.value = { ...featureFlagsMock.value, smartSearchHasCutoff: true };
+    mockPage.url = new URL('https://gallery.test/map?q=ski');
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([
+      { id: 'asset-1', lat: 1, lon: 2 } as never,
+      { id: 'asset-2', lat: 3, lon: 4 } as never,
+    ]);
+    sdkMock.searchSmart.mockResolvedValue({
+      assets: { items: [{ id: 'asset-2' }], nextPage: null },
+    } as never);
+
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() => expect(sdkMock.searchSmart).toHaveBeenCalled());
+    // Narrowed to the semantic match…
+    await waitFor(() => expect(screen.getByTestId('map-stub')).toHaveAttribute('data-marker-ids', 'asset-2'));
+    // …and no notice, because the term genuinely WAS applied.
+    expect(screen.queryByTestId('map-smart-search-notice')).not.toBeInTheDocument();
   });
 
   it('shows no notice when there is no smart-search term', async () => {
@@ -2077,9 +2216,9 @@ Run:
 cd web && pnpm test --run "src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts"
 ```
 
-Expected: **FAIL** — `map-smart-search-notice` does not exist (`Unable to find an element by: [data-testid="map-smart-search-notice"]`), and `expect(sdkMock.searchSmart).not.toHaveBeenCalled()` fails because the intersection loop still runs.
+Expected: **FAIL** — `map-smart-search-notice` does not exist (`Unable to find an element by: [data-testid="map-smart-search-notice"]`), and `expect(sdkMock.searchSmart).not.toHaveBeenCalled()` fails in the first test because the loop still runs unconditionally. The cutoff-enabled test should already **pass** (it describes today's behaviour) — if it fails, the `featureFlagsMock` stub is wrong and must be fixed before proceeding, not worked around.
 
-- [ ] **Step 2: Add the i18n key**
+- [ ] **Step 3: Add the i18n key**
 
 In `i18n/en.json` (**English only** — other locales fall back; the directory is shared with mobile). Top-level keys are alphabetical, so the key belongs among the existing `map_*` block (`:1902-1920`), **not** after `maintenance_title`: insert it between `"map_settings_theme_settings"` (`:1920`) and `"mark_all_as_read"` (`:1921`) — `map_se…` < `map_sm…` < `mark…`.
 
@@ -2089,59 +2228,44 @@ In `i18n/en.json` (**English only** — other locales fall back; the directory i
   "mark_all_as_read": "Mark all as read",
 ```
 
-- [ ] **Step 3: Delete the intersection loop and render the notice**
+- [ ] **Step 4: Gate the intersection loop and render the notice**
 
-In `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/+page.svelte`:
+In `web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/+page.svelte`.
 
-**3a.** Replace the whole marker-fetch `$effect` (`:136-220`) with the structured-only fetch:
+**Do not restructure the `$effect`.** The whole change is a gate on the existing early-return, plus a derived flag and the notice markup. The loop, `buildSmartSearchParams`, `SvelteSet` and the `searchSmart` import all **stay** — they are live code on a cutoff-configured instance. There are no unused imports to remove.
 
-```ts
-$effect(() => {
-  // Read the derived options before the debounce callback so filter changes are tracked as
-  // dependencies of this effect.
-  const options = mapMarkerOptions;
-
-  clearTimeout(fetchTimeout);
-  queryAbortController?.abort();
-  const controller = new AbortController();
-  queryAbortController = controller;
-
-  fetchTimeout = setTimeout(() => {
-    void (async () => {
-      try {
-        const markers = await getFilteredMapMarkers(options);
-        if (controller.signal.aborted) {
-          return;
-        }
-        mapMarkers = markers;
-      } catch (error: unknown) {
-        if (controller.signal.aborted) {
-          return;
-        }
-        console.error('Failed to fetch filtered map markers:', error);
-        mapMarkers = [];
-      }
-    })();
-  }, SEARCH_FILTER_DEBOUNCE_MS);
-
-  return () => {
-    clearTimeout(fetchTimeout);
-    controller.abort();
-  };
-});
-```
-
-**Why the `q` intersection goes away rather than staying alongside the notice:** `/gallery/map/markers` has no embedding search, so the page paged `searchSmart` and kept the markers whose ids came back. But smart search applies its distance threshold only when `machineLearning.clip.maxDistance` is in `(0, 2)` (`search.repository.ts:303-304, 423-435`) and that setting **defaults to `0`** (`config.ts:337`) — so by default `searchSmart` returns the entire library merely _ranked_, the loop pages until every marker id has been seen, and the map renders **all** markers anyway. It narrowed nothing and cost one request per 100 assets. Carrying `q` honestly (server-side `query` on `/map/markers`) is the spec's follow-up (§14.1).
-
-**3b.** Delete the now-unused imports: `searchSmart` from `@immich/sdk` (`:29`), `buildSmartSearchParams` from `$lib/utils/space-search` (`:23` — **keep `SEARCH_FILTER_DEBOUNCE_MS`**), and `SvelteSet` from `svelte/reactivity` (`:36` — **keep `SvelteMap`**). Leaving any of them behind is a lint **error** (`no-unused-vars`), not a warning.
-
-**3c.** Add the derived flag next to `hasActiveFilters` (`:95`):
+**4a.** In the marker-fetch `$effect` (`:136-220`), read the flag alongside the other tracked values (`:139-141`) so the effect re-runs if it resolves late:
 
 ```ts
-const hasUnappliedSmartSearch = $derived(committedQuery.trim().length > 0);
+const options = mapMarkerOptions;
+const currentSpaceId = spaceId;
+const query = committedQuery.trim();
+// Admin-only config: only the server can tell us whether smart search actually narrows
+// anything (clip.maxDistance). Without a cutoff the ranked result set is the whole scoped
+// library, so the loop below would page it to exhaustion and match every marker — see R2.
+const canApplySmartSearch = featureFlagsManager.value.smartSearchHasCutoff;
 ```
 
-**3d.** Render the notice. Put it directly under the `ActiveFiltersBar` overlay (`:317-335`), inside the same absolutely-positioned column, so it sits with the chip that shows the search term:
+Then widen the existing early return (`:157-160`) — this is the entire behavioural change:
+
+```ts
+if (!query || !canApplySmartSearch) {
+  mapMarkers = markers;
+  return;
+}
+```
+
+Everything below it (the `markers.length === 0` guard, the paging loop, the final `markers.filter`) is untouched.
+
+**4b.** Add the derived flag next to `hasActiveFilters` (`:95`):
+
+```ts
+const hasUnappliedSmartSearch = $derived(
+  committedQuery.trim().length > 0 && !featureFlagsManager.value.smartSearchHasCutoff,
+);
+```
+
+**4c.** Render the notice. Put it directly under the `ActiveFiltersBar` overlay (`:317-335`), inside the same absolutely-positioned column, so it sits with the chip that shows the search term:
 
 ```svelte
         {#if hasUnappliedSmartSearch}
@@ -2159,40 +2283,52 @@ const hasUnappliedSmartSearch = $derived(committedQuery.trim().length > 0);
 
 Keep the existing `noResults` overlay (`:351-359`) as is.
 
-- [ ] **Step 4: Verify GREEN**
+- [ ] **Step 5: Verify GREEN**
 
 ```bash
 cd web && pnpm test --run "src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts"
 ```
 
-Expected: **PASS** — the three new tests plus every remaining pre-existing test in the file (the two intersection tests are gone).
+Expected: **PASS** — the four new tests **and** both pre-existing intersection tests (now explicitly arranged onto a cutoff-configured instance), plus everything else in the file.
 
-- [ ] **Step 5: Full web gate**
+- [ ] **Step 6: Full gate (server + web)**
 
 ```bash
-cd web && pnpm test --run && pnpm check:typescript && pnpm lint
+cd server && pnpm test -- --run src/services/server.service.spec.ts && pnpm check
+cd ../web && pnpm test --run && pnpm check:typescript && pnpm lint
 ```
 
-Expected: the whole web suite passes; typecheck clean; lint **0 errors** (≈640 pre-existing `better-tailwindcss` warnings). Do **not** `eslint --fix`.
+Expected: server tests + typecheck clean; the whole web suite passes; typecheck clean; lint **0 errors** (≈640 pre-existing `better-tailwindcss` warnings). Do **not** `eslint --fix`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add "web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/+page.svelte" \
+git add server/src/dtos/server.dto.ts server/src/services/server.service.ts \
+        server/src/services/server.service.spec.ts open-api \
+        "web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/+page.svelte" \
         "web/src/routes/(user)/map/[[photos=photos]]/[[assetId=id]]/map-page.spec.ts" \
         i18n/en.json
-git commit -m "fix(map): be honest about smart search on the map (#767c)
+git commit -m "fix(map): only intersect ?q= when smart search can actually narrow (#767c)
 
 The map applied ?q= by paging searchSmart and keeping the markers whose ids came
-back. That only narrows anything when a CLIP distance threshold is active, and
-machineLearning.clip.maxDistance defaults to 0 — so by default smart search
-returns the whole library merely ranked, the loop paged until every marker had
-been seen, and the map rendered the entire library anyway, at one request per 100
-assets.
+back. That intersection only narrows when a CLIP distance threshold is active:
+the distance predicate is applied conditionally, so without a cutoff nothing is
+excluded and the ranked result set is the whole scoped library. The loop paged it
+to exhaustion, matched every marker, and rendered them all anyway — at one request
+per 100 assets. machineLearning.clip.maxDistance defaults to 0, so that was the
+default experience.
 
-The map now applies every structured filter and states plainly that the
-smart-search term is not applied, instead of silently showing everything. Carrying
-q to /map/markers needs server-side embedding support and is the spec's follow-up."
+Smart search itself is unaffected and works fine without a cutoff; this was only
+ever about the map's client-side intersection.
+
+ServerFeaturesDto now publishes smartSearchHasCutoff (derived, like the other ML
+feature flags — the client cannot read admin config). The map intersects only when
+it is true, and otherwise applies every structured filter and states plainly that
+the smart-search term is not applied, instead of silently showing everything.
+Instances with a cutoff configured keep the behaviour they had.
+
+Carrying q to /map/markers on every instance needs server-side embedding support
+and remains the spec's follow-up."
 ```
 
 ---
@@ -2203,5 +2339,7 @@ q to /map/markers needs server-side embedding support and is the spec's follow-u
 - Album filters survive a **reload**, **back/forward** and a **shared URL**; a transient year survives a URL-writing filter change (`pendingFilterUrlSync` is exercised, not just present); a stray `?albumId=` on an album page is ignored (E9); picker filters stay out of the URL.
 - The map page hydrates its filters from the URL and writes them back; `Route.map` emits `/map?<filters>#<zoom>/<lat>/<lng>` (E11) and all five existing callers still resolve to their old output; the space map link carries `spaceId` **and** the active filters **and** `q` (E10, #767a); the album map honors the album's filters, refetches when they change, and neither toasts nor renders stale markers when a request is superseded.
 - `/gallery/map/markers?albumId=…` is scoped by album **access**, not asset owner — and an **e2e** test proves it: a viewer of a shared album sees the owner's pins (#656 class), and an album asset that also lives in a shared space keeps its pin (the R4 regression). `spaceId` + `albumId` is a 400, and the map page never sends the combination.
-- With `?q=` on the map, every structured filter is applied and an explicit notice says the smart-search term is not; with no `q`, no notice renders. The map never silently shows the full library.
+- `ServerFeaturesDto.smartSearchHasCutoff` is derived from `isSmartSearchEnabled(ml) && isActiveDistanceThreshold(ml.clip.maxDistance)` and reaches the SDK.
+- On an instance **with** a cutoff, the map still intersects `?q=` exactly as before and shows **no** notice — no regression, and a test pins it.
+- On an instance **without** one (the default), the map applies every structured filter, never fires the paging loop, and an explicit notice says the smart-search term is not applied. With no `q`, no notice renders. The map never silently shows the full library, and never silently blanks under a `q` because embeddings are missing.
 - `web/src/lib/utils/__tests__/searchable-page-search.spec.ts` is untouched and green; `/photos` and `/spaces` behave exactly as before.
