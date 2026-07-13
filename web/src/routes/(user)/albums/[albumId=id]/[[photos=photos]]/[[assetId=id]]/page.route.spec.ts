@@ -492,6 +492,20 @@ describe('album detail filter panel route', () => {
     expect(screen.queryByTestId('add-all-to-collection')).not.toBeInTheDocument();
   });
 
+  // Slice 6 — the owner chip on an album is named from the album users the page already holds, so
+  // it costs no request. (There is no album chip here: E9 drops `?albumId=` at hydrate.)
+  it('names the owner chip from the album users in scope, without a request', async () => {
+    const album = albumFactory.build({ id: 'album-1', assetCount: 2 });
+    const owner = album.albumUsers[0].user;
+    mockPage.url = new URL(`https://gallery.test/albums/album-1?owner=${owner.id}`);
+
+    renderPage(album);
+
+    await waitFor(() => expect(screen.getByTestId('active-filters-bar')).toHaveTextContent(owner.name));
+    expect(screen.getByTestId('active-filters-bar')).not.toHaveTextContent(owner.id);
+    expect(sdkMock.getUser).not.toHaveBeenCalled();
+  });
+
   // Nested (not a sibling describe) so it shares this outer describe's beforeEach — the mockPage
   // reset and gotoMock re-arm above are what make the round-trip tests below load-bearing.
   describe('album detail filters are URL-backed', () => {

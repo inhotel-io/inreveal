@@ -91,6 +91,7 @@
   } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider, ImageCarousel, modalManager } from '@immich/ui';
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
+  import { resolveFilterNames } from '$lib/utils/filter-name-resolution';
   import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
   import type { SearchTerms } from '$lib/services/search.service';
   import { mdiDotsVertical } from '@mdi/js';
@@ -136,7 +137,15 @@
   });
   let personNames = new SvelteMap<string, string>();
   let tagNames = new SvelteMap<string, string>();
+  // Album/owner chips have no suggestions feeder and no session-cached name (a shared link and a
+  // reload both arrive with nothing), so they are resolved by id, once, on demand — otherwise the
+  // chip renders a raw UUID.
+  let albumNames = new SvelteMap<string, string>();
+  let ownerNames = new SvelteMap<string, string>();
   consumeTypedSearchNamesInto(page.url.pathname + page.url.search, personNames, tagNames);
+  $effect(() => {
+    void resolveFilterNames(filters, { albumNames, ownerNames });
+  });
   $effect(() => globalSearchManager.registerSearchablePageFilters(() => filters));
   let smartFacets = $state<SmartSearchFacetsResponseDto>();
   let smartFacetKey = $state('');
@@ -565,6 +574,8 @@
           resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
           {personNames}
           {tagNames}
+          {albumNames}
+          {ownerNames}
           onRemoveFilter={handleRemoveActiveFilter}
           onClearAll={handleClearAllFilters}
           onAddAllToCollection={handleAddAllToCollection}
