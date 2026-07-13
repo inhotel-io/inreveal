@@ -407,6 +407,12 @@ describe('handlePhotosRemoveFilter', () => {
     expect(result.selectedMonth).toBeUndefined();
   });
 
+  it('clears ownerId for the owner chip (delegates to the shared handleRemoveFilter)', () => {
+    const filters = { ...createFilterState(), ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb' };
+    const result = handlePhotosRemoveFilter(filters, 'owner');
+    expect(result.ownerId).toBeUndefined();
+  });
+
   it('clears only temporal filters through the timeline chip removal path', () => {
     const filters = {
       ...createFilterState(),
