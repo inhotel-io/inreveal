@@ -128,7 +128,7 @@
   let isLoading = $state(false);
   const showSearchResults = $derived(committedQuery.trim().length > 0);
   const options = $derived({
-    ...buildPhotosTimelineOptions(filters),
+    ...buildPhotosTimelineOptions(filters, authManager.user.id),
     grouping: timelineGrouping,
   });
   $effect(() => {
