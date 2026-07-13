@@ -116,11 +116,18 @@ export function buildFilterStateUrl(url: URL, filters: FilterState): string {
   return url.pathname + (search ? `?${search}` : '') + url.hash;
 }
 
-/** Order-insensitive canonical form of a query string: `a=1&b=2` and `b=2&a=1` collapse to one. */
+/**
+ * Order-insensitive canonical form of a query string: `a=1&b=2` and `b=2&a=1` collapse to one.
+ *
+ * Each entry is percent-encoded before it is joined. The free-text filters (description, filename,
+ * ocr) can legitimately contain `&` and `=`, so joining raw values would let one entry impersonate
+ * two — `description=x&make=Apple` as a single value would canonicalise identically to a separate
+ * `description=x` plus `make=Apple`, and the guard below would call a real filter change a no-op.
+ */
 function canonicalizeParams(params: URLSearchParams): string {
   return [...params.entries()]
     .sort(([keyA, valueA], [keyB, valueB]) => keyA.localeCompare(keyB) || valueA.localeCompare(valueB))
-    .map(([key, value]) => `${key}=${value}`)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
     .join('&');
 }
 

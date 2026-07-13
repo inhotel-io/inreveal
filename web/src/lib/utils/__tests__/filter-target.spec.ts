@@ -273,4 +273,14 @@ describe('isFilterStateUrlUnchanged', () => {
     expect(isFilterStateUrlUnchanged(url, '/albums/al1?spaceId=s1#12/52.52/13.4')).toBe(false);
     expect(isFilterStateUrlUnchanged(url, '/map?spaceId=s1')).toBe(false);
   });
+
+  // The free-text filters (description, filename, ocr) may contain `&` and `=`. Canonicalising by
+  // joining raw values would let ONE entry impersonate TWO — the single description below would
+  // read as `description=x` plus `make=Apple` — and the guard would swallow a real filter change.
+  it('is false when a free-text value merely looks like a second param', () => {
+    const url = new URL('https://g.test/photos');
+    url.searchParams.set('description', 'x&make=Apple');
+
+    expect(isFilterStateUrlUnchanged(url, '/photos?description=x&make=Apple')).toBe(false);
+  });
 });
