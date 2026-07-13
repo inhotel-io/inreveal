@@ -50,6 +50,7 @@
   import { buildSpaceTimelineOptions, handleSpaceRemoveFilter } from '$lib/utils/space-filter-options';
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
   import type { SearchTerms } from '$lib/services/search.service';
+  import { resolveFilterNames } from '$lib/utils/filter-name-resolution';
   import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
   import {
     type ActivatableTimelineBucket,
@@ -111,6 +112,8 @@
     };
     personNames.clear();
     tagNames.clear();
+    albumNames.clear();
+    ownerNames.clear();
     consumeTypedSearchNamesInto(page.url.pathname + page.url.search, personNames, tagNames);
     isLoading = false;
     smartFacetInFlight?.controller.abort();
@@ -155,7 +158,18 @@
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let personNames = new SvelteMap<string, string>();
   let tagNames = new SvelteMap<string, string>();
+  let albumNames = new SvelteMap<string, string>();
+  let ownerNames = new SvelteMap<string, string>();
   consumeTypedSearchNamesInto(page.url.pathname + page.url.search, personNames, tagNames);
+  // An owner chip inside a Space is always a member, and the members are already in scope — seed
+  // the map from them so resolveFilterNames never issues a request for it. Only an `albumId` chip
+  // (no local source) falls through to a by-id fetch.
+  $effect(() => {
+    for (const member of members) {
+      ownerNames.set(member.userId, member.name);
+    }
+    void resolveFilterNames(filters, { albumNames, ownerNames });
+  });
   $effect(() => globalSearchManager.registerSearchablePageFilters(() => filters));
   let smartFacets = $state<SmartSearchFacetsResponseDto>();
   let smartFacetKey = $state('');
@@ -830,6 +844,8 @@
         resultCount={showSearchResults ? smartFacetTotal : totalAssetCount}
         {personNames}
         {tagNames}
+        {albumNames}
+        {ownerNames}
         onRemoveFilter={handleRemoveFilter}
         onClearAll={handleClearAllFilters}
         searchQuery={committedSearchQuery}

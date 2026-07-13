@@ -41,6 +41,7 @@
   import { IconButton, modalManager } from '@immich/ui';
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
   import type { SearchTerms } from '$lib/services/search.service';
+  import { resolveFilterNames } from '$lib/utils/filter-name-resolution';
   import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
   import { lang } from '$lib/stores/preferences.store';
   import { SvelteMap, SvelteSet } from 'svelte/reactivity';
@@ -108,6 +109,13 @@
   let timeBuckets = $state<Array<{ timeBucket: string; count: number }>>([]);
   let personNames = new SvelteMap<string, string>();
   let tagNames = new SvelteMap<string, string>();
+  // /map?albumId=… and ?ownerId=… survive a reload and travel in a shared link, and nothing on this
+  // page knows their names — resolve them by id, once, so the chip is a name and not a UUID.
+  let albumNames = new SvelteMap<string, string>();
+  let ownerNames = new SvelteMap<string, string>();
+  $effect(() => {
+    void resolveFilterNames(filters, { albumNames, ownerNames });
+  });
 
   const filterConfig = $derived.by(() => {
     const base = buildMapFilterConfig(spaceId);
@@ -456,6 +464,8 @@
               onClearSearch={clearCommittedQuery}
               {personNames}
               {tagNames}
+              {albumNames}
+              {ownerNames}
               onRemoveFilter={(type, id) => {
                 filters = handlePhotosRemoveFilter(filters, type, id);
                 syncMapFilterUrl(filters);

@@ -65,6 +65,7 @@
   import { buildAlbumAssetPickerFilterConfig, buildAlbumDetailFilterConfig } from '$lib/utils/album-filter-config';
   import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
+  import { resolveFilterNames } from '$lib/utils/filter-name-resolution';
   import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
   import { buildFilterStateUrl, isFilterStateUrlUnchanged, withoutAtParam } from '$lib/utils/filter-target';
   import { decodeFilterParams } from '$lib/utils/filter-url';
@@ -144,8 +145,21 @@
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let albumPersonNames = new SvelteMap<string, string>();
   let albumTagNames = new SvelteMap<string, string>();
+  let albumOwnerNames = new SvelteMap<string, string>();
+  // Never populated: E9 drops `?albumId=` at hydrate, so an album chip can never appear on this
+  // page. It exists only to satisfy resolveFilterNames' map pair.
+  let albumAlbumNames = new SvelteMap<string, string>();
   let pickerPersonNames = new SvelteMap<string, string>();
   let pickerTagNames = new SvelteMap<string, string>();
+  // An `?ownerId=` chip on an album is (all but always) one of the album's users, and they are
+  // already in scope — seed from them so no request is made. resolveFilterNames only falls through
+  // to a by-id fetch for an owner who is not an album user (a space contributor, say).
+  $effect(() => {
+    for (const { user } of album.albumUsers) {
+      albumOwnerNames.set(user.id, user.name);
+    }
+    void resolveFilterNames(albumFilters, { albumNames: albumAlbumNames, ownerNames: albumOwnerNames });
+  });
   let viewMode: AlbumPageViewMode = $state(AlbumPageViewMode.VIEW);
   let timelineManager = $state<TimelineManager>() as TimelineManager;
   let showAlbumUsers = $derived(timelineManager?.showAssetOwners ?? false);
@@ -615,6 +629,7 @@
                 resultCount={totalAssetCount}
                 personNames={albumPersonNames}
                 tagNames={albumTagNames}
+                ownerNames={albumOwnerNames}
                 onRemoveFilter={(type, id) => {
                   if (type === 'timeline') {
                     clearAlbumTemporalFilter();

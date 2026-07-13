@@ -494,6 +494,43 @@ describe('Map page filters are URL-backed', () => {
     );
   });
 
+  // Slice 6 — this suite renders the REAL ActiveFiltersBar, so it is where the album chip's label is
+  // pinned end to end: a pasted/reloaded `?albumId=` link has no session-cached name and no
+  // suggestions feeder, so without by-id resolution the chip degrades to a raw UUID — the headline
+  // failure mode of a shareable filter URL.
+  it('names the album chip by id instead of showing the raw album id', async () => {
+    sdkMock.getAlbumInfo.mockResolvedValue({ id: 'album-9', albumName: 'Iceland 2026' } as never);
+    mockPage.url = new URL('https://gallery.test/map?albumId=album-9');
+
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() => {
+      expect(sdkMock.getAlbumInfo).toHaveBeenCalledWith({ id: 'album-9' });
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('Iceland 2026');
+    });
+    expect(screen.getByTestId('active-filters-bar')).not.toHaveTextContent('album-9');
+  });
+
+  // The real ✕, clicked on the real chip, inside a space scope (the spec's BDD: "and likewise when I
+  // click it inside a Space") — the lens filter must leave the URL, and the space scope must stay.
+  it('clears a lens chip from the URL when its ✕ is clicked in a space-scoped map', async () => {
+    mockPage.url = new URL('https://gallery.test/map?spaceId=space-1&lens=RF24-70mm');
+
+    renderPage();
+    await flushQueryDebounce();
+
+    const chips = await screen.findAllByTestId('active-chip');
+    const lensChip = chips.find((chip) => chip.textContent?.includes('RF24-70mm'));
+    expect(lensChip).toBeDefined();
+    await fireEvent.click(lensChip!.querySelector('[data-testid="chip-close"]')!);
+
+    await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+    const [target] = gotoMock.mock.calls.at(-1) as [string];
+    expect(target).not.toContain('lens=');
+    expect(target).toContain('spaceId=space-1');
+  });
+
   // Finding 1 (#767 fresh instance): clearing the temporal chip INSIDE the timeline panel used to
   // only mutate the bound `filters` — the page never wrote the URL back, so from/to survived a
   // reload/Back/shared link. MapTimelinePanel must be wired with onFiltersChange={syncMapFilterUrl}

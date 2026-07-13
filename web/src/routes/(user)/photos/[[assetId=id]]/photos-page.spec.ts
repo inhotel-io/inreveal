@@ -1142,4 +1142,47 @@ describe('Photos page search URL state', () => {
       expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2015-01-01T00:00:00.000Z"');
     });
   });
+
+  // Slice 6 — a pasted/reloaded `/photos?albumId=<uuid>` has no session-cached name and no
+  // suggestions feeder to name the album from, so the chip label comes from a by-id lookup. The bar
+  // stub labels exactly like the real one (`albumNames.get(id) ?? id`), so a page that failed to
+  // pass or fill the map would show the UUID here.
+  describe('Slice 6: album / owner chip names', () => {
+    const ALBUM_ID = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
+    const OWNER_ID = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
+
+    it('labels the album chip with the album NAME, not the raw id', async () => {
+      sdkMock.getAlbumInfo.mockResolvedValue({ id: ALBUM_ID, albumName: 'Iceland 2026' } as never);
+      mockPage.url = new URL(`https://gallery.test/photos?albumId=${ALBUM_ID}`);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(sdkMock.getAlbumInfo).toHaveBeenCalledWith({ id: ALBUM_ID });
+        expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-album-label', 'Iceland 2026');
+      });
+    });
+
+    it('labels the owner chip with the user NAME, resolved by id', async () => {
+      sdkMock.getUser.mockResolvedValue({ id: OWNER_ID, name: 'Ada Lovelace' } as never);
+      mockPage.url = new URL(`https://gallery.test/photos?owner=${OWNER_ID}`);
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(sdkMock.getUser).toHaveBeenCalledWith({ id: OWNER_ID });
+        expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-owner-label', 'Ada Lovelace');
+      });
+    });
+
+    it('keeps the id as the label — and the page alive — when the lookup fails', async () => {
+      sdkMock.getAlbumInfo.mockRejectedValue(new Error('403'));
+      mockPage.url = new URL(`https://gallery.test/photos?albumId=${ALBUM_ID}`);
+
+      renderPage();
+
+      await waitFor(() => expect(sdkMock.getAlbumInfo).toHaveBeenCalled());
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-album-label', ALBUM_ID);
+    });
+  });
 });

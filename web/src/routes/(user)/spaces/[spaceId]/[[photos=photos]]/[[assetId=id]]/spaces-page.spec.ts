@@ -1078,4 +1078,56 @@ describe('Spaces page search URL state', () => {
       expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2015-01-01T00:00:00.000Z"');
     });
   });
+
+  // Slice 6 — the chip bar's four new dimensions on the Space surface. The bar itself is stubbed
+  // here (the stub mirrors the real `names.get(id) ?? id` labelling), so these tests pin the WIRING
+  // the isolated component/util specs cannot see: that the page hands the bar the filter and the
+  // name maps, that it fills those maps from the cheapest source, and that a chip removal lands in
+  // the URL — inside a Space, which is the spec's own BDD.
+  describe('Slice 6: lens / album / owner chips inside a Space', () => {
+    it('removes a lens filter from the URL when its chip is dismissed', async () => {
+      mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?lens=RF24-70mm+F2.8');
+
+      renderPage();
+
+      expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-lens', 'RF24-70mm F2.8');
+
+      await fireEvent.click(screen.getByTestId('active-filters-remove-lens'));
+
+      await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+      const [target] = gotoMock.mock.calls.at(-1) as [string];
+      expect(target).not.toContain('lens');
+      // It was the only filter, so the count drops to zero and the whole bar goes with it.
+      expect(screen.queryByTestId('active-filters-bar-stub')).not.toBeInTheDocument();
+    });
+
+    it('names the owner chip from the members already in scope, without a request', async () => {
+      mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?owner=user-1');
+
+      renderPage();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-owner-label', 'Owner'),
+      );
+      expect(sdkMock.getUser).not.toHaveBeenCalled();
+    });
+
+    it('names the album chip by id, and drops it from the URL when dismissed', async () => {
+      sdkMock.getAlbumInfo.mockResolvedValue({ id: 'album-1', albumName: 'Hütte 2026' } as never);
+      mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?albumId=album-1');
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(sdkMock.getAlbumInfo).toHaveBeenCalledWith({ id: 'album-1' });
+        expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-album-label', 'Hütte 2026');
+      });
+
+      await fireEvent.click(screen.getByTestId('active-filters-remove-album'));
+
+      await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+      const [target] = gotoMock.mock.calls.at(-1) as [string];
+      expect(target).not.toContain('albumId');
+    });
+  });
 });
