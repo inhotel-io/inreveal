@@ -230,54 +230,36 @@ describe('buildMapTimelineOptions', () => {
     });
   });
 
-  it('omits partners when favorites filter is selected for global map cluster timelines', () => {
-    const filters = {
-      ...createFilterState(),
-      isFavorite: true,
-    };
-    const selectedClusterIds = new Set(['asset-1']);
+  // Task 11 Step 2: the cluster panel's asset scope must be EXACTLY the marker query's scope. The
+  // marker endpoint (FilteredMapMarkerDto) has no partner scope at all — it is owner-scoped plus the
+  // caller's timeline-enabled spaces — so a partner asset can never be a pin, and the panel asking
+  // for withPartners could only ever list an asset the map has no pin for. Today that is masked by
+  // the client-side assetFilter (the panel is constrained to ids taken from the markers); it
+  // surfaces the moment that constraint is relaxed. Same for onlyFavorites, which the markers also
+  // ignore — as a settings-derived narrowing it made the panel show FEWER assets than the cluster's
+  // own pin count. The legacy $mapSettings asset-scope toggles feed the legacy /map/markers endpoint
+  // only; the filter panel is the single source of truth for this map's scope.
+  it('never asks the cluster timeline for partner assets (the markers have no partner scope, so a partner asset has no pin)', () => {
+    const options = buildMapTimelineOptions(createFilterState(), '1,2,3,4', new Set(['asset-1']));
 
-    const options = buildMapTimelineOptions(filters, '1,2,3,4', selectedClusterIds, undefined, {
-      withPartners: true,
-    });
-
-    expect(options).toEqual(
-      expect.objectContaining({
-        isFavorite: true,
-      }),
-    );
     expect(options).not.toHaveProperty('withPartners');
   });
 
-  it('omits partners when map favorites setting is enabled for global map cluster timelines', () => {
-    const selectedClusterIds = new Set(['asset-1']);
+  it('does not narrow the cluster timeline to favourites unless the FILTERS say so (the markers do not)', () => {
+    const options = buildMapTimelineOptions(createFilterState(), '1,2,3,4', new Set(['asset-1']));
 
-    const options = buildMapTimelineOptions(createFilterState(), '1,2,3,4', selectedClusterIds, undefined, {
-      onlyFavorites: true,
-      withPartners: true,
-    });
-
-    expect(options).toEqual(
-      expect.objectContaining({
-        isFavorite: true,
-      }),
-    );
-    expect(options).not.toHaveProperty('withPartners');
-  });
-
-  it('keeps partners when global map cluster timelines are not narrowed to favorites', () => {
-    const selectedClusterIds = new Set(['asset-1']);
-
-    const options = buildMapTimelineOptions(createFilterState(), '1,2,3,4', selectedClusterIds, undefined, {
-      withPartners: true,
-    });
-
-    expect(options).toEqual(
-      expect.objectContaining({
-        withPartners: true,
-      }),
-    );
     expect(options).not.toHaveProperty('isFavorite');
+  });
+
+  it('forwards the favourites FILTER to the cluster timeline (the markers honour it too)', () => {
+    const options = buildMapTimelineOptions(
+      { ...createFilterState(), isFavorite: true },
+      '1,2,3,4',
+      new Set(['asset-1']),
+    );
+
+    expect(options).toEqual(expect.objectContaining({ isFavorite: true }));
+    expect(options).not.toHaveProperty('withPartners');
   });
 });
 

@@ -11263,40 +11263,49 @@ describe(SharedSpaceService.name, () => {
       await expect(sut.getFilteredMapMarkers(auth, { spaceId })).rejects.toThrow();
     });
 
-    it('should pass personMatchAny and tagMatchAny flags to repository', async () => {
+    // D1: the map used to be the ONLY caller in the server that asked searchAssetBuilder for OR
+    // matching (personMatchAny/tagMatchAny — database.ts:721,724). Every timeline path ANDs, so
+    // filtering /photos by Alice AND Bob and then clicking the map icon (which carries the very same
+    // ?people=alice,bob chips) showed every asset with EITHER — identical chips, roughly double the
+    // pins, a cluster panel (which ANDs) contradicting its own pin count, and an "Add all N to…"
+    // count taken from the OR set while the collection got the AND set. The flags must be ABSENT so
+    // the repository takes its hasAllPeople/hasTags branch, exactly like the timeline.
+    it('should NOT pass personMatchAny/tagMatchAny to the repository (people and tags AND, like every timeline path)', async () => {
       const auth = factory.auth();
       mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
 
       await sut.getFilteredMapMarkers(auth, {
-        personIds: ['person-1'],
-        tagIds: ['tag-1'],
+        personIds: ['person-1', 'person-2'],
+        tagIds: ['tag-1', 'tag-2'],
       });
 
       expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
         expect.objectContaining({
-          personIds: ['person-1'],
-          tagIds: ['tag-1'],
-          personMatchAny: true,
-          tagMatchAny: true,
+          personIds: ['person-1', 'person-2'],
+          tagIds: ['tag-1', 'tag-2'],
         }),
       );
+      const args = mocks.sharedSpace.getFilteredMapMarkers.mock.calls[0][0];
+      expect(args.personMatchAny).toBeUndefined();
+      expect(args.tagMatchAny).toBeUndefined();
     });
 
-    it('should pass personMatchAny for space person IDs', async () => {
+    it('should NOT pass personMatchAny for space person IDs (a space map ANDs its people too)', async () => {
       const auth = factory.auth();
       const spaceId = newUuid();
       mocks.access.sharedSpace.checkMemberAccess.mockResolvedValue(new Set([spaceId]));
       mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
 
-      await sut.getFilteredMapMarkers(auth, { spaceId, personIds: ['person-1'] });
+      await sut.getFilteredMapMarkers(auth, { spaceId, personIds: ['person-1', 'person-2'] });
 
       expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
         expect.objectContaining({
-          spacePersonIds: ['person-1'],
-          personMatchAny: true,
-          tagMatchAny: true,
+          spacePersonIds: ['person-1', 'person-2'],
         }),
       );
+      const args = mocks.sharedSpace.getFilteredMapMarkers.mock.calls[0][0];
+      expect(args.personMatchAny).toBeUndefined();
+      expect(args.tagMatchAny).toBeUndefined();
     });
 
     // #802 — the Map filter panel gained the "Text" section, so markers must honour the same
@@ -11439,10 +11448,12 @@ describe(SharedSpaceService.name, () => {
           rating: 4,
           make: 'Canon',
           isNotInAlbum: true,
-          personMatchAny: true,
-          tagMatchAny: true,
         }),
       );
+      // D1: no OR matching — see the dedicated test above.
+      const args = mocks.sharedSpace.getFilteredMapMarkers.mock.calls[0][0];
+      expect(args.personMatchAny).toBeUndefined();
+      expect(args.tagMatchAny).toBeUndefined();
     });
 
     it('should pass false has-no-album to repository without enabling the filter', async () => {
@@ -11523,6 +11534,94 @@ describe(SharedSpaceService.name, () => {
       await sut.getFilteredMapMarkers(auth, { withSharedSpaces: true, isFavorite: true });
 
       expect(mocks.sharedSpace.getSpaceIdsForTimeline).not.toHaveBeenCalled();
+    });
+
+    // Regression (Task 11 / D-silent-empty): the SAME bug 00a7fd6bac fixed on the albumId arm of
+    // needsTimelineSpaceIds, on its isFavorite arm. `?withSharedSpaces=true&isFavorite=true
+    // &personIds=space-person:<id>` returned an EMPTY map to a legitimate space member:
+    // needsTimelineSpaceIds excluded isFavorite === true, so timelineSpaceIds was undefined; the
+    // SECOND consumer (resolveScopedMapPersonFilters -> faceIdentityRepository
+    // .resolveScopedPersonTokens -> face-identity.repository.ts spaceMatchesScope) requires
+    // timelineSpaceIds.size > 0 whenever withSharedSpaces is truthy, so the scoped token read as
+    // inaccessible -> hasInaccessibleToken -> forceEmptyResult -> zero pins. The person chip and
+    // the favourite chip are one-click co-reachable on /photos, and its map icon carries both.
+    it('resolves timelineSpaceIds for shared-space person-token resolution on a favorites query', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const token = `space-person:${newUuid()}`;
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+      mocks.faceIdentity.resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: [],
+        legacyPersonIds: [],
+        legacySpacePersonIds: ['space-person-1'],
+        hasInaccessibleToken: false,
+      });
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, {
+        withSharedSpaces: true,
+        isFavorite: true,
+        personIds: [token],
+      });
+
+      expect(mocks.sharedSpace.getSpaceIdsForTimeline).toHaveBeenCalledWith(auth.user.id);
+      expect(mocks.faceIdentity.resolveScopedPersonTokens).toHaveBeenCalledWith({
+        userId: auth.user.id,
+        tokens: [token],
+        scope: { withSharedSpaces: true, timelineSpaceIds: [spaceId], spaceId: undefined },
+      });
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isFavorite: true,
+          spacePersonIds: ['space-person-1'],
+          forceEmptyResult: false,
+          // ...but the QUERY still must NOT widen to shared-space assets — see below.
+          timelineSpaceIds: undefined,
+        }),
+      );
+    });
+
+    // The other half of the same fix: a favourite is the ASSET OWNER'S flag, so widening a
+    // favorites query to shared-space assets would pin other members' favourites on the caller's
+    // favourites map (timeline.service.ts:158-168 rejects the same combination outright rather than
+    // answer it). timelineSpaceIds is therefore computed for the person-token consumer but NOT
+    // forwarded to the marker query, which stays owner-scoped (searchAssetBuilder database.ts:688
+    // only widens when timelineSpaceIds AND userIds are both set).
+    it('does not widen a favorites query to shared-space assets even when a scoped token forced timelineSpaceIds to be resolved', async () => {
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+      mocks.faceIdentity.resolveScopedPersonTokens.mockResolvedValue({
+        identityIds: [],
+        legacyPersonIds: [],
+        legacySpacePersonIds: ['space-person-1'],
+        hasInaccessibleToken: false,
+      });
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, {
+        withSharedSpaces: true,
+        isFavorite: true,
+        personIds: [`space-person:${newUuid()}`],
+      });
+
+      const args = mocks.sharedSpace.getFilteredMapMarkers.mock.calls[0][0];
+      expect(args.userIds).toEqual([auth.user.id]);
+      expect(args.timelineSpaceIds).toBeUndefined();
+    });
+
+    it('does not resolve timelineSpaceIds for a favorites query whose person filter carries no scoped token', async () => {
+      const auth = factory.auth();
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, {
+        withSharedSpaces: true,
+        isFavorite: true,
+        personIds: ['ffffffff-ffff-4fff-bfff-ffffffffffff'],
+      });
+
+      expect(mocks.sharedSpace.getSpaceIdsForTimeline).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.resolveScopedPersonTokens).not.toHaveBeenCalled();
     });
 
     it('should not resolve timelineSpaceIds when withSharedSpaces is omitted', async () => {

@@ -1,11 +1,6 @@
 import { AssetTypeEnum, AssetVisibility, MapMediaType } from '@immich/sdk';
 import { applyTextFilters, buildFilterContext, type FilterState } from '$lib/components/filter-panel/filter-panel';
 
-type MapTimelineSettings = {
-  onlyFavorites?: boolean;
-  withPartners?: boolean;
-};
-
 function applyCommonMapFilters(base: Record<string, unknown>, filters: FilterState, includePersonIds = true) {
   if (includePersonIds && filters.personIds.length > 0) {
     base.personIds = filters.personIds;
@@ -145,12 +140,30 @@ export function buildAlbumMapMarkerOptions(albumId: string, filters: FilterState
   return base;
 }
 
+/**
+ * Assets behind the map's cluster panel.
+ *
+ * Its scope must be EXACTLY the marker query's scope (buildMapMarkerOptions): the panel lists the
+ * assets behind the pins, so anything it can return that has no pin — or any pin it cannot return —
+ * is the map contradicting itself. The active filters are therefore the ONLY thing that scopes it.
+ *
+ * In particular it takes nothing from `$mapSettings` (Task 11 Step 2). Those legacy toggles
+ * (withPartners / onlyFavorites / includeArchived / withSharedAlbums / date range) belong to the
+ * pre-filter-panel `/map/markers` endpoint, which Map.svelte still calls; the filtered marker
+ * endpoint this page uses honours none of them:
+ *   - `withPartners`: FilteredMapMarkerDto has no partner scope at all (shared-space.service.ts
+ *     pins `userIds: [auth.user.id]`), so a partner asset never gets a pin — asking the panel for
+ *     partner assets could only ever list an asset the map has no pin for. Masked today by the
+ *     client-side `assetFilter` (the panel is constrained to ids taken from the markers); it
+ *     surfaces the moment that constraint is relaxed.
+ *   - `onlyFavorites`: the markers ignore it, so narrowing the panel by it made the panel show
+ *     FEWER assets than the cluster's own pin count.
+ */
 export function buildMapTimelineOptions(
   filters: FilterState | undefined,
   bbox: string,
   selectedClusterIds: Set<string>,
   spaceId?: string,
-  settings: MapTimelineSettings = {},
 ): Record<string, unknown> {
   const base = applyCommonMapFilters(
     {
@@ -172,17 +185,6 @@ export function buildMapTimelineOptions(
       base.spacePersonIds = filters.personIds;
     } else {
       base.personIds = filters.personIds;
-    }
-  }
-
-  if (!spaceId) {
-    const isFavorite = filters?.isFavorite ?? (settings.onlyFavorites || undefined);
-
-    if (isFavorite !== undefined) {
-      base.isFavorite = isFavorite;
-    }
-    if (isFavorite === undefined && settings.withPartners) {
-      base.withPartners = true;
     }
   }
 
