@@ -1659,7 +1659,7 @@ export type PeopleFaceStatisticsResponseDto = {
     unassignedFaceCount: number;
 };
 export type MergeScopedPeopleDto = {
-    /** Acknowledgement that this merge will modify people/faces owned by other users. Required to commit a cross-owner merge. */
+    /** Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge. */
     confirmCrossOwner?: boolean;
     /** Source scoped profiles */
     sources: ScopedPersonProfileRefDto[];
@@ -1716,6 +1716,8 @@ export type PersonFacePageResponseDto = {
     hasNextPage: boolean;
 };
 export type MergePersonDto = {
+    /** Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge. */
+    confirmCrossOwner?: boolean;
     /** Person IDs to merge */
     ids: string[];
 };
@@ -2849,6 +2851,8 @@ export type SharedSpacePersonAliasDto = {
     alias: string;
 };
 export type SharedSpacePersonMergeDto = {
+    /** Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge. */
+    confirmCrossOwner?: boolean;
     /** Person IDs to merge into target */
     ids: string[];
 };

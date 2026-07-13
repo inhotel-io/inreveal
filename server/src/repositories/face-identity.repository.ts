@@ -2,12 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ExpressionBuilder, Insertable, Kysely, RawBuilder, Selectable, sql, Transaction } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
-import {
-  MergeScopedPeopleDto,
-  PeopleResponseDto,
-  PersonResponseDto,
-  ScopedPersonProfileRefDto,
-} from 'src/dtos/person.dto';
+import { PeopleResponseDto, PersonResponseDto, ScopedPersonProfileRefDto } from 'src/dtos/person.dto';
 import { AssetVisibility, SharedSpaceRole, SourceType, VectorIndex } from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
 import type { PeopleFaceStatistics, PersonStatistics } from 'src/repositories/person.repository';
@@ -165,33 +160,6 @@ export type ScopedPersonTokenResolution = {
   legacySpacePersonIds: string[];
   hasInaccessibleToken: boolean;
 };
-
-export type RepairRefsResolution =
-  | {
-      accessible: false;
-      reason: 'not-found-or-no-access';
-    }
-  | {
-      accessible: true;
-      targetIdentityId: string;
-      sourceIdentityIds: string[];
-      type: string;
-      allAttachedProfilesRepairable: boolean;
-      hasScopedProfileConflict: boolean;
-      /**
-       * Distinct owners of `person` profiles attached to the involved identities that are NOT the
-       * acting user. These are the users whose private people/faces a cross-owner merge would
-       * modify — used to gate cross-owner merges (permitted only when the instance toggle is on).
-       */
-      impactedOwnerIds: string[];
-      /**
-       * True if any involved identity has a `shared_space_person` in a space where the actor lacks a
-       * repair role (viewer / non-member). Such a merge would regroup a space the actor cannot
-       * repair, and the identity cannot be cleanly split, so it stays hard-blocked even when a
-       * cross-owner personal merge would otherwise be permitted.
-       */
-      hasInaccessibleAttachedSpaceProfile: boolean;
-    };
 
 export type DetachRefResolution =
   | {
@@ -1212,98 +1180,6 @@ export class FaceIdentityRepository {
     return people[0];
   }
 
-  async resolveRepairRefs(actorUserId: string, dto: MergeScopedPeopleDto): Promise<RepairRefsResolution> {
-    const refs = [dto.target, ...dto.sources];
-    const profiles: RepairProfile[] = [];
-
-    for (const ref of refs) {
-      const profile = await this.resolveRepairProfile(actorUserId, ref);
-      if (!profile) {
-        return { accessible: false, reason: 'not-found-or-no-access' };
-      }
-      profiles.push(profile);
-    }
-
-    const target = profiles[0];
-
-    const sourceIdentityIds = [
-      ...new Set(
-        profiles
-          .slice(1)
-          .map((profile) => profile.identityId)
-          .filter((id) => id !== target.identityId),
-      ),
-    ];
-    const identityIds = [...new Set([target.identityId, ...sourceIdentityIds])];
-    const [repairability, hasScopedProfileConflict] = await Promise.all([
-      this.resolveAttachedProfileRepairability(actorUserId, identityIds),
-      this.hasRepairProfileConflict(target.identityId, sourceIdentityIds),
-    ]);
-    const { impactedOwnerIds, hasInaccessibleAttachedSpaceProfile, allAttachedProfilesRepairable } = repairability;
-
-    return {
-      accessible: true,
-      targetIdentityId: target.identityId,
-      sourceIdentityIds,
-      type: target.identityType,
-      allAttachedProfilesRepairable,
-      hasScopedProfileConflict,
-      impactedOwnerIds,
-      hasInaccessibleAttachedSpaceProfile,
-    };
-  }
-
-  /**
-   * Single-pass repairability signals for the involved identities: the distinct non-actor personal
-   * `person` owners (impactedOwnerIds), whether any attached `shared_space_person` sits in a space
-   * the actor cannot repair, and the overall repairable flag. The `person` and `shared_space_person`
-   * tables are each scanned once (replacing three overlapping queries).
-   *
-   * `impactedOwnerIds` is a non-empty set of other-owner personal people — a cross-owner merge
-   * rewrites those owners' `person.identityId` and re-links their faces, so it is what gates the
-   * (instance-toggle-permitted) cross-owner merge. `hasInaccessibleAttachedSpaceProfile` is the
-   * space-scoped counterpart that hard-blocks merges which would otherwise regroup a space the actor
-   * cannot repair (viewer / non-member).
-   */
-  private async resolveAttachedProfileRepairability(
-    actorUserId: string,
-    identityIds: string[],
-  ): Promise<{
-    impactedOwnerIds: string[];
-    hasInaccessibleAttachedSpaceProfile: boolean;
-    allAttachedProfilesRepairable: boolean;
-  }> {
-    if (identityIds.length === 0) {
-      return { impactedOwnerIds: [], hasInaccessibleAttachedSpaceProfile: false, allAttachedProfilesRepairable: false };
-    }
-
-    const [ownerRows, spaceRows] = await Promise.all([
-      this.db
-        .selectFrom('person')
-        .select('ownerId')
-        .distinct()
-        .where('identityId', 'in', identityIds)
-        .where('ownerId', '!=', actorUserId)
-        .execute(),
-      this.db
-        .selectFrom('shared_space_person')
-        .leftJoin('shared_space_member', (join) =>
-          join
-            .onRef('shared_space_member.spaceId', '=', 'shared_space_person.spaceId')
-            .on('shared_space_member.userId', '=', actorUserId),
-        )
-        .select(['shared_space_person.id', 'shared_space_member.role'])
-        .where('shared_space_person.identityId', 'in', identityIds)
-        .execute(),
-    ]);
-
-    const impactedOwnerIds = ownerRows.map((row) => row.ownerId);
-    const hasInaccessibleAttachedSpaceProfile = spaceRows.some((row) => !this.isRepairRole(row.role));
-    const allAttachedProfilesRepairable = impactedOwnerIds.length === 0 && !hasInaccessibleAttachedSpaceProfile;
-
-    return { impactedOwnerIds, hasInaccessibleAttachedSpaceProfile, allAttachedProfilesRepairable };
-  }
-
   async resolveDetachRef(actorUserId: string, profileRef: ScopedPersonProfileRefDto): Promise<DetachRefResolution> {
     const profile = await this.resolveRepairProfile(actorUserId, profileRef);
     if (!profile) {
@@ -1511,41 +1387,6 @@ export class FaceIdentityRepository {
           representativeFaceId: row.representativeFaceId,
         }
       : null;
-  }
-
-  private async hasRepairProfileConflict(targetIdentityId: string, sourceIdentityIds: string[]): Promise<boolean> {
-    if (sourceIdentityIds.length === 0) {
-      return false;
-    }
-
-    const personalConflict = await this.db
-      .selectFrom('person as source_person')
-      .innerJoin('person as target_person', (join) =>
-        join
-          .onRef('target_person.ownerId', '=', 'source_person.ownerId')
-          .on('target_person.identityId', '=', targetIdentityId),
-      )
-      .select('source_person.id')
-      .where('source_person.identityId', 'in', sourceIdentityIds)
-      .limit(1)
-      .executeTakeFirst();
-    if (personalConflict) {
-      return true;
-    }
-
-    const spaceConflict = await this.db
-      .selectFrom('shared_space_person as source_person')
-      .innerJoin('shared_space_person as target_person', (join) =>
-        join
-          .onRef('target_person.spaceId', '=', 'source_person.spaceId')
-          .on('target_person.identityId', '=', targetIdentityId),
-      )
-      .select('source_person.id')
-      .where('source_person.identityId', 'in', sourceIdentityIds)
-      .limit(1)
-      .executeTakeFirst();
-
-    return !!spaceConflict;
   }
 
   private async getProfileForDetach(

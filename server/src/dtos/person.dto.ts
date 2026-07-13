@@ -45,6 +45,12 @@ const PeopleUpdateSchema = z
 const MergePersonSchema = z
   .object({
     ids: z.array(z.uuidv4()).describe('Person IDs to merge'),
+    confirmCrossOwner: z
+      .boolean()
+      .optional()
+      .describe(
+        'Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge.',
+      ),
   })
   .meta({ id: 'MergePersonDto' });
 
@@ -73,7 +79,7 @@ const MergeScopedPeopleSchema = z
       .boolean()
       .optional()
       .describe(
-        'Acknowledgement that this merge will modify people/faces owned by other users. Required to commit a cross-owner merge.',
+        'Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge.',
       ),
   })
   .meta({ id: 'MergeScopedPeopleDto' });

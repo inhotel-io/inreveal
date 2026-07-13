@@ -176,8 +176,10 @@ describe('scoped people merge with a same-space profile conflict (#733 follow-up
   });
 });
 
-// Follow-up probe: is the #733 cross-owner gate enforced on the OTHER merge endpoints?
-describe('cross-owner gate coverage on the sibling merge endpoints (#733 follow-up)', () => {
+// §5.4 ENTRY-POINT PARITY. The cross-owner policy must be identical whichever endpoint you merge through —
+// otherwise the gate is theatre, since a user can simply pick the ungated path. (b) collapse used to be
+// performed silently, with no toggle and no confirmation, by both of these endpoints.
+describe('cross-owner policy parity across the merge endpoints (#733)', () => {
   let fx: Fixture;
 
   beforeEach(async () => {
@@ -185,25 +187,121 @@ describe('cross-owner gate coverage on the sibling merge endpoints (#733 follow-
     fx = await setup();
   }, 60_000);
 
-  it('classic POST /people/:id/merge rewrites another owner’s person with the toggle OFF', async () => {
+  const enableCrossOwnerMerge = async () => {
+    const baseConfig = await utils.getSystemConfig(fx.admin.accessToken);
+    await request(app)
+      .put('/system-config')
+      .set('Authorization', `Bearer ${fx.admin.accessToken}`)
+      .send({ ...baseConfig, server: { ...baseConfig.server, mergePeopleAcrossOwners: true } });
+  };
+
+  /** Give the actor a person on identity S, so a classic own-person merge reaches identity S too. */
+  const giveActorAPersonOnS = async () => {
     const db = await utils.connectDatabase();
+    const asset = await utils.createAsset(fx.actor.accessToken);
+    const person = await utils.createPerson(fx.actor.accessToken, { name: 'Ada Mine On S' });
+    await utils.createFace({ assetId: asset.id, personId: person.id });
+    await db.query(`UPDATE "person" SET "identityId" = $1 WHERE id = $2`, [fx.identityS, person.id]);
+    return person.id;
+  };
 
-    // The actor also holds a personal person on identity S — the normal outcome of cross-library
-    // recognition, where one identity spans both users' libraries.
-    const actorAsset = await utils.createAsset(fx.actor.accessToken);
-    const actorPersonOnS = await utils.createPerson(fx.actor.accessToken, { name: 'Ada Mine On S' });
-    await utils.createFace({ assetId: actorAsset.id, personId: actorPersonOnS.id });
-    await db.query(`UPDATE "person" SET "identityId" = $1 WHERE id = $2`, [fx.identityS, actorPersonOnS.id]);
+  /** Give the OTHER owner a second person, on identity T, making any T<->S merge a destructive (b) collapse. */
+  const giveOtherOwnerAPersonOnT = async () => {
+    const db = await utils.connectDatabase();
+    const asset = await utils.createAsset(fx.otherOwner.accessToken);
+    const person = await utils.createPerson(fx.otherOwner.accessToken, { name: 'Ada Theirs On T' });
+    await utils.createFace({ assetId: asset.id, personId: person.id });
+    await db.query(`UPDATE "person" SET "identityId" = $1 WHERE id = $2`, [fx.identityT, person.id]);
+    return person.id;
+  };
 
-    const { status } = await request(app)
+  const otherOwnerPersonCount = async () => {
+    const db = await utils.connectDatabase();
+    const { rows } = await db.query(`SELECT count(*)::int AS count FROM "person" WHERE "ownerId" = $1`, [
+      fx.otherOwner.userId,
+    ]);
+    return rows[0].count as number;
+  };
+
+  // (a) — allowed everywhere, no toggle. Re-pointing another owner's person destroys nothing.
+  it('classic POST /people/:id/merge commits an (a) re-point with the toggle off', async () => {
+    const actorPersonOnS = await giveActorAPersonOnS();
+
+    await request(app)
       .post(`/people/${fx.targetPersonId}/merge`)
       .set('Authorization', `Bearer ${fx.actor.accessToken}`)
-      .send({ ids: [actorPersonOnS.id] });
+      .send({ ids: [actorPersonOnS] })
+      .expect(200);
 
-    expect(status).toBe(200);
-
+    const db = await utils.connectDatabase();
     const { rows } = await db.query(`SELECT "identityId" FROM "person" WHERE id = $1`, [fx.otherOwnerPersonId]);
-    // No toggle, no confirmation — the other owner's person is rewritten onto the actor's identity.
     expect(rows[0].identityId).toBe(fx.identityT);
+  });
+
+  it('in-space merge commits an (a) re-point with the toggle off', async () => {
+    await request(app)
+      .post(`/shared-spaces/${fx.spaceId}/people/${fx.targetSpacePersonId}/merge`)
+      .set('Authorization', `Bearer ${fx.actor.accessToken}`)
+      .send({ ids: [fx.sourceSpacePersonId] })
+      .expect(204);
+
+    const db = await utils.connectDatabase();
+    const { rows } = await db.query(`SELECT "identityId" FROM "person" WHERE id = $1`, [fx.otherOwnerPersonId]);
+    expect(rows[0].identityId).toBe(fx.identityT);
+  });
+
+  // (b) — gated everywhere. These endpoints used to perform this silently.
+  it('classic POST /people/:id/merge is blocked from a (b) collapse when the toggle is off', async () => {
+    const actorPersonOnS = await giveActorAPersonOnS();
+    await giveOtherOwnerAPersonOnT();
+
+    const { status, body } = await request(app)
+      .post(`/people/${fx.targetPersonId}/merge`)
+      .set('Authorization', `Bearer ${fx.actor.accessToken}`)
+      .send({ ids: [actorPersonOnS] });
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('cross_owner_merge_blocked');
+    expect(await otherOwnerPersonCount()).toBe(2);
+  });
+
+  it('in-space merge is blocked from a (b) collapse when the toggle is off', async () => {
+    await giveOtherOwnerAPersonOnT();
+
+    const { status, body } = await request(app)
+      .post(`/shared-spaces/${fx.spaceId}/people/${fx.targetSpacePersonId}/merge`)
+      .set('Authorization', `Bearer ${fx.actor.accessToken}`)
+      .send({ ids: [fx.sourceSpacePersonId] });
+
+    expect(status).toBe(403);
+    expect(body.code).toBe('cross_owner_merge_blocked');
+    expect(await otherOwnerPersonCount()).toBe(2);
+  });
+
+  it('classic POST /people/:id/merge commits a (b) collapse once enabled and confirmed', async () => {
+    const actorPersonOnS = await giveActorAPersonOnS();
+    await giveOtherOwnerAPersonOnT();
+    await enableCrossOwnerMerge();
+
+    await request(app)
+      .post(`/people/${fx.targetPersonId}/merge`)
+      .set('Authorization', `Bearer ${fx.actor.accessToken}`)
+      .send({ ids: [actorPersonOnS], confirmCrossOwner: true })
+      .expect(200);
+
+    expect(await otherOwnerPersonCount()).toBe(1);
+  });
+
+  it('in-space merge commits a (b) collapse once enabled and confirmed', async () => {
+    await giveOtherOwnerAPersonOnT();
+    await enableCrossOwnerMerge();
+
+    await request(app)
+      .post(`/shared-spaces/${fx.spaceId}/people/${fx.targetSpacePersonId}/merge`)
+      .set('Authorization', `Bearer ${fx.actor.accessToken}`)
+      .send({ ids: [fx.sourceSpacePersonId], confirmCrossOwner: true })
+      .expect(204);
+
+    expect(await otherOwnerPersonCount()).toBe(1);
   });
 });

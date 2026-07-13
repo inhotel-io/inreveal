@@ -25945,6 +25945,10 @@
       },
       "MergePersonDto": {
         "properties": {
+          "confirmCrossOwner": {
+            "description": "Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge.",
+            "type": "boolean"
+          },
           "ids": {
             "description": "Person IDs to merge",
             "items": {
@@ -25963,7 +25967,7 @@
       "MergeScopedPeopleDto": {
         "properties": {
           "confirmCrossOwner": {
-            "description": "Acknowledgement that this merge will modify people/faces owned by other users. Required to commit a cross-owner merge.",
+            "description": "Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge.",
             "type": "boolean"
           },
           "sources": {
@@ -29936,6 +29940,10 @@
       },
       "SharedSpacePersonMergeDto": {
         "properties": {
+          "confirmCrossOwner": {
+            "description": "Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge.",
+            "type": "boolean"
+          },
           "ids": {
             "description": "Person IDs to merge into target",
             "items": {

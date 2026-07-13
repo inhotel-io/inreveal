@@ -62,6 +62,7 @@ import { BaseService } from 'src/services/base.service';
 import { JobOf } from 'src/types';
 import { asDateString, asDateTimeString } from 'src/utils/date';
 import { ImmichMediaResponse } from 'src/utils/file';
+import { createCrossOwnerMergeAuthorizer } from 'src/utils/merge-policy';
 import { mimeTypes } from 'src/utils/mime-types';
 
 const ROLE_HIERARCHY: Record<SharedSpaceRole, number> = {
@@ -1323,7 +1324,19 @@ export class SharedSpaceService extends BaseService {
       sources.push(source);
     }
 
-    await this.identityMergePropagationService.mergeSpacePeople(auth, spaceId, targetPersonId, dto.ids);
+    // Same cross-owner policy as every other merge path (#733). An in-space merge propagates out to every
+    // scope the identities are attached to, including other users' libraries, so if it would combine two of
+    // another user's people it needs the instance toggle and an explicit acknowledgement.
+    await this.identityMergePropagationService.mergeSpacePeople(
+      auth,
+      spaceId,
+      targetPersonId,
+      dto.ids,
+      createCrossOwnerMergeAuthorizer(async () => {
+        const { server } = await this.getConfig({ withCache: false });
+        return server;
+      }, dto),
+    );
   }
 
   async setSpacePersonAlias(

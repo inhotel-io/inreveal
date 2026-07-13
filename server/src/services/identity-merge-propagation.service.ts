@@ -31,6 +31,13 @@ export type MergeProfile = {
  */
 export type MergeOriginProfile = Pick<MergeProfile, 'kind' | 'id' | 'ownerId' | 'spaceId' | 'identityId' | 'type'>;
 
+/**
+ * Runs against the built plan, inside the merge transaction and before anything is written, so a refusal rolls
+ * back even the identities the builder may have minted. Authorization policy (and the config it reads) lives in
+ * the calling service — the planner stays an engine.
+ */
+export type MergeAuthorizer = (plan: IdentityMergePropagationPlan) => Promise<void>;
+
 export type ProfileMergeStep = {
   targetPersonId: string;
   sourcePersonIds: string[];
@@ -81,6 +88,18 @@ export type IdentityMergePropagationPlan = {
   spaceProfileMerges: SpaceProfileMergeStep[];
   profileIdentityUpdates: Array<{ kind: MergeProfileKind; profileId: string; identityId: string }>;
   affectedOwnerIds: string[];
+  /**
+   * Owners other than the actor whose single person on the identity set is merely re-pointed at the surviving
+   * identity. Their row keeps its name, faces and thumbnail — nothing is destroyed, and this is precisely what
+   * the recognition job already does unattended when it fuses identities across libraries. Ungated.
+   */
+  repointedOwnerIds: string[];
+  /**
+   * Owners other than the actor who hold people on BOTH identities, so committing the merge would merge two of
+   * THEIR people: one row deleted, its faces moved. That is destructive and irreversible for someone who never
+   * asked for it — and the automatic paths refuse to do it. This is what the cross-owner gate exists for.
+   */
+  collapsedOwnerIds: string[];
   affectedSpaceIds: string[];
   followUpJobs: MergePropagationFollowUpJob[];
   activityEvents: MergePropagationActivityEvent[];
@@ -110,6 +129,7 @@ export class IdentityMergePropagationService {
     auth: AuthDto,
     targetPersonId: string,
     sourcePersonIds: string[],
+    authorize?: MergeAuthorizer,
   ): Promise<BulkIdResponseDto[]> {
     const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
       await this.lockMergePropagation(db);
@@ -121,6 +141,7 @@ export class IdentityMergePropagationService {
         },
         db,
       );
+      await authorize?.(plan);
       await this.lockPlanForExecution(plan, db);
       return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
@@ -134,7 +155,7 @@ export class IdentityMergePropagationService {
    * The scoped merge (POST /people/same-person). Same engine as the personal and in-space merges — it is only
    * the origin refs that differ, so a same-scope profile conflict is collapsed here exactly as it is there.
    */
-  async mergeScopedProfiles(auth: AuthDto, dto: MergeScopedPeopleDto): Promise<void> {
+  async mergeScopedProfiles(auth: AuthDto, dto: MergeScopedPeopleDto, authorize?: MergeAuthorizer): Promise<void> {
     const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
       await this.lockMergePropagation(db);
       const plan = await this.buildScopedMergePlan(
@@ -145,6 +166,7 @@ export class IdentityMergePropagationService {
         },
         db,
       );
+      await authorize?.(plan);
       await this.lockPlanForExecution(plan, db);
       return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
@@ -157,6 +179,7 @@ export class IdentityMergePropagationService {
     spaceId: string,
     targetPersonId: string,
     sourcePersonIds: string[],
+    authorize?: MergeAuthorizer,
   ): Promise<void> {
     const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
       await this.lockMergePropagation(db);
@@ -169,6 +192,7 @@ export class IdentityMergePropagationService {
         },
         db,
       );
+      await authorize?.(plan);
       await this.lockPlanForExecution(plan, db);
       return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
@@ -503,6 +527,8 @@ export class IdentityMergePropagationService {
     const profileIdentityUpdates: IdentityMergePropagationPlan['profileIdentityUpdates'] = [];
     const affectedOwnerIds = new Set<string>();
     const affectedSpaceIds = new Set<string>();
+    const repointedOwnerIds = new Set<string>();
+    const collapsedOwnerIds = new Set<string>();
 
     for (const [ownerId, profiles] of [...personalGroups.entries()].toSorted(([a], [b]) => a.localeCompare(b))) {
       const survivor = this.chooseSurvivor(profiles, {
@@ -518,9 +544,15 @@ export class IdentityMergePropagationService {
           sourcePersonIds: sources.map(({ id }) => id),
         });
         affectedOwnerIds.add(ownerId);
+        if (ownerId !== actorUserId) {
+          collapsedOwnerIds.add(ownerId);
+        }
       } else if (survivor.identityId !== targetIdentityId) {
         profileIdentityUpdates.push({ kind: 'person', profileId: survivor.id, identityId: targetIdentityId });
         affectedOwnerIds.add(ownerId);
+        if (ownerId !== actorUserId) {
+          repointedOwnerIds.add(ownerId);
+        }
       }
     }
 
@@ -564,6 +596,8 @@ export class IdentityMergePropagationService {
       spaceProfileMerges,
       profileIdentityUpdates,
       affectedOwnerIds: sortedAffectedOwnerIds,
+      repointedOwnerIds: [...repointedOwnerIds].toSorted(),
+      collapsedOwnerIds: [...collapsedOwnerIds].toSorted(),
       affectedSpaceIds: sortedAffectedSpaceIds,
       followUpJobs: [
         { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: targetIdentityId } },
