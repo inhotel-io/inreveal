@@ -1159,6 +1159,35 @@ describe('IdentityMergePropagationService', () => {
   });
 
   describe('buildSpaceMergePlan', () => {
+    // Mixed person/pet merges are how a mis-classification is corrected, and the target's type wins. The
+    // personal path has always allowed this (pet-detection.e2e-spec.ts pins it); the space path used to be
+    // the odd one out and refused.
+    it('plans mixed person and pet space merges so the target type wins', async () => {
+      const { sut } = makeService([
+        profile({
+          kind: 'space-person',
+          id: 'space-a-x',
+          spaceId: 'space-a',
+          identityId: 'identity-x',
+          type: 'person',
+        }),
+        profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y', type: 'pet' }),
+      ]);
+
+      const plan = await sut.buildSpaceMergePlan({
+        actorUserId: 'editor-1',
+        spaceId: 'space-a',
+        targetPersonId: 'space-a-x',
+        sourcePersonIds: ['space-a-y'],
+      });
+
+      expect(plan.targetIdentityId).toBe('identity-x');
+      expect(plan.sourceIdentityIds).toEqual(['identity-y']);
+      expect(plan.spaceProfileMerges).toEqual([
+        { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
+      ]);
+    });
+
     it('plans initiating-space merge and personal profile merges for affected owners', async () => {
       const { sut } = makeService([
         profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x', faceCount: 10 }),

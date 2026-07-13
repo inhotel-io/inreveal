@@ -478,10 +478,6 @@ export class IdentityMergePropagationService {
         throw new BadRequestException('Source person not found in this space');
       }
 
-      if (source.type !== target.type) {
-        throw new BadRequestException('Cannot merge people of different types');
-      }
-
       sourceProfiles.push(this.mapSpacePersonMergeProfile(source));
     }
 

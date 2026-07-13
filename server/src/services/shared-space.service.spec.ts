@@ -7212,8 +7212,12 @@ describe(SharedSpaceService.name, () => {
       expect(identityMergePropagation.mergeSpacePeople).not.toHaveBeenCalled();
     });
 
-    it('rejects mixed person and pet space profiles before delegation', async () => {
+    // A mis-classified pet is corrected by merging it into the right person (and vice versa), with the
+    // target's type surviving — the behaviour the classic merge has always had and that
+    // pet-detection.e2e-spec.ts pins. The space endpoint used to be the odd one out and refused.
+    it('delegates mixed person and pet space merges so the target type wins', async () => {
       const identityMergePropagation = useIdentityMergePropagation(sut);
+      const auth = factory.auth();
       const spaceId = newUuid();
       const targetId = newUuid();
       const sourceId = newUuid();
@@ -7223,11 +7227,9 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.sharedSpace.getPersonById.mockResolvedValueOnce(target).mockResolvedValueOnce(source);
 
-      await expect(sut.mergeSpacePeople(factory.auth(), spaceId, targetId, { ids: [sourceId] })).rejects.toThrow(
-        'Cannot merge people of different types',
-      );
+      await expect(sut.mergeSpacePeople(auth, spaceId, targetId, { ids: [sourceId] })).resolves.not.toThrow();
 
-      expect(identityMergePropagation.mergeSpacePeople).not.toHaveBeenCalled();
+      expect(identityMergePropagation.mergeSpacePeople).toHaveBeenCalledWith(auth, spaceId, targetId, [sourceId]);
     });
 
     it('delegates editor-initiated merges after validating source people belong to the initiating space', async () => {

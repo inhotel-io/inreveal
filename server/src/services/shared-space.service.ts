@@ -1321,9 +1321,6 @@ export class SharedSpaceService extends BaseService {
         throw new BadRequestException('Source person not found in this space');
       }
       sources.push(source);
-      if (source.type !== target.type) {
-        throw new BadRequestException('Cannot merge people of different types');
-      }
     }
 
     await this.identityMergePropagationService.mergeSpacePeople(auth, spaceId, targetPersonId, dto.ids);

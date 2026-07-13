@@ -169,7 +169,7 @@ export type ScopedPersonTokenResolution = {
 export type RepairRefsResolution =
   | {
       accessible: false;
-      reason: 'not-found-or-no-access' | 'incompatible-type';
+      reason: 'not-found-or-no-access';
     }
   | {
       accessible: true;
@@ -1211,9 +1211,6 @@ export class FaceIdentityRepository {
     }
 
     const target = profiles[0];
-    if (profiles.some((profile) => profile.identityType !== target.identityType)) {
-      return { accessible: false, reason: 'incompatible-type' };
-    }
 
     const sourceIdentityIds = [
       ...new Set(
