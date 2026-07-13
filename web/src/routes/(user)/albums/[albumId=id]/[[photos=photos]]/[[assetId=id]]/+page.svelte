@@ -66,7 +66,7 @@
   import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
   import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
-  import { buildFilterStateUrl, isFilterStateUrlUnchanged } from '$lib/utils/filter-target';
+  import { buildFilterStateUrl, isFilterStateUrlUnchanged, withoutAtParam } from '$lib/utils/filter-target';
   import { decodeFilterParams } from '$lib/utils/filter-url';
   import { lang } from '$lib/stores/preferences.store';
   import { handleError } from '$lib/utils/handle-error';
@@ -138,7 +138,7 @@
   let albumFilters = $state<FilterState>(hydrateAlbumFilters(page.url));
   // Token guard for the URL $effect below. Copied in spirit from photos/…/+page.svelte:508-513:
   // without it, our own goto() re-runs the effect, which re-runs goto(), forever.
-  let lastHandledFilterSearch = $state(page.url.search);
+  let lastHandledFilterSearch = $state(withoutAtParam(page.url.search));
   // selectedYear/selectedMonth are NOT in the URL codec but DO drive takenAfter/takenBefore via
   // buildFilterContext. Carry them across our own round trip, or the temporal picker resets itself
   // on every unrelated filter change.
@@ -298,12 +298,8 @@
     }
 
     album = data.album;
-    // In real navigation, page.params.albumId always updates in lockstep with data.album (the
-    // URL change is what drives the new load in the first place), so this is normally true. It
-    // only goes false when something swaps data.album without a matching URL/route change —
-    // guard against hydrating this album's filters from what is then a FOREIGN album's URL.
-    albumFilters = page.params.albumId === album.id ? hydrateAlbumFilters(page.url) : createFilterState();
-    lastHandledFilterSearch = page.url.search;
+    albumFilters = hydrateAlbumFilters(page.url);
+    lastHandledFilterSearch = withoutAtParam(page.url.search);
     pendingFilterUrlSync = undefined;
     pickerFilters = createFilterState();
     albumPersonNames.clear();
@@ -320,7 +316,8 @@
 
   $effect(() => {
     const nextSearch = page.url.search;
-    if (nextSearch === lastHandledFilterSearch) {
+    const nextFilterSearch = withoutAtParam(nextSearch);
+    if (nextFilterSearch === lastHandledFilterSearch) {
       return;
     }
 
@@ -334,7 +331,7 @@
       if (pendingFilterUrlSync?.search === nextSearch) {
         pendingFilterUrlSync = undefined;
       }
-      lastHandledFilterSearch = nextSearch;
+      lastHandledFilterSearch = nextFilterSearch;
     });
   });
 
@@ -498,10 +495,6 @@
     void goto(nextUrl, { replaceState: true, keepFocus: true, noScroll: true });
   }
 
-  function handleAlbumFiltersChange(nextFilters: FilterState) {
-    syncAlbumFilterUrl(nextFilters);
-  }
-
   function clearAlbumTemporalFilter() {
     albumFilters = clearTimelineTemporalFilter(albumFilters);
     temporalAnchor = undefined;
@@ -611,7 +604,7 @@
                   {timeBuckets}
                   storageKey="gallery-filter-visible-sections-album-detail"
                   hidden={isTimelineEmpty}
-                  onFiltersChange={handleAlbumFiltersChange}
+                  onFiltersChange={syncAlbumFilterUrl}
                 />
               {/key}
             {/if}

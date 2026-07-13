@@ -426,6 +426,15 @@ describe('album detail filter panel route', () => {
     await user.click(screen.getByTestId('people-item-person-view'));
     expect(screen.getByTestId('active-chip')).toHaveTextContent('First Album Person');
 
+    // A real navigation to another album always moves page.url/page.params in lockstep with
+    // data.album (the URL change is what drives the new load in the first place). Move them here
+    // too, so this proves filters reset because the new album's URL carries none of its own —
+    // not merely because a mock forgot to move.
+    mockPage.reset('https://gallery.test/albums/album-2', {
+      routeId: '/(user)/albums/[albumId=id]/[[photos=photos]]/[[assetId=id]]',
+      params: { albumId: 'album-2' },
+    });
+
     await view.rerender({
       component: AlbumPage,
       componentProps: {
@@ -572,6 +581,31 @@ describe('album detail filter panel route', () => {
         const options = screen.getByTestId('timeline-options').textContent ?? '';
         expect(options).toContain('"personIds":["person-view"]');
         // survived the round trip
+        expect(options).toContain('"takenAfter":"2024-01-01T00:00:00.000Z"');
+        expect(options).toContain('"takenBefore":"2025-01-01T00:00:00.000Z"');
+      });
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2024');
+    });
+
+    // replaceScrollTarget (navigation.ts) writes `?at=<assetId>` into the URL when the asset
+    // viewer closes. That changes page.url.search, which must NOT read as a filter change — a
+    // transient (URL-less) selectedYear picked before opening the viewer has nowhere else to live,
+    // so a naive re-hydrate on this URL change drops it and silently widens the timeline back to
+    // "all time".
+    it('keeps a transient year when the asset viewer closes (?at= is not a filter change)', async () => {
+      renderPage(album1());
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByTestId('year-btn-2024'));
+      await waitFor(() =>
+        expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2024-01-01T00:00:00.000Z"'),
+      );
+
+      // Simulate the asset viewer closing: replaceScrollTarget writes `?at=` into the URL.
+      mockPage.url = new URL('https://gallery.test/albums/album-1?at=asset-1');
+
+      await waitFor(() => {
+        const options = screen.getByTestId('timeline-options').textContent ?? '';
         expect(options).toContain('"takenAfter":"2024-01-01T00:00:00.000Z"');
         expect(options).toContain('"takenBefore":"2025-01-01T00:00:00.000Z"');
       });
