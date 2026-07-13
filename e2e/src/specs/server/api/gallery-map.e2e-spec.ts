@@ -439,4 +439,77 @@ describe('/gallery/map/markers', () => {
       expect(status).toBe(400);
     });
   });
+
+  describe('description / originalFileName filters (finding 2: wire-name pin, #767 fresh instance)', () => {
+    // A prior fix added originalFileName/description/ocr to FilteredMapMarkerSchema and forwarded
+    // them from the web marker-option builders (map-filter-options.ts), but nothing exercised the
+    // three field names over the REAL wire: the web builders return `Record<string, unknown>`, so
+    // renaming a key still typechecks, and the generated SDK silently drops an unknown query key —
+    // the filter would just no-op again (the exact bug that change fixed). The only guards were two
+    // client-side literal-string assertions. This test pins originalFileName and description
+    // end-to-end against two DISTINCT geotagged assets, so a "narrowing" assertion is load-bearing
+    // (it fails both if the filter no-ops AND if it over-matches) rather than vacuously true because
+    // only one asset exists.
+    //
+    // OCR is intentionally NOT covered here: populating ocr_search requires an ML round trip this
+    // e2e suite does not otherwise exercise. OCR forwarding is covered at the unit level
+    // (shared-space.service.spec.ts: "should pass description/originalFileName/ocr to repository").
+    let textFilterUser: LoginResponseDto;
+    let matchingAssetId: string;
+    let otherAssetId: string;
+
+    beforeAll(async () => {
+      textFilterUser = await utils.userSetup(admin.accessToken, createUserDto.create('t21-textfilter-user'));
+      const ws = await utils.connectWebsocket(textFilterUser.accessToken);
+
+      const upload = async (input: string) => {
+        const filepath = join(testAssetDir, input);
+        const { id } = await utils.createAsset(textFilterUser.accessToken, {
+          assetData: { bytes: await readFile(filepath), filename: basename(filepath) },
+        });
+        await utils.waitForWebsocketEvent({ event: 'assetUpload', id });
+        return id;
+      };
+
+      // Two geotagged fixtures with distinct checksums (same pair used in the albumId describe
+      // above), so each gets its own asset row and its own originalFileName.
+      matchingAssetId = await upload('metadata/gps-position/thompson-springs.jpg');
+      otherAssetId = await upload('metadata/dates/datetimeoriginal-gps.jpg');
+      utils.disconnectWebsocket(ws);
+
+      // Descriptions can be set immediately after upload without waiting on metadataExtraction:
+      // upsertExif does a real INSERT ... ON CONFLICT, and the user-set value is written with its
+      // column locked in the same statement, so a later-completing extraction pass cannot clobber it.
+      await request(app)
+        .put(`/assets/${matchingAssetId}`)
+        .set(asBearerAuth(textFilterUser.accessToken))
+        .send({ description: 'A quiet mountain sunset over the valley' });
+      await request(app)
+        .put(`/assets/${otherAssetId}`)
+        .set(asBearerAuth(textFilterUser.accessToken))
+        .send({ description: 'A family gathering in the backyard' });
+    });
+
+    it('originalFileName filter narrows to the matching asset over the wire', async () => {
+      const { status, body } = await request(app)
+        .get('/gallery/map/markers?originalFileName=thompson-springs')
+        .set(asBearerAuth(textFilterUser.accessToken));
+
+      expect(status).toBe(200);
+      const ids = (body as Array<{ id: string }>).map((m) => m.id);
+      expect(ids).toContain(matchingAssetId);
+      expect(ids).not.toContain(otherAssetId);
+    });
+
+    it('description filter narrows to the matching asset over the wire', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?description=${encodeURIComponent('mountain sunset')}`)
+        .set(asBearerAuth(textFilterUser.accessToken));
+
+      expect(status).toBe(200);
+      const ids = (body as Array<{ id: string }>).map((m) => m.id);
+      expect(ids).toContain(matchingAssetId);
+      expect(ids).not.toContain(otherAssetId);
+    });
+  });
 });
