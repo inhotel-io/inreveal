@@ -1,4 +1,4 @@
-import { AssetTypeEnum, AssetVisibility, type AssetResponseDto } from '@immich/sdk';
+import { AssetTypeEnum, AssetVisibility, type AlbumResponseDto, type AssetResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -63,9 +63,27 @@ vi.mock('$lib/managers/asset-viewer-manager.svelte', () => ({
   },
 }));
 
+const featureFlagsMock = vi.hoisted(() => ({ value: { map: false, smartSearch: false } }));
+
 vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
-  featureFlagsManager: { value: { map: false, smartSearch: false } },
+  featureFlagsManager: featureFlagsMock,
 }));
+
+// The embedded map is a dynamic import; the stub exposes its "open in map view" control as a button.
+vi.mock('$lib/components/shared-components/map/Map.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/map-component.stub.svelte');
+  return { default: MockComponent };
+});
+
+vi.mock('$lib/components/shared-components/UserAvatar.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  return { default: MockComponent };
+});
+
+vi.mock('$lib/components/asset-viewer/AlbumListItemDetails.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/noop-component.svelte');
+  return { default: MockComponent };
+});
 
 const buildAsset = (overrides: Partial<AssetResponseDto> = {}): AssetResponseDto =>
   assetFactory.build({
@@ -82,6 +100,7 @@ beforeEach(() => {
   getAllAlbumsMock.mockResolvedValue([]);
   getAssetInfoMock.mockResolvedValue(undefined);
   authManagerMock.isSharedLink = false;
+  featureFlagsMock.value.map = false;
 });
 
 describe('DetailPanel camera filter', () => {
@@ -348,5 +367,153 @@ describe('DetailPanel lens filter', () => {
     expect(screen.queryByLabelText(/search_everywhere/)).not.toBeInTheDocument();
     expect(container.querySelector('a[href*="/search"]')).toBeNull();
     expect(gotoMock).not.toHaveBeenCalled();
+  });
+});
+
+// Task 5 — the rows that live inline in DetailPanel.svelte: "shared by", "appears in", and the
+// embedded map's "open in map view" control.
+
+const OWNER = {
+  id: 'owner-2',
+  name: 'Bob',
+  email: 'bob@example.com',
+  profileImagePath: '',
+  avatarColor: 'primary',
+  profileChangedAt: '2026-01-01T00:00:00.000Z',
+} as AssetResponseDto['owner'];
+
+const currentAlbum = {
+  id: 'album-1',
+  albumName: 'Trip',
+  albumUsers: [{ role: 'editor', user: OWNER }],
+} as unknown as AlbumResponseDto;
+
+const albumDto = (id: string, albumName: string) =>
+  ({ id, albumName, albumThumbnailAssetId: null, albumUsers: [], assetCount: 3 }) as unknown as AlbumResponseDto;
+
+describe('DetailPanel shared-by filter', () => {
+  it('the owner name is a button that emits { ownerId }', async () => {
+    mockPage.reset('https://gallery.test/albums/album-1/photos/asset-1');
+    const asset = buildAsset({ owner: OWNER });
+
+    renderWithTooltips(DetailPanel, { asset, currentAlbum });
+
+    await fireEvent.click(await screen.findByLabelText('filter_by_owner: Bob'));
+
+    const expected = buildContextualFilterUrl(mockPage.url, { ownerId: 'owner-2' });
+    expect(gotoMock).toHaveBeenCalledWith(expected);
+    expect(expected.startsWith('/albums/album-1')).toBe(true);
+    expect(expected).toContain('owner=owner-2');
+  });
+
+  // E2 — this row is NOT shared-link-suppressed today (unlike tags/people/rating/albums), so its
+  // gate is the one that actually matters.
+  it('E2: a shared link renders the name as plain text, with no filter affordance', async () => {
+    authManagerMock.isSharedLink = true;
+    mockPage.reset('https://gallery.test/share/abc/photos/asset-1');
+    const asset = buildAsset({ owner: OWNER });
+
+    renderWithTooltips(DetailPanel, { asset, currentAlbum });
+
+    expect(await screen.findByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^filter_by_owner/)).not.toBeInTheDocument();
+    expect(gotoMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('DetailPanel appears-in album filter', () => {
+  it('the ⚗️ icon emits { albumId } for an album the asset appears in', async () => {
+    mockPage.reset('https://gallery.test/photos/asset-1');
+    getAllAlbumsMock.mockResolvedValue([albumDto('album-7', 'Iceland')]);
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset(), currentAlbum: null });
+
+    await fireEvent.click(await screen.findByLabelText('filter_by_album: Iceland'));
+
+    const expected = buildContextualFilterUrl(mockPage.url, { albumId: 'album-7' });
+    expect(gotoMock).toHaveBeenCalledWith(expected);
+    expect(expected).toContain('albumId=album-7');
+  });
+
+  // The card is an <a>; a button nested inside an anchor is invalid HTML.
+  it('renders the ⚗️ BESIDE the album card link, never inside it', async () => {
+    mockPage.reset('https://gallery.test/photos/asset-1');
+    getAllAlbumsMock.mockResolvedValue([albumDto('album-7', 'Iceland')]);
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset(), currentAlbum: null });
+
+    const button = await screen.findByLabelText('filter_by_album: Iceland');
+    expect(button.tagName).toBe('BUTTON');
+    expect(button.closest('a')).toBeNull();
+  });
+
+  // E9 — on /albums/A an albumId=A filter is a LIE: buildAlbumTimelineOptions refuses to forward it
+  // (the route already scopes the query) while getActiveFilterCount counts it and a chip renders.
+  it('E9: offers NO ⚗️ for the album you are already in', async () => {
+    mockPage.reset('https://gallery.test/albums/album-7/photos/asset-1');
+    getAllAlbumsMock.mockResolvedValue([albumDto('album-7', 'Iceland'), albumDto('album-8', 'Norway')]);
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset(), currentAlbum: albumDto('album-7', 'Iceland') });
+
+    await waitFor(() => expect(screen.getByLabelText('filter_by_album: Norway')).toBeInTheDocument());
+    expect(screen.queryByLabelText('filter_by_album: Iceland')).not.toBeInTheDocument();
+  });
+
+  it('E2: a shared link renders no album filter affordance', async () => {
+    authManagerMock.isSharedLink = true;
+    mockPage.reset('https://gallery.test/share/abc/photos/asset-1');
+    // getAllAlbums is never called on a shared link (refreshAlbums returns [] early), but pin the
+    // affordance's absence regardless of what the fetch would have returned.
+    getAllAlbumsMock.mockResolvedValue([albumDto('album-7', 'Iceland')]);
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset(), currentAlbum: null });
+
+    await waitFor(() => expect(screen.getByTestId('detail-panel-filename')).toBeInTheDocument());
+    expect(screen.queryByLabelText(/^filter_by_album/)).not.toBeInTheDocument();
+  });
+});
+
+// #767 class — the embedded map's "open in map view" control called Route.map({...latlng}) directly,
+// dropping the Space scope AND every active filter. It reuses buildContextualMapUrl now, exactly
+// like the location row's pin (Task 3).
+describe('DetailPanel embedded map: open in map view', () => {
+  const BERLIN = { latitude: 52.52, longitude: 13.405, city: 'Berlin', country: 'Germany' };
+
+  it('carries the Space scope AND the active filters to the map view', async () => {
+    featureFlagsMock.value.map = true;
+    mockPage.reset('https://gallery.test/spaces/space-1/photos/asset-1?make=Apple');
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset({ exifInfo: BERLIN }), currentAlbum: null });
+
+    await fireEvent.click(await screen.findByTestId('map-stub-open-in-map-view'));
+
+    const [url] = gotoMock.mock.calls[0] as [string];
+    expect(url.startsWith('/map?')).toBe(true);
+    expect(url).toContain('spaceId=space-1');
+    expect(url).toContain('make=Apple');
+    expect(url).toContain('#12.5/52.52/13.405');
+  });
+
+  // Same rule as the location pin: there is no album-map URL, so the control would silently widen
+  // "this album" to "the whole library".
+  it('offers no map-view control on an album surface', async () => {
+    featureFlagsMock.value.map = true;
+    mockPage.reset('https://gallery.test/albums/album-1/photos/asset-1');
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset({ exifInfo: BERLIN }), currentAlbum: null });
+
+    await waitFor(() => expect(screen.getByTestId('map-stub')).toBeInTheDocument());
+    expect(screen.queryByTestId('map-stub-open-in-map-view')).not.toBeInTheDocument();
+  });
+
+  it('E2: a shared link gets no map-view control', async () => {
+    authManagerMock.isSharedLink = true;
+    featureFlagsMock.value.map = true;
+    mockPage.reset('https://gallery.test/share/abc/photos/asset-1');
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset({ exifInfo: BERLIN }), currentAlbum: null });
+
+    await waitFor(() => expect(screen.getByTestId('map-stub')).toBeInTheDocument());
+    expect(screen.queryByTestId('map-stub-open-in-map-view')).not.toBeInTheDocument();
   });
 });

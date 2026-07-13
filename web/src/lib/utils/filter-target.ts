@@ -103,6 +103,41 @@ export function applyContextualFilter(patch: Partial<FilterState>, opts?: { glob
 }
 
 /**
+ * The `personIds` patch for ONE asset-viewer person — and it is a function of the SURFACE, not just
+ * of the person (spec §5.5/E4 are wrong about this; see the slice-7 plan's R8).
+ *
+ * Two different server fields are behind `FilterState.personIds`:
+ * - a Space (and the space map) sends it as **`spacePersonIds`** (space-filter-options.ts,
+ *   map-filter-options.ts), which the server validates as `z.array(z.uuidv4())` — a **bare uuid**.
+ *   A `space-person:<uuid>` token there is a zod REJECT → 400 → the whole Space timeline errors out.
+ *   That is a hard error, not merely a wrong result.
+ * - /photos, an album and the global map send it as **`personIds`**, the only field that accepts the
+ *   SCOPED token — and the scoped token is the only id a viewer of a shared-space asset can resolve
+ *   there: the owner's person uuid is invisible to them, so it would return nothing (P1).
+ *
+ * Returns **null when there is nothing honest to filter by**: a Space person with no
+ * `spacePersonId`. The owner's person uuid is not a space_person row, so filtering the Space by it
+ * would silently return an empty timeline. Callers must not render the affordance when this is null.
+ *
+ * Do NOT reach for `getPhotosPersonFilterId` here — it is built for the filter-suggestion DTO shape
+ * (`filterId` / `primaryProfile`), neither of which `mapPerson` sets on an asset-viewer person, so it
+ * falls through to the owner's `person.id`.
+ */
+export function buildPersonFilterPatch(
+  url: URL,
+  person: { id: string; spacePersonId?: string },
+): Partial<FilterState> | null {
+  const target = resolveFilterTarget(url);
+  const isSpaceScoped = target?.kind === 'space' || (target?.kind === 'map' && !!target.spaceId);
+
+  if (isSpaceScoped) {
+    return person.spacePersonId ? { personIds: [person.spacePersonId] } : null;
+  }
+
+  return { personIds: [person.spacePersonId ? `space-person:${person.spacePersonId}` : person.id] };
+}
+
+/**
  * The map URL for the CURRENT context (E10): the surface's scope plus its active filters, optionally
  * centered on a point.
  *
