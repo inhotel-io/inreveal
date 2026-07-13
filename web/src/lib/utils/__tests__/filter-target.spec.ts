@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildContextualFilterUrl, resolveFilterTarget } from '$lib/utils/filter-target';
+import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
+import {
+  buildContextualFilterUrl,
+  buildFilterStateUrl,
+  isFilterStateUrlUnchanged,
+  resolveFilterTarget,
+} from '$lib/utils/filter-target';
 
 const u = (path: string) => new URL(`https://g.test${path}`);
 
@@ -149,5 +155,122 @@ describe('buildContextualFilterUrl', () => {
 
   it('does not leak a hash onto non-map surfaces', () => {
     expect(buildContextualFilterUrl(u('/photos/a1#foo'), { make: 'Apple' })).not.toContain('#');
+  });
+});
+
+describe('buildFilterStateUrl', () => {
+  const state = (overrides: Partial<FilterState> = {}): FilterState => ({ ...createFilterState(), ...overrides });
+
+  it('writes the complete state into the current path', () => {
+    const url = buildFilterStateUrl(new URL('https://g.test/albums/al1'), state({ make: 'Apple', rating: 4 }));
+
+    expect(url).toContain('/albums/al1');
+    expect(url).toContain('make=Apple');
+    expect(url).toContain('rating=4');
+  });
+
+  // THE anti-merge test. buildContextualFilterUrl would keep `rating=4` here, because it decodes
+  // the URL first and merges. A complete state must REPLACE: a field the caller cleared has to
+  // disappear from the URL, or a filter could never be removed.
+  it('drops filter params that are absent from the state (replace, never merge)', () => {
+    const url = buildFilterStateUrl(new URL('https://g.test/albums/al1?make=Apple&rating=4'), state({ make: 'Apple' }));
+
+    expect(url).toContain('make=Apple');
+    expect(url).not.toContain('rating');
+  });
+
+  it('clears every filter param for an empty state', () => {
+    const url = buildFilterStateUrl(new URL('https://g.test/albums/al1?make=Apple&people=person:p1'), state());
+
+    expect(url).toBe('/albums/al1');
+  });
+
+  it('keeps non-filter params (q, sort, spaceId, view)', () => {
+    const url = buildFilterStateUrl(
+      new URL('https://g.test/map?spaceId=s1&q=ski&sort=asc&view=timeline'),
+      state({ make: 'Apple' }),
+    );
+
+    expect(url).toContain('spaceId=s1');
+    expect(url).toContain('q=ski');
+    expect(url).toContain('sort=asc');
+    expect(url).toContain('view=timeline');
+    expect(url).toContain('make=Apple');
+  });
+
+  it('drops the one-shot `at` scroll target', () => {
+    const url = buildFilterStateUrl(new URL('https://g.test/albums/al1?at=asset-9'), state({ make: 'Apple' }));
+
+    expect(url).not.toContain('at=');
+  });
+
+  // The map stores its viewport in the hash. Losing it re-centres the map on every filter change.
+  it('preserves the hash', () => {
+    const url = buildFilterStateUrl(new URL('https://g.test/map?spaceId=s1#12.5/52.52/13.4'), state({ make: 'Apple' }));
+
+    expect(url).toBe('/map?spaceId=s1&make=Apple#12.5/52.52/13.4');
+  });
+
+  // The write-back loop can fire while the asset viewer is open; it must not close it. (This is the
+  // deliberate difference from buildContextualFilterUrl, which targets the BASE path precisely so a
+  // single goto() both closes the viewer and applies the filter.)
+  it('keeps the current path, including an open asset viewer', () => {
+    const url = buildFilterStateUrl(new URL('https://g.test/albums/al1/photos/asset-1'), state({ make: 'Apple' }));
+
+    expect(url).toBe('/albums/al1/photos/asset-1?make=Apple');
+  });
+
+  it('is idempotent', () => {
+    const filters = state({ make: 'Apple', model: 'iPhone 17 Pro Max', tagIds: ['t1'] });
+    const once = buildFilterStateUrl(new URL('https://g.test/albums/al1?rating=4'), filters);
+    const twice = buildFilterStateUrl(new URL(`https://g.test${once}`), filters);
+
+    expect(twice).toBe(once);
+  });
+});
+
+describe('isFilterStateUrlUnchanged', () => {
+  const state = (overrides: Partial<FilterState> = {}): FilterState => ({ ...createFilterState(), ...overrides });
+
+  it('is true when the rebuilt URL is identical', () => {
+    const url = new URL('https://g.test/map?spaceId=s1&make=Apple');
+
+    expect(isFilterStateUrlUnchanged(url, buildFilterStateUrl(url, state({ make: 'Apple' })))).toBe(true);
+  });
+
+  // THE reason this function exists. buildFilterStateUrl deletes the filter params and re-appends
+  // them last, so `?make=Apple&spaceId=s1` comes back as `?spaceId=s1&make=Apple` — a different
+  // string with the same meaning. A raw string compare would report "changed" and burn a spurious
+  // replaceState on the first panel interaction.
+  it('is true when only the param ORDER differs', () => {
+    const url = new URL('https://g.test/map?make=Apple&spaceId=s1');
+    const next = buildFilterStateUrl(url, state({ make: 'Apple' }));
+
+    expect(next).toBe('/map?spaceId=s1&make=Apple'); // re-ordered, on purpose
+    expect(next).not.toBe(url.pathname + url.search + url.hash); // …so a string compare would lie
+    expect(isFilterStateUrlUnchanged(url, next)).toBe(true);
+  });
+
+  it('is false when a filter param is added, changed or removed', () => {
+    const url = new URL('https://g.test/map?spaceId=s1&make=Apple');
+
+    expect(isFilterStateUrlUnchanged(url, '/map?spaceId=s1&make=Apple&rating=4')).toBe(false);
+    expect(isFilterStateUrlUnchanged(url, '/map?spaceId=s1&make=Canon')).toBe(false);
+    expect(isFilterStateUrlUnchanged(url, '/map?spaceId=s1')).toBe(false);
+  });
+
+  // `at` is dropped by buildFilterStateUrl. That IS a change worth navigating for — the one-shot
+  // scroll target must not survive a filter change.
+  it('is false when the one-shot `at` param is dropped', () => {
+    const url = new URL('https://g.test/albums/al1?at=asset-9&make=Apple');
+
+    expect(isFilterStateUrlUnchanged(url, buildFilterStateUrl(url, state({ make: 'Apple' })))).toBe(false);
+  });
+
+  it('is false when the path or the hash differs', () => {
+    const url = new URL('https://g.test/map?spaceId=s1#12/52.52/13.4');
+
+    expect(isFilterStateUrlUnchanged(url, '/albums/al1?spaceId=s1#12/52.52/13.4')).toBe(false);
+    expect(isFilterStateUrlUnchanged(url, '/map?spaceId=s1')).toBe(false);
   });
 });
