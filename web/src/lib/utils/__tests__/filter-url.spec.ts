@@ -116,7 +116,9 @@ describe('filter-url codec', () => {
   });
 
   it('clearFilterParams removes every filter param but leaves q and sort alone', () => {
-    const params = new URLSearchParams('q=beach&sort=asc&make=Apple&lens=RF24&owner=u1&albumId=a1&state=Hamburg');
+    const params = new URLSearchParams(
+      'q=beach&sort=asc&make=Apple&lens=RF24&owner=u1&albumId=a1&state=Hamburg&year=2023&month=6',
+    );
 
     clearFilterParams(params);
 
@@ -127,5 +129,92 @@ describe('filter-url codec', () => {
     expect(params.get('owner')).toBeNull();
     expect(params.get('albumId')).toBeNull();
     expect(params.get('state')).toBeNull();
+    // Without these, buildFilterStateUrl's REPLACE semantics break: a cleared year could never be
+    // removed from the URL, because the stale param would survive the clear and re-hydrate.
+    expect(params.get('year')).toBeNull();
+    expect(params.get('month')).toBeNull();
+  });
+
+  // D2 — the temporal picker's own control (selectedYear/selectedMonth) is IN the codec. It used to
+  // be transient, so a shared link silently lost it and every URL-backed page needed a carry-over
+  // slot to smuggle it across its own goto().
+  describe('D2: year/month', () => {
+    it('emits year and month', () => {
+      const params = encode({ selectedYear: 2023, selectedMonth: 6 });
+
+      expect(params.get('year')).toBe('2023');
+      expect(params.get('month')).toBe('6');
+    });
+
+    it('emits a bare year with no month', () => {
+      const params = encode({ selectedYear: 2023 });
+
+      expect(params.get('year')).toBe('2023');
+      expect(params.get('month')).toBeNull();
+    });
+
+    it('round-trips year and month', () => {
+      const decoded = decodeFilterParams(
+        new URL(`https://g.test/photos?${encode({ selectedYear: 2023, selectedMonth: 6 })}`),
+      );
+
+      expect(decoded).toEqual({ selectedYear: 2023, selectedMonth: 6 });
+    });
+
+    it('round-trips a bare year', () => {
+      const decoded = decodeFilterParams(new URL(`https://g.test/photos?${encode({ selectedYear: 2023 })}`));
+
+      expect(decoded).toEqual({ selectedYear: 2023 });
+    });
+
+    it.each(['abc', '0', '99999', '-2023', '2023.5', ''])('rejects a malformed year=%s', (year) => {
+      const decoded = decodeFilterParams(new URL(`https://g.test/photos?year=${year}`));
+
+      expect(decoded.selectedYear).toBeUndefined();
+      expect(decoded.selectedMonth).toBeUndefined();
+    });
+
+    it.each(['13', '0', 'abc', '-1', '6.5'])('rejects a malformed month=%s but keeps a valid year', (month) => {
+      const decoded = decodeFilterParams(new URL(`https://g.test/photos?year=2023&month=${month}`));
+
+      expect(decoded.selectedYear).toBe(2023);
+      expect(decoded.selectedMonth).toBeUndefined();
+    });
+
+    it('drops a month with no year — buildFilterContext ignores it, so it must not be counted', () => {
+      const decoded = decodeFilterParams(new URL('https://g.test/photos?month=6'));
+
+      expect(decoded).toEqual({});
+    });
+
+    // I2 — buildFilterContext (filter-panel.ts) prefers dateAfter/dateBefore over selectedYear, and
+    // the panel keeps them mutually exclusive. A year emitted beside from/to would be inert in the
+    // query but still COUNTED by getActiveFilterCount: exactly the counted-but-not-applied lie.
+    it('I2: never emits year alongside from/to', () => {
+      const params = encode({ selectedYear: 2023, selectedMonth: 6, dateAfter: '2024-01-01' });
+
+      expect(params.get('from')).toBe('2024-01-01');
+      expect(params.get('year')).toBeNull();
+      expect(params.get('month')).toBeNull();
+    });
+
+    it('I2: never emits year alongside a bare `to`', () => {
+      const params = encode({ selectedYear: 2023, dateBefore: '2024-12-31' });
+
+      expect(params.get('to')).toBe('2024-12-31');
+      expect(params.get('year')).toBeNull();
+    });
+
+    it('I2: decoding drops year/month when from/to is present', () => {
+      const decoded = decodeFilterParams(new URL('https://g.test/photos?from=2024-01-01&year=2023&month=6'));
+
+      expect(decoded).toEqual({ dateAfter: '2024-01-01' });
+    });
+
+    it('I2: an INVALID from does not suppress the year', () => {
+      const decoded = decodeFilterParams(new URL('https://g.test/photos?from=soon&year=2023'));
+
+      expect(decoded).toEqual({ selectedYear: 2023 });
+    });
   });
 });

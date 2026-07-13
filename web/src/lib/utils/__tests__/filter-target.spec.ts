@@ -112,6 +112,31 @@ describe('buildContextualFilterUrl', () => {
     expect(url).toContain('make=Apple');
   });
 
+  // D2 — a behaviour change that falls out of putting year/month in the codec. buildContextualFilterUrl
+  // merges decodeFilterParams(url) under the patch, so the picked year is now carried over by a
+  // contextual-filter click (e.g. "show me this camera") where it used to be silently dropped.
+  it('D2: preserves an active year/month when applying a contextual patch', () => {
+    const url = buildContextualFilterUrl(u('/photos?year=2023&month=6'), { make: 'Apple' });
+
+    expect(url).toContain('year=2023');
+    expect(url).toContain('month=6');
+    expect(url).toContain('make=Apple');
+  });
+
+  it('D2: a patch that sets an explicit date range evicts the year (from/to wins)', () => {
+    const url = buildContextualFilterUrl(u('/photos?year=2023'), { dateAfter: '2024-01-01' });
+
+    expect(url).toContain('from=2024-01-01');
+    expect(url).not.toContain('year=');
+  });
+
+  it('D2: global: true does not carry the year over', () => {
+    const url = buildContextualFilterUrl(u('/photos?year=2023'), { make: 'Apple' }, { global: true });
+
+    expect(url).not.toContain('year=');
+    expect(url).toContain('make=Apple');
+  });
+
   // E5 / global — escape the current context, starting from a clean slate
   it('global: true targets /photos and carries NOTHING over — not filters, not the query', () => {
     const url = buildContextualFilterUrl(

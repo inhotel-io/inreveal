@@ -560,13 +560,10 @@ describe('album detail filter panel route', () => {
       });
     });
 
-    // THE pendingFilterUrlSync test. selectedYear is transient: it drives takenAfter/takenBefore
-    // through buildFilterContext but has NO url param. Picking a year alone writes nothing (the
-    // rebuilt URL is unchanged, so syncAlbumFilterUrl early-returns). Picking a year and THEN a
-    // URL-encoded filter does write — and the re-hydrate that follows rebuilds FilterState from
-    // decodeFilterParams, which has never heard of selectedYear. Without the carry-over the year
-    // silently vanishes and the timeline quietly widens back to "all time".
-    it('carries a transient year across a URL-writing filter change', async () => {
+    // D2 (was THE transient-year carry-over test). selectedYear is IN the URL codec now: picking a year
+    // writes `?year=2024`, so it survives the page's own goto() round trip on its own — no
+    // carry-over slot smuggling it across. Picking a year and THEN a second filter must keep both.
+    it('writes a picked year to the URL and keeps it across a second filter change', async () => {
       renderPage(album1());
       const user = userEvent.setup();
 
@@ -574,14 +571,18 @@ describe('album detail filter panel route', () => {
       await waitFor(() =>
         expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2024-01-01T00:00:00.000Z"'),
       );
-      // A year is transient — it is not in the URL codec, so it must not have triggered a write.
-      expect(gotoMock).not.toHaveBeenCalled();
+      // A year IS in the URL codec, so picking one writes.
+      await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+      const [yearTarget] = gotoMock.mock.calls.at(-1) as [string];
+      expect(yearTarget).toContain('year=2024');
 
       await user.click(await screen.findByTestId('people-item-person-view'));
 
-      await waitFor(() =>
-        expect(gotoMock).toHaveBeenCalledWith('/albums/album-1?people=person-view', expect.anything()),
-      );
+      await waitFor(() => {
+        const [target] = gotoMock.mock.calls.at(-1) as [string];
+        expect(target).toContain('people=person-view');
+        expect(target).toContain('year=2024');
+      });
       await waitFor(() => {
         const options = screen.getByTestId('timeline-options').textContent ?? '';
         expect(options).toContain('"personIds":["person-view"]');
@@ -592,12 +593,24 @@ describe('album detail filter panel route', () => {
       expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2024');
     });
 
-    // replaceScrollTarget (navigation.ts) writes `?at=<assetId>` into the URL when the asset
-    // viewer closes. That changes page.url.search, which must NOT read as a filter change — a
-    // transient (URL-less) selectedYear picked before opening the viewer has nowhere else to live,
-    // so a naive re-hydrate on this URL change drops it and silently widens the timeline back to
-    // "all time".
-    it('keeps a transient year when the asset viewer closes (?at= is not a filter change)', async () => {
+    // D2 — a shared album link carries the year.
+    it('hydrates a shared ?year= link into the picker, the chip and the timeline query', async () => {
+      mockPage.url = new URL('https://gallery.test/albums/album-1?year=2023');
+      renderPage(album1());
+
+      await waitFor(() => {
+        const options = screen.getByTestId('timeline-options').textContent ?? '';
+        expect(options).toContain('"takenAfter":"2023-01-01T00:00:00.000Z"');
+        expect(options).toContain('"takenBefore":"2024-01-01T00:00:00.000Z"');
+      });
+      expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2023');
+    });
+
+    // replaceScrollTarget (navigation.ts) writes `?at=<assetId>` into the URL when the asset viewer
+    // closes. The year is URL-backed (D2), so it survives on its own — and `?at=` must still not
+    // read as a filter change, or the page rebuilds an identical FilterState (and with it the
+    // timeline options object) on every viewer close.
+    it('keeps the year when the asset viewer closes (?at= is not a filter change)', async () => {
       renderPage(album1());
       const user = userEvent.setup();
 
@@ -606,8 +619,11 @@ describe('album detail filter panel route', () => {
         expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2024-01-01T00:00:00.000Z"'),
       );
 
-      // Simulate the asset viewer closing: replaceScrollTarget writes `?at=` into the URL.
-      mockPage.url = new URL('https://gallery.test/albums/album-1?at=asset-1');
+      // Simulate the asset viewer closing: replaceScrollTarget appends `at` to the CURRENT url,
+      // which now carries year=2024 (the page wrote it, and gotoMock landed page.url on it).
+      const withAt = new URL(mockPage.url);
+      withAt.searchParams.set('at', 'asset-1');
+      mockPage.url = withAt;
 
       await waitFor(() => {
         const options = screen.getByTestId('timeline-options').textContent ?? '';
