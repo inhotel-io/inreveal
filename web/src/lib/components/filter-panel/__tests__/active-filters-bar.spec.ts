@@ -159,6 +159,24 @@ describe('ActiveFiltersBar', () => {
     expect(chips[0].textContent).not.toContain('3+');
   });
 
+  it('should render chip for a rating of 1 as "≥ 1 star" (singular)', () => {
+    const filters = createFilterState();
+    filters.rating = 1;
+
+    const { getAllByTestId } = render(ActiveFiltersBar, {
+      props: {
+        filters,
+        onRemoveFilter: () => {},
+        onClearAll: () => {},
+      },
+    });
+
+    const chips = getAllByTestId('active-chip');
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent).toContain('≥ 1 star');
+    expect(chips[0].textContent).not.toContain('1 stars');
+  });
+
   it('should render chip for lens filter, removable as type "lens"', async () => {
     let removedType: string | undefined;
     const filters = createFilterState();

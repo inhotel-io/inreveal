@@ -67,6 +67,22 @@ describe('resolveFilterNames', () => {
     expect(names.albumNames.get(ALBUM_ID)).toBe('Summer 2026');
   });
 
+  it('fills a SECOND, different map instance too when its call joins an already in-flight resolution', async () => {
+    // Regression for the dedupe cache writing only into the first caller's map: a client-side nav
+    // from one surface to another (e.g. /photos?albumId=X -> /map?albumId=X) while the first
+    // request is still in flight owns its OWN names map, and must still receive the resolved name.
+    sdkMock.getAlbumInfo.mockResolvedValue({ id: ALBUM_ID, albumName: 'Summer 2026' } as never);
+    const namesA = emptyNames();
+    const namesB = emptyNames();
+    const filters = withFilters({ albumId: ALBUM_ID });
+
+    await Promise.all([resolveFilterNames(filters, namesA), resolveFilterNames(filters, namesB)]);
+
+    expect(sdkMock.getAlbumInfo).toHaveBeenCalledTimes(1);
+    expect(namesA.albumNames.get(ALBUM_ID)).toBe('Summer 2026');
+    expect(namesB.albumNames.get(ALBUM_ID)).toBe('Summer 2026');
+  });
+
   it('does not fetch when the maps already hold the ids', async () => {
     const names = {
       albumNames: new Map([[ALBUM_ID, 'Already Known Album']]),
