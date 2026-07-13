@@ -55,7 +55,12 @@ vi.mock('$lib/utils/navigation', async (importOriginal) => {
   return {
     ...actual,
     isAlbumsRoute: () => true,
-    navigate: vi.fn().mockResolvedValue(undefined),
+    // Spy that DELEGATES to the real implementation (not a no-op stub): the picker open/close
+    // handlers below call navigate({ assetGridRouteSearchParams: { at } }), which routes into the
+    // real replaceScrollTarget/goto machinery against mockPage + gotoMock above. A no-op stub would
+    // hide the exact bug this suite regression-tests (album.e2e-spec.ts:150 — closing the add-photos
+    // picker silently drops the album's own filter query).
+    navigate: vi.fn(actual.navigate),
   };
 });
 
@@ -637,6 +642,27 @@ describe('album detail filter panel route', () => {
 
       expect(screen.getByTestId('active-chip')).toHaveTextContent('Picker Person');
       expect(gotoMock).not.toHaveBeenCalled();
+    });
+
+    // Regression test for e2e/src/specs/web/album.e2e-spec.ts:150 ("reuses album filters for select
+    // cover but keeps a separate picker state for add assets"). Both opening AND closing the
+    // add-photos picker call navigate({ assetGridRouteSearchParams: { at } }) with no real `at` —
+    // replaceScrollTarget must preserve the album's `?tags=…` query through that round trip, or the
+    // URL-backed $effect re-hydrates albumFilters from a filter-less URL and the chip vanishes.
+    it('keeps the album tag filter across opening and closing the add-photos picker', async () => {
+      renderPage(album1());
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByTestId('tags-item-tag-view')).toBeInTheDocument());
+      await user.click(screen.getByTestId('tags-item-tag-view'));
+      expect(screen.getByTestId('active-chip')).toHaveTextContent('First Album Tag');
+
+      await fireEvent.click(screen.getByLabelText('add_photos'));
+      // The picker shows its OWN (empty) filter state, not the album's — this is expected, not the bug.
+      expect(screen.queryByTestId('active-chip')).not.toBeInTheDocument();
+
+      await fireEvent.click(screen.getByLabelText('Close'));
+      expect(screen.getByTestId('active-chip')).toHaveTextContent('First Album Tag');
     });
 
     it('passes the album filters to the album map', async () => {
