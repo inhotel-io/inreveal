@@ -11622,8 +11622,10 @@ describe(SharedSpaceService.name, () => {
     // a fresh instance of the #767 bug.
     it('forwards albumId to the repository as albumIds', async () => {
       const auth = factory.auth();
-      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
       const albumId = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb';
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
 
       await sut.getFilteredMapMarkers(auth, { albumId } as FilteredMapMarkerDto);
 
@@ -11640,6 +11642,69 @@ describe(SharedSpaceService.name, () => {
 
       const args = mocks.sharedSpace.getFilteredMapMarkers.mock.calls[0][0];
       expect(args.albumIds).toBeUndefined();
+    });
+
+    it('scopes an albumId query by album ACCESS, not by asset owner (issue #656 class)', async () => {
+      const albumId = factory.uuid();
+      const auth = factory.auth();
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, { albumId, withSharedSpaces: true });
+
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          albumIds: [albumId],
+          // The whole point: with userIds unset, searchAssetBuilder takes its album branch
+          // (`albumIds && !userIds` -> albumSharedSpaceScope, database.ts:713). Owner-scoping an album
+          // query hides the album owner's pins from a viewer of a shared album — issue #656.
+          userIds: undefined,
+        }),
+      );
+    });
+
+    // R4 — the OTHER half of the fix. albumSharedSpaceScope's "…or it's in a space you can see" arms
+    // only exist when timelineSpaceIds is set; with it undefined the gate keeps ONLY assets that are in
+    // no shared space at all. So an album query must compute timelineSpaceIds even though the album map
+    // sends no withSharedSpaces — otherwise every album asset that also lives in a space loses its pin.
+    // (This is a shape assertion; the behaviour it protects is pinned by the e2e test in Step 1c.)
+    it('computes timelineSpaceIds for an albumId query even without withSharedSpaces', async () => {
+      const albumId = factory.uuid();
+      const spaceId = newUuid();
+      const auth = factory.auth();
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([{ spaceId }]);
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
+
+      await sut.getFilteredMapMarkers(auth, { albumId });
+
+      expect(mocks.sharedSpace.getSpaceIdsForTimeline).toHaveBeenCalledWith(auth.user.id);
+      expect(mocks.sharedSpace.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({ albumIds: [albumId], userIds: undefined, timelineSpaceIds: [spaceId] }),
+      );
+    });
+
+    it('rejects an albumId the caller cannot read', async () => {
+      const albumId = factory.uuid();
+      const auth = factory.auth();
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.album.checkSharedAlbumAccess.mockResolvedValue(new Set());
+
+      await expect(sut.getFilteredMapMarkers(auth, { albumId })).rejects.toThrow(BadRequestException);
+      expect(mocks.sharedSpace.getFilteredMapMarkers).not.toHaveBeenCalled();
+    });
+
+    // spaceId ∩ albumId is unsatisfiable by construction (see the decision note above): the space scope
+    // demands membership in shared_space_asset, albumSharedSpaceScope (timelineSpaceIds unset under a
+    // spaceId query) demands the opposite. Fail loudly instead of returning a silently empty map.
+    it('rejects spaceId together with albumId', async () => {
+      const auth = factory.auth();
+
+      await expect(sut.getFilteredMapMarkers(auth, { spaceId: newUuid(), albumId: factory.uuid() })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mocks.sharedSpace.getFilteredMapMarkers).not.toHaveBeenCalled();
     });
   });
 
