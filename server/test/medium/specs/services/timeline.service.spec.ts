@@ -2,15 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Insertable, Kysely } from 'kysely';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { TimeBucketDto } from 'src/dtos/time-bucket.dto';
-import {
-  AlbumUserRole,
-  AssetOrder,
-  AssetType,
-  AssetVisibility,
-  SharedLinkType,
-  SharedSpaceRole,
-  TimeBucketSize,
-} from 'src/enum';
+import { AlbumUserRole, AssetOrder, AssetType, AssetVisibility, SharedLinkType, TimeBucketSize } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -21,6 +13,7 @@ import { DB } from 'src/schema';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { TimelineService } from 'src/services/timeline.service';
 import { newMediumService } from 'test/medium.factory';
+import { createTwoOwnerSpace, SPACE_BUCKET, SPACE_DATE } from 'test/medium/fixtures/two-owner-space';
 import { factory } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 
@@ -53,67 +46,10 @@ const createTimelineAsset = async (
   return asset;
 };
 
-const SPACE_BUCKET = '2026-01-01';
-const SPACE_DATE = new Date('2026-01-15T10:00:00Z');
-
-/** An asset owned by `ownerId`, added to `spaceId`, with the given EXIF. */
-const newSpaceAssetWithExif = async (
-  ctx: ReturnType<typeof setup>['ctx'],
-  spaceId: string,
-  ownerId: string,
-  exif: { make?: string; model?: string; lensModel?: string; state?: string; city?: string; country?: string },
-) => {
-  const { asset } = await ctx.newAsset({
-    ownerId,
-    fileCreatedAt: SPACE_DATE,
-    localDateTime: SPACE_DATE,
-    width: 400,
-    height: 200,
-    thumbhash: Buffer.from('thumbhash'),
-  });
-  await ctx.newExif({ assetId: asset.id, timeZone: 'UTC', ...exif });
-  await ctx.newSharedSpaceAsset({ spaceId, assetId: asset.id, addedById: ownerId });
-  return asset;
-};
-
-/**
- * A Space with TWO contributing owners (anna, ben) plus a viewer and an editor who own NOTHING.
- *
- * The two-owner shape is load-bearing: with a single owner every RBAC assertion below passes
- * vacuously and the #655 bug class ("viewers get empty facets for assets owned by someone else")
- * stays invisible. Do not collapse this to one owner.
- */
-const createTwoOwnerSpace = async (ctx: ReturnType<typeof setup>['ctx']) => {
-  const { user: anna } = await ctx.newUser();
-  const { user: ben } = await ctx.newUser();
-  const { user: viewer } = await ctx.newUser();
-  const { user: editor } = await ctx.newUser();
-
-  const { space } = await ctx.newSharedSpace({ createdById: anna.id });
-  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: anna.id, role: SharedSpaceRole.Owner });
-  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: ben.id, role: SharedSpaceRole.Editor });
-  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
-  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: editor.id, role: SharedSpaceRole.Editor });
-
-  const annaAsset = await newSpaceAssetWithExif(ctx, space.id, anna.id, {
-    make: 'Apple',
-    model: 'iPhone 17 Pro Max',
-    lensModel: 'iPhone 17 Pro Max back triple camera',
-    city: 'Berlin',
-    state: 'State of Berlin',
-    country: 'Germany',
-  });
-  const benAsset = await newSpaceAssetWithExif(ctx, space.id, ben.id, {
-    make: 'Canon',
-    model: 'EOS R5',
-    lensModel: 'RF24-70mm F2.8 L IS USM',
-    city: 'Hamburg',
-    state: 'Hamburg',
-    country: 'Germany',
-  });
-
-  return { space, anna, ben, viewer, editor, annaAsset, benAsset };
-};
+// The two-owner Space fixture (anna + ben contribute, viewer + editor own nothing) lives in
+// test/medium/fixtures/two-owner-space.ts: the SAME fixture pins the ownerId contract on the
+// search/map builder (searchAssetBuilder) in search.service.spec.ts, which is a different query
+// builder that has to enforce the same RBAC rules as withTimeBucketAssetFilters below.
 
 /** Asset ids returned by the Space timeline for the given filter. */
 const spaceBucketAssetIds = async (
