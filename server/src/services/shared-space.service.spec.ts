@@ -11698,12 +11698,21 @@ describe(SharedSpaceService.name, () => {
     // spaceId ∩ albumId is unsatisfiable by construction (see the decision note above): the space scope
     // demands membership in shared_space_asset, albumSharedSpaceScope (timelineSpaceIds unset under a
     // spaceId query) demands the opposite. Fail loudly instead of returning a silently empty map.
+    //
+    // Both access checks are armed to SUCCEED here so that the guard under test is the only thing that
+    // can throw. Left at their auto-mocked (empty-Set) defaults, checkMemberAccess would reject the
+    // spaceId first and the guard would never run — the test would stay green even if the guard were
+    // deleted or reordered below the access checks.
     it('rejects spaceId together with albumId', async () => {
       const auth = factory.auth();
+      const spaceId = newUuid();
+      const albumId = factory.uuid();
+      mocks.access.sharedSpace.checkMemberAccess.mockResolvedValue(new Set([spaceId]));
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.getSpaceIdsForTimeline.mockResolvedValue([]);
+      mocks.sharedSpace.getFilteredMapMarkers.mockResolvedValue([]);
 
-      await expect(sut.getFilteredMapMarkers(auth, { spaceId: newUuid(), albumId: factory.uuid() })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(sut.getFilteredMapMarkers(auth, { spaceId, albumId })).rejects.toThrow(BadRequestException);
       expect(mocks.sharedSpace.getFilteredMapMarkers).not.toHaveBeenCalled();
     });
   });
