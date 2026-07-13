@@ -69,12 +69,15 @@
   let isOnPhotos = $derived(filterTarget?.kind === 'photos');
 
   /**
-   * E9 — the album the viewer is ALREADY in never gets an `albumId` filter affordance. On
-   * /albums/A an `albumId=A` filter is a lie: buildAlbumTimelineOptions deliberately refuses to
-   * forward it (the route already scopes the query) while getActiveFilterCount counts it and a chip
-   * renders — a filter the UI claims is active but the server never sees.
+   * E9 — an album surface offers NO `albumId` filter affordance at all, for any album.
+   *
+   * buildAlbumTimelineOptions never forwards `albumId` (the route already scopes the query), while
+   * getActiveFilterCount counts it and a chip renders. So on /albums/A, filtering by album B would
+   * show a "1 filter" badge and a removable B chip over a grid that is still the whole of A — a
+   * filter the UI claims is active but the server never sees. Filtering album A by album B is not
+   * a query the album timeline can express, so we do not offer it.
    */
-  let scopedAlbumId = $derived(currentAlbum?.id ?? (filterTarget?.kind === 'album' ? filterTarget.albumId : undefined));
+  let isOnAlbum = $derived(filterTarget?.kind === 'album');
 
   // R9/E6/E7 — a value that is empty or whitespace-only trims to nothing (filter-url.ts's
   // setTrimmed), so it must not render as a clickable filter affordance: the click would close the
@@ -509,7 +512,7 @@
                 </div>
               </div>
             </a>
-            {#if canFilter && scopedAlbumId !== album.id}
+            {#if canFilter && !isOnAlbum}
               <IconButton
                 icon={mdiFilterOutline}
                 aria-label="{$t('filter_by_album')}: {album.albumName}"

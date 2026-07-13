@@ -1,6 +1,6 @@
 import { AssetOrder, AssetTypeEnum, AssetVisibility, type AlbumResponseDto, type AssetResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
-import { fireEvent, screen } from '@testing-library/svelte';
+import { fireEvent, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
 import { buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
@@ -416,6 +416,8 @@ type Row = {
   filterUrl: () => Promise<string>;
   /** The server field(s) this row must actually reach, so P1 can never pass by filtering nothing. */
   keys: (surface: Surface) => string[];
+  /** Surfaces that deliberately do not OFFER this row's affordance at all (E9). */
+  skipOn?: (surface: Surface) => boolean;
 };
 
 const ROWS: Row[] = [
@@ -453,8 +455,11 @@ const ROWS: Row[] = [
   },
   {
     name: 'album',
+    // E9 — the album surface offers no album ⚗️ at all (see the dedicated describe below), so there
+    // is nothing to click there. Everywhere else it forwards albumId and must satisfy P1.
+    skipOn: (surface) => !surface.forwardsAlbumId,
     filterUrl: () => filterUrlFromClick('filter_by_album: Iceland'),
-    keys: (surface) => (surface.forwardsAlbumId ? ['albumId'] : []),
+    keys: () => ['albumId'],
   },
 ];
 
@@ -492,6 +497,12 @@ describe.each(SURFACES)(
   'P1 on $label: the filter you clicked still contains the asset you clicked it on',
   (surface) => {
     it.each(ROWS)('the $name row', async (row) => {
+      if (row.skipOn?.(surface)) {
+        // The affordance is deliberately not offered here (E9) — the dedicated describe below pins
+        // its ABSENCE, which is the honest behavior. There is nothing to click, so P1 is vacuous.
+        return;
+      }
+
       mockPage.reset(surface.url);
 
       renderWithTooltips(DetailPanel, { asset: subject.asset, currentAlbum: CURRENT_ALBUM });
@@ -516,21 +527,25 @@ describe.each(SURFACES)(
   },
 );
 
-// The album surface is the one place a row's filter is deliberately NOT forwarded — pinned here so
-// the `forwardsAlbumId: false` exemption above can never become a silent hole in P1.
-describe('P1 — the album surface refuses a second albumId', () => {
-  it('keeps its own album scope and never lets a clicked albumId hijack it', async () => {
+// E9 — the album surface is the one place an albumId filter cannot be expressed at all, so the
+// affordance is WITHHELD there rather than offered and quietly ignored.
+//
+// buildAlbumTimelineOptions never forwards `albumId` (the route already scopes the query), while
+// getActiveFilterCount counts it and a chip renders. So offering the ⚗️ here would produce a
+// "1 filter" badge and a removable chip over a grid that never changed — counted, chipped, and
+// never applied. P1 CANNOT catch that (the asset is still in the result set), which is exactly why
+// it is pinned here instead.
+describe('P1 — the album surface withholds the album filter rather than lying about it', () => {
+  it('offers no album ⚗️ at all: not for this album, and not for another', async () => {
     const surface = SURFACES.find((s) => s.label === 'an album')!;
     mockPage.reset(surface.url);
 
     renderWithTooltips(DetailPanel, { asset: subject.asset, currentAlbum: CURRENT_ALBUM });
 
-    const url = await filterUrlFromClick('filter_by_album: Iceland');
-    expect(url).toContain(`albumId=${OTHER_ALBUM_ID}`);
-
-    const options = optionsFor(surface, url);
-    expect(options.albumId).toBe(CURRENT_ALBUM_ID);
-    expectOptionsToMatchSubject(options, subject);
+    // The album cards still render — they navigate. Only the filter affordance is withheld.
+    await waitFor(() => expect(screen.getByText('Iceland')).toBeInTheDocument());
+    expect(screen.queryByLabelText('filter_by_album: Iceland')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(`filter_by_album: ${CURRENT_ALBUM.albumName}`)).not.toBeInTheDocument();
   });
 });
 

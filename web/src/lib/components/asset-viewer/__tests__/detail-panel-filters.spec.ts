@@ -447,16 +447,22 @@ describe('DetailPanel appears-in album filter', () => {
     expect(button.closest('a')).toBeNull();
   });
 
-  // E9 — on /albums/A an albumId=A filter is a LIE: buildAlbumTimelineOptions refuses to forward it
-  // (the route already scopes the query) while getActiveFilterCount counts it and a chip renders.
-  it('E9: offers NO ⚗️ for the album you are already in', async () => {
+  // E9 — an album surface offers NO album ⚗️ AT ALL, for any album (not merely for the album you
+  // are in). buildAlbumTimelineOptions never forwards `albumId` (the route already scopes the
+  // query), while getActiveFilterCount counts it and a chip renders. So on /albums/A, filtering by
+  // album B would show a "1 filter" badge and a removable B chip over a grid that is still the whole
+  // of A — the exact counted-but-not-applied lie this branch keeps killing. P1 cannot catch it (the
+  // asset IS still in the result set), so it is pinned here.
+  it('E9: an album surface offers no album ⚗️ at all — not for this album, not for another', async () => {
     mockPage.reset('https://gallery.test/albums/album-7/photos/asset-1');
     getAllAlbumsMock.mockResolvedValue([albumDto('album-7', 'Iceland'), albumDto('album-8', 'Norway')]);
 
     renderWithTooltips(DetailPanel, { asset: buildAsset(), currentAlbum: albumDto('album-7', 'Iceland') });
 
-    await waitFor(() => expect(screen.getByLabelText('filter_by_album: Norway')).toBeInTheDocument());
+    // The cards still render (they navigate to the album) — only the filter affordance is withheld.
+    await waitFor(() => expect(screen.getByText('Norway')).toBeInTheDocument());
     expect(screen.queryByLabelText('filter_by_album: Iceland')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('filter_by_album: Norway')).not.toBeInTheDocument();
   });
 
   it('E2: a shared link renders no album filter affordance', async () => {
