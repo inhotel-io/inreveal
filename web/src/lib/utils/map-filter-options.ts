@@ -105,6 +105,33 @@ export function buildMapTimeBucketOptions(filters: FilterState, spaceId?: string
   return base;
 }
 
+/**
+ * Markers for ONE album, honouring that album's active filters.
+ *
+ * No `withSharedSpaces` and no owner scope: album ACCESS is the scope. The server checks AlbumRead
+ * and then leaves `userIds` unset so searchAssetBuilder takes its album branch — owner-scoping an
+ * album query hides the album owner's pins from a viewer of a shared album (issue #656).
+ */
+export function buildAlbumMapMarkerOptions(albumId: string, filters: FilterState): Record<string, unknown> {
+  const base = applyCommonMapFilters({ albumId }, filters);
+
+  if (filters.lensModel) {
+    base.lensModel = filters.lensModel;
+  }
+  if (filters.state) {
+    base.state = filters.state;
+  }
+  if (filters.ownerId) {
+    base.ownerId = filters.ownerId;
+  }
+
+  if (filters.mediaType !== 'all') {
+    base.$type = filters.mediaType === 'image' ? MapMediaType.Image : MapMediaType.Video;
+  }
+
+  return base;
+}
+
 export function buildMapTimelineOptions(
   filters: FilterState | undefined,
   bbox: string,
