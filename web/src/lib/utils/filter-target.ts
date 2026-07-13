@@ -83,3 +83,65 @@ export function buildContextualFilterUrl(url: URL, patch: Partial<FilterState>, 
   const search = params.toString();
   return basePath + (search ? `?${search}` : '') + hash;
 }
+
+/**
+ * Write a COMPLETE FilterState into the current URL and return the URL to navigate to.
+ *
+ * This is the WRITE half of the hydrate → write → react loop on the surfaces that are not
+ * "searchable pages" — /albums/{id} and /map. `getSearchablePageBasePath` returns null for both
+ * (searchable-page-search.ts:37-56), so `buildSearchablePageUrl` returns null there and cannot be
+ * reused.
+ *
+ * Semantics, and how they differ from buildContextualFilterUrl:
+ * - It REPLACES rather than merges. Every filter param is deleted, then re-emitted from `filters`
+ *   alone. Do NOT reimplement this by passing a full FilterState as buildContextualFilterUrl's
+ *   `patch`: that function decodes the URL first, so any key absent from the object would silently
+ *   survive and the filter could never be cleared.
+ * - It keeps the CURRENT pathname (including an open asset viewer), because the panel can write
+ *   while the viewer is open. buildContextualFilterUrl deliberately targets the base path instead,
+ *   so that one goto() both closes the viewer and applies the filter.
+ * - Non-filter params (q, sort, spaceId, view, …) are preserved; the hash is preserved (the map
+ *   keeps its viewport there); the one-shot `at` grid scroll target is dropped.
+ */
+export function buildFilterStateUrl(url: URL, filters: FilterState): string {
+  const params = new URLSearchParams(url.searchParams);
+
+  // `at` is a one-shot grid scroll target left behind by closing the asset viewer. It must not
+  // survive a filter change, or the timeline re-scrolls to a now-filtered-out asset.
+  params.delete('at');
+  clearFilterParams(params);
+  encodeFilterParams(params, filters);
+
+  const search = params.toString();
+  return url.pathname + (search ? `?${search}` : '') + url.hash;
+}
+
+/** Order-insensitive canonical form of a query string: `a=1&b=2` and `b=2&a=1` collapse to one. */
+function canonicalizeParams(params: URLSearchParams): string {
+  return [...params.entries()]
+    .sort(([keyA, valueA], [keyB, valueB]) => keyA.localeCompare(keyB) || valueA.localeCompare(valueB))
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+}
+
+/**
+ * Would navigating to `nextUrl` actually change anything?
+ *
+ * This is the no-op guard for the write half of the hydrate → write → react loop, and it must NOT
+ * be a raw string compare: buildFilterStateUrl deletes the filter params and re-appends them last,
+ * so `/map?make=Apple&spaceId=s1` rebuilds as `/map?spaceId=s1&make=Apple` — same meaning, different
+ * string. A string compare would report "changed" and fire a pointless replaceState (plus an extra
+ * $effect pass) the first time the panel is touched on such a URL.
+ *
+ * Path and hash are compared verbatim; the query is compared as a canonicalised param set, so a
+ * dropped `at` or any added/changed/removed filter still reads as a real change.
+ */
+export function isFilterStateUrlUnchanged(url: URL, nextUrl: string): boolean {
+  const next = new URL(nextUrl, url);
+
+  return (
+    next.pathname === url.pathname &&
+    next.hash === url.hash &&
+    canonicalizeParams(next.searchParams) === canonicalizeParams(url.searchParams)
+  );
+}
