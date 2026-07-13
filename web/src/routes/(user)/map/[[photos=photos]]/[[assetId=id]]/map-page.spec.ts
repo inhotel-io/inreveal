@@ -1,20 +1,16 @@
 import { mdiTune } from '@mdi/js';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import type { Component } from 'svelte';
+import { tick, type Component } from 'svelte';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { timeToLoadTheMap } from '$lib/constants';
 import { SEARCH_FILTER_DEBOUNCE_MS } from '$lib/utils/space-search';
+import { reactivePageMock as mockPage } from '@test-data/mocks/reactive-page.mock.svelte';
 import MapPage from './+page.svelte';
 
-const { gotoMock, mockPage, mockAssetViewerManager } = vi.hoisted(() => ({
+const { gotoMock, mockAssetViewerManager } = vi.hoisted(() => ({
   gotoMock: vi.fn().mockResolvedValue(undefined),
-  mockPage: {
-    url: new URL('https://gallery.test/map'),
-    route: { id: '/(user)/map/[[photos=photos]]/[[assetId=id]]' },
-    params: {},
-  },
   mockAssetViewerManager: {
     isViewing: false,
     asset: undefined,
@@ -24,7 +20,14 @@ const { gotoMock, mockPage, mockAssetViewerManager } = vi.hoisted(() => ({
 }));
 
 vi.mock('$app/navigation', () => ({ goto: gotoMock }));
-vi.mock('$app/state', () => ({ page: mockPage }));
+// The mock module and the spec import the SAME singleton, so assigning mockPage.url in a test is
+// what the page's $effect sees. A plain vi.hoisted object registers no signal for a Svelte 5
+// `$effect` reading `page.url.search` (I5) — this reactive mock is the faithful stand-in for the
+// real `page` from $app/state.
+vi.mock('$app/state', async () => {
+  const { reactivePageMock } = await import('@test-data/mocks/reactive-page.mock.svelte');
+  return { page: reactivePageMock };
+});
 
 vi.mock('$lib/components/layouts/UserPageLayout.svelte', async () => {
   const { default: MockComponent } = await import('$lib/components/spaces/mock-user-page-layout.test-wrapper.svelte');
@@ -93,8 +96,16 @@ describe('Map page query intersection', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
-    gotoMock.mockResolvedValue(undefined);
-    mockPage.url = new URL('https://gallery.test/map');
+    // A goto() actually moves page.url, which re-runs the page's URL $effect. If the effect's
+    // lastHandled token guard is ever broken, this turns goto -> $effect -> goto into a real loop
+    // and the test times out — the correct, loud failure.
+    gotoMock.mockImplementation((href: string) => {
+      mockPage.url = new URL(href, 'https://gallery.test');
+      return Promise.resolve();
+    });
+    mockPage.reset('https://gallery.test/map', {
+      routeId: '/(user)/map/[[photos=photos]]/[[assetId=id]]',
+    });
     sdkMock.getTimeBuckets.mockResolvedValue([]);
     sdkMock.getFilteredMapMarkers.mockResolvedValue([]);
     sdkMock.searchSmart.mockResolvedValue({
@@ -378,8 +389,16 @@ describe('Map page filters are URL-backed', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.resetAllMocks();
-    gotoMock.mockResolvedValue(undefined);
-    mockPage.url = new URL('https://gallery.test/map');
+    // Stand in for SvelteKit: a goto() actually changes page.url, which re-runs the page's URL
+    // $effect. If the effect's lastHandled token guard is ever broken, this turns goto -> $effect ->
+    // goto into a real loop and the test times out — which is the correct, loud failure.
+    gotoMock.mockImplementation((href: string) => {
+      mockPage.url = new URL(href, 'https://gallery.test');
+      return Promise.resolve();
+    });
+    mockPage.reset('https://gallery.test/map', {
+      routeId: '/(user)/map/[[photos=photos]]/[[assetId=id]]',
+    });
     sdkMock.getTimeBuckets.mockResolvedValue([]);
     sdkMock.getFilteredMapMarkers.mockResolvedValue([]);
   });
@@ -424,7 +443,7 @@ describe('Map page filters are URL-backed', () => {
 
   // The transient-only case, from the other side: a year is not a URL param, so the rebuilt URL is
   // unchanged and the guard must swallow the write rather than churn history. (The full year +
-  // URL-filter round trip is pinned on the album page, which has a reactive page mock — Task 2.)
+  // URL-filter round trip is pinned below, now that this suite has a reactive page mock too — I5.)
   it('does not write the URL for a transient-only (year) filter change', async () => {
     mockPage.url = new URL('https://gallery.test/map?spaceId=space-1');
 
@@ -461,5 +480,91 @@ describe('Map page filters are URL-backed', () => {
     await waitFor(() =>
       expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-9' })),
     );
+  });
+
+  // Back/forward: SvelteKit swaps page.url without remounting the page component. The $effect must
+  // notice and re-hydrate — this is the same code path a reload and a shared URL take. Only provable
+  // now that this suite's page mock is reactive (I5) — the old plain vi.hoisted object registered no
+  // signal for a Svelte 5 $effect reading page.url.search, so reassigning it here would have been a
+  // no-op the effect never saw.
+  it('re-hydrates when the URL changes underneath the page (back/forward)', async () => {
+    mockPage.url = new URL('https://gallery.test/map?make=Apple&rating=4');
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() =>
+      expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledWith(expect.objectContaining({ make: 'Apple', rating: 4 })),
+    );
+
+    // The browser Back button: no remount, just a new URL.
+    mockPage.url = new URL('https://gallery.test/map?make=Apple');
+    await flushQueryDebounce();
+
+    await waitFor(() => {
+      const [options] = sdkMock.getFilteredMapMarkers.mock.calls.at(-1) as [Record<string, unknown>];
+      expect(options).toMatchObject({ make: 'Apple' });
+      expect(options.rating).toBeUndefined();
+    });
+  });
+
+  // C2's regression test. TimelineAssetViewer.handleClose -> replaceScrollTarget writes `?at=` onto
+  // /map when an asset closes over a filtered map. selectedYear is transient (not in the URL codec),
+  // so a naive re-hydrate on this URL-only change drops it and silently widens the map back to "all
+  // time". This must NOT read as a filter change.
+  it('keeps a transient year when the asset viewer closes (?at= is not a filter change)', async () => {
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+
+    await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
+
+    // Simulate the asset viewer closing: replaceScrollTarget writes `?at=` into the URL. This is a
+    // raw property set (not a fireEvent), so nothing implicitly flushes the pending $effect the way
+    // fireEvent does — tick() forces that flush. A plain waitFor here would be vacuous under fake
+    // timers: its own first synchronous check runs BEFORE the effect flushes and sees the still-2015
+    // value, so it would pass whether or not the bug is present (compare I3).
+    mockPage.url = new URL('https://gallery.test/map?at=asset-1');
+    await tick();
+
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+  });
+
+  // I4's regression test. Clicking the search chip's X calls clearCommittedQuery, which goto()s a
+  // URL without `q` — that re-runs the re-hydrate effect and rebuilds `filters` from the URL alone
+  // unless the transient year is carried over the same way syncMapFilterUrl does it. Reviewer-proven
+  // repro: year 2015 -> "" after clicking the chip's X.
+  it('keeps a transient year when the committed q chip is cleared', async () => {
+    mockPage.url = new URL('https://gallery.test/map?q=beach');
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+
+    await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
+
+    // fireEvent flushes pending effects itself (unlike a raw page.url mutation — see the tick() note
+    // above), so the state right after this settles is the real post-effect state, not a stale one.
+    await fireEvent.click(screen.getByTestId('search-chip-close'));
+
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+  });
+
+  // The pendingFilterUrlSync carry-over, from the other side: a picked year survives a URL-writing
+  // filter change, and the map's viewport hash (which lives outside the FilterState codec entirely)
+  // survives the same write.
+  it('carries a transient year across a URL-writing filter change, preserving the viewport hash', async () => {
+    mockPage.url = new URL('https://gallery.test/map#12/48.85/2.35');
+    renderPage();
+    await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
+
+    await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
+    // A year is transient — it is not in the URL codec, so it must not have triggered a write.
+    expect(gotoMock).not.toHaveBeenCalled();
+
+    await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
+
+    await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+    const [target] = gotoMock.mock.calls.at(-1) as [string];
+    expect(target).toContain('country=Germany');
+    expect(target).toContain('#12/48.85/2.35');
+
+    await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
   });
 });

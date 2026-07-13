@@ -14,7 +14,7 @@
   } from '@immich/sdk';
   import { IconButton, modalManager } from '@immich/ui';
   import { mdiMapOutline } from '@mdi/js';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -48,18 +48,32 @@
     void onClick();
   });
 
+  const markerOptions = $derived.by(() => (filters ? buildAlbumMapMarkerOptions(album.id, filters) : undefined));
+  /**
+   * Stable, value-comparable key for the $effect below. `markerOptions` is a fresh object every time
+   * `filters` changes reference, and the album page reassigns `albumFilters` wholesale on every
+   * keystroke — including into text filters (description/filename/ocr) that
+   * buildAlbumMapMarkerOptions doesn't even read (M6). A Svelte `$derived` only re-notifies
+   * subscribers when its OUTPUT changes by value, so a plain string is what actually stops a marker
+   * refetch on every keystroke — depending on `markerOptions` (an object, never `===` its previous
+   * self) or `filters` directly would not.
+   */
+  const markerOptionsKey = $derived.by(() => (markerOptions ? JSON.stringify(markerOptions) : `album:${album.id}`));
+
   $effect(() => {
-    // Explicit dependency: `filters` is undefined on the shared-link path, where the rest of the
-    // reads below would not touch it at all.
-    void filters;
-    void loadMapMarkers();
+    // The ONLY tracked dependency is this stable key. loadMapMarkers is called inside untrack() so
+    // that its own reads of `markerOptions`/`filters`/`album.id` don't ALSO become dependencies of
+    // this effect — $effect (unlike $derived) does not diff: it reruns whenever any read signal
+    // fires, regardless of whether the resulting value actually changed.
+    void markerOptionsKey;
+    untrack(() => void loadMapMarkers());
   });
 
   /**
-   * Markers now reload on every filter change (see the $effect above), which means each new load
-   * ABORTS the one in flight — and an aborted fetch REJECTS. Under the old onMount-only load that
-   * could never happen, so the catch fed straight into handleError; keep that and the user gets an
-   * error toast every time they touch a filter. Two guards:
+   * Markers now reload on every marker-relevant filter change (see the $effect above), which means
+   * each new load ABORTS the one in flight — and an aborted fetch REJECTS. Under the old
+   * onMount-only load that could never happen, so the catch fed straight into handleError; keep that
+   * and the user gets an error toast every time they touch a filter. Two guards:
    *  - `controller.signal.aborted` → this request was superseded on purpose; say nothing.
    *  - `token !== requestToken`    → a newer request already answered; do not clobber its markers
    *                                  with this stale response (an abort does not un-send a request
@@ -73,8 +87,8 @@
 
     try {
       const markers =
-        filters && !authManager.isSharedLink
-          ? await getFilteredMapMarkers(buildAlbumMapMarkerOptions(album.id, filters), { signal: controller.signal })
+        markerOptions && !authManager.isSharedLink
+          ? await getFilteredMapMarkers(markerOptions, { signal: controller.signal })
           : await getAlbumMapMarkers({ ...authManager.params, id: album.id }, { signal: controller.signal });
 
       if (token !== requestToken) {

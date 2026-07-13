@@ -26,7 +26,7 @@
   import { handlePromiseError } from '$lib/utils';
   import { delay } from '$lib/utils/asset-utils';
   import { buildMapFilterConfig } from '$lib/utils/map-filter-config';
-  import { buildFilterStateUrl, isFilterStateUrlUnchanged } from '$lib/utils/filter-target';
+  import { buildFilterStateUrl, isFilterStateUrlUnchanged, withoutAtParam } from '$lib/utils/filter-target';
   import { decodeFilterParams } from '$lib/utils/filter-url';
   import { navigate } from '$lib/utils/navigation';
   import {
@@ -102,7 +102,10 @@
 
   // Filter state
   let filters = $state<FilterState>(hydrateMapFilters(page.url));
-  let lastHandledFilterSearch = $state(page.url.search);
+  // Token guard for the URL $effect below, at-stripped like the photos/album pages — see
+  // withoutAtParam's docs: replaceScrollTarget writes `?at=<assetId>` onto /map when the timeline
+  // panel's asset viewer closes, and that must not read as a filter change (C2).
+  let lastHandledFilterSearch = $state(withoutAtParam(page.url.search));
   let pendingFilterUrlSync = $state<
     { search: string; transientTemporal?: SearchablePageTransientTemporalState } | undefined
   >();
@@ -278,7 +281,8 @@
 
   $effect(() => {
     const nextSearch = page.url.search;
-    if (nextSearch === lastHandledFilterSearch) {
+    const nextFilterSearch = withoutAtParam(nextSearch);
+    if (nextFilterSearch === lastHandledFilterSearch) {
       return;
     }
 
@@ -292,14 +296,26 @@
       if (pendingFilterUrlSync?.search === nextSearch) {
         pendingFilterUrlSync = undefined;
       }
-      lastHandledFilterSearch = nextSearch;
+      lastHandledFilterSearch = nextFilterSearch;
     });
   });
 
   function clearCommittedQuery() {
     const url = new URL(page.url);
     url.searchParams.delete('q');
-    void goto(`${url.pathname}${url.search}${url.hash}`, {
+    const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+    // Same pendingFilterUrlSync carry-over as syncMapFilterUrl (I4): clearing `q` still goto()s a
+    // URL, which re-runs the re-hydrate effect above and rebuilds `filters` from the URL alone —
+    // dropping selectedYear/selectedMonth (not URL params) without this. Reviewer-proven repro: a
+    // picked year reset to "" after clicking the search chip's X.
+    pendingFilterUrlSync = {
+      search: new URL(nextUrl, page.url).search,
+      transientTemporal: {
+        selectedYear: filters.selectedYear,
+        selectedMonth: filters.selectedMonth,
+      },
+    };
+    void goto(nextUrl, {
       replaceState: true,
       keepFocus: true,
       noScroll: true,

@@ -432,8 +432,8 @@ describe('buildAlbumMapMarkerOptions', () => {
     // The server derives everything else from albumId: it checks AlbumRead, leaves userIds unset,
     // and computes timelineSpaceIds itself so albumSharedSpaceScope can keep unreachable space
     // assets out (R4). The client must NOT try to help by adding withSharedSpaces — that flag also
-    // changes how person tokens are resolved (resolveScopedMapPersonFilters), which is not what an
-    // album query wants.
+    // widens person-token resolution scope in SharedSpaceService.getFilteredMapMarkers
+    // (server/src/services/shared-space.service.ts), which is not what an album query wants.
     expect(buildAlbumMapMarkerOptions('album-1', createFilterState())).toEqual({ albumId: 'album-1' });
   });
 });

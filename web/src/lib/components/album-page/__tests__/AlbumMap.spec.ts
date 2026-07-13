@@ -51,7 +51,10 @@ describe('AlbumMap', () => {
 
     await vi.waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(1));
 
-    await rerender({ component: AlbumMap, componentProps: { album, filters: { ...createFilterState(), make: 'Canon' } } });
+    await rerender({
+      component: AlbumMap,
+      componentProps: { album, filters: { ...createFilterState(), make: 'Canon' } },
+    });
 
     await vi.waitFor(() =>
       expect(sdkMock.getFilteredMapMarkers).toHaveBeenLastCalledWith(
@@ -59,6 +62,26 @@ describe('AlbumMap', () => {
         expect.anything(),
       ),
     );
+  });
+
+  // M6: the album page reassigns `albumFilters` (a whole new object) on every keystroke, including
+  // into text filters that buildAlbumMapMarkerOptions does not even read. Depending on the raw
+  // `filters` object identity (rather than the marker-relevant options) would abort and refetch
+  // markers on every one of those keystrokes.
+  it('does not refetch markers when a filter the album map does not read changes (e.g. description)', async () => {
+    const album = albumFactory.build({ id: 'album-1' });
+    const { rerender } = renderWithTooltips(AlbumMap, { album, filters: { ...createFilterState(), make: 'Apple' } });
+
+    await vi.waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(1));
+
+    await rerender({
+      component: AlbumMap,
+      componentProps: { album, filters: { ...createFilterState(), make: 'Apple', description: 'sunset' } },
+    });
+
+    // Give an (incorrect) effect rerun a chance to fire before asserting it didn't.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(1);
   });
 
   // Markers now load from an $effect, not once from onMount — so every filter change aborts the
@@ -78,12 +101,19 @@ describe('AlbumMap', () => {
     const { rerender } = renderWithTooltips(AlbumMap, { album, filters: { ...createFilterState(), make: 'Apple' } });
     await vi.waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(1));
 
-    await rerender({ component: AlbumMap, componentProps: { album, filters: { ...createFilterState(), make: 'Canon' } } });
+    await rerender({
+      component: AlbumMap,
+      componentProps: { album, filters: { ...createFilterState(), make: 'Canon' } },
+    });
     await vi.waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(2));
 
     // …and only now does the aborted first request settle.
     rejectFirst(new DOMException('The operation was aborted.', 'AbortError'));
-    await vi.waitFor(() => expect(handleErrorMock).not.toHaveBeenCalled());
+    // A flush, not vi.waitFor: vi.waitFor's own first poll runs before the rejection microtask does,
+    // so it would trivially satisfy itself and never actually exercise the catch guard it documents
+    // (I3 — mutation-checked: deleting the guard left this assertion green).
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(handleErrorMock).not.toHaveBeenCalled();
 
     // The second response is the one on the map.
     await userEvent.setup().click(screen.getByLabelText('map'));
@@ -108,7 +138,10 @@ describe('AlbumMap', () => {
     const { rerender } = renderWithTooltips(AlbumMap, { album, filters: { ...createFilterState(), make: 'Apple' } });
     await vi.waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(1));
 
-    await rerender({ component: AlbumMap, componentProps: { album, filters: { ...createFilterState(), make: 'Canon' } } });
+    await rerender({
+      component: AlbumMap,
+      componentProps: { album, filters: { ...createFilterState(), make: 'Canon' } },
+    });
     await vi.waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(2));
 
     resolveFirst([{ id: 'stale', lat: 9, lon: 9 }]);
