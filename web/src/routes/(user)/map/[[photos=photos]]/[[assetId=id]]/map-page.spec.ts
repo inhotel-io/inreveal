@@ -9,7 +9,8 @@ import { SEARCH_FILTER_DEBOUNCE_MS } from '$lib/utils/space-search';
 import { reactivePageMock as mockPage } from '@test-data/mocks/reactive-page.mock.svelte';
 import MapPage from './+page.svelte';
 
-const { gotoMock, mockAssetViewerManager } = vi.hoisted(() => ({
+const { featureFlagsMock, gotoMock, mockAssetViewerManager } = vi.hoisted(() => ({
+  featureFlagsMock: { value: { map: true } as Record<string, unknown> },
   gotoMock: vi.fn().mockResolvedValue(undefined),
   mockAssetViewerManager: {
     isViewing: false,
@@ -64,7 +65,7 @@ vi.mock('$lib/managers/asset-viewer-manager.svelte', () => ({
 }));
 
 vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
-  featureFlagsManager: { value: { map: true } },
+  featureFlagsManager: featureFlagsMock,
 }));
 
 vi.mock('$lib/utils/navigation', () => ({ navigate: () => Promise.resolve() }));
@@ -112,6 +113,10 @@ describe('Map page query intersection', () => {
       assets: { items: [], nextPage: null },
       albums: { items: [], nextPage: null },
     } as never);
+    // This whole describe block pins the pre-existing intersection loop, which only ever runs
+    // when the instance has a smart-search cutoff configured (R2/#767c) — arrange onto that
+    // instance explicitly rather than relying on an ambient default.
+    featureFlagsMock.value = { ...featureFlagsMock.value, map: true, smartSearchHasCutoff: true };
   });
 
   afterEach(() => {
@@ -401,6 +406,9 @@ describe('Map page filters are URL-backed', () => {
     });
     sdkMock.getTimeBuckets.mockResolvedValue([]);
     sdkMock.getFilteredMapMarkers.mockResolvedValue([]);
+    // None of this describe's tests exercise the q/searchSmart intersection — reset explicitly
+    // rather than depend on whatever the previous describe block left behind.
+    featureFlagsMock.value = { map: true };
   });
 
   afterEach(() => {
@@ -566,5 +574,86 @@ describe('Map page filters are URL-backed', () => {
     expect(target).toContain('#12/48.85/2.35');
 
     await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
+  });
+});
+
+describe('Map page smart-search honesty (#767c)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.resetAllMocks();
+    gotoMock.mockResolvedValue(undefined);
+    mockPage.url = new URL('https://gallery.test/map');
+    sdkMock.getTimeBuckets.mockResolvedValue([]);
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([]);
+    // Default instance: clip.maxDistance = 0 ⇒ smart search cannot narrow anything.
+    featureFlagsMock.value = { ...featureFlagsMock.value, map: true, smartSearchHasCutoff: false };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('applies every structured filter and says the smart-search term is not applied', async () => {
+    mockPage.url = new URL('https://gallery.test/map?q=ski&make=Apple&rating=4');
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
+
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() => {
+      // the structured half of the filter IS honoured…
+      expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledWith(expect.objectContaining({ make: 'Apple', rating: 4 }));
+      // …the smart-search half is not, and the map says so instead of pretending
+      expect(screen.getByTestId('map-smart-search-notice')).toBeInTheDocument();
+    });
+
+    // The loop that pages the entire library and narrows nothing never runs here (R2).
+    expect(sdkMock.searchSmart).not.toHaveBeenCalled();
+    // The markers matching the structured filters are still shown — not a silent full library, and
+    // not a silently empty map either.
+    expect(screen.getByTestId('map-stub')).toHaveAttribute('data-marker-ids', 'asset-1');
+  });
+
+  it('intersects and shows NO notice when the instance has a smart-search cutoff', async () => {
+    // The regression guard for the configured instance: this is the test that fails if someone
+    // "simplifies" the gate away by deleting the loop.
+    featureFlagsMock.value = { ...featureFlagsMock.value, smartSearchHasCutoff: true };
+    mockPage.url = new URL('https://gallery.test/map?q=ski');
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([
+      { id: 'asset-1', lat: 1, lon: 2 } as never,
+      { id: 'asset-2', lat: 3, lon: 4 } as never,
+    ]);
+    sdkMock.searchSmart.mockResolvedValue({
+      assets: { items: [{ id: 'asset-2' }], nextPage: null },
+    } as never);
+
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() => expect(sdkMock.searchSmart).toHaveBeenCalled());
+    // Narrowed to the semantic match…
+    await waitFor(() => expect(screen.getByTestId('map-stub')).toHaveAttribute('data-marker-ids', 'asset-2'));
+    // …and no notice, because the term genuinely WAS applied.
+    expect(screen.queryByTestId('map-smart-search-notice')).not.toBeInTheDocument();
+  });
+
+  it('shows no notice when there is no smart-search term', async () => {
+    mockPage.url = new URL('https://gallery.test/map?make=Apple');
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 2 } as never]);
+
+    renderPage();
+    await flushQueryDebounce();
+
+    await waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalled());
+    expect(screen.queryByTestId('map-smart-search-notice')).not.toBeInTheDocument();
+  });
+
+  it('shows no notice for a whitespace-only q', async () => {
+    mockPage.url = new URL('https://gallery.test/map?q=%20%20');
+
+    renderPage();
+    await flushQueryDebounce();
+
+    expect(screen.queryByTestId('map-smart-search-notice')).not.toBeInTheDocument();
   });
 });

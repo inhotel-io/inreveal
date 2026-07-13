@@ -1929,6 +1929,7 @@
   "map_settings_include_show_partners": "Include Partners",
   "map_settings_only_show_favorites": "Show Favorite Only",
   "map_settings_theme_settings": "Map Theme",
+  "map_smart_search_not_applied": "Smart search isn't applied on the map. The map shows every photo matching your other filters.",
   "mark_all_as_read": "Mark all as read",
   "marked_all_as_read": "Marked all as read",
   "matches": "Matches",

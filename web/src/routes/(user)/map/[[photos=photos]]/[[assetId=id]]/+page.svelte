@@ -137,6 +137,9 @@
   // float over the map's own controls (mobile keeps its separate drawer toggle).
   let filterCollapsed = $state(loadFilterCollapsed());
   const noResults = $derived(mapMarkers.length === 0 && hasActiveFilters);
+  const hasUnappliedSmartSearch = $derived(
+    committedQuery.trim().length > 0 && !featureFlagsManager.value.smartSearchHasCutoff,
+  );
 
   const handleAddAllToCollection = () => {
     const query = committedQuery.trim();
@@ -182,6 +185,10 @@
     const options = mapMarkerOptions;
     const currentSpaceId = spaceId;
     const query = committedQuery.trim();
+    // Admin-only config: only the server can tell us whether smart search actually narrows
+    // anything (clip.maxDistance). Without a cutoff the ranked result set is the whole scoped
+    // library, so the loop below would page it to exhaustion and match every marker — see R2.
+    const canApplySmartSearch = featureFlagsManager.value.smartSearchHasCutoff;
 
     clearTimeout(fetchTimeout);
     queryAbortController?.abort();
@@ -197,7 +204,7 @@
             return;
           }
 
-          if (!query) {
+          if (!query || !canApplySmartSearch) {
             mapMarkers = markers;
             return;
           }
@@ -474,6 +481,13 @@
               }}
               onAddAllToCollection={handleAddAllToCollection}
             />
+          </div>
+        {/if}
+        {#if hasUnappliedSmartSearch}
+          <div class="absolute inset-x-0 top-0 z-10 mt-12 px-4" data-testid="map-smart-search-notice" role="status">
+            <p class="rounded-lg bg-warning/90 px-4 py-2 text-sm text-dark shadow">
+              {$t('map_smart_search_not_applied')}
+            </p>
           </div>
         {/if}
         <div
