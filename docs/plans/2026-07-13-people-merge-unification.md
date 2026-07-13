@@ -3,8 +3,14 @@
 Design spec — 2026-07-13. Follow-up to issue #733 (a user on 5.1.0 still cannot merge people across
 libraries; the error is now `Cannot merge people that already have separate profiles in the same scope`).
 
-Implementation is sliced for `/impl-loop` (§7). Slices 1–6 are ordered so each one leaves the suite green
-and ships working software on its own.
+Implementation is sliced for `/impl-loop` (§7). Slices 1–6 are ordered so each one leaves the suite green and
+ships working software on its own.
+
+**Build status.** Slice 1 landed as `861263dfc8` — with its policy **inverted** during implementation: the
+codebase already supported person↔pet merges deliberately (`pet-detection.e2e-spec.ts` pins both directions,
+target type winning), so the space endpoint was brought in line with that rather than the reverse. Slice 2
+landed as `87e1c7a295` (the reported bug; CI green including e2e). Slices 3 and 4 landed together as
+`4957b3f972` — they are one coherent change to the gate and could not be split cleanly mid-file.
 
 ## 1. Why
 
