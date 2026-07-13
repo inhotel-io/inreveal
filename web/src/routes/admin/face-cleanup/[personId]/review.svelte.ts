@@ -1,4 +1,5 @@
 import type { FaceRepairResolveRequestDto } from '@immich/sdk';
+import { mdiAccountArrowRight, mdiArrowRightBold, mdiImageOff, mdiLock, mdiPin } from '@mdi/js';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 // Model B (full per-face resolution, docs/plans/2026-07-10-face-cleanup-full-resolution-design.md). Every
@@ -18,6 +19,18 @@ export const STATE_COLOR: Record<FaceState, string> = {
   stay: '#16a34a',
   lock: '#7c3aed',
   detach: '#475569',
+};
+
+// One icon per state, so state is never encoded in COLOR ALONE. The tile badge used to stamp the same check
+// mark on owner/stay/other, leaving indigo-vs-violet as the only thing separating "moved away" from "locked in
+// place" — unreadable for a colorblind admin, and hard for anyone at a glance. Same icon on the tile badge, the
+// bulk-bar button, the tally chip and the help modal, so one glyph means one thing everywhere on the page.
+export const STATE_ICON: Record<FaceState, string> = {
+  owner: mdiArrowRightBold, // moves to the scan's suspected owner
+  other: mdiAccountArrowRight, // moves to a person the admin picked
+  stay: mdiPin, // stays on this person (decline)
+  lock: mdiLock, // stays, pinned against every future scan
+  detach: mdiImageOff, // not a face at all — unassigned entirely
 };
 
 export interface FlaggedFace {
@@ -59,8 +72,16 @@ export interface ReviewModel {
    *  `other`-state (chosen-person) destinations — a suggested-owner move never auto-locks. */
   applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null; lock?: boolean }): void;
   /** Pure builder: groups `owner`/`other` faces by destination (owner destination = each face's own
-   *  suspectedOwnerId) and emits `stay`/`lock`/`detach` id lists. Never touches the network. */
-  buildResolveRequest(personId: string): FaceRepairResolveRequestDto;
+   *  suspectedOwnerId) and emits `stay`/`lock`/`detach` id lists. Never touches the network.
+   *
+   *  `added` carries the rest-of-cluster faces the admin ticked — faces the scan never flagged, which they want
+   *  moved to the same destination anyway. They join the SAME resolve as the flagged faces (one terminal Apply):
+   *  a separate resolve for them alone would settle none of the flagged snapshot, and the server would (rightly)
+   *  refuse to drain the person — leaving the review half-done. */
+  buildResolveRequest(
+    personId: string,
+    added?: { destinationPersonId: string; faceIds: string[] },
+  ): FaceRepairResolveRequestDto;
 }
 
 export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
@@ -170,7 +191,10 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
       clearSelectionState();
     },
 
-    buildResolveRequest(personId: string): FaceRepairResolveRequestDto {
+    buildResolveRequest(
+      personId: string,
+      added?: { destinationPersonId: string; faceIds: string[] },
+    ): FaceRepairResolveRequestDto {
       // Plain Map: local bookkeeping scoped to this single pure-function call, discarded on return — no UI
       // reads it, so it never needs to be reactive.
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -222,6 +246,13 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
             break;
           }
         }
+      }
+
+      // Rest-of-cluster faces the admin added ride the same (destination, lock:false) group as an owner-state
+      // face bound for the same person — addToMoveGroup dedupes by that key, so they merge rather than emitting
+      // a second group for the same destination.
+      for (const assetFaceId of added?.faceIds ?? []) {
+        addToMoveGroup(added!.destinationPersonId, assetFaceId, false);
       }
 
       return {

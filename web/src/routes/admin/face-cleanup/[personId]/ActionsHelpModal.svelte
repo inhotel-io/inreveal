@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Button, Modal, ModalBody, ModalFooter } from '@immich/ui';
+  import { Button, Icon, Modal, ModalBody, ModalFooter } from '@immich/ui';
   import { mdiInformationOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
-  import { STATE_COLOR, type FaceState } from './review.svelte';
+  import { STATE_COLOR, STATE_ICON, type FaceState } from './review.svelte';
 
   type Props = { onClose: () => void };
   const { onClose }: Props = $props();
@@ -31,8 +31,10 @@
         <div class="flex gap-3.5 border-b border-gray-200 py-4 last:border-b-0 dark:border-gray-700">
           <span class="w-[3px] flex-none rounded-full" style="background: {STATE_COLOR[action.state]}"></span>
           <div>
+            <!-- The state's own icon, the same glyph the tile badge and bulk button carry — that's what ties an
+                 explanation here back to the thing it explains out there. -->
             <h3 class="flex items-center gap-2 text-sm font-bold">
-              <span class="size-2.5 rounded-xs" style="background: {STATE_COLOR[action.state]}"></span>
+              <Icon icon={STATE_ICON[action.state]} size="15" color={STATE_COLOR[action.state]} />
               {$t(action.nameKey)}
             </h3>
             <p class="mt-1.5 text-sm/relaxed">

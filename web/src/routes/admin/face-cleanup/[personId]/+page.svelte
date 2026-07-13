@@ -8,9 +8,10 @@
     getLatestScan,
     getPeopleThumbnailPath,
     resolveFaces,
+    type FaceRepairResolveRequestDto,
   } from '@immich/sdk';
-  import { Button, Icon, modalManager } from '@immich/ui';
-  import { mdiArrowLeft, mdiArrowRight, mdiCheckBold, mdiClose, mdiInformationOutline, mdiLock } from '@mdi/js';
+  import { Button, Icon, modalManager, toastManager } from '@immich/ui';
+  import { mdiArrowLeft, mdiArrowRight, mdiCheckBold, mdiClose, mdiInformationOutline } from '@mdi/js';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
@@ -18,7 +19,14 @@
   import ActionsHelpModal from './ActionsHelpModal.svelte';
   import type { PageData } from './$types';
   import PersonPicker from './PersonPicker.svelte';
-  import { createReviewModel, STATE_COLOR, type FaceEntry, type FaceState, type FlaggedFace } from './review.svelte';
+  import {
+    createReviewModel,
+    STATE_COLOR,
+    STATE_ICON,
+    type FaceEntry,
+    type FaceState,
+    type FlaggedFace,
+  } from './review.svelte';
 
   interface ScanPerson {
     personId: string;
@@ -63,9 +71,12 @@
   let applying = $state(false);
   let applyError = $state<string | null>(null);
 
-  // Rest-of-cluster (server-paginated, add-faces feature) — its own self-contained flow, now also posting
-  // through `resolve` (Slice 6): a selected subset moves via `moveToPerson`, "move entire cluster" via
-  // `entireCluster`. Its selection is intentionally decoupled from the flagged-grid review model above.
+  // Rest-of-cluster (server-paginated, add-faces feature): faces the scan never flagged, which the admin can add
+  // to the move. This selection STAGES into the dock's single Apply — it does not commit on its own. It used to
+  // fire its own independent resolve, which settled none of the flagged snapshot yet still closed the person out
+  // of the console, silently discarding every staged flagged decision (they came back on the next scan). The
+  // server now refuses to drain on such a resolve; the client no longer makes one. "Move entire cluster" stays a
+  // separate, explicit commit — it moves ALL eligible faces, flagged ones included.
   const REST_PAGE_SIZE = 48;
   let restFaces = $state<{ assetFaceId: string }[]>([]);
   let restTotal = $state(0);
@@ -73,7 +84,6 @@
   let restHasMore = $state(false);
   let restLoading = $state(false);
   const restSelected = new SvelteSet<string>();
-  let restMoving = $state(false);
   let showEntireConfirm = $state(false);
 
   // An entire-cluster move covers ALL eligible faces: the Rest (which excludes the flagged ids) plus the
@@ -228,26 +238,6 @@
     }
   };
 
-  const handleMoveRestSelection = async () => {
-    if (!ownerPersonId || restSelected.size === 0 || restMoving) {
-      return;
-    }
-    restMoving = true;
-    try {
-      await resolveFaces({
-        faceRepairResolveRequestDto: {
-          personId,
-          moveToPerson: [{ destinationPersonId: ownerPersonId, faceIds: [...restSelected] }],
-        },
-      });
-      void goto(Route.faceCleanup());
-    } catch {
-      // non-fatal — selection is preserved, admin can retry
-    } finally {
-      restMoving = false;
-    }
-  };
-
   const handleMoveEntireCluster = () => {
     if (!ownerPersonId) {
       return;
@@ -260,31 +250,36 @@
     if (!ownerPersonId) {
       return;
     }
-    try {
-      await resolveFaces({
-        faceRepairResolveRequestDto: {
-          personId,
-          entireCluster: { destinationPersonId: ownerPersonId },
-        },
-      });
-      void goto(Route.faceCleanup());
-    } catch {
-      // non-fatal — the confirm modal already closed; the person stays in the console for a retry
-    }
+    await commitResolve({ personId, entireCluster: { destinationPersonId: ownerPersonId } });
   };
 
   const handleCancel = () => {
     void goto(Route.faceCleanup());
   };
 
-  const handleApply = async () => {
+  // Every resolve on this page funnels through here, so a failure can never again be swallowed: the whole-cluster
+  // move used to `catch {}` the server's 409 ("Refusing to apply while a scan is in progress"), leaving the admin
+  // with no banner, nothing moved, and the belief that it had worked — the same faces then came back on the next
+  // scan. On success we report what the server actually DID (its own counts) rather than blind-navigating.
+  const commitResolve = async (request: FaceRepairResolveRequestDto) => {
     if (applying) {
       return;
     }
     applying = true;
     applyError = null;
     try {
-      await resolveFaces({ faceRepairResolveRequestDto: vm.buildResolveRequest(personId) });
+      const result = await resolveFaces({ faceRepairResolveRequestDto: request });
+      toastManager.primary(
+        $t('admin.face_cleanup_review_apply_summary', {
+          values: {
+            moved: result.moved,
+            kept: result.declined,
+            locked: result.locked,
+            detached: result.detached,
+            skipped: result.skipped,
+          },
+        }),
+      );
       void goto(Route.faceCleanup());
     } catch (error: unknown) {
       const status = (error as { status?: number }).status;
@@ -294,6 +289,19 @@
       applying = false;
     }
   };
+
+  // The ONE terminal action: every flagged face's staged state, plus any rest-of-cluster faces the admin ticked,
+  // in a single resolve. Splitting these into two resolves is what let a rest-move settle none of the flagged
+  // snapshot and still close the person out of the console.
+  const handleApply = () =>
+    commitResolve(
+      vm.buildResolveRequest(
+        personId,
+        ownerPersonId && restSelected.size > 0
+          ? { destinationPersonId: ownerPersonId, faceIds: [...restSelected] }
+          : undefined,
+      ),
+    );
 </script>
 
 <AdminPageLayout breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanup() }, { title: personName }]}>
@@ -452,16 +460,14 @@
               {#if selected}
                 <div class="absolute inset-0 bg-primary/15"></div>
               {/if}
-              <!-- State indicator -->
+              <!-- State indicator: its own icon per state, never colour alone (owner/stay/other used to share
+                   one check mark, so indigo-vs-violet was all that separated "moved away" from "locked here"). -->
               <div
                 class="absolute top-1.5 left-1.5 flex size-5 items-center justify-center rounded-md border-2 border-white shadow-sm"
                 style="background: {STATE_COLOR[face.state]}"
+                data-state-icon={face.state}
               >
-                {#if face.state === 'lock'}
-                  <Icon icon={mdiLock} size="11" color="white" />
-                {:else if face.state !== 'detach'}
-                  <Icon icon={mdiCheckBold} size="11" color="white" />
-                {/if}
+                <Icon icon={STATE_ICON[face.state]} size="11" color="white" />
               </div>
               <!-- Ribbon -->
               <div
@@ -502,14 +508,10 @@
           </h3>
           <div class="flex-1"></div>
           {#if restSelected.size > 0}
-            <Button
-              size="small"
-              disabled={!ownerPersonId || restMoving}
-              onclick={handleMoveRestSelection}
-              data-testid="move-rest-selection-btn"
-            >
-              {$t('admin.face_cleanup_review_move', { values: { count: restSelected.size } })}
-            </Button>
+            <!-- Staged, not committed: these ride the dock's single Apply along with the flagged faces. -->
+            <span class="text-xs font-semibold text-primary" data-testid="rest-staged">
+              {$t('admin.face_cleanup_review_rest_staged', { values: { count: restSelected.size } })}
+            </span>
           {/if}
           <button
             type="button"
@@ -611,7 +613,7 @@
                   count === 0 ? 'opacity-40' : '',
                 ].join(' ')}
               >
-                <span class="size-2.5 rounded-xs" style="background: {STATE_COLOR[state]}"></span>
+                <Icon icon={STATE_ICON[state]} size="13" color={STATE_COLOR[state]} />
                 <span>{count}</span>
                 <span class="font-normal text-gray-500 dark:text-gray-400">
                   {state === 'owner'
@@ -620,6 +622,17 @@
                 </span>
               </span>
             {/each}
+            {#if restSelected.size > 0}
+              <!-- Rest-of-cluster faces the admin added: part of the same Apply, so the dock must account for
+                   them too — otherwise the count lies about what the button is going to do. -->
+              <span
+                class="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
+                data-testid="tally-added"
+              >
+                <span>+{restSelected.size}</span>
+                <span class="font-normal">{$t('admin.face_cleanup_review_tally_added')}</span>
+              </span>
+            {/if}
             <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-600">
               <Icon icon={mdiCheckBold} size="13" />
               {$t('admin.face_cleanup_review_tally_all_set')}
@@ -627,7 +640,11 @@
           </div>
           <Button color="primary" disabled={applying} onclick={handleApply} data-testid="apply-btn">
             <Icon icon={mdiArrowRight} size="16" />
-            {$t('admin.face_cleanup_review_apply_label', { values: { count: vm.total } })}
+            {restSelected.size > 0
+              ? $t('admin.face_cleanup_review_apply_label_added', {
+                  values: { count: vm.total, added: restSelected.size },
+                })
+              : $t('admin.face_cleanup_review_apply_label', { values: { count: vm.total } })}
           </Button>
         {:else}
           <!-- Bulk-bar state — only the move-to-owner path is wired this slice (RF1/Slice 1). -->
@@ -645,7 +662,7 @@
               onclick={handleBulkOwner}
               class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
             >
-              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.owner}"></span>
+              <Icon icon={STATE_ICON.owner} size="13" />
               {$t('admin.face_cleanup_review_bulk_owner')}
             </button>
             <button
@@ -654,7 +671,7 @@
               class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
               data-testid="bulk-stay"
             >
-              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.stay}"></span>
+              <Icon icon={STATE_ICON.stay} size="13" />
               {$t('admin.face_cleanup_review_bulk_stay')}
             </button>
             <button
@@ -663,7 +680,7 @@
               class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
               data-testid="bulk-lock"
             >
-              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.lock}"></span>
+              <Icon icon={STATE_ICON.lock} size="13" />
               {$t('admin.face_cleanup_review_bulk_lock')}
             </button>
             <button
@@ -672,7 +689,7 @@
               class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
               data-testid="bulk-other"
             >
-              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.other}"></span>
+              <Icon icon={STATE_ICON.other} size="13" />
               {$t('admin.face_cleanup_review_bulk_other')}
             </button>
             <button
@@ -681,7 +698,7 @@
               class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
               data-testid="bulk-detach"
             >
-              <span class="size-2 rounded-xs" style="background: {STATE_COLOR.detach}"></span>
+              <Icon icon={STATE_ICON.detach} size="13" />
               {$t('admin.face_cleanup_review_bulk_detach')}
             </button>
             <!-- Same modal as the banner's (i). A plain button rather than <IconButton>: the bar is a dark

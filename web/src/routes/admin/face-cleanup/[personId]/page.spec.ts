@@ -6,10 +6,11 @@ import {
   type FaceRepairClusterFacesResponseDto,
   type FaceRepairPersonFacesDto,
 } from '@immich/sdk';
-import { modalManager } from '@immich/ui';
+import { modalManager, toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goto } from '$app/navigation';
 import Page from './+page.svelte';
 import ActionsHelpModal from './ActionsHelpModal.svelte';
 
@@ -706,7 +707,10 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       expect(screen.queryByTestId('entire-confirm')).not.toBeInTheDocument();
     });
 
-    it('Move selected rest faces calls resolveFaces with a moveToPerson bucket of the selected rest faceIds', async () => {
+    // The rest-of-cluster section used to COMMIT its own independent resolve, which drained the person from the
+    // console while every staged flagged decision was silently discarded (and came back on the next scan).
+    // Ticking a rest face now only STAGES it into the one terminal Apply.
+    it('has no separate rest-move commit button — the rest selection is staged, not committed', async () => {
       vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
         faces: [{ assetFaceId: 'rest-1' }, { assetFaceId: 'rest-2' }],
         total: 2,
@@ -716,19 +720,74 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(2));
 
-      const restTiles = screen.getAllByTestId('rest-tile');
-      await fireEvent.click(restTiles[0]);
-      await waitFor(() => expect(screen.getByTestId('move-rest-selection-btn')).toBeInTheDocument());
+      await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
 
-      await fireEvent.click(screen.getByTestId('move-rest-selection-btn'));
+      expect(screen.queryByTestId('move-rest-selection-btn')).not.toBeInTheDocument();
+      expect(resolveFaces).not.toHaveBeenCalled();
+    });
+
+    it('folds the staged rest faces into the single Apply, in ONE resolve alongside the flagged faces', async () => {
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+        faces: [{ assetFaceId: 'rest-1' }, { assetFaceId: 'rest-2' }],
+        total: 2,
+        hasMore: false,
+      } as unknown as FaceRepairClusterFacesResponseDto);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(2));
+
+      await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
+
+      // The dock now tells the admin the added face is part of what Apply will do — it swaps to the
+      // "+ N added" label and tallies the addition (this spec's t() echoes keys, so the count itself is
+      // asserted on the chip, which renders it literally).
+      await waitFor(() => {
+        expect(screen.getByTestId('apply-btn')).toHaveTextContent('admin.face_cleanup_review_apply_label_added');
+        expect(screen.getByTestId('tally-added')).toHaveTextContent('+1');
+      });
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalledTimes(1));
+      const request = vi.mocked(resolveFaces).mock.calls[0][0].faceRepairResolveRequestDto;
+      // face-1/face-2 (flagged, suspecting owner A) and the staged rest face all ride the owner-A group.
+      const ownerAGroup = request.moveToPerson?.find((group) => group.destinationPersonId === OWNER_A_ID);
+      expect(ownerAGroup?.faceIds.sort()).toEqual(['face-1', 'face-2', 'rest-1'].sort());
+      // ...and the mixed cluster's owner-B face still rides its own group — the rest face never lands there.
+      const ownerBGroup = request.moveToPerson?.find((group) => group.destinationPersonId === OWNER_B_ID);
+      expect(ownerBGroup?.faceIds).toEqual(['face-3']);
+    });
+
+    // The bug that ate a whole-cluster move: the server refuses a resolve while a scan is running (409), and
+    // the client swallowed it — no banner, nothing moved, and the admin believed it had worked.
+    it('surfaces a rejected Move entire cluster instead of swallowing it, and does not navigate away', async () => {
+      vi.mocked(resolveFaces).mockRejectedValue({ status: 409 });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('move-entire-btn'));
+      await waitFor(() => expect(screen.getByTestId('entire-confirm')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
 
       await waitFor(() => {
-        expect(resolveFaces).toHaveBeenCalledWith({
-          faceRepairResolveRequestDto: {
-            personId: PERSON_ID,
-            moveToPerson: [{ destinationPersonId: OWNER_A_ID, faceIds: ['rest-1'] }],
-          },
-        });
+        expect(screen.getByText('admin.face_cleanup_review_apply_conflict')).toBeInTheDocument();
+      });
+      expect(goto).not.toHaveBeenCalled();
+    });
+
+    it('reports what the server actually did after a successful apply', async () => {
+      vi.mocked(resolveFaces).mockResolvedValue({ moved: 2, declined: 1, locked: 0, detached: 0, skipped: 0 });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(toastManager.primary).toHaveBeenCalledWith(
+          expect.stringContaining('admin.face_cleanup_review_apply_summary'),
+        );
       });
     });
   });

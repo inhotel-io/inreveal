@@ -193,13 +193,13 @@
         {#if trimmedQuery}
           <button
             type="button"
-            class="text-primary flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left font-bold hover:bg-gray-100 dark:hover:bg-gray-800"
+            class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left font-bold text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
             onclick={createNew}
             disabled={creating}
             data-testid="person-picker-create"
           >
             <span
-              class="border-primary flex size-9 flex-none items-center justify-center rounded-xl border-2 border-dashed"
+              class="flex size-9 flex-none items-center justify-center rounded-xl border-2 border-dashed border-primary"
             >
               <Icon icon={mdiPlus} size="16" />
             </span>

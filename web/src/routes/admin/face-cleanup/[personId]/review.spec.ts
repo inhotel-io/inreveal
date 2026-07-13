@@ -1,5 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { createReviewModel, type FlaggedFace } from './review.svelte';
+import { createReviewModel, STATE_COLOR, STATE_ICON, type FaceState, type FlaggedFace } from './review.svelte';
+
+// State must never be encoded in colour alone: owner/stay/other used to share one check mark on the tile badge,
+// leaving indigo-vs-violet as the only thing separating "moved away" from "locked in place" — unreadable for a
+// colourblind admin. Every state carries its own glyph, and no two states may share one.
+describe('STATE_ICON', () => {
+  const STATES: FaceState[] = ['owner', 'other', 'stay', 'lock', 'detach'];
+
+  it('gives every state its own distinct icon', () => {
+    const icons = STATES.map((state) => STATE_ICON[state]);
+
+    expect(icons.filter(Boolean)).toHaveLength(STATES.length);
+    expect(new Set(icons).size).toBe(STATES.length);
+  });
+
+  it('covers exactly the same states as STATE_COLOR, so a swatch never outlives its glyph', () => {
+    expect(Object.keys(STATE_ICON).sort()).toEqual(Object.keys(STATE_COLOR).sort());
+  });
+});
 
 // Model B (full per-face resolution) review model. Every flagged face carries its OWN suspectedOwnerId (a
 // mixed cluster can flag faces toward different owners), so "move to owner" is a per-face grouping, not one
