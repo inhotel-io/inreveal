@@ -15,10 +15,16 @@
     mapMarkers?: Marker[];
     popup?: Snippet<[{ marker: Marker }]>;
     onClusterSelect?: (assetIds: string[], bbox: SelectionBBox) => void;
+    /**
+     * Map.svelte renders its "open in map view" control ONLY when this callback is passed (see
+     * Map.svelte's `{#if onOpenInMapView && showSimpleControls}`), so a caller that withholds it
+     * genuinely has no control. Mirror that here: the stub's button exists iff the callback does.
+     */
+    onOpenInMapView?: () => Promise<void> | void;
     [key: string]: unknown;
   }
 
-  let { mapMarkers = [], popup, onClusterSelect, ...rest }: Props = $props();
+  let { mapMarkers = [], popup, onClusterSelect, onOpenInMapView, ...rest }: Props = $props();
 
   // Mirrors Map.svelte's handleClusterClick: a cluster hands its caller the LEAF ids plus the TIGHT
   // bounding box of those leaves. Deriving the bbox from the markers (rather than hard-coding one)
@@ -44,6 +50,11 @@
     <div data-testid="map-popup">
       {@render popup({ marker: mapMarkers[0] })}
     </div>
+  {/if}
+  {#if onOpenInMapView}
+    <button type="button" data-testid="map-stub-open-in-map-view" onclick={() => onOpenInMapView()}>
+      Open in map view
+    </button>
   {/if}
   {#if onClusterSelect && clusterLeaves[0]}
     <button

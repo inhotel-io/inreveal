@@ -4,6 +4,7 @@ import {
   applyContextualFilter,
   buildContextualFilterUrl,
   buildFilterStateUrl,
+  buildPersonFilterPatch,
   isFilterStateUrlUnchanged,
   resolveFilterTarget,
 } from '$lib/utils/filter-target';
@@ -262,6 +263,78 @@ describe('applyContextualFilter', () => {
 
     expect(() => applyContextualFilter({ make: 'Apple' })).not.toThrow();
     expect(gotoMock).toHaveBeenCalledWith('/photos?make=Apple');
+  });
+});
+
+// R8 — the single most dangerous patch in the slice. The Space timeline sends FilterState.personIds
+// as `spacePersonIds`, which the server validates as `z.array(z.uuidv4())` — a BARE uuid, never a
+// scoped token. Sending `space-person:<uuid>` there is a zod reject → 400 → the whole Space timeline
+// errors out. Everywhere else `personIds` is the field, and it is the ONLY one that accepts the
+// scoped token — which is also the only id a viewer of a shared-space asset can resolve on /photos.
+describe('buildPersonFilterPatch', () => {
+  const SPACE_ASSET_PERSON = {
+    id: 'a1b2c3d4-0000-4000-8000-000000000001',
+    spacePersonId: 'f0f0f0f0-0000-4000-8000-000000000002',
+  };
+  const OWN_PERSON = { id: 'a1b2c3d4-0000-4000-8000-000000000003' };
+  const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
+
+  it('emits the BARE spacePersonId in a Space (a scoped token there is a 400, not a miss)', () => {
+    const patch = buildPersonFilterPatch(u('/spaces/space-1/photos/asset-1'), SPACE_ASSET_PERSON);
+
+    expect(patch).toEqual({ personIds: [SPACE_ASSET_PERSON.spacePersonId] });
+    expect(patch?.personIds?.[0]).toMatch(UUID);
+    expect(patch?.personIds?.[0]).not.toContain('space-person:');
+  });
+
+  it('emits the BARE spacePersonId on the SPACE map (spacePersonIds again — map-filter-options:111)', () => {
+    const patch = buildPersonFilterPatch(u('/map/photos/asset-1?spaceId=space-1'), SPACE_ASSET_PERSON);
+
+    expect(patch).toEqual({ personIds: [SPACE_ASSET_PERSON.spacePersonId] });
+    expect(patch?.personIds?.[0]).toMatch(UUID);
+  });
+
+  // The affordance would be a lie: there is no bare space-person uuid to filter the Space by, and
+  // the owner's person uuid is not a space-person row — it would silently return nothing.
+  it('returns null in a Space when the person carries no spacePersonId', () => {
+    expect(buildPersonFilterPatch(u('/spaces/space-1/photos/asset-1'), OWN_PERSON)).toBeNull();
+    expect(buildPersonFilterPatch(u('/map/photos/asset-1?spaceId=space-1'), OWN_PERSON)).toBeNull();
+  });
+
+  it('emits the SCOPED token for a space asset off the Space (photos / album / global map)', () => {
+    const scoped = `space-person:${SPACE_ASSET_PERSON.spacePersonId}`;
+
+    expect(buildPersonFilterPatch(u('/photos/asset-1'), SPACE_ASSET_PERSON)).toEqual({ personIds: [scoped] });
+    expect(buildPersonFilterPatch(u('/albums/album-1/photos/asset-1'), SPACE_ASSET_PERSON)).toEqual({
+      personIds: [scoped],
+    });
+    expect(buildPersonFilterPatch(u('/map/photos/asset-1'), SPACE_ASSET_PERSON)).toEqual({ personIds: [scoped] });
+  });
+
+  it('emits the plain person id for an own person off the Space', () => {
+    expect(buildPersonFilterPatch(u('/photos/asset-1'), OWN_PERSON)).toEqual({ personIds: [OWN_PERSON.id] });
+    expect(buildPersonFilterPatch(u('/albums/album-1/photos/asset-1'), OWN_PERSON)).toEqual({
+      personIds: [OWN_PERSON.id],
+    });
+  });
+
+  // A non-filterable surface falls back to /photos (buildContextualFilterUrl's own fallback), so it
+  // must use the /photos shape, not the Space one.
+  it('uses the /photos shape on a non-filterable surface', () => {
+    expect(buildPersonFilterPatch(u('/favorites/asset-1'), SPACE_ASSET_PERSON)).toEqual({
+      personIds: [`space-person:${SPACE_ASSET_PERSON.spacePersonId}`],
+    });
+  });
+
+  // E25 — the array is REPLACED, never appended: personIds is AND-ed server-side, so appending two
+  // adjacent chips of the same panel would narrow to the intersection instead of switching.
+  it('E25: always emits a SINGLE id, replacing whatever was there', () => {
+    const url = new URL('https://g.test/photos/asset-1?people=other-person');
+    const patch = buildPersonFilterPatch(url, OWN_PERSON)!;
+
+    expect(patch.personIds).toEqual([OWN_PERSON.id]);
+    expect(buildContextualFilterUrl(url, patch)).toContain(`people=${OWN_PERSON.id}`);
+    expect(buildContextualFilterUrl(url, patch)).not.toContain('other-person');
   });
 });
 
