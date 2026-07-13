@@ -72,7 +72,7 @@
                 type="button"
                 class="text-left hover:text-primary"
                 aria-label="{$t('filter_by_location')}: {city}"
-                onclick={() => applyContextualFilter({ city: asset.exifInfo?.city, country: asset.exifInfo?.country })}
+                onclick={() => applyContextualFilter({ city, country })}
               >
                 {asset.exifInfo.city}
               </button>
@@ -89,8 +89,7 @@
                   type="button"
                   class="text-left hover:text-primary"
                   aria-label="{$t('filter_by_location')}: {state}"
-                  onclick={() =>
-                    applyContextualFilter({ state: asset.exifInfo?.state, country: asset.exifInfo?.country })}
+                  onclick={() => applyContextualFilter({ state, country })}
                 >
                   {asset.exifInfo.state}
                 </button>
@@ -108,7 +107,7 @@
                   type="button"
                   class="text-left hover:text-primary"
                   aria-label="{$t('filter_by_location')}: {country}"
-                  onclick={() => applyContextualFilter({ country: asset.exifInfo?.country })}
+                  onclick={() => applyContextualFilter({ country })}
                 >
                   {asset.exifInfo.country}
                 </button>

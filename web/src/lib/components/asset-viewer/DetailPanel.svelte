@@ -464,7 +464,7 @@
               type="button"
               class="text-left hover:text-primary"
               aria-label="{$t('filter_by_owner')}: {asset.owner.name}"
-              onclick={() => applyContextualFilter({ ownerId: asset.owner.id })}
+              onclick={() => applyContextualFilter({ ownerId: asset.owner?.id })}
             >
               {asset.owner.name}
             </button>
