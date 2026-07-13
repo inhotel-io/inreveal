@@ -117,6 +117,25 @@ export function buildFilterStateUrl(url: URL, filters: FilterState): string {
 }
 
 /**
+ * `search` (a `location.search`-shaped string, e.g. `page.url.search`) with the one-shot
+ * `?at=<assetId>` grid-scroll-target param removed.
+ *
+ * `replaceScrollTarget` (navigation.ts) writes `?at=` into the URL when the asset viewer closes,
+ * which changes the surrounding page's `page.url.search`. A URL-backed filter surface's hydrate ⇄
+ * write token guard must NOT treat that as a filter change — otherwise closing the viewer
+ * re-hydrates its FilterState from a URL that never encoded a transient (URL-less)
+ * selectedYear/selectedMonth, silently dropping it and widening the timeline back to "all time". A
+ * real filter change still reads as changed: `buildFilterStateUrl` already drops `at` from any URL
+ * it writes.
+ */
+export function withoutAtParam(search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete('at');
+  const next = params.toString();
+  return next ? `?${next}` : '';
+}
+
+/**
  * Order-insensitive canonical form of a query string: `a=1&b=2` and `b=2&a=1` collapse to one.
  *
  * Each entry is percent-encoded before it is joined. The free-text filters (description, filename,
