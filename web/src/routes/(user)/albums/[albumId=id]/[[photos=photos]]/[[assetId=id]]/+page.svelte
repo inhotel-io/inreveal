@@ -73,10 +73,6 @@
   import { isAlbumsRoute, navigate, type AssetGridRouteSearchParams } from '$lib/utils/navigation';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
   import {
-    preserveTransientTemporalFilters,
-    type SearchablePageTransientTemporalState,
-  } from '$lib/utils/searchable-page-search';
-  import {
     type ActivatableTimelineBucket,
     getTimelineBucketZoomTarget,
     getTimelineManagerTimeBuckets,
@@ -136,15 +132,13 @@
   });
 
   let albumFilters = $state<FilterState>(hydrateAlbumFilters(page.url));
-  // Token guard for the URL $effect below. Copied in spirit from photos/…/+page.svelte:508-513:
-  // without it, our own goto() re-runs the effect, which re-runs goto(), forever.
+  // Token guard for the URL $effect below. Copied in spirit from photos/…/+page.svelte: without it,
+  // our own goto() re-runs the effect, which re-runs goto(), forever. It is at-stripped because
+  // closing the asset viewer writes `?at=<assetId>` (replaceScrollTarget), which is not a filter
+  // change: re-hydrating on it is pure churn — the FilterState it would rebuild is identical, since
+  // every filter is URL-backed. Rebuilding it anyway would needlessly re-create `filters` and, with
+  // it, the timeline options object.
   let lastHandledFilterSearch = $state(withoutAtParam(page.url.search));
-  // selectedYear/selectedMonth are NOT in the URL codec but DO drive takenAfter/takenBefore via
-  // buildFilterContext. Carry them across our own round trip, or the temporal picker resets itself
-  // on every unrelated filter change.
-  let pendingFilterUrlSync = $state<
-    { search: string; transientTemporal?: SearchablePageTransientTemporalState } | undefined
-  >();
   let pickerFilters = $state(createFilterState());
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
@@ -300,7 +294,6 @@
     album = data.album;
     albumFilters = hydrateAlbumFilters(page.url);
     lastHandledFilterSearch = withoutAtParam(page.url.search);
-    pendingFilterUrlSync = undefined;
     pickerFilters = createFilterState();
     albumPersonNames.clear();
     albumTagNames.clear();
@@ -315,22 +308,18 @@
   });
 
   $effect(() => {
-    const nextSearch = page.url.search;
-    const nextFilterSearch = withoutAtParam(nextSearch);
+    const nextFilterSearch = withoutAtParam(page.url.search);
     if (nextFilterSearch === lastHandledFilterSearch) {
       return;
     }
 
     untrack(() => {
-      const transientTemporal =
-        pendingFilterUrlSync?.search === nextSearch ? pendingFilterUrlSync.transientTemporal : undefined;
+      // Every filter — including the temporal picker's year/month — round-trips through the URL, so
+      // rebuilding FilterState from the URL alone is lossless.
       albumFilters = {
         ...createFilterState(),
-        ...preserveTransientTemporalFilters(hydrateAlbumFilters(page.url), transientTemporal),
+        ...hydrateAlbumFilters(page.url),
       };
-      if (pendingFilterUrlSync?.search === nextSearch) {
-        pendingFilterUrlSync = undefined;
-      }
       lastHandledFilterSearch = nextFilterSearch;
     });
   });
@@ -485,13 +474,6 @@
     if (isFilterStateUrlUnchanged(page.url, nextUrl)) {
       return;
     }
-    pendingFilterUrlSync = {
-      search: new URL(nextUrl, page.url).search,
-      transientTemporal: {
-        selectedYear: nextFilters.selectedYear,
-        selectedMonth: nextFilters.selectedMonth,
-      },
-    };
     void goto(nextUrl, { replaceState: true, keepFocus: true, noScroll: true });
   }
 

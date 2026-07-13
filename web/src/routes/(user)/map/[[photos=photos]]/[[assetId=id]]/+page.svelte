@@ -29,10 +29,6 @@
   import { buildFilterStateUrl, isFilterStateUrlUnchanged, withoutAtParam } from '$lib/utils/filter-target';
   import { decodeFilterParams } from '$lib/utils/filter-url';
   import { navigate } from '$lib/utils/navigation';
-  import {
-    preserveTransientTemporalFilters,
-    type SearchablePageTransientTemporalState,
-  } from '$lib/utils/searchable-page-search';
   import { buildSmartSearchParams, SEARCH_FILTER_DEBOUNCE_MS } from '$lib/utils/space-search';
   import {
     AssetVisibility,
@@ -102,13 +98,12 @@
 
   // Filter state
   let filters = $state<FilterState>(hydrateMapFilters(page.url));
-  // Token guard for the URL $effect below, at-stripped like the photos/album pages — see
-  // withoutAtParam's docs: replaceScrollTarget writes `?at=<assetId>` onto /map when the timeline
-  // panel's asset viewer closes, and that must not read as a filter change (C2).
+  // Token guard for the URL $effect below, at-stripped like the album page — see withoutAtParam's
+  // docs: replaceScrollTarget writes `?at=<assetId>` onto /map when the timeline panel's asset
+  // viewer closes, and that is not a filter change. Re-hydrating on it is pure churn — the
+  // FilterState it would rebuild is identical, since every filter is URL-backed — and it would
+  // needlessly re-create `filters`, re-running the debounced marker/bucket fetch below.
   let lastHandledFilterSearch = $state(withoutAtParam(page.url.search));
-  let pendingFilterUrlSync = $state<
-    { search: string; transientTemporal?: SearchablePageTransientTemporalState } | undefined
-  >();
   let mapMarkers = $state<MapMarkerResponseDto[]>([]);
   let timeBuckets = $state<Array<{ timeBucket: string; count: number }>>([]);
   let personNames = new SvelteMap<string, string>();
@@ -277,33 +272,22 @@
     if (isFilterStateUrlUnchanged(page.url, nextUrl)) {
       return;
     }
-    pendingFilterUrlSync = {
-      search: new URL(nextUrl, page.url).search,
-      transientTemporal: {
-        selectedYear: nextFilters.selectedYear,
-        selectedMonth: nextFilters.selectedMonth,
-      },
-    };
     void goto(nextUrl, { replaceState: true, keepFocus: true, noScroll: true });
   }
 
   $effect(() => {
-    const nextSearch = page.url.search;
-    const nextFilterSearch = withoutAtParam(nextSearch);
+    const nextFilterSearch = withoutAtParam(page.url.search);
     if (nextFilterSearch === lastHandledFilterSearch) {
       return;
     }
 
     untrack(() => {
-      const transientTemporal =
-        pendingFilterUrlSync?.search === nextSearch ? pendingFilterUrlSync.transientTemporal : undefined;
+      // Every filter — including the temporal picker's year/month — round-trips through the URL, so
+      // rebuilding FilterState from the URL alone is lossless.
       filters = {
         ...createFilterState(),
-        ...preserveTransientTemporalFilters(hydrateMapFilters(page.url), transientTemporal),
+        ...hydrateMapFilters(page.url),
       };
-      if (pendingFilterUrlSync?.search === nextSearch) {
-        pendingFilterUrlSync = undefined;
-      }
       lastHandledFilterSearch = nextFilterSearch;
     });
   });
@@ -312,17 +296,8 @@
     const url = new URL(page.url);
     url.searchParams.delete('q');
     const nextUrl = `${url.pathname}${url.search}${url.hash}`;
-    // Same pendingFilterUrlSync carry-over as syncMapFilterUrl (I4): clearing `q` still goto()s a
-    // URL, which re-runs the re-hydrate effect above and rebuilds `filters` from the URL alone —
-    // dropping selectedYear/selectedMonth (not URL params) without this. Reviewer-proven repro: a
-    // picked year reset to "" after clicking the search chip's X.
-    pendingFilterUrlSync = {
-      search: new URL(nextUrl, page.url).search,
-      transientTemporal: {
-        selectedYear: filters.selectedYear,
-        selectedMonth: filters.selectedMonth,
-      },
-    };
+    // Only `q` is dropped. The re-hydrate effect above then rebuilds `filters` from the remaining
+    // URL, which still carries every active filter — including the picked year/month.
     void goto(nextUrl, {
       replaceState: true,
       keepFocus: true,

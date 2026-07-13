@@ -23,6 +23,8 @@ export const FILTER_URL_PARAMS = [
   'rating',
   'from',
   'to',
+  'year',
+  'month',
 ] as const;
 
 export type DecodedFilterState = Partial<
@@ -48,6 +50,8 @@ export type DecodedFilterState = Partial<
     | 'rating'
     | 'dateAfter'
     | 'dateBefore'
+    | 'selectedYear'
+    | 'selectedMonth'
   >
 >;
 
@@ -110,6 +114,19 @@ export function encodeFilterParams(params: URLSearchParams, filters: FilterState
   if (filters.dateBefore) {
     params.set('to', filters.dateBefore);
   }
+
+  // The temporal picker's year/month. It drives takenAfter/takenBefore through buildFilterContext,
+  // which PREFERS dateAfter/dateBefore (filter-panel.ts) — and the panel keeps the two mutually
+  // exclusive. Mirror that precedence here: a year emitted beside from/to would be inert in the
+  // query but still COUNTED by getActiveFilterCount and re-encoded on the next sync, i.e. a filter
+  // the UI claims is active but the server never sees. A month with no year is meaningless to
+  // buildFilterContext, so it is never emitted alone.
+  if (!filters.dateAfter && !filters.dateBefore && filters.selectedYear !== undefined) {
+    params.set('year', String(filters.selectedYear));
+    if (filters.selectedMonth !== undefined) {
+      params.set('month', String(filters.selectedMonth));
+    }
+  }
 }
 
 export function decodeFilterParams(url: URL): DecodedFilterState {
@@ -171,6 +188,23 @@ export function decodeFilterParams(url: URL): DecodedFilterState {
     result.dateBefore = to;
   }
 
+  // Mirror the encoder + buildFilterContext: from/to wins, so never surface a year beside it. A
+  // hand-typed `?from=2024-01-01&year=2023` would otherwise decode to BOTH — the year inert in the
+  // query but still counted by getActiveFilterCount. An INVALID from/to does not suppress the year,
+  // because it produces no takenAfter/takenBefore either.
+  if (!result.dateAfter && !result.dateBefore) {
+    const year = parseYearParam(url.searchParams.get('year'));
+    if (year !== undefined) {
+      result.selectedYear = year;
+      // A month without a year is ignored by buildFilterContext, so it must not be surfaced (and
+      // therefore counted) on its own.
+      const month = parseMonthParam(url.searchParams.get('month'));
+      if (month !== undefined) {
+        result.selectedMonth = month;
+      }
+    }
+  }
+
   // Strip keys we set to `undefined` above so the object is a clean partial.
   for (const key of Object.keys(result) as Array<keyof DecodedFilterState>) {
     if (result[key] === undefined) {
@@ -197,6 +231,29 @@ function parseRating(value: string | null): number | undefined {
 
   const rating = Number(value);
   return Number.isSafeInteger(rating) && rating >= 1 && rating <= 5 ? rating : undefined;
+}
+
+/**
+ * A 4-digit calendar year. Bounded rather than "any integer" so a hand-typed or fuzzed `?year=0` /
+ * `?year=99999` can't reach `new Date(Date.UTC(year, …))` in buildFilterContext and produce a
+ * nonsense takenAfter/takenBefore that quietly matches nothing.
+ */
+function parseYearParam(value: string | null): number | undefined {
+  return parseBoundedInteger(value, 1000, 9999);
+}
+
+/** A 1-based calendar month, as buildFilterContext expects (it does `selectedMonth - 1`). */
+function parseMonthParam(value: string | null): number | undefined {
+  return parseBoundedInteger(value, 1, 12);
+}
+
+function parseBoundedInteger(value: string | null, min: number, max: number): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
 }
 
 function parseMediaType(value: string | null): 'image' | 'video' | undefined {

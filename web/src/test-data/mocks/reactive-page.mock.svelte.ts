@@ -1,11 +1,11 @@
 /**
  * A REACTIVE stand-in for `$app/state`'s `page`.
  *
- * The plain `vi.hoisted({ mockPage: { url: new URL(…) } })` object used by photos-page.spec.ts and
- * map-page.spec.ts pins hydrate-on-mount and goto() arguments, but it registers no signal: a Svelte
- * 5 `$effect` reading `page.url.search` never re-runs when a test reassigns `mockPage.url`. A page
- * whose filters are URL-backed has an $effect exactly like that (re-hydrate on back/forward, plus
- * the pendingFilterUrlSync round trip), so testing it needs `url` to be `$state`.
+ * A plain `vi.hoisted({ mockPage: { url: new URL(…) } })` object pins hydrate-on-mount and goto()
+ * arguments, but it registers no signal: a Svelte 5 `$effect` reading `page.url.search` never
+ * re-runs when a test reassigns `mockPage.url`. A page whose filters are URL-backed has an $effect
+ * exactly like that (re-hydrate on back/forward, on a shared link, and on the `?at=` write that
+ * closing the asset viewer performs), so testing it needs `url` to be `$state`.
  *
  * Real `page` from $app/state IS reactive, so this is the faithful mock, not a convenience one.
  */

@@ -453,14 +453,17 @@ describe('Map page filters are URL-backed', () => {
   // The transient-only case, from the other side: a year is not a URL param, so the rebuilt URL is
   // unchanged and the guard must swallow the write rather than churn history. (The full year +
   // URL-filter round trip is pinned below, now that this suite has a reactive page mock too — I5.)
-  it('does not write the URL for a transient-only (year) filter change', async () => {
+  it('writes a year-only filter change to the URL, keeping the space scope', async () => {
     mockPage.url = new URL('https://gallery.test/map?spaceId=space-1');
 
     renderPage();
     await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
 
     await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
-    expect(gotoMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+    const [target] = gotoMock.mock.calls.at(-1) as [string];
+    expect(target).toContain('year=2015');
+    expect(target).toContain('spaceId=space-1');
   });
 
   // The NIT decision, client side: a space and an album are two different scopes and the server
@@ -537,21 +540,24 @@ describe('Map page filters are URL-backed', () => {
   });
 
   // C2's regression test. TimelineAssetViewer.handleClose -> replaceScrollTarget writes `?at=` onto
-  // /map when an asset closes over a filtered map. selectedYear is transient (not in the URL codec),
-  // so a naive re-hydrate on this URL-only change drops it and silently widens the map back to "all
-  // time". This must NOT read as a filter change.
-  it('keeps a transient year when the asset viewer closes (?at= is not a filter change)', async () => {
+  // /map when an asset closes over a filtered map. The year is URL-backed (D2), so it survives on
+  // its own — and `?at=` must still not read as a filter change, or the map re-runs its marker fetch
+  // for an identical FilterState on every viewer close.
+  it('keeps the year when the asset viewer closes (?at= is not a filter change)', async () => {
     renderPage();
     await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
 
     await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
 
-    // Simulate the asset viewer closing: replaceScrollTarget writes `?at=` into the URL. This is a
-    // raw property set (not a fireEvent), so nothing implicitly flushes the pending $effect the way
-    // fireEvent does — tick() forces that flush. A plain waitFor here would be vacuous under fake
-    // timers: its own first synchronous check runs BEFORE the effect flushes and sees the still-2015
-    // value, so it would pass whether or not the bug is present (compare I3).
-    mockPage.url = new URL('https://gallery.test/map?at=asset-1');
+    // Simulate the asset viewer closing: replaceScrollTarget appends `at` to the CURRENT url, which
+    // now carries year=2015 (the page wrote it). This is a raw property set (not a fireEvent), so
+    // nothing implicitly flushes the pending $effect the way fireEvent does — tick() forces that
+    // flush. A plain waitFor here would be vacuous under fake timers: its own first synchronous
+    // check runs BEFORE the effect flushes and sees the still-2015 value, so it would pass whether
+    // or not the bug is present (compare I3).
+    const withAt = new URL(mockPage.url);
+    withAt.searchParams.set('at', 'asset-1');
+    mockPage.url = withAt;
     await tick();
 
     expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
@@ -575,26 +581,51 @@ describe('Map page filters are URL-backed', () => {
     expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
   });
 
-  // The pendingFilterUrlSync carry-over, from the other side: a picked year survives a URL-writing
-  // filter change, and the map's viewport hash (which lives outside the FilterState codec entirely)
-  // survives the same write.
-  it('carries a transient year across a URL-writing filter change, preserving the viewport hash', async () => {
+  // D2 (was the transient-year carry-over test). A picked year is IN the URL codec now: it writes,
+  // and survives a second URL-writing filter change on its own. The map's viewport hash (which lives
+  // outside the FilterState codec entirely) survives the same write.
+  it('writes a picked year to the URL and keeps it across a second filter change, preserving the viewport hash', async () => {
     mockPage.url = new URL('https://gallery.test/map#12/48.85/2.35');
     renderPage();
     await fireEvent.click(screen.getByTestId('filter-panel-set-year'));
 
     await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
-    // A year is transient — it is not in the URL codec, so it must not have triggered a write.
-    expect(gotoMock).not.toHaveBeenCalled();
+    // A year IS in the URL codec, so picking one writes.
+    await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+    const [yearTarget] = gotoMock.mock.calls.at(-1) as [string];
+    expect(yearTarget).toContain('year=2015');
+    expect(yearTarget).toContain('#12/48.85/2.35');
 
     await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
 
-    await waitFor(() => expect(gotoMock).toHaveBeenCalled());
-    const [target] = gotoMock.mock.calls.at(-1) as [string];
-    expect(target).toContain('country=Germany');
-    expect(target).toContain('#12/48.85/2.35');
+    await waitFor(() => {
+      const [target] = gotoMock.mock.calls.at(-1) as [string];
+      expect(target).toContain('country=Germany');
+      expect(target).toContain('year=2015');
+      expect(target).toContain('#12/48.85/2.35');
+    });
 
     await waitFor(() => expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'));
+  });
+
+  // D2 — a shared map link carries the year.
+  it('hydrates a shared ?year= link into the picker, the chip and the marker query', async () => {
+    mockPage.url = new URL('https://gallery.test/map?year=2023&month=6');
+
+    renderPage();
+    await flushQueryDebounce();
+
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2023');
+    expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '6');
+    expect(screen.getByTestId('active-filters-bar')).toHaveTextContent('2023');
+    await waitFor(() =>
+      expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledWith(
+        expect.objectContaining({
+          takenAfter: '2023-06-01T00:00:00.000Z',
+          takenBefore: '2023-07-01T00:00:00.000Z',
+        }),
+      ),
+    );
   });
 });
 

@@ -14,8 +14,6 @@ export type SearchablePageSortOrder = 'relevance' | 'asc' | 'desc';
 // the photos/spaces pages, rather than surviving only as an untyped runtime pass-through.
 export type SearchablePageFilterState = DecodedFilterState;
 
-export type SearchablePageTransientTemporalState = Partial<Pick<FilterState, 'selectedYear' | 'selectedMonth'>>;
-
 type SearchablePageState = {
   basePath: string | null;
   isSearchable: boolean;
@@ -135,19 +133,4 @@ export function clearSearchablePageFilterParams(params: URLSearchParams) {
 
 export function getSearchablePageFilterState(url: URL): SearchablePageFilterState {
   return decodeFilterParams(url);
-}
-
-export function preserveTransientTemporalFilters<T extends SearchablePageFilterState>(
-  filters: T,
-  transient?: SearchablePageTransientTemporalState,
-): T & SearchablePageTransientTemporalState {
-  if (transient?.selectedYear === undefined || filters.dateAfter || filters.dateBefore) {
-    return filters;
-  }
-
-  return {
-    ...filters,
-    selectedYear: transient.selectedYear,
-    selectedMonth: transient.selectedMonth,
-  };
 }

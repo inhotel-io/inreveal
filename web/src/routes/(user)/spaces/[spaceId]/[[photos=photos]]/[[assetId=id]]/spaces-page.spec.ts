@@ -2,7 +2,7 @@ import type { SharedSpaceMemberResponseDto, SharedSpaceResponseDto } from '@immi
 import { AssetTypeEnum, AssetVisibility, SharedSpaceRole } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import type { Component } from 'svelte';
+import { tick, type Component } from 'svelte';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import type { FilterState } from '$lib/components/filter-panel/filter-panel';
@@ -11,6 +11,7 @@ import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
 import { lang } from '$lib/stores/preferences.store';
 import { buildSpaceTimelineOptions } from '$lib/utils/space-filter-options';
 import { storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
+import { reactivePageMock as mockPage } from '@test-data/mocks/reactive-page.mock.svelte';
 import SpacesPage from './+page.svelte';
 
 const OVER_SPACE_ASSET_LIMIT = 50_001;
@@ -18,7 +19,6 @@ const OVER_SPACE_ASSET_LIMIT = 50_001;
 const {
   gotoMock,
   invalidateAllMock,
-  mockPage,
   mockAssetMultiSelectManager,
   mockAuthManager,
   mockEventManager,
@@ -28,11 +28,6 @@ const {
 } = vi.hoisted(() => ({
   gotoMock: vi.fn().mockResolvedValue(undefined),
   invalidateAllMock: vi.fn().mockResolvedValue(undefined),
-  mockPage: {
-    url: new URL('https://gallery.test/spaces/space-1/photos'),
-    route: { id: '/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]' },
-    params: { spaceId: 'space-1' },
-  },
   mockAssetMultiSelectManager: {
     selectionActive: false,
     assets: [] as TimelineAsset[],
@@ -53,7 +48,15 @@ const {
 }));
 
 vi.mock('$app/navigation', () => ({ goto: gotoMock, invalidateAll: invalidateAllMock }));
-vi.mock('$app/state', () => ({ page: mockPage }));
+// The mock module and the spec import the SAME singleton, so assigning mockPage.url in a test is
+// what the page's $effect sees. A plain vi.hoisted object registers no signal for a Svelte 5
+// `$effect` reading `page.url.search` — without this reactive stand-in, a test that changes the URL
+// after render (back/forward, or the `?at=` write from closing the asset viewer) would assert
+// against a page that never re-hydrated, and would pass whether or not the bug is present.
+vi.mock('$app/state', async () => {
+  const { reactivePageMock } = await import('@test-data/mocks/reactive-page.mock.svelte');
+  return { page: reactivePageMock };
+});
 
 vi.mock('@immich/ui', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@immich/ui')>();
@@ -237,7 +240,10 @@ describe('Spaces page search URL state', () => {
     invalidateAllMock.mockResolvedValue(undefined);
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
-    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+    mockPage.reset('https://gallery.test/spaces/space-1/photos', {
+      routeId: '/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]',
+      params: { spaceId: 'space-1' },
+    });
     lang.set('de');
     mockRegisterSearchablePageFilters.mockReturnValue(vi.fn());
     sessionStorage.clear();
@@ -744,7 +750,7 @@ describe('Spaces page search URL state', () => {
     expect(gotoMock).not.toHaveBeenCalled();
   });
 
-  it('keeps explicit space temporal filters transient across URL sync for non-time filter changes', async () => {
+  it('keeps explicit space temporal filters across URL sync for non-time filter changes', async () => {
     mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
 
     renderPage();
@@ -762,7 +768,8 @@ describe('Spaces page search URL state', () => {
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"grouping":"day"');
       expect(screen.getByTestId('timeline-anchor')).toHaveTextContent('null');
     });
-    expect(gotoMock).toHaveBeenLastCalledWith('/spaces/space-1/photos?country=Germany', {
+    // D2 — the year rides along in the URL now, rather than in a carry-over slot beside it.
+    expect(gotoMock).toHaveBeenLastCalledWith('/spaces/space-1/photos?country=Germany&year=2015', {
       replaceState: true,
       keepFocus: true,
       noScroll: true,
@@ -993,5 +1000,82 @@ describe('Spaces page search URL state', () => {
     expect(await screen.findByTestId('timeline-space')).toHaveTextContent(
       JSON.stringify({ id: 'space-1', canWrite: false }),
     );
+  });
+
+  // D2 — the picked year/month is IN the URL codec. It used to be transient, which meant a shared
+  // space link silently dropped it (recipient sees the whole space, no chip) and the page needed a
+  // carry-over slot to smuggle it across its own goto().
+  describe('D2: the temporal filter is URL-backed', () => {
+    it('hydrates a shared ?year= link into the picker, the chip and the timeline query', async () => {
+      mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?year=2023');
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2023');
+        expect(screen.getByTestId('active-filters-bar-stub')).toHaveAttribute('data-selected-year', '2023');
+        const options = screen.getByTestId('timeline-options').textContent ?? '';
+        expect(options).toContain('"spaceId":"space-1"');
+        expect(options).toContain('"takenAfter":"2023-01-01T00:00:00.000Z"');
+        expect(options).toContain('"takenBefore":"2024-01-01T00:00:00.000Z"');
+      });
+    });
+
+    it('hydrates a shared ?year=&month= link', async () => {
+      mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?year=2023&month=6');
+
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2023');
+        expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-month', '6');
+        const options = screen.getByTestId('timeline-options').textContent ?? '';
+        expect(options).toContain('"takenAfter":"2023-06-01T00:00:00.000Z"');
+        expect(options).toContain('"takenBefore":"2023-07-01T00:00:00.000Z"');
+      });
+    });
+
+    it('writes the picked year to the URL', async () => {
+      mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+      renderPage();
+      await fireEvent.click(await screen.findByTestId('filter-panel-set-year'));
+
+      await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+      const [target] = gotoMock.mock.calls.at(-1) as [string];
+      expect(target).toContain('year=2015');
+    });
+
+    // The bug D2 retires. Closing the asset viewer calls replaceScrollTarget, which writes
+    // `?at=<assetId>` — a URL change the page MUST re-hydrate from. Before D2 the year lived only in
+    // a carry-over slot keyed on the exact URL the page itself last wrote, so the `?at=` URL missed
+    // it and the timeline silently widened back to "all time".
+    it('keeps a picked year when the asset viewer closes and writes ?at=', async () => {
+      mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+      renderPage();
+      await fireEvent.click(await screen.findByTestId('filter-panel-set-year'));
+
+      // goto() is mocked, so land page.url on the page's own write the way SvelteKit would.
+      await waitFor(() => expect(gotoMock).toHaveBeenCalled());
+      const [target] = gotoMock.mock.calls.at(-1) as [string];
+      mockPage.url = new URL(target, 'https://gallery.test');
+      await waitFor(() =>
+        expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015'),
+      );
+
+      // Closing the asset viewer: replaceScrollTarget appends `at` to the CURRENT url. This is a raw
+      // property set (not a fireEvent), so nothing implicitly flushes the pending $effect — tick()
+      // forces that flush. A plain waitFor here would be vacuous: its own first synchronous check
+      // runs BEFORE the effect flushes and sees the still-2015 value, so it would pass whether or
+      // not the bug is present.
+      const withAt = new URL(mockPage.url);
+      withAt.searchParams.set('at', 'asset-1');
+      mockPage.url = withAt;
+      await tick();
+
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-selected-year', '2015');
+      expect(screen.getByTestId('timeline-options').textContent).toContain('"takenAfter":"2015-01-01T00:00:00.000Z"');
+    });
   });
 });
