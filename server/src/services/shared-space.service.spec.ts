@@ -11736,8 +11736,10 @@ describe(SharedSpaceService.name, () => {
       const args = mocks.sharedSpace.getFilteredMapMarkers.mock.calls[0][0];
       expect(args.ownerId).toBe(ownerId);
       // The trap: userIds is the OWNER SCOPING predicate. A contributor filter must never be
-      // merged into it, or it widens the result set instead of narrowing it.
-      expect(args.userIds).not.toContain(ownerId);
+      // merged into it, or it widens the result set instead of narrowing it. Pin the exact owner
+      // scope rather than `not.toContain(ownerId)` — that passed near-trivially (it also passes for
+      // an EMPTY userIds, i.e. no owner scope at all, which is the very leak this test guards).
+      expect(args.userIds).toEqual([auth.user.id]);
     });
 
     // searchAssetBuilder already supports albums via inAlbums(), which takes an array (albumIds).

@@ -171,8 +171,10 @@ describe('AlbumMap', () => {
     });
     await vi.waitFor(() => expect(sdkMock.getFilteredMapMarkers).toHaveBeenCalledTimes(2));
 
+    // No handleError assertion here: the stale request RESOLVES (it never throws), so the mock could
+    // not be called whether or not the ordering guard exists — it was an inert line. The assertion
+    // below is the one that does the work.
     resolveFirst([{ id: 'stale', lat: 9, lon: 9 }]);
-    await vi.waitFor(() => expect(handleErrorMock).not.toHaveBeenCalled());
 
     await userEvent.setup().click(screen.getByLabelText('map'));
     expect(modalShowMock).toHaveBeenCalledWith(expect.anything(), { mapMarkers: [{ id: 'fresh', lat: 1, lon: 2 }] });

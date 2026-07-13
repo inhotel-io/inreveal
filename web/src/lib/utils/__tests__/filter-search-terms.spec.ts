@@ -105,13 +105,18 @@ describe('filterStateToSearchTerms', () => {
     expect(terms).toEqual(expect.objectContaining({ ownerId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb' }));
   });
 
+  // Assert the exact ISO instants, as the album/map page tests do. `toBeTruthy()` was vacuous:
+  // swapping takenAfter/takenBefore in buildFilterContext (filter-panel.ts) — an INVERTED date
+  // range, which matches nothing — left it green, because both fields are non-empty either way.
+  // dateBefore is an INCLUSIVE calendar day, so it maps to the EXCLUSIVE start of the next one.
   it('maps a custom date range to takenAfter / takenBefore', () => {
     const terms = filterStateToSearchTerms({
       ...createFilterState(),
       dateAfter: '2024-01-01',
       dateBefore: '2024-12-31',
     });
-    expect(terms.takenAfter).toBeTruthy();
-    expect(terms.takenBefore).toBeTruthy();
+
+    expect(terms.takenAfter).toBe('2024-01-01T00:00:00.000Z');
+    expect(terms.takenBefore).toBe('2025-01-01T00:00:00.000Z');
   });
 });
