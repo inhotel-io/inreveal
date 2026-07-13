@@ -103,7 +103,7 @@ Auto Launch can also be enabled on a per-request basis by navigating to `/auth/l
 
 ## Mobile Redirect URI
 
-The redirect URI for the mobile app is `app.immich:///oauth-callback`, which is a [Custom Scheme](https://developer.apple.com/documentation/xcode/defining-a-custom-url-scheme-for-your-app). If this custom scheme is an invalid redirect URI for your OAuth Provider, you can work around this by doing the following:
+The mobile app currently sends `app.immich:///oauth-callback` as its redirect URI, which is a [Custom Scheme](https://developer.apple.com/documentation/xcode/defining-a-custom-url-scheme-for-your-app). If this custom scheme is an invalid redirect URI for your OAuth Provider, you can work around this by doing the following:
 
 1. Configure an http(s) endpoint to forwards requests to `app.immich:///oauth-callback`
 2. Whitelist the new endpoint as a valid redirect URI with your provider.
