@@ -2,7 +2,7 @@ import { AssetOrder, AssetTypeEnum, AssetVisibility, type FilterSuggestionsPerso
 import type { FilterState } from '$lib/components/filter-panel/filter-panel';
 import { applyTextFilters, buildFilterContext } from '$lib/components/filter-panel/filter-panel';
 import { createUrl } from '$lib/utils';
-import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
+import { handleRemoveFilter } from '$lib/utils/filter-remove';
 
 export type PhotosPersonFilterReference = {
   id: string;
@@ -133,53 +133,5 @@ export function getPhotosPersonFilterId(person: PhotosPersonFilterReference): st
 }
 
 export function handlePhotosRemoveFilter(filters: FilterState, type: string, id?: string): FilterState {
-  switch (type) {
-    case 'person': {
-      return { ...filters, personIds: filters.personIds.filter((p) => p !== id) };
-    }
-    case 'location': {
-      return { ...filters, city: undefined, country: undefined };
-    }
-    case 'camera': {
-      return { ...filters, make: undefined, model: undefined };
-    }
-    case 'tag': {
-      return { ...filters, tagIds: filters.tagIds.filter((t) => t !== id) };
-    }
-    case 'rating': {
-      return { ...filters, rating: undefined };
-    }
-    case 'media':
-    case 'mediaType': {
-      return { ...filters, mediaType: 'all' };
-    }
-    case 'favorites':
-    case 'isFavorite': {
-      return { ...filters, isFavorite: undefined };
-    }
-    case 'albums': {
-      return { ...filters, isNotInAlbum: undefined, isInAlbum: undefined };
-    }
-    case 'isNotInAlbum': {
-      return { ...filters, isNotInAlbum: undefined };
-    }
-    case 'isInAlbum': {
-      return { ...filters, isInAlbum: undefined };
-    }
-    case 'timeline': {
-      return clearTimelineTemporalFilter(filters);
-    }
-    case 'description': {
-      return { ...filters, description: undefined };
-    }
-    case 'filename': {
-      return { ...filters, originalFileName: undefined };
-    }
-    case 'ocr': {
-      return { ...filters, ocr: undefined };
-    }
-    default: {
-      return filters;
-    }
-  }
+  return handleRemoveFilter(filters, type, id);
 }
