@@ -1459,6 +1459,8 @@
   "filter": "Filter",
   "filter_button_active": "Filter, active",
   "filter_by_camera": "Filter by this camera",
+  "filter_by_date": "Filter by this date",
+  "filter_by_filename": "Filter by this filename",
   "filter_by_lens": "Filter by this lens",
   "filter_by_location": "Filter by this location",
   "filter_chip_after": "After {date}",

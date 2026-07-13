@@ -220,6 +220,72 @@ describe('DetailPanel camera filter', () => {
   });
 });
 
+// Task 4 — the filename row lives inline in DetailPanel.svelte too. The patch is the basename
+// WITHOUT its extension: that is what surfaces a RAW/JPEG pair (IMG_1234.CR3 + IMG_1234.jpg) and
+// edited variants of the same shot.
+describe('DetailPanel filename filter', () => {
+  it.each([
+    { originalFileName: 'IMG_1234.jpg', basename: 'IMG_1234' },
+    { originalFileName: 'my.photo.v2.jpg', basename: 'my.photo.v2' },
+    { originalFileName: 'IMG_1234', basename: 'IMG_1234' },
+  ])('clicking $originalFileName emits { originalFileName: $basename }', async ({ originalFileName, basename }) => {
+    mockPage.reset('https://gallery.test/spaces/space-1/photos/asset-1');
+    const asset = buildAsset({ originalFileName });
+
+    renderWithTooltips(DetailPanel, { asset, currentAlbum: null });
+
+    await fireEvent.click(await screen.findByLabelText(`filter_by_filename: ${basename}`));
+
+    const expected = buildContextualFilterUrl(mockPage.url, { originalFileName: basename });
+    expect(gotoMock).toHaveBeenCalledWith(expected);
+    expect(expected.startsWith('/spaces/space-1')).toBe(true);
+    expect(expected).not.toContain('asset-1'); // one goto() closes the asset viewer
+
+    const params = new URLSearchParams(expected.split('?')[1]);
+    expect(params.get('filename')).toBe(basename);
+  });
+
+  // R9/E7 — a leading-dot name has an EMPTY basename, so the patch would trim to nothing: the click
+  // would close the viewer and apply no filter at all. Not clickable.
+  it('R9: a name whose basename is empty (".jpg") is not clickable', async () => {
+    mockPage.reset('https://gallery.test/photos/asset-1');
+    const asset = buildAsset({ originalFileName: '.jpg' });
+
+    renderWithTooltips(DetailPanel, { asset, currentAlbum: null });
+
+    await waitFor(() => expect(screen.getByTestId('detail-panel-filename')).toBeInTheDocument());
+    expect(screen.queryByLabelText(/^filter_by_filename/)).not.toBeInTheDocument();
+    expect(screen.getByText('.jpg')).toBeInTheDocument();
+  });
+
+  // R6/R9 — the path toggle lives inside the SAME <p> as the filename text. Only the text becomes
+  // the filter trigger; the toggle must keep working (detail-panel-path.spec.ts covers it too).
+  it('keeps the file-location toggle working next to the filter trigger', async () => {
+    mockPage.reset('https://gallery.test/photos/asset-1');
+    const asset = buildAsset({ originalFileName: 'IMG_1234.jpg', originalPath: '/photos/IMG_1234.jpg' });
+
+    renderWithTooltips(DetailPanel, { asset, currentAlbum: null });
+
+    await waitFor(() => expect(screen.getByLabelText('show_file_location')).toBeInTheDocument());
+    await fireEvent.click(screen.getByLabelText('show_file_location'));
+
+    expect(gotoMock).not.toHaveBeenCalled();
+  });
+
+  it('E2: a shared link renders no filename filter affordance', async () => {
+    authManagerMock.isSharedLink = true;
+    mockPage.reset('https://gallery.test/share/abc/photos/asset-1');
+    const asset = buildAsset({ originalFileName: 'IMG_1234.jpg' });
+
+    renderWithTooltips(DetailPanel, { asset, currentAlbum: null });
+
+    await waitFor(() => expect(screen.getByTestId('detail-panel-filename')).toBeInTheDocument());
+    expect(screen.getByText('IMG_1234.jpg')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^filter_by_filename/)).not.toBeInTheDocument();
+    expect(gotoMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('DetailPanel lens filter', () => {
   it('clicking the value emits { lensModel } and filters the current surface', async () => {
     mockPage.reset('https://gallery.test/spaces/space-1/photos/asset-1');
