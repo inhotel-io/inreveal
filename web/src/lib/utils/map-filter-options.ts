@@ -82,12 +82,33 @@ export function buildMapMarkerOptions(filters: FilterState, spaceId?: string): R
   return base;
 }
 
+/**
+ * The global/space scope of a map TIMELINE query (the temporal picker's buckets, and the cluster
+ * panel's assets).
+ *
+ * `withSharedSpaces` and `isFavorite` cannot be sent together: `timeline.service.ts`
+ * (`timeBucketChecks`) 400s the combination outright — a favourite is the ASSET OWNER's flag, so a
+ * shared-space asset can never satisfy my favourites filter. Sending both made the map's favourites
+ * chip error the temporal picker and the cluster panel while the markers answered correctly.
+ *
+ * `buildPhotosTimelineOptions` solves it the same way (drop the widening flags for a favourites
+ * query), and so does the marker endpoint (`shared-space.service.ts` does NOT widen a favourites
+ * query to shared spaces either) — so the two map surfaces still describe the same asset set.
+ */
+function mapTimelineScope(filters: FilterState, spaceId?: string): Record<string, unknown> {
+  if (spaceId) {
+    return { spaceId };
+  }
+
+  const includeSharedTimelineAssets = filters.isFavorite === undefined;
+  return {
+    visibility: AssetVisibility.Timeline,
+    ...(includeSharedTimelineAssets ? { withSharedSpaces: true } : {}),
+  };
+}
+
 export function buildMapTimeBucketOptions(filters: FilterState, spaceId?: string): Record<string, unknown> {
-  const base = applyCommonMapFilters(
-    spaceId ? { spaceId } : { visibility: AssetVisibility.Timeline, withSharedSpaces: true },
-    filters,
-    !spaceId,
-  );
+  const base = applyCommonMapFilters(mapTimelineScope(filters, spaceId), filters, !spaceId);
 
   if (spaceId && filters.personIds.length > 0) {
     base.spacePersonIds = filters.personIds;
@@ -165,18 +186,20 @@ export function buildMapTimelineOptions(
   selectedClusterIds: Set<string>,
   spaceId?: string,
 ): Record<string, unknown> {
+  const activeFilters: FilterState = filters ?? {
+    personIds: [],
+    tagIds: [],
+    mediaType: 'all',
+    sortOrder: 'desc',
+  };
+
   const base = applyCommonMapFilters(
     {
       bbox,
-      ...(spaceId ? { spaceId } : { visibility: AssetVisibility.Timeline, withSharedSpaces: true }),
+      ...mapTimelineScope(activeFilters, spaceId),
       assetFilter: selectedClusterIds,
     },
-    filters ?? {
-      personIds: [],
-      tagIds: [],
-      mediaType: 'all',
-      sortOrder: 'desc',
-    },
+    activeFilters,
     false,
   );
 

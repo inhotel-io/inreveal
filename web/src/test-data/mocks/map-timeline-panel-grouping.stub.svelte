@@ -3,12 +3,19 @@
 
   interface Props {
     filters?: FilterState;
+    selectedClusterIds?: Set<string>;
     onClose?: () => void;
     onFiltersChange?: (filters: FilterState) => void;
     [key: string]: unknown;
   }
 
-  let { filters = $bindable(createFilterState()), onClose, onFiltersChange, ...rest }: Props = $props();
+  let {
+    filters = $bindable(createFilterState()),
+    selectedClusterIds,
+    onClose,
+    onFiltersChange,
+    ...rest
+  }: Props = $props();
   let bucketActivations = $state(0);
 
   function activateYear() {
@@ -38,6 +45,7 @@
   {...rest}
   data-testid="map-timeline-panel-stub"
   data-selected-year={filters?.selectedYear ?? ''}
+  data-selected-cluster-ids={[...(selectedClusterIds ?? [])].join(',')}
   data-bucket-activations={bucketActivations}
 >
   <button type="button" data-testid="map-panel-activate-year" onclick={activateYear}>Activate year</button>

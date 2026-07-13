@@ -19,6 +19,19 @@
   }
 
   let { mapMarkers = [], popup, onClusterSelect, ...rest }: Props = $props();
+
+  // Mirrors Map.svelte's handleClusterClick: a cluster hands its caller the LEAF ids plus the TIGHT
+  // bounding box of those leaves. Deriving the bbox from the markers (rather than hard-coding one)
+  // is what lets a page test exercise the cluster selection being recomputed from later markers.
+  const clusterLeaves = $derived(
+    mapMarkers.filter((marker) => marker.lat !== undefined && marker.lon !== undefined),
+  ) as Array<Marker & { lat: number; lon: number }>;
+  const clusterBBox = $derived({
+    west: Math.min(...clusterLeaves.map((marker) => marker.lon)),
+    south: Math.min(...clusterLeaves.map((marker) => marker.lat)),
+    east: Math.max(...clusterLeaves.map((marker) => marker.lon)),
+    north: Math.max(...clusterLeaves.map((marker) => marker.lat)),
+  });
 </script>
 
 <div
@@ -32,11 +45,15 @@
       {@render popup({ marker: mapMarkers[0] })}
     </div>
   {/if}
-  {#if onClusterSelect && mapMarkers[0]}
+  {#if onClusterSelect && clusterLeaves[0]}
     <button
       type="button"
-      data-testid={`map-cluster-${mapMarkers[0].id}`}
-      onclick={() => onClusterSelect([mapMarkers[0].id], { west: 1, south: 2, east: 3, north: 4 })}
+      data-testid={`map-cluster-${clusterLeaves[0].id}`}
+      onclick={() =>
+        onClusterSelect(
+          clusterLeaves.map((marker) => marker.id),
+          clusterBBox,
+        )}
     >
       Open cluster
     </button>

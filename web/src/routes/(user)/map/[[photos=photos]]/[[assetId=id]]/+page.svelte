@@ -25,6 +25,7 @@
   import { Route } from '$lib/route';
   import { handlePromiseError } from '$lib/utils';
   import { delay } from '$lib/utils/asset-utils';
+  import { clusterMarkerIdsInBBox } from '$lib/utils/map-cluster-selection';
   import { buildMapFilterConfig } from '$lib/utils/map-filter-config';
   import { buildFilterStateUrl, isFilterStateUrlUnchanged, withoutAtParam } from '$lib/utils/filter-target';
   import { decodeFilterParams } from '$lib/utils/filter-url';
@@ -58,7 +59,6 @@
   const spaceId = $derived(page.url.searchParams.get(QueryParameter.SPACE_ID) || undefined);
   const committedQuery = $derived(page.url.searchParams.get('q') ?? '');
 
-  let selectedClusterIds = $state.raw(new Set<string>());
   let selectedClusterBBox = $state.raw<SelectionBBox>();
   let isTimelinePanelVisible = $state(false);
   let showMobileFilters = $state(false);
@@ -162,6 +162,13 @@
   };
   const timeBucketOptions = $derived.by(() => buildMapTimeBucketOptions(filters, spaceId));
   const mapMarkerOptions = $derived.by(() => buildMapMarkerOptions(filters, spaceId));
+
+  // The cluster panel's asset scope, RECOMPUTED from the current markers on every refetch — i.e. on
+  // every filter change (Task 10). It used to be the leaf ids captured once at click time, which
+  // made the panel a one-way street: it could narrow, but a filter cleared from inside it could
+  // never surface the assets that had just started matching, and its header count never moved off
+  // the click-time number. See map-cluster-selection.ts.
+  const selectedClusterIds = $derived(clusterMarkerIdsInBBox(mapMarkers, selectedClusterBBox));
 
   // Fetch time buckets for the temporal picker
   $effect(() => {
@@ -318,7 +325,6 @@
   function closeTimelinePanel() {
     isTimelinePanelVisible = false;
     selectedClusterBBox = undefined;
-    selectedClusterIds = new Set();
   }
 
   onDestroy(() => {
@@ -334,8 +340,11 @@
     closeTimelinePanel();
   }
 
-  function onClusterSelect(assetIds: string[], bbox: SelectionBBox) {
-    selectedClusterIds = new Set(assetIds);
+  // The clicked cluster's leaf ids are deliberately NOT stored: they are a snapshot of the markers as
+  // they stood under the filters at click time, and any filter change re-fetches the markers. The
+  // bbox — the tight bounding box of those leaves — is the cluster's durable identity, and
+  // `selectedClusterIds` above is re-derived from the current markers inside it.
+  function onClusterSelect(_: string[], bbox: SelectionBBox) {
     selectedClusterBBox = bbox;
     isTimelinePanelVisible = true;
     assetViewerManager.showAssetViewer(false);
@@ -502,7 +511,6 @@
             <MapTimelinePanel
               bbox={selectedClusterBBox}
               {selectedClusterIds}
-              assetCount={selectedClusterIds.size}
               onClose={closeTimelinePanel}
               {spaceId}
               bind:filters

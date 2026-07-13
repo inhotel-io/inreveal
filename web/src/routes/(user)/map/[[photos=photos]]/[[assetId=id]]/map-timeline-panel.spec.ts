@@ -123,7 +123,6 @@ function renderPanel(filters = createFilterState(), onFiltersChange?: (filters: 
       componentProps: {
         bbox: { west: 1, south: 2, east: 3, north: 4 },
         selectedClusterIds: new Set(['asset-1', 'asset-2']),
-        assetCount: 2,
         filters,
         onClose: vi.fn(),
         ...(onFiltersChange ? { onFiltersChange } : {}),
@@ -132,12 +131,37 @@ function renderPanel(filters = createFilterState(), onFiltersChange?: (filters: 
   );
 }
 
+type TimelineStubGlobal = { __timelineStubAssetCount?: number };
+
 describe('MapTimelinePanel grouping', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
     mockAssetMultiSelectManager.ownedAssets = [];
+  });
+
+  afterEach(() => {
+    delete (globalThis as TimelineStubGlobal).__timelineStubAssetCount;
+  });
+
+  // Task 10: the header used to be handed `selectedClusterIds.size` by the map page — the number of
+  // pins in the cluster at CLICK time, which no filter change ever recomputed ("50 assets" over the
+  // five pins a rating filter had left). It must count what the panel itself lists.
+  it('counts the assets its own timeline holds, not the size of the cluster selection', async () => {
+    (globalThis as TimelineStubGlobal).__timelineStubAssetCount = 7;
+
+    renderPanel(); // the cluster selection carries 2 ids
+
+    await waitFor(() => expect(screen.getByTestId('map-panel-asset-count')).toHaveAttribute('data-asset-count', '7'));
+  });
+
+  it('reports an empty panel when its timeline holds nothing (a filter excluded every pin)', async () => {
+    (globalThis as TimelineStubGlobal).__timelineStubAssetCount = 0;
+
+    renderPanel();
+
+    await waitFor(() => expect(screen.getByTestId('map-panel-asset-count')).toHaveAttribute('data-asset-count', '0'));
   });
 
   it('renders compact grouping controls and passes mobile grouping props', () => {

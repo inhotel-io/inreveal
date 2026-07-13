@@ -43,15 +43,20 @@ the map link becomes an ordinary filter URL.
 
 ## 4. Background: three incompatible filter mechanisms
 
-| Surface                   | Filter state lives in                         | Evidence                                      |
-| ------------------------- | --------------------------------------------- | --------------------------------------------- |
-| `/photos`, `/spaces/{id}` | ✅ URL params                                 | `web/src/lib/utils/searchable-page-search.ts` |
-| `/albums/{id}`            | ❌ component-local `$state`                   | `albums/[albumId=id]/…/+page.svelte:115`      |
-| `/map`                    | ❌ component-local `$state`, **always empty** | `map/…/+page.svelte:72`                       |
+> **STATUS (as of slice 5b).** This section describes the state of the world **before** slices 3 and 4. Both have landed: `/albums/{id}` and `/map` are **URL-backed now**, exactly like `/photos` and
+> `/spaces`. The table below is kept as the problem statement — read it as history, not as current
+> behaviour.
 
-`/photos` and `/spaces` already implement the full loop we want — hydrate from URL, write back on
-change, react to URL changes (`photos/…/+page.svelte:434-452` and `:506-534`). Slices 3 and 4 make
-albums and the map do the same thing.
+| Surface                   | Filter state lived in                         | Now                                                                       |
+| ------------------------- | --------------------------------------------- | ------------------------------------------------------------------------- |
+| `/photos`, `/spaces/{id}` | ✅ URL params                                 | unchanged (`web/src/lib/utils/searchable-page-search.ts`)                 |
+| `/albums/{id}`            | ❌ component-local `$state`                   | ✅ URL-backed (Slice 3) — hydrate ⇄ write ⇄ react, via `filter-target.ts` |
+| `/map`                    | ❌ component-local `$state`, **always empty** | ✅ URL-backed (Slice 4) — same loop, plus the viewport hash               |
+
+`/photos` and `/spaces` already implemented the full loop we want — hydrate from URL, write back on
+change, react to URL changes (`photos/…/+page.svelte:434-452` and `:506-534`). Slices 3 and 4 made
+albums and the map do the same thing; the write half is `buildFilterStateUrl` /
+`isFilterStateUrlUnchanged` / `withoutAtParam` (§5.4).
 
 ### 4.1 What the timeline query already supports
 
@@ -60,7 +65,9 @@ albums and the map do the same thing.
 `spacePersonIds`, `tagIds`, `isFavorite`, `isInAlbum`/`isNotInAlbum`, `albumId`, `spaceId`,
 `takenAfter`/`takenBefore`.
 
-It does **not** support `lensModel`, `state`, or an owner filter.
+It did **not** support `lensModel`, `state`, or an owner filter. **All three shipped in Slice 1** —
+on the timeline DTO, on metadata search, and on the filtered map markers (`ownerId` as a genuine
+contributor `AND`, never merged into `userIds`; see the trap below).
 
 ### 4.2 Three traps found while verifying (do not re-derive these)
 
@@ -172,6 +179,15 @@ if `albumId` is present.
 `searchable-page-search.ts` keeps its public API and delegates to the codec — `/photos` and
 `/spaces` must not change behavior.
 
+**Update (Slice 5b): `year` and `month` are in the codec too.** The temporal picker's
+`selectedYear` / `selectedMonth` used to be transient, URL-less state, which forced every URL-backed
+surface to carry them by hand across a URL write (a `pendingFilterUrlSync` carry-over on the album
+and map pages). They are encoded now — `?year=2023&month=6` — with the same precedence the query
+builder applies: `from`/`to` **wins**, so a year is never emitted (or decoded) beside an explicit
+date range, and a month is never emitted without a year. **The `pendingFilterUrlSync` carry-over has
+been deleted**; rebuilding `FilterState` from the URL alone is now lossless, which is what makes a
+picked year survive a reload, Back, and a shared link.
+
 ### 5.3 Filter target resolution — `web/src/lib/utils/filter-target.ts` (new)
 
 ```ts
@@ -191,26 +207,43 @@ pages, `/search`, and shared links.
 **`/map` is a filter target** (E23): an asset viewer opened from the map (`/map/photos/{assetId}`)
 resolves to `kind: 'map'`, and a filter click lands back on `/map` with the filter applied.
 
-### 5.4 Applying a filter — `applyContextualFilter`
+### 5.4 Applying a filter — the URL builders in `filter-target.ts`
 
 A pure URL builder plus a thin navigating wrapper, so the interesting logic is unit-testable:
 
 ```ts
-// pure
-function buildContextualFilterUrl(url: URL, patch: Partial<FilterState>, opts?: { global?: boolean }): string | null;
-// side-effecting
+// pure — SHIPPED in Slice 2
+function buildContextualFilterUrl(url: URL, patch: Partial<FilterState>, opts?: { global?: boolean }): string;
+// side-effecting — DOES NOT EXIST YET. Slice 7 must budget for writing it (and its tests).
 function applyContextualFilter(patch: Partial<FilterState>, opts?: { global?: boolean }): void; // → goto()
 ```
 
-Semantics:
+> ⚠️ **`applyContextualFilter` has not been written.** Only the pure builder exists today; nothing
+> calls it yet, because the DetailPanel rows that would (Slice 7) are the last slice. Slice 7 owns
+> the navigating wrapper — do not plan it as "already there".
+
+Semantics of `buildContextualFilterUrl`:
 
 1. Resolve the target from `page.url`. If `null` → **fall back to `/photos`** (authenticated contexts
    only). If `authManager.isSharedLink` → the affordance is not rendered at all.
-2. `opts.global === true` forces the `/photos` target regardless of context (the 🔍 icon).
-3. Decode current filters from the URL, apply the patch per §5.6, re-encode.
+2. `opts.global === true` forces the `/photos` target regardless of context (the 🔍 icon), and
+   carries **nothing** over — not the filters, not `q`, not `sort`.
+3. Decode current filters from the URL, apply the patch per §5.6, re-encode. (Since Slice 5b put
+   `year`/`month` in the codec, an active year is **preserved** by a contextual click, like any other
+   filter.)
 4. Drop the `at` param (one-shot grid scroll target — see `searchable-page-search.ts:122-128`).
 5. The resulting URL is the target's **base path**, which does not include the `assetId`. So a single
    `goto()` both closes the asset viewer and applies the filter.
+
+**The write half — added by Slices 3/4, not in the original design.** `/albums/{id}` and `/map` are
+not "searchable pages" (`getSearchablePageBasePath` returns `null` for both), so they cannot reuse
+`buildSearchablePageUrl`. `filter-target.ts` therefore also exports:
+
+| Function                    | Purpose                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `buildFilterStateUrl`       | Writes a **complete** `FilterState` into the current URL. **Replaces, never merges** (every filter param is deleted, then re-emitted from the state) — otherwise a cleared filter could never leave the URL. Keeps the current pathname (the panel can write while the asset viewer is open), preserves non-filter params and the hash, drops `at`. |
+| `isFilterStateUrlUnchanged` | The no-op guard for that write. **Not** a string compare: `buildFilterStateUrl` re-appends the filter params last, so `/map?make=Apple&spaceId=s1` rebuilds re-ordered. Compares path + hash verbatim and the query as a canonicalised param set.                                                                                                   |
+| `withoutAtParam`            | The token guard for the hydrate half. `replaceScrollTarget` writes `?at=<assetId>` when the asset viewer closes; that must not read as a filter change and re-hydrate.                                                                                                                                                                              |
 
 ### 5.5 Per-field filter patches
 
@@ -290,12 +323,27 @@ Three distinct bugs:
 | **b** | Map page never hydrates filters from the URL (`map/…/+page.svelte:72`)                                           | ✅ Slice 4                  |
 | **c** | Map markers **cannot do smart search** — `buildMapMarkerOptions` has no `query`; `/map/markers` is metadata-only | ⚠️ Slice 5 (honest failure) |
 
-Half (c) is the reporter's exact repro (`?q=ski`). We cannot carry a CLIP embedding query to the
-map-markers endpoint without new server work, which is out of scope. **But the worst part of the bug
-is that the map silently renders the entire library**, giving no hint the filter was dropped.
+Half (c) is the reporter's exact repro (`?q=ski`). The conclusion below (be honest instead of
+pretending) is right — but **the mechanism assumed here was wrong, and the fix that shipped is not
+the one described**. Corrected, because the difference matters for anyone reasoning about `q` on the
+map:
 
-Slice 5 therefore: carry `q` in the URL, apply every structured filter, and render an explicit notice
-that the smart-search term is not applied on the map. The `q`-on-map gap is filed as a follow-up.
+- The map page **already had a client-side `q` intersection loop** (shipped with #412): it pages
+  `searchSmart` and keeps the markers whose ids come back. `q` was never simply "dropped".
+- Smart search does **not** return the whole library. What it returns is a **ranked** result set; the
+  CLIP-distance predicate is only applied when `machineLearning.clip.maxDistance` is configured in
+  `(0, 2)`. Without that cutoff nothing is _excluded_ from the ranking, so the intersection loop had
+  nothing to narrow — and it paged the ranked list **to exhaustion** (one request per 100 assets),
+  matched every marker, and rendered them all. `maxDistance` defaults to `0`, so that was the
+  default experience.
+- **Slice 5 therefore shipped a server feature-flag GATE on that loop**, not a "carry `q` + notice"
+  redesign: `ServerFeaturesDto` publishes a derived `smartSearchHasCutoff` (the client cannot read
+  admin config), the map runs the intersection **only** when it is true, and otherwise applies every
+  structured filter and renders the notice saying the smart-search term is not applied here.
+
+Do not reintroduce the claim that smart search "returns the whole library" — it does not, and a fix
+built on that premise would be aimed at the wrong component. The `q`-on-map gap (server-side
+geotagged smart search) remains a follow-up.
 
 ## 8. Edge-case matrix
 
@@ -311,7 +359,7 @@ that the smart-search term is not applied on the map. The `q`-on-map gap is file
 | E8      | Non-owner viewing an asset in a Space                                                            | Can filter; **cannot** edit (✏️ stays owner-gated as today)                                                                                                                                                                                           |
 | E9      | `albumId` filter param while already on `/albums/{id}`                                           | **Ignored.** Not merely redundant — the server's `albumId` is a **scalar** driving one inner join, so a second album cannot be AND-ed. Album∩album is impossible without a server change. The ⚗️ icon is not offered for the album you are already in |
 | E10     | Location pin (🗺️) from within a Space                                                            | Map URL carries `spaceId` **and** the active filters, centered on the asset                                                                                                                                                                           |
-| E11     | `Route.map` currently emits **only** `/map` + a hash (`route.ts:89-90`) — **no query support**   | `Route.map` must be **extended** to take query params, emitting `/map?<filters>#<zoom>/<lat>/<lng>`                                                                                                                                                   |
+| E11     | `Route.map` — query support (**SHIPPED in Slice 4**; it emitted only `/map` + a hash before)     | `Route.map` **takes a query now** and emits `/map?<filters>#<zoom>/<lat>/<lng>`. Nothing left to do here                                                                                                                                              |
 | E12     | Metadata value with URL-special characters (`/`, `+`, `&` in a lens name)                        | Round-trips through `URLSearchParams` intact                                                                                                                                                                                                          |
 | E13     | Very long description used as a filter                                                           | Emitted `description` param truncated to **200 chars** to bound URL length                                                                                                                                                                            |
 | E14     | Date filter across a timezone boundary                                                           | Uses the asset's **local** date as displayed; no UTC re-bucketing                                                                                                                                                                                     |
@@ -551,8 +599,18 @@ Scenario: An albumId filter param on its own album page is ignored   # E9
 
 ### Slice 4 — Web: map page becomes URL-backed + map links carry filters (#767 a+b)
 
-**Files:** `map/…/+page.svelte`, `web/src/lib/components/spaces/space-map.svelte`,
-`web/src/lib/components/album-page/AlbumMap.svelte`, `web/src/lib/route.ts`
+**Files:** `map/…/+page.svelte`, `map/…/MapTimelinePanel.svelte`,
+`web/src/lib/utils/map-filter-options.ts`, `web/src/lib/components/spaces/space-map.svelte`,
+`web/src/lib/components/album-page/AlbumMap.svelte`, `web/src/lib/route.ts`, **plus the server half
+of the album map:** `server/src/services/shared-space.service.ts` and
+`e2e/src/specs/server/api/gallery-map.e2e-spec.ts`.
+
+> **The album-map RBAC fix is issue #656, not #655.** (#655 is the album-suggestions bug quoted in
+> §4.4; this spec says "#655" throughout, which is the wrong number for the map half.) Scoping the
+> album map's markers by asset OWNER hid the album owner's pins from a viewer of a shared album; the
+> server must let album **access** be the scope — check `AlbumRead`, leave `userIds` unset so the
+> query takes its album branch — exactly as the album grid does. That is server work, and it needs
+> an e2e that a non-owner sees the owner's pins.
 
 **BDD**
 
@@ -567,10 +625,17 @@ Scenario: Map filters round-trip through the URL
   When I open "/map?spaceId=X&make=Apple" directly
   Then the map's filter panel shows the camera filter as active
 
-Scenario: The album map link carries the album's active filters
+Scenario: The album map MODAL honours the album's active filters
+  # NB: AlbumMap is a modal rendered over the album page — there is no album-map URL and no
+  # "album map link". It fetches filtered markers for the album scope directly.
   Given I am on an album filtered to rating>=4
   When I open the album map
-  Then the map URL carries the album scope AND rating=4
+  Then the modal shows only that album's geotagged assets with rating>=4
+
+Scenario: A viewer of a shared album sees the OWNER's pins           # #656
+  Given I am a non-owner viewer of an album
+  When I open the album map
+  Then I see pins for the album owner's geotagged assets
 
 Scenario: Route.map emits query params AND a hash                   # E11
   When I build a map route with filters and a centre point
@@ -580,32 +645,49 @@ Scenario: Route.map emits query params AND a hash                   # E11
 **TDD steps**
 
 1. **RED** — tests: `/map?spaceId=X&make=Apple` hydrates the camera filter; `space-map.svelte`'s link
-   carries active filters; `AlbumMap.svelte`'s link carries the album's filters; `Route.map` emits
-   query + hash together (E11).
+   carries active filters; `AlbumMap.svelte` (the modal) fetches markers for the album scope **with**
+   the album's active filters; `Route.map` emits query + hash together (E11); a non-owner viewer gets
+   the album owner's pins (#656, e2e + service unit test).
 2. **GREEN** —
    - Extend `Route.map` to accept filter params (`route.ts:89-90` currently emits hash only).
    - Hydrate the map's `filters` from the codec, replacing the always-empty `createFilterState()`
-     (`map/…/+page.svelte:72`). Reuse the `lastHandledSearchState` guard.
+     (`map/…/+page.svelte:72`), and write them back with `buildFilterStateUrl` behind the
+     `isFilterStateUrlUnchanged` / `withoutAtParam` guards (§5.4).
    - Build `space-map.svelte`'s `mapUrl` from live filter state instead of the hardcoded
-     `/map?spaceId=<id>` (`:13`); do the same for `AlbumMap.svelte`.
+     `/map?spaceId=<id>` (`:13`). `AlbumMap.svelte` is a **modal**, not a link — pass it the album's
+     live `FilterState` and have it call the filtered-marker endpoint with an album scope.
+   - Server: scope album markers by album **access**, not by asset owner (#656).
 
-**Done when:** #767 (a) and (b) are fixed. E10, E11.
+**Done when:** #767 (a) and (b) are fixed, and a shared-album viewer sees the owner's pins. E10, E11.
 
 ---
 
 ### Slice 5 — Web: honest `q` handling on the map (#767 c)
 
-**Files:** `map/…/+page.svelte`, `i18n/en.json`
+**Files:** `map/…/+page.svelte`, `i18n/en.json`, **and the server flag the gate reads:**
+`server/src/dtos/server.dto.ts` (`ServerFeaturesDto.smartSearchHasCutoff`),
+`server/src/services/server.service.ts` (derives it from `machineLearning.clip.maxDistance`), plus an
+**SDK regeneration** (`make open-api`) — the web client cannot read admin config, so the flag has to
+travel through the features endpoint. See the corrected §7(c): the deliverable is a **gate on the
+existing client-side intersection loop**, not a new "carry `q`" mechanism.
 
 **BDD**
 
 ```gherkin
 Scenario: The map is honest about a smart search it cannot apply
-  Given I am on a Space with an active smart search "?q=ski"
+  Given the instance has NO CLIP distance cutoff (machineLearning.clip.maxDistance = 0)
+    And I am on a Space with an active smart search "?q=ski"
   When I switch to the map view
   Then every structured filter IS applied
     And an explicit notice states the smart-search term is not applied on the map
-    And the map does NOT silently render the entire library
+    And the client-side intersection loop does NOT run (it could not narrow anything,
+        and it would page the ranked result set to exhaustion)
+
+Scenario: The intersection still runs on an instance that CAN narrow
+  Given the instance has a CLIP distance cutoff (smartSearchHasCutoff = true)
+    And I am on the map with "?q=ski"
+  Then the markers are intersected with the smart-search result ids
+    And NO notice is shown — the term genuinely was applied
 
 Scenario: No notice when there is no smart search
   Given I am on the map with only structured filters
@@ -614,13 +696,17 @@ Scenario: No notice when there is no smart search
 
 **TDD steps**
 
-1. **RED** — component test: with `q` in the URL, the notice renders and structured filters still
-   apply; without `q`, no notice.
-2. **GREEN** — render the notice; add the i18n key to **`i18n/en.json` only** (other locales fall
-   back — see the shared web+mobile `i18n/` dir).
+1. **RED** — component tests: with `q` and **no** cutoff, the notice renders, the structured filters
+   still apply and `searchSmart` is **never called**; with `q` and a cutoff, the markers are
+   intersected and no notice renders; without `q`, no notice.
+2. **GREEN** — publish `smartSearchHasCutoff` on `ServerFeaturesDto` (derived in `server.service.ts`
+   from `machineLearning.clip.maxDistance ∈ (0, 2)`), regenerate the SDK, gate the existing
+   intersection loop on it, and render the notice otherwise. Add the i18n key to **`i18n/en.json`
+   only** (other locales fall back — see the shared web+mobile `i18n/` dir).
 
-**Done when:** the reporter's `?q=ski` repro shows filtered results plus a clear explanation, never a
-silent full library.
+**Done when:** the reporter's `?q=ski` repro shows filtered results plus a clear explanation, and the
+default (cutoff-less) instance no longer pages the whole ranked result set to exhaustion only to
+render every marker anyway.
 
 ---
 

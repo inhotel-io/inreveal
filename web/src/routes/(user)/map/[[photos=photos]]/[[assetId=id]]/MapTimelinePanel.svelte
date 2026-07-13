@@ -43,7 +43,6 @@
   interface Props {
     bbox: SelectionBBox;
     selectedClusterIds: Set<string>;
-    assetCount: number;
     onClose: () => void;
     spaceId?: string;
     filters?: FilterState;
@@ -53,7 +52,6 @@
   let {
     bbox,
     selectedClusterIds,
-    assetCount,
     onClose,
     spaceId,
     filters = $bindable(createFilterState()),
@@ -61,6 +59,13 @@
   }: Props = $props();
 
   let timelineManager = $state<TimelineManager>() as TimelineManager;
+
+  // The panel's OWN count, not the cluster selection's size (Task 10). The header used to be fed
+  // `selectedClusterIds.size` from the page — a click-time snapshot that no filter change ever
+  // recomputed, so it kept claiming "50 assets" over the five pins a rating filter had left. This
+  // is the count of what the panel actually lists: the server's bucket counts until a month loads,
+  // and the loaded assets (client-side `assetFilter` exclusions already applied) after.
+  const assetCount = $derived(timelineManager?.assetCount ?? 0);
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let selectedAssets = $derived(assetMultiSelectManager.assets);
@@ -146,7 +151,11 @@
   <div class="flex items-center justify-between border-b border-gray-200 pe-1 pb-1 dark:border-immich-dark-gray">
     <div class="flex items-center gap-2">
       <Icon icon={mdiImageMultiple} size="20" />
-      <p class="text-sm font-medium text-immich-fg dark:text-immich-dark-fg">
+      <p
+        class="text-sm font-medium text-immich-fg dark:text-immich-dark-fg"
+        data-testid="map-panel-asset-count"
+        data-asset-count={assetCount}
+      >
         {$t('assets_count', { values: { count: assetCount } })}
       </p>
     </div>

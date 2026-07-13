@@ -514,6 +514,69 @@ describe('Map page filters are URL-backed', () => {
     expect(target).not.toContain('to=');
   });
 
+  // Task 10: the cluster panel's asset scope was captured ONCE from the markers at click time and
+  // fed to the panel as a client-side `assetFilter` EXCLUSION set, which no filter change ever
+  // recomputed. So the panel could only shrink: adding a filter left it answering from the old set,
+  // and clearing one — from the left panel or from inside the panel itself — could never surface the
+  // assets that had just started matching. It is derived from the CURRENT markers now, so it tracks
+  // the filters in both directions.
+  it('narrows the cluster selection when a filter change drops markers', async () => {
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([
+      { id: 'asset-1', lat: 1, lon: 1 },
+      { id: 'asset-2', lat: 3, lon: 3 },
+      { id: 'asset-3', lat: 5, lon: 5 },
+    ] as never);
+
+    renderPage();
+    await flushQueryDebounce();
+    await flushMapLoad();
+    await fireEvent.click(screen.getByTestId('map-cluster-asset-1'));
+
+    expect(screen.getByTestId('map-timeline-panel-stub')).toHaveAttribute(
+      'data-selected-cluster-ids',
+      'asset-1,asset-2,asset-3',
+    );
+
+    // A rating/country/… chip drops two of the three pins.
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 1 }] as never);
+    await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
+    await flushQueryDebounce();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('map-timeline-panel-stub')).toHaveAttribute('data-selected-cluster-ids', 'asset-1'),
+    );
+  });
+
+  // The direction that was outright impossible before: WIDENING.
+  it('widens the cluster selection when a filter is cleared and new markers match', async () => {
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([{ id: 'asset-1', lat: 1, lon: 1 }] as never);
+    mockPage.url = new URL('https://gallery.test/map?country=Germany');
+
+    renderPage();
+    await flushQueryDebounce();
+    await flushMapLoad();
+    await fireEvent.click(screen.getByTestId('map-cluster-asset-1'));
+
+    expect(screen.getByTestId('map-timeline-panel-stub')).toHaveAttribute('data-selected-cluster-ids', 'asset-1');
+
+    // Clearing the country brings two more assets — inside the same cluster's bbox — back into the
+    // markers. They must reach the panel; the click-time snapshot could never let them in.
+    sdkMock.getFilteredMapMarkers.mockResolvedValue([
+      { id: 'asset-1', lat: 1, lon: 1 },
+      { id: 'asset-2', lat: 1, lon: 1 },
+      { id: 'asset-3', lat: 1, lon: 1 },
+    ] as never);
+    await fireEvent.click(screen.getByTestId('filter-panel-clear-location'));
+    await flushQueryDebounce();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('map-timeline-panel-stub')).toHaveAttribute(
+        'data-selected-cluster-ids',
+        'asset-1,asset-2,asset-3',
+      ),
+    );
+  });
+
   // Back/forward: SvelteKit swaps page.url without remounting the page component. The $effect must
   // notice and re-hydrate — this is the same code path a reload and a shared URL take. Only provable
   // now that this suite's page mock is reactive (I5) — the old plain vi.hoisted object registered no

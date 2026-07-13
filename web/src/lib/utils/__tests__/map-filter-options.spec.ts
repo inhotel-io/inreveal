@@ -81,7 +81,6 @@ describe('buildMapTimeBucketOptions', () => {
       tagIds: ['tag-1'],
       rating: 4,
       mediaType: 'video' as const,
-      isFavorite: true,
       isNotInAlbum: true,
       selectedYear: 2015,
       selectedMonth: 3,
@@ -95,12 +94,35 @@ describe('buildMapTimeBucketOptions', () => {
       model: 'EOS R6',
       tagIds: ['tag-1'],
       rating: 4,
-      isFavorite: true,
       isNotInAlbum: true,
       $type: AssetTypeEnum.Video,
       takenAfter: '2015-03-01T00:00:00.000Z',
       takenBefore: '2015-04-01T00:00:00.000Z',
     });
+  });
+
+  // The favourites chip 400s the map's temporal picker: timeline.service.ts (timeBucketChecks)
+  // REJECTS withSharedSpaces together with isFavorite — "a favourite is the asset owner's flag" —
+  // so sending both errored getTimeBuckets and the cluster panel while the markers answered fine.
+  // Mirror buildPhotosTimelineOptions: it drops withPartners/withSharedSpaces for a favourites
+  // query, which also matches what the marker endpoint does (it does NOT widen a favourites query
+  // to shared spaces either), so the two surfaces still agree.
+  it('drops withSharedSpaces for a favourites time-bucket query (the server 400s the combination)', () => {
+    const options = buildMapTimeBucketOptions({ ...createFilterState(), isFavorite: true });
+
+    expect(options).toMatchObject({ visibility: AssetVisibility.Timeline, isFavorite: true });
+    expect(options).not.toHaveProperty('withSharedSpaces');
+  });
+
+  it('drops withSharedSpaces for an explicitly non-favourite time-bucket query too', () => {
+    const options = buildMapTimeBucketOptions({ ...createFilterState(), isFavorite: false });
+
+    expect(options).toMatchObject({ isFavorite: false });
+    expect(options).not.toHaveProperty('withSharedSpaces');
+  });
+
+  it('keeps withSharedSpaces when the favourites chip is off', () => {
+    expect(buildMapTimeBucketOptions(createFilterState())).toMatchObject({ withSharedSpaces: true });
   });
 
   it('uses the current space instead of global timeline visibility when spaceId is present', () => {
@@ -260,6 +282,21 @@ describe('buildMapTimelineOptions', () => {
 
     expect(options).toEqual(expect.objectContaining({ isFavorite: true }));
     expect(options).not.toHaveProperty('withPartners');
+  });
+
+  // Same 400 as the temporal picker above: the cluster panel is a timeline query, so it must not
+  // send withSharedSpaces beside isFavorite.
+  it('drops withSharedSpaces for a favourites cluster timeline (the server 400s the combination)', () => {
+    const options = buildMapTimelineOptions({ ...createFilterState(), isFavorite: true }, '1,2,3,4', new Set(['a1']));
+
+    expect(options).toMatchObject({ visibility: AssetVisibility.Timeline, isFavorite: true });
+    expect(options).not.toHaveProperty('withSharedSpaces');
+  });
+
+  it('keeps withSharedSpaces on the cluster timeline when the favourites chip is off', () => {
+    expect(buildMapTimelineOptions(createFilterState(), '1,2,3,4', new Set(['a1']))).toMatchObject({
+      withSharedSpaces: true,
+    });
   });
 });
 
