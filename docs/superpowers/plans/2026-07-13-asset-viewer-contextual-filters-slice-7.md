@@ -123,6 +123,7 @@ Second half: **`getPhotosPersonFilterId` cannot produce a scoped token from an a
 **Files:** `web/src/lib/utils/filter-target.ts`, `web/src/lib/utils/__tests__/filter-target.spec.ts`
 
 - [ ] **Step 1 (RED):** tests for
+
   ```ts
   export function applyContextualFilter(patch: Partial<FilterState>, opts?: { global?: boolean }): void;
   ```
@@ -132,6 +133,7 @@ Second half: **`getPhotosPersonFilterId` cannot produce a scoped token from an a
   - it navigates to the target's **base path**, so a single `goto()` **closes the asset viewer** (the URL contains no `assetId`).
   - **E24 (idempotency):** applying the same patch twice produces the identical URL — the second click is a **no-op**, it does **not** toggle the filter off.
   - it does **not** throw when `resolveFilterTarget` returns `null` (non-filterable surface → `/photos` fallback).
+
 - [ ] **Step 2 (GREEN):** implement it next to `buildContextualFilterUrl`, using `page` from `$app/state` and `goto` from `$app/navigation`. Keep it a **thin** wrapper — all the interesting logic already lives in the pure builder and is already tested. ⚠️ `no-floating-promises` is enforced: `void goto(...)`.
 - [ ] **Step 3:** typecheck, lint, commit.
 
