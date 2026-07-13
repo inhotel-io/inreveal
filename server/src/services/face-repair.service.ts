@@ -877,11 +877,19 @@ export class FaceRepairService extends BaseService {
       }
     }
 
-    // Drop-on-any-resolution (C5, E13): unlike the now-retired applyRepair's `moved > 0` gate, a committed
-    // resolve always drains the person from the console immediately, even when every flagged face was kept/stayed (zero
-    // moves) — the M11 stay-only case, with `lock` still to come in Slice 3. moveToPerson destinations only
-    // ever gain faces from this call, so there is no destination to additionally drain this slice.
-    await this.faceRepairScanRepository.removePersonsFromLatestScan([personId]);
+    // Drop-on-SETTLED-resolution (C5, E13). A committed resolve drains the person from the console even when
+    // every flagged face was kept/stayed (zero moves) — the M11 stay-only case — because a kept face IS a
+    // settled face. What it must NOT do is drain on a resolve that settled *none* of the flagged snapshot: a
+    // move of rest-of-cluster faces alone (faces the scan never flagged) would otherwise drop the person while
+    // every flagged face was still awaiting a decision, silently discarding the admin's staged review and
+    // handing the same faces back on the next scan. `entireCluster` always drains — it moves the whole cluster,
+    // flagged faces included. moveToPerson destinations only ever gain faces from this call, so there is no
+    // destination to additionally drain.
+    const settledFaceIds = new Set([...moveFaceIds, ...stay, ...lock, ...detach]);
+    const settlesFlaggedSnapshot = [...flaggedIds].every((assetFaceId) => settledFaceIds.has(assetFaceId));
+    if (entireCluster || settlesFlaggedSnapshot) {
+      await this.faceRepairScanRepository.removePersonsFromLatestScan([personId]);
+    }
 
     return {
       moved: result.moved,

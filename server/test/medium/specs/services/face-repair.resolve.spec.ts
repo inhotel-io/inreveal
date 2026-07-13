@@ -288,6 +288,83 @@ describe('FaceRepairService.resolveFaces: moveToPerson carries rest-of-cluster f
   });
 });
 
+// A resolve that settles NONE of the flagged snapshot must not close the person out of the console. The web
+// review page used to fire a second, independent resolve for its rest-of-cluster selection; the unconditional
+// drop-on-any-resolution then dropped the person while every flagged face was still unresolved, so the admin's
+// staged decisions were silently discarded and the same faces came back on the next scan (the reported bug).
+describe('FaceRepairService.resolveFaces: a resolve that settles no flagged face does NOT drain the person', () => {
+  it('moves only the rest-of-cluster face and leaves the person (and its untouched flagged faces) in the scan', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    const flagged1 = await seedFace(ctx, user.id, source.id);
+    const flagged2 = await seedFace(ctx, user.id, source.id);
+    const rest = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: flagged1, suspectedOwnerId: owner.id },
+      { assetFaceId: flagged2, suspectedOwnerId: owner.id },
+    ]);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: owner.id, faceIds: [rest], lock: false }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+
+    expect(result).toEqual({ moved: 1, declined: 0, locked: 0, detached: 0, skipped: 0 });
+
+    // The rest face moved; the two flagged faces are untouched, still awaiting a decision.
+    const byId = await personIdsOf([flagged1, flagged2, rest]);
+    expect(byId[rest]).toBe(owner.id);
+    expect(byId[flagged1]).toBe(source.id);
+    expect(byId[flagged2]).toBe(source.id);
+
+    // ...so the person MUST still be in the console, with its flagged snapshot intact.
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+
+    const stillFlagged = await scanRepo.getScanFlaggedFacesForPersons(latest!.id, [source.id]);
+    expect(stillFlagged.map((face) => face.assetFaceId).sort()).toEqual([flagged1, flagged2].sort());
+  });
+
+  it('drains the person once the flagged snapshot IS settled, even alongside a rest-of-cluster face in the same resolve', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    const flagged = await seedFace(ctx, user.id, source.id);
+    const rest = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: flagged, suspectedOwnerId: owner.id }]);
+
+    // The unified Apply: every flagged face plus the admin's added rest-of-cluster faces, in ONE resolve.
+    await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: owner.id, faceIds: [flagged, rest], lock: false }],
+        stay: [],
+        lock: [],
+        detach: [],
+      },
+      user.id,
+    );
+
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).not.toContain(source.id);
+  });
+});
+
 // Ported from the retired applyRepair manual-move spec (E5): a moveToPerson group need not carry every
 // eligible face on the person — a partial move leaves the rest, and a source with remaining faces survives
 // (unlike the fully-drained-unnamed-source deletion covered elsewhere).
