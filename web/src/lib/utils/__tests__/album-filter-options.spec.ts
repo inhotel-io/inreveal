@@ -121,9 +121,9 @@ describe('buildAlbumTimelineOptions', () => {
   });
 
   it('forwards isInAlbum/isNotInAlbum to the album timeline query only when true', () => {
-    expect(
-      buildAlbumTimelineOptions('album-1', AssetOrder.Desc, { ...createFilterState(), isInAlbum: true }),
-    ).toEqual(expect.objectContaining({ isInAlbum: true }));
+    expect(buildAlbumTimelineOptions('album-1', AssetOrder.Desc, { ...createFilterState(), isInAlbum: true })).toEqual(
+      expect.objectContaining({ isInAlbum: true }),
+    );
     expect(
       buildAlbumTimelineOptions('album-1', AssetOrder.Desc, { ...createFilterState(), isNotInAlbum: true }),
     ).toEqual(expect.objectContaining({ isNotInAlbum: true }));

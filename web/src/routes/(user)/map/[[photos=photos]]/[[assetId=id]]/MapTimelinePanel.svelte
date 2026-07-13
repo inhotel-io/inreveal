@@ -25,7 +25,6 @@
   import type { TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { getAssetBulkActions } from '$lib/services/asset.service';
   import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
-  import { mapSettings } from '$lib/stores/preferences.store';
   import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import {
     updateStackedAssetInTimeline,
@@ -128,12 +127,11 @@
     `${floor(bbox.west, 6)},${floor(bbox.south, 6)},${ceil(bbox.east, 6)},${ceil(bbox.north, 6)}`,
   );
 
+  // No $mapSettings here: the cluster panel is scoped by the active filters and nothing else, so it
+  // returns exactly the assets behind the pins. See buildMapTimelineOptions.
   const timelineOptions = $derived.by(() => {
     return {
-      ...buildMapTimelineOptions(filters, timelineBoundingBox, selectedClusterIds, spaceId, {
-        onlyFavorites: $mapSettings.onlyFavorites,
-        withPartners: $mapSettings.withPartners,
-      }),
+      ...buildMapTimelineOptions(filters, timelineBoundingBox, selectedClusterIds, spaceId),
       grouping: timelineGrouping,
     };
   });

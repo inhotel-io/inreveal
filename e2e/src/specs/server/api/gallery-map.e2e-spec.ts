@@ -667,4 +667,168 @@ describe('/gallery/map/markers', () => {
       expect(ids).not.toContain(benAssetId);
     });
   });
+
+  // D1: multiple people (and multiple tags) must AND, exactly like every timeline path
+  // (searchAssetBuilder's hasAllPeople/hasTags branch, database.ts:721,724). The map was the ONLY
+  // caller in the server that set personMatchAny/tagMatchAny, so filtering /photos by Alice AND Bob
+  // and then clicking the map icon — which carries those very chips as ?people=alice,bob — showed
+  // every asset with EITHER: identical chips, roughly double the pins, and a cluster panel (which
+  // ANDs) contradicting its own pin count.
+  describe('multiple people / tags AND, they do not OR (D1)', () => {
+    let andUser: LoginResponseDto;
+    let assetWithBoth: string;
+    let assetWithAliceOnly: string;
+    let alice: { id: string };
+    let bob: { id: string };
+    let tagBeach: { id: string };
+    let tagSunset: { id: string };
+
+    beforeAll(async () => {
+      andUser = await utils.userSetup(admin.accessToken, createUserDto.create('t23-and'));
+      const ws = await utils.connectWebsocket(andUser.accessToken);
+
+      const upload = async (input: string) => {
+        const filepath = join(testAssetDir, input);
+        const { id } = await utils.createAsset(andUser.accessToken, {
+          assetData: { bytes: await readFile(filepath), filename: basename(filepath) },
+        });
+        await utils.waitForWebsocketEvent({ event: 'assetUpload', id });
+        return id;
+      };
+
+      // Two DISTINCT geotagged fixtures: uploads dedupe on (owner, checksum), so the same file
+      // twice would collapse into one asset and the AND assertion would be vacuous.
+      assetWithBoth = await upload('metadata/gps-position/thompson-springs.jpg');
+      assetWithAliceOnly = await upload('metadata/dates/datetimeoriginal-gps.jpg');
+      utils.disconnectWebsocket(ws);
+
+      alice = await utils.createPerson(andUser.accessToken, { name: 't23 Alice' });
+      bob = await utils.createPerson(andUser.accessToken, { name: 't23 Bob' });
+
+      await utils.createFace({ assetId: assetWithBoth, personId: alice.id });
+      await utils.createFace({ assetId: assetWithBoth, personId: bob.id });
+      await utils.createFace({ assetId: assetWithAliceOnly, personId: alice.id });
+
+      const tags = await utils.upsertTags(andUser.accessToken, ['t23-beach', 't23-sunset']);
+      tagBeach = tags.find((tag) => tag.value === 't23-beach')!;
+      tagSunset = tags.find((tag) => tag.value === 't23-sunset')!;
+      await utils.tagAssets(andUser.accessToken, tagBeach.id, [assetWithBoth, assetWithAliceOnly]);
+      await utils.tagAssets(andUser.accessToken, tagSunset.id, [assetWithBoth]);
+    });
+
+    it('sanity: each asset is a marker, and a single person matches both of them', async () => {
+      // Without this, the AND assertions below could pass for the wrong reason (a fixture that
+      // silently lost its GPS EXIF, or a face row that never landed, produces no marker at all).
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?personIds=${alice.id}`)
+        .set(asBearerAuth(andUser.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body).toSorted()).toEqual([assetWithBoth, assetWithAliceOnly].toSorted());
+    });
+
+    it('two people return ONLY the asset that has BOTH (not the union)', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?personIds=${alice.id}&personIds=${bob.id}`)
+        .set(asBearerAuth(andUser.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body)).toEqual([assetWithBoth]);
+    });
+
+    it('two tags return ONLY the asset that has BOTH (not the union)', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?tagIds=${tagBeach.id}&tagIds=${tagSunset.id}`)
+        .set(asBearerAuth(andUser.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body)).toEqual([assetWithBoth]);
+    });
+
+    it('sanity: a single tag still matches every asset carrying it', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?tagIds=${tagBeach.id}`)
+        .set(asBearerAuth(andUser.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body).toSorted()).toEqual([assetWithBoth, assetWithAliceOnly].toSorted());
+    });
+  });
+
+  // Regression (Task 11): `?withSharedSpaces=true&isFavorite=true&personIds=space-person:<id>`
+  // returned a silently EMPTY map to a legitimate space member. needsTimelineSpaceIds excluded
+  // isFavorite === true, so timelineSpaceIds was undefined — and its SECOND consumer, the scoped
+  // person-token resolver (face-identity.repository.ts spaceMatchesScope), requires
+  // timelineSpaceIds.size > 0 under withSharedSpaces, so the token read as inaccessible ->
+  // forceEmptyResult -> zero pins. Same bug as 00a7fd6bac, on the other arm of the condition.
+  // /photos makes the person chip and the favourite chip one-click co-reachable, and its map icon
+  // carries both.
+  describe('favorites + a shared-space person token (silent-empty map regression)', () => {
+    let favUser: LoginResponseDto;
+    let favSpaceId: string;
+    let favAssetId: string;
+    let unfavAssetId: string;
+    let spacePersonId: string;
+
+    beforeAll(async () => {
+      favUser = await utils.userSetup(admin.accessToken, createUserDto.create('t24-fav'));
+      const ws = await utils.connectWebsocket(favUser.accessToken);
+
+      const upload = async (input: string) => {
+        const filepath = join(testAssetDir, input);
+        const { id } = await utils.createAsset(favUser.accessToken, {
+          assetData: { bytes: await readFile(filepath), filename: basename(filepath) },
+        });
+        await utils.waitForWebsocketEvent({ event: 'assetUpload', id });
+        return id;
+      };
+
+      favAssetId = await upload('metadata/gps-position/thompson-springs.jpg');
+      unfavAssetId = await upload('metadata/dates/gps-datetime.jpg');
+      utils.disconnectWebsocket(ws);
+
+      const space = await utils.createSpace(favUser.accessToken, { name: 't24 space' });
+      favSpaceId = space.id;
+      await utils.addSpaceAssets(favUser.accessToken, favSpaceId, [favAssetId, unfavAssetId]);
+
+      const created = await utils.createSpacePerson(favSpaceId, 't24 Ada', favUser.userId, favAssetId);
+      spacePersonId = created.spacePersonId;
+
+      await request(app).put(`/assets/${favAssetId}`).set(asBearerAuth(favUser.accessToken)).send({ isFavorite: true });
+    });
+
+    it('sanity: the space person token alone resolves and returns its asset', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?withSharedSpaces=true&personIds=space-person:${spacePersonId}`)
+        .set(asBearerAuth(favUser.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body)).toEqual([favAssetId]);
+    });
+
+    it('sanity: the favorite filter narrows on its own (the unfavorited space asset drops out)', async () => {
+      // Pins the other half of the combination, so the test below cannot pass for the wrong reason:
+      // both assets are in the space and both are markers, but only one is favorited.
+      const all = await request(app)
+        .get('/gallery/map/markers?withSharedSpaces=true')
+        .set(asBearerAuth(favUser.accessToken));
+      expect(markerIds(all.body).toSorted()).toEqual([favAssetId, unfavAssetId].toSorted());
+
+      const { status, body } = await request(app)
+        .get('/gallery/map/markers?withSharedSpaces=true&isFavorite=true')
+        .set(asBearerAuth(favUser.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body)).toEqual([favAssetId]);
+    });
+
+    it('favorites + a space person token returns the favorited asset, not an empty map', async () => {
+      const { status, body } = await request(app)
+        .get(`/gallery/map/markers?withSharedSpaces=true&isFavorite=true&personIds=space-person:${spacePersonId}`)
+        .set(asBearerAuth(favUser.accessToken));
+
+      expect(status).toBe(200);
+      expect(markerIds(body)).toEqual([favAssetId]);
+    });
+  });
 });
