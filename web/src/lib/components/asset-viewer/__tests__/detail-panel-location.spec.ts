@@ -154,6 +154,54 @@ describe('DetailPanelLocation filter grammar', () => {
     expect(expected).not.toContain('state=');
   });
 
+  // Location is ONE dimension everywhere else (counted once, one folded chip, removed as a unit), so a
+  // location click must REPLACE the whole location dimension — not AND with a stale sibling left over
+  // from a previous, different-level location filter. Otherwise clicking a state while a city is active
+  // yields `city=X AND state=Y`, which the server ANDs to (almost always) zero results with an
+  // incoherent chip. Camera avoids this by always emitting BOTH make and model; location must too.
+  it('clicking the city clears a stale state/country from a prior location filter', async () => {
+    mockPage.reset('https://gallery.test/photos/asset-1?state=Bavaria&country=Austria');
+
+    renderWithTooltips(DetailPanelLocation, { asset: buildAsset(BERLIN), isOwner: true, canFilter: true });
+
+    await fireEvent.click(await screen.findByLabelText('filter_by_location: Berlin'));
+
+    const url = gotoMock.mock.calls[0][0] as string;
+    expect(url).toContain('city=Berlin');
+    expect(url).toContain('country=Germany'); // the clicked asset's country replaces the stale one
+    expect(url).not.toContain('Austria'); // stale country gone
+    expect(url).not.toContain('state='); // stale state gone
+  });
+
+  it('clicking the state clears a stale city from a prior location filter', async () => {
+    mockPage.reset('https://gallery.test/photos/asset-1?city=Munich&country=Germany');
+
+    renderWithTooltips(DetailPanelLocation, { asset: buildAsset(BERLIN), isOwner: true, canFilter: true });
+
+    await fireEvent.click(await screen.findByLabelText('filter_by_location: State of Berlin'));
+
+    const url = gotoMock.mock.calls[0][0] as string;
+    expect(url).toContain('state=');
+    expect(url).toContain('country=Germany');
+    expect(url).not.toContain('city='); // stale city gone
+    expect(url).not.toContain('Munich');
+  });
+
+  it('clicking the country clears a stale city and state from a prior location filter', async () => {
+    mockPage.reset('https://gallery.test/photos/asset-1?city=Munich&state=Bavaria&country=Germany');
+
+    renderWithTooltips(DetailPanelLocation, { asset: buildAsset(BERLIN), isOwner: true, canFilter: true });
+
+    await fireEvent.click(await screen.findByLabelText('filter_by_location: Germany'));
+
+    const url = gotoMock.mock.calls[0][0] as string;
+    expect(url).toContain('country=Germany');
+    expect(url).not.toContain('city='); // stale city gone
+    expect(url).not.toContain('state='); // stale state gone
+    expect(url).not.toContain('Munich');
+    expect(url).not.toContain('Bavaria');
+  });
+
   // R9/E7 — a whitespace-only value trims to nothing, so a click would close the viewer and apply
   // NO filter. It must not be clickable at all (the country line still is).
   it('R9: a whitespace-only city line is not clickable', async () => {
