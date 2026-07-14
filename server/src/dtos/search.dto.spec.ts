@@ -82,9 +82,9 @@ describe('search DTO albumless filters', () => {
 
   it('should reject a non-uuid ownerId (a malformed owner filter must 400, not reach SQL as a bad cast)', () => {
     expect(MetadataSearchDto.schema.safeParse({ ownerId: 'not-a-uuid' }).success).toBe(false);
-    expect(MetadataSearchDto.schema.safeParse({ ownerId: 'space-person:00000000-0000-4000-8000-000000000001' }).success).toBe(
-      false,
-    );
+    expect(
+      MetadataSearchDto.schema.safeParse({ ownerId: 'space-person:00000000-0000-4000-8000-000000000001' }).success,
+    ).toBe(false);
   });
 
   // The free-text ILIKE filters are bounded server-side to mirror the web clamp
