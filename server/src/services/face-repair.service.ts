@@ -897,27 +897,43 @@ export class FaceRepairService extends BaseService {
         throw new BadRequestException('Reviewed person not found');
       }
       const cluster = await this.personRepository.create({ ownerId: reviewedPerson.ownerId });
-      const parked = await this.executeRepair({
-        toRepair: unknown.map((assetFaceId) => ({
-          assetFaceId,
-          currentPersonId: personId,
-          suspectedOwnerId: cluster.id,
-        })),
-        reviewOnlyFaces: [],
-        reviewOnlyPersonIds: [],
-        unAttributableFaces: [],
-        perPerson: [],
-      });
-      unknownParked = parked.moved;
-      unknownSkipped = parked.skipped;
-      await (parked.movedFaceIds.length > 0
-        ? // Lock to the NEW cluster, not to the reviewed person: the lock is owner-agnostic (unique on
-          // assetFaceId), and its `personId` is the audit trail of where the face actually came to rest.
-          this.faceRepairLockRepository.insertLocks(parked.movedFaceIds, cluster.id, resolvedBy)
-        : // Every requested face turned out stale (moved off this person between the snapshot read and the write),
-          // so executeRepair moved nothing and the cluster we just created would linger as an empty, nameless
-          // person on the People page.
-          this.personRepository.delete([cluster.id]));
+      try {
+        const parked = await this.executeRepair({
+          toRepair: unknown.map((assetFaceId) => ({
+            assetFaceId,
+            currentPersonId: personId,
+            suspectedOwnerId: cluster.id,
+          })),
+          reviewOnlyFaces: [],
+          reviewOnlyPersonIds: [],
+          unAttributableFaces: [],
+          perPerson: [],
+        });
+        unknownParked = parked.moved;
+        unknownSkipped = parked.skipped;
+        await (parked.movedFaceIds.length > 0
+          ? // Lock to the NEW cluster, not to the reviewed person: the lock is owner-agnostic (unique on
+            // assetFaceId), and its `personId` is the audit trail of where the face actually came to rest.
+            this.faceRepairLockRepository.insertLocks(parked.movedFaceIds, cluster.id, resolvedBy)
+          : // Every requested face turned out stale (moved off this person between the snapshot read and the
+            // write), so executeRepair moved nothing and the cluster we just created would linger as an empty,
+            // nameless person on the People page.
+            this.personRepository.delete([cluster.id]));
+      } catch (error) {
+        // The cluster is created BEFORE the faces are moved into it, so any failure in between (a dropped
+        // connection mid-reattribution, a lock insert that blows up) would otherwise strand a nameless, faceless
+        // person on the owner's People page — permanently, since nothing else ever cleans it up.
+        //
+        // Only remove it if it is genuinely EMPTY. `asset_face.personId` is ON DELETE SET NULL, so deleting a
+        // cluster that did receive faces would unassign them — dumping them straight back into the recognition
+        // pool this action exists to keep them out of. A partially-succeeded park leaves the faces safely on the
+        // cluster and the error surfaces to the admin, who can retry.
+        const parkedFaces = await this.faceRepairRepository.countAllFaces(cluster.id);
+        if (parkedFaces === 0) {
+          await this.personRepository.delete([cluster.id]);
+        }
+        throw error;
+      }
     }
 
     // Empty-unnamed cleanup, reused from the now-retired applyRepair's manual-move cleanup (A2): only delete a

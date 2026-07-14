@@ -23,7 +23,7 @@ import { FaceRepairService } from 'src/services/face-repair.service';
 import { applyDeclineFilters } from 'src/utils/face-repair';
 import { newMediumService } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
-import { Mocked } from 'vitest';
+import { Mocked, vi } from 'vitest';
 
 const EMBEDDING = '[' + Array.from({ length: 512 }, () => 1).join(',') + ']';
 
@@ -1981,5 +1981,127 @@ describe('FaceRepairService.resolveFaces: unknown person (state 6)', () => {
     const byId = await personIdsOf([f1]);
     expect(byId[f1]).toBe(elsewhere.id);
     expect(await lockRowsFor(f1)).toHaveLength(0);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: the unknown cluster is usable on the People page', () => {
+  it('gives the new cluster a representative face and queues its thumbnail', async () => {
+    const { sut, ctx, scanRepo, jobMock } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [], unknown: [f1] },
+      user.id,
+    );
+
+    const parked = await personIdsOf([f1]);
+    const clusterId = parked[f1]!;
+
+    // The entire point of parking a stranger is that someone can NAME them later. A cluster with no
+    // representative face renders as a blank tile on the People page — findable in theory, useless in practice.
+    const cluster = await db
+      .selectFrom('person')
+      .select('faceAssetId')
+      .where('id', '=', clusterId)
+      .executeTakeFirstOrThrow();
+    expect(cluster.faceAssetId).toBe(f1);
+
+    const queuedJobs = jobMock.queueAll.mock.calls.flatMap(([items]) => items);
+    expect(queuedJobs).toEqual(
+      expect.arrayContaining([{ name: JobName.PersonGenerateThumbnail, data: { id: clusterId } }]),
+    );
+  });
+});
+
+describe('FaceRepairService.resolveFaces: unknown combined with a move in one resolve', () => {
+  it('routes each face to its own destination and counts moved and unknown separately', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: 'Paul' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+    const fMove = await seedFace(ctx, user.id, source.id);
+    const fUnknown = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: fMove, suspectedOwnerId: ownerA.id },
+      { assetFaceId: fUnknown, suspectedOwnerId: ownerA.id },
+    ]);
+
+    // The realistic mixed review: most faces really are Paul's, one is a friend nobody can name.
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: ownerA.id, faceIds: [fMove], lock: false }],
+        stay: [],
+        lock: [],
+        detach: [],
+        unknown: [fUnknown],
+      },
+      user.id,
+    );
+
+    // `moved` and `unknown` are deliberately disjoint counts — a parked face is not "moved to a person the admin
+    // chose", and reporting it in both would double-count it in the apply summary.
+    expect(result).toEqual({ moved: 1, declined: 0, locked: 0, detached: 0, unknown: 1, skipped: 0 });
+
+    const byId = await personIdsOf([fMove, fUnknown]);
+    expect(byId[fMove]).toBe(ownerA.id);
+    expect(byId[fUnknown]).not.toBe(ownerA.id);
+    expect(byId[fUnknown]).not.toBe(source.id);
+
+    // The parked face is locked to its new cluster; the plainly-moved one is NOT locked (lock: false).
+    expect(await lockRowsFor(fUnknown)).toHaveLength(1);
+    expect(await lockRowsFor(fMove)).toHaveLength(0);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: a failed park leaves no orphan cluster', () => {
+  it('removes the freshly created cluster when the move into it throws', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    // The cluster is created BEFORE the faces move into it. If the move blows up (dropped connection, etc.) the
+    // nameless, faceless person must not be left stranded on the owner's People page — nothing else ever cleans
+    // one up.
+    const repairRepo = ctx.get(FaceRepairRepository);
+    const reattribute = vi
+      .spyOn(repairRepo, 'reattributeFaces')
+      .mockRejectedValueOnce(new Error('connection terminated'));
+
+    const peopleBefore = await db
+      .selectFrom('person')
+      .select((eb) => eb.fn.countAll<string>().as('count'))
+      .where('ownerId', '=', user.id)
+      .executeTakeFirstOrThrow();
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [], unknown: [f1] },
+        user.id,
+      ),
+    ).rejects.toThrow('connection terminated');
+
+    reattribute.mockRestore();
+
+    const peopleAfter = await db
+      .selectFrom('person')
+      .select((eb) => eb.fn.countAll<string>().as('count'))
+      .where('ownerId', '=', user.id)
+      .executeTakeFirstOrThrow();
+    expect(peopleAfter.count).toBe(peopleBefore.count);
+
+    // The face is untouched and still reviewable — the admin can simply retry.
+    const afterFailure = await personIdsOf([f1]);
+    expect(afterFailure[f1]).toBe(source.id);
   });
 });

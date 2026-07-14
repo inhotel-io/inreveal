@@ -677,7 +677,10 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(tiles[0]); // face-1, suspected owner-a
       await fireEvent.click(screen.getByTestId('bulk-detach'));
 
+      // Detaching is irreversible, so Apply routes through the confirmation first.
       await fireEvent.click(screen.getByTestId('apply-btn'));
+      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('detach-confirm-cta'));
 
       await waitFor(() => {
         expect(resolveFaces).toHaveBeenCalledWith({
@@ -694,6 +697,66 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           },
         });
       });
+    });
+  });
+
+  // "Not a face" is the only action on this page that cannot be undone — it retires the detected face for good,
+  // and nothing in the app brings it back. It also sits one button away from "Unknown person", which means the
+  // OPPOSITE thing. These tests pin the guard against that slip.
+  describe('Destructive Apply — confirmation before discarding faces', () => {
+    const stageDetach = async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await fireEvent.click(screen.getByTestId('bulk-detach'));
+    };
+
+    it('does NOT commit anything when Apply carries a detached face — it asks first', async () => {
+      await stageDetach();
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
+      // The whole point: the destructive resolve has NOT been sent yet.
+      expect(resolveFaces).not.toHaveBeenCalled();
+      expect(goto).not.toHaveBeenCalled();
+    });
+
+    it('cancelling commits nothing and leaves the staged review exactly as it was', async () => {
+      await stageDetach();
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('detach-confirm-cancel'));
+
+      await waitFor(() => expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument());
+      expect(resolveFaces).not.toHaveBeenCalled();
+      // The staged decision survives the cancel — the admin returns to their review, not to a blank slate.
+      expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'detach');
+    });
+
+    it('does NOT ask when nothing is being discarded — a routine Apply goes straight through', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      // Every face stays in the default `owner` state: nothing destructive, so no confirmation. Prompting on
+      // every Apply would train the admin to click past the one prompt that matters.
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
+      expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument();
+    });
+
+    it('does NOT ask for the Unknown person action — parking a stranger is reversible', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await fireEvent.click(screen.getByTestId('bulk-unknown'));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
+      expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument();
     });
   });
 

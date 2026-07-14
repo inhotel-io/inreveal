@@ -236,13 +236,14 @@ test.describe.serial('Face Cleanup', () => {
     const faceStay = await utils.createFace({ assetId: asset.id, personId: source.id });
     const faceLock = await utils.createFace({ assetId: asset.id, personId: source.id });
     const faceOther = await utils.createFace({ assetId: asset.id, personId: source.id });
+    const faceUnknown = await utils.createFace({ assetId: asset.id, personId: source.id });
     const faceDetach = await utils.createFace({ assetId: asset.id, personId: source.id });
 
     await seedFlaggedScan(db, {
       ownerUserId: admin.userId,
       personId: source.id,
       suspectedOwnerId: owner.id,
-      faceIds: [faceOwner, faceStay, faceLock, faceOther, faceDetach],
+      faceIds: [faceOwner, faceStay, faceLock, faceOther, faceUnknown, faceDetach],
     });
 
     // Confirm the seeded person shows up on the dashboard before it's resolved.
@@ -252,7 +253,7 @@ test.describe.serial('Face Cleanup', () => {
 
     await page.goto(`/admin/face-cleanup/${source.id}`);
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(5, { timeout: 15_000 });
+    await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(6, { timeout: 15_000 });
 
     const tile = (faceId: string) => page.locator(`[data-testid="face-tile"][data-faceid="${faceId}"]`);
 
@@ -269,6 +270,11 @@ test.describe.serial('Face Cleanup', () => {
     await expect(page.locator('[data-testid="person-picker"]')).toBeVisible({ timeout: 10_000 });
     await page.locator(`[data-testid="person-picker-row-${other.id}"]`).click();
 
+    // A real face of a real person the admin cannot name — parked in a cluster of its own rather than forced
+    // onto the suspected owner.
+    await tile(faceUnknown).click();
+    await page.locator('[data-testid="bulk-unknown"]').click();
+
     await tile(faceDetach).click();
     await page.locator('[data-testid="bulk-detach"]').click();
 
@@ -277,11 +283,16 @@ test.describe.serial('Face Cleanup', () => {
     await expect(tile(faceStay)).toHaveAttribute('data-state', 'stay');
     await expect(tile(faceLock)).toHaveAttribute('data-state', 'lock');
     await expect(tile(faceOther)).toHaveAttribute('data-state', 'other');
+    await expect(tile(faceUnknown)).toHaveAttribute('data-state', 'unknown');
     await expect(tile(faceDetach)).toHaveAttribute('data-state', 'detach');
+
+    // This Apply discards a face ("not a face" is irreversible), so it must be confirmed before anything is sent.
+    await page.locator('[data-testid="apply-btn"]').click();
+    await expect(page.locator('[data-testid="detach-confirm"]')).toBeVisible({ timeout: 10_000 });
 
     const [resolveRequest] = await Promise.all([
       page.waitForRequest((req) => req.url().includes('/admin/face-repair/resolve') && req.method() === 'POST'),
-      page.locator('[data-testid="apply-btn"]').click(),
+      page.locator('[data-testid="detach-confirm-cta"]').click(),
     ]);
 
     const payload = resolveRequest.postDataJSON() as {
@@ -290,11 +301,13 @@ test.describe.serial('Face Cleanup', () => {
       stay: string[];
       lock: string[];
       detach: string[];
+      unknown: string[];
     };
     expect(payload.personId).toBe(source.id);
     expect(payload.stay).toEqual([faceStay]);
     expect(payload.lock).toEqual([faceLock]);
     expect(payload.detach).toEqual([faceDetach]);
+    expect(payload.unknown).toEqual([faceUnknown]);
     const moveGroups = new Map(payload.moveToPerson.map((group) => [group.destinationPersonId, group.faceIds]));
     expect(moveGroups.get(owner.id)).toEqual([faceOwner]);
     expect(moveGroups.get(other.id)).toEqual([faceOther]);
@@ -303,6 +316,52 @@ test.describe.serial('Face Cleanup', () => {
     await page.waitForURL('**/admin/face-cleanup', { timeout: 15_000 });
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(sourceName)).toHaveCount(0);
+  });
+
+  /**
+   * The action dock stays pinned to the bottom even when the review is short.
+   *
+   * It used to be `sticky bottom-0` inside the scrolled content. Sticky only pins while its containing block
+   * still extends below it — so on a review with a handful of faces the page never overflowed, sticky was inert,
+   * and the bar came to rest wherever the content happened to end: adrift in the middle of the page (reported by
+   * a user). It now renders through AdminPageLayout's `footer` slot, OUTSIDE the scroll area.
+   *
+   * This can only be caught here. The AdminPageLayout test stub renders `children` and `footer` into the same
+   * element, so putting the dock back inside the scrolled content would keep every component test green while
+   * reintroducing exactly this bug.
+   */
+  test('the action dock stays pinned to the bottom of the viewport on a short review', async ({ context, page }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    const db = await utils.connectDatabase();
+
+    const source = await utils.createPerson(admin.accessToken, { name: 'Dock Short Person' });
+    const owner = await utils.createPerson(admin.accessToken, { name: 'Dock Owner Person' });
+    const asset = await utils.createAsset(admin.accessToken);
+    const face = await utils.createFace({ assetId: asset.id, personId: source.id });
+
+    // ONE flagged face: nowhere near enough content to fill the page, which is precisely the case that floated.
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [face],
+    });
+
+    await page.goto(`/admin/face-cleanup/${source.id}`);
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(1, { timeout: 15_000 });
+
+    const dock = page.locator('[data-testid="dock"]');
+    await expect(dock).toBeVisible();
+
+    const box = await dock.boundingBox();
+    const viewport = page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(viewport).not.toBeNull();
+
+    // The dock's bottom edge sits on the bottom of the viewport (a pixel of rounding allowed), rather than
+    // floating somewhere above it with dead space underneath.
+    expect(box!.y + box!.height).toBeGreaterThanOrEqual(viewport!.height - 2);
   });
 
   /**

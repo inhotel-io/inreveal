@@ -85,6 +85,7 @@
   let restLoading = $state(false);
   const restSelected = new SvelteSet<string>();
   let showEntireConfirm = $state(false);
+  let showDetachConfirm = $state(false);
 
   // An entire-cluster move covers ALL eligible faces: the Rest (which excludes the flagged ids) plus the
   // still-flagged faces. This is why "Move entire cluster" works even when the Rest is empty.
@@ -301,15 +302,33 @@
   // The ONE terminal action: every flagged face's staged state, plus any rest-of-cluster faces the admin ticked,
   // in a single resolve. Splitting these into two resolves is what let a rest-move settle none of the flagged
   // snapshot and still close the person out of the console.
-  const handleApply = () =>
-    commitResolve(
-      vm.buildResolveRequest(
-        personId,
-        ownerPersonId && restSelected.size > 0
-          ? { destinationPersonId: ownerPersonId, faceIds: [...restSelected] }
-          : undefined,
-      ),
+  const buildApplyRequest = () =>
+    vm.buildResolveRequest(
+      personId,
+      ownerPersonId && restSelected.size > 0
+        ? { destinationPersonId: ownerPersonId, faceIds: [...restSelected] }
+        : undefined,
     );
+
+  // "Not a face" is the one IRREVERSIBLE action on this page: it retires the detected face for good, and there
+  // is no undo for it anywhere in the app (declines and locks have one on the Resolutions page; a detached face
+  // does not). It also sits directly next to "Unknown person" in the bulk bar, and the two mean opposite things
+  // — bin this crop vs. this is a real person I can't name. A slip between those two buttons destroys real face
+  // data, so an Apply carrying any detached face has to be confirmed first. Everything else applies straight
+  // through: a confirmation on every Apply would train the admin to click past it, which is how you lose the
+  // one warning that matters.
+  const handleApply = () => {
+    if (vm.tally.detach > 0) {
+      showDetachConfirm = true;
+      return;
+    }
+    return commitResolve(buildApplyRequest());
+  };
+
+  const confirmDestructiveApply = async () => {
+    showDetachConfirm = false;
+    await commitResolve(buildApplyRequest());
+  };
 </script>
 
 <AdminPageLayout breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanup() }, { title: personName }]}>
@@ -770,6 +789,30 @@
             {$t('admin.face_cleanup_review_move_entire_confirm_cta', {
               values: { count: clusterTotal.toLocaleString() },
             })}
+          </Button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- The only destructive confirmation on this page. `danger` on the CTA, not `primary`: this button is the one
+       that cannot be taken back, and it must not look like the routine Apply the admin has already clicked a
+       dozen times. Cancel returns to the review with every staged state intact — nothing is committed. -->
+  {#if showDetachConfirm}
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" data-testid="detach-confirm">
+      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
+        <h3 class="text-lg font-semibold">
+          {$t('admin.face_cleanup_review_detach_confirm_title', { values: { count: vm.tally.detach } })}
+        </h3>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+          {$t('admin.face_cleanup_review_detach_confirm_body', { values: { count: vm.tally.detach } })}
+        </p>
+        <div class="mt-5 flex justify-end gap-3">
+          <Button color="secondary" onclick={() => (showDetachConfirm = false)} data-testid="detach-confirm-cancel">
+            {$t('admin.face_cleanup_review_cancel')}
+          </Button>
+          <Button color="danger" onclick={confirmDestructiveApply} data-testid="detach-confirm-cta">
+            {$t('admin.face_cleanup_review_detach_confirm_cta', { values: { count: vm.tally.detach } })}
           </Button>
         </div>
       </div>

@@ -8,7 +8,7 @@
   "action_description": "फिल्टर केलेल्या माध्यमांवर करायच्या क्रियांचा संच",
   "actions": "कृत्ये",
   "active": "सक्रिय",
-  "active_count": "कृती: {संख्या}",
+  "active_count": "कृती: {count}",
   "activity": "गतिविधि",
   "add": "जोडा",
   "add_a_description": "वर्णन करा",
