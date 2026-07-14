@@ -6,8 +6,6 @@ import {
   type DecodedFilterState,
 } from '$lib/utils/filter-url';
 
-export { FILTER_URL_PARAMS as SEARCHABLE_PAGE_FILTER_PARAMS } from '$lib/utils/filter-url';
-
 export type SearchablePageSortOrder = 'relevance' | 'asc' | 'desc';
 
 // Widen to the codec's type so the four new dimensions are properly typed as they flow through
