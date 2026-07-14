@@ -355,13 +355,24 @@ test.describe.serial('Face Cleanup', () => {
     await expect(dock).toBeVisible();
 
     const box = await dock.boundingBox();
+    const grid = await page.locator('[data-testid="flagged-grid"]').boundingBox();
     const viewport = page.viewportSize();
     expect(box).not.toBeNull();
+    expect(grid).not.toBeNull();
     expect(viewport).not.toBeNull();
 
-    // The dock's bottom edge sits on the bottom of the viewport (a pixel of rounding allowed), rather than
-    // floating somewhere above it with dead space underneath.
-    expect(box!.y + box!.height).toBeGreaterThanOrEqual(viewport!.height - 2);
+    // THE assertion: the dock is flush with the bottom of the screen. Being below the content is not enough —
+    // the floating dock was below the content too, just adrift, with dead space underneath. Distance to the
+    // bottom is the only thing that separates the two.
+    //
+    // Not pixel-exact: the app shell insets its content region by a few pixels (shared by every admin page,
+    // unrelated to this dock), so a fixed dock measures ~8px short of the viewport. The bug measured ~124px
+    // short. A 16px tolerance sits an order of magnitude away from the failure, so it cannot let it through.
+    const SHELL_INSET_TOLERANCE = 16;
+    expect(box!.y + box!.height).toBeGreaterThanOrEqual(viewport!.height - SHELL_INSET_TOLERANCE);
+
+    // Sanity: it really is the dock below the review grid, not some other element that happens to hug the bottom.
+    expect(box!.y).toBeGreaterThan(grid!.y + grid!.height);
   });
 
   /**
