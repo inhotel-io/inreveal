@@ -62,11 +62,20 @@ const crossOwnerMergeDto = (overrides: Record<string, unknown> = {}) => ({
 });
 
 /** The cross-owner authorizer each merge entry point hands to the planner (src/utils/merge-policy.ts). */
-type MergeAuthorizerFn = (plan: { collapsedOwnerIds: string[]; repointedOwnerIds: string[] }) => Promise<void>;
+type MergeAuthorizerFn = (plan: {
+  collapsedOwnerIds: string[];
+  repointedOwnerIds: string[];
+  unrepairableSpaceCollapseIds: string[];
+}) => Promise<void>;
 
-const planWith = (overrides: { collapsedOwnerIds?: string[]; repointedOwnerIds?: string[] }) => ({
+const planWith = (overrides: {
+  collapsedOwnerIds?: string[];
+  repointedOwnerIds?: string[];
+  unrepairableSpaceCollapseIds?: string[];
+}) => ({
   collapsedOwnerIds: [],
   repointedOwnerIds: [],
+  unrepairableSpaceCollapseIds: [],
   ...overrides,
 });
 
@@ -4757,7 +4766,9 @@ describe(PersonService.name, () => {
       await sut.mergePerson(auth, person.id, { ids: [mergeTarget.id] });
       const authorize = identityMergePropagation.mergePersonalPeople.mock.calls[0][3] as MergeAuthorizerFn;
 
-      await expect(authorize({ collapsedOwnerIds: [], repointedOwnerIds: ['owner-b'] })).resolves.toBeUndefined();
+      await expect(
+        authorize({ collapsedOwnerIds: [], repointedOwnerIds: ['owner-b'], unrepairableSpaceCollapseIds: [] }),
+      ).resolves.toBeUndefined();
     });
 
     it('blocks a merge that would combine two of another owner’s people when the toggle is off', async () => {
@@ -4776,9 +4787,9 @@ describe(PersonService.name, () => {
       await sut.mergePerson(auth, person.id, { ids: [mergeTarget.id] });
       const authorize = identityMergePropagation.mergePersonalPeople.mock.calls[0][3] as MergeAuthorizerFn;
 
-      await expect(authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [] })).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [], unrepairableSpaceCollapseIds: [] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('commits a (b) collapse once the toggle is on and the merge is confirmed', async () => {
@@ -4797,7 +4808,9 @@ describe(PersonService.name, () => {
       await sut.mergePerson(auth, person.id, { ids: [mergeTarget.id], confirmCrossOwner: true });
       const authorize = identityMergePropagation.mergePersonalPeople.mock.calls[0][3] as MergeAuthorizerFn;
 
-      await expect(authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [] })).resolves.toBeUndefined();
+      await expect(
+        authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [], unrepairableSpaceCollapseIds: [] }),
+      ).resolves.toBeUndefined();
     });
   });
 

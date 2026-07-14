@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { SearchSuggestionType } from 'src/dtos/search.dto';
 import { AssetVisibility, JobName, SharedSpaceRole, SourceType, UserMetadataKey } from 'src/enum';
@@ -74,6 +74,7 @@ const setupSharedSpace = (db?: Kysely<DB>) => {
       AccessRepository,
       AssetRepository,
       ConfigRepository,
+      DatabaseRepository,
       FaceIdentityRepository,
       PersonRepository,
       SearchRepository,
@@ -3611,6 +3612,189 @@ describe('People identity RBAC projection', () => {
         .where('id', '=', viewerSpacePerson.id)
         .executeTakeFirstOrThrow();
       expect(viewerSpacePersonAfter.identityId).toBe(targetIdentity.id);
+    });
+
+    // The COLLAPSE counterpart of the re-point test above (issue #733 follow-up): the fan-out space holds
+    // profiles on BOTH identities, so committing the merge would delete one of that space's people. Collapsing
+    // a space's people is an Editor-only action, so a merge must not reach it by fan-out for a viewer or a
+    // non-member — regardless of the cross-owner toggle, which governs personal libraries, not a space's roles.
+    // Builds the exact fixture the reverted proof-of-concept used, now asserting the fixed behaviour.
+    const setupFanOutSpaceCollapse = async (options: { actorRole: SharedSpaceRole | 'non-member' }) => {
+      const { ctx, sut, faceIdentityRepository } = setup();
+      ctx
+        .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+        .get.mockResolvedValue({
+          // Toggle ON on purpose: the space hard-block must hold even when cross-owner merges are enabled.
+          server: { mergePeopleAcrossOwners: true },
+          machineLearning: { facialRecognition: { minFaces: 1 } },
+        } as any);
+
+      const { user: actor } = await ctx.newUser();
+      const { user: stranger } = await ctx.newUser();
+
+      const { person: actorPerson } = await ctx.newPerson({ ownerId: actor.id, name: 'Actor Alice' });
+      const targetIdentity = await faceIdentityRepository.ensurePersonIdentity(actorPerson.id);
+
+      // A space the actor edits surfaces the resolvable source.
+      const { space: accessibleSpace } = await ctx.newSharedSpace({ createdById: stranger.id });
+      await ctx.newSharedSpaceMember({ spaceId: accessibleSpace.id, userId: actor.id, role: SharedSpaceRole.Editor });
+      const sourceSpacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: accessibleSpace.id, name: 'Space Alice', type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const sourceIdentity = await faceIdentityRepository.ensureSpacePersonIdentity(sourceSpacePerson.id);
+
+      // The fan-out space holds a profile on BOTH identities -> committing collapses them.
+      const { space: fanOutSpace } = await ctx.newSharedSpace({ createdById: stranger.id });
+      await ctx.newSharedSpaceMember({ spaceId: fanOutSpace.id, userId: stranger.id, role: SharedSpaceRole.Owner });
+      if (options.actorRole !== 'non-member') {
+        await ctx.newSharedSpaceMember({ spaceId: fanOutSpace.id, userId: actor.id, role: options.actorRole });
+      }
+      await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: fanOutSpace.id, identityId: targetIdentity.id, name: 'Fan Target', type: 'person' })
+        .execute();
+      const fanOutSourceProfile = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: fanOutSpace.id, identityId: sourceIdentity.id, name: 'Fan Source', type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      return { ctx, sut, actor, actorPerson, sourceSpacePerson, accessibleSpace, sourceIdentity, fanOutSourceProfile };
+    };
+
+    const runFanOutCollapseMerge = (fx: Awaited<ReturnType<typeof setupFanOutSpaceCollapse>>) =>
+      fx.sut.mergeScopedPeople(factory.auth({ user: fx.actor }), {
+        target: { type: 'person', id: fx.actorPerson.id },
+        sources: [{ type: 'space-person', id: fx.sourceSpacePerson.id, spaceId: fx.accessibleSpace.id }],
+      });
+
+    const spaceProfileCount = (ctx: Awaited<ReturnType<typeof setupFanOutSpaceCollapse>>['ctx'], spaceId: string) =>
+      ctx.database
+        .selectFrom('shared_space_person')
+        .select((eb) => eb.fn.countAll<number>().as('count'))
+        .where('spaceId', '=', spaceId)
+        .executeTakeFirstOrThrow();
+
+    it('blocks a fan-out collapse in a space the actor can only view, even with the toggle on', async () => {
+      const fx = await setupFanOutSpaceCollapse({ actorRole: SharedSpaceRole.Viewer });
+
+      await expect(runFanOutCollapseMerge(fx)).rejects.toBeInstanceOf(ForbiddenException);
+
+      // Nothing destroyed: the fan-out space still has both profiles, the source still on its own identity.
+      const { count } = await spaceProfileCount(fx.ctx, fx.fanOutSourceProfile.spaceId);
+      expect(Number(count)).toBe(2);
+      const sourceAfter = await fx.ctx.database
+        .selectFrom('shared_space_person')
+        .select('identityId')
+        .where('id', '=', fx.fanOutSourceProfile.id)
+        .executeTakeFirstOrThrow();
+      expect(sourceAfter.identityId).toBe(fx.sourceIdentity.id);
+    });
+
+    it('blocks a fan-out collapse in a space the actor is not a member of', async () => {
+      const fx = await setupFanOutSpaceCollapse({ actorRole: 'non-member' });
+
+      await expect(runFanOutCollapseMerge(fx)).rejects.toBeInstanceOf(ForbiddenException);
+
+      const { count } = await spaceProfileCount(fx.ctx, fx.fanOutSourceProfile.spaceId);
+      expect(Number(count)).toBe(2);
+    });
+
+    it.each([SharedSpaceRole.Owner, SharedSpaceRole.Editor])(
+      'allows a fan-out collapse in a space the actor is %s of',
+      async (role) => {
+        const fx = await setupFanOutSpaceCollapse({ actorRole: role });
+
+        await expect(runFanOutCollapseMerge(fx)).resolves.toBeUndefined();
+
+        // The collapse committed: the fan-out space is down to one profile, on the surviving identity.
+        const { count } = await spaceProfileCount(fx.ctx, fx.fanOutSourceProfile.spaceId);
+        expect(Number(count)).toBe(1);
+      },
+    );
+
+    // The same policy must hold for the CLASSIC person merge (POST /people/:id/merge), not just the scoped one:
+    // merging two of the actor's own people whose identities are both duplicated in a space they cannot edit.
+    it('blocks the classic person merge when its fan-out would collapse an un-editable space', async () => {
+      const { ctx, sut, faceIdentityRepository } = setup();
+      ctx
+        .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+        .get.mockResolvedValue({
+          server: { mergePeopleAcrossOwners: true },
+          machineLearning: { facialRecognition: { minFaces: 1 } },
+        } as any);
+
+      const { user: actor } = await ctx.newUser();
+      const { user: stranger } = await ctx.newUser();
+      const { person: personA } = await ctx.newPerson({ ownerId: actor.id, name: 'A' });
+      const identityT = await faceIdentityRepository.ensurePersonIdentity(personA.id);
+      const { person: personB } = await ctx.newPerson({ ownerId: actor.id, name: 'B' });
+      const identityS = await faceIdentityRepository.ensurePersonIdentity(personB.id);
+
+      const { space: viewerSpace } = await ctx.newSharedSpace({ createdById: stranger.id });
+      await ctx.newSharedSpaceMember({ spaceId: viewerSpace.id, userId: stranger.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: viewerSpace.id, userId: actor.id, role: SharedSpaceRole.Viewer });
+      await ctx.database
+        .insertInto('shared_space_person')
+        .values([
+          { spaceId: viewerSpace.id, identityId: identityT.id, name: 'VT', type: 'person' },
+          { spaceId: viewerSpace.id, identityId: identityS.id, name: 'VS', type: 'person' },
+        ])
+        .execute();
+
+      await expect(
+        sut.mergePerson(factory.auth({ user: actor }), personA.id, { ids: [personB.id] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    // ...and for the IN-SPACE merge: an Editor of one space merges two of its people, but the same identities are
+    // also duplicated in a SECOND space they can only view. The initiating space is Editor-checked; the fan-out
+    // into the viewer-only space must still be refused.
+    it('blocks an in-space merge whose fan-out would collapse a different space the actor cannot edit', async () => {
+      const { ctx, sut, faceIdentityRepository } = setupSharedSpace();
+      const { user: actor } = await ctx.newUser();
+      const { user: stranger } = await ctx.newUser();
+
+      const { space: editorSpace } = await ctx.newSharedSpace({ createdById: stranger.id });
+      await ctx.newSharedSpaceMember({ spaceId: editorSpace.id, userId: stranger.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: editorSpace.id, userId: actor.id, role: SharedSpaceRole.Editor });
+      const spaceTarget = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: editorSpace.id, name: 'Edit Target', type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const identityT = await faceIdentityRepository.ensureSpacePersonIdentity(spaceTarget.id);
+      const spaceSource = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: editorSpace.id, name: 'Edit Source', type: 'person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const identityS = await faceIdentityRepository.ensureSpacePersonIdentity(spaceSource.id);
+
+      const { space: viewerSpace } = await ctx.newSharedSpace({ createdById: stranger.id });
+      await ctx.newSharedSpaceMember({ spaceId: viewerSpace.id, userId: stranger.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: viewerSpace.id, userId: actor.id, role: SharedSpaceRole.Viewer });
+      await ctx.database
+        .insertInto('shared_space_person')
+        .values([
+          { spaceId: viewerSpace.id, identityId: identityT.id, name: 'VT', type: 'person' },
+          { spaceId: viewerSpace.id, identityId: identityS.id, name: 'VS', type: 'person' },
+        ])
+        .execute();
+
+      await expect(
+        sut.mergeSpacePeople(factory.auth({ user: actor }), editorSpace.id, spaceTarget.id, { ids: [spaceSource.id] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      // The viewer space is untouched: both of its profiles survive.
+      const { count } = await ctx.database
+        .selectFrom('shared_space_person')
+        .select((eb) => eb.fn.countAll<number>().as('count'))
+        .where('spaceId', '=', viewerSpace.id)
+        .executeTakeFirstOrThrow();
+      expect(Number(count)).toBe(2);
     });
   });
 });

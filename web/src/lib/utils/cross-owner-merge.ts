@@ -14,6 +14,12 @@ export const CrossOwnerMergeErrorCode = {
   Blocked: 'cross_owner_merge_blocked',
   /** The instance toggle is on: the merge is permitted but must be explicitly confirmed first. */
   ConfirmationRequired: 'cross_owner_merge_confirmation_required',
+  /**
+   * The merge would collapse people in a shared space the user cannot edit. Unlike `Blocked`, no instance
+   * toggle can enable it — a space's roles are not overridable — so this is shown as a plain descriptive block
+   * with no confirmation dialog.
+   */
+  BlockedSpace: 'cross_owner_merge_blocked_space',
 } as const;
 
 /** Read the machine-readable cross-owner merge error code from a thrown SDK error, if present. */
@@ -87,7 +93,10 @@ export const runMergeWithCrossOwnerConfirmation = async (
   } catch (error) {
     const code = getCrossOwnerMergeErrorCode(error);
 
-    if (code === CrossOwnerMergeErrorCode.Blocked) {
+    // Both are terminal blocks that surface the server's descriptive message and never retry. They differ only
+    // in what the message says: `Blocked` can be lifted by an admin toggle; `BlockedSpace` cannot (the actor
+    // must ask a space editor), so it is never offered the cross-owner confirmation dialog.
+    if (code === CrossOwnerMergeErrorCode.Blocked || code === CrossOwnerMergeErrorCode.BlockedSpace) {
       handlers.onBlocked(getServerErrorMessage(error));
       return false;
     }

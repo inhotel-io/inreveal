@@ -512,6 +512,13 @@ const makeService = (profiles: MergeProfile[], options: { unrepairableSpaceIds?:
     repairInvalidRepresentativeFaces: vi.fn().mockResolvedValue(void 0),
     repairOrphanedRepresentativeFaces: vi.fn().mockResolvedValue(void 0),
     logActivity: vi.fn().mockResolvedValue(void 0),
+    // Mirrors the repository contract: the actor's role per space (member spaces only). A space in
+    // `unrepairableSpaceIds` models one where the actor is a viewer (cannot repair); every other space is
+    // modelled as owned by the actor.
+    getActorSpaceRoles: vi.fn(
+      (_userId: string, spaceIds: string[]) =>
+        new Map(spaceIds.map((spaceId) => [spaceId, unrepairableSpaceIds.has(spaceId) ? 'viewer' : 'owner'])),
+    ),
   };
 
   const sut = new IdentityMergePropagationService({
@@ -948,6 +955,53 @@ describe('IdentityMergePropagationService', () => {
         expect.objectContaining({ spaceId: 'space-a', userId: 'owner-1', type: SharedSpaceActivityType.PersonMerge }),
         expect.objectContaining({ spaceId: 'space-b', userId: 'owner-1', type: SharedSpaceActivityType.PersonMerge }),
       ]);
+    });
+
+    it('flags a fan-out space collapse the actor cannot repair, but not one they can', async () => {
+      const target = profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x' });
+      const source = profile({ kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y' });
+      // space-a (repairable) and space-b (viewer-only) both hold BOTH identities -> both collapse.
+      const spaceAX = profile({ kind: 'space-person', id: 'space-a-x', spaceId: 'space-a', identityId: 'identity-x' });
+      const spaceAY = profile({ kind: 'space-person', id: 'space-a-y', spaceId: 'space-a', identityId: 'identity-y' });
+      const spaceBX = profile({ kind: 'space-person', id: 'space-b-x', spaceId: 'space-b', identityId: 'identity-x' });
+      const spaceBY = profile({ kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y' });
+      const { sut } = makeService([target, source, spaceAX, spaceAY, spaceBX, spaceBY], {
+        unrepairableSpaceIds: ['space-b'],
+      });
+
+      const plan = await sut.buildPersonalMergePlan({
+        actorUserId: 'owner-1',
+        targetPersonId: 'person-x',
+        sourcePersonIds: ['person-y'],
+      });
+
+      // Both spaces still collapse (the merge cannot leave a duplicate identity), but only the un-editable one
+      // is flagged for the policy to hard-block on.
+      expect(plan.spaceProfileMerges).toEqual([
+        { spaceId: 'space-a', targetPersonId: 'space-a-x', sourcePersonIds: ['space-a-y'] },
+        { spaceId: 'space-b', targetPersonId: 'space-b-x', sourcePersonIds: ['space-b-y'] },
+      ]);
+      expect(plan.unrepairableSpaceCollapseIds).toEqual(['space-b']);
+    });
+
+    it('does not flag a re-point in a space the actor cannot repair (only collapses are destructive)', async () => {
+      const target = profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x' });
+      const source = profile({ kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y' });
+      // space-b (viewer-only) holds ONLY the source identity -> a re-point, not a collapse. Nothing is destroyed.
+      const spaceBY = profile({ kind: 'space-person', id: 'space-b-y', spaceId: 'space-b', identityId: 'identity-y' });
+      const { sut } = makeService([target, source, spaceBY], { unrepairableSpaceIds: ['space-b'] });
+
+      const plan = await sut.buildPersonalMergePlan({
+        actorUserId: 'owner-1',
+        targetPersonId: 'person-x',
+        sourcePersonIds: ['person-y'],
+      });
+
+      expect(plan.spaceProfileMerges).toEqual([]);
+      expect(plan.profileIdentityUpdates).toEqual([
+        { kind: 'space-person', profileId: 'space-b-y', identityId: 'identity-x' },
+      ]);
+      expect(plan.unrepairableSpaceCollapseIds).toEqual([]);
     });
 
     it('keeps a single affected space profile and updates it to the target identity', async () => {
@@ -1576,6 +1630,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: ['owner-1'],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: [],
           followUpJobs: [],
           activityEvents: [],
@@ -1616,6 +1671,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: ['owner-1'],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: [],
           followUpJobs: [],
           activityEvents: [],
@@ -1656,6 +1712,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: ['owner-1'],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: [],
           followUpJobs: [],
           activityEvents: [],
@@ -1694,6 +1751,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: ['owner-1'],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: [],
           followUpJobs: [],
           activityEvents: [],
@@ -1732,6 +1790,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: [],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: ['space-a'],
           followUpJobs: [],
           activityEvents: [],
@@ -1768,6 +1827,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: [],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: ['space-a'],
           followUpJobs: [{ name: JobName.SharedSpacePersonDedup, data: { spaceId: 'space-a' } }],
           activityEvents: [],
@@ -1808,6 +1868,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: ['owner-2'],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: ['space-a'],
           followUpJobs: [],
           activityEvents: [],
@@ -1847,6 +1908,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: [],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: ['space-a', 'space-b'],
           followUpJobs: [
             { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: 'identity-x' } },
@@ -1897,6 +1959,7 @@ describe('IdentityMergePropagationService', () => {
           affectedOwnerIds: ['owner-1'],
           repointedOwnerIds: [],
           collapsedOwnerIds: [],
+          unrepairableSpaceCollapseIds: [],
           affectedSpaceIds: ['space-a'],
           followUpJobs: [],
           activityEvents: [
@@ -1959,6 +2022,7 @@ describe('IdentityMergePropagationService', () => {
             affectedOwnerIds: ['owner-1'],
             repointedOwnerIds: [],
             collapsedOwnerIds: [],
+            unrepairableSpaceCollapseIds: [],
             affectedSpaceIds: ['space-a'],
             followUpJobs: [{ name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: 'identity-x' } }],
             activityEvents: [],

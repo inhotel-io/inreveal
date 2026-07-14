@@ -3,7 +3,7 @@ import { Kysely, sql, Transaction } from 'kysely';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { MergeScopedPeopleDto, ScopedPersonProfileRefDto } from 'src/dtos/person.dto';
-import { JobName, SharedSpaceActivityType } from 'src/enum';
+import { JobName, SharedSpaceActivityType, SharedSpaceRole } from 'src/enum';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -100,6 +100,12 @@ export type IdentityMergePropagationPlan = {
    * asked for it — and the automatic paths refuse to do it. This is what the cross-owner gate exists for.
    */
   collapsedOwnerIds: string[];
+  /**
+   * Spaces whose profiles this merge would collapse (one row deleted, its faces moved) but where the actor is
+   * not an Owner/Editor. Collapsing a space's people is an editor-only action, and the fan-out must not reach it
+   * for a viewer or non-member. Populated for every merge path; enforced (toggle-independently) by the policy.
+   */
+  unrepairableSpaceCollapseIds: string[];
   affectedSpaceIds: string[];
   followUpJobs: MergePropagationFollowUpJob[];
   activityEvents: MergePropagationActivityEvent[];
@@ -485,6 +491,26 @@ export class IdentityMergePropagationService {
    * The survivor of the actor's *own* scope is pinned to the profile they targeted; every other scope picks by
    * face count, then name, then id.
    */
+  /**
+   * Of the spaces this merge would collapse, the ones where the actor is not an Owner/Editor. The actor's role
+   * is read per space (member spaces only); a space the actor is a viewer of, or not a member of at all, is not
+   * repairable and so is returned. The initiating space of an in-space merge is Editor-checked upstream, so it
+   * never appears here.
+   */
+  private async resolveUnrepairableSpaceCollapses(
+    actorUserId: string,
+    collapsedSpaceIds: string[],
+    db?: DbOrTransaction,
+  ): Promise<string[]> {
+    const roles = await this.deps.sharedSpaceRepository.getActorSpaceRoles(actorUserId, collapsedSpaceIds, db);
+    return collapsedSpaceIds
+      .filter((spaceId) => {
+        const role = roles.get(spaceId);
+        return role !== SharedSpaceRole.Owner && role !== SharedSpaceRole.Editor;
+      })
+      .toSorted();
+  }
+
   private async buildPlanFromOrigins(
     input: {
       actorUserId: string;
@@ -572,6 +598,16 @@ export class IdentityMergePropagationService {
       }
     }
 
+    // Collapsing a space's people is an editor-only action. A merge must not reach that destructive result by
+    // fan-out just because the actor owns personal people on the same identities, so any collapsed space where
+    // the actor is not an Owner/Editor is flagged for the policy to hard-block (issue #733 follow-up). Re-points
+    // (the else-branch above) are non-destructive and never flagged.
+    const collapsedSpaceIds = spaceProfileMerges.map((step) => step.spaceId);
+    const unrepairableSpaceCollapseIds =
+      collapsedSpaceIds.length > 0
+        ? await this.resolveUnrepairableSpaceCollapses(actorUserId, collapsedSpaceIds, db)
+        : [];
+
     const sortedAffectedOwnerIds = [...affectedOwnerIds].toSorted();
     const sortedAffectedSpaceIds = [...affectedSpaceIds].toSorted();
     const plan: IdentityMergePropagationPlan = {
@@ -598,6 +634,7 @@ export class IdentityMergePropagationService {
       affectedOwnerIds: sortedAffectedOwnerIds,
       repointedOwnerIds: [...repointedOwnerIds].toSorted(),
       collapsedOwnerIds: [...collapsedOwnerIds].toSorted(),
+      unrepairableSpaceCollapseIds,
       affectedSpaceIds: sortedAffectedSpaceIds,
       followUpJobs: [
         { name: JobName.SharedSpacePersonMetadataBackfill, data: { identityId: targetIdentityId } },

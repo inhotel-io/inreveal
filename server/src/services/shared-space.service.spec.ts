@@ -198,7 +198,11 @@ const useIdentityMergePropagation = (sut: SharedSpaceService) => {
 };
 
 /** The cross-owner authorizer the in-space merge hands to the planner (src/utils/merge-policy.ts). */
-type SpaceMergeAuthorizerFn = (plan: { collapsedOwnerIds: string[]; repointedOwnerIds: string[] }) => Promise<void>;
+type SpaceMergeAuthorizerFn = (plan: {
+  collapsedOwnerIds: string[];
+  repointedOwnerIds: string[];
+  unrepairableSpaceCollapseIds: string[];
+}) => Promise<void>;
 
 describe(SharedSpaceService.name, () => {
   let sut: SharedSpaceService;
@@ -7258,7 +7262,9 @@ describe(SharedSpaceService.name, () => {
       await sut.mergeSpacePeople(auth, spaceId, targetId, { ids: [sourceId] });
       const authorize = identityMergePropagation.mergeSpacePeople.mock.calls[0][4] as SpaceMergeAuthorizerFn;
 
-      await expect(authorize({ collapsedOwnerIds: [], repointedOwnerIds: ['owner-b'] })).resolves.toBeUndefined();
+      await expect(
+        authorize({ collapsedOwnerIds: [], repointedOwnerIds: ['owner-b'], unrepairableSpaceCollapseIds: [] }),
+      ).resolves.toBeUndefined();
     });
 
     it('blocks an in-space merge that would combine two of another owner’s people when the toggle is off', async () => {
@@ -7275,9 +7281,9 @@ describe(SharedSpaceService.name, () => {
       await sut.mergeSpacePeople(auth, spaceId, targetId, { ids: [sourceId] });
       const authorize = identityMergePropagation.mergeSpacePeople.mock.calls[0][4] as SpaceMergeAuthorizerFn;
 
-      await expect(authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [] })).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [], unrepairableSpaceCollapseIds: [] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('commits an in-space (b) collapse once the toggle is on and the merge is confirmed', async () => {
@@ -7294,7 +7300,9 @@ describe(SharedSpaceService.name, () => {
       await sut.mergeSpacePeople(auth, spaceId, targetId, { ids: [sourceId], confirmCrossOwner: true });
       const authorize = identityMergePropagation.mergeSpacePeople.mock.calls[0][4] as SpaceMergeAuthorizerFn;
 
-      await expect(authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [] })).resolves.toBeUndefined();
+      await expect(
+        authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [], unrepairableSpaceCollapseIds: [] }),
+      ).resolves.toBeUndefined();
     });
 
     it('delegates editor-initiated merges after validating source people belong to the initiating space', async () => {
