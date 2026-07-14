@@ -1,4 +1,13 @@
-import { getAssetInfo, getFilteredMapMarkers, SharedSpaceRole, updateAssets, type LoginResponseDto } from '@immich/sdk';
+import {
+  addAssetsToAlbum,
+  AlbumUserRole,
+  getAssetInfo,
+  getFilteredMapMarkers,
+  SharedSpaceRole,
+  updateAsset,
+  updateAssets,
+  type LoginResponseDto,
+} from '@immich/sdk';
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -16,6 +25,15 @@ import { asBearerAuth, testAssetDir, utils } from 'src/utils';
  */
 const CANON_FIXTURE = 'albums/nature/prairie_falcon.jpg';
 const APPLE_FIXTURE = 'formats/heic/IMG_2682.heic';
+
+/**
+ * A second real, GPS-tagged Canon photo — Palisade, Colorado, USA, lens `Canon EF 24-105mm f/4L IS
+ * II USM`, taken in 2022. Used by the value-affordance suites below alongside `APPLE_FIXTURE`
+ * (Ralston, Nebraska, USA, iPhone 7, 2019). Every filterable dimension EXCEPT country differs
+ * between the two, so each location/date/filename/lens filter has a genuine non-matching asset to
+ * exclude. City/state/lens/date are read back from the SERVER in the suites, never hard-coded.
+ */
+const THOMPSON_FIXTURE = 'metadata/gps-position/thompson-springs.jpg';
 
 const upload = (accessToken: string, path: string) =>
   utils.createAsset(accessToken, {
@@ -255,9 +273,17 @@ test.describe('Asset viewer contextual filters on an album and /photos', () => {
     const plain = await utils.createAsset(admin.accessToken);
     plainId = plain.id;
     await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
-    // Drain the previews too: a grid tile or a viewer waiting on a thumbnail that is still queued is
-    // a page-load stall, not a filter bug.
-    await utils.waitForQueueFinish(admin.accessToken, 'thumbnailGeneration');
+    // Drain the previews too — but NOT via waitForQueueFinish('thumbnailGeneration'): that queue reads
+    // "empty" in the window BEFORE the thumbnail job is enqueued (upload → metadataExtraction →
+    // storage-template → only THEN thumbnailGeneration), so the wait can return before any thumbnail
+    // exists and a grid tile / viewer then stalls on a still-queued preview. Poll the real
+    // post-condition instead, exactly like shared-space.e2e-spec.ts's recentAssetIds thumbhash poll.
+    for (const id of [canonId, plainId]) {
+      await utils.poll(
+        () => utils.getAssetInfo(admin.accessToken, id),
+        (asset) => asset.thumbhash !== null,
+      );
+    }
 
     const album = await utils.createAlbum(admin.accessToken, {
       albumName: 'Nature',
@@ -359,9 +385,17 @@ test.describe('Asset viewer contextual filters — the map handoff', () => {
     const apple = await upload(admin.accessToken, APPLE_FIXTURE);
     appleId = apple.id;
     await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
-    // Drain the previews too: a grid tile or a viewer waiting on a thumbnail that is still queued is
-    // a page-load stall, not a filter bug.
-    await utils.waitForQueueFinish(admin.accessToken, 'thumbnailGeneration');
+    // Drain the previews too — but NOT via waitForQueueFinish('thumbnailGeneration'): that queue reads
+    // "empty" in the window BEFORE the thumbnail job is enqueued (upload → metadataExtraction →
+    // storage-template → only THEN thumbnailGeneration), so the wait can return before any thumbnail
+    // exists and a grid tile / viewer then stalls on a still-queued preview. Poll the real
+    // post-condition instead, exactly like shared-space.e2e-spec.ts's recentAssetIds thumbhash poll.
+    for (const id of [canonId, appleId]) {
+      await utils.poll(
+        () => utils.getAssetInfo(admin.accessToken, id),
+        (asset) => asset.thumbhash !== null,
+      );
+    }
 
     // The Apple fixture is geotagged in EXIF; the Canon one is not, so give it a point of its own.
     // Both are on the map — with different cameras.
@@ -474,9 +508,17 @@ test.describe('Asset viewer contextual filters — a Space VIEWER filters anothe
     const apple = await upload(admin.accessToken, APPLE_FIXTURE);
     appleId = apple.id;
     await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
-    // Drain the previews too: a grid tile or a viewer waiting on a thumbnail that is still queued is
-    // a page-load stall, not a filter bug.
-    await utils.waitForQueueFinish(admin.accessToken, 'thumbnailGeneration');
+    // Drain the previews too — but NOT via waitForQueueFinish('thumbnailGeneration'): that queue reads
+    // "empty" in the window BEFORE the thumbnail job is enqueued (upload → metadataExtraction →
+    // storage-template → only THEN thumbnailGeneration), so the wait can return before any thumbnail
+    // exists and a grid tile / viewer then stalls on a still-queued preview. Poll the real
+    // post-condition instead, exactly like shared-space.e2e-spec.ts's recentAssetIds thumbhash poll.
+    for (const id of [canonId, appleId]) {
+      await utils.poll(
+        () => utils.getAssetInfo(admin.accessToken, id),
+        (asset) => asset.thumbhash !== null,
+      );
+    }
 
     // A location on A's asset, so the row renders for B — and so the missing pencil below is a real
     // absence rather than a row that was never drawn.
@@ -539,5 +581,447 @@ test.describe('Asset viewer contextual filters — a Space VIEWER filters anothe
     // …while the owner-only affordances on those same rows are absent.
     await expect(page.getByLabel('Edit location')).toHaveCount(0);
     await expect(page.locator('[data-testid="detail-panel-edit-date-button"]')).toHaveCount(0);
+  });
+});
+
+/**
+ * The value affordances the camera/person suites above do not touch — location (city + the
+ * sibling-staleness path), date, filename, lens, tag — plus the two rows that are edited in place
+ * rather than filtered (rating, description). One `/photos` surface, two real fixtures that differ on
+ * every dimension but country, so each filter has a genuine non-matching asset to exclude. Every
+ * value under test is read back from the SERVER (never hard-coded) and pinned as distinct, so no
+ * assertion can pass vacuously.
+ */
+test.describe('Asset viewer contextual filters — value affordances on /photos', () => {
+  let admin: LoginResponseDto;
+  let thompsonId: string;
+  let imgId: string;
+  let thompsonCity: string;
+  let imgState: string;
+  let thompsonLens: string;
+  let tagValue: string;
+  let tagId: string;
+  const RATING = 4;
+  const DESCRIPTION = 'A quiet mountain sunset';
+  const THOMPSON_BASENAME = 'thompson-springs';
+
+  test.beforeAll(async () => {
+    utils.initSdk();
+    await utils.resetDatabase();
+    admin = await utils.adminSetup();
+
+    const thompson = await upload(admin.accessToken, THOMPSON_FIXTURE);
+    thompsonId = thompson.id;
+    const apple = await upload(admin.accessToken, APPLE_FIXTURE);
+    imgId = apple.id;
+    await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+    for (const id of [thompsonId, imgId]) {
+      await utils.poll(
+        () => utils.getAssetInfo(admin.accessToken, id),
+        (asset) => asset.thumbhash !== null,
+      );
+    }
+
+    // Rating + description live on the Canon asset. Setting them re-runs metadata extraction
+    // (updateAsset enqueues a sidecar write), so drain those queues before reading anything back —
+    // otherwise the just-set rating is not yet in exifInfo when the panel renders.
+    await updateAsset(
+      { id: thompsonId, updateAssetDto: { rating: RATING, description: DESCRIPTION } },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    await utils.waitForQueueFinish(admin.accessToken, 'sidecar');
+    await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+
+    const tags = await utils.upsertTags(admin.accessToken, ['ctx-viewer-tag']);
+    tagId = tags[0].id;
+    tagValue = tags[0].value;
+    await utils.tagAssets(admin.accessToken, tagId, [thompsonId]);
+
+    // The rating and tag rows are preference-gated, and BOTH default OFF (preferences.ts) — enable
+    // them for admin or those two rows never render.
+    await utils.updateMyPreferences(admin.accessToken, {
+      ratings: { enabled: true },
+      tags: { enabled: true },
+    });
+
+    const thompsonInfo = await getAssetInfo({ id: thompsonId }, { headers: asBearerAuth(admin.accessToken) });
+    const imgInfo = await getAssetInfo({ id: imgId }, { headers: asBearerAuth(admin.accessToken) });
+
+    thompsonCity = (thompsonInfo.exifInfo?.city ?? '').trim();
+    imgState = (imgInfo.exifInfo?.state ?? '').trim();
+    thompsonLens = (thompsonInfo.exifInfo?.lensModel ?? '').trim();
+
+    // Non-vacuity pins: each row only renders when its value is present, and each negative control
+    // below only means something when the two assets genuinely differ on that dimension.
+    expect(thompsonCity, 'reverse geocoding must have produced a city for the Canon asset').not.toBe('');
+    expect(imgState, 'reverse geocoding must have produced a state for the Apple asset').not.toBe('');
+    expect(thompsonCity, 'the two assets must sit in different cities').not.toBe((imgInfo.exifInfo?.city ?? '').trim());
+    expect((thompsonInfo.exifInfo?.state ?? '').trim(), 'the two assets must sit in different states').not.toBe(
+      imgState,
+    );
+    expect(thompsonLens, 'the Canon asset must carry a lens model').not.toBe('');
+    expect(thompsonLens, 'the two assets must have different lenses').not.toBe(
+      (imgInfo.exifInfo?.lensModel ?? '').trim(),
+    );
+    expect(thompsonInfo.exifInfo?.rating).toBe(RATING);
+    expect(thompsonInfo.exifInfo?.description).toBe(DESCRIPTION);
+    // Different capture years, so the day filter's negative control cannot pass vacuously.
+    expect((thompsonInfo.localDateTime ?? '').slice(0, 4)).not.toBe((imgInfo.localDateTime ?? '').slice(0, 4));
+  });
+
+  test('clicking a location (city) filters /photos and excludes an asset in a different city', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    // Unfiltered, /photos shows BOTH assets — the control for the exclusion below.
+    await page.goto('/photos');
+    await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toBeVisible();
+
+    await openDetailPanel(page, `/photos/${thompsonId}`);
+    await page.getByLabel(`Filter by this location: ${thompsonCity}`, { exact: true }).click();
+
+    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('city') === thompsonCity);
+    await expect(page.locator('#immich-asset-viewer')).toHaveCount(0);
+
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-asset-id="${imgId}"]`),
+      'the asset in the other city must be excluded, or the location filter is unproven',
+    ).toHaveCount(0);
+    await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: thompsonCity })).toBeVisible();
+  });
+
+  test('clicking a second location value replaces the stale location filter instead of ANDing it', async ({
+    context,
+    page,
+  }) => {
+    // Guards the DetailPanelLocation fix: each location button clears its SIBLING location fields, so
+    // jumping from one city to another asset's state must not leave the first city ANDed. Without the
+    // fix the URL would carry city=<A> AND state=<B> — two locations no asset satisfies — and the
+    // timeline would go empty. The load-bearing checks are therefore "the new asset is PRESENT" and
+    // "the stale city param is gone".
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    await openDetailPanel(page, `/photos/${thompsonId}`);
+    await page.getByLabel(`Filter by this location: ${thompsonCity}`, { exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('city') === thompsonCity);
+    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
+
+    // Open the OTHER asset while the first city filter is still in the URL, then click ITS state.
+    const stale = new URL(page.url());
+    await openDetailPanel(page, `/photos/${imgId}${stale.search}`);
+    await page.getByLabel(`Filter by this location: ${imgState}`, { exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('state') === imgState);
+
+    const next = new URL(page.url());
+    expect(next.searchParams.get('state')).toBe(imgState);
+    expect(next.searchParams.has('city'), 'the stale city filter must be cleared, not ANDed with the new state').toBe(
+      false,
+    );
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-asset-id="${thompsonId}"]`),
+      'the previously-filtered asset must drop out — the new location REPLACED the old one',
+    ).toHaveCount(0);
+  });
+
+  test('the date, filename and lens rows each filter /photos and exclude the non-matching asset', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    // Date — the button carries the DISPLAYED day into a single-day from/to range.
+    await openDetailPanel(page, `/photos/${thompsonId}`);
+    await page.getByLabel(/^Filter by this date/).click();
+    await page.waitForURL((url) => url.pathname === '/photos' && !!url.searchParams.get('from'));
+    const dateUrl = new URL(page.url());
+    expect(dateUrl.searchParams.get('from')).toBeTruthy();
+    expect(dateUrl.searchParams.get('to'), 'a single clicked day is an inclusive [day, day] range').toBe(
+      dateUrl.searchParams.get('from'),
+    );
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
+
+    // Filename — the basename WITHOUT extension.
+    await openDetailPanel(page, `/photos/${thompsonId}`);
+    await page.getByLabel(`Filter by this filename: ${THOMPSON_BASENAME}`, { exact: true }).click();
+    await page.waitForURL(
+      (url) => url.pathname === '/photos' && url.searchParams.get('filename') === THOMPSON_BASENAME,
+    );
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
+
+    // Lens.
+    await openDetailPanel(page, `/photos/${thompsonId}`);
+    await page.getByLabel(`Filter by this lens: ${thompsonLens}`, { exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('lens') === thompsonLens);
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
+  });
+
+  test('clicking a tag filters /photos and excludes an untagged asset', async ({ context, page }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    await openDetailPanel(page, `/photos/${thompsonId}`);
+
+    await page.getByLabel(`Filter by this tag: ${tagValue}`).click();
+    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('tags') === tagId);
+    await expect(page.locator('#immich-asset-viewer')).toHaveCount(0);
+
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-asset-id="${imgId}"]`),
+      'the untagged asset must be excluded, or the tag filter is unproven',
+    ).toHaveCount(0);
+    await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: tagValue })).toBeVisible();
+  });
+
+  test('the rating and description rows are edited in place, their value is not a filter affordance', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    await openDetailPanel(page, `/photos/${thompsonId}`);
+
+    // Each row exposes a DEDICATED filter icon — that is the only way to filter by rating/description.
+    await expect(page.getByLabel(`Filter by this rating: ${RATING}`)).toBeVisible();
+    await expect(page.getByLabel(`Filter by this description: ${DESCRIPTION}`)).toBeVisible();
+
+    // The description VALUE is an editable textarea: clicking it places the caret, it must NOT filter.
+    await page.getByTestId('autogrow-textarea').click();
+    await expect(page.locator('#immich-asset-viewer')).toBeVisible();
+    expect(page.url()).toContain(thompsonId);
+    expect(new URL(page.url()).searchParams.has('description')).toBe(false);
+
+    // The rating VALUE is the star widget: clicking a star edits the rating, it must NOT filter.
+    await page.getByTestId('star').first().click();
+    await expect(page.locator('#immich-asset-viewer')).toBeVisible();
+    expect(page.url()).toContain(thompsonId);
+    expect(new URL(page.url()).searchParams.has('rating')).toBe(false);
+  });
+
+  // TASK C.1 — the whole feature is URL-backed; a reload must rebuild both the chip and the narrowed
+  // grid from the URL alone.
+  test('a click-applied filter survives a full page reload (URL-backed)', async ({ context, page }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    await openDetailPanel(page, `/photos/${thompsonId}`);
+
+    await page.getByLabel(`Filter by this lens: ${thompsonLens}`, { exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('lens') === thompsonLens);
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
+    await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: thompsonLens })).toBeVisible();
+
+    await page.reload();
+
+    expect(new URL(page.url()).searchParams.get('lens')).toBe(thompsonLens);
+    await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: thompsonLens })).toBeVisible();
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-asset-id="${imgId}"]`),
+      'the reloaded, URL-hydrated grid must stay narrowed',
+    ).toHaveCount(0);
+  });
+});
+
+/**
+ * The owner ("shared by") affordance. It renders ONLY on a shared album (DetailPanel gates it on
+ * `currentAlbum.albumUsers.length > 0`), so this drives a genuinely TWO-OWNER album: admin owns one
+ * asset, a co-editor owns the other. The owner filter is the only thing that can separate them, so a
+ * filter that silently no-oped would leave both assets and this test would fail.
+ */
+test.describe('Asset viewer contextual filters — the shared-by owner affordance on a shared album', () => {
+  let admin: LoginResponseDto;
+  let contributor: LoginResponseDto;
+  let albumId: string;
+  let adminAssetId: string;
+  let contributorAssetId: string;
+  const CONTRIBUTOR_NAME = 'Contributing Owner';
+
+  test.beforeAll(async () => {
+    utils.initSdk();
+    await utils.resetDatabase();
+    admin = await utils.adminSetup();
+    contributor = await utils.userSetup(admin.accessToken, {
+      email: 'album-contributor@test.com',
+      name: CONTRIBUTOR_NAME,
+      password: 'password',
+    });
+
+    const adminAsset = await upload(admin.accessToken, CANON_FIXTURE);
+    adminAssetId = adminAsset.id;
+    const contributorAsset = await upload(contributor.accessToken, APPLE_FIXTURE);
+    contributorAssetId = contributorAsset.id;
+    await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+    for (const [token, id] of [
+      [admin.accessToken, adminAssetId],
+      [contributor.accessToken, contributorAssetId],
+    ] as const) {
+      await utils.poll(
+        () => utils.getAssetInfo(token, id),
+        (asset) => asset.thumbhash !== null,
+      );
+    }
+
+    // Admin owns the album and one asset, with the contributor as an EDITOR (this is what makes the
+    // album "shared" and renders the shared-by row). The contributor then adds their OWN asset, so
+    // the album genuinely holds two owners.
+    const album = await utils.createAlbum(admin.accessToken, {
+      albumName: 'Two Owners Album',
+      assetIds: [adminAssetId],
+      albumUsers: [{ userId: contributor.userId, role: AlbumUserRole.Editor }],
+    });
+    albumId = album.id;
+    await addAssetsToAlbum(
+      { id: albumId, bulkIdsDto: { ids: [contributorAssetId] } },
+      { headers: asBearerAuth(contributor.accessToken) },
+    );
+  });
+
+  test('clicking shared-by filters the album to that owner and excludes the other contributor', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    // Unfiltered, the album shows BOTH owners' assets — the control for the exclusion below.
+    await page.goto(`/albums/${albumId}`);
+    await expect(page.locator(`[data-asset-id="${adminAssetId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-asset-id="${contributorAssetId}"]`)).toBeVisible();
+
+    // Open the CONTRIBUTOR's asset; for the admin its "shared by <contributor>" value is a filter.
+    await openDetailPanel(page, `/albums/${albumId}/photos/${contributorAssetId}`);
+    await page.getByLabel(`Filter by this owner: ${CONTRIBUTOR_NAME}`).click();
+
+    await page.waitForURL(
+      (url) => url.pathname === `/albums/${albumId}` && url.searchParams.get('owner') === contributor.userId,
+    );
+    await expect(page.locator('#immich-asset-viewer')).toHaveCount(0);
+
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${contributorAssetId}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-asset-id="${adminAssetId}"]`),
+      'the other owner asset must be excluded, or the owner filter is unproven',
+    ).toHaveCount(0);
+    // The chip resolves the owner id to a name (resolveFilterNames → getUser).
+    await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: CONTRIBUTOR_NAME })).toBeVisible();
+  });
+});
+
+/**
+ * TASK C.2 — two chips compose as an AND, and the result is narrower than either alone. Three assets:
+ * one matches BOTH dimensions, one matches only the state, one matches only the tag. So state alone
+ * keeps two, the tag alone keeps two, and the two together keep exactly the one that has both — with
+ * the state-only and tag-only assets each providing a live negative control.
+ */
+test.describe('Asset viewer contextual filters — two-chip composition (AND) on /photos', () => {
+  let admin: LoginResponseDto;
+  let bothId: string; // Colorado + tagged
+  let coloradoOnlyId: string; // Colorado, untagged
+  let taggedElsewhereId: string; // France, tagged
+  let state: string;
+  let tagValue: string;
+  let tagId: string;
+
+  test.beforeAll(async () => {
+    utils.initSdk();
+    await utils.resetDatabase();
+    admin = await utils.adminSetup();
+
+    const both = await upload(admin.accessToken, THOMPSON_FIXTURE); // real Colorado GPS
+    bothId = both.id;
+    const coloradoOnly = await upload(admin.accessToken, APPLE_FIXTURE); // has its own Nebraska GPS
+    coloradoOnlyId = coloradoOnly.id;
+    const elsewhere = await upload(admin.accessToken, CANON_FIXTURE); // no GPS
+    taggedElsewhereId = elsewhere.id;
+    await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+    for (const id of [bothId, coloradoOnlyId, taggedElsewhereId]) {
+      await utils.poll(
+        () => utils.getAssetInfo(admin.accessToken, id),
+        (asset) => asset.thumbhash !== null,
+      );
+    }
+
+    // Force the second asset into the SAME state as the first (override its Nebraska point with the
+    // Colorado one) and push the third to France. Must run AFTER metadata extraction, or the pass
+    // overwrites these back. Now state=Colorado matches {both, coloradoOnly}; the tag matches
+    // {both, elsewhere}; their intersection is exactly {both}.
+    await setAssetGeo(admin.accessToken, coloradoOnlyId, 39.115, -108.400_968);
+    await setAssetGeo(admin.accessToken, taggedElsewhereId, 48.8566, 2.3522);
+
+    const tags = await utils.upsertTags(admin.accessToken, ['ctx-compose-tag']);
+    tagId = tags[0].id;
+    tagValue = tags[0].value;
+    await utils.tagAssets(admin.accessToken, tagId, [bothId, taggedElsewhereId]);
+    await utils.updateMyPreferences(admin.accessToken, { tags: { enabled: true } });
+
+    const bothInfo = await getAssetInfo({ id: bothId }, { headers: asBearerAuth(admin.accessToken) });
+    const coloradoInfo = await getAssetInfo({ id: coloradoOnlyId }, { headers: asBearerAuth(admin.accessToken) });
+    const elsewhereInfo = await getAssetInfo({ id: taggedElsewhereId }, { headers: asBearerAuth(admin.accessToken) });
+
+    state = (bothInfo.exifInfo?.state ?? '').trim();
+    expect(state, 'the shared state must be present').not.toBe('');
+    expect(
+      (coloradoInfo.exifInfo?.state ?? '').trim(),
+      'the second asset must share the state so the state filter alone keeps it',
+    ).toBe(state);
+    expect(
+      (elsewhereInfo.exifInfo?.state ?? '').trim(),
+      'the third asset must NOT share the state so the state filter drops it',
+    ).not.toBe(state);
+  });
+
+  test('clicking two different values composes the filters as an AND (narrower than either alone)', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+
+    // Chip 1 — state. Alone it keeps {both, coloradoOnly} and drops the France asset.
+    await openDetailPanel(page, `/photos/${bothId}`);
+    await page.getByLabel(`Filter by this location: ${state}`, { exact: true }).click();
+    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('state') === state);
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('2 results');
+    await expect(page.locator(`[data-asset-id="${bothId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-asset-id="${coloradoOnlyId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-asset-id="${taggedElsewhereId}"]`)).toHaveCount(0);
+
+    // Chip 2 — the tag, added ON TOP of the state filter: re-open the same asset carrying the state
+    // filter in the URL, then click its tag. The AND keeps ONLY the asset that has both.
+    const withState = new URL(page.url());
+    await openDetailPanel(page, `/photos/${bothId}${withState.search}`);
+    await page.getByLabel(`Filter by this tag: ${tagValue}`).click();
+    await page.waitForURL(
+      (url) =>
+        url.pathname === '/photos' && url.searchParams.get('state') === state && url.searchParams.get('tags') === tagId,
+    );
+
+    // Both chips render…
+    await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: state })).toBeVisible();
+    await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: tagValue })).toBeVisible();
+
+    // …and the result is the intersection — strictly narrower than the state filter alone (2 → 1).
+    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
+    await expect(page.locator(`[data-asset-id="${bothId}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-asset-id="${coloradoOnlyId}"]`),
+      'the same-state but untagged asset must be excluded by the AND',
+    ).toHaveCount(0);
+    await expect(
+      page.locator(`[data-asset-id="${taggedElsewhereId}"]`),
+      'the tagged but different-state asset must be excluded by the AND',
+    ).toHaveCount(0);
   });
 });
