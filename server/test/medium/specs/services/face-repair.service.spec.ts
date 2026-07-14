@@ -1331,6 +1331,7 @@ describe('FaceRepairService decline filter', () => {
         stay: [],
         lock: [],
         detach: [],
+        unknown: [],
       },
       user.id,
     );

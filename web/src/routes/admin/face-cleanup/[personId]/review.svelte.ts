@@ -1,12 +1,16 @@
 import type { FaceRepairResolveRequestDto } from '@immich/sdk';
-import { mdiAccountArrowRight, mdiArrowRightBold, mdiImageOff, mdiLock, mdiPin } from '@mdi/js';
+import { mdiAccountArrowRight, mdiAccountQuestion, mdiArrowRightBold, mdiImageOff, mdiLock, mdiPin } from '@mdi/js';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 // Model B (full per-face resolution, docs/plans/2026-07-10-face-cleanup-full-resolution-design.md). Every
-// flagged face resolves to exactly one of five terminal states. Slice 1 only wires the `owner` action into
-// the UI (+page.svelte), but the model supports all five up front so later slices (stay/lock/other/detach)
-// don't need another rework of this file.
-export type FaceState = 'owner' | 'other' | 'stay' | 'lock' | 'detach';
+// flagged face resolves to exactly one of six terminal states.
+//
+// `unknown` is the sixth: a real face of a real person the admin cannot name. It is the standard case whenever
+// an admin reviews someone else's library — a friend of the family turns up in a mixed cluster, the admin knows
+// it is not the cluster's person, but has no one to route it to. Without it the review cannot be finished: every
+// other action is a lie (moving it to the suggested owner is wrong, keeping it is wrong, and "not a face" is
+// wrong — it plainly IS a face). The server parks these in a fresh unnamed cluster of their own.
+export type FaceState = 'owner' | 'other' | 'stay' | 'lock' | 'detach' | 'unknown';
 
 // Model B state colors (docs/plans/2026-07-10-face-cleanup-resolution-mockup.html :root vars) — the visual
 // source of truth for the review page. Lives here, next to `FaceState`, because both the page (tile badges,
@@ -19,6 +23,7 @@ export const STATE_COLOR: Record<FaceState, string> = {
   stay: '#16a34a',
   lock: '#7c3aed',
   detach: '#475569',
+  unknown: '#0d9488',
 };
 
 // One icon per state, so state is never encoded in COLOR ALONE. The tile badge used to stamp the same check
@@ -30,7 +35,8 @@ export const STATE_ICON: Record<FaceState, string> = {
   other: mdiAccountArrowRight, // moves to a person the admin picked
   stay: mdiPin, // stays on this person (decline)
   lock: mdiLock, // stays, pinned against every future scan
-  detach: mdiImageOff, // not a face at all — unassigned entirely
+  detach: mdiImageOff, // not a face at all — retired entirely
+  unknown: mdiAccountQuestion, // a real person, but not one the admin can name — parked in its own cluster
 };
 
 export interface FlaggedFace {
@@ -119,7 +125,7 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
     },
 
     get tally(): FaceTally {
-      const tally: FaceTally = { owner: 0, other: 0, stay: 0, lock: 0, detach: 0 };
+      const tally: FaceTally = { owner: 0, other: 0, stay: 0, lock: 0, detach: 0, unknown: 0 };
       for (const id of order) {
         const state = states.get(id) ?? 'owner';
         tally[state] += 1;
@@ -202,6 +208,7 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
       const stay: string[] = [];
       const lock: string[] = [];
       const detach: string[] = [];
+      const unknown: string[] = [];
 
       // `lock` (Slice 3, move-and-lock): a suggested-owner (`owner`-state) move always passes `lock: false` —
       // never auto-lock a face the admin didn't explicitly move. A chosen-person (`other`-state) move passes
@@ -245,6 +252,10 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
             detach.push(face.assetFaceId);
             break;
           }
+          case 'unknown': {
+            unknown.push(face.assetFaceId);
+            break;
+          }
         }
       }
 
@@ -265,6 +276,7 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
         stay,
         lock,
         detach,
+        unknown,
       };
     },
   };

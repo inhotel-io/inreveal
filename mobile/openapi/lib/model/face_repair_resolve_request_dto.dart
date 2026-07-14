@@ -19,6 +19,7 @@ class FaceRepairResolveRequestDto {
     this.moveToPerson = const Optional.present(const []),
     required this.personId,
     this.stay = const Optional.present(const []),
+    this.unknown = const Optional.present(const []),
   });
 
   Optional<List<String>?> detach;
@@ -39,6 +40,8 @@ class FaceRepairResolveRequestDto {
 
   Optional<List<String>?> stay;
 
+  Optional<List<String>?> unknown;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairResolveRequestDto &&
     _deepEquality.equals(other.detach, detach) &&
@@ -46,7 +49,8 @@ class FaceRepairResolveRequestDto {
     _deepEquality.equals(other.lock, lock) &&
     _deepEquality.equals(other.moveToPerson, moveToPerson) &&
     other.personId == personId &&
-    _deepEquality.equals(other.stay, stay);
+    _deepEquality.equals(other.stay, stay) &&
+    _deepEquality.equals(other.unknown, unknown);
 
   @override
   int get hashCode =>
@@ -56,10 +60,11 @@ class FaceRepairResolveRequestDto {
     (lock.hashCode) +
     (moveToPerson.hashCode) +
     (personId.hashCode) +
-    (stay.hashCode);
+    (stay.hashCode) +
+    (unknown.hashCode);
 
   @override
-  String toString() => 'FaceRepairResolveRequestDto[detach=$detach, entireCluster=$entireCluster, lock=$lock, moveToPerson=$moveToPerson, personId=$personId, stay=$stay]';
+  String toString() => 'FaceRepairResolveRequestDto[detach=$detach, entireCluster=$entireCluster, lock=$lock, moveToPerson=$moveToPerson, personId=$personId, stay=$stay, unknown=$unknown]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -84,6 +89,10 @@ class FaceRepairResolveRequestDto {
       final value = this.stay.value;
       json[r'stay'] = value;
     }
+    if (this.unknown.isPresent) {
+      final value = this.unknown.value;
+      json[r'unknown'] = value;
+    }
     return json;
   }
 
@@ -107,6 +116,9 @@ class FaceRepairResolveRequestDto {
         personId: mapValueOfType<String>(json, r'personId')!,
         stay: json.containsKey(r'stay') ? Optional.present(json[r'stay'] is Iterable
             ? (json[r'stay'] as Iterable).cast<String>().toList(growable: false)
+            : const []) : const Optional.absent(),
+        unknown: json.containsKey(r'unknown') ? Optional.present(json[r'unknown'] is Iterable
+            ? (json[r'unknown'] as Iterable).cast<String>().toList(growable: false)
             : const []) : const Optional.absent(),
       );
     }

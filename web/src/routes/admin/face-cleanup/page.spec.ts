@@ -155,7 +155,14 @@ describe('+page.svelte (face cleanup)', () => {
       personId: 'c1',
       flaggedFaces: [{ assetFaceId: 'f1', suspectedOwnerId: 'owner-person' }],
     } as unknown as FaceRepairPersonFacesDto);
-    vi.mocked(resolveFaces).mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, skipped: 0 });
+    vi.mocked(resolveFaces).mockResolvedValue({
+      moved: 1,
+      declined: 0,
+      locked: 0,
+      detached: 0,
+      unknown: 0,
+      skipped: 0,
+    });
     vi.mocked(declineFaceRepair).mockResolvedValue({ created: 1 });
   });
 

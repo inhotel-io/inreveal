@@ -132,6 +132,9 @@
       case 'detach': {
         return $t('admin.face_cleanup_review_tile_detach_ribbon');
       }
+      case 'unknown': {
+        return $t('admin.face_cleanup_review_tile_unknown_ribbon');
+      }
     }
   };
 
@@ -185,7 +188,11 @@
     vm.applyToSelection('detach');
   };
 
-  // The five bulk actions carry terse labels and no explanation of what they do on apply. Two entry points open
+  const handleBulkUnknown = () => {
+    vm.applyToSelection('unknown');
+  };
+
+  // The six bulk actions carry terse labels and no explanation of what they do on apply. Two entry points open
   // the same modal: the banner (always visible, so a confused admin finds it BEFORE selecting anything) and the
   // bulk bar (which only exists once a face is selected, i.e. mid-task). Read-only — it never touches the
   // review model, so an open/close leaves the selection and the staged states exactly as they were.
@@ -276,6 +283,7 @@
             kept: result.declined,
             locked: result.locked,
             detached: result.detached,
+            unknown: result.unknown,
             skipped: result.skipped,
           },
         }),
@@ -605,7 +613,7 @@
         {#if vm.selectedCount === 0}
           <!-- Summary state -->
           <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="tally">
-            {#each ['owner', 'stay', 'lock', 'other', 'detach'] as FaceState[] as state (state)}
+            {#each ['owner', 'stay', 'lock', 'other', 'unknown', 'detach'] as FaceState[] as state (state)}
               {@const count = vm.tally[state]}
               <span
                 class={[
@@ -691,6 +699,18 @@
             >
               <Icon icon={STATE_ICON.other} size="13" />
               {$t('admin.face_cleanup_review_bulk_other')}
+            </button>
+            <!-- Sits next to "Move to…" because it is the same decision one step further: the admin knows the
+                 face does not belong here but has nobody to route it to. Without it the only honest-looking exits
+                 are all wrong, and the review cannot be finished. -->
+            <button
+              type="button"
+              onclick={handleBulkUnknown}
+              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+              data-testid="bulk-unknown"
+            >
+              <Icon icon={STATE_ICON.unknown} size="13" />
+              {$t('admin.face_cleanup_review_bulk_unknown')}
             </button>
             <button
               type="button"

@@ -266,6 +266,14 @@ export const FaceRepairResolveRequestSchema = z
     stay: z.array(z.uuidv4()).default([]),
     lock: z.array(z.uuidv4()).default([]),
     detach: z.array(z.uuidv4()).default([]),
+    // "Unknown person" (state 6): a real face of a real person the admin cannot name — the standard case when
+    // reviewing someone else's library. The server moves these into a FRESH unnamed person owned by the
+    // reviewed cluster's owner and locks them there. Deliberately NOT a bare unassign: an unassigned face is
+    // re-queued by recognition and re-matched onto its nearest neighbour-with-a-person (very often the cluster
+    // it was just pulled out of), so "send it back to the unknown pool" would boomerang. Giving it a person of
+    // its own means recognition skips it, the lock means no future scan re-flags it, and it still surfaces as an
+    // unnamed cluster on the People page for anyone to name later.
+    unknown: z.array(z.uuidv4()).default([]),
     entireCluster: z.object({ destinationPersonId: z.uuidv4() }).optional(),
   })
   .meta({ id: 'FaceRepairResolveRequestDto' });
@@ -278,6 +286,10 @@ export const FaceRepairResolveResponseSchema = z
     declined: z.number(),
     locked: z.number(),
     detached: z.number(),
+    // Faces parked in a fresh unnamed cluster of their own. Counted separately from `moved` (they never pass
+    // through the moveToPerson buckets) and from `locked` (they are locked, but reporting them in both would
+    // double-count them in the apply summary).
+    unknown: z.number(),
     skipped: z.number(),
   })
   .meta({ id: 'FaceRepairResolveResponseDto' });

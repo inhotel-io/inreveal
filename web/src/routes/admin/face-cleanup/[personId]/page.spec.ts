@@ -167,7 +167,14 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       personId: PERSON_ID,
       flaggedFaces: makeFlaggedFaces(),
     } as unknown as FaceRepairPersonFacesDto);
-    vi.mocked(resolveFaces).mockResolvedValue({ moved: 0, declined: 0, locked: 0, detached: 0, skipped: 0 });
+    vi.mocked(resolveFaces).mockResolvedValue({
+      moved: 0,
+      declined: 0,
+      locked: 0,
+      detached: 0,
+      unknown: 0,
+      skipped: 0,
+    });
     vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(emptyRest());
     showModal.mockResolvedValue(undefined);
   });
@@ -324,6 +331,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
             stay: [],
             lock: [],
             detach: [],
+            unknown: [],
           },
         });
       });
@@ -420,6 +428,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
             stay: ['face-1'],
             lock: [],
             detach: [],
+            unknown: [],
           },
         });
       });
@@ -478,6 +487,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
             stay: [],
             lock: ['face-1'],
             detach: [],
+            unknown: [],
           },
         });
       });
@@ -565,6 +575,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
             stay: [],
             lock: [],
             detach: [],
+            unknown: [],
           },
         });
       });
@@ -596,6 +607,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
             stay: [],
             lock: [],
             detach: [],
+            unknown: [],
           },
         });
       });
@@ -678,6 +690,61 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
             stay: [],
             lock: [],
             detach: ['face-1'],
+            unknown: [],
+          },
+        });
+      });
+    });
+  });
+
+  // ---- "Unknown person": a real face the admin cannot name (the case that made the review unfinishable) ----
+
+  describe('Bulk actions — Unknown person', () => {
+    it('tags the selected tile unknown WITHOUT graying it out (it is a real face) and updates the tally', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('bulk-unknown'));
+
+      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+
+      const refreshedTiles = screen.getAllByTestId('face-tile');
+      expect(refreshedTiles[0]).toHaveAttribute('data-state', 'unknown');
+      expect(screen.getByText('admin.face_cleanup_review_tile_unknown_ribbon')).toBeInTheDocument();
+
+      // Unlike "Not a face", the crop is NOT desaturated — this face is a real person, just an unnamed one.
+      const image = refreshedTiles[0].querySelector('img');
+      expect(image?.getAttribute('style') ?? '').not.toContain('grayscale(1)');
+
+      const tally = screen.getByTestId('tally');
+      const unknownChip = within(tally).getByText('admin.face_cleanup_review_tally_unknown').parentElement!;
+      expect(unknownChip).not.toHaveClass('opacity-40');
+      expect(unknownChip).toHaveTextContent('1');
+    });
+
+    it('sends the face in `unknown` and excludes it from `moveToPerson` on Apply', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]); // face-1, suspected owner-a
+      await fireEvent.click(screen.getByTestId('bulk-unknown'));
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
+            ],
+            stay: [],
+            lock: [],
+            detach: [],
+            unknown: ['face-1'],
           },
         });
       });
@@ -777,7 +844,14 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     });
 
     it('reports what the server actually did after a successful apply', async () => {
-      vi.mocked(resolveFaces).mockResolvedValue({ moved: 2, declined: 1, locked: 0, detached: 0, skipped: 0 });
+      vi.mocked(resolveFaces).mockResolvedValue({
+        moved: 2,
+        declined: 1,
+        locked: 0,
+        detached: 0,
+        unknown: 0,
+        skipped: 0,
+      });
 
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));

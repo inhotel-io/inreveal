@@ -7,17 +7,20 @@
   type Props = { onClose: () => void };
   const { onClose }: Props = $props();
 
-  // The five terminal actions, in the order the bulk bar renders them. The NAME is not re-declared here — each
+  // The six terminal actions, in the order the bulk bar renders them. The NAME is not re-declared here — each
   // action reuses its own bulk-bar key, so a translated heading can never drift from its translated button.
   // Only the explanation (`_body`: what it means / when to use it) and the consequence (`_effect`: what it does
   // on apply) are new strings.
-  const ACTIONS: { state: FaceState; nameKey: string }[] = [
+  // `as const` (rather than a `nameKey: string` annotation) keeps each key a string LITERAL: svelte-i18n's `$t`
+  // takes the generated key union, and a widened `string` is not assignable to it.
+  const ACTIONS = [
     { state: 'owner', nameKey: 'admin.face_cleanup_review_bulk_owner' },
     { state: 'stay', nameKey: 'admin.face_cleanup_review_bulk_stay' },
     { state: 'lock', nameKey: 'admin.face_cleanup_review_bulk_lock' },
     { state: 'other', nameKey: 'admin.face_cleanup_review_bulk_other' },
+    { state: 'unknown', nameKey: 'admin.face_cleanup_review_bulk_unknown' },
     { state: 'detach', nameKey: 'admin.face_cleanup_review_bulk_detach' },
-  ];
+  ] as const satisfies readonly { state: FaceState; nameKey: string }[];
 </script>
 
 <Modal title={$t('admin.face_cleanup_review_help_title')} icon={mdiInformationOutline} {onClose} size="medium">

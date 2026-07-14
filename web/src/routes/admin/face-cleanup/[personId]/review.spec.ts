@@ -5,7 +5,7 @@ import { createReviewModel, STATE_COLOR, STATE_ICON, type FaceState, type Flagge
 // leaving indigo-vs-violet as the only thing separating "moved away" from "locked in place" — unreadable for a
 // colourblind admin. Every state carries its own glyph, and no two states may share one.
 describe('STATE_ICON', () => {
-  const STATES: FaceState[] = ['owner', 'other', 'stay', 'lock', 'detach'];
+  const STATES: FaceState[] = ['owner', 'other', 'stay', 'lock', 'detach', 'unknown'];
 
   it('gives every state its own distinct icon', () => {
     const icons = STATES.map((state) => STATE_ICON[state]);
@@ -21,8 +21,8 @@ describe('STATE_ICON', () => {
 
 // Model B (full per-face resolution) review model. Every flagged face carries its OWN suspectedOwnerId (a
 // mixed cluster can flag faces toward different owners), so "move to owner" is a per-face grouping, not one
-// destination. Slice 1 only wires the `owner` bulk action into the UI, but the model supports the full
-// 5-state set (`owner`/`other`/`stay`/`lock`/`detach`) up front so later slices don't need another rework.
+// destination. Every face resolves to exactly one of six terminal states
+// (`owner`/`other`/`stay`/`lock`/`detach`/`unknown`).
 describe('createReviewModel (Model B / full resolution)', () => {
   const makeFaces = (): FlaggedFace[] => [
     { assetFaceId: 'f1', suspectedOwnerId: 'owner-a' },
@@ -37,7 +37,7 @@ describe('createReviewModel (Model B / full resolution)', () => {
     const vm = createReviewModel(makeFaces());
     expect(vm.total).toBe(3);
     expect(vm.selectedCount).toBe(0);
-    expect(vm.tally).toEqual({ owner: 3, other: 0, stay: 0, lock: 0, detach: 0 });
+    expect(vm.tally).toEqual({ owner: 3, other: 0, stay: 0, lock: 0, detach: 0, unknown: 0 });
     expect(vm.faces.map((f) => f.state)).toEqual(['owner', 'owner', 'owner']);
   });
 
@@ -149,6 +149,22 @@ describe('createReviewModel (Model B / full resolution)', () => {
     expect(req.stay).toEqual(['f1']);
     expect(req.lock).toEqual(['f2']);
     expect(req.detach).toEqual(['f3']);
+    expect(req.unknown).toEqual([]);
+  });
+
+  it('W1: unknown faces are emitted in `unknown`, never as a move to the suspected owner', () => {
+    const vm = createReviewModel(makeFaces());
+    vm.toggleSelect('f1');
+    vm.toggleSelect('f2');
+    vm.applyToSelection('unknown');
+
+    const req = vm.buildResolveRequest('person-1');
+    expect(req.unknown).toEqual(['f1', 'f2']);
+    // The whole point: an unknown face must NOT be routed to the owner the scan suspected — that suggestion is
+    // exactly what the admin is rejecting when they say they cannot name it. Only f3 (still `owner`) moves.
+    expect(req.moveToPerson).toEqual([{ destinationPersonId: 'owner-b', faceIds: ['f3'], lock: false }]);
+    expect(req.stay).toEqual([]);
+    expect(req.detach).toEqual([]);
   });
 
   // ---- W2: the outcome tally always sums to N across every sequence of bulk actions ----
@@ -161,23 +177,23 @@ describe('createReviewModel (Model B / full resolution)', () => {
     vm.toggleSelect('f1');
     vm.applyToSelection('stay');
     expect(sumTally()).toBe(3);
-    expect(vm.tally).toEqual({ owner: 2, other: 0, stay: 1, lock: 0, detach: 0 });
+    expect(vm.tally).toEqual({ owner: 2, other: 0, stay: 1, lock: 0, detach: 0, unknown: 0 });
 
     vm.toggleSelect('f2');
     vm.toggleSelect('f3');
     vm.applyToSelection('lock');
     expect(sumTally()).toBe(3);
-    expect(vm.tally).toEqual({ owner: 0, other: 0, stay: 1, lock: 2, detach: 0 });
+    expect(vm.tally).toEqual({ owner: 0, other: 0, stay: 1, lock: 2, detach: 0, unknown: 0 });
 
     vm.selectAll();
     vm.applyToSelection('detach');
     expect(sumTally()).toBe(3);
-    expect(vm.tally).toEqual({ owner: 0, other: 0, stay: 0, lock: 0, detach: 3 });
+    expect(vm.tally).toEqual({ owner: 0, other: 0, stay: 0, lock: 0, detach: 3, unknown: 0 });
 
     vm.toggleSelect('f1');
     vm.applyToSelection('owner');
     expect(sumTally()).toBe(3);
-    expect(vm.tally).toEqual({ owner: 1, other: 0, stay: 0, lock: 0, detach: 2 });
+    expect(vm.tally).toEqual({ owner: 1, other: 0, stay: 0, lock: 0, detach: 2, unknown: 0 });
   });
 
   it('W2: re-routing an already-routed face keeps the tally at N (no double counting)', () => {
@@ -188,7 +204,7 @@ describe('createReviewModel (Model B / full resolution)', () => {
     vm.applyToSelection('stay');
 
     expect(Object.values(vm.tally).reduce((a, b) => a + b, 0)).toBe(3);
-    expect(vm.tally).toEqual({ owner: 2, other: 0, stay: 1, lock: 0, detach: 0 });
+    expect(vm.tally).toEqual({ owner: 2, other: 0, stay: 1, lock: 0, detach: 0, unknown: 0 });
     // the stale "other" destination must not leak back in once re-routed away from "other"
     expect(vm.faces.find((f) => f.assetFaceId === 'f1')?.destinationPersonId).toBeNull();
   });
@@ -217,7 +233,7 @@ describe('createReviewModel (Model B / full resolution)', () => {
 
     vm.reset();
 
-    expect(vm.tally).toEqual({ owner: 3, other: 0, stay: 0, lock: 0, detach: 0 });
+    expect(vm.tally).toEqual({ owner: 3, other: 0, stay: 0, lock: 0, detach: 0, unknown: 0 });
     for (const face of vm.faces) {
       expect(face.state).toBe('owner');
       expect(face.destinationPersonId).toBeNull();

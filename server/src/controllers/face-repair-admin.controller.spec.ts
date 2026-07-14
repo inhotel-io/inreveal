@@ -322,7 +322,7 @@ describe(FaceRepairAdminController.name, () => {
 
     it('delegates to service.resolveFaces with the auth user id as resolvedBy (C2)', async () => {
       ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
-      service.resolveFaces.mockResolvedValue({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      service.resolveFaces.mockResolvedValue({ moved: 3, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
       const moveToPerson = [
         { destinationPersonId: ownerA, faceIds: [faceId1, faceId2] },
         { destinationPersonId: ownerB, faceIds: [faceId3] },
@@ -343,7 +343,7 @@ describe(FaceRepairAdminController.name, () => {
         }),
         adminUserId,
       );
-      expect(body).toEqual({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      expect(body).toEqual({ moved: 3, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
     });
 
     it('rejects a non-uuid personId with 400', async () => {
@@ -368,7 +368,7 @@ describe(FaceRepairAdminController.name, () => {
 
     it('C1: accepts a moveToPerson group with lock:true and passes it through', async () => {
       ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
-      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 1, detached: 0, skipped: 0 });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 1, detached: 0, unknown: 0, skipped: 0 });
       const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: true }];
 
       const { status } = await request(ctx.getHttpServer())
@@ -388,7 +388,7 @@ describe(FaceRepairAdminController.name, () => {
 
     it('C1: accepts a moveToPerson group with lock:false and passes it through', async () => {
       ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
-      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
       const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: false }];
 
       const { status } = await request(ctx.getHttpServer())
@@ -408,7 +408,7 @@ describe(FaceRepairAdminController.name, () => {
 
     it("C1: defaults a moveToPerson group's lock to false when omitted", async () => {
       ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
-      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
       const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1] }];
 
       const { status } = await request(ctx.getHttpServer())
