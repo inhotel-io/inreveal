@@ -1,5 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
-import { isoDatetimeToDate, stringToBool } from 'src/validation';
+import { boundedTextFilter, isoDatetimeToDate, stringToBool } from 'src/validation';
 import z from 'zod';
 
 export enum MapMediaType {
@@ -37,12 +37,13 @@ const FilteredMapMarkerSchema = z
     isFavorite: stringToBool.optional().describe('Filter by favorite status'),
     isNotInAlbum: stringToBool.optional().describe('Filter assets not in any album'),
     isInAlbum: stringToBool.optional().describe('Filter assets in at least one album'),
-    originalFileName: z
-      .string()
+    originalFileName: boundedTextFilter()
       .optional()
       .describe('Filter by original filename (substring, case/accent-insensitive)'),
-    description: z.string().optional().describe('Filter by asset description (substring, case/accent-insensitive)'),
-    ocr: z.string().optional().describe('Filter by OCR text content (substring, case/accent-insensitive)'),
+    description: boundedTextFilter()
+      .optional()
+      .describe('Filter by asset description (substring, case/accent-insensitive)'),
+    ocr: boundedTextFilter().optional().describe('Filter by OCR text content (substring, case/accent-insensitive)'),
     city: z.string().optional().describe('Filter by city'),
     country: z.string().optional().describe('Filter by country'),
     // The Map filter panel renders the same "Text" section as every other surface (#802), so

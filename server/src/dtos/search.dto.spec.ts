@@ -80,6 +80,26 @@ describe('search DTO albumless filters', () => {
     expect(result.data?.ownerId).toBe(ownerId);
   });
 
+  it('should reject a non-uuid ownerId (a malformed owner filter must 400, not reach SQL as a bad cast)', () => {
+    expect(MetadataSearchDto.schema.safeParse({ ownerId: 'not-a-uuid' }).success).toBe(false);
+    expect(MetadataSearchDto.schema.safeParse({ ownerId: 'space-person:00000000-0000-4000-8000-000000000001' }).success).toBe(
+      false,
+    );
+  });
+
+  // The free-text ILIKE filters are bounded server-side to mirror the web clamp
+  // (TEXT_FILTER_MAX_CODE_POINTS = 200), counting code points, so a direct API caller cannot push a
+  // multi-kilobyte pattern into POST /search/metadata.
+  it('should accept description/originalFileName at exactly 200 code points', () => {
+    expect(MetadataSearchDto.schema.safeParse({ description: 'a'.repeat(200) }).success).toBe(true);
+    expect(MetadataSearchDto.schema.safeParse({ originalFileName: 'a'.repeat(200) }).success).toBe(true);
+  });
+
+  it('should reject description/originalFileName longer than 200 code points', () => {
+    expect(MetadataSearchDto.schema.safeParse({ description: 'a'.repeat(201) }).success).toBe(false);
+    expect(MetadataSearchDto.schema.safeParse({ originalFileName: 'a'.repeat(201) }).success).toBe(false);
+  });
+
   it('should coerce isInAlbum on filter suggestion requests', () => {
     const result = FilterSuggestionsRequestDto.schema.safeParse({ isInAlbum: 'true' });
 
