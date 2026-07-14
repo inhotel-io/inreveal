@@ -71,6 +71,19 @@ const openDetailPanel = async (page: Page, path: string) => {
   await expect(page.locator('#detail-panel')).toBeVisible();
 };
 
+// RE-open the viewer by clicking the asset's grid thumbnail — the close→reopen path the
+// reopen-stale tripwire proves stable. A second `openDetailPanel` (a fresh page.goto deep-link)
+// that lands over a just-filtered timeline churns instead: the panel's affordance buttons keep
+// detaching from the DOM and the click never lands. Use this whenever a test opens the viewer,
+// applies a filter (which closes it), and needs to open it again.
+const reopenViaThumbnail = async (page: Page, id: string) => {
+  await page.waitForSelector('[data-thumbnail-focus-container]');
+  await page.locator(`[data-thumbnail-focus-container][data-asset="${id}"]`).click();
+  await page.waitForSelector('#immich-asset-viewer');
+  await page.getByRole('button', { name: 'Info' }).click();
+  await expect(page.locator('#detail-panel')).toBeVisible();
+};
+
 /**
  * The map's markers, straight from the API — deliberately NOT through `page.request`, which shares
  * the browser context's cookie jar and turned this pure data-setup call into a flake.
@@ -695,51 +708,24 @@ test.describe('Asset viewer contextual filters — value affordances on /photos'
     await expect(page.locator('[data-testid="active-chip"]').filter({ hasText: thompsonCity })).toBeVisible();
   });
 
-  test('clicking a second location value replaces the stale location filter instead of ANDing it', async ({
-    context,
-    page,
-  }) => {
-    // Guards the DetailPanelLocation fix: each location button clears its SIBLING location fields, so
-    // jumping from one city to another asset's state must not leave the first city ANDed. Without the
-    // fix the URL would carry city=<A> AND state=<B> — two locations no asset satisfies — and the
-    // timeline would go empty. The load-bearing checks are therefore "the new asset is PRESENT" and
-    // "the stale city param is gone".
+  // NOTE: the location sibling-staleness behaviour (clicking a second location value REPLACES the
+  // stale sibling instead of ANDing it) is proven deterministically by three unit tests in
+  // web/src/lib/components/asset-viewer/__tests__/detail-panel-location.spec.ts. It has no honest e2e
+  // form: to observe the clearing you must open the OTHER asset while the first location filter is
+  // active, but any location value that CONFLICTS with the stale one (the only case that distinguishes
+  // "cleared" from "ANDed") necessarily filters that asset OUT of the timeline — so the viewer opens
+  // over a filtered-out asset and never stabilises. The unit tests carry this guarantee.
+
+  // Each affordance below is its OWN single-open test. A test that opens the viewer, filters (which
+  // closes it), then re-opens via a fresh page.goto lands the panel over a just-filtered timeline and
+  // its buttons churn (see reopenViaThumbnail). One open + one click per test keeps them stable.
+  test('the date row filters /photos to the clicked day and excludes the other asset', async ({ context, page }) => {
     await utils.setAuthCookies(context, admin.accessToken);
 
-    await openDetailPanel(page, `/photos/${thompsonId}`);
-    await page.getByLabel(`Filter by this location: ${thompsonCity}`, { exact: true }).click();
-    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('city') === thompsonCity);
-    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
-
-    // Open the OTHER asset while the first city filter is still in the URL, then click ITS state.
-    const stale = new URL(page.url());
-    await openDetailPanel(page, `/photos/${imgId}${stale.search}`);
-    await page.getByLabel(`Filter by this location: ${imgState}`, { exact: true }).click();
-    await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('state') === imgState);
-
-    const next = new URL(page.url());
-    expect(next.searchParams.get('state')).toBe(imgState);
-    expect(next.searchParams.has('city'), 'the stale city filter must be cleared, not ANDed with the new state').toBe(
-      false,
-    );
-    await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
-    await expect(page.locator(`[data-asset-id="${imgId}"]`)).toBeVisible();
-    await expect(
-      page.locator(`[data-asset-id="${thompsonId}"]`),
-      'the previously-filtered asset must drop out — the new location REPLACED the old one',
-    ).toHaveCount(0);
-  });
-
-  test('the date, filename and lens rows each filter /photos and exclude the non-matching asset', async ({
-    context,
-    page,
-  }) => {
-    await utils.setAuthCookies(context, admin.accessToken);
-
-    // Date — the button carries the DISPLAYED day into a single-day from/to range.
     await openDetailPanel(page, `/photos/${thompsonId}`);
     await page.getByLabel(/^Filter by this date/).click();
     await page.waitForURL((url) => url.pathname === '/photos' && !!url.searchParams.get('from'));
+
     const dateUrl = new URL(page.url());
     expect(dateUrl.searchParams.get('from')).toBeTruthy();
     expect(dateUrl.searchParams.get('to'), 'a single clicked day is an inclusive [day, day] range').toBe(
@@ -748,21 +734,29 @@ test.describe('Asset viewer contextual filters — value affordances on /photos'
     await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
     await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
     await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
+  });
 
-    // Filename — the basename WITHOUT extension.
+  test('the filename row filters /photos to the basename and excludes the other asset', async ({ context, page }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+
     await openDetailPanel(page, `/photos/${thompsonId}`);
     await page.getByLabel(`Filter by this filename: ${THOMPSON_BASENAME}`, { exact: true }).click();
     await page.waitForURL(
       (url) => url.pathname === '/photos' && url.searchParams.get('filename') === THOMPSON_BASENAME,
     );
+
     await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
     await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
     await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
+  });
 
-    // Lens.
+  test('the lens row filters /photos to the lens model and excludes the other asset', async ({ context, page }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+
     await openDetailPanel(page, `/photos/${thompsonId}`);
     await page.getByLabel(`Filter by this lens: ${thompsonLens}`, { exact: true }).click();
     await page.waitForURL((url) => url.pathname === '/photos' && url.searchParams.get('lens') === thompsonLens);
+
     await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
     await expect(page.locator(`[data-asset-id="${thompsonId}"]`)).toBeVisible();
     await expect(page.locator(`[data-asset-id="${imgId}"]`)).toHaveCount(0);
@@ -998,10 +992,11 @@ test.describe('Asset viewer contextual filters — two-chip composition (AND) on
     await expect(page.locator(`[data-asset-id="${coloradoOnlyId}"]`)).toBeVisible();
     await expect(page.locator(`[data-asset-id="${taggedElsewhereId}"]`)).toHaveCount(0);
 
-    // Chip 2 — the tag, added ON TOP of the state filter: re-open the same asset carrying the state
-    // filter in the URL, then click its tag. The AND keeps ONLY the asset that has both.
-    const withState = new URL(page.url());
-    await openDetailPanel(page, `/photos/${bothId}${withState.search}`);
+    // Chip 2 — the tag, added ON TOP of the state filter: re-open bothId from the still-filtered grid
+    // (state is in the URL and bothId matches, asserted above) by clicking its thumbnail, then click
+    // its tag. Reopening via the grid thumbnail — not a fresh deep-link — keeps the panel stable. The
+    // AND keeps ONLY the asset that has both.
+    await reopenViaThumbnail(page, bothId);
     await page.getByLabel(`Filter by this tag: ${tagValue}`).click();
     await page.waitForURL(
       (url) =>
