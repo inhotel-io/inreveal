@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { lazyComponent } from '$lib/utils/lazy-component.svelte';
   import { goto } from '$app/navigation';
   import type { Action } from '$lib/components/asset-viewer/actions/action';
   import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
@@ -73,6 +74,10 @@
       // no default
     }
   };
+
+  // Mounting the viewer through `{#await}` leaves it permanently unreactive on reopen.
+  // See lazyComponent().
+  const LazyAssetViewer = lazyComponent(() => import('$lib/components/asset-viewer/AssetViewer.svelte'));
 </script>
 
 {#if sharedLink?.allowUpload || assets.length > 1}
@@ -140,8 +145,9 @@
   </header>
 {:else if assets.length === 1}
   {#await getAssetInfo({ ...authManager.params, id: assets[0].id }) then asset}
-    {#await import('$lib/components/asset-viewer/AssetViewer.svelte') then { default: AssetViewer }}
+    {#if LazyAssetViewer.current}
+      {@const AssetViewer = LazyAssetViewer.current}
       <AssetViewer cursor={{ current: asset }} onAction={handleAction} />
-    {/await}
+    {/if}
   {/await}
 {/if}
