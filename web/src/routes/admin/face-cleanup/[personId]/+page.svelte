@@ -313,7 +313,7 @@
 </script>
 
 <AdminPageLayout breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanup() }, { title: personName }]}>
-  <div class="mx-auto max-w-screen-xl p-6 pb-32">
+  <div class="mx-auto max-w-screen-xl p-6">
     <!-- Back link -->
     <a
       href={Route.faceCleanup()}
@@ -601,151 +601,157 @@
     {/if}
   </div>
 
-  <!-- Sticky dock: swaps between the outcome-tally summary and the bulk action bar (Model B mockup).
-       Sticky (not fixed) so it stays within the admin content region and never overlaps the sidebar — fixed
-       positioning spans the full viewport and would render on top of AdminPageLayout's sidebar nav. -->
-  {#if !loading && flaggedFaces.length > 0}
-    <div
-      class="sticky bottom-0 z-20 border-t border-gray-200 bg-white/90 py-3.5 backdrop-blur-md dark:border-gray-700 dark:bg-gray-900/90"
-      data-testid="dock"
-    >
-      <div class="mx-auto flex max-w-screen-xl flex-wrap items-center gap-3.5 px-6">
-        {#if vm.selectedCount === 0}
-          <!-- Summary state -->
-          <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="tally">
-            {#each ['owner', 'stay', 'lock', 'other', 'unknown', 'detach'] as FaceState[] as state (state)}
-              {@const count = vm.tally[state]}
-              <span
-                class={[
-                  'inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-bold dark:border-gray-700 dark:bg-gray-800',
-                  count === 0 ? 'opacity-40' : '',
-                ].join(' ')}
-              >
-                <Icon icon={STATE_ICON[state]} size="13" color={STATE_COLOR[state]} />
-                <span>{count}</span>
-                <span class="font-normal text-gray-500 dark:text-gray-400">
-                  {state === 'owner'
-                    ? $t('admin.face_cleanup_review_tally_owner', { values: { name: ownerName } })
-                    : $t(`admin.face_cleanup_review_tally_${state}`)}
+  <!-- Dock: swaps between the outcome-tally summary and the bulk action bar (Model B mockup). Rendered through
+       AdminPageLayout's `footer` slot, i.e. as a sibling of the scroll area rather than inside it. It used to be
+       `sticky bottom-0` within the content, which only pins while there is something to scroll: on a short review
+       (a handful of flagged faces) the page doesn't overflow, sticky is inert, and the bar came to rest wherever
+       the content happened to end — floating in the middle of the page. As a footer it is pinned at every content
+       length, the grid scrolls above it instead of under it, and it still never overlaps the sidebar (which is why
+       `fixed` was rejected). The content no longer needs `pb-32` to reserve space for it either. -->
+  {#snippet footer()}
+    {#if !loading && flaggedFaces.length > 0}
+      <div
+        class="shrink-0 border-t border-gray-200 bg-white py-3.5 dark:border-gray-700 dark:bg-gray-900"
+        data-testid="dock"
+      >
+        <div class="mx-auto flex max-w-screen-xl flex-wrap items-center gap-3.5 px-6">
+          {#if vm.selectedCount === 0}
+            <!-- Summary state -->
+            <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="tally">
+              {#each ['owner', 'stay', 'lock', 'other', 'unknown', 'detach'] as FaceState[] as state (state)}
+                {@const count = vm.tally[state]}
+                <span
+                  class={[
+                    'inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-bold dark:border-gray-700 dark:bg-gray-800',
+                    count === 0 ? 'opacity-40' : '',
+                  ].join(' ')}
+                >
+                  <Icon icon={STATE_ICON[state]} size="13" color={STATE_COLOR[state]} />
+                  <span>{count}</span>
+                  <span class="font-normal text-gray-500 dark:text-gray-400">
+                    {state === 'owner'
+                      ? $t('admin.face_cleanup_review_tally_owner', { values: { name: ownerName } })
+                      : $t(`admin.face_cleanup_review_tally_${state}`)}
+                  </span>
                 </span>
-              </span>
-            {/each}
-            {#if restSelected.size > 0}
-              <!-- Rest-of-cluster faces the admin added: part of the same Apply, so the dock must account for
+              {/each}
+              {#if restSelected.size > 0}
+                <!-- Rest-of-cluster faces the admin added: part of the same Apply, so the dock must account for
                    them too — otherwise the count lies about what the button is going to do. -->
-              <span
-                class="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
-                data-testid="tally-added"
-              >
-                <span>+{restSelected.size}</span>
-                <span class="font-normal">{$t('admin.face_cleanup_review_tally_added')}</span>
+                <span
+                  class="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
+                  data-testid="tally-added"
+                >
+                  <span>+{restSelected.size}</span>
+                  <span class="font-normal">{$t('admin.face_cleanup_review_tally_added')}</span>
+                </span>
+              {/if}
+              <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-600">
+                <Icon icon={mdiCheckBold} size="13" />
+                {$t('admin.face_cleanup_review_tally_all_set')}
               </span>
-            {/if}
-            <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-600">
-              <Icon icon={mdiCheckBold} size="13" />
-              {$t('admin.face_cleanup_review_tally_all_set')}
-            </span>
-          </div>
-          <Button color="primary" disabled={applying} onclick={handleApply} data-testid="apply-btn">
-            <Icon icon={mdiArrowRight} size="16" />
-            {restSelected.size > 0
-              ? $t('admin.face_cleanup_review_apply_label_added', {
-                  values: { count: vm.total, added: restSelected.size },
-                })
-              : $t('admin.face_cleanup_review_apply_label', { values: { count: vm.total } })}
-          </Button>
-        {:else}
-          <!-- Bulk-bar state — only the move-to-owner path is wired this slice (RF1/Slice 1). -->
-          <div
-            class="flex flex-1 flex-wrap items-center gap-2.5 rounded-xl bg-gray-900 px-3.5 py-2.5 text-white"
-            data-testid="bulk-bar"
-          >
-            <span class="text-sm font-bold whitespace-nowrap">
-              {vm.selectedCount}
-              {$t('admin.face_cleanup_review_bulk_selected_suffix')}
-            </span>
-            <span class="h-5 w-px bg-white/15"></span>
-            <button
-              type="button"
-              onclick={handleBulkOwner}
-              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+            </div>
+            <Button color="primary" disabled={applying} onclick={handleApply} data-testid="apply-btn">
+              <Icon icon={mdiArrowRight} size="16" />
+              {restSelected.size > 0
+                ? $t('admin.face_cleanup_review_apply_label_added', {
+                    values: { count: vm.total, added: restSelected.size },
+                  })
+                : $t('admin.face_cleanup_review_apply_label', { values: { count: vm.total } })}
+            </Button>
+          {:else}
+            <!-- Bulk-bar state — only the move-to-owner path is wired this slice (RF1/Slice 1). -->
+            <div
+              class="flex flex-1 flex-wrap items-center gap-2.5 rounded-xl bg-gray-900 px-3.5 py-2.5 text-white"
+              data-testid="bulk-bar"
             >
-              <Icon icon={STATE_ICON.owner} size="13" />
-              {$t('admin.face_cleanup_review_bulk_owner')}
-            </button>
-            <button
-              type="button"
-              onclick={handleBulkStay}
-              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-              data-testid="bulk-stay"
-            >
-              <Icon icon={STATE_ICON.stay} size="13" />
-              {$t('admin.face_cleanup_review_bulk_stay')}
-            </button>
-            <button
-              type="button"
-              onclick={handleBulkLock}
-              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-              data-testid="bulk-lock"
-            >
-              <Icon icon={STATE_ICON.lock} size="13" />
-              {$t('admin.face_cleanup_review_bulk_lock')}
-            </button>
-            <button
-              type="button"
-              onclick={handleBulkOther}
-              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-              data-testid="bulk-other"
-            >
-              <Icon icon={STATE_ICON.other} size="13" />
-              {$t('admin.face_cleanup_review_bulk_other')}
-            </button>
-            <!-- Sits next to "Move to…" because it is the same decision one step further: the admin knows the
+              <span class="text-sm font-bold whitespace-nowrap">
+                {vm.selectedCount}
+                {$t('admin.face_cleanup_review_bulk_selected_suffix')}
+              </span>
+              <span class="h-5 w-px bg-white/15"></span>
+              <button
+                type="button"
+                onclick={handleBulkOwner}
+                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+              >
+                <Icon icon={STATE_ICON.owner} size="13" />
+                {$t('admin.face_cleanup_review_bulk_owner')}
+              </button>
+              <button
+                type="button"
+                onclick={handleBulkStay}
+                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+                data-testid="bulk-stay"
+              >
+                <Icon icon={STATE_ICON.stay} size="13" />
+                {$t('admin.face_cleanup_review_bulk_stay')}
+              </button>
+              <button
+                type="button"
+                onclick={handleBulkLock}
+                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+                data-testid="bulk-lock"
+              >
+                <Icon icon={STATE_ICON.lock} size="13" />
+                {$t('admin.face_cleanup_review_bulk_lock')}
+              </button>
+              <button
+                type="button"
+                onclick={handleBulkOther}
+                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+                data-testid="bulk-other"
+              >
+                <Icon icon={STATE_ICON.other} size="13" />
+                {$t('admin.face_cleanup_review_bulk_other')}
+              </button>
+              <!-- Sits next to "Move to…" because it is the same decision one step further: the admin knows the
                  face does not belong here but has nobody to route it to. Without it the only honest-looking exits
                  are all wrong, and the review cannot be finished. -->
-            <button
-              type="button"
-              onclick={handleBulkUnknown}
-              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-              data-testid="bulk-unknown"
-            >
-              <Icon icon={STATE_ICON.unknown} size="13" />
-              {$t('admin.face_cleanup_review_bulk_unknown')}
-            </button>
-            <button
-              type="button"
-              onclick={handleBulkDetach}
-              class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-              data-testid="bulk-detach"
-            >
-              <Icon icon={STATE_ICON.detach} size="13" />
-              {$t('admin.face_cleanup_review_bulk_detach')}
-            </button>
-            <!-- Same modal as the banner's (i). A plain button rather than <IconButton>: the bar is a dark
+              <button
+                type="button"
+                onclick={handleBulkUnknown}
+                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+                data-testid="bulk-unknown"
+              >
+                <Icon icon={STATE_ICON.unknown} size="13" />
+                {$t('admin.face_cleanup_review_bulk_unknown')}
+              </button>
+              <button
+                type="button"
+                onclick={handleBulkDetach}
+                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+                data-testid="bulk-detach"
+              >
+                <Icon icon={STATE_ICON.detach} size="13" />
+                {$t('admin.face_cleanup_review_bulk_detach')}
+              </button>
+              <!-- Same modal as the banner's (i). A plain button rather than <IconButton>: the bar is a dark
                  surface, and the @immich/ui ghost variant styles for the page background, not for this one. -->
-            <button
-              type="button"
-              onclick={handleOpenHelp}
-              aria-label={$t('admin.face_cleanup_review_help_open')}
-              title={$t('admin.face_cleanup_review_help_open')}
-              class="inline-flex items-center rounded-md border border-white/15 bg-white/10 p-1.5 hover:bg-white/20"
-              data-testid="bulk-help"
-            >
-              <Icon icon={mdiInformationOutline} size="15" />
-            </button>
-            <button
-              type="button"
-              onclick={() => vm.clearSelection()}
-              class="ml-auto text-xs font-bold text-gray-300 hover:text-white"
-              data-testid="clear"
-            >
-              {$t('admin.face_cleanup_review_bulk_clear')}
-            </button>
-          </div>
-        {/if}
+              <button
+                type="button"
+                onclick={handleOpenHelp}
+                aria-label={$t('admin.face_cleanup_review_help_open')}
+                title={$t('admin.face_cleanup_review_help_open')}
+                class="inline-flex items-center rounded-md border border-white/15 bg-white/10 p-1.5 hover:bg-white/20"
+                data-testid="bulk-help"
+              >
+                <Icon icon={mdiInformationOutline} size="15" />
+              </button>
+              <button
+                type="button"
+                onclick={() => vm.clearSelection()}
+                class="ml-auto text-xs font-bold text-gray-300 hover:text-white"
+                data-testid="clear"
+              >
+                {$t('admin.face_cleanup_review_bulk_clear')}
+              </button>
+            </div>
+          {/if}
+        </div>
       </div>
-    </div>
-  {/if}
+    {/if}
+  {/snippet}
 
   {#if showEntireConfirm}
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" data-testid="entire-confirm">
