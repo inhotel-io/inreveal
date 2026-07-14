@@ -1385,15 +1385,27 @@ describe(AssetService.name, () => {
       expect(mocks.sharedSpace.emitAlbumAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1', 'asset-2']);
     });
 
-    it('removes from albums exactly once (lock-once) but still re-purges on a re-lock (M3 retry-convergence)', async () => {
+    it('re-locking an already-Locked asset still strips it from albums (M-1 retry-convergence)', async () => {
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set(['asset-1']));
       mocks.asset.getByIds.mockResolvedValue([{ id: 'asset-1', visibility: AssetVisibility.Locked } as any]);
       await sut.updateAll(authStub.admin, { ids: ['asset-1'], visibility: AssetVisibility.Locked });
-      // lock-once is unchanged: removeAssetsFromAll is gated on prior !== Locked, so a re-lock skips it.
-      expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled(); // already Locked → no-op
-      // M3: the purge itself is unconditional on the non-shareable next, so a re-lock still re-purges
-      // (idempotent tombstone) — this is what makes a retry after a failed emit converge.
+      // M-1: the album strip is now UNCONDITIONAL on Locked (no prior!==Locked "lock-once" gate). A crash
+      // between the visibility UPDATE and the strip left the album_asset rows with no tombstone, and the old
+      // gate then read prior=Locked on retry and skipped the strip forever (durable on-device leak + silent
+      // re-share on unlock). Re-running is idempotent (already-stripped → zero rows) and recovers a crashed
+      // first attempt (deletes surviving rows → the delete-audit trigger fires the tombstone).
+      expect(mocks.album.removeAssetsFromAll).toHaveBeenCalledWith(['asset-1']);
+      // The direct purge stays unconditional/idempotent on a non-shareable next (M3).
       expect(mocks.sharedSpace.emitDirectAssetVisibilityPurge).toHaveBeenCalledWith(['asset-1']);
+    });
+
+    it('does not strip albums on a Locked transition with an empty id list (M-1 empty-batch guard)', async () => {
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.asset.getByIds.mockResolvedValue([]);
+      // An empty ids array is API-reachable (PUT /assets {ids:[], visibility:locked}). removeAssetsFromAll
+      // has no empty guard and an empty `IN ()` is invalid SQL, so the strip must be length-gated.
+      await sut.updateAll(authStub.admin, { ids: [], visibility: AssetVisibility.Locked });
+      expect(mocks.album.removeAssetsFromAll).not.toHaveBeenCalled();
     });
   });
 

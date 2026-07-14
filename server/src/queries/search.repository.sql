@@ -52,6 +52,7 @@ where
     "asset"."ownerId" = any ($3::uuid[])
     or (
       "asset"."visibility" in ($4, $5)
+      and "asset"."deletedAt" is null
       and (
         exists (
           select
@@ -179,6 +180,7 @@ from
         "asset"."ownerId" = any ($1::uuid[])
         or (
           "asset"."visibility" in ($2, $3)
+          and "asset"."deletedAt" is null
           and (
             exists (
               select
@@ -278,6 +280,7 @@ drop as (
       "asset"."ownerId" = any ($1::uuid[])
       or (
         "asset"."visibility" in ($2, $3)
+        and "asset"."deletedAt" is null
         and (
           exists (
             select

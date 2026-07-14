@@ -1326,6 +1326,7 @@ where
   and "shared_space_asset"."updateId" > $5
   and "shared_space_asset"."spaceId" = $6
   and "asset"."visibility" in ($7, $8)
+  and "asset"."deletedAt" is null
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1377,6 +1378,7 @@ where
       "shared_space_member"."userId" = $6
   )
   and "asset"."visibility" in ($7, $8)
+  and "asset"."deletedAt" is null
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1470,6 +1472,7 @@ where
   and "shared_space_asset"."updateId" > $3
   and "shared_space_asset"."spaceId" = $4
   and "asset"."visibility" in ($5, $6)
+  and "asset"."deletedAt" is null
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1524,6 +1527,7 @@ where
       "shared_space_member"."userId" = $4
   )
   and "asset"."visibility" in ($5, $6)
+  and "asset"."deletedAt" is null
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1596,6 +1600,7 @@ where
   and "shared_space_asset"."updateId" > $3
   and "shared_space_asset"."spaceId" = $4
   and "asset"."visibility" in ($5, $6)
+  and "asset"."deletedAt" is null
 order by
   "shared_space_asset"."updateId" asc
 
@@ -1794,7 +1799,10 @@ where
   and "asset"."libraryId" = $6
   and (
     "asset"."ownerId" = $7
-    or "asset"."visibility" in ($8, $9)
+    or (
+      "asset"."visibility" in ($8, $9)
+      and "asset"."deletedAt" is null
+    )
   )
 order by
   "asset"."updateId" asc
@@ -1998,7 +2006,10 @@ where
   and "asset"."libraryId" = $4
   and (
     "asset"."ownerId" = $5
-    or "asset"."visibility" in ($6, $7)
+    or (
+      "asset"."visibility" in ($6, $7)
+      and "asset"."deletedAt" is null
+    )
   )
 order by
   "asset"."updateId" asc
@@ -2342,6 +2353,7 @@ where
   and "album_asset"."updateId" <= $3
   and "album_asset"."updateId" > $4
   and "asset"."visibility" in ($5, $6)
+  and "asset"."deletedAt" is null
 union
 select
   "album_space_asset"."assetId" as "assetId",
@@ -2367,6 +2379,7 @@ where
       "shared_space_album"."albumId" = "album_space_asset"."albumId"
       and "shared_space_album"."spaceId" = "album_space_asset"."spaceId"
   )
+  and "asset"."deletedAt" is null
 order by
   "updateId" asc
 
@@ -2604,6 +2617,7 @@ where
   and "album_asset"."updateId" <= $5
   and "album_asset"."updateId" > $6
   and "asset"."visibility" in ($7, $8)
+  and "asset"."deletedAt" is null
 union
 select
   "asset"."id",
@@ -2652,6 +2666,7 @@ where
       "shared_space_album"."albumId" = "album_space_asset"."albumId"
       and "shared_space_album"."spaceId" = "album_space_asset"."spaceId"
   )
+  and "asset"."deletedAt" is null
 order by
   "updateId" asc
 
@@ -2848,6 +2863,7 @@ where
   and "album_asset"."updateId" < $6
   and "album_asset"."updateId" > $7
   and "asset"."visibility" in ($8, $9)
+  and "asset"."deletedAt" is null
 union
 select
   "asset"."id",
@@ -2918,6 +2934,7 @@ where
       "shared_space_album"."albumId" = "album_space_asset"."albumId"
       and "shared_space_album"."spaceId" = "album_space_asset"."spaceId"
   )
+  and "asset"."deletedAt" is null
 order by
   "updateId" asc
 
@@ -2961,6 +2978,7 @@ where
   and "album_asset"."updateId" <= $3
   and "album_asset"."updateId" > $4
   and "asset"."visibility" in ($5, $6)
+  and "asset"."deletedAt" is null
 union
 select
   "asset_exif"."assetId",
@@ -3012,6 +3030,7 @@ where
       "shared_space_album"."albumId" = "album_space_asset"."albumId"
       and "shared_space_album"."spaceId" = "album_space_asset"."spaceId"
   )
+  and "asset"."deletedAt" is null
 order by
   "updateId" asc
 
@@ -3217,6 +3236,7 @@ where
   and "album_asset"."updateId" < $4
   and "album_asset"."updateId" > $5
   and "asset"."visibility" in ($6, $7)
+  and "asset"."deletedAt" is null
 union
 select
   "asset_exif"."assetId",
@@ -3290,5 +3310,6 @@ where
       "shared_space_album"."albumId" = "album_space_asset"."albumId"
       and "shared_space_album"."spaceId" = "album_space_asset"."spaceId"
   )
+  and "asset"."deletedAt" is null
 order by
   "updateId" asc

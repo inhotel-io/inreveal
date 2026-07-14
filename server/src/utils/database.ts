@@ -729,7 +729,13 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
           // browse / timeline gate) — Hidden and Locked are never surfaced for other members.
           eb.or([
             ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
-            spaceVisibilityGate(eb),
+            // Fork RBAC (H-1): the other-members branch must ALSO exclude trashed assets, mirroring
+            // albumSharedSpaceScope. Without this, a member (incl. a read-only Viewer) can pull another
+            // member's trashed asset by flipping withDeleted — directly or implicitly via
+            // trashedAfter/trashedBefore/isOffline (see :676) — because the terminal deletedAt filter
+            // (:850) is caller-skippable. The ownerId branch stays unfiltered so a caller keeps
+            // own/partner trash search.
+            eb.and([spaceVisibilityGate(eb), eb('asset.deletedAt', 'is', null)]),
           ]),
         ]),
       ),
@@ -743,6 +749,10 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
           // elevation is per-owner, Hidden/Locked never surface for other members).
           eb.and([
             spaceVisibilityGate(eb),
+            // Fork RBAC (H-1): not-trashed on the other-members branch too (the ownerId branch above is
+            // left unfiltered). Mirrors the spaceId arm and albumSharedSpaceScope; never rely on the
+            // caller-skippable terminal deletedAt filter (:850).
+            eb('asset.deletedAt', 'is', null),
             eb.or(
               spaceAssetPathBranches(eb, {
                 correlateAssetId: 'asset.id',
