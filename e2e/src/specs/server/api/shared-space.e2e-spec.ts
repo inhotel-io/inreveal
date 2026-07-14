@@ -181,7 +181,13 @@ describe('/shared-spaces', () => {
       // empty here and waitForQueueFinish would return immediately, leaving recentAssetIds empty.
       // Poll the post-condition instead.
       await expect
-        .poll(async () => (await utils.getAssetInfo(user3.accessToken, imageAsset.id)).thumbhash, { timeout: 30_000 })
+        .poll(
+          async () => {
+            const asset = await utils.getAssetInfo(user3.accessToken, imageAsset.id);
+            return asset.thumbhash;
+          },
+          { timeout: 30_000 },
+        )
         .not.toBeNull();
 
       const { body } = await request(app)
