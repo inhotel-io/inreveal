@@ -5,7 +5,7 @@
 **Origin:** the per-face resolution review page ships five terminal actions on the bulk bar — `→ Owner`,
 `Keep here`, `Confirm / lock`, `Move → person…`, `Not a face` — with no explanation of what any of them
 means or what it will do on apply. The distinctions that matter most are invisible: `Keep here` declines only
-*this* suspected owner (a later scan can re-flag the face toward someone else), which is the entire reason
+_this_ suspected owner (a later scan can re-flag the face toward someone else), which is the entire reason
 `Confirm / lock` exists; `Not a face` strips the identity link and regenerates the person's thumbnail if the
 detached crop was the avatar. An admin has no way to learn any of that from the UI.
 
@@ -26,7 +26,7 @@ One modal, two entry points, both opening it via `modalManager.show(...)`:
 2. An `(i)` `IconButton` on the **bulk bar**, in context with the five buttons it explains.
 
 The bulk bar only renders once at least one face is selected, so the banner entry point is the one a confused
-admin finds *before* touching anything; the bulk-bar entry point is the one they reach for mid-task. Both open
+admin finds _before_ touching anything; the bulk-bar entry point is the one they reach for mid-task. Both open
 the same component.
 
 Surface is `@immich/ui`'s `Modal` + `ModalBody` + `ModalFooter` (as `ServerAboutModal` does), not a hand-rolled
@@ -46,17 +46,17 @@ drift from its translated button.
 
 Copy is grounded in `resolveFaces` (`server/src/services/face-repair.service.ts`), not in what the labels imply:
 
-| Action | Means | On apply (verified against the service) |
-| --- | --- | --- |
-| `→ Owner` | Belongs to the suspected owner the scan found. The default for every flagged face. | Face leaves this person and joins the suspected owner; it won't come back, because it now sits with the person it resembles. |
-| `Keep here` | The face really does belong to this person; the scan got it wrong. | Face stays; a decline is written against **that face's own** suspected owner, so future scans stop proposing that move. A later scan suspecting a *different* person can still flag it — hence `Confirm / lock`. |
-| `Confirm / lock` | Like `Keep here` but permanent and owner-agnostic. For faces that genuinely don't resemble their owner: childhood photos, age gaps, costumes, heavy shadow. | Face is pinned; no future scan can flag it again regardless of who it comes to resemble. The lock survives the person being merged away or deleted (the consistency-hardening work in this same PR). Undoable from the Resolutions page. |
-| `Move → person…` | Send the face to a person you pick instead of the scan's suggestion. | Face moves to the chosen person. `Lock so it won't re-flag` in the picker also pins it there — needed for a deliberate override the scan will disagree with; without it the next scan can re-flag the face toward whoever it resembles. |
-| `Not a face` | The crop isn't a real face: a poster, statue, reflection, blurred smudge. | Face is unassigned from this person **and** its identity link is stripped, so it stops being proposed for anyone. The photo is untouched — only the detected face region is detached — and the person's thumbnail is regenerated if that crop was its avatar. |
+| Action           | Means                                                                                                                                                       | On apply (verified against the service)                                                                                                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `→ Owner`        | Belongs to the suspected owner the scan found. The default for every flagged face.                                                                          | Face leaves this person and joins the suspected owner; it won't come back, because it now sits with the person it resembles.                                                                                                                                  |
+| `Keep here`      | The face really does belong to this person; the scan got it wrong.                                                                                          | Face stays; a decline is written against **that face's own** suspected owner, so future scans stop proposing that move. A later scan suspecting a _different_ person can still flag it — hence `Confirm / lock`.                                              |
+| `Confirm / lock` | Like `Keep here` but permanent and owner-agnostic. For faces that genuinely don't resemble their owner: childhood photos, age gaps, costumes, heavy shadow. | Face is pinned; no future scan can flag it again regardless of who it comes to resemble. The lock survives the person being merged away or deleted (the consistency-hardening work in this same PR). Undoable from the Resolutions page.                      |
+| `Move → person…` | Send the face to a person you pick instead of the scan's suggestion.                                                                                        | Face moves to the chosen person. `Lock so it won't re-flag` in the picker also pins it there — needed for a deliberate override the scan will disagree with; without it the next scan can re-flag the face toward whoever it resembles.                       |
+| `Not a face`     | The crop isn't a real face: a poster, statue, reflection, blurred smudge.                                                                                   | Face is unassigned from this person **and** its identity link is stripped, so it stops being proposed for anyone. The photo is untouched — only the detected face region is detached — and the person's thumbnail is regenerated if that crop was its avatar. |
 
-Framing lines: an intro (*nothing changes until you press Apply; every flagged face ends in one of these five
-states, then this person leaves the queue for good*) and a footer (*declines and locks are undoable from the
-Resolutions page; if moving or detaching leaves an unnamed person with no faces, that empty person is removed*).
+Framing lines: an intro (_nothing changes until you press Apply; every flagged face ends in one of these five
+states, then this person leaves the queue for good_) and a footer (_declines and locks are undoable from the
+Resolutions page; if moving or detaching leaves an unnamed person with no faces, that empty person is removed_).
 
 ## 3. i18n
 
@@ -67,7 +67,7 @@ to English and are filled by Weblate:
 - `_title`, `_intro`, `_footer`
 - `_owner_body` / `_owner_effect`, and the same `_body` / `_effect` pair for `_stay`, `_lock`, `_other`, `_detach`
 
-Splitting *means* and *effect* into separate keys keeps each translation unit short. The Close button reuses the
+Splitting _means_ and _effect_ into separate keys keeps each translation unit short. The Close button reuses the
 existing global `close` key.
 
 ## 4. Code

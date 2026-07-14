@@ -101,9 +101,9 @@ M2, M3, M4** + a `mergePersonProfile` medium test.
 - [ ] **Step 1 — Failing medium M1/M2 (lock survives delete/merge).** In a new medium spec
       `server/test/medium/specs/services/face-repair.merge-consistency.spec.ts` (harness per Reference facts,
       `real: [FaceRepairLockRepository, FaceRepairDeclineRepository, PersonRepository, FaceRepairRepository,
-  ...]`): seed owner P, a person Q, an `asset_face` f1 on P (ML/visible), and a `face_repair_lock(f1,
-  personId=P)`. **M1:** `personRepository.delete([P])` → assert the lock row still exists with `personId IS
-  NULL`, and `faceRepairLockRepository.getLockedFaceIds()` contains f1. **M2:** (fresh fixture) seed a lock
+...]`): seed owner P, a person Q, an `asset_face` f1 on P (ML/visible), and a `face_repair_lock(f1,
+personId=P)`. **M1:** `personRepository.delete([P])` → assert the lock row still exists with `personId IS
+NULL`, and `faceRepairLockRepository.getLockedFaceIds()` contains f1. **M2:** (fresh fixture) seed a lock
       on P, `personRepository.mergePersonProfile({ sourcePersonId: P, targetPersonId: P2 })` → assert the lock
       row exists with `personId = P2` and `getLockedFaceIds()` contains f1. Run
       `npx vitest run --config test/vitest.config.medium.mjs face-repair.merge-consistency` → **FAIL** (M1: row
@@ -150,9 +150,9 @@ M2, M3, M4** + a `mergePersonProfile` medium test.
       `asset_face` f1 on person R, and a `face_repair_decline(type='face', assetFaceId=f1, suspectedOwnerId=Q)`.
       **M3:** `mergePersonProfile({ sourcePersonId: Q, targetPersonId: Q2 })` → assert the decline row now has
       `suspectedOwnerId = Q2`, and `faceRepairDeclineRepository.getDeclineMaps({ assetFaceIds: [f1] })
-  .declinedFaceOwners.get(f1)` contains `Q2`. **M4:** (fresh fixture) seed **both** `(f1, Q)` and `(f1, Q2)`
+.declinedFaceOwners.get(f1)` contains `Q2`. **M4:** (fresh fixture) seed **both** `(f1, Q)` and `(f1, Q2)`
       declines; merge Q into Q2 → assert exactly **one** `(f1, Q2)` row remains (no unique violation) and `(f1,
-  Q)` is gone. Run → **FAIL** (current CASCADE drops the `(f1, Q)` row on Q's delete).
+Q)` is gone. Run → **FAIL** (current CASCADE drops the `(f1, Q)` row on Q's delete).
 - [ ] **Step 5 — `mergePersonProfile` re-points the decline (conflict-safe).** Before the source delete, on
       the same `db` handle, dedup-on-conflict:
 
@@ -227,7 +227,7 @@ it. **Covers** req 4; edge E11. Tests **M9, C2, P2**.
   person.) Run Step 1 → **PASS**.
 
 - [ ] **Step 3 — Failing controller C2.** In `face-repair-admin.controller.spec.ts`, in the `POST
-  /admin/face-repair/decline` describe block, add a test that a persons-payload dismiss delegates to
+/admin/face-repair/decline` describe block, add a test that a persons-payload dismiss delegates to
       `service.createDeclines` (the service-level drain is covered by M9; the controller test asserts
       delegation with the persons payload). Run → **FAIL** if asserting new behavior, else confirm green.
 - [ ] **Step 4 — Failing web P2 + wire dashboard.** In `web/.../face-cleanup/page.spec.ts`: after Dismiss
@@ -256,14 +256,14 @@ it. **Covers** req 4; edge E11. Tests **M9, C2, P2**.
 
 - [ ] **Step 1 — Failing medium M5/M8 (move-and-lock; only moved faces).** In `face-repair.resolve.spec.ts`:
       **M5** — `resolveFaces({ personId, moveToPerson: [{ destinationPersonId: dest, faceIds: [f1], lock: true
-  }] }, admin)`: assert `asset_face.personId(f1) = dest`, a `face_repair_lock(f1, personId=dest)` row exists,
+}] }, admin)`: assert `asset_face.personId(f1) = dest`, a `face_repair_lock(f1, personId=dest)` row exists,
       response `locked >= 1`, and re-issuing the identical call inserts **no** second lock row (E13). **M8** —
       a `lock: true` group with `[f1, fGone]` where `fGone` moved off `personId` before the call: assert f1 is
       moved+locked but `fGone` is **not** locked (no lock row for `fGone`). Run → **FAIL** (`lock` unknown /
       no locks written).
 - [ ] **Step 2 — DTO `lock` flag.** In `face-repair.dto.ts`, change `MoveGroupSchema` to
       `z.object({ destinationPersonId: z.uuidv4(), faceIds: z.array(z.uuidv4()).min(1), lock:
-  z.boolean().default(false) })`. Add a DTO validation test (accepts `lock:true/false`, defaults false;
+z.boolean().default(false) })`. Add a DTO validation test (accepts `lock:true/false`, defaults false;
       rejects non-boolean `lock` → 400). Run the DTO spec → **PASS**.
 - [ ] **Step 3 — `executeRepair` returns moved ids.** Change the `RepairExecution` interface (~line 87) to
       `{ moved: number; skipped: number; movedFaceIds: string[] }`. In `executeRepair`, accumulate the per-route
@@ -298,7 +298,7 @@ it. **Covers** req 4; edge E11. Tests **M9, C2, P2**.
       re-run scan does not re-flag f1. Run → **FAIL** then implement any gaps → **PASS** (M7/M12 should pass
       against Steps 4 + Slice 1; M10 exercises the existing resolutions-remove path).
 - [ ] **Step 6 — Regen SDK.** `cd server && pnpm build && mise run //server:sync-open-api && mise run
-  //:open-api-typescript && mise run //:open-api-dart`. Verify `lock` appears on the resolve DTO in
+//:open-api-typescript && mise run //:open-api-dart`. Verify `lock` appears on the resolve DTO in
       `packages/sdk/src/fetch-client.ts` and `mobile/openapi/**` regenerates cleanly (keeps the OpenAPI Clients
       CI check green). Commit server + SDK: `feat(face-cleanup): move-and-lock (server + SDK)`.
 - [ ] **Step 7 — Failing web W1/W2 + PersonPicker toggle (P1).** In `review.spec.ts`/`PersonPicker.spec.ts`:
@@ -366,8 +366,8 @@ E12. Tests **U1, M11, X1, X2** + the matrix-completeness gate.
       stack is readily available, else rely on CI. Run → written + compiling (CI validates Playwright).
 - [ ] **Step 4 — i18n + full gate.** Add any missing `admin.face_cleanup_*` keys (the move-lock checkbox
       label) to `i18n/en.json`. Full gate: `cd server && pnpm check && pnpm lint && pnpm test -- --run &&
-  npx vitest run --config test/vitest.config.medium.mjs face-repair`; `cd web && pnpm check:typescript &&
-  pnpm check:svelte && pnpm lint && pnpm test`; `cd e2e && pnpm check && pnpm lint`. Fix any red. Commit:
+npx vitest run --config test/vitest.config.medium.mjs face-repair`; `cd web && pnpm check:typescript &&
+pnpm check:svelte && pnpm lint && pnpm test`; `cd e2e && pnpm check && pnpm lint`. Fix any red. Commit:
       `test(face-cleanup): consistency capstone e2e + i18n + gate`.
 
 ---

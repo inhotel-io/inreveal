@@ -45,13 +45,13 @@ across refetches. And a person **drains from the scan** once reviewed or dismiss
 
 ## 3. States
 
-| Condition | Rendering |
-| --- | --- |
-| No scan yet / scan found nothing | Not rendered — the existing empty states already speak for themselves |
-| `reviewFirstTotal > 0`, some unopened | ① active, showing `opened of total` |
-| every review-first opened (or none exist) | ① collapses to a green ✓ done line |
-| `confidentTotal === 0` | ② dimmed, "none in this scan" — nothing was auto-selected |
-| `selectedCount === 0` | ③ dimmed — there is nothing to commit |
+| Condition                                 | Rendering                                                             |
+| ----------------------------------------- | --------------------------------------------------------------------- |
+| No scan yet / scan found nothing          | Not rendered — the existing empty states already speak for themselves |
+| `reviewFirstTotal > 0`, some unopened     | ① active, showing `opened of total`                                   |
+| every review-first opened (or none exist) | ① collapses to a green ✓ done line                                    |
+| `confidentTotal === 0`                    | ② dimmed, "none in this scan" — nothing was auto-selected             |
+| `selectedCount === 0`                     | ③ dimmed — there is nothing to commit                                 |
 
 Step ①'s button flips the **existing** filter chip to `review-first`. It is a shortcut into machinery that is
 already there, not a new mechanism.
