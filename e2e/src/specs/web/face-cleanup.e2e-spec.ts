@@ -1,5 +1,6 @@
 /**
- * Face Cleanup admin page — smoke + decline/undo + full-resolution flow (X1/X2) tests.
+ * Face Cleanup admin page — smoke + decline/undo + full-resolution flow (X1/X2) + temporal-consistency
+ * hardening (Consistency X1/X2) tests.
  *
  * Scope: the dashboard/empty-state/decline smoke tests below are a reduced fallback — a real face-repair
  * SCAN JOB requires live CLIP embeddings, which are unavailable in this ML-disabled e2e stack
@@ -23,11 +24,21 @@
  *   6. X2 — Resolutions page: undoing a lock re-enables flagging (re-checked against the same persisted scan
  *      snapshot, which is the same mechanism a subsequent scan run applies — see the test body for the exact
  *      scope this covers vs. the medium/component tests).
+ *   7. Consistency X1/X2 (temporal-consistency hardening design §7.6, distinct from the X1/X2 above, which
+ *      predate and cover the full-resolution feature) — see the test bodies for what each proves and the
+ *      "re-scan" proxy technique both use (a real, live-embeddings scan job isn't available in this
+ *      ML-disabled stack, same constraint as X1/X2 above).
  *
  * The tests follow the proven `rebase-smoke-pages` canary pattern (admin-page-header landmark,
  * `.first()`, explicit timeout).
  */
-import { declineFaceRepair, getFaceRepairPersonFaces, resolveFaces, type LoginResponseDto } from '@immich/sdk';
+import {
+  declineFaceRepair,
+  getFaceRepairPersonFaces,
+  mergePerson,
+  resolveFaces,
+  type LoginResponseDto,
+} from '@immich/sdk';
 import { expect, test } from '@playwright/test';
 import { asBearerAuth, utils } from 'src/utils';
 
@@ -39,8 +50,15 @@ type PgClient = Awaited<ReturnType<typeof utils.connectDatabase>>;
 // embedding) resolve the seeded faces. Same value the server's own medium tests use.
 const EMBEDDING = '[' + Array.from({ length: 512 }, () => 1).join(',') + ']';
 
+// Idempotent: the consistency specs seed a SECOND flagged scan over the same faces (to simulate a later
+// re-scan), so re-inserting a face's embedding must not collide on `face_search`'s primary key. The embedding
+// is identical on every seed, so DO NOTHING is the correct no-op.
 const seedFaceSearch = (db: PgClient, faceId: string) =>
-  db.query(`INSERT INTO "face_search" ("faceId", "embedding") VALUES ($1, $2::vector)`, [faceId, EMBEDDING]);
+  db.query(
+    `INSERT INTO "face_search" ("faceId", "embedding") VALUES ($1, $2::vector)
+     ON CONFLICT ("faceId") DO NOTHING`,
+    [faceId, EMBEDDING],
+  );
 
 /**
  * Seeds a completed face-repair scan flagging every face in `faceIds` (already created via
@@ -218,13 +236,14 @@ test.describe.serial('Face Cleanup', () => {
     const faceStay = await utils.createFace({ assetId: asset.id, personId: source.id });
     const faceLock = await utils.createFace({ assetId: asset.id, personId: source.id });
     const faceOther = await utils.createFace({ assetId: asset.id, personId: source.id });
+    const faceUnknown = await utils.createFace({ assetId: asset.id, personId: source.id });
     const faceDetach = await utils.createFace({ assetId: asset.id, personId: source.id });
 
     await seedFlaggedScan(db, {
       ownerUserId: admin.userId,
       personId: source.id,
       suspectedOwnerId: owner.id,
-      faceIds: [faceOwner, faceStay, faceLock, faceOther, faceDetach],
+      faceIds: [faceOwner, faceStay, faceLock, faceOther, faceUnknown, faceDetach],
     });
 
     // Confirm the seeded person shows up on the dashboard before it's resolved.
@@ -234,7 +253,7 @@ test.describe.serial('Face Cleanup', () => {
 
     await page.goto(`/admin/face-cleanup/${source.id}`);
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(5, { timeout: 15_000 });
+    await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(6, { timeout: 15_000 });
 
     const tile = (faceId: string) => page.locator(`[data-testid="face-tile"][data-faceid="${faceId}"]`);
 
@@ -251,6 +270,11 @@ test.describe.serial('Face Cleanup', () => {
     await expect(page.locator('[data-testid="person-picker"]')).toBeVisible({ timeout: 10_000 });
     await page.locator(`[data-testid="person-picker-row-${other.id}"]`).click();
 
+    // A real face of a real person the admin cannot name — parked in a cluster of its own rather than forced
+    // onto the suspected owner.
+    await tile(faceUnknown).click();
+    await page.locator('[data-testid="bulk-unknown"]').click();
+
     await tile(faceDetach).click();
     await page.locator('[data-testid="bulk-detach"]').click();
 
@@ -259,11 +283,16 @@ test.describe.serial('Face Cleanup', () => {
     await expect(tile(faceStay)).toHaveAttribute('data-state', 'stay');
     await expect(tile(faceLock)).toHaveAttribute('data-state', 'lock');
     await expect(tile(faceOther)).toHaveAttribute('data-state', 'other');
+    await expect(tile(faceUnknown)).toHaveAttribute('data-state', 'unknown');
     await expect(tile(faceDetach)).toHaveAttribute('data-state', 'detach');
+
+    // This Apply discards a face ("not a face" is irreversible), so it must be confirmed before anything is sent.
+    await page.locator('[data-testid="apply-btn"]').click();
+    await expect(page.locator('[data-testid="detach-confirm"]')).toBeVisible({ timeout: 10_000 });
 
     const [resolveRequest] = await Promise.all([
       page.waitForRequest((req) => req.url().includes('/admin/face-repair/resolve') && req.method() === 'POST'),
-      page.locator('[data-testid="apply-btn"]').click(),
+      page.locator('[data-testid="detach-confirm-cta"]').click(),
     ]);
 
     const payload = resolveRequest.postDataJSON() as {
@@ -272,11 +301,13 @@ test.describe.serial('Face Cleanup', () => {
       stay: string[];
       lock: string[];
       detach: string[];
+      unknown: string[];
     };
     expect(payload.personId).toBe(source.id);
     expect(payload.stay).toEqual([faceStay]);
     expect(payload.lock).toEqual([faceLock]);
     expect(payload.detach).toEqual([faceDetach]);
+    expect(payload.unknown).toEqual([faceUnknown]);
     const moveGroups = new Map(payload.moveToPerson.map((group) => [group.destinationPersonId, group.faceIds]));
     expect(moveGroups.get(owner.id)).toEqual([faceOwner]);
     expect(moveGroups.get(other.id)).toEqual([faceOther]);
@@ -285,6 +316,63 @@ test.describe.serial('Face Cleanup', () => {
     await page.waitForURL('**/admin/face-cleanup', { timeout: 15_000 });
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(sourceName)).toHaveCount(0);
+  });
+
+  /**
+   * The action dock stays pinned to the bottom even when the review is short.
+   *
+   * It used to be `sticky bottom-0` inside the scrolled content. Sticky only pins while its containing block
+   * still extends below it — so on a review with a handful of faces the page never overflowed, sticky was inert,
+   * and the bar came to rest wherever the content happened to end: adrift in the middle of the page (reported by
+   * a user). It now renders through AdminPageLayout's `footer` slot, OUTSIDE the scroll area.
+   *
+   * This can only be caught here. The AdminPageLayout test stub renders `children` and `footer` into the same
+   * element, so putting the dock back inside the scrolled content would keep every component test green while
+   * reintroducing exactly this bug.
+   */
+  test('the action dock stays pinned to the bottom of the viewport on a short review', async ({ context, page }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    const db = await utils.connectDatabase();
+
+    const source = await utils.createPerson(admin.accessToken, { name: 'Dock Short Person' });
+    const owner = await utils.createPerson(admin.accessToken, { name: 'Dock Owner Person' });
+    const asset = await utils.createAsset(admin.accessToken);
+    const face = await utils.createFace({ assetId: asset.id, personId: source.id });
+
+    // ONE flagged face: nowhere near enough content to fill the page, which is precisely the case that floated.
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [face],
+    });
+
+    await page.goto(`/admin/face-cleanup/${source.id}`);
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(1, { timeout: 15_000 });
+
+    const dock = page.locator('[data-testid="dock"]');
+    await expect(dock).toBeVisible();
+
+    const box = await dock.boundingBox();
+    const grid = await page.locator('[data-testid="flagged-grid"]').boundingBox();
+    const viewport = page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(grid).not.toBeNull();
+    expect(viewport).not.toBeNull();
+
+    // THE assertion: the dock is flush with the bottom of the screen. Being below the content is not enough —
+    // the floating dock was below the content too, just adrift, with dead space underneath. Distance to the
+    // bottom is the only thing that separates the two.
+    //
+    // Not pixel-exact: the app shell insets its content region by a few pixels (shared by every admin page,
+    // unrelated to this dock), so a fixed dock measures ~8px short of the viewport. The bug measured ~124px
+    // short. A 16px tolerance sits an order of magnitude away from the failure, so it cannot let it through.
+    const SHELL_INSET_TOLERANCE = 16;
+    expect(box!.y + box!.height).toBeGreaterThanOrEqual(viewport!.height - SHELL_INSET_TOLERANCE);
+
+    // Sanity: it really is the dock below the review grid, not some other element that happens to hug the bottom.
+    expect(box!.y).toBeGreaterThan(grid!.y + grid!.height);
   });
 
   /**
@@ -346,5 +434,173 @@ test.describe.serial('Face Cleanup', () => {
       { headers: asBearerAuth(admin.accessToken) },
     );
     expect(afterUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(true);
+  });
+
+  /**
+   * Consistency X1 (temporal-consistency hardening design §7.6 — distinct from X1 above, which predates and
+   * covers the full-resolution feature): a deliberate "Move → chosen person" with the picker's lock toggle ON
+   * durably locks the moved face so it is never re-flagged — without this, a plain move writes no persisted
+   * marker at all (design §1, gap 3).
+   *
+   * "Re-scan" proxy: this ML-disabled stack can't run a real, live-embeddings scan job (see the file header),
+   * so durability is proven the same way the existing X2 test above proves it for a plain lock — by seeding a
+   * FRESH completed scan snapshot that (as a later real scan would) proposes the SAME face flagged again, then
+   * reading it back through `getFaceRepairPersonFaces`. That endpoint runs the exact seam a real scan's
+   * `buildRepairPlan` now also runs (a scoped `getDeclineMaps` read + `applyDeclineFilters`, Slice 4) — since
+   * the lock is owner-agnostic, this proves the face would be dropped by a later scan regardless of who it
+   * re-suspects.
+   */
+  test('Consistency X1: a move-and-lock via the picker survives a later re-scan', async ({ context, page }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    const db = await utils.connectDatabase();
+
+    const sourceName = 'CX1 Flagged Person';
+    const ownerName = 'CX1 Owner Person';
+    const otherName = 'CX1 Chosen Person';
+
+    const source = await utils.createPerson(admin.accessToken, { name: sourceName });
+    const owner = await utils.createPerson(admin.accessToken, { name: ownerName });
+    const other = await utils.createPerson(admin.accessToken, { name: otherName });
+
+    const asset = await utils.createAsset(admin.accessToken);
+    const faceId = await utils.createFace({ assetId: asset.id, personId: source.id });
+
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceId],
+    });
+
+    await page.goto(`/admin/face-cleanup/${source.id}`);
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(1, { timeout: 15_000 });
+
+    await page.locator('[data-testid="face-tile"]').click();
+    await page.locator('[data-testid="bulk-other"]').click();
+    await expect(page.locator('[data-testid="person-picker"]')).toBeVisible({ timeout: 10_000 });
+
+    // The "Lock so it won't re-flag" checkbox defaults to checked (P1) — assert it explicitly so this test
+    // documents driving the picker with the lock toggle ON, per design §7.6 X1.
+    await expect(page.locator('[data-testid="person-picker-lock-toggle"] button[role="checkbox"]')).toBeChecked();
+    await page.locator(`[data-testid="person-picker-row-${other.id}"]`).click();
+
+    const [resolveRequest] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes('/admin/face-repair/resolve') && req.method() === 'POST'),
+      page.locator('[data-testid="apply-btn"]').click(),
+    ]);
+    const payload = resolveRequest.postDataJSON() as {
+      moveToPerson: { destinationPersonId: string; faceIds: string[]; lock: boolean }[];
+    };
+    const chosenGroup = payload.moveToPerson.find((g) => g.destinationPersonId === other.id);
+    expect(chosenGroup?.faceIds).toEqual([faceId]);
+    expect(chosenGroup?.lock).toBe(true);
+
+    await page.waitForURL('**/admin/face-cleanup', { timeout: 15_000 });
+
+    // The face actually moved to `other`, and a lock row persists for it there.
+    const { rows: faceRows } = await db.query(`SELECT "personId" FROM "asset_face" WHERE id = $1`, [faceId]);
+    expect(faceRows[0].personId).toBe(other.id);
+    const { rows: lockRows } = await db.query(`SELECT "personId" FROM "face_repair_lock" WHERE "assetFaceId" = $1`, [
+      faceId,
+    ]);
+    expect(lockRows).toHaveLength(1);
+    expect(lockRows[0].personId).toBe(other.id);
+
+    // Simulate a LATER real scan: it would re-derive faceId as a candidate now living on `other` and, absent
+    // the lock, propose it flagged toward `owner` again (the age-gap/re-suspect case) — seed that snapshot
+    // directly (same technique `seedFlaggedScan` uses throughout this file).
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: other.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceId],
+    });
+
+    const afterRescan = await getFaceRepairPersonFaces(
+      { personId: other.id },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    expect(afterRescan.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
+  });
+
+  /**
+   * Consistency X2 (temporal-consistency hardening design §7.6 — distinct from X2 above, which predates and
+   * covers the full-resolution feature): locking a face, then merging its person into a different one via the
+   * real merge API, must not lose the lock — before Slice 1 of this design, `face_repair_lock.personId` was a
+   * `CASCADE`-deleting FK, so merging the locked-on person away silently destroyed the lock and re-exposed the
+   * face to the next scan (design §1, gap 1 — "the most serious hole ... in the strongest guarantee").
+   *
+   * Uses the same "re-scan" proxy as Consistency X1 above (see its docstring) since a real, live-embeddings
+   * scan job isn't available in this ML-disabled stack.
+   */
+  test('Consistency X2: a lock survives a person merge and the face is still not re-flagged on a later scan', async ({
+    context,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    const db = await utils.connectDatabase();
+
+    const sourceName = 'CX2 Locked Person';
+    const ownerName = 'CX2 Owner Person';
+    const targetName = 'CX2 Merge Target Person';
+
+    const source = await utils.createPerson(admin.accessToken, { name: sourceName });
+    const owner = await utils.createPerson(admin.accessToken, { name: ownerName });
+    const mergeTarget = await utils.createPerson(admin.accessToken, { name: targetName });
+    const asset = await utils.createAsset(admin.accessToken);
+    const faceId = await utils.createFace({ assetId: asset.id, personId: source.id });
+
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceId],
+    });
+
+    // Lock the face on `source` through the real resolve endpoint (a plain "Confirm / lock", not a move —
+    // the interactive picker-driven move-and-lock route is Consistency X1's concern).
+    await resolveFaces(
+      { faceRepairResolveRequestDto: { personId: source.id, lock: [faceId] } },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    const { rows: lockRowsBefore } = await db.query(
+      `SELECT "personId" FROM "face_repair_lock" WHERE "assetFaceId" = $1`,
+      [faceId],
+    );
+    expect(lockRowsBefore).toHaveLength(1);
+    expect(lockRowsBefore[0].personId).toBe(source.id);
+
+    // Merge `source` into `mergeTarget` via the real API — this re-points the lock row (Slice 1 fix)
+    // instead of cascade-deleting it (the pre-Slice-1 gap this test guards against).
+    await mergePerson(
+      { id: mergeTarget.id, mergePersonDto: { ids: [source.id] } },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+
+    const { rows: lockRowsAfter } = await db.query(
+      `SELECT "personId" FROM "face_repair_lock" WHERE "assetFaceId" = $1`,
+      [faceId],
+    );
+    expect(lockRowsAfter).toHaveLength(1);
+    expect(lockRowsAfter[0].personId).toBe(mergeTarget.id);
+
+    // The merge itself re-points the face to the target too.
+    const { rows: faceRows } = await db.query(`SELECT "personId" FROM "asset_face" WHERE id = $1`, [faceId]);
+    expect(faceRows[0].personId).toBe(mergeTarget.id);
+
+    // Simulate a LATER real scan re-suspecting the same face (now on `mergeTarget`) toward some owner: the
+    // lock is owner-agnostic, so it must still be dropped regardless of who is proposed.
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: mergeTarget.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceId],
+    });
+
+    const afterRescan = await getFaceRepairPersonFaces(
+      { personId: mergeTarget.id },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    expect(afterRescan.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
   });
 });
