@@ -289,21 +289,13 @@ constants below are the values referenced by the tests; treat them as the spec's
 
 ## 6. Test plan (TDD / BDD)
 
-### 6.0 TDD build order (red → green → refactor per unit)
+### 6.0 TDD discipline (red → green → refactor per unit)
 
-Build bottom-up so each unit is real before its consumer is tested. For **every** unit:
-write the spec, run it and watch it **fail for the right reason**, implement the minimum to
-pass, then refactor with the test green.
-
-1. `curation.util` (pure — no deps) → `curation.util.spec.ts`
-2. `season.util` (pure) → `season.util.spec.ts`
-3. `getMemoryAssetsForPeriod` + `MemoryPeriodAsset` → medium DB test; add the
-   `asset.repository.mock.ts` entry so downstream mocks compile
-4. the four rules (each mocks only `getMemoryAssetsForPeriod`) → four `.rule.spec.ts`
-5. `memory-rule.interface.ts` field + `memory.service.ts` window → extend
-   `memory.service.spec.ts`
-6. registry + metadata → extend the two existing specs
-7. web `MemoriesSettings.svelte` + `en.json` labels (no logic; verified via `check:svelte`)
+The work is carved into ordered, independently-shippable slices in **§9** (the plan
+`/impl-loop` executes); build bottom-up in that order so each unit is real before its
+consumer. For **every** unit within a slice: write the spec, run it and watch it **fail for
+the right reason**, implement the minimum to pass, refactor with the test green. Never let a
+test pass on its first run — that means it isn't exercising the new behavior.
 
 ### Conventions (match the existing rule specs)
 
@@ -498,3 +490,125 @@ persisted `showAt`/`hideAt`:
       row count a problem — never a flat total cap (§4).
 - [ ] Later tier: keep `MemoryRuleCandidate` shaped so an embedding-backed rule (#12) needs
       no engine change.
+
+## 9. Implementation slices (for `/impl-loop`)
+
+Each slice below is independently implementable and leaves the tree **green and shippable**.
+Foundations (Slices 1–3) land first because every rule depends on them; then one rule per
+slice, each wired end-to-end (rule → registry → metadata → admin toggle → i18n) so enabling
+it produces a working, user-visible memory type. Rules are ordered by increasing complexity
+so the first sets the pattern.
+
+**TDD is mandatory in every slice:** write the spec, run it and confirm it **fails red for
+the intended reason** (module/method/key absent), implement the minimum to pass, confirm
+**green**, then refactor with tests green. A test that passes on its first run is a red flag
+— it isn't testing the new behavior. Assert **exact** `score` values (per the existing
+`birthday.rule.spec` convention). Detail for each item lives in the referenced §sections;
+this section defines scope, order, dependencies, and done-criteria only.
+
+### Slice 1 — Curation & season utilities
+
+- **Deps:** none (pure functions).
+- **Build:** `curation.util.ts` (§5.5) and `season.util.ts` (§5.4 mapping) + their specs
+  (§6.2, §6.3).
+- **Red→green:** util specs fail (no module) → implement → green.
+- **Verify:** `cd server && pnpm test -- --run src/services/memory-rules/curation.util.spec.ts src/services/memory-rules/season.util.spec.ts`; `make check-server`.
+- **Done:** both util specs green; exported signatures match §5.4/§5.5.
+- **Commit:** `feat(memories): curation + season utilities for memory rules`.
+
+### Slice 2 — `getMemoryAssetsForPeriod` query
+
+- **Deps:** none. Enables every rule.
+- **Build:** `MemoryPeriodAsset` + `getMemoryAssetsForPeriod` in `asset.repository.ts` (§4);
+  add `getMemoryAssetsForPeriod: vitest.fn()` to `asset.repository.mock.ts`; medium test
+  `describe('getMemoryAssetsForPeriod')` in `test/medium/specs/repositories/asset.repository.spec.ts` (§6.5).
+- **Red→green:** medium test fails (no method) → implement → green.
+- **Verify:** `pnpm test:medium` (Docker DB up) for the new describe; `make sql` (DB up) to
+  snapshot the query — **never without a running DB**; commit the snapshot; `make check-server`.
+- **Done:** medium test green; mock updated; SQL snapshot committed.
+- **Commit:** `feat(memories): getMemoryAssetsForPeriod repository query`.
+
+### Slice 3 — Multi-day visibility window
+
+- **Deps:** none (engine change; independent of Slices 1–2).
+- **Build:** `visibleForDays?: number` on `MemoryRuleCandidate` (`memory-rule.interface.ts`);
+  `createRuleMemories` derives `hideAt` from it (§3.2); extend `memory.service.spec.ts` (§6.6).
+- **Red→green:** new service window cases fail (field ignored) → implement → green.
+- **Verify:** `pnpm test -- --run src/services/memory.service.spec.ts` — new cases green **and
+  all pre-existing cases still green** (default 1-day behavior unchanged for
+  `birthday`/`recent_trip`).
+- **Done:** window honored; existing memories unchanged.
+- **Commit:** `feat(memories): optional multi-day visibility window for rule candidates`.
+
+### Slice 4 — `month_recap` rule (end-to-end, pattern-setter)
+
+- **Deps:** Slices 1, 2, 3.
+- **Build:** `month-recap.rule.ts` + spec (§5.2, §6.1 month_recap, edge cases §6.7); register
+  in `memory-type.registry.ts` (`RULE_FACTORIES`) and `memory-type.metadata.ts`
+  (`MEMORY_TYPE_METADATA`, `defaultEnabled: true`); extend `memory-type.registry.spec.ts` +
+  `memory-type.metadata.spec.ts` for the `month_recap` key (§6.4 — the "all four" assertions
+  are the end state; this slice adds `month_recap`'s); add `month_recap` to `memoryTypeKeys`
+  in `MemoriesSettings.svelte`; add the 4 `en.json` keys (§7 i18n gate).
+- **Red→green:** rule spec fails (no rule) → implement rule green → wire registry/metadata
+  (their specs green) → web/i18n.
+- **Verify:** rule spec green; `make check-server`; from `web/`: `check:typescript` +
+  `check:svelte` + `pnpm lint`; grep the 4 i18n keys exist.
+- **Done:** in a smoke run, enabling `month_recap` generates a memory from prior-year photos;
+  disabling hides it.
+- **Commit:** `feat(memories): month recap memory type`.
+
+### Slice 5 — `favorites_throwback` rule
+
+- **Deps:** Slices 1, 2, 3; follows the Slice 4 registration pattern.
+- **Build:** `favorites-throwback.rule.ts` + spec (§5.3, §6.1 favorites); register + extend
+  registry/metadata specs for its key; add admin `memoryTypeKeys` entry; 4 `en.json` keys.
+- **Verify:** as Slice 4, for `favorites_throwback`.
+- **Done:** enabling it surfaces a favorites memory; toggle hides it.
+- **Commit:** `feat(memories): favorites throwback memory type`.
+
+### Slice 6 — `on_this_day_place` rule
+
+- **Deps:** Slices 1 (`dominantBy`), 2 (city/country + `day` filter); registration pattern
+  from Slice 4. (No dependency on Slice 3 — it is single-day.)
+- **Build:** `on-this-day-place.rule.ts` + spec (§5.1, §6.1 place incl. dominant-city,
+  60%-boundary, leap-day, tie, `MAX_YEARS`); register + specs; admin key; 4 `en.json` keys.
+- **Verify:** as Slice 4, for `on_this_day_place`.
+- **Done:** enabling it surfaces an "On this day in <city>" memory when a prior year's day is
+  place-dominant.
+- **Commit:** `feat(memories): on this day in a place memory type`.
+
+### Slice 7 — `season_recap` rule
+
+- **Deps:** Slices 1 (`season.util`), 2 (multi-month), 3 (`visibleForDays: 10`); registration
+  pattern from Slice 4.
+- **Build:** `season-recap.rule.ts` + spec (§5.4, §6.1 season incl. winter cross-year,
+  season-start guard, 15-boundary, `MAX_YEARS`); register + specs; admin key; 4 `en.json` keys.
+- **Verify:** as Slice 4, for `season_recap`.
+- **Done:** on a season-start date, enabling it surfaces a "<Season> <year>" memory; winter
+  Dec/Jan/Feb group into one season-year.
+- **Commit:** `feat(memories): season recap memory type`.
+
+### Slice 8 — Mobile parity, full-suite gate & roadmap status
+
+- **Deps:** Slices 4–7.
+- **Build:** resolve the §3.1 mobile verification — inspect the mobile memory-type settings
+  surface; if it hardcodes a list (rather than reading `availableMemoryTypes`), add the four
+  keys + mobile i18n, otherwise record "no change needed"; flip the four rows in the
+  [roadmap](./2026-07-15-memory-types-roadmap.md) Status column to shipped.
+- **Verify:** the full §7 gate — `make check-server`, `make lint-server`, `prettier --check`
+  on all modified server files, web checks, docs prettier, and the optional `make dev` smoke
+  with all four types enabled.
+- **Done:** whole suite green; mobile parity resolved (edited or explicitly N/A); roadmap
+  updated.
+- **Commit:** `chore(memories): mobile settings parity + roadmap status for Tier 1`.
+
+### Slice dependency graph
+
+```
+1 utils ─┐
+2 query ─┼─→ 4 month_recap ─→ 5 favorites ─→ 6 place ─→ 7 season ─→ 8 mobile/docs
+3 window ┘        (4 sets the registration pattern reused by 5–7)
+```
+
+Slices 1–3 have no interdependencies and may be built in any order (or parallel); 4 requires
+1+2+3; 5–7 require 1+2 (5 & 7 also 3) plus the pattern established in 4; 8 requires 4–7.
