@@ -2,6 +2,7 @@ import { AssetRepository } from 'src/repositories/asset.repository';
 import { MemoryRepository } from 'src/repositories/memory.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { BirthdayMemoryRule } from 'src/services/memory-rules/birthday.rule';
+import { FavoritesThrowbackMemoryRule } from 'src/services/memory-rules/favorites-throwback.rule';
 import { MemoryRule } from 'src/services/memory-rules/memory-rule.interface';
 import { MEMORY_TYPE_METADATA } from 'src/services/memory-rules/memory-type.metadata';
 import { MonthRecapMemoryRule } from 'src/services/memory-rules/month-recap.rule';
@@ -18,6 +19,7 @@ const RULE_FACTORIES: Record<string, (deps: MemoryRuleDeps) => MemoryRule> = {
   birthday: (deps) => new BirthdayMemoryRule(deps.personRepository, deps.assetRepository),
   recent_trip: (deps) => new RecentTripMemoryRule(deps.assetRepository, deps.memoryRepository),
   month_recap: (deps) => new MonthRecapMemoryRule(deps.assetRepository),
+  favorites_throwback: (deps) => new FavoritesThrowbackMemoryRule(deps.assetRepository),
 };
 
 /** instantiate the rule-kind memory rules whose key is in `enabledKeys` (in registry order, deduped) */

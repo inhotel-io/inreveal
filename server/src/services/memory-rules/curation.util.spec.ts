@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import {
   dominantBy,
   medianTime,
+  monthName,
   pickEvenlySpaced,
   recencyBonus,
   sampleAssetsByTime,
@@ -121,6 +122,14 @@ describe('dominantBy', () => {
 
   it('returns an empty result for empty input', () => {
     expect(dominantBy([] as string[], (v) => v)).toEqual({ key: '', items: [], ratio: 0 });
+  });
+});
+
+describe('monthName', () => {
+  it('returns the English name for a 1-based month', () => {
+    expect(monthName(1)).toBe('January');
+    expect(monthName(7)).toBe('July');
+    expect(monthName(12)).toBe('December');
   });
 });
 
