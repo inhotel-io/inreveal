@@ -16,6 +16,7 @@ export const MEMORY_TYPE_METADATA: MemoryTypeMetadata[] = [
   { key: 'on_this_day', kind: 'on_this_day', defaultEnabled: true, adminConfigurable: true },
   { key: 'birthday', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
   { key: 'recent_trip', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+  { key: 'month_recap', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
 ];
 
 export const MEMORY_TYPE_KEYS = MEMORY_TYPE_METADATA.map((m) => m.key);
