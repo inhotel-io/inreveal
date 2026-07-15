@@ -94,7 +94,15 @@ describe('MemoriesSettings', () => {
         retentionDays: 365,
         birthday: true,
         recentTrips: true,
-        types: { on_this_day: true, birthday: false, recent_trip: true },
+        types: {
+          on_this_day: true,
+          birthday: false,
+          recent_trip: true,
+          month_recap: true,
+          favorites_throwback: true,
+          on_this_day_place: true,
+          season_recap: true,
+        },
       },
     });
   });

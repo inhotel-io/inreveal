@@ -15,7 +15,15 @@ const getDefaultPreferences = (): UserPreferences => ({
   memories: {
     enabled: true,
     duration: 5,
-    types: { on_this_day: true, birthday: true, recent_trip: true },
+    types: {
+      on_this_day: true,
+      birthday: true,
+      recent_trip: true,
+      month_recap: true,
+      favorites_throwback: true,
+      on_this_day_place: true,
+      season_recap: true,
+    },
   },
   people: {
     enabled: true,
@@ -161,7 +169,15 @@ describe('getPreferences', () => {
 
   it('should default the memory-type map from the registry', () => {
     const result = getPreferences([]);
-    expect(result.memories.types).toEqual({ on_this_day: true, birthday: true, recent_trip: true });
+    expect(result.memories.types).toEqual({
+      on_this_day: true,
+      birthday: true,
+      recent_trip: true,
+      month_recap: true,
+      favorites_throwback: true,
+      on_this_day_place: true,
+      season_recap: true,
+    });
   });
 
   it('should override a single memory type while keeping siblings at their default', () => {
