@@ -194,7 +194,15 @@ describe(ServerService.name, () => {
         mapLightStyleUrl: 'https://tiles.openfreemap.org/styles/positron',
         maintenanceMode: false,
         minFaces: 3,
-        availableMemoryTypes: ['on_this_day', 'birthday', 'recent_trip'],
+        availableMemoryTypes: [
+          'on_this_day',
+          'birthday',
+          'recent_trip',
+          'month_recap',
+          'favorites_throwback',
+          'on_this_day_place',
+          'season_recap',
+        ],
       });
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
     });
@@ -209,7 +217,14 @@ describe(ServerService.name, () => {
 
       const result = await sut.getSystemConfig();
 
-      expect(result.availableMemoryTypes).toEqual(['on_this_day', 'birthday']);
+      expect(result.availableMemoryTypes).toEqual([
+        'on_this_day',
+        'birthday',
+        'month_recap',
+        'favorites_throwback',
+        'on_this_day_place',
+        'season_recap',
+      ]);
     });
 
     // Regression guard: getSystemConfig is hit on every page load; must read from cache.
