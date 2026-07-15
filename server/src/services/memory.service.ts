@@ -131,8 +131,8 @@ export class MemoryService extends BaseService {
       return;
     }
 
-    const showAt = target.startOf('day').toJSDate();
-    const hideAt = target.endOf('day').toJSDate();
+    const startOfDay = target.startOf('day');
+    const showAt = startOfDay.toJSDate();
     const seenDedupeKeys = new Set<string>();
     const evaluatedCandidates = await this.evaluateRuleCandidates(ownerId, target, enabledRuleKeys);
     const candidates = evaluatedCandidates.toSorted((left, right) => right.score - left.score);
@@ -152,6 +152,11 @@ export class MemoryService extends BaseService {
       if (await this.memoryRepository.hasRuleMemory(ownerId, candidate.ruleId, candidate.dedupeKey)) {
         continue;
       }
+
+      const hideAt = startOfDay
+        .plus({ days: Math.max(1, candidate.visibleForDays ?? 1) - 1 })
+        .endOf('day')
+        .toJSDate();
 
       await this.memoryRepository.create(
         {
