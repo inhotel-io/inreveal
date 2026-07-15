@@ -258,6 +258,43 @@ where
 order by
   "asset"."localDateTime" asc
 
+-- AssetRepository.getMemoryAssetsForPeriod
+select
+  "asset"."id",
+  "asset"."localDateTime",
+  "asset"."isFavorite",
+  "asset_exif"."country" as "country",
+  "asset_exif"."city" as "city",
+  extract(
+    year
+    from
+      (asset."localDateTime" at time zone 'UTC')
+  )::int as "year"
+from
+  "asset"
+  left join "asset_exif" on "asset_exif"."assetId" = "asset"."id"
+where
+  "asset"."ownerId" = $1
+  and "asset"."visibility" = $2
+  and "asset"."deletedAt" is null
+  and "asset"."localDateTime" <= $3
+  and extract(
+    month
+    from
+      (asset."localDateTime" at time zone 'UTC')
+  )::int in ($4)
+  and exists (
+    select
+      "asset_file"."assetId"
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = $5
+  )
+order by
+  "asset"."localDateTime" asc
+
 -- AssetRepository.getOwnedManifestAssets
 select
   "asset"."id",
