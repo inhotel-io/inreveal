@@ -16,6 +16,7 @@
     'month_recap',
     'favorites_throwback',
     'on_this_day_place',
+    'season_recap',
   ];
 
   const disabled = $derived(featureFlagsManager.value.configFile);
