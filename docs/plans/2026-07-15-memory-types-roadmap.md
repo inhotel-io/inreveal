@@ -38,14 +38,14 @@ toggles, `availableMemoryTypes`, and the visibility filter — derives from the 
 Effort is relative to the rule engine: 🟢 reuses existing queries · 🟡 one new moderate
 SQL query · 🟠 new query + data-model work · 🔴 ML / embeddings / new infra.
 
-### 🟢 Tier 1 — Very easy (in progress)
+### 🟢 Tier 1 — Very easy (shipped)
 
-| #   | Idea                    | Surfaces                                            | Effort | Impact      | Status                      |
-| --- | ----------------------- | --------------------------------------------------- | ------ | ----------- | --------------------------- |
-| 1   | Favorites throwback     | `isFavorite` photos from this month in a past year  | 🟢     | High        | **Spec'd** — see tier1 spec |
-| 2   | This month, X years ago | All photos from this calendar month in a past year  | 🟢     | High        | **Spec'd** — see tier1 spec |
-| 3   | On this day, in a place | On-this-day photos dominated by one city → labelled | 🟢/🟡  | Medium-high | **Spec'd** — see tier1 spec |
-| 4   | Season recap            | Photos from a past meteorological season            | 🟢/🟡  | Medium      | **Spec'd** — see tier1 spec |
+| #   | Idea                    | Surfaces                                            | Effort | Impact      | Status                              |
+| --- | ----------------------- | --------------------------------------------------- | ------ | ----------- | ----------------------------------- |
+| 1   | Favorites throwback     | `isFavorite` photos from this month in a past year  | 🟢     | High        | **Shipped** — `favorites_throwback` |
+| 2   | This month, X years ago | All photos from this calendar month in a past year  | 🟢     | High        | **Shipped** — `month_recap`         |
+| 3   | On this day, in a place | On-this-day photos dominated by one city → labelled | 🟢/🟡  | Medium-high | **Shipped** — `on_this_day_place`   |
+| 4   | Season recap            | Photos from a past meteorological season            | 🟢/🟡  | Medium      | **Shipped** — `season_recap`        |
 
 Spec: [`2026-07-15-memory-types-tier1-spec.md`](./2026-07-15-memory-types-tier1-spec.md)
 
