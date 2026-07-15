@@ -8,6 +8,7 @@ import { MEMORY_TYPE_METADATA } from 'src/services/memory-rules/memory-type.meta
 import { MonthRecapMemoryRule } from 'src/services/memory-rules/month-recap.rule';
 import { OnThisDayPlaceMemoryRule } from 'src/services/memory-rules/on-this-day-place.rule';
 import { RecentTripMemoryRule } from 'src/services/memory-rules/recent-trip.rule';
+import { SeasonRecapMemoryRule } from 'src/services/memory-rules/season-recap.rule';
 
 export interface MemoryRuleDeps {
   personRepository: PersonRepository;
@@ -22,6 +23,7 @@ const RULE_FACTORIES: Record<string, (deps: MemoryRuleDeps) => MemoryRule> = {
   month_recap: (deps) => new MonthRecapMemoryRule(deps.assetRepository),
   favorites_throwback: (deps) => new FavoritesThrowbackMemoryRule(deps.assetRepository),
   on_this_day_place: (deps) => new OnThisDayPlaceMemoryRule(deps.assetRepository),
+  season_recap: (deps) => new SeasonRecapMemoryRule(deps.assetRepository),
 };
 
 /** instantiate the rule-kind memory rules whose key is in `enabledKeys` (in registry order, deduped) */

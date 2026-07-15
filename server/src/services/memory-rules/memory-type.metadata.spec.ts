@@ -24,6 +24,7 @@ describe('memory-type.metadata', () => {
         { key: 'month_recap', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'favorites_throwback', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'on_this_day_place', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'season_recap', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
       ]);
     });
 
@@ -42,6 +43,7 @@ describe('memory-type.metadata', () => {
         'month_recap',
         'favorites_throwback',
         'on_this_day_place',
+        'season_recap',
       ]);
     });
   });
@@ -55,6 +57,7 @@ describe('memory-type.metadata', () => {
         month_recap: true,
         favorites_throwback: true,
         on_this_day_place: true,
+        season_recap: true,
       });
     });
   });
@@ -88,7 +91,15 @@ describe('memory-type.metadata', () => {
   describe('getAdminAvailableMemoryTypeKeys', () => {
     it('returns all types when no overrides', () => {
       expect(getAdminAvailableMemoryTypeKeys({})).toEqual(
-        new Set(['on_this_day', 'birthday', 'recent_trip', 'month_recap', 'favorites_throwback', 'on_this_day_place']),
+        new Set([
+          'on_this_day',
+          'birthday',
+          'recent_trip',
+          'month_recap',
+          'favorites_throwback',
+          'on_this_day_place',
+          'season_recap',
+        ]),
       );
     });
 
@@ -122,7 +133,15 @@ describe('memory-type.metadata', () => {
 
     it('ignores unknown keys in the types map', () => {
       expect(getAdminAvailableMemoryTypeKeys({ types: { unknown_key: true } })).toEqual(
-        new Set(['on_this_day', 'birthday', 'recent_trip', 'month_recap', 'favorites_throwback', 'on_this_day_place']),
+        new Set([
+          'on_this_day',
+          'birthday',
+          'recent_trip',
+          'month_recap',
+          'favorites_throwback',
+          'on_this_day_place',
+          'season_recap',
+        ]),
       );
     });
   });
