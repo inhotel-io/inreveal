@@ -49,7 +49,7 @@ describe(FaceRepairService.name, () => {
       // Never re-queues facial recognition — that is what re-clustered faces back to the wrong person.
       // (queueAll is only used for thumbnail regen, and only when a representative face was repointed.)
       expect(mocks.job.queueAll).not.toHaveBeenCalled();
-      expect(r).toEqual({ moved: 2, skipped: 0 });
+      expect(r).toEqual({ moved: 2, skipped: 0, movedFaceIds: ['f1', 'f2'] });
     });
 
     it('skips faces whose suspected owner no longer exists (deleted/merged since the scan)', async () => {
@@ -59,7 +59,7 @@ describe(FaceRepairService.name, () => {
       const r = await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'gone' }]));
 
       expect(mocks.faceRepair.reattributeFaces).not.toHaveBeenCalled();
-      expect(r).toEqual({ moved: 0, skipped: 1 });
+      expect(r).toEqual({ moved: 0, skipped: 1, movedFaceIds: [] });
     });
 
     it('reconciles representative faces for both the source and the destination person', async () => {

@@ -25679,6 +25679,10 @@
                   },
                   "minItems": 1,
                   "type": "array"
+                },
+                "lock": {
+                  "default": false,
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -25695,6 +25699,15 @@
             "type": "string"
           },
           "stay": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unknown": {
             "default": [],
             "items": {
               "format": "uuid",
@@ -25725,6 +25738,9 @@
           },
           "skipped": {
             "type": "number"
+          },
+          "unknown": {
+            "type": "number"
           }
         },
         "required": [
@@ -25732,7 +25748,8 @@
           "detached",
           "locked",
           "moved",
-          "skipped"
+          "skipped",
+          "unknown"
         ],
         "type": "object"
       },

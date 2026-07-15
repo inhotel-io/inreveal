@@ -317,6 +317,61 @@ describe('applyDeclineFilters', () => {
     });
     expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
   });
+
+  // U1 (temporal-consistency hardening design, Slice 4, E12): a regression lock proving the scoped-load
+  // change (Step 2 scopes buildRepairPlan's getDeclineMaps read to the flagged set) cannot change what gets
+  // dropped — applyDeclineFilters itself is agnostic to how its maps were populated, so feeding it a full
+  // (unscoped) DeclineMaps or one pre-filtered down to only the flagged set's own ids must produce identical
+  // results, as long as the scope actually covers every id the flagged set touches.
+  it('produces identical drops whether fed full (unscoped) maps or maps scoped to the flagged set', () => {
+    const buildFlagged = () =>
+      new Map([
+        ['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'Q'), f('face3', 'P', 'R')]],
+        ['S', [f('face4', 'S', 'T')]],
+      ]);
+
+    // The FULL (unscoped) table contents: face1/face2/S are relevant to the flagged set above; face5/face6/X
+    // are entirely OUTSIDE it — the kind of unrelated row an unscoped read pulls in that a scoped read, built
+    // from the flagged set's own face/person ids, would never fetch.
+    const fullMaps = {
+      declinedFaceOwners: new Map([
+        ['face1', new Set(['Q'])],
+        ['face5', new Set(['Z'])],
+      ]),
+      dismissedPersons: new Map([
+        ['S', new Set(['T'])],
+        ['X', new Set(['Z'])],
+      ]),
+      lockedFaceIds: new Set(['face2', 'face6']),
+    };
+
+    // A scoped read only ever returns rows for the flagged assetFaceIds/personIds — simulate that by
+    // filtering fullMaps down to exactly the flagged set's own ids, mirroring what a real scoped
+    // getDeclineMaps({ assetFaceIds, personIds }) call returns.
+    const flaggedFaceIds = new Set(['face1', 'face2', 'face3', 'face4']);
+    const flaggedPersonIds = new Set(['P', 'S']);
+    const scopedMaps = {
+      declinedFaceOwners: new Map([...fullMaps.declinedFaceOwners].filter(([faceId]) => flaggedFaceIds.has(faceId))),
+      dismissedPersons: new Map([...fullMaps.dismissedPersons].filter(([personId]) => flaggedPersonIds.has(personId))),
+      lockedFaceIds: new Set([...fullMaps.lockedFaceIds].filter((id) => flaggedFaceIds.has(id))),
+    };
+
+    const withFull = buildFlagged();
+    applyDeclineFilters(withFull, fullMaps);
+
+    const withScoped = buildFlagged();
+    applyDeclineFilters(withScoped, scopedMaps);
+
+    const asPlainObject = (m: Map<string, { assetFaceId: string }[]>) =>
+      Object.fromEntries([...m].map(([id, faces]) => [id, faces.map((x) => x.assetFaceId)]));
+    expect(asPlainObject(withScoped)).toEqual(asPlainObject(withFull));
+
+    // Sanity: something was actually dropped by both — not a vacuous no-op comparison.
+    expect(withFull.get('P')!.map((x) => x.assetFaceId)).toEqual(['face3']);
+    expect(withScoped.get('P')!.map((x) => x.assetFaceId)).toEqual(['face3']);
+    expect(withFull.get('S')).toEqual([]);
+    expect(withScoped.get('S')).toEqual([]);
+  });
 });
 
 describe('findOverlappingIds', () => {

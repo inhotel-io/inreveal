@@ -91,7 +91,7 @@ describe(FaceRepairAdminController.name, () => {
       const result = {
         dryRun: false,
         mutated: true,
-        executed: { moved: 3, skipped: 0 },
+        executed: { moved: 3, skipped: 0, movedFaceIds: [] },
         report: {
           totals: {
             eligibleFaces: 50,
@@ -205,6 +205,26 @@ describe(FaceRepairAdminController.name, () => {
       expect(status).toBe(400);
       expect(service.createDeclines).not.toHaveBeenCalled();
     });
+
+    // Temporal-consistency hardening, Slice 2 (C2, E11): dismiss (a persons-payload decline) delegates to
+    // service.createDeclines exactly like a faces-payload decline — the drain of the latest scan snapshot is
+    // an internal service concern covered at the service layer by the medium M9 test; this controller test
+    // only mocks the service, so it can assert delegation, not the drain itself.
+    it('should delegate a persons-payload dismiss to service.createDeclines with auth user id', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.createDeclines.mockResolvedValue({ created: 1 });
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/decline')
+        .set('Authorization', 'Bearer token')
+        .send({ persons: [{ personId: uuid1, suspectedOwnerIds: [uuid2] }] });
+      expect(status).toBe(201);
+      expect(service.createDeclines).toHaveBeenCalledWith(
+        expect.objectContaining({
+          persons: [{ personId: uuid1, suspectedOwnerIds: [uuid2] }],
+          declinedBy: adminUserId,
+        }),
+      );
+    });
   });
 
   describe('GET /admin/face-repair/decline', () => {
@@ -302,7 +322,7 @@ describe(FaceRepairAdminController.name, () => {
 
     it('delegates to service.resolveFaces with the auth user id as resolvedBy (C2)', async () => {
       ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
-      service.resolveFaces.mockResolvedValue({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      service.resolveFaces.mockResolvedValue({ moved: 3, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
       const moveToPerson = [
         { destinationPersonId: ownerA, faceIds: [faceId1, faceId2] },
         { destinationPersonId: ownerB, faceIds: [faceId3] },
@@ -313,10 +333,17 @@ describe(FaceRepairAdminController.name, () => {
         .send({ personId, moveToPerson });
       expect(status).toBe(201);
       expect(service.resolveFaces).toHaveBeenCalledWith(
-        expect.objectContaining({ personId, moveToPerson, stay: [], lock: [], detach: [] }),
+        expect.objectContaining({
+          personId,
+          // Each group's `lock` (temporal-consistency hardening, Slice 3) defaults to false when omitted.
+          moveToPerson: moveToPerson.map((group) => ({ ...group, lock: false })),
+          stay: [],
+          lock: [],
+          detach: [],
+        }),
         adminUserId,
       );
-      expect(body).toEqual({ moved: 3, declined: 0, locked: 0, detached: 0, skipped: 0 });
+      expect(body).toEqual({ moved: 3, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
     });
 
     it('rejects a non-uuid personId with 400', async () => {
@@ -333,6 +360,77 @@ describe(FaceRepairAdminController.name, () => {
         .post('/admin/face-repair/resolve')
         .set('Authorization', 'Bearer token')
         .send({ personId, moveToPerson: [{ destinationPersonId: ownerA, faceIds: ['not-a-uuid'] }] });
+      expect(status).toBe(400);
+      expect(service.resolveFaces).not.toHaveBeenCalled();
+    });
+
+    // ---- C1 (temporal-consistency hardening, Slice 3, move-and-lock): the resolve route's `lock` flag ----
+
+    it('C1: accepts a moveToPerson group with lock:true and passes it through', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 1, detached: 0, unknown: 0, skipped: 0 });
+      const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: true }];
+
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson });
+
+      expect(status).toBe(201);
+      expect(service.resolveFaces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          personId,
+          moveToPerson: [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: true }],
+        }),
+        adminUserId,
+      );
+    });
+
+    it('C1: accepts a moveToPerson group with lock:false and passes it through', async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
+      const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: false }];
+
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson });
+
+      expect(status).toBe(201);
+      expect(service.resolveFaces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          personId,
+          moveToPerson: [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: false }],
+        }),
+        adminUserId,
+      );
+    });
+
+    it("C1: defaults a moveToPerson group's lock to false when omitted", async () => {
+      ctx.authenticate.mockResolvedValue({ user: { id: adminUserId } });
+      service.resolveFaces.mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
+      const moveToPerson = [{ destinationPersonId: ownerA, faceIds: [faceId1] }];
+
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson });
+
+      expect(status).toBe(201);
+      expect(service.resolveFaces).toHaveBeenCalledWith(
+        expect.objectContaining({
+          personId,
+          moveToPerson: [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: false }],
+        }),
+        adminUserId,
+      );
+    });
+
+    it('C1: rejects a non-boolean lock on a moveToPerson group with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/resolve')
+        .set('Authorization', 'Bearer token')
+        .send({ personId, moveToPerson: [{ destinationPersonId: ownerA, faceIds: [faceId1], lock: 'yes' }] });
       expect(status).toBe(400);
       expect(service.resolveFaces).not.toHaveBeenCalled();
     });

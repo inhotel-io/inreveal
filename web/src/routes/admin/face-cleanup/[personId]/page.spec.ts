@@ -6,11 +6,13 @@ import {
   type FaceRepairClusterFacesResponseDto,
   type FaceRepairPersonFacesDto,
 } from '@immich/sdk';
-import { modalManager } from '@immich/ui';
+import { modalManager, toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goto } from '$app/navigation';
 import Page from './+page.svelte';
+import ActionsHelpModal from './ActionsHelpModal.svelte';
 
 // Mock @immich/sdk before any imports that use it
 vi.mock('@immich/sdk', async (importOriginal) => {
@@ -154,7 +156,7 @@ const emptyRest = () => ({ faces: [], total: 0, hasMore: false }) as unknown as 
 // so `vi.mocked(modalManager.show)` can't infer a concrete signature at this call site. Cast once to a plain
 // mock of the shape the picker's `onClose` actually resolves with (see PersonPicker.svelte).
 const showModal = modalManager.show as unknown as ReturnType<
-  typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string } | undefined>>
+  typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | undefined>>
 >;
 
 describe('+page.svelte (face-cleanup review — Model B)', () => {
@@ -165,7 +167,14 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       personId: PERSON_ID,
       flaggedFaces: makeFlaggedFaces(),
     } as unknown as FaceRepairPersonFacesDto);
-    vi.mocked(resolveFaces).mockResolvedValue({ moved: 0, declined: 0, locked: 0, detached: 0, skipped: 0 });
+    vi.mocked(resolveFaces).mockResolvedValue({
+      moved: 0,
+      declined: 0,
+      locked: 0,
+      detached: 0,
+      unknown: 0,
+      skipped: 0,
+    });
     vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(emptyRest());
     showModal.mockResolvedValue(undefined);
   });
@@ -314,13 +323,15 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
         expect(resolveFaces).toHaveBeenCalledWith({
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
+            // owner-state groups never auto-lock (Slice 3, move-and-lock).
             moveToPerson: [
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-1', 'face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-1', 'face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: [],
             lock: [],
             detach: [],
+            unknown: [],
           },
         });
       });
@@ -411,12 +422,13 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
             moveToPerson: [
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: ['face-1'],
             lock: [],
             detach: [],
+            unknown: [],
           },
         });
       });
@@ -469,12 +481,13 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
             moveToPerson: [
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: [],
             lock: ['face-1'],
             detach: [],
+            unknown: [],
           },
         });
       });
@@ -552,14 +565,49 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
         expect(resolveFaces).toHaveBeenCalledWith({
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
+            // The mock resolves without `lock` — same as an unchecked picker toggle — so the chosen-person
+            // group defaults to lock:false, same as the untouched owner-state groups (Slice 3).
             moveToPerson: [
-              { destinationPersonId: 'chosen-1', faceIds: ['face-1'] },
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: 'chosen-1', faceIds: ['face-1'], lock: false },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: [],
             lock: [],
             detach: [],
+            unknown: [],
+          },
+        });
+      });
+    });
+
+    // ---- Slice 3 (move-and-lock): the picker's lock toggle rides through +page.svelte's wiring ----
+    it("W1: threads the picker's lock:true onto the chosen-person group only, never onto owner-state groups", async () => {
+      showModal.mockResolvedValueOnce({ personId: 'chosen-1', name: 'Chosen Person', lock: true });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      const tiles = screen.getAllByTestId('face-tile');
+      await fireEvent.click(tiles[0]); // face-1, suspected owner-a
+      await fireEvent.click(screen.getByTestId('bulk-other'));
+      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [
+              { destinationPersonId: 'chosen-1', faceIds: ['face-1'], lock: true },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
+            ],
+            stay: [],
+            lock: [],
+            detach: [],
+            unknown: [],
           },
         });
       });
@@ -629,6 +677,123 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(tiles[0]); // face-1, suspected owner-a
       await fireEvent.click(screen.getByTestId('bulk-detach'));
 
+      // Detaching is irreversible, so Apply routes through the confirmation first.
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('detach-confirm-cta'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
+            ],
+            stay: [],
+            lock: [],
+            detach: ['face-1'],
+            unknown: [],
+          },
+        });
+      });
+    });
+  });
+
+  // "Not a face" is the only action on this page that cannot be undone — it retires the detected face for good,
+  // and nothing in the app brings it back. It also sits one button away from "Unknown person", which means the
+  // OPPOSITE thing. These tests pin the guard against that slip.
+  describe('Destructive Apply — confirmation before discarding faces', () => {
+    const stageDetach = async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await fireEvent.click(screen.getByTestId('bulk-detach'));
+    };
+
+    it('does NOT commit anything when Apply carries a detached face — it asks first', async () => {
+      await stageDetach();
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
+      // The whole point: the destructive resolve has NOT been sent yet.
+      expect(resolveFaces).not.toHaveBeenCalled();
+      expect(goto).not.toHaveBeenCalled();
+    });
+
+    it('cancelling commits nothing and leaves the staged review exactly as it was', async () => {
+      await stageDetach();
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('detach-confirm-cancel'));
+
+      await waitFor(() => expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument());
+      expect(resolveFaces).not.toHaveBeenCalled();
+      // The staged decision survives the cancel — the admin returns to their review, not to a blank slate.
+      expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'detach');
+    });
+
+    it('does NOT ask when nothing is being discarded — a routine Apply goes straight through', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      // Every face stays in the default `owner` state: nothing destructive, so no confirmation. Prompting on
+      // every Apply would train the admin to click past the one prompt that matters.
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
+      expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument();
+    });
+
+    it('does NOT ask for the Unknown person action — parking a stranger is reversible', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await fireEvent.click(screen.getByTestId('bulk-unknown'));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
+      expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---- "Unknown person": a real face the admin cannot name (the case that made the review unfinishable) ----
+
+  describe('Bulk actions — Unknown person', () => {
+    it('tags the selected tile unknown WITHOUT graying it out (it is a real face) and updates the tally', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('bulk-unknown'));
+
+      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+
+      const refreshedTiles = screen.getAllByTestId('face-tile');
+      expect(refreshedTiles[0]).toHaveAttribute('data-state', 'unknown');
+      expect(screen.getByText('admin.face_cleanup_review_tile_unknown_ribbon')).toBeInTheDocument();
+
+      // Unlike "Not a face", the crop is NOT desaturated — this face is a real person, just an unnamed one.
+      const image = refreshedTiles[0].querySelector('img');
+      expect(image?.getAttribute('style') ?? '').not.toContain('grayscale(1)');
+
+      const tally = screen.getByTestId('tally');
+      const unknownChip = within(tally).getByText('admin.face_cleanup_review_tally_unknown').parentElement!;
+      expect(unknownChip).not.toHaveClass('opacity-40');
+      expect(unknownChip).toHaveTextContent('1');
+    });
+
+    it('sends the face in `unknown` and excludes it from `moveToPerson` on Apply', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]); // face-1, suspected owner-a
+      await fireEvent.click(screen.getByTestId('bulk-unknown'));
       await fireEvent.click(screen.getByTestId('apply-btn'));
 
       await waitFor(() => {
@@ -636,12 +801,13 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
             moveToPerson: [
-              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'] },
-              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'] },
+              { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+              { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
             ],
             stay: [],
             lock: [],
-            detach: ['face-1'],
+            detach: [],
+            unknown: ['face-1'],
           },
         });
       });
@@ -671,7 +837,10 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       expect(screen.queryByTestId('entire-confirm')).not.toBeInTheDocument();
     });
 
-    it('Move selected rest faces calls resolveFaces with a moveToPerson bucket of the selected rest faceIds', async () => {
+    // The rest-of-cluster section used to COMMIT its own independent resolve, which drained the person from the
+    // console while every staged flagged decision was silently discarded (and came back on the next scan).
+    // Ticking a rest face now only STAGES it into the one terminal Apply.
+    it('has no separate rest-move commit button — the rest selection is staged, not committed', async () => {
       vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
         faces: [{ assetFaceId: 'rest-1' }, { assetFaceId: 'rest-2' }],
         total: 2,
@@ -681,20 +850,125 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(2));
 
-      const restTiles = screen.getAllByTestId('rest-tile');
-      await fireEvent.click(restTiles[0]);
-      await waitFor(() => expect(screen.getByTestId('move-rest-selection-btn')).toBeInTheDocument());
+      await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
 
-      await fireEvent.click(screen.getByTestId('move-rest-selection-btn'));
+      expect(screen.queryByTestId('move-rest-selection-btn')).not.toBeInTheDocument();
+      expect(resolveFaces).not.toHaveBeenCalled();
+    });
+
+    it('folds the staged rest faces into the single Apply, in ONE resolve alongside the flagged faces', async () => {
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+        faces: [{ assetFaceId: 'rest-1' }, { assetFaceId: 'rest-2' }],
+        total: 2,
+        hasMore: false,
+      } as unknown as FaceRepairClusterFacesResponseDto);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(2));
+
+      await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
+
+      // The dock now tells the admin the added face is part of what Apply will do — it swaps to the
+      // "+ N added" label and tallies the addition (this spec's t() echoes keys, so the count itself is
+      // asserted on the chip, which renders it literally).
+      await waitFor(() => {
+        expect(screen.getByTestId('apply-btn')).toHaveTextContent('admin.face_cleanup_review_apply_label_added');
+        expect(screen.getByTestId('tally-added')).toHaveTextContent('+1');
+      });
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalledTimes(1));
+      const request = vi.mocked(resolveFaces).mock.calls[0][0].faceRepairResolveRequestDto;
+      // face-1/face-2 (flagged, suspecting owner A) and the staged rest face all ride the owner-A group.
+      const ownerAGroup = request.moveToPerson?.find((group) => group.destinationPersonId === OWNER_A_ID);
+      expect(ownerAGroup?.faceIds.sort()).toEqual(['face-1', 'face-2', 'rest-1'].sort());
+      // ...and the mixed cluster's owner-B face still rides its own group — the rest face never lands there.
+      const ownerBGroup = request.moveToPerson?.find((group) => group.destinationPersonId === OWNER_B_ID);
+      expect(ownerBGroup?.faceIds).toEqual(['face-3']);
+    });
+
+    // The bug that ate a whole-cluster move: the server refuses a resolve while a scan is running (409), and
+    // the client swallowed it — no banner, nothing moved, and the admin believed it had worked.
+    it('surfaces a rejected Move entire cluster instead of swallowing it, and does not navigate away', async () => {
+      vi.mocked(resolveFaces).mockRejectedValue({ status: 409 });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('move-entire-btn'));
+      await waitFor(() => expect(screen.getByTestId('entire-confirm')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
 
       await waitFor(() => {
-        expect(resolveFaces).toHaveBeenCalledWith({
-          faceRepairResolveRequestDto: {
-            personId: PERSON_ID,
-            moveToPerson: [{ destinationPersonId: OWNER_A_ID, faceIds: ['rest-1'] }],
-          },
-        });
+        expect(screen.getByText('admin.face_cleanup_review_apply_conflict')).toBeInTheDocument();
       });
+      expect(goto).not.toHaveBeenCalled();
+    });
+
+    it('reports what the server actually did after a successful apply', async () => {
+      vi.mocked(resolveFaces).mockResolvedValue({
+        moved: 2,
+        declined: 1,
+        locked: 0,
+        detached: 0,
+        unknown: 0,
+        skipped: 0,
+      });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(toastManager.primary).toHaveBeenCalledWith(
+          expect.stringContaining('admin.face_cleanup_review_apply_summary'),
+        );
+      });
+    });
+  });
+
+  // ---- Actions help: two entry points, one modal ----
+  // The bulk bar only exists once a face is selected, so the banner (i) is the one a confused admin finds
+  // before touching anything; the bulk-bar (i) is the one they reach for mid-task. The modal's own content is
+  // covered by ActionsHelpModal.spec.ts — here we only verify both buttons open it.
+
+  describe('Actions help modal', () => {
+    it('opens the help modal from the review banner, before anything is selected', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+      await fireEvent.click(screen.getByTestId('banner-help'));
+
+      expect(showModal).toHaveBeenCalledWith(ActionsHelpModal, {});
+    });
+
+    it('opens the same help modal from the bulk bar once a face is selected', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('bulk-help'));
+
+      expect(showModal).toHaveBeenCalledWith(ActionsHelpModal, {});
+    });
+
+    it('keeps the selection intact when the help modal is dismissed', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('bulk-help'));
+
+      // The bar only renders while something is selected, so its survival IS the selection surviving.
+      expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('bulk-bar')).toHaveTextContent('1');
+      expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'owner');
     });
   });
 

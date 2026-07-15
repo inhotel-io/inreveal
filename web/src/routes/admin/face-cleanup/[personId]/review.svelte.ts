@@ -1,11 +1,43 @@
 import type { FaceRepairResolveRequestDto } from '@immich/sdk';
+import { mdiAccountArrowRight, mdiAccountQuestion, mdiArrowRightBold, mdiImageOff, mdiLock, mdiPin } from '@mdi/js';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 
 // Model B (full per-face resolution, docs/plans/2026-07-10-face-cleanup-full-resolution-design.md). Every
-// flagged face resolves to exactly one of five terminal states. Slice 1 only wires the `owner` action into
-// the UI (+page.svelte), but the model supports all five up front so later slices (stay/lock/other/detach)
-// don't need another rework of this file.
-export type FaceState = 'owner' | 'other' | 'stay' | 'lock' | 'detach';
+// flagged face resolves to exactly one of six terminal states.
+//
+// `unknown` is the sixth: a real face of a real person the admin cannot name. It is the standard case whenever
+// an admin reviews someone else's library — a friend of the family turns up in a mixed cluster, the admin knows
+// it is not the cluster's person, but has no one to route it to. Without it the review cannot be finished: every
+// other action is a lie (moving it to the suggested owner is wrong, keeping it is wrong, and "not a face" is
+// wrong — it plainly IS a face). The server parks these in a fresh unnamed cluster of their own.
+export type FaceState = 'owner' | 'other' | 'stay' | 'lock' | 'detach' | 'unknown';
+
+// Model B state colors (docs/plans/2026-07-10-face-cleanup-resolution-mockup.html :root vars) — the visual
+// source of truth for the review page. Lives here, next to `FaceState`, because both the page (tile badges,
+// ribbons, bulk bar, tally) and ActionsHelpModal (the per-action rails and swatches) render them: the modal's
+// swatch is what ties an explanation back to the button and the tile it describes, so the two must never
+// drift apart.
+export const STATE_COLOR: Record<FaceState, string> = {
+  owner: '#4f46e5',
+  other: '#d97706',
+  stay: '#16a34a',
+  lock: '#7c3aed',
+  detach: '#475569',
+  unknown: '#0d9488',
+};
+
+// One icon per state, so state is never encoded in COLOR ALONE. The tile badge used to stamp the same check
+// mark on owner/stay/other, leaving indigo-vs-violet as the only thing separating "moved away" from "locked in
+// place" — unreadable for a colorblind admin, and hard for anyone at a glance. Same icon on the tile badge, the
+// bulk-bar button, the tally chip and the help modal, so one glyph means one thing everywhere on the page.
+export const STATE_ICON: Record<FaceState, string> = {
+  owner: mdiArrowRightBold, // moves to the scan's suspected owner
+  other: mdiAccountArrowRight, // moves to a person the admin picked
+  stay: mdiPin, // stays on this person (decline)
+  lock: mdiLock, // stays, pinned against every future scan
+  detach: mdiImageOff, // not a face at all — retired entirely
+  unknown: mdiAccountQuestion, // a real person, but not one the admin can name — parked in its own cluster
+};
 
 export interface FlaggedFace {
   assetFaceId: string;
@@ -41,11 +73,21 @@ export interface ReviewModel {
   /** Returns every face to `owner` (clearing any chosen destination) and clears the selection. */
   reset(): void;
   /** Applies `state` (+ optional destination for `other`) to every currently-selected face, then clears the
-   *  selection — mirrors the mockup's `apply(s)` bulk-bar action. */
-  applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null }): void;
+   *  selection — mirrors the mockup's `apply(s)` bulk-bar action. `destination.lock` (Slice 3, move-and-lock)
+   *  is the PersonPicker's "Lock so it won't re-flag" toggle; it defaults to false and only ever applies to
+   *  `other`-state (chosen-person) destinations — a suggested-owner move never auto-locks. */
+  applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null; lock?: boolean }): void;
   /** Pure builder: groups `owner`/`other` faces by destination (owner destination = each face's own
-   *  suspectedOwnerId) and emits `stay`/`lock`/`detach` id lists. Never touches the network. */
-  buildResolveRequest(personId: string): FaceRepairResolveRequestDto;
+   *  suspectedOwnerId) and emits `stay`/`lock`/`detach` id lists. Never touches the network.
+   *
+   *  `added` carries the rest-of-cluster faces the admin ticked — faces the scan never flagged, which they want
+   *  moved to the same destination anyway. They join the SAME resolve as the flagged faces (one terminal Apply):
+   *  a separate resolve for them alone would settle none of the flagged snapshot, and the server would (rightly)
+   *  refuse to drain the person — leaving the review half-done. */
+  buildResolveRequest(
+    personId: string,
+    added?: { destinationPersonId: string; faceIds: string[] },
+  ): FaceRepairResolveRequestDto;
 }
 
 export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
@@ -56,7 +98,7 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
   const indexById = new Map(order.map((id, i) => [id, i]));
 
   const states: SvelteMap<string, FaceState> = new SvelteMap(order.map((id) => [id, 'owner' as FaceState]));
-  const destinations: SvelteMap<string, { personId: string; name: string | null }> = new SvelteMap();
+  const destinations: SvelteMap<string, { personId: string; name: string | null; lock: boolean }> = new SvelteMap();
   const selected: SvelteSet<string> = new SvelteSet();
   let lastToggledIndex: number | null = null;
 
@@ -83,7 +125,7 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
     },
 
     get tally(): FaceTally {
-      const tally: FaceTally = { owner: 0, other: 0, stay: 0, lock: 0, detach: 0 };
+      const tally: FaceTally = { owner: 0, other: 0, stay: 0, lock: 0, detach: 0, unknown: 0 };
       for (const id of order) {
         const state = states.get(id) ?? 'owner';
         tally[state] += 1;
@@ -139,11 +181,15 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
       clearSelectionState();
     },
 
-    applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null }): void {
+    applyToSelection(state: FaceState, destination?: { personId: string; name?: string | null; lock?: boolean }): void {
       for (const id of selected) {
         states.set(id, state);
         if (state === 'other' && destination) {
-          destinations.set(id, { personId: destination.personId, name: destination.name ?? null });
+          destinations.set(id, {
+            personId: destination.personId,
+            name: destination.name ?? null,
+            lock: destination.lock ?? false,
+          });
         } else {
           destinations.delete(id);
         }
@@ -151,21 +197,32 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
       clearSelectionState();
     },
 
-    buildResolveRequest(personId: string): FaceRepairResolveRequestDto {
+    buildResolveRequest(
+      personId: string,
+      added?: { destinationPersonId: string; faceIds: string[] },
+    ): FaceRepairResolveRequestDto {
       // Plain Map: local bookkeeping scoped to this single pure-function call, discarded on return — no UI
       // reads it, so it never needs to be reactive.
       // eslint-disable-next-line svelte/prefer-svelte-reactivity
-      const moveGroups = new Map<string, string[]>();
+      const moveGroups = new Map<string, { destinationPersonId: string; faceIds: string[]; lock: boolean }>();
       const stay: string[] = [];
       const lock: string[] = [];
       const detach: string[] = [];
+      const unknown: string[] = [];
 
-      const addToMoveGroup = (destinationPersonId: string, assetFaceId: string) => {
-        const group = moveGroups.get(destinationPersonId);
+      // `lock` (Slice 3, move-and-lock): a suggested-owner (`owner`-state) move always passes `lock: false` —
+      // never auto-lock a face the admin didn't explicitly move. A chosen-person (`other`-state) move passes
+      // whatever the PersonPicker's toggle recorded. Groups are keyed by the PAIR (destinationPersonId, lock),
+      // not destinationPersonId alone: if an owner-state face and an other-state face happen to share a
+      // destination but disagree on lock, they must emit as two separate `moveToPerson` groups so the
+      // owner-state group is never swept into a lock:true it never asked for.
+      const addToMoveGroup = (destinationPersonId: string, assetFaceId: string, faceLock: boolean) => {
+        const key = `${destinationPersonId}|${faceLock}`;
+        const group = moveGroups.get(key);
         if (group) {
-          group.push(assetFaceId);
+          group.faceIds.push(assetFaceId);
         } else {
-          moveGroups.set(destinationPersonId, [assetFaceId]);
+          moveGroups.set(key, { destinationPersonId, faceIds: [assetFaceId], lock: faceLock });
         }
       };
 
@@ -173,13 +230,13 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
         const state = states.get(face.assetFaceId) ?? 'owner';
         switch (state) {
           case 'owner': {
-            addToMoveGroup(face.suspectedOwnerId, face.assetFaceId);
+            addToMoveGroup(face.suspectedOwnerId, face.assetFaceId, false);
             break;
           }
           case 'other': {
-            const destinationPersonId = destinations.get(face.assetFaceId)?.personId;
-            if (destinationPersonId) {
-              addToMoveGroup(destinationPersonId, face.assetFaceId);
+            const destination = destinations.get(face.assetFaceId);
+            if (destination) {
+              addToMoveGroup(destination.personId, face.assetFaceId, destination.lock);
             }
             break;
           }
@@ -195,18 +252,31 @@ export function createReviewModel(flaggedFaces: FlaggedFace[]): ReviewModel {
             detach.push(face.assetFaceId);
             break;
           }
+          case 'unknown': {
+            unknown.push(face.assetFaceId);
+            break;
+          }
         }
+      }
+
+      // Rest-of-cluster faces the admin added ride the same (destination, lock:false) group as an owner-state
+      // face bound for the same person — addToMoveGroup dedupes by that key, so they merge rather than emitting
+      // a second group for the same destination.
+      for (const assetFaceId of added?.faceIds ?? []) {
+        addToMoveGroup(added!.destinationPersonId, assetFaceId, false);
       }
 
       return {
         personId,
-        moveToPerson: [...moveGroups.entries()].map(([destinationPersonId, faceIds]) => ({
-          destinationPersonId,
-          faceIds,
+        moveToPerson: [...moveGroups.values()].map((group) => ({
+          destinationPersonId: group.destinationPersonId,
+          faceIds: group.faceIds,
+          lock: group.lock,
         })),
         stay,
         lock,
         detach,
+        unknown,
       };
     },
   };

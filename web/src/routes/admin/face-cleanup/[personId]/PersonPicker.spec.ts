@@ -134,8 +134,34 @@ describe('PersonPicker', () => {
     render(PersonPicker, { props: { ownerId: OWNER_ID, faceCount: 3, onClose } });
     await fireEvent.click(await screen.findByText('Marco Weber'));
 
-    expect(onClose).toHaveBeenCalledWith({ personId: 'p1', name: 'Marco Weber' });
+    // lock:true — the "Lock so it won't re-flag" checkbox defaults to checked (P1).
+    expect(onClose).toHaveBeenCalledWith({ personId: 'p1', name: 'Marco Weber', lock: true });
     expect(createFaceRepairOwnerPerson).not.toHaveBeenCalled();
+  });
+
+  // ---- P1 (Slice 3, move-and-lock): the "Lock so it won't re-flag" checkbox ----
+
+  it('P1: renders the lock checkbox checked by default', () => {
+    vi.mocked(getFaceRepairOwnerPeople).mockResolvedValue(makePeopleResponse([]));
+
+    render(PersonPicker, { props: { ownerId: OWNER_ID, faceCount: 3, onClose: vi.fn() } });
+
+    expect(screen.getByText("Lock so it won't re-flag")).toBeInTheDocument();
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toBeChecked();
+  });
+
+  it('P1: unchecking the lock checkbox routes the selection with lock:false', async () => {
+    vi.mocked(getFaceRepairOwnerPeople).mockResolvedValue(
+      makePeopleResponse([{ id: 'p1', name: 'Marco Weber', faceCount: 412, thumbnailFaceId: 'f1' }]),
+    );
+    const onClose = vi.fn();
+
+    render(PersonPicker, { props: { ownerId: OWNER_ID, faceCount: 3, onClose } });
+    await fireEvent.click(await screen.findByRole('checkbox'));
+    await fireEvent.click(await screen.findByText('Marco Weber'));
+
+    expect(onClose).toHaveBeenCalledWith({ personId: 'p1', name: 'Marco Weber', lock: false });
   });
 
   it('shows a "Create new person" row once there is a search query, and it creates + routes the selection', async () => {
@@ -156,7 +182,8 @@ describe('PersonPicker', () => {
         ownerId: OWNER_ID,
         faceRepairOwnerPersonCreateRequestDto: { name: 'Brand New' },
       });
-      expect(onClose).toHaveBeenCalledWith({ personId: 'new-person-1', name: 'Brand New' });
+      // lock:true — the "Lock so it won't re-flag" checkbox defaults to checked (P1).
+      expect(onClose).toHaveBeenCalledWith({ personId: 'new-person-1', name: 'Brand New', lock: true });
     });
   });
 
