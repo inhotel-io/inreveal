@@ -24,6 +24,7 @@ import 'package:immich_mobile/infrastructure/entities/shared_space.entity.drift.
 import 'package:immich_mobile/infrastructure/entities/shared_space_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space_library.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space_member.entity.drift.dart';
+import 'package:immich_mobile/infrastructure/entities/stack.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/trashed_local_asset.entity.dart';
 import 'package:immich_mobile/infrastructure/entities/trashed_local_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/user.entity.drift.dart';
@@ -446,6 +447,12 @@ class MediumRepositoryContext {
     return db
         .into(db.sharedSpaceAssetEntity)
         .insert(SharedSpaceAssetEntityCompanion.insert(spaceId: spaceId, assetId: assetId));
+  }
+
+  Future<void> insertStack({required String id, required String ownerId, required String primaryAssetId}) {
+    return db
+        .into(db.stackEntity)
+        .insert(StackEntityCompanion.insert(id: id, ownerId: ownerId, primaryAssetId: primaryAssetId));
   }
 
   Future<LibraryEntityData> newLibrary({
