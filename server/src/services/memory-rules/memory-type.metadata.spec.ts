@@ -16,11 +16,12 @@ describe('memory-type.metadata', () => {
       expect(new Set(keys).size).toBe(keys.length);
     });
 
-    it('contains the three current types with expected attributes', () => {
+    it('contains the current types with expected attributes', () => {
       expect(MEMORY_TYPE_METADATA).toEqual([
         { key: 'on_this_day', kind: 'on_this_day', defaultEnabled: true, adminConfigurable: true },
         { key: 'birthday', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'recent_trip', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'month_recap', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
       ]);
     });
 
@@ -32,13 +33,18 @@ describe('memory-type.metadata', () => {
     });
 
     it('MEMORY_TYPE_KEYS lists keys in registry order', () => {
-      expect(MEMORY_TYPE_KEYS).toEqual(['on_this_day', 'birthday', 'recent_trip']);
+      expect(MEMORY_TYPE_KEYS).toEqual(['on_this_day', 'birthday', 'recent_trip', 'month_recap']);
     });
   });
 
   describe('buildDefaultMemoryTypeMap', () => {
     it('returns all keys enabled', () => {
-      expect(buildDefaultMemoryTypeMap()).toEqual({ on_this_day: true, birthday: true, recent_trip: true });
+      expect(buildDefaultMemoryTypeMap()).toEqual({
+        on_this_day: true,
+        birthday: true,
+        recent_trip: true,
+        month_recap: true,
+      });
     });
   });
 
@@ -69,8 +75,20 @@ describe('memory-type.metadata', () => {
   });
 
   describe('getAdminAvailableMemoryTypeKeys', () => {
-    it('returns all three when no overrides', () => {
-      expect(getAdminAvailableMemoryTypeKeys({})).toEqual(new Set(['on_this_day', 'birthday', 'recent_trip']));
+    it('returns all types when no overrides', () => {
+      expect(getAdminAvailableMemoryTypeKeys({})).toEqual(
+        new Set(['on_this_day', 'birthday', 'recent_trip', 'month_recap']),
+      );
+    });
+
+    it('adds month_recap as a rule type mapping to its ruleId', () => {
+      expect(getMemoryTypeKeyForMemory(MemoryType.Rule, { ruleId: 'month_recap' })).toBe('month_recap');
+      expect(getMemoryTypeMetadata('month_recap')).toEqual({
+        key: 'month_recap',
+        kind: 'rule',
+        defaultEnabled: true,
+        adminConfigurable: true,
+      });
     });
 
     it('honors an explicit types override', () => {
@@ -93,7 +111,7 @@ describe('memory-type.metadata', () => {
 
     it('ignores unknown keys in the types map', () => {
       expect(getAdminAvailableMemoryTypeKeys({ types: { unknown_key: true } })).toEqual(
-        new Set(['on_this_day', 'birthday', 'recent_trip']),
+        new Set(['on_this_day', 'birthday', 'recent_trip', 'month_recap']),
       );
     });
   });
