@@ -9,7 +9,14 @@
   import { fade } from 'svelte/transition';
 
   // Mirrors the server-side memory-type registry keys.
-  const memoryTypeKeys = ['on_this_day', 'birthday', 'recent_trip', 'month_recap', 'favorites_throwback'];
+  const memoryTypeKeys = [
+    'on_this_day',
+    'birthday',
+    'recent_trip',
+    'month_recap',
+    'favorites_throwback',
+    'on_this_day_place',
+  ];
 
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);

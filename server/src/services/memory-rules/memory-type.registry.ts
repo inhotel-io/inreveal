@@ -6,6 +6,7 @@ import { FavoritesThrowbackMemoryRule } from 'src/services/memory-rules/favorite
 import { MemoryRule } from 'src/services/memory-rules/memory-rule.interface';
 import { MEMORY_TYPE_METADATA } from 'src/services/memory-rules/memory-type.metadata';
 import { MonthRecapMemoryRule } from 'src/services/memory-rules/month-recap.rule';
+import { OnThisDayPlaceMemoryRule } from 'src/services/memory-rules/on-this-day-place.rule';
 import { RecentTripMemoryRule } from 'src/services/memory-rules/recent-trip.rule';
 
 export interface MemoryRuleDeps {
@@ -20,6 +21,7 @@ const RULE_FACTORIES: Record<string, (deps: MemoryRuleDeps) => MemoryRule> = {
   recent_trip: (deps) => new RecentTripMemoryRule(deps.assetRepository, deps.memoryRepository),
   month_recap: (deps) => new MonthRecapMemoryRule(deps.assetRepository),
   favorites_throwback: (deps) => new FavoritesThrowbackMemoryRule(deps.assetRepository),
+  on_this_day_place: (deps) => new OnThisDayPlaceMemoryRule(deps.assetRepository),
 };
 
 /** instantiate the rule-kind memory rules whose key is in `enabledKeys` (in registry order, deduped) */

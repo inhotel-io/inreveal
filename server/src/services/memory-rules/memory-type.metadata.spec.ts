@@ -23,6 +23,7 @@ describe('memory-type.metadata', () => {
         { key: 'recent_trip', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'month_recap', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'favorites_throwback', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'on_this_day_place', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
       ]);
     });
 
@@ -41,6 +42,7 @@ describe('memory-type.metadata', () => {
         'recent_trip',
         'month_recap',
         'favorites_throwback',
+        'on_this_day_place',
       ]);
     });
   });
@@ -53,6 +55,7 @@ describe('memory-type.metadata', () => {
         recent_trip: true,
         month_recap: true,
         favorites_throwback: true,
+        on_this_day_place: true,
       });
     });
   });
@@ -86,7 +89,7 @@ describe('memory-type.metadata', () => {
   describe('getAdminAvailableMemoryTypeKeys', () => {
     it('returns all types when no overrides', () => {
       expect(getAdminAvailableMemoryTypeKeys({})).toEqual(
-        new Set(['on_this_day', 'birthday', 'recent_trip', 'month_recap', 'favorites_throwback']),
+        new Set(['on_this_day', 'birthday', 'recent_trip', 'month_recap', 'favorites_throwback', 'on_this_day_place']),
       );
     });
 
@@ -120,7 +123,7 @@ describe('memory-type.metadata', () => {
 
     it('ignores unknown keys in the types map', () => {
       expect(getAdminAvailableMemoryTypeKeys({ types: { unknown_key: true } })).toEqual(
-        new Set(['on_this_day', 'birthday', 'recent_trip', 'month_recap', 'favorites_throwback']),
+        new Set(['on_this_day', 'birthday', 'recent_trip', 'month_recap', 'favorites_throwback', 'on_this_day_place']),
       );
     });
   });
