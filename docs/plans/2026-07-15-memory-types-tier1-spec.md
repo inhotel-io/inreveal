@@ -18,27 +18,29 @@ emotionally resonant, anniversary-flavored memories, reusing the existing rule e
 - No localization of memory _content_ (titles/subtitles stay English, matching existing
   rules). Settings _labels_ are localized.
 - No changes to the memory _viewer_ (web/mobile render rule memories generically).
-- No change to `RULE_DAILY_LIMIT` or the memory generation/cleanup scheduling.
+- No change to `RULE_DAILY_LIMIT`, the daily-limit counting, or the memory
+  generation/cleanup scheduling. The only service change is a small one: rule candidates
+  may declare a multi-day visibility window (see §3.2).
 
 ## 2. Design decisions (please confirm on review)
 
 These are the choices that shaped the spec. Each has a default I recommend; flag any you
 want changed and I'll revise before implementation.
 
-| ID  | Decision                | Chosen default                                                                                              | Alternative                                              |
-| --- | ----------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| D1  | **Trigger cadence**     | Anniversary-anchored & staggered: #3 daily · #2 on the 1st · #1 on the 15th · #4 on each season's first day | Emit-always + cooldown model (like `recent_trip`)        |
-| D2  | **One shared query**    | Single parametric `getMemoryAssetsForPeriod` serves all four; rules group/curate/score in TS                | Four bespoke queries                                     |
-| D3  | **Memory content i18n** | Hardcoded English titles/subtitles (consistent with `birthday`/`recent_trip`)                               | Introduce a content-localization mechanism (own project) |
-| D4  | **Default enabled**     | All four `defaultEnabled: true`, `adminConfigurable: true`                                                  | Ship #4 (season) OFF by default, more conservative       |
-| D5  | **Season model**        | Meteorological seasons, N-hemisphere, with winter (Dec–Feb) cross-year grouping                             | Calendar quarters (no cross-year), or hemisphere-aware   |
-| D6  | **#1 vs #2 overlap**    | Accept it; the 15th/1st stagger stops same-day stacking, different `dedupeKey`s, favorites score higher     | Suppress #2 for a month already covered by #1            |
-| D7  | **Scoring/thresholds**  | The constants in §5 (tunable; birthday ≈ 250–320 stays top, favorites competitive, recaps mid)              | Any other numbers                                        |
+| ID  | Decision                     | Chosen default                                                                                                                                                                                                                                               | Alternative                                              |
+| --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| D1  | **Trigger cadence + window** | Anniversary-anchored & staggered triggers: #3 daily · #2 on the 1st · #1 on the 15th · #4 on each season's first day. The three recaps stay **visible for a multi-day window** (§3.2), not just the trigger day; #3 stays single-day (it regenerates daily). | Emit-always + cooldown model (like `recent_trip`)        |
+| D2  | **One shared query**         | Single parametric `getMemoryAssetsForPeriod` serves all four; rules group/curate/score in TS                                                                                                                                                                 | Four bespoke queries                                     |
+| D3  | **Memory content i18n**      | Hardcoded English titles/subtitles (consistent with `birthday`/`recent_trip`)                                                                                                                                                                                | Introduce a content-localization mechanism (own project) |
+| D4  | **Default enabled**          | All four `defaultEnabled: true`, `adminConfigurable: true`                                                                                                                                                                                                   | Ship #4 (season) OFF by default, more conservative       |
+| D5  | **Season model**             | Meteorological seasons, N-hemisphere, with winter (Dec–Feb) cross-year grouping                                                                                                                                                                              | Calendar quarters (no cross-year), or hemisphere-aware   |
+| D6  | **#1 vs #2 overlap**         | Accept it; the 15th/1st stagger stops same-day stacking, different `dedupeKey`s, favorites score higher                                                                                                                                                      | Suppress #2 for a month already covered by #1            |
+| D7  | **Scoring/thresholds**       | The constants in §5 (tunable; birthday ≈ 250–320 stays top, favorites competitive, recaps mid)                                                                                                                                                               | Any other numbers                                        |
 
 ## 3. Architecture
 
 ```
-memory.service.ts  (unchanged)
+memory.service.ts  (small change: honors candidate.visibleForDays → hideAt window)
   └─ createRuleMemories → evaluateRuleCandidates → rule.evaluate({ ownerId, target })
         ├─ FavoritesThrowbackMemoryRule   (id "favorites_throwback")
         ├─ MonthRecapMemoryRule           (id "month_recap")
@@ -58,31 +60,34 @@ trivial to mock.
 
 **Server — source**
 
-| File                                                    | Change                                                                     |
-| ------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `src/repositories/asset.repository.ts`                  | Add `getMemoryAssetsForPeriod` + `MemoryPeriodAsset` interface             |
-| `src/services/memory-rules/curation.util.ts`            | New: `pickEvenlySpaced`, `sampleAssetsByTime`, `dominant` helpers          |
-| `src/services/memory-rules/favorites-throwback.rule.ts` | New rule                                                                   |
-| `src/services/memory-rules/month-recap.rule.ts`         | New rule                                                                   |
-| `src/services/memory-rules/on-this-day-place.rule.ts`   | New rule                                                                   |
-| `src/services/memory-rules/season-recap.rule.ts`        | New rule                                                                   |
-| `src/services/memory-rules/season.util.ts`              | New: season ↔ months mapping + `seasonOf`, `seasonYearOf`, `isSeasonStart` |
-| `src/services/memory-rules/memory-type.metadata.ts`     | Add 4 `MEMORY_TYPE_METADATA` entries                                       |
-| `src/services/memory-rules/memory-type.registry.ts`     | Add 4 `RULE_FACTORIES` entries                                             |
+| File                                                    | Change                                                                       |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `src/repositories/asset.repository.ts`                  | Add `getMemoryAssetsForPeriod` + `MemoryPeriodAsset` interface               |
+| `src/services/memory-rules/curation.util.ts`            | New: `pickEvenlySpaced`, `sampleAssetsByTime`, `dominant` helpers            |
+| `src/services/memory-rules/favorites-throwback.rule.ts` | New rule                                                                     |
+| `src/services/memory-rules/month-recap.rule.ts`         | New rule                                                                     |
+| `src/services/memory-rules/on-this-day-place.rule.ts`   | New rule                                                                     |
+| `src/services/memory-rules/season-recap.rule.ts`        | New rule                                                                     |
+| `src/services/memory-rules/season.util.ts`              | New: season ↔ months mapping + `seasonOf`, `seasonYearOf`, `isSeasonStart`   |
+| `src/services/memory-rules/memory-rule.interface.ts`    | Add optional `visibleForDays?: number` to `MemoryRuleCandidate`              |
+| `src/services/memory.service.ts`                        | `createRuleMemories`: derive `hideAt` from `candidate.visibleForDays` (§3.2) |
+| `src/services/memory-rules/memory-type.metadata.ts`     | Add 4 `MEMORY_TYPE_METADATA` entries                                         |
+| `src/services/memory-rules/memory-type.registry.ts`     | Add 4 `RULE_FACTORIES` entries                                               |
 
 **Server — tests**
 
-| File                                                    | Change                                                           |
-| ------------------------------------------------------- | ---------------------------------------------------------------- |
-| `.../favorites-throwback.rule.spec.ts`                  | New (unit, BDD)                                                  |
-| `.../month-recap.rule.spec.ts`                          | New (unit, BDD)                                                  |
-| `.../on-this-day-place.rule.spec.ts`                    | New (unit, BDD)                                                  |
-| `.../season-recap.rule.spec.ts`                         | New (unit, BDD)                                                  |
-| `.../curation.util.spec.ts`                             | New (unit)                                                       |
-| `.../season.util.spec.ts`                               | New (unit)                                                       |
-| `.../memory-type.metadata.spec.ts`                      | Extend: assert 4 new keys, defaults, `getMemoryTypeKeyForMemory` |
-| `.../memory-type.registry.spec.ts`                      | Extend: assert factories build the right rule for each new key   |
-| `test/medium/.../asset.repository.spec.ts` (or nearest) | New medium test for `getMemoryAssetsForPeriod` (real DB)         |
+| File                                                    | Change                                                                |
+| ------------------------------------------------------- | --------------------------------------------------------------------- |
+| `.../favorites-throwback.rule.spec.ts`                  | New (unit, BDD)                                                       |
+| `.../month-recap.rule.spec.ts`                          | New (unit, BDD)                                                       |
+| `.../on-this-day-place.rule.spec.ts`                    | New (unit, BDD)                                                       |
+| `.../season-recap.rule.spec.ts`                         | New (unit, BDD)                                                       |
+| `.../curation.util.spec.ts`                             | New (unit)                                                            |
+| `.../season.util.spec.ts`                               | New (unit)                                                            |
+| `.../memory-type.metadata.spec.ts`                      | Extend: assert 4 new keys, defaults, `getMemoryTypeKeyForMemory`      |
+| `.../memory-type.registry.spec.ts`                      | Extend: assert factories build the right rule for each new key        |
+| `src/services/memory.service.spec.ts`                   | Extend: `visibleForDays` → correct `hideAt`; default (absent) → 1-day |
+| `test/medium/.../asset.repository.spec.ts` (or nearest) | New medium test for `getMemoryAssetsForPeriod` (real DB)              |
 
 **Web**
 
@@ -94,6 +99,33 @@ trivial to mock.
 **Verify (no code expected, but confirm):** mobile memory-type settings enumeration.
 If mobile reads `availableMemoryTypes` like web user settings, only strings are needed;
 if it hardcodes a list, it needs the same 4-key edit. Captured as a task in §8.
+
+### 3.2 Multi-day visibility window
+
+A memory surfaces while `showAt <= now` and (`hideAt is null` or `hideAt >= now`)
+(`memory.repository.ts` `baseSearchBuilder`). Today every rule memory is pinned to its
+trigger day (`showAt = target.startOf('day')`, `hideAt = target.endOf('day')`), so a
+monthly recap generated on the 1st would vanish on the 2nd. To let recaps linger:
+
+- Add optional `visibleForDays?: number` to `MemoryRuleCandidate` (**default 1** — existing
+  `birthday`/`recent_trip` behavior is unchanged).
+- In `createRuleMemories`, keep `showAt = target.startOf('day')` and compute
+  `hideAt = target.startOf('day').plus({ days: (candidate.visibleForDays ?? 1) - 1 }).endOf('day')`.
+
+**Windows chosen:** `month_recap` 7 days, `favorites_throwback` 7 days, `season_recap`
+10 days, `on_this_day_place` 1 day (it is date-anchored and regenerates every day, so it
+does not need a window).
+
+**Daily-limit interaction (unchanged logic, documented):** `RULE_DAILY_LIMIT` (2) is
+enforced by counting rule memories **visible on `target`** (`search({ type: Rule, for:
+target })`). A multi-day recap therefore holds one of the two slots for its whole window.
+Because the daily rules (`on_this_day_place`, `birthday`, `recent_trip`) are 1-day and do
+not accumulate, one active recap still leaves a slot free each day for a daily memory. The
+only crunch is when **two** recaps overlap — the four season-starts, where `month_recap`
+(days 1–7) and `season_recap` (days 1–10) coincide — during which the two recaps can take
+both slots and briefly suppress `on_this_day_place`. This is rare (~4×/yr), self-healing,
+and no worse than an existing birthday+trip day. If it ever matters, bumping
+`RULE_DAILY_LIMIT` to 3 is the lever — **explicitly out of scope here** (flagged in §8).
 
 ## 4. Shared repository query
 
@@ -158,6 +190,7 @@ constants below are the values referenced by the tests; treat them as the spec's
   - `dedupeKey`: `on_this_day_place:${year}-${MM}-${dd}:${placeKeyLower}`
   - `score`: `100 + count * 3 + recencyBonus(year, target)`
   - `assetIds`: that year+city assets → `sampleAssetsByTime(cap = 8)`
+  - `visibleForDays`: **1** (omit — date-anchored, regenerates daily)
 - **Determinism:** on a dominant-city tie, pick the greater count then the lexicographically
   smaller city (so tests and reruns are stable).
 
@@ -175,6 +208,7 @@ constants below are the values referenced by the tests; treat them as the spec's
   - `dedupeKey`: `month_recap:${year}-${MM}`
   - `score`: `80 + min(count, 30) + recencyBonus(year, target)`
   - `assetIds`: `sampleAssetsByTime(cap = 24)`
+  - `visibleForDays`: **7** (visible through the first week of the month)
 
 ### 5.3 `favorites_throwback` — "Favorite moments from [Month] [Year]"
 
@@ -190,6 +224,7 @@ constants below are the values referenced by the tests; treat them as the spec's
   - `score`: `200 + min(count, 20) * 3 + recencyBonus(year, target)` (favorites rank high —
     curated; the `min` cap keeps a heavily-favorited month from outscoring `birthday`'s rich path)
   - `assetIds`: `sampleAssetsByTime(cap = 12)`
+  - `visibleForDays`: **7** (visible through the second half of the month)
 
 ### 5.4 `season_recap` — "[Season] [Year]"
 
@@ -209,6 +244,7 @@ constants below are the values referenced by the tests; treat them as the spec's
   - `dedupeKey`: `season_recap:${seasonYear}-${seasonName}`
   - `score`: `90 + min(count, 40) + recencyBonus(seasonYear, target)`
   - `assetIds`: `sampleAssetsByTime(cap = 30)`
+  - `visibleForDays`: **10** (a season is long; a longer welcome-to-the-season window)
 - **Limitation:** N-hemisphere seasons only (documented). A future hemisphere-aware
   version can key off the user's home country/latitude.
 
@@ -332,7 +368,21 @@ Using the `test/medium` harness (real Postgres via testcontainers), seed assets 
 - `year` is the correct UTC year; assets without a Preview file are excluded; deleted /
   non-Timeline assets excluded.
 
-### 6.6 Edge cases consolidated (must each have a test)
+### 6.6 Service — visibility window (extend `memory.service.spec.ts`)
+
+Drive `createRuleMemories` with a stubbed rule returning a single candidate and assert the
+persisted `showAt`/`hideAt`:
+
+- given a candidate with `visibleForDays: 7` on target `2026-07-01` → `showAt = 2026-07-01
+00:00`, `hideAt = 2026-07-07 23:59:59`.
+- given a candidate with **no** `visibleForDays` → `hideAt = target.endOf('day')` (1-day;
+  proves `birthday`/`recent_trip` behavior is unchanged).
+- given a candidate with `visibleForDays: 1` → identical to the no-field case.
+- regression: an active multi-day recap counts as one visible rule memory for the daily
+  limit on subsequent days (stub `memory.search` to return it for `for: target+1`), leaving
+  `remainingSlots = 1` so a daily `on_this_day_place` candidate is still inserted.
+
+### 6.7 Edge cases consolidated (must each have a test)
 
 | Edge case                                      | Owning test       | Expected                             |
 | ---------------------------------------------- | ----------------- | ------------------------------------ |
@@ -349,6 +399,9 @@ Using the `test/medium` harness (real Postgres via testcontainers), seed assets 
 | Leap-day target (Feb 29) for place/on-this-day | #3 spec           | handled; no crash                    |
 | `dedupeKey` stability across target days       | each rule spec    | identical key for same period        |
 | Score ordering vs `birthday`/`recent_trip`     | metadata/reasoned | birthday stays top; documented in §5 |
+| Multi-day recap window (`hideAt`)              | service spec §6.6 | `hideAt` spans `visibleForDays`      |
+| Absent `visibleForDays` (existing rules)       | service spec §6.6 | 1-day window unchanged               |
+| Two recaps overlapping a season-start          | service spec §6.6 | both fit in 2 slots; documented §3.2 |
 
 ## 7. Verification gates (before PR)
 
@@ -365,9 +418,12 @@ Using the `test/medium` harness (real Postgres via testcontainers), seed assets 
 
 ## 8. Open tasks / follow-ups
 
-- [ ] Confirm the §2 design decisions (esp. D1 cadence, D4 defaults, D5 season model).
+- [x] §2 design decisions confirmed: D1 staggered triggers **+ multi-day recap windows**
+      (§3.2); D4 all four default-on; D5 meteorological N-hemisphere seasons.
 - [ ] Verify mobile memory-type settings enumeration; edit if it hardcodes a list.
 - [ ] Decide whether to refactor `recent_trip` to import the shared `pickEvenlySpaced`
       (optional cleanup; keep behavior identical + its existing tests green).
+- [ ] Out of scope, revisit if `on_this_day_place` feels starved: bump `RULE_DAILY_LIMIT`
+      from 2 → 3 now that six rule types compete (§3.2).
 - [ ] Later tier: keep `MemoryRuleCandidate` shaped so an embedding-backed rule (#12) needs
       no engine change.
