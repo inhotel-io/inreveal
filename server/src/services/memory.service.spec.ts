@@ -590,6 +590,58 @@ describe(MemoryService.name, () => {
 
       vi.useRealTimers();
     });
+
+    // Slice 3: rule candidates may declare a multi-day visibility window via visibleForDays.
+    it.each([
+      {
+        label: 'extends hideAt across a multi-day window',
+        visibleForDays: 7 as number | undefined,
+        hideAt: '2026-07-07T23:59:59.999Z',
+      },
+      { label: 'defaults to a single day when absent', visibleForDays: undefined, hideAt: '2026-07-01T23:59:59.999Z' },
+      {
+        label: 'treats visibleForDays of 1 as a single day',
+        visibleForDays: 1 as number | undefined,
+        hideAt: '2026-07-01T23:59:59.999Z',
+      },
+    ])('$label', async ({ visibleForDays, hideAt }) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-01T12:00:00Z'));
+
+      const user = factory.userAdmin();
+      mocks.user.getList.mockResolvedValue([user]);
+      mocks.systemMetadata.get.mockResolvedValue({
+        lastOnThisDayDate: '2026-07-03T00:00:00.000Z',
+        lastRuleDate: '2026-06-30T00:00:00.000Z',
+      });
+      mocks.asset.getByDayOfYear.mockResolvedValue([]);
+      mocks.memory.search.mockResolvedValue([]);
+      mocks.memory.hasRuleMemory.mockResolvedValue(false);
+      mocks.memory.create.mockResolvedValue(MemoryFactory.create() as any);
+
+      const rule = {
+        id: 'month_recap',
+        evaluate: vi.fn().mockResolvedValue([
+          {
+            ruleId: 'month_recap',
+            dedupeKey: 'month_recap:2023-07',
+            title: 'July 2023',
+            score: 100,
+            assetIds: ['a-1'],
+            memoryAt: DateTime.fromISO('2023-07-15T00:00:00Z'),
+            ...(visibleForDays === undefined ? {} : { visibleForDays }),
+          },
+        ]),
+      };
+      vi.spyOn(sut as never, 'getMemoryRules').mockReturnValue([rule] as never);
+
+      await sut.onMemoriesCreate();
+      vi.useRealTimers();
+
+      const created = mocks.memory.create.mock.calls[0]?.[0];
+      expect(created?.showAt).toEqual(new Date('2026-07-01T00:00:00.000Z'));
+      expect(created?.hideAt).toEqual(new Date(hideAt));
+    });
   });
 
   describe('search', () => {
