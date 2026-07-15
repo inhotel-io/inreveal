@@ -170,6 +170,26 @@ export interface MemoryLocationCluster {
   lastDate: Date;
 }
 
+export interface MemoryPeriodAsset {
+  id: string;
+  localDateTime: Date;
+  year: number;
+  country: string | null;
+  city: string | null;
+  isFavorite: boolean;
+}
+
+export interface MemoryPeriodOptions {
+  /** calendar months (1–12) to include */
+  months: number[];
+  /** optional day-of-month filter (for on-this-day style rules) */
+  day?: number;
+  /** when true, only favorited assets are returned */
+  favoritesOnly?: boolean;
+  /** exclude assets taken after this instant (defensive guard against future-dated assets) */
+  takenBefore: Date;
+}
+
 interface AssetExploreFieldOptions {
   maxFields: number;
   minAssetsPerField: number;
@@ -911,6 +931,44 @@ export class AssetRepository {
       .where('asset_exif.country', '=', country)
       .$if(city !== null, (qb) => qb.where('asset_exif.city', '=', city))
       .$if(city === null, (qb) => qb.where('asset_exif.city', 'is', null))
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_file')
+            .select('asset_file.assetId')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', AssetFileType.Preview),
+        ),
+      )
+      .orderBy('asset.localDateTime', 'asc')
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, { months: [7], takenBefore: DummyValue.DATE }] })
+  getMemoryAssetsForPeriod(
+    ownerId: string,
+    { months, day, favoritesOnly, takenBefore }: MemoryPeriodOptions,
+  ): Promise<MemoryPeriodAsset[]> {
+    return this.db
+      .selectFrom('asset')
+      .leftJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
+      .select([
+        'asset.id',
+        'asset.localDateTime',
+        'asset.isFavorite',
+        'asset_exif.country as country',
+        'asset_exif.city as city',
+      ])
+      .select(sql<number>`extract(year from (asset."localDateTime" at time zone 'UTC'))::int`.as('year'))
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.localDateTime', '<=', takenBefore)
+      .where(sql<number>`extract(month from (asset."localDateTime" at time zone 'UTC'))::int`, 'in', months)
+      .$if(day !== undefined, (qb) =>
+        qb.where(sql<number>`extract(day from (asset."localDateTime" at time zone 'UTC'))::int`, '=', day!),
+      )
+      .$if(favoritesOnly === true, (qb) => qb.where('asset.isFavorite', '=', true))
       .where((eb) =>
         eb.exists(
           eb
