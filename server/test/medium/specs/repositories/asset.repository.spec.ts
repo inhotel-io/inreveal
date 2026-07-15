@@ -28,6 +28,42 @@ const setup = (db?: Kysely<DB>) => {
   return { ctx, sut: ctx.get(AssetRepository) };
 };
 
+const seedPeriodAsset = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  ownerId: string,
+  {
+    localDateTime,
+    country = null,
+    city = null,
+    isFavorite = false,
+    withPreview = true,
+    visibility = AssetVisibility.Timeline,
+    deleted = false,
+  }: {
+    localDateTime: Date;
+    country?: string | null;
+    city?: string | null;
+    isFavorite?: boolean;
+    withPreview?: boolean;
+    visibility?: AssetVisibility;
+    deleted?: boolean;
+  },
+) => {
+  const { asset } = await ctx.newAsset({
+    ownerId,
+    visibility,
+    localDateTime,
+    isFavorite,
+    deletedAt: deleted ? new Date() : null,
+  });
+  await Promise.all([
+    ctx.newExif({ assetId: asset.id, country, city }),
+    ctx.newJobStatus({ assetId: asset.id }),
+    withPreview ? ctx.newAssetFile({ assetId: asset.id, type: AssetFileType.Preview, path: `${asset.id}.jpg` }) : null,
+  ]);
+  return asset;
+};
+
 const createTimelineAssetWithPeople = async (
   ctx: ReturnType<typeof setup>['ctx'],
   ownerId: string,
@@ -847,6 +883,139 @@ describe(AssetRepository.name, () => {
           expect.objectContaining({ id: duplicateFaceAsset.id, localDateTime: new Date('2024-04-01T12:00:00Z') }),
         ]),
       );
+    });
+  });
+
+  describe('getMemoryAssetsForPeriod', () => {
+    it('filters by month across years and returns the correct UTC year', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-10T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2022-07-20T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-06-10T12:00:00Z') }); // wrong month
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.year).toSorted()).toEqual([2022, 2023]);
+    });
+
+    it('unions multiple months', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-06-10T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-10T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-08-10T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-09-10T12:00:00Z') }); // excluded
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [6, 7, 8],
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result).toHaveLength(3);
+    });
+
+    it('narrows to a day-of-month across years', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-15T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2022-07-15T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-16T12:00:00Z') }); // wrong day
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        day: 15,
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result).toHaveLength(2);
+    });
+
+    it('returns only favorites when favoritesOnly is set', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const fav = await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-10T12:00:00Z'),
+        isFavorite: true,
+      });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-11T12:00:00Z'), isFavorite: false });
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        favoritesOnly: true,
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result.map((r) => r.id)).toEqual([fav.id]);
+      expect(result[0].isFavorite).toBe(true);
+    });
+
+    it('excludes assets taken after takenBefore', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-10T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2025-07-10T12:00:00Z') }); // after cutoff
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        takenBefore: new Date('2024-01-01T00:00:00Z'),
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].year).toBe(2023);
+    });
+
+    it('returns city and country for geotagged assets and nulls for ungeotagged', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-10T12:00:00Z'),
+        country: 'France',
+        city: 'Paris',
+      });
+      await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-11T12:00:00Z'),
+        country: null,
+        city: null,
+      });
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ country: 'France', city: 'Paris' }),
+          expect.objectContaining({ country: null, city: null }),
+        ]),
+      );
+    });
+
+    it('excludes assets without a preview, deleted, non-timeline, and other owners; orders by localDateTime asc', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { user: other } = await ctx.newUser();
+      const first = await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-05T12:00:00Z') });
+      const second = await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-25T12:00:00Z') });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-10T12:00:00Z'), withPreview: false });
+      await seedPeriodAsset(ctx, user.id, { localDateTime: new Date('2023-07-10T12:00:00Z'), deleted: true });
+      await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-10T12:00:00Z'),
+        visibility: AssetVisibility.Archive,
+      });
+      await seedPeriodAsset(ctx, other.id, { localDateTime: new Date('2023-07-10T12:00:00Z') });
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result.map((r) => r.id)).toEqual([first.id, second.id]);
     });
   });
 
