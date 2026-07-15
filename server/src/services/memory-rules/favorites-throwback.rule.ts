@@ -3,24 +3,27 @@ import { AssetRepository, MemoryPeriodAsset } from 'src/repositories/asset.repos
 import { medianTime, monthName, recencyBonus, sampleAssetsByTime } from 'src/services/memory-rules/curation.util';
 import { MemoryRule, MemoryRuleCandidate, MemoryRuleContext } from 'src/services/memory-rules/memory-rule.interface';
 
-/** "July 2023" — a recap of all photos from this calendar month in a past year. */
-export class MonthRecapMemoryRule implements MemoryRule {
-  readonly id = 'month_recap';
-  private static readonly MIN_ASSETS = 10;
+/** "Favorite moments from July 2023" — favorited photos from this month in a past year. */
+export class FavoritesThrowbackMemoryRule implements MemoryRule {
+  readonly id = 'favorites_throwback';
+  private static readonly TRIGGER_DAY = 15;
+  private static readonly MIN_FAVORITES = 4;
   private static readonly MAX_YEARS = 3;
-  private static readonly ASSET_CAP = 24;
+  private static readonly ASSET_CAP = 12;
+  private static readonly SCORE_COUNT_CAP = 20;
   private static readonly VISIBLE_FOR_DAYS = 7;
 
   constructor(private assetRepository: Pick<AssetRepository, 'getMemoryAssetsForPeriod'>) {}
 
   async evaluate({ ownerId, target }: MemoryRuleContext): Promise<MemoryRuleCandidate[]> {
-    if (target.day !== 1) {
+    if (target.day !== FavoritesThrowbackMemoryRule.TRIGGER_DAY) {
       return [];
     }
 
     const month = target.month;
     const assets = await this.assetRepository.getMemoryAssetsForPeriod(ownerId, {
       months: [month],
+      favoritesOnly: true,
       takenBefore: target.endOf('day').toJSDate(),
     });
 
@@ -36,24 +39,27 @@ export class MonthRecapMemoryRule implements MemoryRule {
 
     const candidates: MemoryRuleCandidate[] = [];
     for (const [year, yearAssets] of byYear) {
-      if (yearAssets.length < MonthRecapMemoryRule.MIN_ASSETS) {
+      if (yearAssets.length < FavoritesThrowbackMemoryRule.MIN_FAVORITES) {
         continue;
       }
 
       const count = yearAssets.length;
       candidates.push({
         ruleId: this.id,
-        dedupeKey: `month_recap:${year}-${String(month).padStart(2, '0')}`,
-        title: `${monthName(month)} ${year}`,
-        subtitle: `${count} photos`,
-        score: 80 + Math.min(count, 30) + recencyBonus(year, target.year),
-        assetIds: sampleAssetsByTime(yearAssets, MonthRecapMemoryRule.ASSET_CAP),
+        dedupeKey: `favorites_throwback:${year}-${String(month).padStart(2, '0')}`,
+        title: `Favorite moments from ${monthName(month)} ${year}`,
+        subtitle: `${count} favorites`,
+        score:
+          200 + Math.min(count, FavoritesThrowbackMemoryRule.SCORE_COUNT_CAP) * 3 + recencyBonus(year, target.year),
+        assetIds: sampleAssetsByTime(yearAssets, FavoritesThrowbackMemoryRule.ASSET_CAP),
         memoryAt: DateTime.fromJSDate(medianTime(yearAssets), { zone: 'utc' }),
         context: { year, month, count },
-        visibleForDays: MonthRecapMemoryRule.VISIBLE_FOR_DAYS,
+        visibleForDays: FavoritesThrowbackMemoryRule.VISIBLE_FOR_DAYS,
       });
     }
 
-    return candidates.toSorted((left, right) => right.score - left.score).slice(0, MonthRecapMemoryRule.MAX_YEARS);
+    return candidates
+      .toSorted((left, right) => right.score - left.score)
+      .slice(0, FavoritesThrowbackMemoryRule.MAX_YEARS);
   }
 }
