@@ -4812,6 +4812,66 @@ describe(PersonService.name, () => {
         authorize({ collapsedOwnerIds: ['owner-b'], repointedOwnerIds: [], unrepairableSpaceCollapseIds: [] }),
       ).resolves.toBeUndefined();
     });
+
+    // Parity with the scoped merge's 409 test: with the toggle on but no confirmation on the DTO, the classic
+    // endpoint must surface the confirmation-required conflict, not silently commit (#733).
+    it('requires explicit confirmation for a (b) collapse when the toggle is on but the merge is not confirmed', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
+      const identityMergePropagation = useIdentityMergePropagation();
+      const auth = AuthFactory.create();
+      const [person, mergeTarget] = [
+        PersonFactory.create({ id: 'person-x' }),
+        PersonFactory.create({ id: 'person-y' }),
+      ];
+      identityMergePropagation.mergePersonalPeople.mockResolvedValue([{ id: mergeTarget.id, success: true }]);
+      mocks.person.getById.mockResolvedValueOnce(person);
+      mocks.person.getById.mockResolvedValueOnce(mergeTarget);
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([person.id]));
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([mergeTarget.id]));
+      await sut.mergePerson(auth, person.id, { ids: [mergeTarget.id] });
+      const authorize = identityMergePropagation.mergePersonalPeople.mock.calls[0][3] as MergeAuthorizerFn;
+
+      const error = await authorize({
+        collapsedOwnerIds: ['owner-b'],
+        repointedOwnerIds: [],
+        unrepairableSpaceCollapseIds: [],
+      }).catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.confirmationRequired,
+      });
+    });
+
+    // The space hard-block is toggle-independent: even with the toggle ON and the merge confirmed, a fan-out that
+    // would collapse a space the actor cannot edit is refused with the space-specific code, on this endpoint too.
+    it('blocks a fan-out collapse of an un-editable space regardless of the toggle', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
+      const identityMergePropagation = useIdentityMergePropagation();
+      const auth = AuthFactory.create();
+      const [person, mergeTarget] = [
+        PersonFactory.create({ id: 'person-x' }),
+        PersonFactory.create({ id: 'person-y' }),
+      ];
+      identityMergePropagation.mergePersonalPeople.mockResolvedValue([{ id: mergeTarget.id, success: true }]);
+      mocks.person.getById.mockResolvedValueOnce(person);
+      mocks.person.getById.mockResolvedValueOnce(mergeTarget);
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([person.id]));
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([mergeTarget.id]));
+      await sut.mergePerson(auth, person.id, { ids: [mergeTarget.id], confirmCrossOwner: true });
+      const authorize = identityMergePropagation.mergePersonalPeople.mock.calls[0][3] as MergeAuthorizerFn;
+
+      const error = await authorize({
+        collapsedOwnerIds: [],
+        repointedOwnerIds: [],
+        unrepairableSpaceCollapseIds: ['space-x'],
+      }).catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).getResponse()).toMatchObject({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.blockedSpace,
+      });
+    });
   });
 
   describe('scoped people repair', () => {

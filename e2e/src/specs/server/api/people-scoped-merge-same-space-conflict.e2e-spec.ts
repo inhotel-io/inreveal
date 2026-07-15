@@ -304,4 +304,37 @@ describe('cross-owner policy parity across the merge endpoints (#733)', () => {
 
     expect(await otherOwnerPersonCount()).toBe(1);
   });
+
+  // The intermediate 409 step: toggle ON but no confirmation on the request. Only the scoped endpoint had this
+  // asserted end-to-end (people-cross-owner-merge.e2e-spec.ts); the classic and in-space endpoints jumped
+  // straight from "blocked" to "committed", never proving the HTTP 409 contract in between.
+  it('classic POST /people/:id/merge requires confirmation for a (b) collapse once the toggle is on', async () => {
+    const actorPersonOnS = await giveActorAPersonOnS();
+    await giveOtherOwnerAPersonOnT();
+    await enableCrossOwnerMerge();
+
+    const { status, body } = await request(app)
+      .post(`/people/${fx.targetPersonId}/merge`)
+      .set('Authorization', `Bearer ${fx.actor.accessToken}`)
+      .send({ ids: [actorPersonOnS] });
+
+    expect(status).toBe(409);
+    expect(body.code).toBe('cross_owner_merge_confirmation_required');
+    // Nothing merged: the other owner still holds both of their people.
+    expect(await otherOwnerPersonCount()).toBe(2);
+  });
+
+  it('in-space merge requires confirmation for a (b) collapse once the toggle is on', async () => {
+    await giveOtherOwnerAPersonOnT();
+    await enableCrossOwnerMerge();
+
+    const { status, body } = await request(app)
+      .post(`/shared-spaces/${fx.spaceId}/people/${fx.targetSpacePersonId}/merge`)
+      .set('Authorization', `Bearer ${fx.actor.accessToken}`)
+      .send({ ids: [fx.sourceSpacePersonId] });
+
+    expect(status).toBe(409);
+    expect(body.code).toBe('cross_owner_merge_confirmation_required');
+    expect(await otherOwnerPersonCount()).toBe(2);
+  });
 });
