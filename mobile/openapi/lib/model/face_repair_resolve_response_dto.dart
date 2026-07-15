@@ -18,6 +18,7 @@ class FaceRepairResolveResponseDto {
     required this.locked,
     required this.moved,
     required this.skipped,
+    required this.unknown,
   });
 
   num declined;
@@ -30,13 +31,16 @@ class FaceRepairResolveResponseDto {
 
   num skipped;
 
+  num unknown;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairResolveResponseDto &&
     other.declined == declined &&
     other.detached == detached &&
     other.locked == locked &&
     other.moved == moved &&
-    other.skipped == skipped;
+    other.skipped == skipped &&
+    other.unknown == unknown;
 
   @override
   int get hashCode =>
@@ -45,10 +49,11 @@ class FaceRepairResolveResponseDto {
     (detached.hashCode) +
     (locked.hashCode) +
     (moved.hashCode) +
-    (skipped.hashCode);
+    (skipped.hashCode) +
+    (unknown.hashCode);
 
   @override
-  String toString() => 'FaceRepairResolveResponseDto[declined=$declined, detached=$detached, locked=$locked, moved=$moved, skipped=$skipped]';
+  String toString() => 'FaceRepairResolveResponseDto[declined=$declined, detached=$detached, locked=$locked, moved=$moved, skipped=$skipped, unknown=$unknown]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -57,6 +62,7 @@ class FaceRepairResolveResponseDto {
       json[r'locked'] = this.locked;
       json[r'moved'] = this.moved;
       json[r'skipped'] = this.skipped;
+      json[r'unknown'] = this.unknown;
     return json;
   }
 
@@ -74,6 +80,7 @@ class FaceRepairResolveResponseDto {
         locked: num.parse('${json[r'locked']}'),
         moved: num.parse('${json[r'moved']}'),
         skipped: num.parse('${json[r'skipped']}'),
+        unknown: num.parse('${json[r'unknown']}'),
       );
     }
     return null;
@@ -126,6 +133,7 @@ class FaceRepairResolveResponseDto {
     'locked',
     'moved',
     'skipped',
+    'unknown',
   };
 }
 

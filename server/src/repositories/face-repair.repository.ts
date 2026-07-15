@@ -242,7 +242,7 @@ export class FaceRepairRepository {
     return movedIds;
   }
 
-  // Detach ("Not a face", Slice 5): unassign the given faces from `personId` (same ML/visible/not-deleted
+  // Detach ("Not a face", Slice 5): retire the given faces from `personId` (same ML/visible/not-deleted
   // eligibility re-check as reattributeFaces, and the same still-on-source guard) AND strip their identity
   // link in the SAME chunk/transaction — never via FaceIdentityRepository.unlinkFaces, whose own `this.db`
   // would run outside a caller-supplied `trx` and break the pair's atomicity (a crash between the two writes
@@ -250,6 +250,15 @@ export class FaceRepairRepository {
   // resolve right back onto it — the exact regression this pairing (E4) guards against). Returns the ids
   // actually detached, so the caller can regenerate the person's representative thumbnail for exactly those
   // (E19/M21).
+  //
+  // The write is `personId = NULL` AND `deletedAt = now()` — soft-delete, the same primitive the face editor's
+  // own "delete face" uses (PersonRepository.softDeleteAssetFaces). Unassigning ALONE is not durable and was the
+  // bug: PersonService.queueRecognizeFaces streams every `personId IS NULL` visible ML face back into the
+  // FacialRecognition queue, which re-matches it by embedding and re-assigns it to whichever neighbour has a
+  // person — for a crop that was mis-clustered INTO this person, that neighbour is very often this person again.
+  // So a merely-unassigned "not a face" would silently boomerang back onto the cluster and re-flag on the next
+  // scan, contradicting the console's own promise that a detached crop "stops being proposed for anyone".
+  // `deletedAt` is what makes that promise true: every recognition-candidate query filters `deletedAt IS NULL`.
   async detachFaces(
     personId: string,
     assetFaceIds: string[],
@@ -265,7 +274,7 @@ export class FaceRepairRepository {
       const chunk = assetFaceIds.slice(index, index + 1000);
       const rows = await db
         .updateTable('asset_face')
-        .set({ personId: null })
+        .set({ personId: null, deletedAt: new Date() })
         .where('id', 'in', chunk)
         .where('personId', '=', personId)
         .where('sourceType', '=', sql.lit(SourceType.MachineLearning))

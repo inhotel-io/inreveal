@@ -87,6 +87,12 @@ export interface RunRepairOptions {
 export interface RepairExecution {
   moved: number;
   skipped: number;
+  // Temporal-consistency hardening, Slice 3 (move-and-lock): every face id that ACTUALLY moved (i.e. was still
+  // on its source person at write time — the same set `moved` counts), across every route. resolveFaces uses
+  // this to lock only the faces a moveToPerson `lock: true` group actually moved, never a stale one that
+  // turned out to have moved off the source before this call (M8) — an orphan lock on an untouched face would
+  // be meaningless (locks are keyed to the destination the face is confirmed on).
+  movedFaceIds: string[];
 }
 
 export interface RunRepairResult {
@@ -141,7 +147,17 @@ export class FaceRepairService extends BaseService {
       await options.onProgress?.(scanned);
     }
 
-    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps();
+    // Slice 4 (temporal-consistency hardening, req 5): bound the decline/lock load to exactly the faces/
+    // persons this scan just flagged — an unscoped read re-fetches the whole (ever-growing) decline/lock
+    // tables on every scan pass. Scope must be built from the pre-filter flaggedByPerson (not the post-filter
+    // toRepair/reviewOnlyFaces below) so a decline/lock on any candidate face is still fetched even though its
+    // whole purpose is to drop that very face.
+    const flaggedFaceIds = [...flaggedByPerson.values()].flat().map((f) => f.assetFaceId);
+    const flaggedPersonIds = [...flaggedByPerson.keys()];
+    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
+      assetFaceIds: flaggedFaceIds,
+      personIds: flaggedPersonIds,
+    });
     applyDeclineFilters(flaggedByPerson, declineMaps);
 
     const reviewOnlyPersonIds = new Set<string>();
@@ -203,6 +219,7 @@ export class FaceRepairService extends BaseService {
 
     let moved = 0;
     let skipped = 0;
+    const movedFaceIds: string[] = [];
     const affectedPersonIds = new Set<string>();
     const ownerExists = new Map<string, boolean>();
 
@@ -236,6 +253,7 @@ export class FaceRepairService extends BaseService {
         continue;
       }
       moved += movedIds.length;
+      movedFaceIds.push(...movedIds);
       affectedPersonIds.add(from);
       affectedPersonIds.add(to);
     }
@@ -251,7 +269,7 @@ export class FaceRepairService extends BaseService {
       }
     }
 
-    return { moved, skipped };
+    return { moved, skipped, movedFaceIds };
   }
 
   async runRepair(options: RunRepairOptions = {}): Promise<RunRepairResult> {
@@ -559,6 +577,12 @@ export class FaceRepairService extends BaseService {
     declinedBy: string;
   }): Promise<{ created: number }> {
     const created = await this.faceRepairDeclineRepository.createDeclines(input);
+    // Drain the dismissed persons from the latest scan snapshot so a dashboard reload no longer resurfaces
+    // them (mirrors resolveFaces's unconditional drop-on-resolution). Scoped to the `persons` branch only:
+    // the `faces` branch is reached solely from resolveFaces, which already drains its own person.
+    if (input.persons?.length) {
+      await this.faceRepairScanRepository.removePersonsFromLatestScan(input.persons.map((p) => p.personId));
+    }
     return { created };
   }
 
@@ -631,20 +655,30 @@ export class FaceRepairService extends BaseService {
   // on the same raw-snapshot membership check; Slice 6 wires `entireCluster` (server-enumerated whole-cluster
   // move, mutually exclusive with the per-face buckets) — the old `apply` endpoint has since been retired.
   async resolveFaces(input: FaceRepairResolveRequest, resolvedBy: string): Promise<FaceRepairResolveResponse> {
-    const { personId, moveToPerson, stay, lock, detach, entireCluster } = input;
+    const { personId, moveToPerson, stay, lock, detach, unknown, entireCluster } = input;
     const moveFaceIds = moveToPerson.flatMap((group) => group.faceIds);
 
     // E12/M13: entireCluster (server-enumerated whole-cluster move) is mutually exclusive with every per-face
     // bucket — combining them is ambiguous (which wins for a face requested both ways?), so reject outright.
     // Pure input validation, so it runs before the person is ever touched.
-    if (entireCluster && (moveFaceIds.length > 0 || stay.length > 0 || lock.length > 0 || detach.length > 0)) {
+    if (
+      entireCluster &&
+      (moveFaceIds.length > 0 || stay.length > 0 || lock.length > 0 || detach.length > 0 || unknown.length > 0)
+    ) {
       throw new BadRequestException('entireCluster cannot be combined with per-face resolution buckets');
     }
 
-    // E16/M19: an empty resolve (nothing to move/stay/lock/detach, and no entireCluster) must be rejected
-    // outright rather than silently falling through to an unconditional drain — a plain 400, no side effects.
-    // Pure input validation, so it runs before the person is ever touched (concurrency guards included).
-    if (moveFaceIds.length === 0 && stay.length === 0 && lock.length === 0 && detach.length === 0 && !entireCluster) {
+    // E16/M19: an empty resolve (nothing to move/stay/lock/detach/unknown, and no entireCluster) must be
+    // rejected outright rather than silently falling through to an unconditional drain — a plain 400, no side
+    // effects. Pure input validation, so it runs before the person is ever touched (concurrency guards included).
+    if (
+      moveFaceIds.length === 0 &&
+      stay.length === 0 &&
+      lock.length === 0 &&
+      detach.length === 0 &&
+      unknown.length === 0 &&
+      !entireCluster
+    ) {
       throw new BadRequestException('Resolve request has no faces to act on');
     }
 
@@ -658,10 +692,8 @@ export class FaceRepairService extends BaseService {
       throw new ConflictException('Refusing to apply while a scan is in progress');
     }
 
-    // E7: a face may resolve only one way in a single request. moveToPerson's groups flatten to one bucket;
-    // `stay` is real from this slice on, `lock`/`detach` are still always [] until Slices 3/5 populate them —
-    // the check already covers all four buckets so those slices don't need to revisit it.
-    const overlapping = findOverlappingIds([moveFaceIds, stay, lock, detach]);
+    // E7: a face may resolve only one way in a single request. moveToPerson's groups flatten to one bucket.
+    const overlapping = findOverlappingIds([moveFaceIds, stay, lock, detach, unknown]);
     if (overlapping.length > 0) {
       throw new BadRequestException('A face cannot be resolved more than one way in the same request');
     }
@@ -722,8 +754,8 @@ export class FaceRepairService extends BaseService {
     applyDeclineFilters(byPerson, declineMaps);
     const resolvable = new Set((byPerson.get(personId) ?? []).map((face) => face.assetFaceId));
 
-    // stay/lock/detach (E15) act only on this person's raw flagged snapshot.
-    const unresolvable = findUnresolvableIds([...stay, ...lock, ...detach], flaggedIds);
+    // stay/lock/detach/unknown (E15) act only on this person's raw flagged snapshot.
+    const unresolvable = findUnresolvableIds([...stay, ...lock, ...detach, ...unknown], flaggedIds);
     if (unresolvable.length > 0) {
       throw new BadRequestException('Some faces are not in the flagged snapshot for this person');
     }
@@ -766,6 +798,27 @@ export class FaceRepairService extends BaseService {
       perPerson: [],
     });
 
+    // Move-and-lock (temporal-consistency hardening, Slice 3, E5-E10/E13): a moveToPerson group with
+    // `lock: true` durably, owner-agnostically locks the faces it moved to its own destination — never a face
+    // requested in the same group that turned out to be stale (M8: moved off `personId` before this call, so
+    // it's absent from `movedFaceIds`) — an orphan lock on an untouched face would be meaningless. Bypasses
+    // the flagged-snapshot membership check entirely (M7): unlike the standalone `lock` bucket above, a
+    // move-lock is tied to the move itself, not to a pre-existing suspected-owner pairing. `insertLocks` is
+    // idempotent via the plain unique index on assetFaceId, so re-issuing an identical move-lock request never
+    // inserts a second row (E13) — and since the face is already on its destination the second time, it also
+    // won't be in `movedFaceIds` again, so insertLocks is not even called for it.
+    const movedSet = new Set(result.movedFaceIds);
+    let moveLocked = 0;
+    for (const group of moveToPerson) {
+      if (!group.lock) {
+        continue;
+      }
+      const toLock = group.faceIds.filter((id) => movedSet.has(id));
+      if (toLock.length > 0) {
+        moveLocked += await this.faceRepairLockRepository.insertLocks(toLock, group.destinationPersonId, resolvedBy);
+      }
+    }
+
     // Soft-stay (M4, state 3): write a durable decline against each stayed face's OWN stored suspected owner
     // (never one shared owner — a mixed cluster can point faces at different owners). `createDeclines` is
     // idempotent via its `(assetFaceId, suspectedOwnerId)` ON CONFLICT DO NOTHING, so re-staying an
@@ -784,8 +837,10 @@ export class FaceRepairService extends BaseService {
     // Confirm/lock (Slice 3, state 4): durably, owner-agnostically lock each `lock`-bucket face to this
     // reviewed person. `insertLocks` is idempotent via the plain unique index on assetFaceId — re-locking an
     // already-locked face (even one whose flaggedIds membership above passed via a stale/declined snapshot row)
-    // is a silent no-op, never a unique-violation.
-    const locked = lock.length > 0 ? await this.faceRepairLockRepository.insertLocks(lock, personId, resolvedBy) : 0;
+    // is a silent no-op, never a unique-violation. Summed with `moveLocked` (temporal-consistency hardening,
+    // Slice 3): a single resolve can both stand-alone-lock some faces AND move-and-lock others.
+    const locked =
+      (lock.length > 0 ? await this.faceRepairLockRepository.insertLocks(lock, personId, resolvedBy) : 0) + moveLocked;
 
     // Detach (Slice 5, state 5, "Not a face"): unassign each detached face from this person AND strip its
     // identity link, atomically — wrapped in one transaction so a crash between the two writes can never leave
@@ -810,6 +865,70 @@ export class FaceRepairService extends BaseService {
       }
     }
 
+    // "Unknown person" (state 6): the admin knows the face does not belong to this cluster but cannot name whose
+    // it is — the standard case when an admin reviews someone else's library and hits a friend of the family.
+    // Park each such face in a FRESH unnamed person of its own and lock it there.
+    //
+    // Why a new person rather than simply unassigning the face back to the "unknown pool" the admin has in mind?
+    // Because that pool is not a parking lot — it is the input queue of the very clustering that mis-assigned the
+    // face. PersonService.queueRecognizeFaces streams every `personId IS NULL` face back through
+    // FacialRecognition, which re-matches it by embedding and assigns it to its nearest neighbour that HAS a
+    // person; for a face being pulled out of a mixed cluster, that neighbour is very often the cluster it just
+    // left. A bare unassign would therefore boomerang. Giving the face a person of its own is what makes the
+    // decision stick: handleRecognizeFaces early-returns on a face that already has a person, and the lock stops
+    // the next cleanup scan re-flagging it. The face still surfaces as an unnamed cluster on the People page, so
+    // the library's owner — or face-recognition suggestions — can name or merge it later, which is exactly the
+    // decision the admin is deferring.
+    //
+    // One new cluster per resolve, not one per face: the admin selects the faces they believe are the same
+    // unknown person and parks them together, so they can be named in a single go later.
+    let unknownParked = 0;
+    let unknownSkipped = 0;
+    if (unknown.length > 0) {
+      const reviewedPerson = await this.personRepository.getById(personId);
+      if (!reviewedPerson) {
+        throw new BadRequestException('Reviewed person not found');
+      }
+      const cluster = await this.personRepository.create({ ownerId: reviewedPerson.ownerId });
+      try {
+        const parked = await this.executeRepair({
+          toRepair: unknown.map((assetFaceId) => ({
+            assetFaceId,
+            currentPersonId: personId,
+            suspectedOwnerId: cluster.id,
+          })),
+          reviewOnlyFaces: [],
+          reviewOnlyPersonIds: [],
+          unAttributableFaces: [],
+          perPerson: [],
+        });
+        unknownParked = parked.moved;
+        unknownSkipped = parked.skipped;
+        await (parked.movedFaceIds.length > 0
+          ? // Lock to the NEW cluster, not to the reviewed person: the lock is owner-agnostic (unique on
+            // assetFaceId), and its `personId` is the audit trail of where the face actually came to rest.
+            this.faceRepairLockRepository.insertLocks(parked.movedFaceIds, cluster.id, resolvedBy)
+          : // Every requested face turned out stale (moved off this person between the snapshot read and the
+            // write), so executeRepair moved nothing and the cluster we just created would linger as an empty,
+            // nameless person on the People page.
+            this.personRepository.delete([cluster.id]));
+      } catch (error) {
+        // The cluster is created BEFORE the faces are moved into it, so any failure in between (a dropped
+        // connection mid-reattribution, a lock insert that blows up) would otherwise strand a nameless, faceless
+        // person on the owner's People page — permanently, since nothing else ever cleans it up.
+        //
+        // Only remove it if it is genuinely EMPTY. `asset_face.personId` is ON DELETE SET NULL, so deleting a
+        // cluster that did receive faces would unassign them — dumping them straight back into the recognition
+        // pool this action exists to keep them out of. A partially-succeeded park leaves the faces safely on the
+        // cluster and the error surfaces to the admin, who can retry.
+        const parkedFaces = await this.faceRepairRepository.countAllFaces(cluster.id);
+        if (parkedFaces === 0) {
+          await this.personRepository.delete([cluster.id]);
+        }
+        throw error;
+      }
+    }
+
     // Empty-unnamed cleanup, reused from the now-retired applyRepair's manual-move cleanup (A2): only delete a
     // source with ZERO remaining faces of any kind, and only when it was never named.
     const remaining = await this.faceRepairRepository.countEligibleFaces({ personId });
@@ -823,18 +942,27 @@ export class FaceRepairService extends BaseService {
       }
     }
 
-    // Drop-on-any-resolution (C5, E13): unlike the now-retired applyRepair's `moved > 0` gate, a committed
-    // resolve always drains the person from the console immediately, even when every flagged face was kept/stayed (zero
-    // moves) — the M11 stay-only case, with `lock` still to come in Slice 3. moveToPerson destinations only
-    // ever gain faces from this call, so there is no destination to additionally drain this slice.
-    await this.faceRepairScanRepository.removePersonsFromLatestScan([personId]);
+    // Drop-on-SETTLED-resolution (C5, E13). A committed resolve drains the person from the console even when
+    // every flagged face was kept/stayed (zero moves) — the M11 stay-only case — because a kept face IS a
+    // settled face. What it must NOT do is drain on a resolve that settled *none* of the flagged snapshot: a
+    // move of rest-of-cluster faces alone (faces the scan never flagged) would otherwise drop the person while
+    // every flagged face was still awaiting a decision, silently discarding the admin's staged review and
+    // handing the same faces back on the next scan. `entireCluster` always drains — it moves the whole cluster,
+    // flagged faces included. moveToPerson destinations only ever gain faces from this call, so there is no
+    // destination to additionally drain.
+    const settledFaceIds = new Set([...moveFaceIds, ...stay, ...lock, ...detach, ...unknown]);
+    const settlesFlaggedSnapshot = [...flaggedIds].every((assetFaceId) => settledFaceIds.has(assetFaceId));
+    if (entireCluster || settlesFlaggedSnapshot) {
+      await this.faceRepairScanRepository.removePersonsFromLatestScan([personId]);
+    }
 
     return {
       moved: result.moved,
       declined,
       locked,
       detached: detachedIds.length,
-      skipped: result.skipped + preSkipped,
+      unknown: unknownParked,
+      skipped: result.skipped + preSkipped + unknownSkipped,
     };
   }
 

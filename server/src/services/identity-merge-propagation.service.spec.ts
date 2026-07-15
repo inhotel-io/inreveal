@@ -36,6 +36,37 @@ class PersonalMergeDb {
   deleteFrom(table: string) {
     return new PersonalMergeDeleteBuilder(this, table);
   }
+
+  // `mergePersonProfile` re-points `face_repair_decline` via an insert-select + onConflict-doNothing (Face
+  // Cleanup temporal-consistency hardening, Slice 1). These personal-merge fixtures never seed declines and
+  // don't assert on them, so — like the generic (non-person/asset_face) branches of the update/delete
+  // builders above — this is a no-op stub that only needs to satisfy the chained call shape without throwing.
+  insertInto(table: string) {
+    return new PersonalMergeInsertBuilder(this, table);
+  }
+}
+
+class PersonalMergeInsertBuilder {
+  constructor(
+    private db: PersonalMergeDb,
+    private table: string,
+  ) {}
+
+  columns() {
+    return this;
+  }
+
+  expression() {
+    return this;
+  }
+
+  onConflict() {
+    return this;
+  }
+
+  execute() {
+    return [];
+  }
 }
 
 class PersonalMergeSelectBuilder {

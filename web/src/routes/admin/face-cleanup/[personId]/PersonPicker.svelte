@@ -5,7 +5,7 @@
     getPeopleThumbnailPath,
     type FaceRepairOwnerPeopleResponseDto,
   } from '@immich/sdk';
-  import { Icon, Modal, ModalBody } from '@immich/ui';
+  import { Checkbox, Icon, Label, Modal, ModalBody } from '@immich/ui';
   import { mdiMagnify, mdiPlus } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
@@ -17,6 +17,10 @@
   export interface PersonPickerDestination {
     personId: string;
     name: string;
+    // Slice 3 (move-and-lock): whether the moved faces should also be durably, owner-agnostically locked so a
+    // later re-scan never re-flags them. Mirrors the "Lock so it won't re-flag" checkbox below (checked by
+    // default — a deliberate move-to-chosen-person is expected to stick).
+    lock: boolean;
   }
 
   type OwnerPerson = FaceRepairOwnerPeopleResponseDto['people'][number];
@@ -39,6 +43,8 @@
   let loadError = $state(false);
   let creating = $state(false);
   let createError = $state(false);
+  // Slice 3 (move-and-lock): default on — a deliberate move to a chosen person is expected to stick.
+  let lockOnMove = $state(true);
 
   const trimmedQuery = $derived(query.trim());
   const showEmpty = $derived(!loading && !loadError && people.length === 0 && trimmedQuery.length === 0);
@@ -84,7 +90,7 @@
   };
 
   const choosePerson = (person: OwnerPerson) => {
-    onClose({ personId: person.id, name: displayName(person.name) });
+    onClose({ personId: person.id, name: displayName(person.name), lock: lockOnMove });
   };
 
   const createNew = async () => {
@@ -98,7 +104,7 @@
         ownerId,
         faceRepairOwnerPersonCreateRequestDto: { name: trimmedQuery },
       });
-      onClose({ personId: result.id, name: trimmedQuery });
+      onClose({ personId: result.id, name: trimmedQuery, lock: lockOnMove });
     } catch {
       // E8: creation failed — leave the selection untouched (nothing applied) and surface the error inline;
       // the picker stays open so the admin can retry.
@@ -125,6 +131,20 @@
           bind:value={query}
           oninput={handleSearchInput}
           data-testid="person-picker-search"
+        />
+      </div>
+
+      <div class="flex items-center gap-2" data-testid="person-picker-lock-toggle">
+        <Checkbox
+          id="person-picker-lock"
+          size="tiny"
+          checked={lockOnMove}
+          onCheckedChange={() => (lockOnMove = !lockOnMove)}
+        />
+        <Label
+          label={$t('admin.face_cleanup_review_picker_lock_label')}
+          for="person-picker-lock"
+          class="text-xs text-gray-500 dark:text-gray-400"
         />
       </div>
 
@@ -173,13 +193,13 @@
         {#if trimmedQuery}
           <button
             type="button"
-            class="text-primary flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left font-bold hover:bg-gray-100 dark:hover:bg-gray-800"
+            class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left font-bold text-primary hover:bg-gray-100 dark:hover:bg-gray-800"
             onclick={createNew}
             disabled={creating}
             data-testid="person-picker-create"
           >
             <span
-              class="border-primary flex size-9 flex-none items-center justify-center rounded-xl border-2 border-dashed"
+              class="flex size-9 flex-none items-center justify-center rounded-xl border-2 border-dashed border-primary"
             >
               <Icon icon={mdiPlus} size="16" />
             </span>
