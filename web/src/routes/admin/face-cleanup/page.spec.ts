@@ -1,4 +1,5 @@
 import {
+  declineFaceRepair,
   getFaceRepairPersonFaces,
   getLatestScan,
   resolveFaces,
@@ -20,6 +21,7 @@ vi.mock('@immich/sdk', async (importOriginal) => {
     triggerScan: vi.fn(),
     resolveFaces: vi.fn(),
     getFaceRepairPersonFaces: vi.fn(),
+    declineFaceRepair: vi.fn(),
     getPeopleThumbnailPath: (id: string) => `/people/${id}/thumbnail`,
   };
 });
@@ -153,11 +155,20 @@ describe('+page.svelte (face cleanup)', () => {
       personId: 'c1',
       flaggedFaces: [{ assetFaceId: 'f1', suspectedOwnerId: 'owner-person' }],
     } as unknown as FaceRepairPersonFacesDto);
-    vi.mocked(resolveFaces).mockResolvedValue({ moved: 1, declined: 0, locked: 0, detached: 0, skipped: 0 });
+    vi.mocked(resolveFaces).mockResolvedValue({
+      moved: 1,
+      declined: 0,
+      locked: 0,
+      detached: 0,
+      unknown: 0,
+      skipped: 0,
+    });
+    vi.mocked(declineFaceRepair).mockResolvedValue({ created: 1 });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   // ---- empty states ----
@@ -259,6 +270,40 @@ describe('+page.svelte (face cleanup)', () => {
       expect(screen.getByText('admin.face_cleanup_scan_failed')).toBeInTheDocument();
       expect(screen.getByText('Some error occurred')).toBeInTheDocument();
       expect(screen.getByText('admin.face_cleanup_retry_scan')).toBeInTheDocument();
+    });
+  });
+
+  // ---- post-scan guidance ----
+  // The console never told the admin what to do, nor that the confident clusters arrive pre-selected (making
+  // its biggest button a bulk action over every one of them). The checklist's own copy and state matrix are
+  // covered by ScanChecklist.spec.ts; here we only verify the page feeds it real scan state and wires its CTA.
+
+  describe('What-to-do-now checklist', () => {
+    it('renders after a scan, counting the review-first and confident clusters', async () => {
+      const persons = [
+        makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
+        makeScanPerson({ personId: 'c2', recommendation: 'confident' }),
+        makeScanPerson({ personId: 'r1', recommendation: 'review-first', reviewReasons: ['named'] }),
+      ];
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('scan-checklist')).toBeInTheDocument());
+
+      // 1 review-first, none opened yet; 2 confident, and those 2 are what the page has pre-selected.
+      expect(screen.getByTestId('step-review')).toHaveAttribute('data-done', 'false');
+      expect(screen.getByTestId('step-confident')).toHaveAttribute('data-inactive', 'false');
+      expect(screen.getByTestId('step-apply')).toHaveAttribute('data-inactive', 'false');
+    });
+
+    it('is not rendered when the scan found nothing to clean up', async () => {
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByText('admin.face_cleanup_empty_clean')).toBeInTheDocument());
+      expect(screen.queryByTestId('scan-checklist')).not.toBeInTheDocument();
     });
   });
 
@@ -524,5 +569,41 @@ describe('+page.svelte (face cleanup)', () => {
       expect(screen.getByText(/admin\.face_cleanup_filter_review_first/)).toBeInTheDocument();
       expect(screen.getByText(/admin\.face_cleanup_filter_confident/)).toBeInTheDocument();
     });
+  });
+
+  // ---- dismiss (P2, E11) ----
+
+  it('Dismiss reflects the server-removed person after a refetch, not just a client-side filter', async () => {
+    const persons = [makeScanPerson({ personId: 'p1', recommendation: 'confident' })];
+    // First call (onMount) sees the person; the server call itself drains the latest scan (covered by the
+    // service-layer M9 medium test), so the SECOND call (the post-dismiss refetch this page must trigger)
+    // returns a snapshot that already omits it.
+    vi.mocked(getLatestScan)
+      .mockResolvedValueOnce(makeCompletedScan(persons) as unknown as object)
+      .mockResolvedValueOnce(makeCompletedScan([]) as unknown as object);
+    vi.mocked(declineFaceRepair).mockResolvedValue({ created: 1 });
+    vi.stubGlobal('confirm', () => true);
+
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dismiss-btn')).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByTestId('dismiss-btn'));
+
+    await waitFor(() => {
+      expect(declineFaceRepair).toHaveBeenCalledWith({
+        faceRepairDeclineRequestDto: { persons: [{ personId: 'p1', suspectedOwnerIds: ['owner-person'] }] },
+      });
+    });
+
+    // Driven by the server response: the page refetches getLatestScan after the dismiss resolves, and the
+    // dismissed person is gone because the SERVER already drained it, not because of a client-only filter.
+    await waitFor(() => {
+      expect(getLatestScan).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('admin.face_cleanup_empty_clean')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('dismiss-btn')).not.toBeInTheDocument();
   });
 });

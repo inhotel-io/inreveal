@@ -204,6 +204,48 @@ export class PersonRepository {
       .set({ personId: input.targetPersonId })
       .where('personId', '=', input.sourcePersonId)
       .execute();
+
+    // Face Cleanup temporal-consistency hardening (Slice 1): re-point the durable confirm/lock's reviewed
+    // person before the source person is deleted below. The lock check itself is owner-agnostic
+    // (`getLockedFaceIds`, keyed on assetFaceId alone) — this keeps the audit-only `personId` accurate rather
+    // than letting it fall back to NULL via the FK's `ON DELETE SET NULL`.
+    await db
+      .updateTable('face_repair_lock')
+      .set({ personId: input.targetPersonId })
+      .where('personId', '=', input.sourcePersonId)
+      .execute();
+
+    // Face Cleanup temporal-consistency hardening (Slice 1): re-point `type='face'` soft-declines whose
+    // suspected owner is the merged-away source, so a soft-declined pairing survives the suspected owner being
+    // merged into a different person. Insert-new-then-delete-old (rather than an in-place UPDATE) is
+    // conflict-safe against the (assetFaceId, suspectedOwnerId) unique index: the target may already have its
+    // own decline for the same face (M4), so the insert dedupes via ON CONFLICT DO NOTHING and the delete
+    // always removes the stale source-owner row.
+    await db
+      .insertInto('face_repair_decline')
+      .columns(['type', 'assetFaceId', 'suspectedOwnerId', 'personId', 'suspectedOwnerIds', 'declinedBy'])
+      .expression((eb) =>
+        eb
+          .selectFrom('face_repair_decline')
+          .select([
+            'type',
+            'assetFaceId',
+            eb.val(input.targetPersonId).as('suspectedOwnerId'),
+            'personId',
+            'suspectedOwnerIds',
+            'declinedBy',
+          ])
+          .where('type', '=', 'face')
+          .where('suspectedOwnerId', '=', input.sourcePersonId),
+      )
+      .onConflict((oc) => oc.columns(['assetFaceId', 'suspectedOwnerId']).doNothing())
+      .execute();
+    await db
+      .deleteFrom('face_repair_decline')
+      .where('type', '=', 'face')
+      .where('suspectedOwnerId', '=', input.sourcePersonId)
+      .execute();
+
     const targetNeedsFeatureFaceRepair =
       !target.faceAssetId || !(await this.isFeatureFaceValid(input.targetPersonId, target.faceAssetId, db));
     const [deleteResult] = await db.deleteFrom('person').where('id', '=', input.sourcePersonId).execute();

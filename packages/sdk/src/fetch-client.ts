@@ -207,9 +207,11 @@ export type FaceRepairResolveRequestDto = {
     moveToPerson?: {
         destinationPersonId: string;
         faceIds: string[];
+        lock?: boolean;
     }[];
     personId: string;
     stay?: string[];
+    "unknown"?: string[];
 };
 export type FaceRepairResolveResponseDto = {
     declined: number;
@@ -217,6 +219,7 @@ export type FaceRepairResolveResponseDto = {
     locked: number;
     moved: number;
     skipped: number;
+    "unknown": number;
 };
 export type FaceRepairScanTriggerRequestDto = {
     params?: {

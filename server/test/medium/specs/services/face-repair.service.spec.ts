@@ -1322,10 +1322,13 @@ describe('FaceRepairService decline filter', () => {
     const result = await sut.resolveFaces(
       {
         personId: alexia.id,
-        moveToPerson: [{ destinationPersonId: karina.id, faceIds: leakedToRepair.map((f) => f.assetFaceId) }],
+        moveToPerson: [
+          { destinationPersonId: karina.id, faceIds: leakedToRepair.map((f) => f.assetFaceId), lock: false },
+        ],
         stay: [],
         lock: [],
         detach: [],
+        unknown: [],
       },
       user.id,
     );
@@ -1390,4 +1393,94 @@ describe('FaceRepairService decline filter', () => {
     const { flaggedFaces } = await sut.getPersonFlaggedFaces(alexia.id);
     expect(flaggedFaces.length).toBe(0);
   });
+
+  // M11 (temporal-consistency hardening design, Slice 4, E12): buildRepairPlan's own decline/lock read must be
+  // bounded to the faces/persons it just flagged, not an unscoped whole-table load — and doing so must not
+  // change which faces end up flagged, over a fixture with declines/locks both INSIDE and OUTSIDE the flagged
+  // set. Before Slice 4 Step 2, buildRepairPlan calls getDeclineMaps() with no scope; the call-args assertion
+  // below fails until that call site is scoped from `flaggedByPerson`.
+  it(
+    'M11: buildRepairPlan flags exactly the same faces via a scoped getDeclineMaps read as it does unscoped, ' +
+      'and reads that scope from the flagged set only',
+    async () => {
+      const { sut, ctx } = setupDecline();
+      const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+      jobMock.isActive.mockResolvedValue(false);
+      const declineRepo = ctx.get(FaceRepairDeclineRepository);
+      const { user } = await ctx.newUser();
+
+      // Karina-main: 10 first-axis faces (the reference/suspected-owner cluster — never itself flagged).
+      const { person: karina, faceIds: karinaFaceIds } = await buildCluster(ctx, user.id, axisEmbedding('first'), 10);
+
+      // Alexia: 3 leaked first-axis faces (flagged toward karina) + 8 genuine second-axis (never flagged).
+      const { person: alexia } = await ctx.newPerson({ ownerId: user.id });
+      const leakedFaceIds: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+        await ctx.database
+          .insertInto('face_search')
+          .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+          .execute();
+        leakedFaceIds.push(assetFace.id);
+      }
+      for (let i = 0; i < 8; i++) {
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexia.id });
+        await ctx.database
+          .insertInto('face_search')
+          .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+          .execute();
+      }
+
+      const baseline = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
+      const leaked = baseline.toRepair.filter(
+        (f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId),
+      );
+      expect(leaked).toHaveLength(3);
+      const [declinedFace, lockedFace, untouchedFace] = leaked;
+
+      // INSIDE the flagged set: decline one leaked face toward its suspected owner, lock another.
+      await declineRepo.createDeclines({
+        faces: [{ assetFaceId: declinedFace.assetFaceId, suspectedOwnerId: declinedFace.suspectedOwnerId }],
+        declinedBy: null,
+      });
+      await ctx.database
+        .insertInto('face_repair_lock')
+        .values({ assetFaceId: lockedFace.assetFaceId, personId: alexia.id, createdBy: null })
+        .execute();
+
+      // OUTSIDE the flagged set entirely: a lock on one of karina's OWN faces (never a candidate — her faces
+      // always vote for herself) and a person-level dismiss for a brand-new person with no faces at all.
+      await ctx.database
+        .insertInto('face_repair_lock')
+        .values({ assetFaceId: karinaFaceIds[0], personId: karina.id, createdBy: null })
+        .execute();
+      const { person: unrelated } = await ctx.newPerson({ ownerId: user.id });
+      await declineRepo.createDeclines({
+        persons: [{ personId: unrelated.id, suspectedOwnerIds: [karina.id] }],
+        declinedBy: null,
+      });
+
+      const spy = vi.spyOn(declineRepo, 'getDeclineMaps');
+
+      const plan = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
+      const flaggedIds = new Set([...plan.toRepair, ...plan.reviewOnlyFaces].map((f) => f.assetFaceId));
+
+      // Functional equivalence with the unscoped baseline, minus exactly the two faces the inside-scope
+      // decline/lock drop — the outside-scope rows (karina's own lock, the unrelated person's dismiss) never
+      // touch anything in the flagged set either way, scoped or not.
+      expect(flaggedIds.has(untouchedFace.assetFaceId)).toBe(true);
+      expect(flaggedIds.has(declinedFace.assetFaceId)).toBe(false);
+      expect(flaggedIds.has(lockedFace.assetFaceId)).toBe(false);
+
+      // The scoped-load contract itself: buildRepairPlan's decline/lock read must be bounded to exactly the
+      // faces/persons it just flagged.
+      expect(spy).toHaveBeenCalledTimes(1);
+      const [scope] = spy.mock.calls[0]!;
+      expect(scope).toBeDefined();
+      expect(new Set(scope!.assetFaceIds)).toEqual(new Set(leakedFaceIds));
+      expect(scope!.personIds).toEqual([alexia.id]);
+    },
+  );
 });

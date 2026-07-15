@@ -23,9 +23,12 @@
     breadcrumbs: BreadcrumbItem[];
     actions?: Array<HeaderButtonActionItem | MenuItemType>;
     children?: Snippet;
+    // Optional bottom-pinned action bar — see BreadcrumbActionPage. Sits below the scroll area, never over the
+    // sidebar.
+    footer?: Snippet;
   };
 
-  let { breadcrumbs, actions, children }: Props = $props();
+  let { breadcrumbs, actions, children, footer }: Props = $props();
 </script>
 
 <AppShell>
@@ -52,7 +55,7 @@
     </div>
   </AppShellSidebar>
 
-  <BreadcrumbActionPage {breadcrumbs} {actions}>
+  <BreadcrumbActionPage {breadcrumbs} {actions} {footer}>
     {@render children?.()}
   </BreadcrumbActionPage>
 </AppShell>

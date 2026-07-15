@@ -15,30 +15,39 @@ class FaceRepairResolveRequestDtoMoveToPersonInner {
   FaceRepairResolveRequestDtoMoveToPersonInner({
     required this.destinationPersonId,
     this.faceIds = const [],
+    this.lock = const Optional.present(false),
   });
 
   String destinationPersonId;
 
   List<String> faceIds;
 
+  Optional<bool?> lock;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairResolveRequestDtoMoveToPersonInner &&
     other.destinationPersonId == destinationPersonId &&
-    _deepEquality.equals(other.faceIds, faceIds);
+    _deepEquality.equals(other.faceIds, faceIds) &&
+    other.lock == lock;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (destinationPersonId.hashCode) +
-    (faceIds.hashCode);
+    (faceIds.hashCode) +
+    (lock.hashCode);
 
   @override
-  String toString() => 'FaceRepairResolveRequestDtoMoveToPersonInner[destinationPersonId=$destinationPersonId, faceIds=$faceIds]';
+  String toString() => 'FaceRepairResolveRequestDtoMoveToPersonInner[destinationPersonId=$destinationPersonId, faceIds=$faceIds, lock=$lock]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'destinationPersonId'] = this.destinationPersonId;
       json[r'faceIds'] = this.faceIds;
+    if (this.lock.isPresent) {
+      final value = this.lock.value;
+      json[r'lock'] = value;
+    }
     return json;
   }
 
@@ -55,6 +64,7 @@ class FaceRepairResolveRequestDtoMoveToPersonInner {
         faceIds: json[r'faceIds'] is Iterable
             ? (json[r'faceIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
+        lock: json.containsKey(r'lock') ? Optional.present(mapValueOfType<bool>(json, r'lock')) : const Optional.absent(),
       );
     }
     return null;

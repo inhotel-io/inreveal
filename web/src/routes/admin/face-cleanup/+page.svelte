@@ -7,6 +7,7 @@
   import { Button, Icon, modalManager, toastManager } from '@immich/ui';
   import { mdiClose, mdiRefresh, mdiTune } from '@mdi/js';
   import AdvancedScanModal, { type AdvancedScanParams } from './AdvancedScanModal.svelte';
+  import ScanChecklist from './ScanChecklist.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
@@ -267,9 +268,9 @@
     const suspectedOwnerIds = person.suspectedOwners.map((o) => o.ownerPersonId);
     try {
       await declineFaceRepair({ faceRepairDeclineRequestDto: { persons: [{ personId, suspectedOwnerIds }] } });
-      if (scan) {
-        setScan({ ...scan, persons: scan.persons.filter((p) => p.personId !== personId) });
-      }
+      // The server drains the dismissed person from the latest scan snapshot (createDeclines's persons
+      // branch), so trust that snapshot via a refetch rather than only mutating the client-held list.
+      await fetchLatestScan();
       toastManager.success($t('admin.face_cleanup_dismiss'));
     } catch {
       toastManager.danger($t('admin.face_cleanup_dismiss_error'));
@@ -300,11 +301,10 @@
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Header -->
     <div class="mb-6 flex flex-wrap items-start justify-between gap-6">
+      <!-- The description paragraph that used to sit here now lives as the checklist's subtitle: the page was
+           already dense, so guidance had to replace prose rather than pile on top of it. -->
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">{$t('admin.face_cleanup')}</h1>
-        <p class="mt-1.5 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
-          {$t('admin.face_cleanup_description')}
-        </p>
       </div>
       <div class="flex flex-none flex-col items-end gap-2">
         {#if scan?.finishedAt}
@@ -395,6 +395,20 @@
 
       <!-- Scan completed -->
     {:else if scan.status === 'completed'}
+      <!-- What to do now: the page is dense and, until this, said nothing about what the admin should DO — nor
+           that the confident clusters arrive pre-selected. Only worth showing when the scan actually flagged
+           someone; the "nothing to clean up" state below speaks for itself. -->
+      {#if vm && (vm.reviewFirst.length > 0 || vm.confident.length > 0)}
+        <div class="mb-6">
+          <ScanChecklist
+            reviewFirstTotal={vm.reviewFirst.length}
+            reviewFirstOpened={vm.reviewFirst.filter((person) => vm!.opened.has(person.personId)).length}
+            confidentTotal={vm.confident.length}
+            selectedCount={vm.selectedCount}
+          />
+        </div>
+      {/if}
+
       <!-- Stat strip -->
       {#if scan.totals}
         {@const tot = scan.totals}

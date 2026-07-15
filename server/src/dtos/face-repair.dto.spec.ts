@@ -136,6 +136,48 @@ describe('FaceRepairResolveRequestSchema', () => {
       false,
     );
   });
+
+  // Temporal-consistency hardening, Slice 3 (move-and-lock): moveToPerson groups gain an optional `lock` flag.
+  it('accepts lock: true on a moveToPerson group', () => {
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: PERSON_ID,
+      moveToPerson: [{ destinationPersonId: OWNER_A, faceIds: [FACE_1], lock: true }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.moveToPerson[0].lock).toBe(true);
+    }
+  });
+
+  it('accepts lock: false on a moveToPerson group', () => {
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: PERSON_ID,
+      moveToPerson: [{ destinationPersonId: OWNER_A, faceIds: [FACE_1], lock: false }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.moveToPerson[0].lock).toBe(false);
+    }
+  });
+
+  it('defaults a moveToPerson group lock to false when omitted', () => {
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: PERSON_ID,
+      moveToPerson: [{ destinationPersonId: OWNER_A, faceIds: [FACE_1] }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.moveToPerson[0].lock).toBe(false);
+    }
+  });
+
+  it('rejects a non-boolean lock on a moveToPerson group', () => {
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: PERSON_ID,
+      moveToPerson: [{ destinationPersonId: OWNER_A, faceIds: [FACE_1], lock: 'yes' }],
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('FaceRepairClusterFacesRequestSchema', () => {

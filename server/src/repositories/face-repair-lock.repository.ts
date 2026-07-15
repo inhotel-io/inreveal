@@ -5,7 +5,10 @@ import { DB } from 'src/schema';
 export interface LockListRow {
   id: string;
   assetFaceId: string;
-  personId: string;
+  // Nullable since Slice 1 (Face Cleanup temporal-consistency hardening): the reviewed person can be
+  // hard-deleted, in which case the FK's `ON DELETE SET NULL` clears this audit-only reference while the lock
+  // itself survives.
+  personId: string | null;
   personName: string | null;
   personThumbnailFaceId: string | null;
   createdAt: string;
@@ -49,19 +52,22 @@ export class FaceRepairLockRepository {
     if (rows.length === 0) {
       return [];
     }
-    const personIds = [...new Set(rows.map((row) => row.personId))];
-    const people = await this.db
-      .selectFrom('person')
-      .select(['id', 'name', 'faceAssetId'])
-      .where('id', 'in', personIds)
-      .execute();
+    const personIds = [...new Set(rows.map((row) => row.personId).filter((id): id is string => id !== null))];
+    const people =
+      personIds.length > 0
+        ? await this.db
+            .selectFrom('person')
+            .select(['id', 'name', 'faceAssetId'])
+            .where('id', 'in', personIds)
+            .execute()
+        : [];
     const byId = new Map(people.map((p) => [p.id, p]));
     return rows.map((r) => ({
       id: r.id,
       assetFaceId: r.assetFaceId,
       personId: r.personId,
-      personName: byId.get(r.personId)?.name || null,
-      personThumbnailFaceId: byId.get(r.personId)?.faceAssetId ?? null,
+      personName: (r.personId && byId.get(r.personId)?.name) || null,
+      personThumbnailFaceId: (r.personId && byId.get(r.personId)?.faceAssetId) ?? null,
       createdAt: r.createdAt as unknown as string,
     }));
   }
