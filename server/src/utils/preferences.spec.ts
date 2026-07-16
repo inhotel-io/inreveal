@@ -23,6 +23,7 @@ const getDefaultPreferences = (): UserPreferences => ({
       favorites_throwback: true,
       on_this_day_place: true,
       season_recap: true,
+      people_together: true,
     },
   },
   people: {
@@ -177,6 +178,7 @@ describe('getPreferences', () => {
       favorites_throwback: true,
       on_this_day_place: true,
       season_recap: true,
+      people_together: true,
     });
   });
 

@@ -102,6 +102,7 @@ describe('MemoriesSettings', () => {
           favorites_throwback: true,
           on_this_day_place: true,
           season_recap: true,
+          people_together: true,
         },
       },
     });

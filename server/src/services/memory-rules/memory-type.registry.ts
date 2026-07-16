@@ -7,6 +7,7 @@ import { MemoryRule } from 'src/services/memory-rules/memory-rule.interface';
 import { MEMORY_TYPE_METADATA } from 'src/services/memory-rules/memory-type.metadata';
 import { MonthRecapMemoryRule } from 'src/services/memory-rules/month-recap.rule';
 import { OnThisDayPlaceMemoryRule } from 'src/services/memory-rules/on-this-day-place.rule';
+import { PeopleTogetherMemoryRule } from 'src/services/memory-rules/people-together.rule';
 import { RecentTripMemoryRule } from 'src/services/memory-rules/recent-trip.rule';
 import { SeasonRecapMemoryRule } from 'src/services/memory-rules/season-recap.rule';
 
@@ -24,6 +25,7 @@ const RULE_FACTORIES: Record<string, (deps: MemoryRuleDeps) => MemoryRule> = {
   favorites_throwback: (deps) => new FavoritesThrowbackMemoryRule(deps.assetRepository),
   on_this_day_place: (deps) => new OnThisDayPlaceMemoryRule(deps.assetRepository),
   season_recap: (deps) => new SeasonRecapMemoryRule(deps.assetRepository),
+  people_together: (deps) => new PeopleTogetherMemoryRule(deps.assetRepository),
 };
 
 /** instantiate the rule-kind memory rules whose key is in `enabledKeys` (in registry order, deduped) */
