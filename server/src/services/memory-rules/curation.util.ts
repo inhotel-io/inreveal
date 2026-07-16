@@ -101,3 +101,74 @@ const MONTH_NAMES = [
 
 /** The English name of a 1-based month, used in memory titles. */
 export const monthName = (month: number): string => MONTH_NAMES[month - 1]!;
+
+// Structural input, decoupled from the repository type so curation.util stays dependency-free.
+export interface FaceRow {
+  assetId: string;
+  personId: string;
+  personName: string;
+  localDateTime: Date;
+}
+
+export interface PairStat {
+  a: { id: string; name: string }; // ordered so a.id < b.id (stable, order-independent)
+  b: { id: string; name: string };
+  assets: { id: string; localDateTime: Date }[]; // assets containing BOTH, chronological
+  distinctDays: number; // count of distinct UTC calendar days among those assets
+}
+
+/**
+ * For every unordered pair of distinct subjects that co-occur on at least one asset, collect the
+ * assets where both appear. A person with two faces on the same asset collapses to one subject
+ * (no self-pair, no double count). Returned pairs are sorted by co-occurrence count desc, then by
+ * the ordered id pair ascending, so the result is deterministic regardless of input row order.
+ */
+export const pairCounts = (rows: FaceRow[]): PairStat[] => {
+  const subjectsByAsset = new Map<string, Map<string, { id: string; name: string }>>();
+  const assetTimes = new Map<string, Date>();
+
+  for (const row of rows) {
+    const subjects = subjectsByAsset.get(row.assetId) ?? new Map<string, { id: string; name: string }>();
+    subjects.set(row.personId, { id: row.personId, name: row.personName });
+    subjectsByAsset.set(row.assetId, subjects);
+    assetTimes.set(row.assetId, row.localDateTime);
+  }
+
+  const pairs = new Map<
+    string,
+    { a: { id: string; name: string }; b: { id: string; name: string }; assets: Map<string, Date> }
+  >();
+
+  for (const [assetId, subjects] of subjectsByAsset) {
+    const subjectList = [...subjects.values()];
+    for (let i = 0; i < subjectList.length; i++) {
+      for (let j = i + 1; j < subjectList.length; j++) {
+        const [a, b] =
+          subjectList[i]!.id < subjectList[j]!.id
+            ? [subjectList[i]!, subjectList[j]!]
+            : [subjectList[j]!, subjectList[i]!];
+        const key = `${a.id}:${b.id}`;
+        const pair = pairs.get(key) ?? { a, b, assets: new Map<string, Date>() };
+        pair.assets.set(assetId, assetTimes.get(assetId)!);
+        pairs.set(key, pair);
+      }
+    }
+  }
+
+  const stats: PairStat[] = [...pairs.values()].map(({ a, b, assets }) => {
+    const sortedAssets = [...assets.entries()]
+      .map(([id, localDateTime]) => ({ id, localDateTime }))
+      .sort((left, right) => left.localDateTime.getTime() - right.localDateTime.getTime());
+    const distinctDays = new Set(sortedAssets.map((asset) => asset.localDateTime.toISOString().slice(0, 10))).size;
+    return { a, b, assets: sortedAssets, distinctDays };
+  });
+
+  return stats.sort((left, right) => {
+    if (right.assets.length !== left.assets.length) {
+      return right.assets.length - left.assets.length;
+    }
+    const leftKey = `${left.a.id}:${left.b.id}`;
+    const rightKey = `${right.a.id}:${right.b.id}`;
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
+};

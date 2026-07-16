@@ -1,14 +1,23 @@
 import { DateTime } from 'luxon';
 import {
   dominantBy,
+  FaceRow,
   medianTime,
   monthName,
+  pairCounts,
   pickEvenlySpaced,
   recencyBonus,
   sampleAssetsByTime,
 } from 'src/services/memory-rules/curation.util';
 
 const asset = (id: string, iso: string) => ({ id, localDateTime: DateTime.fromISO(iso, { zone: 'utc' }).toJSDate() });
+
+const face = (assetId: string, personId: string, personName: string, iso: string): FaceRow => ({
+  assetId,
+  personId,
+  personName,
+  localDateTime: DateTime.fromISO(iso, { zone: 'utc' }).toJSDate(),
+});
 
 describe('pickEvenlySpaced', () => {
   it('returns [] when count is zero or negative', () => {
@@ -151,5 +160,152 @@ describe('recencyBonus', () => {
   it('is 0 for ten or more years ago and never negative', () => {
     expect(recencyBonus(2016, 2026)).toBe(0);
     expect(recencyBonus(2000, 2026)).toBe(0);
+  });
+});
+
+describe('pairCounts', () => {
+  describe('given an asset with 2 subjects', () => {
+    it('then returns one pair containing that asset', () => {
+      const rows = [face('a1', 'p1', 'Anna', '2023-06-10T10:00:00'), face('a1', 'p2', 'Ben', '2023-06-10T10:00:00')];
+
+      const result = pairCounts(rows);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        a: { id: 'p1', name: 'Anna' },
+        b: { id: 'p2', name: 'Ben' },
+        assets: [{ id: 'a1', localDateTime: rows[0]!.localDateTime }],
+        distinctDays: 1,
+      });
+    });
+  });
+
+  describe('given an asset with 3 subjects', () => {
+    it('then returns 3 pairs (all unordered combinations)', () => {
+      const rows = [
+        face('a1', 'p1', 'Anna', '2023-06-10T10:00:00'),
+        face('a1', 'p2', 'Ben', '2023-06-10T10:00:00'),
+        face('a1', 'p3', 'Cara', '2023-06-10T10:00:00'),
+      ];
+
+      const result = pairCounts(rows);
+
+      expect(result).toHaveLength(3);
+      const keys = result.map((pair) => `${pair.a.id}:${pair.b.id}`).sort();
+      expect(keys).toEqual(['p1:p2', 'p1:p3', 'p2:p3']);
+      for (const pair of result) {
+        expect(pair.assets).toHaveLength(1);
+        expect(pair.assets[0]!.id).toBe('a1');
+      }
+    });
+  });
+
+  describe('given an asset with 1 subject', () => {
+    it('then returns no pair (no self-pair)', () => {
+      const rows = [face('a1', 'p1', 'Anna', '2023-06-10T10:00:00')];
+
+      expect(pairCounts(rows)).toEqual([]);
+    });
+  });
+
+  describe('given one subject appearing via two faces on the same asset, plus a second subject', () => {
+    it('then produces exactly one pair, counted once (no self-pair, no inflation)', () => {
+      const rows = [
+        face('a1', 'p1', 'Anna', '2023-06-10T10:00:00'),
+        face('a1', 'p1', 'Anna', '2023-06-10T10:00:00'),
+        face('a1', 'p2', 'Ben', '2023-06-10T10:00:00'),
+      ];
+
+      const result = pairCounts(rows);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.a).toEqual({ id: 'p1', name: 'Anna' });
+      expect(result[0]!.b).toEqual({ id: 'p2', name: 'Ben' });
+      expect(result[0]!.assets).toHaveLength(1);
+    });
+  });
+
+  describe('given the same pair across 3 assets on 2 distinct UTC calendar days', () => {
+    it('then assets.length is 3, distinctDays is 2, and assets are chronological ascending', () => {
+      const rows = [
+        face('a1', 'p1', 'Anna', '2023-06-10T10:00:00'),
+        face('a1', 'p2', 'Ben', '2023-06-10T10:00:00'),
+        face('a2', 'p1', 'Anna', '2023-06-10T15:00:00'),
+        face('a2', 'p2', 'Ben', '2023-06-10T15:00:00'),
+        face('a3', 'p1', 'Anna', '2023-06-11T09:00:00'),
+        face('a3', 'p2', 'Ben', '2023-06-11T09:00:00'),
+      ];
+
+      const result = pairCounts(rows);
+
+      expect(result).toHaveLength(1);
+      const [pair] = result;
+      expect(pair!.assets.map((a) => a.id)).toEqual(['a1', 'a2', 'a3']);
+      expect(pair!.distinctDays).toBe(2);
+    });
+  });
+
+  describe('given two pairs with different counts', () => {
+    it('then sorts by assets.length desc', () => {
+      const rows = [
+        face('a1', 'p1', 'Anna', '2023-06-10T10:00:00'),
+        face('a1', 'p2', 'Ben', '2023-06-10T10:00:00'),
+        face('a2', 'p1', 'Anna', '2023-06-11T10:00:00'),
+        face('a2', 'p2', 'Ben', '2023-06-11T10:00:00'),
+        face('a3', 'p1', 'Anna', '2023-06-12T10:00:00'),
+        face('a3', 'p3', 'Cara', '2023-06-12T10:00:00'),
+      ];
+
+      const result = pairCounts(rows);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({ a: { id: 'p1' }, b: { id: 'p2' } });
+      expect(result[0]!.assets).toHaveLength(2);
+      expect(result[1]).toMatchObject({ a: { id: 'p1' }, b: { id: 'p3' } });
+      expect(result[1]!.assets).toHaveLength(1);
+    });
+  });
+
+  describe('given two pairs with equal counts', () => {
+    it('then orders deterministically by the ordered id pair ascending', () => {
+      const rows = [
+        face('a1', 'p2', 'Ben', '2023-06-10T10:00:00'),
+        face('a1', 'p3', 'Cara', '2023-06-10T10:00:00'),
+        face('a2', 'p1', 'Anna', '2023-06-11T10:00:00'),
+        face('a2', 'p2', 'Ben', '2023-06-11T10:00:00'),
+      ];
+
+      const result = pairCounts(rows);
+
+      expect(result).toHaveLength(2);
+      expect(result.map((pair) => `${pair.a.id}:${pair.b.id}`)).toEqual(['p1:p2', 'p2:p3']);
+    });
+  });
+
+  describe('given rows in shuffled input order', () => {
+    it('then returns identical output to sorted input, and every pair keeps a.id < b.id', () => {
+      const inOrder = [
+        face('a1', 'p1', 'Anna', '2023-06-10T10:00:00'),
+        face('a1', 'p2', 'Ben', '2023-06-10T10:00:00'),
+        face('a1', 'p3', 'Cara', '2023-06-10T10:00:00'),
+        face('a2', 'p1', 'Anna', '2023-06-11T10:00:00'),
+        face('a2', 'p2', 'Ben', '2023-06-11T10:00:00'),
+      ];
+      const shuffled = [inOrder[3]!, inOrder[1]!, inOrder[4]!, inOrder[0]!, inOrder[2]!];
+
+      const resultInOrder = pairCounts(inOrder);
+      const resultShuffled = pairCounts(shuffled);
+
+      expect(resultShuffled).toEqual(resultInOrder);
+      for (const pair of resultInOrder) {
+        expect(pair.a.id < pair.b.id).toBe(true);
+      }
+    });
+  });
+
+  describe('given empty input', () => {
+    it('then returns []', () => {
+      expect(pairCounts([])).toEqual([]);
+    });
   });
 });
