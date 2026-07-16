@@ -206,6 +206,26 @@ from
         "asset"."id" in ($15)
         or "asset"."livePhotoVideoId" in ($16)
       )
+    union
+    select
+      "asset"."id",
+      "asset"."livePhotoVideoId"
+    from
+      "shared_space_album"
+      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+      and "album"."deletedAt" is null
+      inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+      inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+      and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+      inner join "asset" on "asset"."id" = "album_space_asset"."assetId"
+      and "asset"."deletedAt" is null
+    where
+      "shared_space_member"."userId" = $17
+      and "asset"."visibility" in ($18, $19)
+      and (
+        "asset"."id" in ($20)
+        or "asset"."livePhotoVideoId" in ($21)
+      )
   ) as "combined"
 
 -- AccessRepository.asset.checkSpaceAccessForSpace
@@ -267,6 +287,27 @@ from
       and (
         "asset"."id" in ($18)
         or "asset"."livePhotoVideoId" in ($19)
+      )
+    union
+    select
+      "asset"."id",
+      "asset"."livePhotoVideoId"
+    from
+      "shared_space_album"
+      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+      and "album"."deletedAt" is null
+      inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+      inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+      and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+      inner join "asset" on "asset"."id" = "album_space_asset"."assetId"
+      and "asset"."deletedAt" is null
+    where
+      "shared_space_member"."userId" = $20
+      and "shared_space_album"."spaceId" = $21
+      and "asset"."visibility" in ($22, $23)
+      and (
+        "asset"."id" in ($24)
+        or "asset"."livePhotoVideoId" in ($25)
       )
   ) as "combined"
 

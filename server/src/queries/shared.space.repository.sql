@@ -141,6 +141,18 @@ where
 order by
   "asset"."id"
 
+-- SharedSpaceRepository.getMemberSpaceIdsLinkingAlbum
+select
+  "shared_space_album"."spaceId"
+from
+  "shared_space_album"
+  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+  and "album"."deletedAt" is null
+  inner join "shared_space_member" on "shared_space_member"."spaceId" = "shared_space_album"."spaceId"
+where
+  "shared_space_album"."albumId" = $1
+  and "shared_space_member"."userId" = $2
+
 -- SharedSpaceRepository.getSpaceIdsForTimeline
 select
   "spaceId"
@@ -387,10 +399,22 @@ where
   and "libraryId" = $2
 
 -- SharedSpaceRepository.removeAlbum
+begin
+insert into
+  "album_space_asset_audit" ("albumId", "assetId")
+select
+  "album_space_asset"."albumId",
+  "album_space_asset"."assetId"
+from
+  "album_space_asset"
+where
+  "album_space_asset"."spaceId" = $1
+  and "album_space_asset"."albumId" in ($2)
 delete from "shared_space_album"
 where
   "spaceId" = $1
   and "albumId" = $2
+commit
 
 -- SharedSpaceRepository.removeOwnedAlbumLinksAddedBy
 delete from "shared_space_album"

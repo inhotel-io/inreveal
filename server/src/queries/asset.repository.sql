@@ -374,20 +374,34 @@ select
   "asset"."id"
 from
   "asset"
-  inner join "album_asset" on "album_asset"."assetId" = "asset"."id"
+  inner join (
+    select
+      "album_asset"."assetId" as "assetId"
+    from
+      "album_asset"
+    where
+      "album_asset"."albumId" = $1::uuid
+    union
+    select
+      "album_space_asset"."assetId" as "assetId"
+    from
+      "album_space_asset"
+    where
+      "album_space_asset"."albumId" = $2::uuid
+      and "album_space_asset"."spaceId" = $3::uuid
+  ) as "album_members" on "album_members"."assetId" = "asset"."id"
   inner join "asset_face" on "asset_face"."assetId" = "asset"."id"
 where
-  "album_asset"."albumId" = $1
-  and "asset"."deletedAt" is null
-  and "asset"."isOffline" = $2
+  "asset"."deletedAt" is null
+  and "asset"."isOffline" = $4
 group by
   "asset"."id"
 order by
   "asset"."id"
 limit
-  $3
+  $5
 offset
-  $4
+  $6
 
 -- AssetRepository.getByLibraryIdAndOriginalPath
 select
