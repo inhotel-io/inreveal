@@ -1045,6 +1045,33 @@ describe('IdentityMergePropagationService', () => {
       ]);
     });
 
+    // #733 review T1: the whole cross-owner gate keys on collapsedOwnerIds/repointedOwnerIds, so pin the DERIVATION
+    // for a topology with two distinct non-actor owners — one collapsing (two profiles) and one re-pointing (one).
+    it('derives collapsedOwnerIds/repointedOwnerIds per distinct non-actor owner', async () => {
+      const { sut } = makeService([
+        profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x', faceCount: 10 }),
+        profile({ kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y', faceCount: 4 }),
+        // owner-2 holds a person on BOTH merged identities -> a destructive collapse of one of THEIR people.
+        profile({ kind: 'person', id: 'owner-2-a', ownerId: 'owner-2', identityId: 'identity-x', faceCount: 3 }),
+        profile({ kind: 'person', id: 'owner-2-b', ownerId: 'owner-2', identityId: 'identity-y', faceCount: 3 }),
+        // owner-3 holds a person on ONLY the source identity -> a free re-point onto the surviving identity.
+        profile({ kind: 'person', id: 'owner-3-a', ownerId: 'owner-3', identityId: 'identity-y', faceCount: 2 }),
+        // owner-4 holds a person on BOTH -> a second, distinct collapse.
+        profile({ kind: 'person', id: 'owner-4-a', ownerId: 'owner-4', identityId: 'identity-x', faceCount: 1 }),
+        profile({ kind: 'person', id: 'owner-4-b', ownerId: 'owner-4', identityId: 'identity-y', faceCount: 1 }),
+      ]);
+
+      const plan = await sut.buildPersonalMergePlan({
+        actorUserId: 'owner-1',
+        targetPersonId: 'person-x',
+        sourcePersonIds: ['person-y'],
+      });
+
+      // Two distinct other owners collapse; owner-1 (the actor) is never counted; owner-3 only re-points.
+      expect(plan.collapsedOwnerIds).toEqual(['owner-2', 'owner-4']);
+      expect(plan.repointedOwnerIds).toEqual(['owner-3']);
+    });
+
     it('prefers named survivor candidates over unnamed candidates with equal face counts outside the initiating scope', async () => {
       const { sut } = makeService([
         profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x', faceCount: 10 }),

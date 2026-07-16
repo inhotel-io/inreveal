@@ -232,7 +232,7 @@ describe('Person detail page', () => {
     await userEvent.click(screen.getByText('merge_people'));
     await userEvent.click(screen.getByTestId('merge-personal-candidate'));
 
-    await waitFor(() => expect(toastManager.danger).toHaveBeenCalledWith('An administrator can enable it.'));
+    await waitFor(() => expect(toastManager.danger).toHaveBeenCalled());
     expect(sdkMock.mergePerson).toHaveBeenCalledTimes(1);
     expect(modalManager.showDialog).not.toHaveBeenCalled();
   });

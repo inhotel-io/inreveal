@@ -4,14 +4,15 @@ import { app, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-// End-to-end HTTP coverage for the space-collapse hard-block (issue #733 follow-up), driven through the real
-// endpoints against the real Postgres DB. Collapsing a shared space's people is an Editor-only action, so a
-// merge whose fan-out would collapse a space the actor can only view — or is not a member of at all — is refused
-// with `cross_owner_merge_blocked_space`, TOGGLE-INDEPENDENTLY (no instance switch can override a space's roles).
+// End-to-end HTTP coverage for a merge whose fan-out would collapse people in a shared space the actor cannot
+// edit (issue #733 follow-up, review P1), driven through the real endpoints against the real Postgres DB.
+// Collapsing such a space's people is destructive, so — like collapsing another owner's people — it is governed
+// by the `mergePeopleAcrossOwners` toggle: refused with `cross_owner_merge_blocked` while the toggle is off, and
+// permitted (with an explicit `confirmCrossOwner`) once an administrator turns it on.
 //
 // The service-level behaviour is proven in server/test/medium/specs/services/people-identity-rbac.spec.ts and
-// the policy itself in server/src/utils/merge-policy.spec.ts; these tests pin the HTTP contract (403 + code) for
-// each of the three merge endpoints — the one layer those specs do not exercise.
+// the policy itself in server/src/utils/merge-policy.spec.ts; these tests pin the HTTP contract for each of the
+// three merge endpoints — the one layer those specs do not exercise.
 //
 // ML is disabled in the e2e stack, so the preconditions are seeded directly in SQL.
 
@@ -34,7 +35,7 @@ const RESET_TABLES = [
   'user_group',
 ];
 
-const BLOCKED_SPACE_CODE = 'cross_owner_merge_blocked_space';
+const BLOCKED_CODE = 'cross_owner_merge_blocked';
 
 type Db = Awaited<ReturnType<typeof utils.connectDatabase>>;
 
@@ -89,7 +90,7 @@ const remainingProfiles = async (db: Db, spaceId: string): Promise<number> => {
   return rows[0].count as number;
 };
 
-describe('merge space-collapse hard-block over HTTP (#733 follow-up)', () => {
+describe('merge un-editable-space collapse over HTTP (#733 follow-up, toggle-governed)', () => {
   let admin: LoginResponseDto;
   let actor: LoginResponseDto;
   let stranger: LoginResponseDto;
@@ -195,7 +196,7 @@ describe('merge space-collapse hard-block over HTTP (#733 follow-up)', () => {
   };
 
   describe('classic POST /people/:id/merge', () => {
-    it('is refused (403 blocked_space) when the actor can only view the collapsing space', async () => {
+    it('is refused (403 blocked) when the actor can only view the collapsing space and the toggle is off', async () => {
       const { personA, personB, spaceId } = await setupClassic(SharedSpaceRole.Viewer);
 
       const { status, body } = await request(app)
@@ -204,12 +205,12 @@ describe('merge space-collapse hard-block over HTTP (#733 follow-up)', () => {
         .send({ ids: [personB.id] });
 
       expect(status).toBe(403);
-      expect(body.code).toBe(BLOCKED_SPACE_CODE);
+      expect(body.code).toBe(BLOCKED_CODE);
       // Nothing destroyed: the space still has both profiles.
       expect(await remainingProfiles(db, spaceId)).toBe(2);
     });
 
-    it('is refused when the actor is not a member of the collapsing space', async () => {
+    it('is refused when the actor is not a member of the collapsing space and the toggle is off', async () => {
       const { personA, personB, spaceId } = await setupClassic(null);
 
       const { status, body } = await request(app)
@@ -218,27 +219,40 @@ describe('merge space-collapse hard-block over HTTP (#733 follow-up)', () => {
         .send({ ids: [personB.id] });
 
       expect(status).toBe(403);
-      expect(body.code).toBe(BLOCKED_SPACE_CODE);
+      expect(body.code).toBe(BLOCKED_CODE);
       expect(await remainingProfiles(db, spaceId)).toBe(2);
     });
 
-    it('stays refused with the cross-owner toggle on and the merge confirmed (toggle-independent)', async () => {
+    it('requires confirmation (409) when the toggle is on but the merge is not confirmed', async () => {
       const { personA, personB, spaceId } = await setupClassic(SharedSpaceRole.Viewer);
       await enableCrossOwnerMerge(admin);
 
       const { status, body } = await request(app)
         .post(`/people/${personA.id}/merge`)
         .set('Authorization', `Bearer ${actor.accessToken}`)
+        .send({ ids: [personB.id] });
+
+      expect(status).toBe(409);
+      expect(body.impactedSpaceCount).toBe(1);
+      expect(await remainingProfiles(db, spaceId)).toBe(2);
+    });
+
+    it('commits once the toggle is on and the merge is confirmed, collapsing the un-editable space', async () => {
+      const { personA, personB, spaceId } = await setupClassic(SharedSpaceRole.Viewer);
+      await enableCrossOwnerMerge(admin);
+
+      const { status } = await request(app)
+        .post(`/people/${personA.id}/merge`)
+        .set('Authorization', `Bearer ${actor.accessToken}`)
         .send({ ids: [personB.id], confirmCrossOwner: true });
 
-      expect(status).toBe(403);
-      expect(body.code).toBe(BLOCKED_SPACE_CODE);
-      expect(await remainingProfiles(db, spaceId)).toBe(2);
+      expect(status).toBeLessThan(300);
+      expect(await remainingProfiles(db, spaceId)).toBe(1);
     });
   });
 
   describe('scoped POST /people/same-person', () => {
-    it('is refused (403 blocked_space) when the fan-out collapses a space the actor can only view', async () => {
+    it('is refused (403 blocked) when the fan-out collapses a space the actor can only view and the toggle is off', async () => {
       const { personA, editorSpaceId, sourceSpacePersonId, viewerSpaceId } = await setupScoped();
 
       const { status, body } = await request(app)
@@ -250,15 +264,15 @@ describe('merge space-collapse hard-block over HTTP (#733 follow-up)', () => {
         });
 
       expect(status).toBe(403);
-      expect(body.code).toBe(BLOCKED_SPACE_CODE);
+      expect(body.code).toBe(BLOCKED_CODE);
       expect(await remainingProfiles(db, viewerSpaceId)).toBe(2);
     });
 
-    it('stays refused with the cross-owner toggle on and the merge confirmed', async () => {
+    it('commits once the toggle is on and the merge is confirmed, collapsing the un-editable space', async () => {
       const { personA, editorSpaceId, sourceSpacePersonId, viewerSpaceId } = await setupScoped();
       await enableCrossOwnerMerge(admin);
 
-      const { status, body } = await request(app)
+      const { status } = await request(app)
         .post('/people/same-person')
         .set('Authorization', `Bearer ${actor.accessToken}`)
         .send({
@@ -267,14 +281,13 @@ describe('merge space-collapse hard-block over HTTP (#733 follow-up)', () => {
           confirmCrossOwner: true,
         });
 
-      expect(status).toBe(403);
-      expect(body.code).toBe(BLOCKED_SPACE_CODE);
-      expect(await remainingProfiles(db, viewerSpaceId)).toBe(2);
+      expect(status).toBe(204);
+      expect(await remainingProfiles(db, viewerSpaceId)).toBe(1);
     });
   });
 
   describe('in-space POST /shared-spaces/:id/people/:personId/merge', () => {
-    it('is refused (403 blocked_space) when the fan-out collapses a different space the actor cannot edit', async () => {
+    it('is refused (403 blocked) when the fan-out collapses a different space the actor cannot edit and the toggle is off', async () => {
       const { editorSpaceId, targetSpacePersonId, sourceSpacePersonId, viewerSpaceId } = await setupInSpace();
 
       const { status, body } = await request(app)
@@ -283,22 +296,21 @@ describe('merge space-collapse hard-block over HTTP (#733 follow-up)', () => {
         .send({ ids: [sourceSpacePersonId] });
 
       expect(status).toBe(403);
-      expect(body.code).toBe(BLOCKED_SPACE_CODE);
+      expect(body.code).toBe(BLOCKED_CODE);
       expect(await remainingProfiles(db, viewerSpaceId)).toBe(2);
     });
 
-    it('stays refused with the cross-owner toggle on and the merge confirmed', async () => {
+    it('commits once the toggle is on and the merge is confirmed, collapsing the un-editable space', async () => {
       const { editorSpaceId, targetSpacePersonId, sourceSpacePersonId, viewerSpaceId } = await setupInSpace();
       await enableCrossOwnerMerge(admin);
 
-      const { status, body } = await request(app)
+      const { status } = await request(app)
         .post(`/shared-spaces/${editorSpaceId}/people/${targetSpacePersonId}/merge`)
         .set('Authorization', `Bearer ${actor.accessToken}`)
         .send({ ids: [sourceSpacePersonId], confirmCrossOwner: true });
 
-      expect(status).toBe(403);
-      expect(body.code).toBe(BLOCKED_SPACE_CODE);
-      expect(await remainingProfiles(db, viewerSpaceId)).toBe(2);
+      expect(status).toBe(204);
+      expect(await remainingProfiles(db, viewerSpaceId)).toBe(1);
     });
   });
 });

@@ -4843,9 +4843,37 @@ describe(PersonService.name, () => {
       });
     });
 
-    // The space hard-block is toggle-independent: even with the toggle ON and the merge confirmed, a fan-out that
-    // would collapse a space the actor cannot edit is refused with the space-specific code, on this endpoint too.
-    it('blocks a fan-out collapse of an un-editable space regardless of the toggle', async () => {
+    // #733 review P1: a fan-out that would collapse people in a space the actor cannot edit is now governed by the
+    // same admin toggle as an other-owner collapse — blocked when off, permitted (with confirmation) when on.
+    it('blocks a fan-out collapse of an un-editable space when the toggle is off', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: false } });
+      const identityMergePropagation = useIdentityMergePropagation();
+      const auth = AuthFactory.create();
+      const [person, mergeTarget] = [
+        PersonFactory.create({ id: 'person-x' }),
+        PersonFactory.create({ id: 'person-y' }),
+      ];
+      identityMergePropagation.mergePersonalPeople.mockResolvedValue([{ id: mergeTarget.id, success: true }]);
+      mocks.person.getById.mockResolvedValueOnce(person);
+      mocks.person.getById.mockResolvedValueOnce(mergeTarget);
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([person.id]));
+      mocks.access.person.checkOwnerAccess.mockResolvedValueOnce(new Set([mergeTarget.id]));
+      await sut.mergePerson(auth, person.id, { ids: [mergeTarget.id] });
+      const authorize = identityMergePropagation.mergePersonalPeople.mock.calls[0][3] as MergeAuthorizerFn;
+
+      const error = await authorize({
+        collapsedOwnerIds: [],
+        repointedOwnerIds: [],
+        unrepairableSpaceCollapseIds: ['space-x'],
+      }).catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).getResponse()).toMatchObject({
+        code: CROSS_OWNER_MERGE_ERROR_CODE.blocked,
+      });
+    });
+
+    it('commits a fan-out collapse of an un-editable space once the toggle is on and confirmed', async () => {
       mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: true } });
       const identityMergePropagation = useIdentityMergePropagation();
       const auth = AuthFactory.create();
@@ -4861,16 +4889,9 @@ describe(PersonService.name, () => {
       await sut.mergePerson(auth, person.id, { ids: [mergeTarget.id], confirmCrossOwner: true });
       const authorize = identityMergePropagation.mergePersonalPeople.mock.calls[0][3] as MergeAuthorizerFn;
 
-      const error = await authorize({
-        collapsedOwnerIds: [],
-        repointedOwnerIds: [],
-        unrepairableSpaceCollapseIds: ['space-x'],
-      }).catch((error_: unknown) => error_);
-
-      expect(error).toBeInstanceOf(ForbiddenException);
-      expect((error as ForbiddenException).getResponse()).toMatchObject({
-        code: CROSS_OWNER_MERGE_ERROR_CODE.blockedSpace,
-      });
+      await expect(
+        authorize({ collapsedOwnerIds: [], repointedOwnerIds: [], unrepairableSpaceCollapseIds: ['space-x'] }),
+      ).resolves.toBeUndefined();
     });
   });
 

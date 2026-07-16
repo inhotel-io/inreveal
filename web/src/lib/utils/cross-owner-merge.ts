@@ -3,23 +3,17 @@ import { modalManager, toastManager } from '@immich/ui';
 import { mdiAlertOutline } from '@mdi/js';
 import { t } from 'svelte-i18n';
 import { get } from 'svelte/store';
-import { getServerErrorMessage } from '$lib/utils/handle-error';
 
 /**
- * Machine-readable error codes returned by the server when a scoped people-merge crosses an owner
- * boundary (issue #733). Mirrors `CROSS_OWNER_MERGE_ERROR_CODE` in the server's person service.
+ * Machine-readable error codes returned by the server when a people-merge would destructively reach past what
+ * the actor controls (issue #733). Mirrors `CROSS_OWNER_MERGE_ERROR_CODE` in the server's merge policy.
  */
 export const CrossOwnerMergeErrorCode = {
-  /** The merge is not permitted because the instance toggle is off. */
+  /** The merge would collapse another user's people, or people in a space the actor can't edit, and the
+   * instance toggle is off. An administrator can enable it. */
   Blocked: 'cross_owner_merge_blocked',
   /** The instance toggle is on: the merge is permitted but must be explicitly confirmed first. */
   ConfirmationRequired: 'cross_owner_merge_confirmation_required',
-  /**
-   * The merge would collapse people in a shared space the user cannot edit. Unlike `Blocked`, no instance
-   * toggle can enable it — a space's roles are not overridable — so this is shown as a plain descriptive block
-   * with no confirmation dialog.
-   */
-  BlockedSpace: 'cross_owner_merge_blocked_space',
 } as const;
 
 /** Read the machine-readable cross-owner merge error code from a thrown SDK error, if present. */
@@ -42,16 +36,16 @@ export const getCrossOwnerMergeErrorCode = (error: unknown): string | undefined 
 };
 
 export interface CrossOwnerMergeHandlers {
-  /** Ask the user to confirm a cross-owner merge. Resolves true to proceed. */
+  /** Ask the user to confirm a destructive cross-boundary merge. Resolves true to proceed. */
   confirmCrossOwner: () => Promise<boolean>;
-  /** Surface the server's descriptive "blocked" message (never the raw truncated string). */
-  onBlocked: (message: string | undefined) => void;
+  /** Tell the user the merge is blocked and an administrator can enable it (localized, never a raw server string). */
+  onBlocked: () => void;
 }
 
 /**
  * The standard cross-owner merge handlers shared by every scoped-merge entry point (the people
  * detail page, the space people detail page, and the merge-suggestion modal): a strong danger
- * confirmation dialog and a descriptive blocked-merge toast, all using i18n.
+ * confirmation dialog and a localized blocked-merge toast, all using i18n.
  */
 export const createCrossOwnerMergeHandlers = (): CrossOwnerMergeHandlers => ({
   confirmCrossOwner: () => {
@@ -64,15 +58,15 @@ export const createCrossOwnerMergeHandlers = (): CrossOwnerMergeHandlers => ({
       icon: mdiAlertOutline,
     });
   },
-  onBlocked: (message) => {
+  onBlocked: () => {
     const $t = get(t);
-    toastManager.danger(message ?? $t('cannot_merge_people'));
+    toastManager.danger($t('merge_people_across_owners_blocked'));
   },
 });
 
 /**
- * Run any people-merge call, transparently handling the cross-owner boundary (issue #733):
- * - a `blocked` response invokes `handlers.onBlocked` with the server's descriptive message;
+ * Run any people-merge call, transparently handling the destructive cross-boundary case (issue #733):
+ * - a `blocked` response invokes `handlers.onBlocked` (a localized "an admin can enable this" toast);
  * - a `confirmationRequired` response asks `handlers.confirmCrossOwner`, and — only if accepted —
  *   re-runs `merge` with `confirmCrossOwner: true` so the server commits it.
  *
@@ -93,11 +87,10 @@ export const runMergeWithCrossOwnerConfirmation = async (
   } catch (error) {
     const code = getCrossOwnerMergeErrorCode(error);
 
-    // Both are terminal blocks that surface the server's descriptive message and never retry. They differ only
-    // in what the message says: `Blocked` can be lifted by an admin toggle; `BlockedSpace` cannot (the actor
-    // must ask a space editor), so it is never offered the cross-owner confirmation dialog.
-    if (code === CrossOwnerMergeErrorCode.Blocked || code === CrossOwnerMergeErrorCode.BlockedSpace) {
-      handlers.onBlocked(getServerErrorMessage(error));
+    // A terminal block: the merge would destructively collapse another owner's or an un-editable space's people
+    // and the instance toggle is off. Surface a localized "an administrator can enable this" toast; never retry.
+    if (code === CrossOwnerMergeErrorCode.Blocked) {
+      handlers.onBlocked();
       return false;
     }
 

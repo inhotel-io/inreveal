@@ -65,7 +65,7 @@ describe('runScopedMergeWithCrossOwnerConfirmation', () => {
     expect(onBlocked).not.toHaveBeenCalled();
   });
 
-  it('shows the descriptive message and does not retry when blocked', async () => {
+  it('invokes the localized blocked toast and does not retry when blocked', async () => {
     vi.mocked(mergeScopedPeople).mockRejectedValueOnce(
       httpError(403, { code: CrossOwnerMergeErrorCode.Blocked, message: 'An administrator can enable it.' }),
     );
@@ -75,7 +75,7 @@ describe('runScopedMergeWithCrossOwnerConfirmation', () => {
     const committed = await runScopedMergeWithCrossOwnerConfirmation(dto, { confirmCrossOwner, onBlocked });
 
     expect(committed).toBe(false);
-    expect(onBlocked).toHaveBeenCalledWith('An administrator can enable it.');
+    expect(onBlocked).toHaveBeenCalledTimes(1);
     expect(confirmCrossOwner).not.toHaveBeenCalled();
     expect(mergeScopedPeople).toHaveBeenCalledTimes(1);
   });
@@ -90,41 +90,9 @@ describe('runScopedMergeWithCrossOwnerConfirmation', () => {
     const committed = await runScopedMergeWithCrossOwnerConfirmation(dto, { confirmCrossOwner, onBlocked });
 
     expect(committed).toBe(false);
-    expect(onBlocked).toHaveBeenCalledWith('An administrator can enable it.');
+    expect(onBlocked).toHaveBeenCalledTimes(1);
     expect(confirmCrossOwner).not.toHaveBeenCalled();
     expect(mergeScopedPeople).toHaveBeenCalledTimes(1);
-  });
-
-  it('treats a space hard-block like a block: descriptive message, no confirm dialog, no retry', async () => {
-    vi.mocked(mergeScopedPeople).mockRejectedValueOnce(
-      httpError(403, {
-        code: CrossOwnerMergeErrorCode.BlockedSpace,
-        message: 'Ask a space editor to merge them.',
-      }),
-    );
-    const confirmCrossOwner = vi.fn();
-    const onBlocked = vi.fn();
-
-    const committed = await runScopedMergeWithCrossOwnerConfirmation(dto, { confirmCrossOwner, onBlocked });
-
-    expect(committed).toBe(false);
-    expect(onBlocked).toHaveBeenCalledWith('Ask a space editor to merge them.');
-    expect(confirmCrossOwner).not.toHaveBeenCalled();
-    expect(mergeScopedPeople).toHaveBeenCalledTimes(1);
-  });
-
-  it('reads the space hard-block code from a raw (unparsed) string body too', async () => {
-    vi.mocked(mergeScopedPeople).mockRejectedValueOnce(
-      httpErrorRaw(403, { code: CrossOwnerMergeErrorCode.BlockedSpace, message: 'Ask a space editor.' }),
-    );
-    const confirmCrossOwner = vi.fn();
-    const onBlocked = vi.fn();
-
-    const committed = await runScopedMergeWithCrossOwnerConfirmation(dto, { confirmCrossOwner, onBlocked });
-
-    expect(committed).toBe(false);
-    expect(onBlocked).toHaveBeenCalledWith('Ask a space editor.');
-    expect(confirmCrossOwner).not.toHaveBeenCalled();
   });
 
   it('shows the confirm dialog and re-runs with the acknowledgement when the code arrives in a raw string body', async () => {
@@ -207,7 +175,7 @@ describe('runMergeWithCrossOwnerConfirmation', () => {
     expect(onBlocked).not.toHaveBeenCalled();
   });
 
-  it('shows the descriptive message and does not retry when blocked', async () => {
+  it('invokes the localized blocked toast and does not retry when blocked', async () => {
     const merge = vi
       .fn()
       .mockRejectedValueOnce(
@@ -219,7 +187,7 @@ describe('runMergeWithCrossOwnerConfirmation', () => {
     const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
 
     expect(committed).toBe(false);
-    expect(onBlocked).toHaveBeenCalledWith('An administrator can enable it.');
+    expect(onBlocked).toHaveBeenCalledTimes(1);
     expect(confirmCrossOwner).not.toHaveBeenCalled();
     expect(merge).toHaveBeenCalledTimes(1);
   });
@@ -236,46 +204,9 @@ describe('runMergeWithCrossOwnerConfirmation', () => {
     const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
 
     expect(committed).toBe(false);
-    expect(onBlocked).toHaveBeenCalledWith('An administrator can enable it.');
+    expect(onBlocked).toHaveBeenCalledTimes(1);
     expect(confirmCrossOwner).not.toHaveBeenCalled();
     expect(merge).toHaveBeenCalledTimes(1);
-  });
-
-  // Parity with the scoped runner: the classic/in-space UI flows go through this generic runner, so the space
-  // hard-block must be treated like a block here too — descriptive message, no confirm dialog, no retry, and no
-  // toggle can help.
-  it('treats a space hard-block like a block: descriptive message, no confirm dialog, no retry', async () => {
-    const merge = vi.fn().mockRejectedValueOnce(
-      httpError(403, {
-        code: CrossOwnerMergeErrorCode.BlockedSpace,
-        message: 'Ask a space editor to merge them.',
-      }),
-    );
-    const confirmCrossOwner = vi.fn();
-    const onBlocked = vi.fn();
-
-    const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
-
-    expect(committed).toBe(false);
-    expect(onBlocked).toHaveBeenCalledWith('Ask a space editor to merge them.');
-    expect(confirmCrossOwner).not.toHaveBeenCalled();
-    expect(merge).toHaveBeenCalledTimes(1);
-  });
-
-  it('reads the space hard-block code from a raw (unparsed) string body too', async () => {
-    const merge = vi
-      .fn()
-      .mockRejectedValueOnce(
-        httpErrorRaw(403, { code: CrossOwnerMergeErrorCode.BlockedSpace, message: 'Ask a space editor.' }),
-      );
-    const confirmCrossOwner = vi.fn();
-    const onBlocked = vi.fn();
-
-    const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
-
-    expect(committed).toBe(false);
-    expect(onBlocked).toHaveBeenCalledWith('Ask a space editor.');
-    expect(confirmCrossOwner).not.toHaveBeenCalled();
   });
 
   it('shows the confirm dialog and re-runs with the cross-owner acknowledgement once the user confirms', async () => {

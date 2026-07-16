@@ -110,7 +110,7 @@ describe('PersonMergeSuggestionModal', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'yes' }));
 
-    await waitFor(() => expect(toastManager.danger).toHaveBeenCalledWith('An administrator can enable it.'));
+    await waitFor(() => expect(toastManager.danger).toHaveBeenCalled());
     expect(onClose).not.toHaveBeenCalled();
     expect(sdkMock.mergePerson).toHaveBeenCalledTimes(1);
   });

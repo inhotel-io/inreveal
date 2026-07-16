@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { SearchSuggestionType } from 'src/dtos/search.dto';
 import { AssetVisibility, JobName, SharedSpaceRole, SourceType, UserMetadataKey } from 'src/enum';
@@ -3616,16 +3616,18 @@ describe('People identity RBAC projection', () => {
 
     // The COLLAPSE counterpart of the re-point test above (issue #733 follow-up): the fan-out space holds
     // profiles on BOTH identities, so committing the merge would delete one of that space's people. Collapsing
-    // a space's people is an Editor-only action, so a merge must not reach it by fan-out for a viewer or a
-    // non-member — regardless of the cross-owner toggle, which governs personal libraries, not a space's roles.
-    // Builds the exact fixture the reverted proof-of-concept used, now asserting the fixed behaviour.
-    const setupFanOutSpaceCollapse = async (options: { actorRole: SharedSpaceRole | 'non-member' }) => {
+    // a space's people the actor cannot edit is destructive, so — after the #733 review (P1) — it is governed by
+    // the SAME admin toggle as an other-owner collapse: blocked when off, permitted (with an explicit
+    // confirmation) when on. An Owner/Editor of the fan-out space is never gated.
+    const setupFanOutSpaceCollapse = async (options: {
+      actorRole: SharedSpaceRole | 'non-member';
+      mergePeopleAcrossOwners?: boolean;
+    }) => {
       const { ctx, sut, faceIdentityRepository } = setup();
       ctx
         .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
         .get.mockResolvedValue({
-          // Toggle ON on purpose: the space hard-block must hold even when cross-owner merges are enabled.
-          server: { mergePeopleAcrossOwners: true },
+          server: { mergePeopleAcrossOwners: options.mergePeopleAcrossOwners ?? true },
           machineLearning: { facialRecognition: { minFaces: 1 } },
         } as any);
 
@@ -3664,10 +3666,14 @@ describe('People identity RBAC projection', () => {
       return { ctx, sut, actor, actorPerson, sourceSpacePerson, accessibleSpace, sourceIdentity, fanOutSourceProfile };
     };
 
-    const runFanOutCollapseMerge = (fx: Awaited<ReturnType<typeof setupFanOutSpaceCollapse>>) =>
+    const runFanOutCollapseMerge = (
+      fx: Awaited<ReturnType<typeof setupFanOutSpaceCollapse>>,
+      confirmCrossOwner?: boolean,
+    ) =>
       fx.sut.mergeScopedPeople(factory.auth({ user: fx.actor }), {
         target: { type: 'person', id: fx.actorPerson.id },
         sources: [{ type: 'space-person', id: fx.sourceSpacePerson.id, spaceId: fx.accessibleSpace.id }],
+        ...(confirmCrossOwner ? { confirmCrossOwner: true } : {}),
       });
 
     const spaceProfileCount = (ctx: Awaited<ReturnType<typeof setupFanOutSpaceCollapse>>['ctx'], spaceId: string) =>
@@ -3677,29 +3683,43 @@ describe('People identity RBAC projection', () => {
         .where('spaceId', '=', spaceId)
         .executeTakeFirstOrThrow();
 
-    it('blocks a fan-out collapse in a space the actor can only view, even with the toggle on', async () => {
+    it.each([SharedSpaceRole.Viewer, 'non-member' as const])(
+      'blocks a fan-out collapse in a space the actor is %s of when the toggle is off',
+      async (actorRole) => {
+        const fx = await setupFanOutSpaceCollapse({ actorRole, mergePeopleAcrossOwners: false });
+
+        await expect(runFanOutCollapseMerge(fx)).rejects.toBeInstanceOf(ForbiddenException);
+
+        // Nothing destroyed: the fan-out space still has both profiles, the source still on its own identity.
+        const { count } = await spaceProfileCount(fx.ctx, fx.fanOutSourceProfile.spaceId);
+        expect(Number(count)).toBe(2);
+        const sourceAfter = await fx.ctx.database
+          .selectFrom('shared_space_person')
+          .select('identityId')
+          .where('id', '=', fx.fanOutSourceProfile.id)
+          .executeTakeFirstOrThrow();
+        expect(sourceAfter.identityId).toBe(fx.sourceIdentity.id);
+      },
+    );
+
+    it('requires an explicit confirmation for a fan-out collapse in an un-editable space when the toggle is on', async () => {
       const fx = await setupFanOutSpaceCollapse({ actorRole: SharedSpaceRole.Viewer });
 
-      await expect(runFanOutCollapseMerge(fx)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(runFanOutCollapseMerge(fx)).rejects.toBeInstanceOf(ConflictException);
 
-      // Nothing destroyed: the fan-out space still has both profiles, the source still on its own identity.
+      // Unconfirmed: still nothing destroyed.
       const { count } = await spaceProfileCount(fx.ctx, fx.fanOutSourceProfile.spaceId);
       expect(Number(count)).toBe(2);
-      const sourceAfter = await fx.ctx.database
-        .selectFrom('shared_space_person')
-        .select('identityId')
-        .where('id', '=', fx.fanOutSourceProfile.id)
-        .executeTakeFirstOrThrow();
-      expect(sourceAfter.identityId).toBe(fx.sourceIdentity.id);
     });
 
-    it('blocks a fan-out collapse in a space the actor is not a member of', async () => {
-      const fx = await setupFanOutSpaceCollapse({ actorRole: 'non-member' });
+    it('commits a fan-out collapse in an un-editable space once the toggle is on and the merge is confirmed', async () => {
+      const fx = await setupFanOutSpaceCollapse({ actorRole: SharedSpaceRole.Viewer });
 
-      await expect(runFanOutCollapseMerge(fx)).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(runFanOutCollapseMerge(fx, true)).resolves.toBeUndefined();
 
+      // The collapse committed: the fan-out space is down to one profile, on the surviving identity.
       const { count } = await spaceProfileCount(fx.ctx, fx.fanOutSourceProfile.spaceId);
-      expect(Number(count)).toBe(2);
+      expect(Number(count)).toBe(1);
     });
 
     it.each([SharedSpaceRole.Owner, SharedSpaceRole.Editor])(
@@ -3716,13 +3736,14 @@ describe('People identity RBAC projection', () => {
     );
 
     // The same policy must hold for the CLASSIC person merge (POST /people/:id/merge), not just the scoped one:
-    // merging two of the actor's own people whose identities are both duplicated in a space they cannot edit.
-    it('blocks the classic person merge when its fan-out would collapse an un-editable space', async () => {
+    // merging two of the actor's own people whose identities are both duplicated in a space they cannot edit is
+    // blocked while the toggle is off (#733 review P1).
+    it('blocks the classic person merge when its fan-out would collapse an un-editable space and the toggle is off', async () => {
       const { ctx, sut, faceIdentityRepository } = setup();
       ctx
         .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
         .get.mockResolvedValue({
-          server: { mergePeopleAcrossOwners: true },
+          server: { mergePeopleAcrossOwners: false },
           machineLearning: { facialRecognition: { minFaces: 1 } },
         } as any);
 
