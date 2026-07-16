@@ -642,6 +642,71 @@ describe(MemoryService.name, () => {
       expect(created?.showAt).toEqual(new Date('2026-07-01T00:00:00.000Z'));
       expect(created?.hideAt).toEqual(new Date(hideAt));
     });
+
+    it('caps a multi-day recap rule to one memory per day, leaving a slot for a daily rule', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-01T12:00:00Z'));
+
+      const user = factory.userAdmin();
+      mocks.user.getList.mockResolvedValue([user]);
+      mocks.systemMetadata.get.mockResolvedValue({
+        lastOnThisDayDate: '2026-07-03T00:00:00.000Z',
+        lastRuleDate: '2026-06-30T00:00:00.000Z',
+      });
+      mocks.asset.getByDayOfYear.mockResolvedValue([]);
+      mocks.memory.search.mockResolvedValue([]);
+      mocks.memory.hasRuleMemory.mockResolvedValue(false);
+      mocks.memory.create.mockResolvedValue(MemoryFactory.create() as any);
+
+      const recapRule = {
+        id: 'month_recap',
+        evaluate: vi.fn().mockResolvedValue([
+          {
+            ruleId: 'month_recap',
+            dedupeKey: 'month_recap:2023-07',
+            title: 'July 2023',
+            score: 100,
+            assetIds: ['a'],
+            memoryAt: DateTime.fromISO('2023-07-15T00:00:00Z'),
+            visibleForDays: 7,
+          },
+          {
+            ruleId: 'month_recap',
+            dedupeKey: 'month_recap:2022-07',
+            title: 'July 2022',
+            score: 95,
+            assetIds: ['b'],
+            memoryAt: DateTime.fromISO('2022-07-15T00:00:00Z'),
+            visibleForDays: 7,
+          },
+        ]),
+      };
+      const dailyRule = {
+        id: 'on_this_day_place',
+        evaluate: vi.fn().mockResolvedValue([
+          {
+            ruleId: 'on_this_day_place',
+            dedupeKey: 'on_this_day_place:2023',
+            title: 'On this day in Lisbon',
+            score: 80,
+            assetIds: ['c'],
+            memoryAt: DateTime.fromISO('2023-07-01T00:00:00Z'),
+          },
+        ]),
+      };
+      vi.spyOn(sut as never, 'getMemoryRules').mockReturnValue([recapRule, dailyRule] as never);
+
+      await sut.onMemoriesCreate();
+
+      // Both slots used, but the second month_recap year is dropped so the daily rule gets a slot.
+      expect(mocks.memory.create).toHaveBeenCalledTimes(2);
+      expect(mocks.memory.create.mock.calls.map((call) => (call[0].data as { dedupeKey: string }).dedupeKey)).toEqual([
+        'month_recap:2023-07',
+        'on_this_day_place:2023',
+      ]);
+
+      vi.useRealTimers();
+    });
   });
 
   describe('search', () => {
