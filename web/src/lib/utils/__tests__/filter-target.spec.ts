@@ -3,6 +3,7 @@ import { createFilterState, type FilterState } from '$lib/components/filter-pane
 import {
   applyContextualFilter,
   buildContextualFilterUrl,
+  buildContextualMapUrl,
   buildFilterStateUrl,
   buildPersonFilterPatch,
   isFilterStateUrlUnchanged,
@@ -203,6 +204,27 @@ describe('buildContextualFilterUrl', () => {
 // this: only the pure buildContextualFilterUrl shipped in Slice 2. Kept thin on purpose, so these
 // tests are about the WIRING (does it read page.url, forward opts, and call goto with the exact
 // result), not the merge/target logic already covered above.
+describe('buildContextualMapUrl', () => {
+  // A space-scoped map cannot represent an album filter: space ∩ album is unsatisfiable and the
+  // server 400s it (hydrateMapFilters drops albumId there). So the 🗺️ pin, which carries the
+  // active filters from a Space over to the map, must NOT let albumId ride along.
+  it('drops an active albumId when carrying a Space scope to the map', () => {
+    const url = buildContextualMapUrl(u('/spaces/s1/photos/a1?albumId=al1'));
+    expect(url).not.toBeNull();
+    expect(url).toContain('spaceId=s1');
+    expect(url).not.toContain('albumId');
+  });
+
+  // The reverse guard: a NON-space map is a legitimate home for an album scope (/map?albumId=X),
+  // so the pin must keep albumId when there is no Space in play.
+  it('keeps an albumId when the target map is not space-scoped', () => {
+    const url = buildContextualMapUrl(u('/photos/a1?albumId=al1'));
+    expect(url).not.toBeNull();
+    expect(url).toContain('albumId=al1');
+    expect(url).not.toContain('spaceId');
+  });
+});
+
 describe('applyContextualFilter', () => {
   beforeEach(() => {
     vi.clearAllMocks();

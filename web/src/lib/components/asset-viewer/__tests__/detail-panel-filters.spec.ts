@@ -477,6 +477,32 @@ describe('DetailPanel appears-in album filter', () => {
     await waitFor(() => expect(screen.getByTestId('detail-panel-filename')).toBeInTheDocument());
     expect(screen.queryByLabelText(/^filter_by_album/)).not.toBeInTheDocument();
   });
+
+  // E9b — a SPACE-scoped map drops an albumId filter (space ∩ album is unsatisfiable, the server
+  // 400s it — see hydrateMapFilters / buildContextualMapUrl), so offering the album ⚗️ there would
+  // be a dead affordance: the grid never filters and no chip appears. Withhold it, like E9's album
+  // surface. P1 cannot catch this (the clicked asset stays in the result set).
+  it('E9b: a space-scoped map offers no album ⚗️ — albumId is unsupported there', async () => {
+    mockPage.reset('https://gallery.test/map/photos/asset-1?spaceId=space-1');
+    getAllAlbumsMock.mockResolvedValue([albumDto('album-7', 'Iceland')]);
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset(), currentAlbum: null });
+
+    // The album card still renders (it navigates); only the filter affordance is withheld.
+    await waitFor(() => expect(screen.getByText('Iceland')).toBeInTheDocument());
+    expect(screen.queryByLabelText('filter_by_album: Iceland')).not.toBeInTheDocument();
+  });
+
+  // Reverse guard: a GLOBAL (non-space) map is a legitimate album scope (/map?albumId=X), so the
+  // album ⚗️ must remain there — the suppression is space-scoped only.
+  it('a global (non-space) map still offers the album ⚗️', async () => {
+    mockPage.reset('https://gallery.test/map/photos/asset-1');
+    getAllAlbumsMock.mockResolvedValue([albumDto('album-7', 'Iceland')]);
+
+    renderWithTooltips(DetailPanel, { asset: buildAsset(), currentAlbum: null });
+
+    expect(await screen.findByLabelText('filter_by_album: Iceland')).toBeInTheDocument();
+  });
 });
 
 // #767 class — the embedded map's "open in map view" control called Route.map({...latlng}) directly,
