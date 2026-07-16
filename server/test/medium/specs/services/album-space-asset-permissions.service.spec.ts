@@ -284,6 +284,23 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
       }
       expect(await seesContribution(actors.spaceEditor.id, assetCarol)).toBe(true);
     });
+
+    it('DEPARTURE RETENTION (pins D2 status quo): contributed-asset owner leaves — remaining members still see it', async () => {
+      // carol owns assetCarol and contributed nothing herself; the pinned semantic is that HER
+      // departure does not revoke the contribution (mirrors shared_space_asset pool retention).
+      // Flipping this assertion is the one-line signal if D2 ever decides departure should revoke.
+      await spaceRepo.removeMember(spaceS, actors.carol.id);
+      try {
+        expect(await seesContribution(actors.spaceEditor.id, assetCarol)).toBe(true);
+        expect(await seesContribution(actors.spaceViewer.id, assetCarol)).toBe(true);
+      } finally {
+        await db
+          .insertInto('shared_space_member')
+          .values({ spaceId: spaceS, userId: actors.carol.id, role: 'editor' })
+          .onConflict((oc) => oc.doNothing())
+          .execute();
+      }
+    });
   });
 
   // ===============================================================================================

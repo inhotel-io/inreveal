@@ -201,3 +201,89 @@ describe('M-2: LibraryAssetSync — non-owner backfill excludes trashed; owner k
     expect(ids).toContain(trashed.id);
   });
 });
+
+const seedContributionInSpace = async (ctx: SyncTestContext) => {
+  const { user: owner } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { user: carol } = await ctx.newUser();
+  const { album } = await ctx.newAlbum({ ownerId: owner.id });
+  const { asset: live } = await ctx.newAsset({ ownerId: carol.id });
+  const { asset: trashed } = await ctx.newAsset({ ownerId: carol.id });
+  await ctx.newExif({ assetId: live.id, make: 'LiveCamera' });
+  await ctx.newExif({ assetId: trashed.id, make: 'TrashedCamera' });
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+  await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+  await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: live.id, spaceId: space.id });
+  await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: trashed.id, spaceId: space.id });
+  await trash(defaultDatabase, trashed.id);
+  return { owner, member, album, live, trashed };
+};
+
+describe('M-2 (P2-8): contributed arms — backfill/creates exclude trashed; updates still deliver', () => {
+  it('ToAsset.getBackfill excludes a trashed contribution (live sibling present)', async () => {
+    const ctx = setup();
+    const sut = ctx.get(SyncRepository).sharedSpaceAlbumToAsset;
+    const { member, album, live, trashed } = await seedContributionInSpace(ctx);
+    const rows = await collect(
+      sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, member.id),
+    );
+    const ids = rows.map((r) => r.assetId);
+    expect(ids).toContain(live.id);
+    expect(ids).not.toContain(trashed.id);
+  });
+
+  it('ToAsset.getBackfill album_asset arm also gates trash (line :1690 pin)', async () => {
+    const ctx = setup();
+    const sut = ctx.get(SyncRepository).sharedSpaceAlbumToAsset;
+    const { user: owner } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset: live } = await ctx.newAsset({ ownerId: owner.id });
+    const { asset: trashed } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: live.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: trashed.id });
+    await trash(defaultDatabase, trashed.id);
+    const rows = await collect(
+      sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, owner.id),
+    );
+    expect(rows.map((r) => r.assetId)).not.toContain(trashed.id);
+  });
+
+  it('Asset content sync (getBackfill + getCreates) excludes the trashed contributed asset', async () => {
+    const ctx = setup();
+    const sut = ctx.get(SyncRepository).sharedSpaceAlbumAsset;
+    const { member, album, live, trashed } = await seedContributionInSpace(ctx);
+    const backfill = await collect(
+      sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, member.id),
+    );
+    expect(backfill.map((r) => r.id)).toContain(live.id);
+    expect(backfill.map((r) => r.id)).not.toContain(trashed.id);
+    const creates = await collect(sut.getCreates({ nowId: NOW_ID, userId: member.id }));
+    expect(creates.map((r) => r.id)).toContain(live.id);
+    expect(creates.map((r) => r.id)).not.toContain(trashed.id);
+  });
+
+  it('Exif sync getBackfill excludes the trashed contribution’s EXIF', async () => {
+    const ctx = setup();
+    const sut = ctx.get(SyncRepository).sharedSpaceAlbumAssetExif;
+    const { member, album, live, trashed } = await seedContributionInSpace(ctx);
+    const rows = await collect(
+      sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, member.id),
+    );
+    expect(rows.map((r) => r.assetId)).toContain(live.id);
+    expect(rows.map((r) => r.assetId)).not.toContain(trashed.id);
+  });
+
+  it('Asset content getUpdates STILL delivers the trashed contribution (purge convergence)', async () => {
+    const ctx = setup();
+    const sut = ctx.get(SyncRepository).sharedSpaceAlbumAsset;
+    const { member, trashed } = await seedContributionInSpace(ctx);
+    const rows = await collect(
+      sut.getUpdates(
+        { nowId: NOW_ID, userId: member.id },
+        { type: SyncEntityType.AlbumToAssetV1, updateId: BEFORE_UPDATE_ID },
+      ),
+    );
+    expect(rows.map((r) => r.id)).toContain(trashed.id);
+  });
+});

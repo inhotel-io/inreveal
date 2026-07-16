@@ -183,19 +183,31 @@ describe('/shared-spaces/:id/albums (T18)', () => {
       expect(status).toBe(403);
     });
 
-    it('space editor → 204 (toggle showInTimeline=false)', async () => {
+    it('space editor → 204 (toggle showInTimeline=false) and the value persists', async () => {
       const { status } = await updateAlbum(editor.accessToken, ownerAlbum.id, false);
       expect(status).toBe(204);
+      const { body } = await listAlbums(editor.accessToken);
+      expect(
+        (body as Array<{ id: string; showInTimeline: boolean }>).find((a) => a.id === ownerAlbum.id)?.showInTimeline,
+      ).toBe(false);
     });
 
-    it('space editor → 204 (toggle showInTimeline=true)', async () => {
+    it('space editor → 204 (toggle showInTimeline=true) and the value persists', async () => {
       const { status } = await updateAlbum(editor.accessToken, ownerAlbum.id, true);
       expect(status).toBe(204);
+      const { body } = await listAlbums(editor.accessToken);
+      expect(
+        (body as Array<{ id: string; showInTimeline: boolean }>).find((a) => a.id === ownerAlbum.id)?.showInTimeline,
+      ).toBe(true);
     });
 
-    it('space owner → 204', async () => {
+    it('space owner → 204 and the value persists', async () => {
       const { status } = await updateAlbum(owner.accessToken, ownerAlbum.id, false);
       expect(status).toBe(204);
+      const { body } = await listAlbums(owner.accessToken);
+      expect(
+        (body as Array<{ id: string; showInTimeline: boolean }>).find((a) => a.id === ownerAlbum.id)?.showInTimeline,
+      ).toBe(false);
     });
   });
 
