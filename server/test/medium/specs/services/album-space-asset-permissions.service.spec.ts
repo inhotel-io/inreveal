@@ -350,12 +350,12 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
       const [ownRes] = await sut.addAssets(authOf('albumOwner'), albumL, { ids: [ownAsset.id] });
       expect(ownRes.success).toBe(true);
 
-      const matches = async (assetId: string) =>
-        (
-          await inAlbums(db.selectFrom('asset').where('asset.id', '=', assetId), [albumL], [spaceS])
-            .select('asset.id')
-            .execute()
-        ).length > 0;
+      const matches = async (assetId: string) => {
+        const rows = await inAlbums(db.selectFrom('asset').where('asset.id', '=', assetId), [albumL], [spaceS])
+          .select('asset.id')
+          .execute();
+        return rows.length > 0;
+      };
 
       // BDD-1: live member, album still linked — the contribution matches (existing behavior).
       expect(await matches(contributed.id)).toBe(true);
