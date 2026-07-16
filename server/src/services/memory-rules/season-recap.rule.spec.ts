@@ -55,7 +55,11 @@ describe(SeasonRecapMemoryRule.name, () => {
         subtitle: '15 photos',
         score: 113, // 90 + min(15,40)=15 + recencyBonus(2024,2026)=8
         visibleForDays: 10,
+        context: { seasonYear: 2024, season: 'summer', count: 15 },
       });
+      expect(candidate.memoryAt.toISODate()).toBe('2024-07-01');
+      expect(candidate.assetIds).toHaveLength(15);
+      expect(candidate.assetIds[0]).toBe('a-2024-7-0');
     });
   });
 

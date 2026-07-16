@@ -47,10 +47,28 @@ describe(OnThisDayPlaceMemoryRule.name, () => {
       subtitle: '6 photos from 2023',
       dedupeKey: 'on_this_day_place:2023-06-10:france:lisbon',
       score: 125, // 100 + 6*3 + recencyBonus(2023,2026)=7
+      context: { year: 2023, city: 'Lisbon', country: 'France', count: 6 },
     });
     expect(candidate.memoryAt.toISODate()).toBe('2023-06-10');
     expect(candidate.assetIds).toHaveLength(6);
     expect(candidate.visibleForDays).toBeUndefined();
+  });
+
+  it('excludes ungeotagged assets from the dominance denominator (only geotagged count)', async () => {
+    // 4 Lisbon + 4 null-city: if nulls counted, ratio would be 4/8 = 50% and fail the gate.
+    // Because null-city assets are dropped before dominance, Lisbon is 4/4 = 100% -> a candidate.
+    const { rule } = ruleWith([...cityAssets(2023, 'Lisbon', 4), ...cityAssets(2023, null, 4, null)]);
+    const result = await rule.evaluate({ ownerId: 'user-1', target });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ title: 'On this day in Lisbon', subtitle: '4 photos from 2023' });
+  });
+
+  it('treats a blank ("") city the same as no city', async () => {
+    // EXIF city is usually null when absent but can be an empty string; it must not form a place.
+    const { rule } = ruleWith([...cityAssets(2023, 'Lisbon', 4), ...cityAssets(2023, '', 4)]);
+    const result = await rule.evaluate({ ownerId: 'user-1', target });
+    expect(result).toHaveLength(1);
+    expect(result[0].title).toBe('On this day in Lisbon');
   });
 
   it('emits no candidate when no city reaches a 60% majority', async () => {
