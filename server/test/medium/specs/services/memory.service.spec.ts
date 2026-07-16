@@ -758,6 +758,79 @@ describe(MemoryService.name, () => {
     });
   });
 
+  describe('onMemoriesCreate — people_together (end-to-end generation)', () => {
+    it('creates a people_together memory for two people co-occurring across a past June', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 6, day: 20 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+      const { person: anna } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+      const { person: ben } = await ctx.newPerson({ ownerId: user.id, name: 'Ben' });
+
+      // 6 ungeotagged June 2023 photos across 6 distinct days (no city -> no on_this_day_place;
+      // none of them land on day 20 -> no on_this_day_place either), both people in every photo.
+      const assetIds: string[] = [];
+      for (let day = 5; day <= 10; day++) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-06-${day}T12:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: anna.id, isVisible: true });
+        await ctx.newAssetFace({ assetId: asset.id, personId: ben.id, isVisible: true });
+        assetIds.push(asset.id);
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+
+      // Title/dedupeKey/context are ordered by person id (D6) — the ids are random UUIDs, so
+      // derive the expected order from the created people rather than hardcoding "Anna & Ben".
+      const [first, second] = [anna, ben].toSorted((a, b) => (a.id < b.id ? -1 : 1));
+
+      expect(memories).toEqual([
+        expect.objectContaining({
+          type: MemoryType.Rule,
+          memoryAt: expect.any(Date),
+          showAt: now.startOf('day').toJSDate(),
+          hideAt: now.startOf('day').plus({ days: 6 }).endOf('day').toJSDate(),
+          data: expect.objectContaining({
+            ruleId: 'people_together',
+            title: `${first.name} & ${second.name}`,
+            subtitle: '6 photos together · June 2023',
+            context: expect.objectContaining({
+              year: 2023,
+              count: 6,
+              personAId: first.id,
+              personBId: second.id,
+            }),
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...assetIds].toSorted());
+    });
+
+    it('does not create a people_together memory below the minimum co-occurring photo count', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 6, day: 20 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+      const { person: anna } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+      const { person: ben } = await ctx.newPerson({ ownerId: user.id, name: 'Ben' });
+
+      // Only 5 co-occurring photos across 5 distinct days — below MIN_ASSETS (6).
+      for (let day = 5; day <= 9; day++) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-06-${day}T12:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: anna.id, isVisible: true });
+        await ctx.newAssetFace({ assetId: asset.id, personId: ben.id, isVisible: true });
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories.some((memory) => (memory.data as { ruleId?: string }).ruleId === 'people_together')).toBe(false);
+    });
+  });
+
   describe('onMemoriesCleanup', () => {
     it('should run without error', async () => {
       const { sut } = setup();
