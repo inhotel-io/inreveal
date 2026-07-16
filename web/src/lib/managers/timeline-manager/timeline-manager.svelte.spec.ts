@@ -1357,4 +1357,17 @@ describe('TimelineManager scroll scaling', () => {
     expect(fakeEl.scrollTop).toBeCloseTo(timelineManager.domScrollMax, 6); // 3000, reachable — not clamped short
     expect(reached).toBe(true);
   });
+
+  it('16. re-derives the DOM↔logical mapping on a geometry change so renderOffset never goes stale', () => {
+    timelineManager.maxScrollHeight = 4000; // force scaling: domScrollMax 3000, logicalScrollMax 7337
+    timelineManager.scrollTo(2000); // logical; DOM scrollTop is now well below the logical position
+    // Invariant after any scroll: renderOffset === domScrollTop − logicalScrollTop.
+    expect(timelineManager.renderOffset).toBeCloseTo(fakeEl.scrollTop - timelineManager.scrollTop, 6);
+
+    // A viewport resize changes the scale WITHOUT a scroll event. The cached logical position must be
+    // re-derived under the new scale, otherwise the next scroll teleports the timeline by the drift.
+    timelineManager.viewportHeight = 500; // was 1000
+
+    expect(timelineManager.renderOffset).toBeCloseTo(fakeEl.scrollTop - timelineManager.scrollTop, 6);
+  });
 });

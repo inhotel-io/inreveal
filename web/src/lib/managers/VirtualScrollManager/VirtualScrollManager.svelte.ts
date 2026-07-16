@@ -202,6 +202,17 @@ export abstract class VirtualScrollManager {
     }
   }
 
+  // Re-derive the cached DOM↔logical scroll mapping from the current DOM scrollTop under the
+  // present scale. A geometry change (viewport resize, width reflow) shifts domScrollMax/
+  // logicalScrollMax without a scroll event, so the cached logical position — and therefore
+  // renderOffset — would otherwise stay computed against the old scale and teleport the timeline
+  // on the next scroll. Unlike updateSlidingWindow this skips the change guard: the DOM scrollTop
+  // may be unchanged while the scale is not.
+  protected resyncScrollMapping(): void {
+    this.#cachedDomScrollTop = this.domScrollTop;
+    this.#scrollTop = this.domToLogical(this.#cachedDomScrollTop);
+  }
+
   refreshLayout() {
     this.updateViewportProximities();
   }

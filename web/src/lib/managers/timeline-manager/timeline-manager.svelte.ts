@@ -450,11 +450,15 @@ export class TimelineManager extends VirtualScrollManager {
     }
     if (this.grouping !== 'day') {
       layoutTimelineBuckets(this.timelineBuckets);
+      this.resyncScrollMapping();
       return;
     }
     for (const month of this.months) {
       updateGeometry(this, month, { invalidateHeight: changedWidth });
     }
+    // Geometry may have changed the scale (viewport resize / width reflow), so re-derive the
+    // DOM↔logical mapping before recomputing proximities off the logical scrollTop.
+    this.resyncScrollMapping();
     this.updateViewportProximities();
     if (changedWidth) {
       this.#createScrubberMonths();
