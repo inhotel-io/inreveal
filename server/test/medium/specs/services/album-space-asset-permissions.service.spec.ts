@@ -325,6 +325,56 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
         .execute();
       expect(withoutLiveMembership).toHaveLength(0);
     });
+
+    // Task 9 (D1-b residue): timelineSpaceIds only proves the searcher has a live SPACE membership —
+    // it does NOT prove the album is still LINKED to that space. A contribution row survives an
+    // unlink (D1-b tombstoning is for the read arms, not the row itself), so before this fix a live
+    // member searching with an album filter still matched a retained contribution of an UNLINKED
+    // album — which then 403s on thumbnail (checkAccess routes through the live-link-gated
+    // spaceContributedAssetExists). This test pins BDD-1..4 from the task brief in one flow.
+    it('D1-b residue: unlink drops the search match for a live member; re-link restores it; the album_asset arm is untouched throughout', async () => {
+      const { ctx } = setup();
+      const { asset: contributed } = await ctx.newAsset({
+        ownerId: actors.carol.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      await ctx.newSharedSpaceAsset({ spaceId: spaceS, assetId: contributed.id, addedById: actors.carol.id });
+      const [contribRes] = await sut.addAssets(authOf('spaceEditor'), albumL, { ids: [contributed.id] });
+      expect(contribRes.success).toBe(true);
+
+      // Own asset landing via album_asset (the arm this task must NOT touch).
+      const { asset: ownAsset } = await ctx.newAsset({
+        ownerId: actors.albumOwner.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      const [ownRes] = await sut.addAssets(authOf('albumOwner'), albumL, { ids: [ownAsset.id] });
+      expect(ownRes.success).toBe(true);
+
+      const matches = async (assetId: string) =>
+        (
+          await inAlbums(db.selectFrom('asset').where('asset.id', '=', assetId), [albumL], [spaceS])
+            .select('asset.id')
+            .execute()
+        ).length > 0;
+
+      // BDD-1: live member, album still linked — the contribution matches (existing behavior).
+      expect(await matches(contributed.id)).toBe(true);
+      expect(await matches(ownAsset.id)).toBe(true);
+
+      await spaceRepo.removeAlbum(spaceS, albumL);
+      try {
+        // BDD-2 (the RED driver): album unlinked (row retained) — the contribution NO LONGER matches
+        // even though the searcher still has a live timelineSpaceId for S.
+        expect(await matches(contributed.id)).toBe(false);
+        // BDD-4: the album_asset arm is untouched by the space link — the owner's own row still matches.
+        expect(await matches(ownAsset.id)).toBe(true);
+      } finally {
+        await spaceRepo.addAlbum({ spaceId: spaceS, albumId: albumL, addedById: actors.spaceOwner.id });
+      }
+
+      // BDD-3: re-link restores the match (D1-b reversibility).
+      expect(await matches(contributed.id)).toBe(true);
+    });
   });
 
   // ===============================================================================================

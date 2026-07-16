@@ -489,7 +489,25 @@ export function inAlbums<O>(
                     .selectFrom('album_space_asset')
                     .select(['album_space_asset.assetId as assetId', 'album_space_asset.albumId as albumId'])
                     .where('album_space_asset.albumId', '=', anyUuid(albumIds!))
-                    .where('album_space_asset.spaceId', '=', anyUuid(timelineSpaceIds!)),
+                    .where('album_space_asset.spaceId', '=', anyUuid(timelineSpaceIds!))
+                    // Task 9 (D1-b residue): timelineSpaceIds only proves the searcher has a live SPACE
+                    // membership — it does not prove this album is still LINKED to that space. A
+                    // contribution row survives an unlink (D1-b tombstoning applies to other read arms,
+                    // not this row), so without this gate a live member searching with an album filter
+                    // still matched a retained contribution of an UNLINKED album, which then 403s on
+                    // thumbnail (checkAccess routes through the live-link-gated spaceContributedAssetExists).
+                    // Mirrors contributionVisibleToMember (sync.repository.ts) / spaceContributedAssetExists
+                    // (shared-space-album-scope.ts): require a live shared_space_album correlated on BOTH
+                    // albumId AND spaceId.
+                    .where((wb) =>
+                      wb.exists(
+                        wb
+                          .selectFrom('shared_space_album')
+                          .whereRef('shared_space_album.albumId', '=', 'album_space_asset.albumId')
+                          .whereRef('shared_space_album.spaceId', '=', 'album_space_asset.spaceId')
+                          .select(wb.lit(1).as('one')),
+                      ),
+                    ),
                 )
               : albumAssetMembers
           ).as('album_members');

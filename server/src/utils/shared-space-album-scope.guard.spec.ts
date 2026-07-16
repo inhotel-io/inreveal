@@ -375,6 +375,16 @@ const VIS_ALLOWLIST: Record<string, string> = {
   // timeline-album-contributions.medium.spec.ts (Hidden/trashed contributions vanish from counts).
   'album.repository.ts::getMetadataForIds':
     'gated via withDefaultVisibility ($call-ed on the outer asset query); scanner does not recognize this helper name',
+
+  // Task 9 (D1-b residue): the contributed (`album_space_asset`) arm's live-link gate — a
+  // correlated EXISTS against shared_space_album (albumId + spaceId) proving the album is still
+  // linked to the space the contribution was made through, mirroring contributionVisibleToMember
+  // (sync.repository.ts) / spaceContributedAssetExists. Pure link-existence check — same reasoning
+  // as hasLibraryLink / getAssetIdsWithoutOtherSpacePath above — no asset content is read here.
+  // Asset visibility for the matched rows is enforced elsewhere (same as the rest of inAlbums,
+  // which was never gate-scanned before this arm's shared_space_album reference existed).
+  'database.ts::inAlbums':
+    'live-link EXISTS(shared_space_album) correlated on albumId+spaceId; link-existence check, no asset content (Task 9)',
 };
 
 const VIS_WINDOW = 50;
