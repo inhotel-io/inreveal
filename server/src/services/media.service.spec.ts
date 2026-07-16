@@ -1675,8 +1675,9 @@ describe(MediaService.name, () => {
           await new Promise<void>((resolve) => (releaseFirstTrim = resolve));
           order.push('trim1:end');
         })
-        .mockImplementationOnce(async () => {
+        .mockImplementationOnce(() => {
           order.push('trim2:start');
+          return Promise.resolve();
         });
 
       const first = sut.handleAssetEditThumbnailGeneration({ id: asset.id });
