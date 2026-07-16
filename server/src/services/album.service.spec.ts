@@ -871,6 +871,50 @@ describe(AlbumService.name, () => {
       expect(mocks.access.album.checkSharedLinkAccess).toHaveBeenCalledWith(auth.sharedLink!.id, new Set([album.id]));
     });
 
+    // #752 P1-5: pins the `auth.sharedLink ? undefined : auth.user.id` ternary in album.service.ts
+    // get() — a future refactor that drops it would leak cross-owner contribution counts to
+    // anonymous shared-link viewers (the member-gate for getMetadataForIds's contributed arm).
+    it('excludes contributions (forUserId: undefined) from the metadata query for a shared-link viewer', async () => {
+      const album = AlbumFactory.from().albumUser().build();
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.access.album.checkSharedLinkAccess.mockResolvedValue(new Set([album.id]));
+      mocks.album.getMetadataForIds.mockResolvedValue([
+        {
+          albumId: album.id,
+          assetCount: 1,
+          startDate: new Date('1970-01-01'),
+          endDate: new Date('1970-01-01'),
+          lastModifiedAssetTimestamp: new Date('1970-01-01'),
+        },
+      ]);
+
+      const auth = AuthFactory.from().sharedLink().build();
+      await sut.get(auth, album.id);
+
+      expect(mocks.album.getMetadataForIds).toHaveBeenCalledWith([album.id], { forUserId: undefined });
+    });
+
+    it('includes contributions (forUserId: <user id>) in the metadata query for a normal authenticated viewer', async () => {
+      const album = AlbumFactory.from().albumUser().build();
+      const { user: owner } = album.albumUsers.find(({ role }) => role === AlbumUserRole.Owner)!;
+      mocks.album.getById.mockResolvedValue(getForAlbum(album));
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([album.id]));
+      mocks.sharedSpace.getAlbumSpaceLinks.mockResolvedValue([]);
+      mocks.album.getMetadataForIds.mockResolvedValue([
+        {
+          albumId: album.id,
+          assetCount: 1,
+          startDate: new Date('1970-01-01'),
+          endDate: new Date('1970-01-01'),
+          lastModifiedAssetTimestamp: new Date('1970-01-01'),
+        },
+      ]);
+
+      await sut.get(AuthFactory.create(owner), album.id);
+
+      expect(mocks.album.getMetadataForIds).toHaveBeenCalledWith([album.id], { forUserId: owner.id });
+    });
+
     it('should get a shared album via shared with user', async () => {
       const user = UserFactory.create();
       const album = AlbumFactory.from().albumUser({ userId: user.id }).build();

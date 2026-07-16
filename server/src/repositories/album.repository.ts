@@ -157,9 +157,9 @@ export class AlbumRepository {
     return map;
   }
 
-  @GenerateSql({ params: [[DummyValue.UUID]] })
+  @GenerateSql({ params: [[DummyValue.UUID]] }, { params: [[DummyValue.UUID], { forUserId: DummyValue.UUID }] })
   @ChunkedArray()
-  async getMetadataForIds(ids: string[]): Promise<AlbumAssetCount[]> {
+  async getMetadataForIds(ids: string[], { forUserId }: { forUserId?: string } = {}): Promise<AlbumAssetCount[]> {
     // Guard against running invalid query when ids list is empty.
     if (ids.length === 0) {
       return [];
@@ -169,16 +169,50 @@ export class AlbumRepository {
       this.db
         .selectFrom('asset')
         .$call(withDefaultVisibility)
-        .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
-        .select('album_asset.albumId as albumId')
+        .innerJoin(
+          (eb) => {
+            // #752 P1-5: album metadata = owner rows ∪ member-gated contributions, so card counts
+            // and date ranges agree with the grid (P0-2) for the SAME viewer. The contributed arm
+            // requires a LIVE album↔space link (D1-b: retained rows of an unlinked album are inert)
+            // and live membership of `forUserId`. UNION dedupes a P1-6 coexistence-window pair.
+            const ownerRows = eb
+              .selectFrom('album_asset')
+              .select(['album_asset.albumId as albumId', 'album_asset.assetId as assetId'])
+              .where('album_asset.albumId', 'in', ids);
+            return (
+              forUserId
+                ? ownerRows.union(
+                    eb
+                      .selectFrom('album_space_asset')
+                      .innerJoin('shared_space_album', (join) =>
+                        join
+                          .onRef('shared_space_album.albumId', '=', 'album_space_asset.albumId')
+                          .onRef('shared_space_album.spaceId', '=', 'album_space_asset.spaceId'),
+                      )
+                      .innerJoin('album', (join) =>
+                        join.onRef('album.id', '=', 'album_space_asset.albumId').on('album.deletedAt', 'is', null),
+                      )
+                      .innerJoin('shared_space_member', (join) =>
+                        join
+                          .onRef('shared_space_member.spaceId', '=', 'shared_space_album.spaceId')
+                          .on('shared_space_member.userId', '=', asUuid(forUserId)),
+                      )
+                      .select(['album_space_asset.albumId as albumId', 'album_space_asset.assetId as assetId'])
+                      .where('album_space_asset.albumId', 'in', ids),
+                  )
+                : ownerRows
+            ).as('album_members');
+          },
+          (join) => join.onRef('album_members.assetId', '=', 'asset.id'),
+        )
+        .select('album_members.albumId as albumId')
         .select((eb) => eb.fn.min(sql<Date>`("asset"."localDateTime" AT TIME ZONE 'UTC'::text)::date`).as('startDate'))
         .select((eb) => eb.fn.max(sql<Date>`("asset"."localDateTime" AT TIME ZONE 'UTC'::text)::date`).as('endDate'))
         // lastModifiedAssetTimestamp is only used in mobile app, please remove if not need
         .select((eb) => eb.fn.max('asset.updatedAt').as('lastModifiedAssetTimestamp'))
         .select((eb) => sql<number>`${eb.fn.count('asset.id')}::int`.as('assetCount'))
-        .where('album_asset.albumId', 'in', ids)
         .where('asset.deletedAt', 'is', null)
-        .groupBy('album_asset.albumId')
+        .groupBy('album_members.albumId')
         .execute()
     );
   }

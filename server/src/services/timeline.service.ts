@@ -86,9 +86,20 @@ export class TimelineService extends BaseService {
       }
     }
 
+    let albumSpaceIds: string[] | undefined = undefined;
+    // #752 P0-2: album browse — resolve the viewer's live member-spaces linking this album so the
+    // repository unions member-gated contributions. NEVER for shared-link auth: auth.user is the
+    // link OWNER there, and their membership must not leak contributions to anonymous viewers.
+    if (dto.albumId && !auth.sharedLink) {
+      const ids = await this.sharedSpaceRepository.getMemberSpaceIdsLinkingAlbum(dto.albumId, auth.user.id);
+      if (ids.length > 0) {
+        albumSpaceIds = ids;
+      }
+    }
+
     const scopedOptions = await this.resolveScopedPersonFilters(auth, { ...options, timelineSpaceIds });
 
-    return { ...scopedOptions, bucketSize: dto.bucketSize ?? TimeBucketSize.Month, userIds };
+    return { ...scopedOptions, bucketSize: dto.bucketSize ?? TimeBucketSize.Month, userIds, albumSpaceIds };
   }
 
   private async resolveScopedPersonFilters(auth: AuthDto, options: TimeBucketOptions): Promise<TimeBucketOptions> {

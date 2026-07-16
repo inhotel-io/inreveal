@@ -91,6 +91,13 @@ interface AssetBuilderOptions {
   isTrashed?: boolean;
   isDuplicate?: boolean;
   albumId?: string;
+  /**
+   * #752 P0-2: live member-spaces of the viewer that currently link `albumId` — resolved by
+   * timeline.service (getMemberSpaceIdsLinkingAlbum), NEVER for shared-link auth. When set, the
+   * albumId arm unions member-gated album_space_asset contributions. Distinct from
+   * timelineSpaceIds (home-timeline preference set, separate consumers — PR #778).
+   */
+  albumSpaceIds?: string[];
   spaceId?: string;
   tagId?: string;
   personId?: string;
@@ -316,20 +323,48 @@ export function withTimeBucketAssetFilters<O>(
     .$if(!!options.visibility, (qb) => qb.where('asset.visibility', '=', options.visibility!))
     .$if(!!options.albumId, (qb) =>
       qb
-        .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
-        .where('album_asset.albumId', '=', asUuid(options.albumId!))
         // Fork RBAC (Slice 1 / security-3 defense-in-depth): an explicit visibility=HIDDEN/LOCKED
         // bypasses the top-level withDefaultVisibility (which only fires when visibility is
         // undefined). Flat-gate the album arm so Hidden/Locked album assets never surface via the
         // timeline bucket, even if the service-level guard is bypassed. Idempotent for the default
         // album grid view (withDefaultVisibility is the same Archive+Timeline predicate).
+        //
+        // Applied BEFORE the innerJoin below (WHERE is conjunctive, so the SQL is identical either
+        // order) so `eb` here stays `ExpressionBuilder<DB, 'asset'>` — spaceVisibilityGate expects
+        // `ExpressionBuilder<DB, keyof DB>`, which the post-join builder (extended with the
+        // `album_members` subquery alias) no longer satisfies.
         .where((eb) => spaceVisibilityGate(eb))
         // Fork RBAC (Slice 1 / H1 defense-in-depth): the top-level `options.isTrashed` ternary
         // (line 253) flips `deletedAt IS NOT NULL` for the whole query, and the service-layer
         // guard (timeline.service.ts timeBucketChecks) already rejects isTrashed=true on an
         // album/space browse — but flat-gate here too so the album arm never surfaces a trashed
-        // asset even if that guard is bypassed. Keep the getTimeBucket inline copy in sync.
-        .where('asset.deletedAt', 'is', null),
+        // asset even if that guard is bypassed.
+        .where('asset.deletedAt', 'is', null)
+        .innerJoin(
+          (eb) => {
+            // #764/#752 P0-2: album content = the owner's album_asset rows ∪ member-gated
+            // cross-owner contributions. The contributed arm is included ONLY when the service
+            // resolved albumSpaceIds (live member-spaces linking this album) — album_user shares,
+            // shared links and departed members resolve to none, so a blind-union leak is
+            // impossible. UNION (not ALL) dedupes a P1-6 coexistence-window pair.
+            const ownerRows = eb
+              .selectFrom('album_asset')
+              .select('album_asset.assetId as assetId')
+              .where('album_asset.albumId', '=', asUuid(options.albumId!));
+            return (
+              options.albumSpaceIds?.length
+                ? ownerRows.union(
+                    eb
+                      .selectFrom('album_space_asset')
+                      .select('album_space_asset.assetId as assetId')
+                      .where('album_space_asset.albumId', '=', asUuid(options.albumId!))
+                      .where('album_space_asset.spaceId', '=', anyUuid(options.albumSpaceIds!)),
+                  )
+                : ownerRows
+            ).as('album_members');
+          },
+          (join) => join.onRef('album_members.assetId', '=', 'asset.id'),
+        ),
     )
     .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
       qb.where((eb) =>

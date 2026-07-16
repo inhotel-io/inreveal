@@ -9122,7 +9122,10 @@ describe(SharedSpaceService.name, () => {
       await sut.getLinkedAlbums(auth, space.id);
 
       expect(mocks.album.getMetadataForIds).toHaveBeenCalledTimes(1);
-      expect(mocks.album.getMetadataForIds).toHaveBeenCalledWith(rows.map((r) => r.id));
+      expect(mocks.album.getMetadataForIds).toHaveBeenCalledWith(
+        rows.map((r) => r.id),
+        { forUserId: auth.user.id },
+      );
       expect(mocks.sharedSpace.getAlbumAssetCount).not.toHaveBeenCalled();
     });
 

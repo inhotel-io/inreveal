@@ -317,6 +317,27 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  // #752 P0-2: spaces that CURRENTLY link `albumId` and have `userId` as a live member — the
+  // member-gate for contributed content on album read surfaces (time buckets, covers, metadata).
+  // Live-link + live-membership by construction; A1 (album not soft-deleted) enforced here so a
+  // trashed album's retained contributions resolve to no spaces. NOT preference-filtered — unlike
+  // getSpaceIdsForTimeline, a member who hid the space from their home timeline still sees the
+  // album's contributions on the album page itself.
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async getMemberSpaceIdsLinkingAlbum(albumId: string, userId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('album', (join) =>
+        join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+      )
+      .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+      .where('shared_space_album.albumId', '=', albumId)
+      .where('shared_space_member.userId', '=', userId)
+      .select('shared_space_album.spaceId')
+      .execute();
+    return rows.map((row) => row.spaceId);
+  }
+
   @GenerateSql({ params: [DummyValue.UUID] })
   getSpaceIdsForTimeline(userId: string) {
     return this.db

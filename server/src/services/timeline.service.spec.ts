@@ -351,6 +351,7 @@ describe(TimelineService.name, () => {
   describe('getTimeBucket', () => {
     it('should return the assets for a album time bucket if user has album.read', async () => {
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
       const json = `[{ id: ['asset-id'] }]`;
       mocks.asset.getTimeBucket.mockResolvedValue({ assets: json });
 
@@ -846,6 +847,7 @@ describe(TimelineService.name, () => {
   describe('edge cases', () => {
     it('should not interfere when albumId is provided instead of spaceId', async () => {
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
       mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
 
       await sut.getTimeBuckets(authStub.admin, { albumId: 'album-id' });
@@ -889,6 +891,7 @@ describe(TimelineService.name, () => {
 
     it('should not interfere when albumId is provided for getTimeBucket', async () => {
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
       const json = `[{ id: ['asset-id'] }]`;
       mocks.asset.getTimeBucket.mockResolvedValue({ assets: json });
 
@@ -900,6 +903,7 @@ describe(TimelineService.name, () => {
 
     it('should not set userIds when albumId is provided for getTimeBuckets', async () => {
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
       mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
 
       await sut.getTimeBuckets(authStub.admin, { albumId: 'album-id' });
@@ -957,6 +961,7 @@ describe(TimelineService.name, () => {
 
     it('allows Archive visibility on an albumId browse (Archive is shareable)', async () => {
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
       mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
 
       await expect(
@@ -968,6 +973,7 @@ describe(TimelineService.name, () => {
 
     it('allows default (undefined) visibility on an albumId browse', async () => {
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
       mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
 
       await expect(sut.getTimeBuckets(authStub.admin, { albumId: 'album-id' })).resolves.toEqual([
@@ -1021,6 +1027,7 @@ describe(TimelineService.name, () => {
 
     it('allows isTrashed=false on an albumId browse (no over-block)', async () => {
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
       mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
 
       await expect(sut.getTimeBuckets(authStub.admin, { albumId: 'album-id', isTrashed: false })).resolves.toEqual([
@@ -1032,6 +1039,7 @@ describe(TimelineService.name, () => {
 
     it('allows default (undefined) isTrashed on an albumId browse (no over-block)', async () => {
       mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set(['album-id']));
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
       mocks.asset.getTimeBuckets.mockResolvedValue([{ timeBucket: '2024-01-01', count: 1 }]);
 
       await expect(sut.getTimeBuckets(authStub.admin, { albumId: 'album-id' })).resolves.toEqual([

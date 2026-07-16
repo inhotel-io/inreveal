@@ -822,7 +822,12 @@ export class SharedSpaceService extends BaseService {
     if (rows.length === 0) {
       return [];
     }
-    const metadata = await this.albumRepository.getMetadataForIds(rows.map((row) => row.id));
+    const metadata = await this.albumRepository.getMetadataForIds(
+      rows.map((row) => row.id),
+      {
+        forUserId: auth.user.id,
+      },
+    );
     const byId: Record<string, AlbumAssetCount> = {};
     for (const m of metadata) {
       byId[m.albumId] = m;

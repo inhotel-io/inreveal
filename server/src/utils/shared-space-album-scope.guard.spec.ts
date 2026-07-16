@@ -365,6 +365,16 @@ const VIS_ALLOWLIST: Record<string, string> = {
   // rows. The library asset streams (LibraryAssetSync/ExifSync) carry the gate.
   'sync.repository.ts::getCreatedAfter':
     'streams library_user access-grant metadata (accessibleLibraries-scoped), not asset rows',
+
+  // #752 P1-5: album metadata (assetCount/date-range) unions album_asset with member-gated
+  // album_space_asset contributions (join through shared_space_album ⋈ shared_space_member). The
+  // outer query IS visibility-gated — `.$call(withDefaultVisibility)` on the top-level `asset`
+  // selectFrom (Timeline/Archive only, applied uniformly to owner and contributed rows alike) —
+  // but the textual VIS_GATE_MARKER scan doesn't recognize `withDefaultVisibility` by name (it's
+  // the file-local default-visibility helper, not a space-specific gate identifier). Pinned by
+  // timeline-album-contributions.medium.spec.ts (Hidden/trashed contributions vanish from counts).
+  'album.repository.ts::getMetadataForIds':
+    'gated via withDefaultVisibility ($call-ed on the outer asset query); scanner does not recognize this helper name',
 };
 
 const VIS_WINDOW = 50;
