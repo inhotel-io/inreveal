@@ -123,6 +123,12 @@ describe('dominantBy', () => {
   it('returns an empty result for empty input', () => {
     expect(dominantBy([] as string[], (v) => v)).toEqual({ key: '', items: [], ratio: 0 });
   });
+
+  it('lets a real empty-string key win a tie (no sentinel confusion), regardless of order', () => {
+    // '' is lexicographically smallest, so it must win an equal-sized tie whether seen first or last.
+    expect(dominantBy(['', '', 'a', 'a'], (v) => v)).toMatchObject({ key: '', items: ['', ''] });
+    expect(dominantBy(['a', 'a', '', ''], (v) => v)).toMatchObject({ key: '', items: ['', ''] });
+  });
 });
 
 describe('monthName', () => {

@@ -119,14 +119,24 @@ does not need a window).
 
 **Daily-limit interaction (unchanged logic, documented):** `RULE_DAILY_LIMIT` (2) is
 enforced by counting rule memories **visible on `target`** (`search({ type: Rule, for:
-target })`). A multi-day recap therefore holds one of the two slots for its whole window.
-Because the daily rules (`on_this_day_place`, `birthday`, `recent_trip`) are 1-day and do
-not accumulate, one active recap still leaves a slot free each day for a daily memory. The
-only crunch is when **two** recaps overlap — the four season-starts, where `month_recap`
-(days 1–7) and `season_recap` (days 1–10) coincide — during which the two recaps can take
-both slots and briefly suppress `on_this_day_place`. This is rare (~4×/yr), self-healing,
-and no worse than an existing birthday+trip day. If it ever matters, bumping
-`RULE_DAILY_LIMIT` to 3 is the lever — **explicitly out of scope here** (flagged in §8).
+target })`, a visibility query — so a multi-day recap holds its slot for its whole window).
+Be precise about the consequence: a single recap **type** emits up to `MAX_YEARS`
+candidates (`month_recap`/`favorites_throwback` up to 3, `season_recap` up to 2), so on a
+trigger day when **two or more prior years qualify**, that one type can take **both** daily
+slots and hold them for its 7–10-day window. So whenever ≥2 prior years qualify:
+
+- the **1st**–7th of most months, `month_recap` can occupy both slots;
+- the **15th**–21st, `favorites_throwback` can occupy both slots (it also scores highest of
+  the recaps, 200–270);
+- at season starts, `month_recap` + `season_recap` compound.
+
+During those windows `on_this_day_place` (and `recent_trip`) are fully suppressed. That is
+roughly **monthly** for libraries with several years of history — not the rare event an
+earlier draft implied. It is self-healing (windows expire) and no data is lost, but it is a
+real product trade-off. Levers, all **out of scope here** and flagged in §8: cap emission to
+**one memory per recap type per day**, and/or bump `RULE_DAILY_LIMIT`. The slot-counting
+itself is covered by the existing `memory.service.spec` daily-cap test (an already-visible
+rule memory reduces `remainingSlots`).
 
 ## 4. Shared repository query
 
@@ -483,13 +493,25 @@ persisted `showAt`/`hideAt`:
 - [ ] Verify mobile memory-type settings enumeration; edit if it hardcodes a list.
 - [ ] Decide whether to refactor `recent_trip` to import the shared `pickEvenlySpaced`
       (optional cleanup; keep behavior identical + its existing tests green).
-- [ ] Out of scope, revisit if `on_this_day_place` feels starved: bump `RULE_DAILY_LIMIT`
-      from 2 → 3 now that six rule types compete (§3.2).
-- [ ] Out of scope unless profiling demands it: add a **per-group** lateral `LIMIT` to
-      `getMemoryAssetsForPeriod` (like `getByDayOfYear`) if huge libraries make the unbounded
-      row count a problem — never a flat total cap (§4).
+- [ ] Out of scope, but revisit — the recap-starvation trade-off (§3.2, corrected): a single
+      recap type can take **both** daily slots for its 7–10-day window (roughly monthly),
+      fully suppressing `on_this_day_place`/`recent_trip`. Two candidate levers: **cap emission
+      to one memory per recap type per day** (keeps a slot free for daily rules) and/or bump
+      `RULE_DAILY_LIMIT` 2 → 3. Product decision for the maintainer.
+- [ ] Out of scope unless profiling demands it: the month/season queries filter on
+      `extract(month …)`, which the existing `date_trunc('MONTH', …)` functional index does
+      **not** serve, so they scan the owner's Timeline assets and filter in-heap (background
+      job, low cadence — acceptable). If a huge library ever makes this hurt, add a matching
+      functional index and/or a **per-group** lateral `LIMIT` (like `getByDayOfYear`) — never a
+      flat total cap (§4).
 - [ ] Later tier: keep `MemoryRuleCandidate` shaped so an embedding-backed rule (#12) needs
       no engine change.
+
+**Post-review hardening (done):** `dominantBy` empty-key sentinel fixed; `on_this_day_place`
+now treats a blank (`''`) city as absent; added the null-city-denominator + blank-city rule
+tests, `memoryAt`/`context`/`assetIds`-order assertions, a `dominantBy` empty-key test, and
+**two end-to-end medium generation tests** (`month_recap` 7-day window + `on_this_day_place`
+1-day window) — closing the gap where only `birthday`/`recent_trip` had generation coverage.
 
 ## 9. Implementation slices (for `/impl-loop`)
 

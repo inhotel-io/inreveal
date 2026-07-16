@@ -4,6 +4,9 @@ import { MemoryRule, MemoryRuleCandidate, MemoryRuleContext } from 'src/services
 
 const placeKeyOf = (asset: MemoryPeriodAsset): string => `${asset.country ?? ''}:${asset.city}`.toLowerCase();
 
+/** A usable place needs a non-blank city (EXIF city is usually null when absent, but can be ''). */
+const hasCity = (asset: MemoryPeriodAsset): boolean => asset.city !== null && asset.city.trim() !== '';
+
 /** "On this day in Lisbon" — a past year's on-this-day photos dominated by a single city. */
 export class OnThisDayPlaceMemoryRule implements MemoryRule {
   readonly id = 'on_this_day_place';
@@ -23,7 +26,7 @@ export class OnThisDayPlaceMemoryRule implements MemoryRule {
 
     const byYear = new Map<number, MemoryPeriodAsset[]>();
     for (const asset of assets) {
-      if (asset.year >= target.year || asset.city === null) {
+      if (asset.year >= target.year || !hasCity(asset)) {
         continue;
       }
       const yearAssets = byYear.get(asset.year) ?? [];

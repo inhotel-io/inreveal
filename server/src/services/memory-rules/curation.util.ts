@@ -69,10 +69,10 @@ export const dominantBy = <T>(items: T[], key: (item: T) => string): DominantGro
   let bestKey = '';
   let bestItems: T[] = [];
   for (const [groupKey, group] of groups) {
-    if (
-      group.length > bestItems.length ||
-      (group.length === bestItems.length && (bestKey === '' || groupKey < bestKey))
-    ) {
+    // The first group is always captured by the length comparison (length >= 1 > 0), so the
+    // tie-break below never runs on iteration 1 — meaning a legitimate empty-string key is
+    // compared like any other and still wins a tie by being lexicographically smallest.
+    if (group.length > bestItems.length || (group.length === bestItems.length && groupKey < bestKey)) {
       bestKey = groupKey;
       bestItems = group;
     }
