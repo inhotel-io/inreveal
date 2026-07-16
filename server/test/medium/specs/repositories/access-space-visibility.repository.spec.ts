@@ -8,7 +8,7 @@
  * Each test seeds a clean context so there is no shared-state cross-contamination.
  */
 import { Kysely } from 'kysely';
-import { AssetVisibility } from 'src/enum';
+import { AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
@@ -670,6 +670,89 @@ const seedPartnerAndSpaceAsset = async (visibility: AssetVisibility) => {
 
   return { accessRepo, partner, asset };
 };
+
+// ---------------------------------------------------------------------------
+// P1-4: contributed-only assets (album_space_asset) — checkSpaceAccess /
+// checkSpaceAccessForSpace
+//
+// A cross-owner contribution (`album_space_asset`) can be an asset's ONLY
+// space path: it lives in an album linked into a space, but the asset was
+// never added to `shared_space_asset` and never lives in `album_asset`
+// (it's contributed by a non-owner member, not the album owner). Every
+// member except the owner previously got a silent empty set here — the
+// symptom upstream was a 403 on thumbnail/original/download. The new 4th
+// union arm below closes that gap; the album/live-link join correlation on
+// BOTH albumId and spaceId is what makes D1-(b) unlink retention inert.
+// ---------------------------------------------------------------------------
+
+const seedContributionOnly = async (ctx: Awaited<ReturnType<typeof setup>>['ctx']) => {
+  const { user: owner } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { user: carol } = await ctx.newUser();
+  const { album } = await ctx.newAlbum({ ownerId: owner.id });
+  const { asset } = await ctx.newAsset({ ownerId: carol.id, visibility: AssetVisibility.Timeline });
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+  await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+  // contribution is the ONLY space path: no shared_space_asset row, no album_asset row
+  await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+  return { owner, member, carol, album, asset, space };
+};
+
+describe('P1-4: contributed-only assets — checkSpaceAccess / checkSpaceAccessForSpace', () => {
+  it('member reaches a contributed-only asset (fixes thumbnail/original/download 403)', async () => {
+    const { ctx, accessRepo } = setup();
+    const s = await seedContributionOnly(ctx);
+    const allowed = await accessRepo.asset.checkSpaceAccess(s.member.id, new Set([s.asset.id]));
+    expect(allowed.has(s.asset.id)).toBe(true);
+  });
+
+  it('non-member gets nothing', async () => {
+    const { ctx, accessRepo } = setup();
+    const s = await seedContributionOnly(ctx);
+    const { user: stranger } = await ctx.newUser();
+    const allowed = await accessRepo.asset.checkSpaceAccess(stranger.id, new Set([s.asset.id]));
+    expect(allowed.size).toBe(0);
+  });
+
+  it('unlink revokes access even though the contribution row is retained (D1-b live-link gate)', async () => {
+    const { ctx, accessRepo } = setup();
+    const s = await seedContributionOnly(ctx);
+    await ctx.get(SharedSpaceRepository).removeAlbum(s.space.id, s.album.id);
+    const allowed = await accessRepo.asset.checkSpaceAccess(s.member.id, new Set([s.asset.id]));
+    expect(allowed.size).toBe(0);
+  });
+
+  it('Hidden / trashed contributed asset is not reachable', async () => {
+    const { ctx, accessRepo } = setup();
+    const s = await seedContributionOnly(ctx);
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Hidden })
+      .where('id', '=', s.asset.id)
+      .execute();
+    const hiddenResult = await accessRepo.asset.checkSpaceAccess(s.member.id, new Set([s.asset.id]));
+    expect(hiddenResult.size).toBe(0);
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Timeline, deletedAt: new Date() })
+      .where('id', '=', s.asset.id)
+      .execute();
+    const trashedResult = await accessRepo.asset.checkSpaceAccess(s.member.id, new Set([s.asset.id]));
+    expect(trashedResult.size).toBe(0);
+  });
+
+  it('checkSpaceAccessForSpace is scoped to the contribution’s own space', async () => {
+    const { ctx, accessRepo } = setup();
+    const s = await seedContributionOnly(ctx);
+    const { space: other } = await ctx.newSharedSpace({ createdById: s.owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: other.id, userId: s.member.id, role: SharedSpaceRole.Viewer });
+    const wrongSpace = await accessRepo.asset.checkSpaceAccessForSpace(s.member.id, other.id, new Set([s.asset.id]));
+    expect(wrongSpace.size).toBe(0);
+    const rightSpace = await accessRepo.asset.checkSpaceAccessForSpace(s.member.id, s.space.id, new Set([s.asset.id]));
+    expect(rightSpace.has(s.asset.id)).toBe(true);
+  });
+});
 
 describe('C6 partner × space-linked visibility invariant', () => {
   it('Locked X is blocked by BOTH arms (the private tier never leaks through the union)', async () => {
