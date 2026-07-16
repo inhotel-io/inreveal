@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { JobName, SharedSpaceActivityType } from 'src/enum';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
@@ -544,6 +545,30 @@ const makeService = (profiles: MergeProfile[], options: { unrepairableSpaceIds?:
     faceIdentityRepository,
   };
 };
+
+// A minimal non-destructive personal-merge plan (owner-1 merges their own person-y into person-x). Used by the L2
+// concurrency tests, which mock a repository throw to prove the engine translates a race into a retriable 409.
+const nonDestructivePlan = () => ({
+  actorUserId: 'owner-1',
+  origin: {
+    type: 'person' as const,
+    targetProfileId: 'person-x',
+    sourceProfileIds: ['person-y'],
+    ownerId: 'owner-1',
+  },
+  targetIdentityId: 'identity-x',
+  sourceIdentityIds: ['identity-y'],
+  personalProfileMerges: [{ ownerId: 'owner-1', targetPersonId: 'person-x', sourcePersonIds: ['person-y'] }],
+  spaceProfileMerges: [],
+  profileIdentityUpdates: [],
+  affectedOwnerIds: ['owner-1'],
+  repointedOwnerIds: [],
+  collapsedOwnerIds: [],
+  unrepairableSpaceCollapseIds: [],
+  affectedSpaceIds: [],
+  followUpJobs: [],
+  activityEvents: [],
+});
 
 describe(PersonRepository.name, () => {
   describe('mergePersonProfile', () => {
@@ -1707,6 +1732,33 @@ describe('IdentityMergePropagationService', () => {
       ).rejects.toThrow(/without an authorizer/);
 
       expect(mocks.person.mergePersonProfile).not.toHaveBeenCalled();
+    });
+
+    // #733 review L2: a concurrent recognition/dedup/detach job (which doesn't take the merge advisory lock) can
+    // collide with the plan's identity move on the unique (scope, identity) index, or trip the post-merge conflict
+    // re-check. The merge must surface a retriable 409, not a 500 — nothing is lost, the caller just tries again.
+    it('translates a concurrent unique-violation (23505) into a retriable conflict, not a 500', async () => {
+      const { sut, mocks } = makeService([]);
+      mocks.faceIdentity.mergeIdentitiesAfterProfileResolution.mockRejectedValueOnce(
+        Object.assign(new Error('duplicate key value violates unique constraint "person_ownerId_identityId_key"'), {
+          code: '23505',
+        }),
+      );
+
+      await expect(sut.executePlan(nonDestructivePlan(), { actorUserId: 'owner-1' })).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('translates the post-merge conflict re-check into a retriable conflict', async () => {
+      const { sut, mocks } = makeService([]);
+      mocks.faceIdentity.mergeIdentitiesAfterProfileResolution.mockRejectedValueOnce(
+        new Error('Cannot merge face identities with unresolved profile conflicts'),
+      );
+
+      await expect(sut.executePlan(nonDestructivePlan(), { actorUserId: 'owner-1' })).rejects.toBeInstanceOf(
+        ConflictException,
+      );
     });
 
     it('links moved personal faces to the target identity with manual source before collapsing identities', async () => {

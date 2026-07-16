@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Kysely, sql, Transaction } from 'kysely';
 import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
@@ -137,7 +137,7 @@ export class IdentityMergePropagationService {
     sourcePersonIds: string[],
     authorize?: MergeAuthorizer,
   ): Promise<BulkIdResponseDto[]> {
-    const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
+    const { plan, followUps } = await this.runMergeTransaction(async (db) => {
       await this.lockMergePropagation(db);
       const plan = await this.buildPersonalMergePlan(
         {
@@ -162,7 +162,7 @@ export class IdentityMergePropagationService {
    * the origin refs that differ, so a same-scope profile conflict is collapsed here exactly as it is there.
    */
   async mergeScopedProfiles(auth: AuthDto, dto: MergeScopedPeopleDto, authorize?: MergeAuthorizer): Promise<void> {
-    const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
+    const { plan, followUps } = await this.runMergeTransaction(async (db) => {
       await this.lockMergePropagation(db);
       const plan = await this.buildScopedMergePlan(
         {
@@ -187,7 +187,7 @@ export class IdentityMergePropagationService {
     sourcePersonIds: string[],
     authorize?: MergeAuthorizer,
   ): Promise<void> {
-    const { plan, followUps } = await this.deps.databaseRepository.transaction(async (db) => {
+    const { plan, followUps } = await this.runMergeTransaction(async (db) => {
       await this.lockMergePropagation(db);
       const plan = await this.buildSpaceMergePlan(
         {
@@ -207,7 +207,7 @@ export class IdentityMergePropagationService {
   }
 
   async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
-    const followUps = await this.deps.databaseRepository.transaction(async (db) => {
+    const followUps = await this.runMergeTransaction(async (db) => {
       await this.lockMergePropagation(db);
       // executePlan has no authorizer to consult, so it may only run non-destructive plans (issue #733 review, L3).
       await this.authorizePlan(plan);
@@ -224,6 +224,30 @@ export class IdentityMergePropagationService {
    * (or a call to `executePlan`) that forgets the authorizer cannot silently re-open the #733 cross-owner hole; it
    * throws instead. Tests that intentionally exercise destructive execution pass an explicit permissive authorizer.
    */
+  /**
+   * Runs the merge transaction, translating a concurrency collision into a retriable 409 instead of a 500 (#733
+   * review L2). The automatic recognition/dedup/reconciliation and detach paths do NOT take the merge advisory
+   * lock, so between this plan's read snapshot and its writes one of them can insert or move a profile on an
+   * involved identity. The plan's unguarded identity move then hits the unique (scope, identity) index (23505), or
+   * the post-merge conflict re-check (`mergeIdentitiesAfterProfileResolution`) fires. Nothing is lost — the
+   * transaction rolls back — but the caller should be told to try again, not shown an internal error.
+   */
+  private async runMergeTransaction<T>(fn: (db: Transaction<DB>) => Promise<T>): Promise<T> {
+    try {
+      return await this.deps.databaseRepository.transaction(fn);
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      const message = error instanceof Error ? error.message : '';
+      if (code === '23505' || message.includes('unresolved profile conflicts')) {
+        throw new ConflictException({
+          code: 'merge_conflict',
+          message: 'This merge conflicts with a concurrent change to the same people. Please try again.',
+        });
+      }
+      throw error;
+    }
+  }
+
   private async authorizePlan(plan: IdentityMergePropagationPlan, authorize?: MergeAuthorizer): Promise<void> {
     if (authorize) {
       await authorize(plan);
