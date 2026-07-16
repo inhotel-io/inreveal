@@ -9660,8 +9660,8 @@ describe(SharedSpaceService.name, () => {
       const result = await sut.handleSharedSpaceAlbumFaceSync({ spaceId, albumId });
 
       expect(result).toBe(JobStatus.Success);
-      expect(mocks.asset.getByAlbumIdWithFaces).toHaveBeenCalledWith(albumId, 1000, 0);
-      expect(mocks.asset.getByAlbumIdWithFaces).toHaveBeenCalledWith(albumId, 1000, 2);
+      expect(mocks.asset.getByAlbumIdWithFaces).toHaveBeenCalledWith(albumId, spaceId, 1000, 0);
+      expect(mocks.asset.getByAlbumIdWithFaces).toHaveBeenCalledWith(albumId, spaceId, 1000, 2);
       expect(mocks.job.queue).toHaveBeenCalledWith({
         name: JobName.SharedSpacePersonDedup,
         data: { spaceId },

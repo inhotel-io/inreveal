@@ -75,13 +75,19 @@ const seedCombos = async (ctx: Ctx) => {
   await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
   await ctx.softDeleteAlbum(deleted.id);
 
-  return { space, viaShown, viaHidden };
+  // #752 P1-7: contributions — one co-resident with an album_asset album, one contribution-ONLY.
+  const { asset: viaContribution } = await ctx.newAsset({ ownerId: user.id });
+  const { asset: viaContributionOnly } = await ctx.newAsset({ ownerId: user.id });
+  await ctx.newAlbumSpaceAsset({ albumId: shown.id, assetId: viaContribution.id, spaceId: space.id });
+  await ctx.newAlbumSpaceAsset({ albumId: hidden.id, assetId: viaContributionOnly.id, spaceId: space.id });
+
+  return { space, viaShown, viaHidden, viaContribution, viaContributionOnly };
 };
 
 describe('raw-SQL album arm ≡ Kysely album arm', () => {
   it('returns the identical asset set (A1 on) across all path combinations', async () => {
     const { ctx } = setup();
-    const { space, viaShown, viaHidden } = await seedCombos(ctx);
+    const { space, viaShown, viaHidden, viaContribution, viaContributionOnly } = await seedCombos(ctx);
 
     const kysely = await kyselyIds(space.id);
     const raw = await rawIds(space.id);
@@ -91,6 +97,10 @@ describe('raw-SQL album arm ≡ Kysely album arm', () => {
     // soft-deleted album excluded (A1); direct/library assets absent from the album arm.
     expect(kysely.has(viaShown.id)).toBe(true);
     expect(kysely.has(viaHidden.id)).toBe(true);
+    // #752 P1-7: cross-owner contributions (co-resident and contribution-only) are visible
+    // through both the raw-SQL and Kysely album arms.
+    expect(kysely.has(viaContribution.id ?? viaContribution)).toBe(true);
+    expect(kysely.has(viaContributionOnly.id ?? viaContributionOnly)).toBe(true);
   });
 
   it('returns the identical asset set with A1 off (soft-deleted album included by both)', async () => {
@@ -133,7 +143,7 @@ const rawIdsTimeline = async (spaceId: string, requireShowInTimeline: boolean): 
 describe('requireShowInTimeline option: raw-SQL ≡ Kysely', () => {
   it('with requireShowInTimeline=true: matches only the showInTimeline=true album and equals Kysely result', async () => {
     const { ctx } = setup();
-    const { space, viaShown, viaHidden } = await seedCombos(ctx);
+    const { space, viaShown, viaHidden, viaContributionOnly } = await seedCombos(ctx);
 
     const kyselyResult = await kyselyIdsTimeline(space.id, true);
     const rawResult = await rawIdsTimeline(space.id, true);
@@ -144,11 +154,13 @@ describe('requireShowInTimeline option: raw-SQL ≡ Kysely', () => {
     expect(kyselyResult.has(viaShown.id)).toBe(true);
     // the showInTimeline=false album's asset is excluded
     expect(kyselyResult.has(viaHidden.id)).toBe(false);
+    // #752 P1-7: the contribution-only asset is tethered to the showInTimeline=false album — excluded too.
+    expect(kyselyResult.has(viaContributionOnly.id)).toBe(false);
   });
 
   it('with requireShowInTimeline=false (default): both albums matched, raw-SQL equals Kysely result', async () => {
     const { ctx } = setup();
-    const { space, viaShown, viaHidden } = await seedCombos(ctx);
+    const { space, viaShown, viaHidden, viaContributionOnly } = await seedCombos(ctx);
 
     const kyselyResult = await kyselyIdsTimeline(space.id, false);
     const rawResult = await rawIdsTimeline(space.id, false);
@@ -158,5 +170,7 @@ describe('requireShowInTimeline option: raw-SQL ≡ Kysely', () => {
     // both album assets present (unchanged legacy behavior)
     expect(kyselyResult.has(viaShown.id)).toBe(true);
     expect(kyselyResult.has(viaHidden.id)).toBe(true);
+    // #752 P1-7: with no timeline gate, the contribution-only asset is included too.
+    expect(kyselyResult.has(viaContributionOnly.id)).toBe(true);
   });
 });

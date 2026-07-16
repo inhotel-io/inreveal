@@ -2047,7 +2047,7 @@ export class SharedSpaceService extends BaseService {
         break;
       }
 
-      const assets = await this.assetRepository.getByAlbumIdWithFaces(job.albumId, batchSize, offset);
+      const assets = await this.assetRepository.getByAlbumIdWithFaces(job.albumId, job.spaceId, batchSize, offset);
       if (assets.length === 0) {
         break;
       }

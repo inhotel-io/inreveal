@@ -991,14 +991,34 @@ export class AssetRepository {
       .execute();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, 1000, 0] })
-  getByAlbumIdWithFaces(albumId: string, limit = 1000, offset = 0) {
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, 1000, 0] })
+  getByAlbumIdWithFaces(albumId: string, spaceId: string, limit = 1000, offset = 0) {
     return this.db
       .selectFrom('asset')
-      .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
+      .innerJoin(
+        (eb) => {
+          // #752 P1-7 / D1-b: link-time face sync must also page retained contributions on
+          // re-link — album_asset alone would skip faces cleaned up while the album was unlinked.
+          // The contributed arm is correlated to the syncing space: contributions are reachable
+          // only through their tether space (mirrors contributionVisibleToMember's albumId+spaceId
+          // gate), so an S2 link-sync never pages an S1-tethered contribution into S2's people.
+          return eb
+            .selectFrom('album_asset')
+            .select('album_asset.assetId as assetId')
+            .where('album_asset.albumId', '=', asUuid(albumId))
+            .union(
+              eb
+                .selectFrom('album_space_asset')
+                .select('album_space_asset.assetId as assetId')
+                .where('album_space_asset.albumId', '=', asUuid(albumId))
+                .where('album_space_asset.spaceId', '=', asUuid(spaceId)),
+            )
+            .as('album_members');
+        },
+        (join) => join.onRef('album_members.assetId', '=', 'asset.id'),
+      )
       .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
       .select('asset.id')
-      .where('album_asset.albumId', '=', albumId)
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
       .groupBy('asset.id')

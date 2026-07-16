@@ -15,7 +15,7 @@ import {
 import { BulkIdErrorReason, BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
-import { AlbumUserRole, Permission } from 'src/enum';
+import { AlbumUserRole, JobName, Permission } from 'src/enum';
 import { AlbumAssetCount, AlbumInfoOptions } from 'src/repositories/album.repository';
 import { BaseService } from 'src/services/base.service';
 import { hasDirectAlbumReadAccess } from 'src/utils/access';
@@ -340,6 +340,18 @@ export class AlbumService extends BaseService {
 
     if (toInsert.length > 0) {
       await this.albumRepository.addContributedAssets(toInsert);
+      // D3 (#752 P1-7): a contribution's faces must reach space People without waiting for a coarse
+      // reconcile trigger — enqueue the targeted per-asset match, mirroring the space-pool add path
+      // (SharedSpaceService.addAssets). The handler re-guards on space + faceRecognitionEnabled.
+      const spaceIds = [...new Set(toInsert.map(({ spaceId }) => spaceId))];
+      const spaces = await Promise.all(spaceIds.map((spaceId) => this.sharedSpaceRepository.getById(spaceId)));
+      const faceEnabled = new Set(spaces.filter((space) => space?.faceRecognitionEnabled).map((space) => space!.id));
+      const jobs = toInsert
+        .filter(({ spaceId }) => faceEnabled.has(spaceId))
+        .map(({ spaceId, assetId }) => ({ name: JobName.SharedSpaceFaceMatch as const, data: { spaceId, assetId } }));
+      if (jobs.length > 0) {
+        await this.jobRepository.queueAll(jobs);
+      }
     }
     return contributedIds;
   }

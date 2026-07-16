@@ -358,8 +358,13 @@ export interface SpaceAlbumAssetSqlOptions {
 }
 
 /**
- * Raw-SQL analogue of `spaceAlbumAssetExists` — an `EXISTS (...)` fragment over
- * the linked-album access path, for interpolation into `sql``` queries.
+ * Raw-SQL analogue of `spaceAlbumAssetExists` — an `EXISTS (...) OR EXISTS (...)` fragment over
+ * the linked-album access path, for interpolation into `sql``` queries. Emits BOTH arms, mirroring
+ * spaceAlbumAssetExists: the album owner's own `album_asset` rows, and cross-owner `album_space_asset`
+ * contributions (#752 P1-7 — previously this raw-SQL analogue only emitted the `album_asset` arm,
+ * despite its header claiming parity with the two-arm Kysely helper). The outer parentheses keep
+ * this precedence-safe for every consumer that interpolates it into a larger `OR ${...}` / negates
+ * it via `NOT (...)`.
  */
 export function spaceAlbumAssetExistsSql(options: SpaceAlbumAssetSqlOptions): RawBuilder<SqlBool> {
   const albumJoin =
@@ -367,7 +372,7 @@ export function spaceAlbumAssetExistsSql(options: SpaceAlbumAssetSqlOptions): Ra
       ? sql`INNER JOIN album ON album.id = shared_space_album."albumId" AND album."deletedAt" IS NULL`
       : sql``;
   const timelineGate = options.requireShowInTimeline ? sql`AND "shared_space_album"."showInTimeline" = true` : sql``;
-  return sql<SqlBool>`EXISTS (
+  return sql<SqlBool>`(EXISTS (
               SELECT 1
               FROM shared_space_album
               ${options.spaceScopeJoin}
@@ -375,5 +380,14 @@ export function spaceAlbumAssetExistsSql(options: SpaceAlbumAssetSqlOptions): Ra
               INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
               WHERE album_asset."assetId" = ${options.assetIdColumn}
               ${timelineGate}
-            )`;
+            ) OR EXISTS (
+              SELECT 1
+              FROM shared_space_album
+              ${options.spaceScopeJoin}
+              ${albumJoin}
+              INNER JOIN album_space_asset ON album_space_asset."albumId" = shared_space_album."albumId"
+                AND album_space_asset."spaceId" = shared_space_album."spaceId"
+              WHERE album_space_asset."assetId" = ${options.assetIdColumn}
+              ${timelineGate}
+            ))`;
 }

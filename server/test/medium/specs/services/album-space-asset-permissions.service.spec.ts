@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { AssetVisibility, Permission } from 'src/enum';
+import { AssetVisibility, JobName, Permission } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumUserRepository } from 'src/repositories/album-user.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
@@ -53,6 +53,11 @@ const setup = () => {
   });
   // The owned-asset path emits AlbumUpdate / AlbumAssetsAdd; give the auto-mock a no-op resolution.
   result.ctx.getMock(EventRepository).emit.mockResolvedValue(void 0);
+  // P1-7 (D3): a successful contribution into spaceS (faceRecognitionEnabled defaults to true)
+  // enqueues SharedSpaceFaceMatch — give the auto-mock a no-op default so tests that don't assert
+  // on job enqueue behavior aren't tripped by the strict auto-mock. The FACE MATCH ENQUEUE describe
+  // below re-asserts on this mock directly.
+  result.ctx.getMock(JobRepository).queueAll.mockResolvedValue(void 0);
   return result;
 };
 
@@ -400,6 +405,39 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
       const [res] = await sut.addAssets(authOf('spaceEditor'), albumL, { ids: [assetId] });
       expect(res).toEqual({ id: assetId, success: false, error: 'duplicate' });
       expect(await isContributionRow(assetId)).toBeUndefined();
+    });
+  });
+
+  // ===============================================================================================
+  // FACE MATCH ENQUEUE (P1-7 / D3) — a successful contribution enqueues a targeted per-asset face
+  // match job so a contribution's faces reach space People without waiting for a coarse reconcile.
+  // ===============================================================================================
+  describe('FACE MATCH ENQUEUE (P1-7 / D3)', () => {
+    it('a successful contribution enqueues SharedSpaceFaceMatch for its (spaceId, assetId) when the space has face recognition on', async () => {
+      const { ctx: freshCtx, sut: freshSut } = setup();
+      const jobMock = freshCtx.getMock(JobRepository);
+      jobMock.queueAll.mockResolvedValue(void 0);
+      await db.updateTable('shared_space').set({ faceRecognitionEnabled: true }).where('id', '=', spaceS).execute();
+      const { asset } = await freshCtx.newAsset({ ownerId: actors.carol.id, visibility: AssetVisibility.Timeline });
+      await freshCtx.newSharedSpaceAsset({ spaceId: spaceS, assetId: asset.id, addedById: actors.carol.id });
+
+      const [res] = await freshSut.addAssets(authOf('spaceEditor'), albumL, { ids: [asset.id] });
+      expect(res.success).toBe(true);
+      expect(jobMock.queueAll).toHaveBeenCalledWith([
+        { name: JobName.SharedSpaceFaceMatch, data: { spaceId: spaceS, assetId: asset.id } },
+      ]);
+    });
+
+    it('no enqueue when face recognition is off', async () => {
+      const { ctx: freshCtx, sut: freshSut } = setup();
+      const jobMock = freshCtx.getMock(JobRepository);
+      await db.updateTable('shared_space').set({ faceRecognitionEnabled: false }).where('id', '=', spaceS).execute();
+      const { asset } = await freshCtx.newAsset({ ownerId: actors.carol.id, visibility: AssetVisibility.Timeline });
+      await freshCtx.newSharedSpaceAsset({ spaceId: spaceS, assetId: asset.id, addedById: actors.carol.id });
+
+      const [res] = await freshSut.addAssets(authOf('spaceEditor'), albumL, { ids: [asset.id] });
+      expect(res.success).toBe(true);
+      expect(jobMock.queueAll).not.toHaveBeenCalled();
     });
   });
 });
