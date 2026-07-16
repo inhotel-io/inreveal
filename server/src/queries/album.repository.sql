@@ -410,6 +410,9 @@ order by
 delete from "album_asset"
 where
   "album_asset"."assetId" in ($1)
+delete from "album_space_asset"
+where
+  "album_space_asset"."assetId" in ($1)
 
 -- AlbumRepository.getAssetIds
 select
@@ -431,6 +434,22 @@ from
     select
       1
   ) as "dummy"
+on conflict do nothing
+
+-- AlbumRepository.getContributedAssetIds
+select
+  "album_space_asset"."assetId"
+from
+  "album_space_asset"
+where
+  "album_space_asset"."albumId" = $1
+  and "album_space_asset"."assetId" in ($2)
+
+-- AlbumRepository.addContributedAssets
+insert into
+  "album_space_asset" ("albumId", "assetId", "spaceId", "addedById")
+values
+  ($1, $2, $3, $4)
 on conflict do nothing
 
 -- AlbumRepository.create
@@ -541,6 +560,7 @@ from
 where
   "asset"."deletedAt" is null
   and "album_asset"."albumId" = $1
+  and "asset"."visibility" in ('archive', 'timeline')
 group by
   "asset"."ownerId"
 order by

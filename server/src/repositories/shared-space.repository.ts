@@ -2,11 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { Insertable, Kysely, NotNull, sql, Transaction, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
-import { AssetType, AssetVisibility, SharedSpaceRole, VectorIndex } from 'src/enum';
+import { AlbumUserRole, AssetType, AssetVisibility, SharedSpaceRole, VectorIndex } from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
 import type { PeopleFaceStatistics } from 'src/repositories/person.repository';
 import type { AssetSearchBuilderOptions } from 'src/repositories/search.repository';
 import { DB } from 'src/schema';
+import { SharedSpaceAlbumTable } from 'src/schema/tables/shared-space-album.table';
 import { SharedSpaceAssetTable } from 'src/schema/tables/shared-space-asset.table';
 import { SharedSpaceLibraryTable } from 'src/schema/tables/shared-space-library.table';
 import { SharedSpaceMemberTable } from 'src/schema/tables/shared-space-member.table';
@@ -15,8 +16,13 @@ import { SharedSpacePersonFaceTable } from 'src/schema/tables/shared-space-perso
 import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, searchAssetBuilder } from 'src/utils/database';
+import {
+  spaceAlbumAssetExists,
+  spaceVisibilityGate,
+  spaceVisibleAssetVisibilities,
+} from 'src/utils/shared-space-album-scope';
 
-export const visibleSpaceAssetVisibilities = [AssetVisibility.Archive, AssetVisibility.Timeline];
+export const visibleSpaceAssetVisibilities = spaceVisibleAssetVisibilities;
 
 type SpacePersonStatistics = {
   assets: number;
@@ -229,12 +235,84 @@ export class SharedSpaceRepository {
       .executeTakeFirstOrThrow();
   }
 
+  // L7: accepts an optional trx so removeMember (service) can thread it through one
+  // transaction shared with removeOwnedAlbumLinksAddedBy. Mirrors recountPersons's db param.
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async removeMember(spaceId: string, userId: string) {
-    await this.db
-      .deleteFrom('shared_space_member')
-      .where('spaceId', '=', spaceId)
-      .where('userId', '=', userId)
+  async removeMember(spaceId: string, userId: string, db: Kysely<DB> | Transaction<DB> = this.db) {
+    await db.deleteFrom('shared_space_member').where('spaceId', '=', spaceId).where('userId', '=', userId).execute();
+  }
+
+  /**
+   * Cross-owner contribution eligibility (#764). For each of `assetIds`, returns the space it may be
+   * contributed to `albumId` through — i.e. a space `S` such that: the album is linked to `S`, the
+   * caller is an Owner/Editor of `S`, and the asset is space-visible to the caller via `S` (direct
+   * pool ∪ linked library ∪ another linked album) under the visibility gate (no Hidden/Locked). Only
+   * NON-owned assets are eligible (the caller's own photos take the ordinary `album_asset` path). One
+   * row per eligible asset (the tether space); assets with no eligible space are simply absent.
+   */
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, [DummyValue.UUID]] })
+  @ChunkedArray({ paramIndex: 2 })
+  async getContributableAssetSpaces(
+    userId: string,
+    albumId: string,
+    assetIds: string[],
+  ): Promise<{ assetId: string; spaceId: string }[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    return this.db
+      .selectFrom('shared_space_album as link')
+      .innerJoin('shared_space_member as m', (join) =>
+        join
+          .onRef('m.spaceId', '=', 'link.spaceId')
+          .on('m.userId', '=', userId)
+          .on('m.role', 'in', [SharedSpaceRole.Owner, SharedSpaceRole.Editor]),
+      )
+      .innerJoin(
+        'asset',
+        (join) =>
+          join
+            .on('asset.id', 'in', assetIds)
+            .on('asset.deletedAt', 'is', null)
+            .on('asset.ownerId', '!=', userId) // owned assets take the ordinary album_asset path
+            .on('asset.visibility', 'in', spaceVisibleAssetVisibilities), // gate out Hidden/Locked
+      )
+      .where('link.albumId', '=', albumId)
+      .where((eb) =>
+        eb.or([
+          // Directly shared into the space's pool.
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset as sd')
+              .select(sql`1`.as('x'))
+              .whereRef('sd.spaceId', '=', 'link.spaceId')
+              .whereRef('sd.assetId', '=', 'asset.id'),
+          ),
+          // In a library linked to the space.
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library as sl')
+              .select(sql`1`.as('x'))
+              .whereRef('sl.spaceId', '=', 'link.spaceId')
+              .whereRef('sl.libraryId', '=', 'asset.libraryId')
+              .where('asset.isOffline', '=', false),
+          ),
+          // Already in another (non-deleted) album linked to the space.
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album as sa2')
+              .innerJoin('album_asset as aa2', 'aa2.albumId', 'sa2.albumId')
+              .innerJoin('album as al2', (j2) => j2.onRef('al2.id', '=', 'sa2.albumId').on('al2.deletedAt', 'is', null))
+              .select(sql`1`.as('x'))
+              .whereRef('sa2.spaceId', '=', 'link.spaceId')
+              .whereRef('aa2.assetId', '=', 'asset.id'),
+          ),
+        ]),
+      )
+      .select(['asset.id as assetId', 'link.spaceId as spaceId'])
+      .distinctOn('asset.id')
+      .orderBy('asset.id')
       .execute();
   }
 
@@ -280,6 +358,21 @@ export class SharedSpaceRepository {
               .where('asset.isOffline', '=', false)
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+              .select('asset.id')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
           .as('combined'),
       )
       .select((eb) => eb.fn.countAll().as('count'))
@@ -317,6 +410,28 @@ export class SharedSpaceRepository {
       .onConflict((oc) => oc.doNothing())
       .returningAll()
       .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async getOwnedStackSiblingIds(userId: string, assetIds: string[]): Promise<string[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .selectFrom('asset as seed')
+      .innerJoin('asset as sibling', 'sibling.stackId', 'seed.stackId')
+      .select('sibling.id as assetId')
+      .distinct()
+      .where('seed.id', 'in', assetIds)
+      .where('seed.stackId', 'is not', null)
+      .where('sibling.ownerId', '=', userId)
+      .where('sibling.deletedAt', 'is', null)
+      .where('sibling.isOffline', '=', false)
+      .where('sibling.visibility', 'in', visibleSpaceAssetVisibilities)
+      .execute();
+
+    return rows.map((row) => row.assetId);
   }
 
   /**
@@ -359,6 +474,235 @@ export class SharedSpaceRepository {
       .deleteFrom('shared_space_asset')
       .where('spaceId', '=', spaceId)
       .where('assetId', 'in', assetIds)
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async getStackSiblingIdsInSpace(spaceId: string, assetIds: string[]): Promise<string[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .selectFrom('asset as seed')
+      .innerJoin('asset as sibling', 'sibling.stackId', 'seed.stackId')
+      .innerJoin('shared_space_asset', 'shared_space_asset.assetId', 'sibling.id')
+      .select('sibling.id as assetId')
+      .distinct()
+      .where('seed.id', 'in', assetIds)
+      .where('seed.stackId', 'is not', null)
+      .where('shared_space_asset.spaceId', '=', spaceId)
+      .execute();
+
+    return rows.map((row) => row.assetId);
+  }
+
+  /**
+   * Slice 4.B DIRECT-path purge: when the owner flips one of these assets OUT of
+   * the space-shareable visibility set (Timeline/Archive) to Hidden or Locked,
+   * the `shared_space_asset` join row is NOT deleted, so the delete-audit trigger
+   * never fires and already-synced member devices keep the bytes. Emit a
+   * `shared_space_asset_audit` tombstone for every join row referencing the given
+   * assets so `SharedSpaceToAssetSync.getDeletes` purges those devices.
+   *
+   * `shared_space_asset_audit` is space-only (NOT shared with normal album sync),
+   * so writing to it here does not bleed into non-space behavior. `id` and
+   * `deletedAt` are DB-generated (immich_uuid_v7 / clock_timestamp), giving every
+   * tombstone a fresh id > any prior checkpoint.
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitDirectAssetVisibilityPurge(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('shared_space_asset_audit')
+      .columns(['spaceId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('shared_space_asset')
+          .select(['shared_space_asset.spaceId', 'shared_space_asset.assetId'])
+          .where('shared_space_asset.assetId', 'in', assetIds),
+      )
+      .execute();
+  }
+
+  /**
+   * Slice 4.B DIRECT-path restore: when the owner flips one of these assets back
+   * INTO the space-shareable set (Timeline/Archive), the join row already exists
+   * but its `updateId` is unchanged, so `SharedSpaceToAssetSync.getUpserts` (gated
+   * by `updateId` > checkpoint) won't re-add it to devices that purged it. Touch
+   * the referencing rows so the `updated_at` BEFORE-UPDATE trigger bumps
+   * `updateId = immich_uuid_v7(clock_timestamp())` and getUpserts re-emits.
+   *
+   * Over-emitting a restore for an already-visible asset is harmless (the device
+   * simply re-upserts a join row it already has).
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitDirectAssetVisibilityRestore(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .updateTable('shared_space_asset')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
+      .execute();
+  }
+
+  /**
+   * Slice 1 ALBUM-path purge: when the owner flips an album-linked asset to
+   * Hidden, the album_asset join row is retained (unlike Locked), so no
+   * album_asset_audit trigger fires. Emit one shared_space_album_asset_audit
+   * tombstone per (albumId, assetId) where the album is space-linked, so
+   * SharedSpaceAlbumToAssetSync.getDeletes delivers the delete to members.
+   * Only space-linked albums are targeted — normal album members are unaffected.
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitAlbumAssetVisibilityPurge(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('shared_space_album_asset_audit')
+      .columns(['albumId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('album_asset')
+          .select(['album_asset.albumId', 'album_asset.assetId'])
+          .where('album_asset.assetId', 'in', assetIds)
+          .where('album_asset.albumId', 'in', (eb) =>
+            eb.selectFrom('shared_space_album').select('shared_space_album.albumId'),
+          ),
+      )
+      .execute();
+
+    // #764: contributions live in album_space_asset (not album_asset); tombstone the contributed
+    // (albumId, assetId) pairs too so SharedSpaceAlbumToAssetSync.getDeletes drops a now-Hidden
+    // contribution on member devices. Unlike the album_asset arm above there is NO space-link filter
+    // here — album_space_asset has no FK to shared_space_album, so we cannot (and need not) restrict to
+    // linked albums at write time. The safety is applied at READ time: getDeletes scopes these
+    // tombstones by accessibleSpaceAlbums, so only a member who can see the album ever receives the delete.
+    await this.db
+      .insertInto('album_space_asset_audit')
+      .columns(['albumId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('album_space_asset')
+          .select(['album_space_asset.albumId', 'album_space_asset.assetId'])
+          .where('album_space_asset.assetId', 'in', assetIds),
+      )
+      .execute();
+  }
+
+  /**
+   * Slice 1 ALBUM-path restore: when the owner flips a Hidden album-linked
+   * asset back to Timeline/Archive, the album_asset row was retained. Touch
+   * the rows so the updated_at BEFORE-UPDATE trigger bumps album_asset.updateId
+   * and SharedSpaceAlbumToAssetSync.getUpserts re-emits the membership to devices
+   * that purged it. Only space-linked albums are targeted. Re-emitting to normal
+   * album members is idempotent.
+   *
+   * Note: after Locked, album_asset rows were deleted by removeAssetsFromAll, so
+   * this method finds nothing to bump and the asset does not return to the album —
+   * matching Immich Locked semantics (see A8).
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitAlbumAssetVisibilityRestore(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .updateTable('album_asset')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
+      .where('albumId', 'in', (eb) => eb.selectFrom('shared_space_album').select('shared_space_album.albumId'))
+      .execute();
+
+    // #764: bump contributed rows too so getUpserts re-emits an un-hidden contribution to devices
+    // that purged it. The album_space_asset_updatedAt BEFORE-UPDATE trigger regenerates updateId.
+    // Unlike the album_asset arm above this has no space-link filter (a harmless over-bump — getUpserts
+    // re-gates by grant + visibility, and now also per-space via contributionVisibleToMember).
+    await this.db
+      .updateTable('album_space_asset')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
+      .execute();
+  }
+
+  /**
+   * Slice 2 LIBRARY-path purge: when the owner flips a library-linked space asset
+   * to Hidden or Locked, write a tombstone per (libraryId, assetId) in
+   * shared_space_library_asset_audit for each asset that belongs to a space-linked
+   * library. LibraryAssetSync.getDeletes unions this table (owner-gated) so member
+   * devices drop the asset. The owner is never purged — the union arm filters
+   * asset.ownerId != userId. The ASSET ROW's restore is automatic (the visibility
+   * UPDATE bumps asset.updateId; LibraryAssetSync.getUpserts re-emits the
+   * now-visible asset) — but its EXIF is NOT (see emitLibraryAssetVisibilityRestore
+   * below). Only space-linked libraries are targeted — the library owner's own
+   * sync stream and any non-space library member are unaffected.
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitLibraryAssetVisibilityPurge(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('shared_space_library_asset_audit')
+      .columns(['libraryId', 'assetId'])
+      .expression(
+        this.db
+          .selectFrom('asset')
+          .select(['asset.libraryId as libraryId', 'asset.id as assetId'])
+          .where('asset.id', 'in', assetIds)
+          .where('asset.libraryId', 'is not', null)
+          .where('asset.libraryId', 'in', (eb) =>
+            eb.selectFrom('shared_space_library').select('shared_space_library.libraryId'),
+          ),
+      )
+      .$narrowType<{ libraryId: string }>()
+      .execute();
+  }
+
+  /**
+   * L4 LIBRARY-path EXIF restore: when the owner flips a library-linked space
+   * asset back to Timeline/Archive, the asset ROW re-upserts automatically (its
+   * own updateId is bumped by the visibility UPDATE), but asset_exif.updateId is
+   * untouched by a visibility flip. LibraryAssetExifSync.getUpserts is gated on
+   * `asset_exif.updateId > ack`, so without this, a member who already
+   * synced-then-purged the asset would see the asset row reappear with EXIF
+   * missing forever. Touch asset_exif.updatedAt (mirrors
+   * emitDirectAssetVisibilityRestore / emitAlbumAssetVisibilityRestore) for every
+   * restored asset that belongs to a space-linked library so the updated_at
+   * BEFORE-UPDATE trigger bumps updateId and getUpserts re-emits.
+   *
+   * Over-emitting for an already-visible asset is harmless (the device simply
+   * re-upserts an exif row it already has).
+   */
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async emitLibraryAssetVisibilityRestore(assetIds: string[]) {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .updateTable('asset_exif')
+      .set({ updatedAt: sql`clock_timestamp()` })
+      .where('assetId', 'in', assetIds)
+      .where('assetId', 'in', (eb) =>
+        eb
+          .selectFrom('asset')
+          .select('asset.id')
+          .where('asset.libraryId', 'is not', null)
+          .where('asset.libraryId', 'in', (eb2) =>
+            eb2.selectFrom('shared_space_library').select('shared_space_library.libraryId'),
+          ),
+      )
       .execute();
   }
 
@@ -411,6 +755,267 @@ export class SharedSpaceRepository {
       .then((row) => !!row);
   }
 
+  // ==========================================
+  // Shared Space Album Link CRUD
+  // ==========================================
+
+  addAlbum(values: Insertable<SharedSpaceAlbumTable>) {
+    return this.db
+      .insertInto('shared_space_album')
+      .values(values)
+      .onConflict((oc) => oc.doNothing())
+      .returningAll()
+      .executeTakeFirst();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  removeAlbum(spaceId: string, albumId: string) {
+    return this.db
+      .deleteFrom('shared_space_album')
+      .where('spaceId', '=', spaceId)
+      .where('albumId', '=', albumId)
+      .execute();
+  }
+
+  // albums-6: on member removal/leave, unlink the shared_space_album rows the
+  // departing user ADDED and OWNS (album_user role='owner'). Remaining members lose
+  // access to the ex-member's album (its future assets too). Rows the member added
+  // for albums they do NOT own are left untouched. Deleting the rows fires
+  // shared_space_album_delete_audit (link tombstone + gated grant revocation for
+  // remaining members). Returns the album ids actually unlinked.
+  // M9: deliberately does NOT filter `album.deletedAt IS NULL` — a link to the
+  // departing member's own TRASHED album must also be removed on departure. The
+  // soft-delete trigger already tombstoned that album's grants but leaves the
+  // shared_space_album link row in place; without this, a later restore re-creates
+  // grants for S's current members, re-sharing an album the owner had already left
+  // the space with. Deleting a trashed album's link is safe either way — grants are
+  // already revoked and the delete-audit tombstone is idempotent.
+  // L7: accepts an optional trx so removeMember (service) can thread it through one
+  // transaction shared with the membership-row delete — atomic member removal.
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async removeOwnedAlbumLinksAddedBy(
+    spaceId: string,
+    userId: string,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<string[]> {
+    const deleted = await db
+      .deleteFrom('shared_space_album')
+      .where('shared_space_album.spaceId', '=', spaceId)
+      .where('shared_space_album.addedById', '=', userId)
+      .where('shared_space_album.albumId', 'in', (eb) =>
+        eb
+          .selectFrom('album_user')
+          .select('album_user.albumId')
+          .where('album_user.userId', '=', userId)
+          .where('album_user.role', '=', AlbumUserRole.Owner),
+      )
+      .returning('shared_space_album.albumId')
+      .execute();
+    return deleted.map((row) => row.albumId);
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getLinkedAlbums(spaceId: string) {
+    return (
+      this.db
+        .selectFrom('shared_space_album')
+        .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+        .selectAll('album')
+        .select([
+          'shared_space_album.addedById',
+          'shared_space_album.showInTimeline',
+          'shared_space_album.createdAt as linkedAt',
+        ])
+        .select((eb) =>
+          eb
+            .selectFrom('album_user')
+            .whereRef('album_user.albumId', '=', 'album.id')
+            .where('album_user.role', '=', AlbumUserRole.Owner)
+            .select('album_user.userId')
+            .limit(1)
+            .as('ownerId'),
+        )
+        // L17: the raw `album.albumThumbnailAssetId` (already selected via `selectAll('album')`
+        // above) can point at an asset that isn't space-visible (Hidden/Locked, or since
+        // soft-deleted) — a member's gated thumbnail request for it 403s and the web renders a
+        // broken cover tile. This later `albumThumbnailAssetId` alias appears after `album.*` in
+        // the column list, so it wins on the duplicate name: COALESCE (1) the current thumbnail
+        // only if it's still a live, space-visible asset, else (2) the newest space-visible asset
+        // still in the album, else (3) null (web renders NoCover).
+        .select((eb) =>
+          eb.fn
+            .coalesce(
+              eb
+                .selectFrom('asset')
+                .select('asset.id')
+                .whereRef('asset.id', '=', 'album.albumThumbnailAssetId')
+                .where('asset.deletedAt', 'is', null)
+                .where((eb2) => spaceVisibilityGate(eb2)),
+              eb
+                .selectFrom('album_asset')
+                .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+                .select('asset.id')
+                .whereRef('album_asset.albumId', '=', 'album.id')
+                .where('asset.deletedAt', 'is', null)
+                .where((eb2) => spaceVisibilityGate(eb2))
+                .orderBy('asset.fileCreatedAt', 'desc')
+                .orderBy('asset.id', 'asc')
+                .limit(1),
+            )
+            .as('albumThumbnailAssetId'),
+        )
+        .where('shared_space_album.spaceId', '=', spaceId)
+        .where('album.deletedAt', 'is', null)
+        .orderBy('album.createdAt', 'desc')
+        .orderBy('album.id', 'asc')
+        .execute()
+    );
+  }
+
+  // correctness-4 support: album ids currently linked to a space (captured before a
+  // member removal / space deletion so the reconcile job can target them post-commit).
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getLinkedAlbumIds(spaceId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('shared_space_album')
+      .select('albumId')
+      .where('spaceId', '=', spaceId)
+      .execute();
+    return rows.map((row) => row.albumId);
+  }
+
+  // correctness-4 / M7: bidirectional sweep of the grants of the given albums — self-heals
+  // missing grants AND tombstones stranded ones. Runs POST-COMMIT (its own statement/txn), so
+  // the READ COMMITTED snapshot race in both the create-side and delete-side triggers is
+  // resolved — it sees fully committed state.
+  //
+  // Step 1 (M7 — grant-side self-heal): the create-side triggers (shared_space_album_after_insert_user
+  // / shared_space_member_after_insert_album) each fan out from ONE just-inserted row using a
+  // statement-time snapshot, so a member-join and an album-link landing in two overlapping
+  // transactions can each miss the other's row and neither ever grants the (member, album) pair
+  // (see the (doc) test in shared-space-album-create-triggers.spec.ts). This INSERT re-derives
+  // every (userId, albumId) pair that currently has a live path (member of the album's space,
+  // album not soft-deleted) and is missing its grant row. ON CONFLICT DO NOTHING makes it a
+  // no-op for pairs that already have a grant.
+  //
+  // Step 2 (tombstone sweep, pre-existing): inserting into shared_space_album_user_audit fires
+  // shared_space_album_user_delete_after_audit (deletes the grant) + SharedSpaceAlbumSync.getDeletes
+  // (device tombstone). The nil sentinel excludes no real space → "does the user have ANY live
+  // path?"; a grant with a live path is skipped (no over-revocation), an already-revoked grant
+  // has no row to sweep. Returns the number of grants tombstoned (Step 1 never over-counts here:
+  // a pair Step 1 just inserted, by construction, HAS a live path, so Step 2 always skips it).
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async reconcileAlbumGrants(albumIds: string[]): Promise<number> {
+    if (albumIds.length === 0) {
+      return 0;
+    }
+
+    await this.db
+      .insertInto('shared_space_album_user')
+      .columns(['userId', 'albumId'])
+      .expression((eb) =>
+        eb
+          .selectFrom('shared_space_album')
+          .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+          .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+          .select(['shared_space_member.userId', 'shared_space_album.albumId'])
+          .where('shared_space_album.albumId', 'in', albumIds)
+          .where('album.deletedAt', 'is', null),
+      )
+      .onConflict((oc) => oc.doNothing())
+      .execute();
+
+    const inserted = await this.db
+      .insertInto('shared_space_album_user_audit')
+      .columns(['albumId', 'userId'])
+      .expression((eb) =>
+        eb
+          .selectFrom('shared_space_album_user')
+          .select(['shared_space_album_user.albumId', 'shared_space_album_user.userId'])
+          .where('shared_space_album_user.albumId', 'in', albumIds)
+          .where(
+            sql<boolean>`NOT user_has_album_path("shared_space_album_user"."albumId", "shared_space_album_user"."userId", '00000000-0000-0000-0000-000000000000'::uuid)`,
+          ),
+      )
+      .returning('albumId')
+      .execute();
+    return inserted.length;
+  }
+
+  // L8: every album id with at least one live grant row — the nightly sweep's target set for
+  // reconcileAlbumGrants, making the self-heal/tombstone mechanism path-independent (a backstop
+  // for M6 durability, L7 residue, and cascade-deletion strands that never enqueued a reconcile).
+  @GenerateSql({ params: [] })
+  async getAllGrantedAlbumIds(): Promise<string[]> {
+    const rows = await this.db.selectFrom('shared_space_album_user').select('albumId').distinct().execute();
+    return rows.map((row) => row.albumId);
+  }
+
+  // Album sync fan-out: used by the AlbumAssetsAdd/Remove handlers to find every space
+  // a linked album feeds, with its face-recognition flag. Mirrors getSpacesLinkedToLibrary.
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getSpacesLinkedToAlbum(albumId: string) {
+    return this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('shared_space', 'shared_space.id', 'shared_space_album.spaceId')
+      .selectAll('shared_space_album')
+      .select('shared_space.faceRecognitionEnabled')
+      .where('shared_space_album.albumId', '=', albumId)
+      .execute();
+  }
+
+  // rbac-6: the album owner's view of every space this album is linked into, so they can
+  // review + revoke links. Intentionally NOT decorated with @GenerateSql — decorating it would
+  // require a `make sql` regen against a scratch migrated DB, which is out of scope for this slice.
+  getAlbumSpaceLinks(albumId: string) {
+    return this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('shared_space', 'shared_space.id', 'shared_space_album.spaceId')
+      .select([
+        'shared_space_album.spaceId as spaceId',
+        'shared_space.name as spaceName',
+        'shared_space_album.addedById as linkedById',
+        'shared_space_album.showInTimeline as showInTimeline',
+      ])
+      .where('shared_space_album.albumId', '=', albumId)
+      .orderBy('shared_space.name', 'asc')
+      .orderBy('shared_space_album.spaceId', 'asc')
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  hasAlbumLink(spaceId: string, albumId: string) {
+    return this.db
+      .selectFrom('shared_space_album')
+      .where('spaceId', '=', spaceId)
+      .where('albumId', '=', albumId)
+      .select('spaceId')
+      .executeTakeFirst()
+      .then((row) => !!row);
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, true] })
+  setAlbumShowInTimeline(spaceId: string, albumId: string, showInTimeline: boolean) {
+    return this.db
+      .updateTable('shared_space_album')
+      .set({ showInTimeline })
+      .where('spaceId', '=', spaceId)
+      .where('albumId', '=', albumId)
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getAlbumAssetCount(albumId: string): Promise<number> {
+    const row = await this.db
+      .selectFrom('album_asset')
+      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+      .select((eb) => eb.fn.countAll<number>().as('count'))
+      .where('album_asset.albumId', '=', albumId)
+      .where('asset.deletedAt', 'is', null)
+      .executeTakeFirst();
+    return Number(row?.count ?? 0);
+  }
+
   @GenerateSql({ params: [DummyValue.UUID, 4] })
   getRecentAssets(spaceId: string, limit = 4) {
     return this.db
@@ -437,6 +1042,23 @@ export class SharedSpaceRepository {
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
               .where('asset.thumbhash', 'is not', null),
           )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (j) =>
+                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+              .select(['asset.id', 'asset.thumbhash', 'asset.fileCreatedAt'])
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.type', '=', AssetType.Image)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+              .where('asset.thumbhash', 'is not', null),
+          )
           .as('combined'),
       )
       .select(['combined.id', 'combined.thumbhash'])
@@ -448,13 +1070,43 @@ export class SharedSpaceRepository {
   @GenerateSql({ params: [DummyValue.UUID] })
   async getLastAssetAddedAt(spaceId: string): Promise<Date | undefined> {
     const result = await this.db
-      .selectFrom('shared_space_asset')
-      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
-      .where('spaceId', '=', spaceId)
-      .where('asset.deletedAt', 'is', null)
-      .where('asset.isOffline', '=', false)
-      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
-      .select((eb) => eb.fn.max('addedAt').as('lastAddedAt'))
+      .selectFrom(
+        this.db
+          .selectFrom('shared_space_asset')
+          .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+          .select('shared_space_asset.addedAt as ts')
+          .where('shared_space_asset.spaceId', '=', spaceId)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+          .union(
+            this.db
+              .selectFrom('shared_space_library')
+              .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+              .select('asset.createdAt as ts')
+              .where('shared_space_library.spaceId', '=', spaceId)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (j) =>
+                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+              .select('asset.createdAt as ts')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
+          .as('combined'),
+      )
+      .select((eb) => eb.fn.max('combined.ts').as('lastAddedAt'))
       .executeTakeFirst();
     return result?.lastAddedAt ?? undefined;
   }
@@ -483,6 +1135,22 @@ export class SharedSpaceRepository {
               .where('asset.isOffline', '=', false)
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (j) =>
+                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+              .select('asset.id')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
+              .where('asset.createdAt', '>', since)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
           .as('combined'),
       )
       .select((eb) => eb.fn.countAll().as('count'))
@@ -492,18 +1160,47 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.DATE] })
   async getLastContributor(spaceId: string, since: Date): Promise<{ id: string; name: string } | undefined> {
-    return this.db
+    const contributions = this.db
       .selectFrom('shared_space_asset')
       .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
-      .innerJoin('user', (join) =>
-        join.onRef('user.id', '=', 'shared_space_asset.addedById').on('user.deletedAt', 'is', null),
-      )
+      .select(['shared_space_asset.addedById as userId', 'shared_space_asset.addedAt as ts'])
       .where('shared_space_asset.spaceId', '=', spaceId)
       .where('shared_space_asset.addedAt', '>', since)
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
       .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
-      .orderBy('shared_space_asset.addedAt', 'desc')
+      .union(
+        this.db
+          .selectFrom('shared_space_library')
+          .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+          .select(['asset.ownerId as userId', 'asset.createdAt as ts'])
+          .where('shared_space_library.spaceId', '=', spaceId)
+          .where('asset.createdAt', '>', since)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+      )
+      .union(
+        this.db
+          .selectFrom('shared_space_album')
+          .innerJoin('album', (j) =>
+            j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+          )
+          .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+          .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+          .select(['asset.ownerId as userId', 'asset.createdAt as ts'])
+          .where('shared_space_album.spaceId', '=', spaceId)
+          .where('shared_space_album.showInTimeline', '=', true)
+          .where('asset.createdAt', '>', since)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+      );
+
+    return this.db
+      .selectFrom(contributions.as('contrib'))
+      .innerJoin('user', (join) => join.onRef('user.id', '=', 'contrib.userId').on('user.deletedAt', 'is', null))
+      .orderBy('contrib.ts', 'desc')
       .select(['user.id', 'user.name'])
       .limit(1)
       .executeTakeFirst();
@@ -718,40 +1415,49 @@ export class SharedSpaceRepository {
           ]),
         ),
       )
-      .$if(!!options.takenAfter || !!options.takenBefore, (qb) =>
-        qb.where((eb) =>
-          eb.exists(
-            eb
-              .selectFrom('shared_space_person_face as spf2')
-              .innerJoin('asset_face as af2', 'af2.id', 'spf2.assetFaceId')
-              .innerJoin('asset', 'asset.id', 'af2.assetId')
-              .whereRef('spf2.personId', '=', 'shared_space_person.id')
-              .where('af2.deletedAt', 'is', null)
-              .where('af2.isVisible', '=', true)
-              .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false)
-              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
-              .where((spaceEb) =>
-                spaceEb.or([
-                  spaceEb.exists(
-                    spaceEb
-                      .selectFrom('shared_space_asset')
-                      .select('shared_space_asset.assetId')
-                      .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                      .where('shared_space_asset.spaceId', '=', spaceId),
-                  ),
-                  spaceEb.exists(
-                    spaceEb
-                      .selectFrom('shared_space_library')
-                      .select('shared_space_library.libraryId')
-                      .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                      .where('shared_space_library.spaceId', '=', spaceId),
-                  ),
-                ]),
-              )
-              .$if(!!options.takenAfter, (qb2) => qb2.where('asset.fileCreatedAt', '>=', options.takenAfter!))
-              .$if(!!options.takenBefore, (qb2) => qb2.where('asset.fileCreatedAt', '<', options.takenBefore!)),
-          ),
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('shared_space_person_face as spf2')
+            .innerJoin('asset_face as af2', 'af2.id', 'spf2.assetFaceId')
+            .innerJoin('asset', 'asset.id', 'af2.assetId')
+            .whereRef('spf2.personId', '=', 'shared_space_person.id')
+            .where('af2.deletedAt', 'is', null)
+            .where('af2.isVisible', '=', true)
+            .where('asset.deletedAt', 'is', null)
+            .where('asset.isOffline', '=', false)
+            .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+            .where((spaceEb) =>
+              spaceEb.or([
+                spaceEb.exists(
+                  spaceEb
+                    .selectFrom('shared_space_asset')
+                    .select('shared_space_asset.assetId')
+                    .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+                    .where('shared_space_asset.spaceId', '=', spaceId),
+                ),
+                spaceEb.exists(
+                  spaceEb
+                    .selectFrom('shared_space_library')
+                    .select('shared_space_library.libraryId')
+                    .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+                    .where('shared_space_library.spaceId', '=', spaceId),
+                ),
+                spaceEb.exists(
+                  spaceEb
+                    .selectFrom('shared_space_album')
+                    .innerJoin('album', (j) =>
+                      j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+                    )
+                    .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+                    .select('shared_space_album.albumId')
+                    .whereRef('album_asset.assetId', '=', 'asset.id')
+                    .where('shared_space_album.spaceId', '=', spaceId),
+                ),
+              ]),
+            )
+            .$if(!!options.takenAfter, (qb2) => qb2.where('asset.fileCreatedAt', '>=', options.takenAfter!))
+            .$if(!!options.takenBefore, (qb2) => qb2.where('asset.fileCreatedAt', '<', options.takenBefore!)),
         ),
       )
       .orderBy('shared_space_person.isHidden', 'asc')
@@ -803,9 +1509,9 @@ export class SharedSpaceRepository {
               OR "shared_space_person"."assetCount" >= ${minimumFaceCount}
             )
           `;
-    const datePersonFilter =
-      options.takenAfter || options.takenBefore
-        ? sql`
+    // Always require at least one visible, in-scope face (visibility already enforced by asset_scope CTE).
+    // The date bounds are already applied to asset_scope, so this naturally enforces date filtering too.
+    const visibleFaceFilter = sql`
             AND EXISTS (
               SELECT 1
               FROM "shared_space_person_face"
@@ -815,8 +1521,7 @@ export class SharedSpaceRepository {
                 AND "asset_face"."deletedAt" IS NULL
                 AND "asset_face"."isVisible" = true
             )
-          `
-        : sql``;
+          `;
     const hasAssignedPersonFaceFilter = !!options.named || !!namePattern;
     const assignedPersonFaceFilter = hasAssignedPersonFaceFilter
       ? sql`
@@ -867,6 +1572,20 @@ export class SharedSpaceRepository {
           AND ${visibilityFilter}
           ${takenAfterFilter}
           ${takenBeforeFilter}
+        UNION
+        SELECT "asset"."id" AS "assetId"
+        FROM "shared_space_album"
+        INNER JOIN "album"
+          ON "album"."id" = "shared_space_album"."albumId"
+          AND "album"."deletedAt" IS NULL
+        INNER JOIN "album_asset" ON "album_asset"."albumId" = "shared_space_album"."albumId"
+        INNER JOIN "asset" ON "asset"."id" = "album_asset"."assetId"
+        WHERE "shared_space_album"."spaceId" = ${spaceId}
+          AND "asset"."deletedAt" IS NULL
+          AND "asset"."isOffline" = false
+          AND ${visibilityFilter}
+          ${takenAfterFilter}
+          ${takenBeforeFilter}
       ),
       "person_rows" AS (
         SELECT
@@ -878,7 +1597,7 @@ export class SharedSpaceRepository {
           ${namedPersonFilter}
           ${namePersonFilter}
           ${minimumPersonFilter}
-          ${datePersonFilter}
+          ${visibleFaceFilter}
       ),
       "person_keys" AS (
         SELECT "personKey", BOOL_AND("isHidden") AS "allHidden"
@@ -967,6 +1686,20 @@ export class SharedSpaceRepository {
         FROM "shared_space_library"
         INNER JOIN "asset" ON "asset"."libraryId" = "shared_space_library"."libraryId"
         WHERE "shared_space_library"."spaceId" = ${spaceId}
+          AND "asset"."deletedAt" IS NULL
+          AND "asset"."isOffline" = false
+          AND ${visibilityFilter}
+          ${takenAfterFilter}
+          ${takenBeforeFilter}
+        UNION
+        SELECT "asset"."id" AS "assetId"
+        FROM "shared_space_album"
+        INNER JOIN "album"
+          ON "album"."id" = "shared_space_album"."albumId"
+          AND "album"."deletedAt" IS NULL
+        INNER JOIN "album_asset" ON "album_asset"."albumId" = "shared_space_album"."albumId"
+        INNER JOIN "asset" ON "asset"."id" = "album_asset"."assetId"
+        WHERE "shared_space_album"."spaceId" = ${spaceId}
           AND "asset"."deletedAt" IS NULL
           AND "asset"."isOffline" = false
           AND ${visibilityFilter}
@@ -1092,6 +1825,18 @@ export class SharedSpaceRepository {
           AND "asset"."deletedAt" IS NULL
           AND "asset"."isOffline" = false
           AND "asset"."visibility" IN (${sql.join(visibleSpaceAssetVisibilities)})
+        UNION
+        SELECT "asset"."id" AS "assetId"
+        FROM "shared_space_album"
+        INNER JOIN "album"
+          ON "album"."id" = "shared_space_album"."albumId"
+          AND "album"."deletedAt" IS NULL
+        INNER JOIN "album_asset" ON "album_asset"."albumId" = "shared_space_album"."albumId"
+        INNER JOIN "asset" ON "asset"."id" = "album_asset"."assetId"
+        WHERE "shared_space_album"."spaceId" = ${spaceId}
+          AND "asset"."deletedAt" IS NULL
+          AND "asset"."isOffline" = false
+          AND "asset"."visibility" IN (${sql.join(visibleSpaceAssetVisibilities)})
       ),
       "selected_faces" AS (
         SELECT DISTINCT
@@ -1160,6 +1905,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
           ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+          }),
         ]),
       )
       .executeTakeFirst();
@@ -1197,6 +1946,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
           ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+          }),
         ]),
       )
       .orderBy('asset.fileCreatedAt', 'desc')
@@ -1414,7 +2167,30 @@ export class SharedSpaceRepository {
       .where('shared_space_library.addedById', 'is not', null)
       .execute();
 
-    return [...new Set([...directRows, ...libraryRows].flatMap((row) => (row.userId ? [row.userId] : [])))];
+    const albumRows = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
+      .innerJoin('shared_space_album', (join) =>
+        join
+          .onRef('shared_space_album.albumId', '=', 'album_asset.albumId')
+          .on('shared_space_album.spaceId', '=', spaceId),
+      )
+      .innerJoin('album', (j) =>
+        j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+      )
+      .select('shared_space_album.addedById as userId')
+      .distinct()
+      .where('shared_space_person_face.personId', '=', personId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('shared_space_album.addedById', 'is not', null)
+      .execute();
+
+    return [
+      ...new Set([...directRows, ...libraryRows, ...albumRows].flatMap((row) => (row.userId ? [row.userId] : []))),
+    ];
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
@@ -1440,7 +2216,25 @@ export class SharedSpaceRepository {
       .where('asset.isOffline', '=', false)
       .executeTakeFirst();
 
-    return libraryRow ?? directRow;
+    if (libraryRow?.addedById) {
+      return libraryRow;
+    }
+
+    const albumRow = await this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('album', (join) =>
+        join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+      )
+      .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+      .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+      .select('shared_space_album.addedById')
+      .where('shared_space_album.spaceId', '=', spaceId)
+      .where('asset.id', '=', assetId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .executeTakeFirst();
+
+    return albumRow ?? libraryRow ?? directRow;
   }
 
   @GenerateSql({ params: [{ cursor: DummyValue.UUID, identityId: DummyValue.UUID, limit: 100 }] })
@@ -1486,6 +2280,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .where('shared_space_library.spaceId', '=', spaceId),
           ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceId },
+          }),
         ]),
       )
       .where('person.identityId', 'is not', null)
@@ -1538,10 +2336,38 @@ export class SharedSpaceRepository {
   getPersonAssetIds(personId: string) {
     return this.db
       .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
       .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
       .select('asset_face.assetId')
       .distinct()
       .where('shared_space_person_face.personId', '=', personId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .select('shared_space_asset.assetId')
+              .whereRef('shared_space_asset.assetId', '=', 'asset_face.assetId')
+              .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .select('shared_space_library.libraryId')
+              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
+              .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
+          ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+            requireShowInTimeline: true,
+          }),
+        ]),
+      )
       .execute();
   }
 
@@ -1682,6 +2508,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
           ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+          }),
         ]),
       )
       .executeTakeFirst();
@@ -1721,6 +2551,10 @@ export class SharedSpaceRepository {
               .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
               .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
           ),
+          spaceAlbumAssetExists(eb, {
+            correlateAssetId: 'asset_face.assetId',
+            scope: { spaceIdRef: 'shared_space_person.spaceId' },
+          }),
         ]),
       )
       .orderBy('asset.fileCreatedAt', 'desc')
@@ -1842,6 +2676,121 @@ export class SharedSpaceRepository {
     if (affectedPersonIds.length > 0) {
       await this.recountPersons(affectedPersonIds.map((r) => r.personId));
     }
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async getAlbumAssetIdsWithoutOtherSpacePath(spaceId: string, albumId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('album_asset')
+      .select('album_asset.assetId')
+      .where('album_asset.albumId', '=', albumId)
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'album_asset.assetId')
+              .where('shared_space_asset.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset as other', 'other.albumId', 'shared_space_album.albumId')
+              .whereRef('other.assetId', '=', 'album_asset.assetId')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.albumId', '!=', albumId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+              .whereRef('asset.id', '=', 'album_asset.assetId')
+              .where('shared_space_library.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .execute();
+    return rows.map((r) => r.assetId);
+  }
+
+  // Per-asset analogue of getAlbumAssetIdsWithoutOtherSpacePath. Call AFTER the album_asset
+  // rows for the removed assets are deleted, so "any linked album" already excludes the album
+  // they were removed from. Returns the subset of assetIds with NO remaining space path.
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async getAssetIdsWithoutOtherSpacePath(spaceId: string, assetIds: string[]): Promise<string[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+    const rows = await this.db
+      .selectFrom('asset')
+      .select('asset.id')
+      .where('asset.id', 'in', assetIds)
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
+              .where('shared_space_asset.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .whereRef('album_asset.assetId', '=', 'asset.id')
+              .where('shared_space_album.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .innerJoin('asset as libAsset', 'libAsset.libraryId', 'shared_space_library.libraryId')
+              .whereRef('libAsset.id', '=', 'asset.id')
+              .where('shared_space_library.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .execute();
+    return rows.map((r) => r.id);
+  }
+
+  // L6: candidate assetIds for the stale-face sweep — every asset currently referenced by a
+  // shared_space_person_face row for this space's persons. Feed the result into
+  // getAssetIdsWithoutOtherSpacePath to find which of them have no remaining space path (a
+  // path removed outside the service — cascade delete, or a failed fire-and-forget job — never
+  // ran the synchronous removePersonFacesByAssetIds cleanup that unlinkAlbum/removeMember do).
+  @GenerateSql({ params: [DummyValue.UUID] })
+  async getSpacePersonFaceAssetIds(spaceId: string): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .select('asset_face.assetId')
+      .distinct()
+      .where('shared_space_person.spaceId', '=', spaceId)
+      .execute();
+    return rows.map((r) => r.assetId);
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
@@ -2112,6 +3061,21 @@ export class SharedSpaceRepository {
               .where('asset.isOffline', '=', false)
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (j) =>
+                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+              .select('asset.id')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('asset.id', '=', assetId)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
           .as('combined'),
       )
       .select('combined.id')
@@ -2126,11 +3090,15 @@ export class SharedSpaceRepository {
       .selectFrom(
         this.db
           .selectFrom('shared_space_asset')
+          .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
           .innerJoin('asset_face', 'asset_face.assetId', 'shared_space_asset.assetId')
           .select('asset_face.id')
           .where('shared_space_asset.spaceId', '=', spaceId)
           .where('asset_face.id', '=', faceId)
           .where('asset_face.deletedAt', 'is', null)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where((eb) => spaceVisibilityGate(eb))
           .union(
             this.db
               .selectFrom('shared_space_library')
@@ -2141,7 +3109,26 @@ export class SharedSpaceRepository {
               .where('asset_face.id', '=', faceId)
               .where('asset_face.deletedAt', 'is', null)
               .where('asset.deletedAt', 'is', null)
-              .where('asset.isOffline', '=', false),
+              .where('asset.isOffline', '=', false)
+              .where((eb) => spaceVisibilityGate(eb)),
+          )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+              .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
+              .select('asset_face.id')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('asset_face.id', '=', faceId)
+              .where('asset_face.deletedAt', 'is', null)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where((eb) => spaceVisibilityGate(eb))
+              .where('shared_space_album.showInTimeline', '=', true),
           )
           .as('combined'),
       )
@@ -2242,9 +3229,38 @@ export class SharedSpaceRepository {
               .where('asset.id', '=', assetId)
               .where('shared_space.faceRecognitionEnabled', '=', true),
           )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (j) =>
+                j.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('shared_space', 'shared_space.id', 'shared_space_album.spaceId')
+              .select('shared_space_album.spaceId')
+              .where('album_asset.assetId', '=', assetId)
+              .where('shared_space.faceRecognitionEnabled', '=', true),
+          )
           .as('combined'),
       )
       .select('combined.spaceId')
+      .execute();
+  }
+
+  /**
+   * Returns the (spaceId, personId) pairs for every shared-space person face that references
+   * an asset_face belonging to the given asset.  Must be called BEFORE the asset row is deleted
+   * (i.e. before the asset → asset_face → shared_space_person_face cascade runs).
+   */
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getSpacePersonsForAsset(assetId: string) {
+    return this.db
+      .selectFrom('shared_space_person_face')
+      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'shared_space_person_face.personId')
+      .select(['shared_space_person.spaceId', 'shared_space_person_face.personId'])
+      .distinct()
+      .where('asset_face.assetId', '=', assetId)
       .execute();
   }
 

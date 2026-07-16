@@ -59,6 +59,7 @@ import {
   withTags,
 } from 'src/utils/database';
 import { globToSqlPattern } from 'src/utils/misc';
+import { spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 
 export type AssetStats = Record<AssetType, number>;
 
@@ -316,7 +317,19 @@ export function withTimeBucketAssetFilters<O>(
     .$if(!!options.albumId, (qb) =>
       qb
         .innerJoin('album_asset', 'asset.id', 'album_asset.assetId')
-        .where('album_asset.albumId', '=', asUuid(options.albumId!)),
+        .where('album_asset.albumId', '=', asUuid(options.albumId!))
+        // Fork RBAC (Slice 1 / security-3 defense-in-depth): an explicit visibility=HIDDEN/LOCKED
+        // bypasses the top-level withDefaultVisibility (which only fires when visibility is
+        // undefined). Flat-gate the album arm so Hidden/Locked album assets never surface via the
+        // timeline bucket, even if the service-level guard is bypassed. Idempotent for the default
+        // album grid view (withDefaultVisibility is the same Archive+Timeline predicate).
+        .where((eb) => spaceVisibilityGate(eb))
+        // Fork RBAC (Slice 1 / H1 defense-in-depth): the top-level `options.isTrashed` ternary
+        // (line 253) flips `deletedAt IS NOT NULL` for the whole query, and the service-layer
+        // guard (timeline.service.ts timeBucketChecks) already rejects isTrashed=true on an
+        // album/space browse — but flat-gate here too so the album arm never surfaces a trashed
+        // asset even if that guard is bypassed. Keep the getTimeBucket inline copy in sync.
+        .where('asset.deletedAt', 'is', null),
     )
     .$if(!!options.isNotInAlbum && !options.albumId, (qb) =>
       qb.where((eb) =>
@@ -330,24 +343,39 @@ export function withTimeBucketAssetFilters<O>(
     )
     .$if(!!options.spaceId, (qb) =>
       qb.where((eb) =>
-        eb.or([
-          eb.exists(
-            eb
-              .selectFrom('shared_space_asset')
-              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-              .where('shared_space_asset.spaceId', '=', asUuid(options.spaceId!)),
+        // Fork RBAC (Fix A): the space-membership predicate is intersected with an
+        // INDEPENDENT visibility gate — `own OR (Archive|Timeline)` — so an explicit
+        // `visibility=HIDDEN`/`LOCKED` cannot surface OTHER members' Hidden/Locked in-space
+        // assets. Mirrors searchAssetBuilder. `userIds` may be undefined (pure spaceId browse):
+        // then the `own` term is absent and the gate is purely other-members-Archive/Timeline.
+        eb.and([
+          eb.or(
+            spaceAssetPathBranches(eb, {
+              correlateAssetId: 'asset.id',
+              correlateLibraryId: 'asset.libraryId',
+              scope: { spaceId: options.spaceId! },
+              requireShowInTimeline: true,
+            }),
           ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_library')
-              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-              .where('shared_space_library.spaceId', '=', asUuid(options.spaceId!)),
-          ),
+          eb.or([
+            ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
+            spaceVisibilityGate(eb),
+          ]),
         ]),
       ),
     )
     .$if(!!options.personIds?.length, (qb) => hasPeople(qb, options.personIds!))
-    .$if(!!options.spacePersonIds?.length, (qb) => hasSpacePeople(qb, options.spacePersonIds!))
+    .$if(!!options.spacePersonIds?.length, (qb) =>
+      hasSpacePeople(qb, options.spacePersonIds!).where((eb) =>
+        // The space-person face narrowing must ALSO carry the independent visibility gate:
+        // a space person's face on ANOTHER member's Hidden/Locked asset must not surface it
+        // via an explicit `visibility=HIDDEN`. Caller's own rows follow the resolved visibility.
+        eb.or([
+          ...(options.userIds ? [eb('asset.ownerId', '=', anyUuid(options.userIds))] : []),
+          spaceVisibilityGate(eb),
+        ]),
+      ),
+    )
     .$if(!!options.identityIds?.length, (qb) => hasFaceIdentities(qb, options.identityIds!))
     .$if(!!options.withStacked, (qb) =>
       qb
@@ -362,19 +390,22 @@ export function withTimeBucketAssetFilters<O>(
     .$if(!!options.userIds && !!options.timelineSpaceIds, (qb) =>
       qb.where((eb) =>
         eb.or([
+          // Caller's own (and partner) rows follow the resolved top-level visibility.
           eb('asset.ownerId', '=', anyUuid(options.userIds!)),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_asset')
-              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-              .where('shared_space_asset.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
-          ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_library')
-              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-              .where('shared_space_library.spaceId', '=', anyUuid(options.timelineSpaceIds!)),
-          ),
+          // Fork RBAC (Fix A): other members' rows are constrained to Archive+Timeline via the
+          // INDEPENDENT gate, so an explicit `visibility=HIDDEN`/`LOCKED` can't surface their
+          // Hidden/Locked in-space assets. Mirrors searchAssetBuilder's timelineSpaceIds arm.
+          eb.and([
+            spaceVisibilityGate(eb),
+            eb.or(
+              spaceAssetPathBranches(eb, {
+                correlateAssetId: 'asset.id',
+                correlateLibraryId: 'asset.libraryId',
+                scope: { spaceIds: options.timelineSpaceIds! },
+                requireShowInTimeline: true,
+              }),
+            ),
+          ]),
         ]),
       ),
     )
@@ -916,6 +947,23 @@ export class AssetRepository {
       .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
       .select('asset.id')
       .where('asset.libraryId', '=', libraryId)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', '=', false)
+      .groupBy('asset.id')
+      .orderBy('asset.id')
+      .limit(limit)
+      .offset(offset)
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, 1000, 0] })
+  getByAlbumIdWithFaces(albumId: string, limit = 1000, offset = 0) {
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
+      .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
+      .select('asset.id')
+      .where('album_asset.albumId', '=', albumId)
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', '=', false)
       .groupBy('asset.id')

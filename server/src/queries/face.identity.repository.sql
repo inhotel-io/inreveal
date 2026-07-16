@@ -142,6 +142,19 @@ WITH
           WHERE
             shared_space_library."libraryId" = asset."libraryId"
         )
+        OR EXISTS (
+          SELECT
+            1
+          FROM
+            shared_space_album
+            INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"
+            INNER JOIN album ON album.id = shared_space_album."albumId"
+            AND album."deletedAt" IS NULL
+            INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
+          WHERE
+            album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
+        )
       )
   ),
   accessible_profiles AS (
@@ -333,6 +346,19 @@ WITH
           WHERE
             shared_space_library."libraryId" = asset."libraryId"
         )
+        OR EXISTS (
+          SELECT
+            1
+          FROM
+            shared_space_album
+            INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"
+            INNER JOIN album ON album.id = shared_space_album."albumId"
+            AND album."deletedAt" IS NULL
+            INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
+          WHERE
+            album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
+        )
       )
   ),
   accessible_profiles AS (
@@ -523,6 +549,19 @@ WITH
           WHERE
             shared_space_library."libraryId" = asset."libraryId"
         )
+        OR EXISTS (
+          SELECT
+            1
+          FROM
+            shared_space_album
+            INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"
+            INNER JOIN album ON album.id = shared_space_album."albumId"
+            AND album."deletedAt" IS NULL
+            INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
+          WHERE
+            album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
+        )
       )
   ),
   accessible_faces AS (
@@ -682,6 +721,19 @@ WITH
             INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_library."spaceId"
           WHERE
             shared_space_library."libraryId" = asset."libraryId"
+        )
+        OR EXISTS (
+          SELECT
+            1
+          FROM
+            shared_space_album
+            INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"
+            INNER JOIN album ON album.id = shared_space_album."albumId"
+            AND album."deletedAt" IS NULL
+            INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
+          WHERE
+            album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),
@@ -874,6 +926,19 @@ WITH
           WHERE
             shared_space_library."libraryId" = asset."libraryId"
         )
+        OR EXISTS (
+          SELECT
+            1
+          FROM
+            shared_space_album
+            INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"
+            INNER JOIN album ON album.id = shared_space_album."albumId"
+            AND album."deletedAt" IS NULL
+            INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
+          WHERE
+            album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
+        )
       )
   )
 SELECT
@@ -978,6 +1043,19 @@ WITH
             INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_library."spaceId"
           WHERE
             shared_space_library."libraryId" = asset."libraryId"
+        )
+        OR EXISTS (
+          SELECT
+            1
+          FROM
+            shared_space_album
+            INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"
+            INNER JOIN album ON album.id = shared_space_album."albumId"
+            AND album."deletedAt" IS NULL
+            INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
+          WHERE
+            album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),
@@ -1176,6 +1254,19 @@ WITH
             INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_library."spaceId"
           WHERE
             shared_space_library."libraryId" = asset."libraryId"
+        )
+        OR EXISTS (
+          SELECT
+            1
+          FROM
+            shared_space_album
+            INNER JOIN timeline_spaces ON timeline_spaces."spaceId" = shared_space_album."spaceId"
+            INNER JOIN album ON album.id = shared_space_album."albumId"
+            AND album."deletedAt" IS NULL
+            INNER JOIN album_asset ON album_asset."albumId" = shared_space_album."albumId"
+          WHERE
+            album_asset."assetId" = asset.id
+            AND "shared_space_album"."showInTimeline" = true
         )
       )
   ),

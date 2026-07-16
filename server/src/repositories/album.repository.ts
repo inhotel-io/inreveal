@@ -378,6 +378,11 @@ export class AlbumRepository {
   @Chunked()
   async removeAssetsFromAll(assetIds: string[]): Promise<void> {
     await this.db.deleteFrom('album_asset').where('album_asset.assetId', 'in', assetIds).execute();
+    // #764: also drop cross-owner contributions — "remove from all albums" must clear both membership
+    // tables, else a Locked contribution never leaves a member's device (the album_asset-only delete
+    // above never fires the album_space_asset delete trigger). Un-lock won't restore (row deleted),
+    // matching owned-asset Locked semantics.
+    await this.db.deleteFrom('album_space_asset').where('album_space_asset.assetId', 'in', assetIds).execute();
   }
 
   @Chunked({ paramIndex: 1 })
@@ -428,6 +433,59 @@ export class AlbumRepository {
         eb.selectFrom(dummy).select([asUuid(albumId).as('albumId'), sql`unnest(${assetIds}::uuid[])`.as('assetId')]),
       )
       .onConflict((oc) => oc.doNothing())
+      .execute();
+  }
+
+  // --- Cross-owner contributions (album_space_asset) — #764 ---------------------------------------
+  // A contribution is a bookmark of a space photo the contributor does not own; it lives OUTSIDE
+  // `album_asset` so it can never become a permanent `checkAlbumAccess` grant for the album owner.
+
+  /** Which of `assetIds` already exist as contributions in the album (for DUPLICATE detection). */
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  @ChunkedSet({ paramIndex: 1 })
+  async getContributedAssetIds(albumId: string, assetIds: string[]): Promise<Set<string>> {
+    if (assetIds.length === 0) {
+      return new Set();
+    }
+
+    return this.db
+      .selectFrom('album_space_asset')
+      .select('album_space_asset.assetId')
+      .where('album_space_asset.albumId', '=', albumId)
+      .where('album_space_asset.assetId', 'in', assetIds)
+      .execute()
+      .then((results) => new Set(results.map(({ assetId }) => assetId)));
+  }
+
+  @GenerateSql({
+    params: [
+      [{ albumId: DummyValue.UUID, assetId: DummyValue.UUID, spaceId: DummyValue.UUID, addedById: DummyValue.UUID }],
+    ],
+  })
+  async addContributedAssets(
+    values: { albumId: string; assetId: string; spaceId: string; addedById: string }[],
+  ): Promise<void> {
+    if (values.length === 0) {
+      return;
+    }
+
+    await this.db
+      .insertInto('album_space_asset')
+      .values(values)
+      .onConflict((oc) => oc.doNothing())
+      .execute();
+  }
+
+  @Chunked({ paramIndex: 1 })
+  async removeContributedAssetIds(albumId: string, assetIds: string[]): Promise<void> {
+    if (assetIds.length === 0) {
+      return;
+    }
+
+    await this.db
+      .deleteFrom('album_space_asset')
+      .where('album_space_asset.albumId', '=', albumId)
+      .where('album_space_asset.assetId', 'in', assetIds)
       .execute();
   }
 
@@ -570,14 +628,19 @@ export class AlbumRepository {
   /**
    * Get per-user asset contribution counts for a single album.
    * Excludes deleted assets, orders by count desc.
+   * L1: also excludes Hidden/Locked assets (withDefaultVisibility) — the per-user totals are
+   * PII-adjacent (album.service.get gates the whole field to direct readers), and without this
+   * gate a contributor's Hidden/Locked asset count could still be inferred from the total.
    */
   @GenerateSql({ params: [DummyValue.UUID] })
   getContributorCounts(id: string) {
-    return this.db
-      .selectFrom('album_asset')
-      .innerJoin('asset', 'asset.id', 'assetId')
-      .where('asset.deletedAt', 'is', sql.lit(null))
-      .where('album_asset.albumId', '=', id)
+    return withDefaultVisibility(
+      this.db
+        .selectFrom('album_asset')
+        .innerJoin('asset', 'asset.id', 'assetId')
+        .where('asset.deletedAt', 'is', sql.lit(null))
+        .where('album_asset.albumId', '=', id),
+    )
       .select('asset.ownerId as userId')
       .select((eb) => eb.fn.countAll<number>().as('assetCount'))
       .groupBy('asset.ownerId')

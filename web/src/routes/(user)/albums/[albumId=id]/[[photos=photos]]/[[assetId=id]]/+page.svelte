@@ -2,6 +2,7 @@
   import { goto, invalidate, onNavigate } from '$app/navigation';
   import { scrollMemoryClearer } from '$lib/actions/scroll-memory';
   import AlbumMap from '$lib/components/album-page/AlbumMap.svelte';
+  import AlbumSharedSpaceLinks from '$lib/components/album-page/AlbumSharedSpaceLinks.svelte';
   import AlbumSummary from '$lib/components/album-page/AlbumSummary.svelte';
   import ActivityStatus from '$lib/components/asset-viewer/ActivityStatus.svelte';
   import ActivityViewer from '$lib/components/asset-viewer/ActivityViewer.svelte';
@@ -53,6 +54,7 @@
     getAlbumAssetsActions,
     handleDeleteAlbum,
     handleDownloadAlbum,
+    handleLinkAlbumToSpace,
   } from '$lib/services/album.service';
   import { getGlobalActions } from '$lib/services/app.service';
   import { getAssetBulkActions } from '$lib/services/asset.service';
@@ -93,6 +95,7 @@
     mdiImageOutline,
     mdiImagePlusOutline,
     mdiLink,
+    mdiLinkVariantPlus,
     mdiPlus,
     mdiPresentationPlay,
   } from '@mdi/js';
@@ -619,6 +622,10 @@
                       <AlbumSummary {album} />
                     {/if}
 
+                    <!-- rbac-6: owner-only — the server populates album.sharedSpaceLinks only for
+                         the album owner, so this self-hides for every other caller. -->
+                    <AlbumSharedSpaceLinks {album} />
+
                     <!-- ALBUM SHARING -->
                     {#if album.albumUsers.length > 1 || (album.hasSharedLink && isOwned)}
                       <div class="my-3 flex gap-x-1">
@@ -730,7 +737,7 @@
             />
             <SetVisibilityAction menuItem onVisibilitySet={handleSetVisibility} />
           {/if}
-          {#if assetMultiSelectManager.assets.length === 1}
+          {#if isEditor && assetMultiSelectManager.assets.length === 1}
             <MenuOption
               text={$t('set_as_album_cover')}
               icon={mdiImageOutline}
@@ -828,6 +835,15 @@
                 {/if}
 
                 {#if isOwned}
+                  <MenuOption
+                    icon={mdiLinkVariantPlus}
+                    text={$t('link_album_to_space')}
+                    onClick={async () => {
+                      if (await handleLinkAlbumToSpace(album)) {
+                        await refreshAlbum();
+                      }
+                    }}
+                  />
                   <MenuOption
                     icon={mdiDeleteOutline}
                     text={$t('delete_album')}

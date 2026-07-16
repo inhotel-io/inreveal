@@ -2,9 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { Kysely, NotNull, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
-import { AlbumUserRole, AssetVisibility } from 'src/enum';
+import { AlbumUserRole, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { asUuid } from 'src/utils/database';
+import {
+  spaceAssetPathBranches,
+  spaceVisibilityGate,
+  spaceVisibleAssetVisibilities,
+} from 'src/utils/shared-space-album-scope';
 
 class ActivityAccess {
   constructor(private db: Kysely<DB>) {}
@@ -133,6 +138,47 @@ class AlbumAccess {
         (sharedLinks) => new Set(sharedLinks.flatMap((sharedLink) => (sharedLink.albumId ? [sharedLink.albumId] : []))),
       );
   }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkSpaceLinkedAlbumAccess(userId: string, albumIds: Set<string>) {
+    if (albumIds.size === 0) {
+      return new Set<string>();
+    }
+
+    return this.db
+      .selectFrom('album')
+      .select('album.id')
+      .distinct()
+      .innerJoin('shared_space_album', 'shared_space_album.albumId', 'album.id')
+      .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+      .where('album.id', 'in', [...albumIds])
+      .where('album.deletedAt', 'is', null)
+      .where('shared_space_member.userId', '=', userId)
+      .where('shared_space_member.role', 'in', [SharedSpaceRole.Owner, SharedSpaceRole.Editor])
+      .execute()
+      .then((albums) => new Set(albums.map((album) => album.id)));
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkSpaceLinkedAlbumReadAccess(userId: string, albumIds: Set<string>) {
+    if (albumIds.size === 0) {
+      return new Set<string>();
+    }
+
+    return this.db
+      .selectFrom('album')
+      .select('album.id')
+      .distinct()
+      .innerJoin('shared_space_album', 'shared_space_album.albumId', 'album.id')
+      .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+      .where('album.id', 'in', [...albumIds])
+      .where('album.deletedAt', 'is', null)
+      .where('shared_space_member.userId', '=', userId)
+      .execute()
+      .then((albums) => new Set(albums.map((album) => album.id)));
+  }
 }
 
 class AssetAccess {
@@ -240,6 +286,7 @@ class AssetAccess {
           )
           .select(['asset.id', 'asset.livePhotoVideoId'])
           .where('shared_space_member.userId', '=', userId)
+          .where((eb) => spaceVisibilityGate(eb))
           .where((eb) =>
             eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
           )
@@ -255,6 +302,25 @@ class AssetAccess {
               )
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
+              .where((eb) => spaceVisibilityGate(eb))
+              .where((eb) =>
+                eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
+              ),
+          )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', (join) =>
+                join.onRef('asset.id', '=', 'album_asset.assetId').on('asset.deletedAt', 'is', null),
+              )
+              .select(['asset.id', 'asset.livePhotoVideoId'])
+              .where('shared_space_member.userId', '=', userId)
+              .where((eb) => spaceVisibilityGate(eb))
               .where((eb) =>
                 eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
               ),
@@ -295,6 +361,7 @@ class AssetAccess {
           .select(['asset.id', 'asset.livePhotoVideoId'])
           .where('shared_space_member.userId', '=', userId)
           .where('shared_space_asset.spaceId', '=', spaceId)
+          .where((eb) => spaceVisibilityGate(eb))
           .where((eb) =>
             eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
           )
@@ -311,6 +378,26 @@ class AssetAccess {
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
               .where('shared_space_library.spaceId', '=', spaceId)
+              .where((eb) => spaceVisibilityGate(eb))
+              .where((eb) =>
+                eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
+              ),
+          )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', (join) =>
+                join.onRef('asset.id', '=', 'album_asset.assetId').on('asset.deletedAt', 'is', null),
+              )
+              .select(['asset.id', 'asset.livePhotoVideoId'])
+              .where('shared_space_member.userId', '=', userId)
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where((eb) => spaceVisibilityGate(eb))
               .where((eb) =>
                 eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
               ),
@@ -350,6 +437,7 @@ class AssetAccess {
           )
           .select(['asset.id', 'asset.livePhotoVideoId'])
           .where('shared_space_member.userId', '=', userId)
+          .where((eb) => spaceVisibilityGate(eb))
           .where((eb) =>
             eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
           )
@@ -366,6 +454,7 @@ class AssetAccess {
               )
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
+              .where((eb) => spaceVisibilityGate(eb))
               .where((eb) =>
                 eb.or([eb('asset.id', 'in', [...assetIds]), eb('asset.livePhotoVideoId', 'in', [...assetIds])]),
               )
@@ -621,28 +710,68 @@ class PersonAccess {
               join
                 .onRef('asset.id', '=', 'asset_face.assetId')
                 .on('asset.deletedAt', 'is', null)
-                .on('asset.visibility', '=', AssetVisibility.Timeline),
+                // rbac-7 (deny-only widening): widen from Timeline-only to the shareable set
+                // (Timeline + Archive) so a person appearing only on Archived space assets — shown in the
+                // space people grid via getPersonsBySpaceId — is also granted PersonRead. Never Hidden/Locked.
+                .on('asset.visibility', 'in', spaceVisibleAssetVisibilities),
             )
             .whereRef('asset_face.personId', '=', 'person.id')
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', 'is', true)
             .where((eb) =>
-              eb.or([
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_asset')
-                    .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
-                    .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                    .where('shared_space_member.userId', '=', userId),
-                ),
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_library')
-                    .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_library.spaceId')
-                    .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                    .where('shared_space_member.userId', '=', userId),
-                ),
-              ]),
+              eb.or(
+                spaceAssetPathBranches(eb, {
+                  correlateAssetId: 'asset.id',
+                  correlateLibraryId: 'asset.libraryId',
+                  scope: { memberUserId: userId },
+                }),
+              ),
+            ),
+        ),
+      )
+      .execute()
+      .then((persons) => new Set(persons.map((person) => person.id)));
+  }
+
+  // Fork RBAC (Slice 3 / M2): checkSharedSpaceAccess above proves PersonRead reachability for ANY
+  // space role (including Viewer). Mutating the owner's GLOBAL representative face must be limited
+  // to the owner or an Editor/Owner of a space the person is shared through — this mirrors
+  // checkSharedSpaceAccess exactly except for the added `memberRole` filter.
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkSharedSpaceEditAccess(userId: string, personIds: Set<string>) {
+    if (personIds.size === 0) {
+      return new Set<string>();
+    }
+
+    return this.db
+      .selectFrom('person')
+      .select('person.id')
+      .where('person.id', 'in', [...personIds])
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_face')
+            .innerJoin('asset', (join) =>
+              join
+                .onRef('asset.id', '=', 'asset_face.assetId')
+                .on('asset.deletedAt', 'is', null)
+                // rbac-7 (deny-only widening): widen from Timeline-only to the shareable set
+                // (Timeline + Archive) so a person appearing only on Archived space assets — shown in the
+                // space people grid via getPersonsBySpaceId — is also granted PersonRead. Never Hidden/Locked.
+                .on('asset.visibility', 'in', spaceVisibleAssetVisibilities),
+            )
+            .whereRef('asset_face.personId', '=', 'person.id')
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true)
+            .where((eb) =>
+              eb.or(
+                spaceAssetPathBranches(eb, {
+                  correlateAssetId: 'asset.id',
+                  correlateLibraryId: 'asset.libraryId',
+                  scope: { memberUserId: userId, memberRole: [SharedSpaceRole.Owner, SharedSpaceRole.Editor] },
+                }),
+              ),
             ),
         ),
       )

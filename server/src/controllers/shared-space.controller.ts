@@ -36,16 +36,23 @@ import {
 import {
   SharedSpaceActivityQueryDto,
   SharedSpaceActivityResponseDto,
+  SharedSpaceAlbumLinkUpdateDto,
+  SharedSpaceAlbumParamDto,
   SharedSpaceAssetAddDto,
   SharedSpaceAssetRemoveDto,
   SharedSpaceCreateDto,
   SharedSpaceLibraryLinkDto,
+  SharedSpaceLibraryParamDto,
+  SharedSpaceLinkedAlbumDto,
   SharedSpaceMemberCreateDto,
   SharedSpaceMemberMetadataContributionDto,
+  SharedSpaceMemberParamDto,
   SharedSpaceMemberPreferencesDto,
   SharedSpaceMemberResponseDto,
   SharedSpaceMemberTimelineDto,
   SharedSpaceMemberUpdateDto,
+  SharedSpacePersonFaceParamDto,
+  SharedSpacePersonParamDto,
   SharedSpaceResponseDto,
   SharedSpaceUpdateDto,
 } from 'src/dtos/shared-space.dto';
@@ -161,7 +168,7 @@ export class SharedSpaceController {
   })
   updateMemberTimeline(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
+    @Param() { id }: UUIDParamDto,
     @Body() dto: SharedSpaceMemberTimelineDto,
   ): Promise<SharedSpaceMemberResponseDto> {
     return this.service.updateMemberTimeline(auth, id, dto);
@@ -176,7 +183,7 @@ export class SharedSpaceController {
   })
   updateMemberPreferences(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
+    @Param() { id }: UUIDParamDto,
     @Body() dto: SharedSpaceMemberPreferencesDto,
   ): Promise<SharedSpaceMemberResponseDto> {
     return this.service.updateMemberPreferences(auth, id, dto);
@@ -203,8 +210,7 @@ export class SharedSpaceController {
   })
   updateMember(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('userId') userId: string,
+    @Param() { id, userId }: SharedSpaceMemberParamDto,
     @Body() dto: SharedSpaceMemberUpdateDto,
   ): Promise<SharedSpaceMemberResponseDto> {
     return this.service.updateMember(auth, id, userId, dto);
@@ -219,8 +225,7 @@ export class SharedSpaceController {
   })
   updateMemberMetadataContribution(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('userId') userId: string,
+    @Param() { id, userId }: SharedSpaceMemberParamDto,
     @Body() dto: SharedSpaceMemberMetadataContributionDto,
   ): Promise<SharedSpaceMemberResponseDto> {
     return this.service.updateMemberMetadataContribution(auth, id, userId, dto);
@@ -234,7 +239,7 @@ export class SharedSpaceController {
     description: 'Remove a member from a shared space, or leave the space.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  removeMember(@Auth() auth: AuthDto, @Param('id') id: string, @Param('userId') userId: string): Promise<void> {
+  removeMember(@Auth() auth: AuthDto, @Param() { id, userId }: SharedSpaceMemberParamDto): Promise<void> {
     return this.service.removeMember(auth, id, userId);
   }
 
@@ -357,7 +362,7 @@ export class SharedSpaceController {
     description: 'Queue a background job to find and merge duplicate people in a shared space.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  deduplicateSpacePeople(@Auth() auth: AuthDto, @Param('id') id: string): Promise<void> {
+  deduplicateSpacePeople(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<void> {
     return this.service.deduplicateSpacePeople(auth, id);
   }
 
@@ -370,8 +375,7 @@ export class SharedSpaceController {
   })
   getSpacePersonStatistics(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
+    @Param() { id, personId }: SharedSpacePersonParamDto,
   ): Promise<PersonStatisticsResponseDto> {
     return this.service.getSpacePersonStatistics(auth, id, personId);
   }
@@ -385,8 +389,7 @@ export class SharedSpaceController {
   })
   getSpacePersonFaces(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
+    @Param() { id, personId }: SharedSpacePersonParamDto,
     @Query() dto: PersonFacePageQueryDto,
   ): Promise<PersonFacePageResponseDto> {
     return this.service.getSpacePersonFaces(auth, id, personId, dto);
@@ -404,9 +407,7 @@ export class SharedSpaceController {
     @Res() res: Response,
     @Next() next: NextFunction,
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
-    @Param('faceId') faceId: string,
+    @Param() { id, personId, faceId }: SharedSpacePersonFaceParamDto,
   ) {
     await sendFile(res, next, () => this.service.getSpacePersonFaceThumbnail(auth, id, personId, faceId), this.logger);
   }
@@ -420,8 +421,7 @@ export class SharedSpaceController {
   })
   updateSpacePersonRepresentativeFace(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
+    @Param() { id, personId }: SharedSpacePersonParamDto,
     @Body() dto: SpaceRepresentativeFaceUpdateDto,
   ): Promise<SharedSpacePersonResponseDto> {
     return this.service.updateSpacePersonRepresentativeFace(auth, id, personId, dto);
@@ -436,8 +436,7 @@ export class SharedSpaceController {
   })
   getSpacePerson(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
+    @Param() { id, personId }: SharedSpacePersonParamDto,
   ): Promise<SharedSpacePersonResponseDto> {
     return this.service.getSpacePerson(auth, id, personId);
   }
@@ -454,8 +453,7 @@ export class SharedSpaceController {
     @Res() res: Response,
     @Next() next: NextFunction,
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
+    @Param() { id, personId }: SharedSpacePersonParamDto,
   ) {
     await sendFile(res, next, () => this.service.getSpacePersonThumbnail(auth, id, personId), this.logger);
   }
@@ -469,8 +467,7 @@ export class SharedSpaceController {
   })
   updateSpacePerson(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
+    @Param() { id, personId }: SharedSpacePersonParamDto,
     @Body() dto: SharedSpacePersonUpdateDto,
   ): Promise<SharedSpacePersonResponseDto> {
     return this.service.updateSpacePerson(auth, id, personId, dto);
@@ -484,11 +481,7 @@ export class SharedSpaceController {
     description: 'Permanently delete a person and their face assignments from a shared space.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  deleteSpacePerson(
-    @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
-  ): Promise<void> {
+  deleteSpacePerson(@Auth() auth: AuthDto, @Param() { id, personId }: SharedSpacePersonParamDto): Promise<void> {
     return this.service.deleteSpacePerson(auth, id, personId);
   }
 
@@ -502,8 +495,7 @@ export class SharedSpaceController {
   })
   mergeSpacePeople(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
+    @Param() { id, personId }: SharedSpacePersonParamDto,
     @Body() dto: SharedSpacePersonMergeDto,
   ): Promise<void> {
     return this.service.mergeSpacePeople(auth, id, personId, dto);
@@ -519,8 +511,7 @@ export class SharedSpaceController {
   })
   setSpacePersonAlias(
     @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
+    @Param() { id, personId }: SharedSpacePersonParamDto,
     @Body() dto: SharedSpacePersonAliasDto,
   ): Promise<void> {
     return this.service.setSpacePersonAlias(auth, id, personId, dto);
@@ -534,11 +525,7 @@ export class SharedSpaceController {
     description: 'Remove a user-specific alias for a person in a shared space.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  deleteSpacePersonAlias(
-    @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
-  ): Promise<void> {
+  deleteSpacePersonAlias(@Auth() auth: AuthDto, @Param() { id, personId }: SharedSpacePersonParamDto): Promise<void> {
     return this.service.deleteSpacePersonAlias(auth, id, personId);
   }
 
@@ -549,11 +536,7 @@ export class SharedSpaceController {
     description: 'Retrieve asset IDs for all assets containing a specific person in a shared space.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  getSpacePersonAssets(
-    @Auth() auth: AuthDto,
-    @Param('id') id: string,
-    @Param('personId') personId: string,
-  ): Promise<string[]> {
+  getSpacePersonAssets(@Auth() auth: AuthDto, @Param() { id, personId }: SharedSpacePersonParamDto): Promise<string[]> {
     return this.service.getSpacePersonAssets(auth, id, personId);
   }
 
@@ -581,11 +564,53 @@ export class SharedSpaceController {
     description: 'Remove a library link. Library assets will no longer appear in the space.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  unlinkLibrary(
-    @Auth() auth: AuthDto,
-    @Param() { id }: UUIDParamDto,
-    @Param('libraryId') libraryId: string,
-  ): Promise<void> {
+  unlinkLibrary(@Auth() auth: AuthDto, @Param() { id, libraryId }: SharedSpaceLibraryParamDto): Promise<void> {
     return this.service.unlinkLibrary(auth, id, libraryId);
+  }
+
+  @Get(':id/albums')
+  @Authenticated({ permission: Permission.SharedSpaceRead })
+  @Endpoint({ summary: 'List albums linked to a shared space', history: new HistoryBuilder().added('v1').beta('v1') })
+  getSharedSpaceAlbums(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<SharedSpaceLinkedAlbumDto[]> {
+    return this.service.getLinkedAlbums(auth, id);
+  }
+
+  @Put(':id/albums/:albumId')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumCreate })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Endpoint({
+    summary: 'Link an album to a shared space',
+    description: 'Link an album so its photos appear in the space. Requires space editor/owner and album owner/editor.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  linkAlbum(@Auth() auth: AuthDto, @Param() { id, albumId }: SharedSpaceAlbumParamDto): Promise<void> {
+    return this.service.linkAlbum(auth, id, albumId);
+  }
+
+  @Patch(':id/albums/:albumId')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumUpdate })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Endpoint({
+    summary: 'Update a space-album link (showInTimeline)',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  updateSharedSpaceAlbum(
+    @Auth() auth: AuthDto,
+    @Param() { id, albumId }: SharedSpaceAlbumParamDto,
+    @Body() dto: SharedSpaceAlbumLinkUpdateDto,
+  ): Promise<void> {
+    return this.service.updateAlbumLink(auth, id, albumId, dto);
+  }
+
+  @Delete(':id/albums/:albumId')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumDelete })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Endpoint({
+    summary: 'Unlink an album from a shared space',
+    description: 'Remove an album link. Album assets will no longer appear in the space.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  unlinkAlbum(@Auth() auth: AuthDto, @Param() { id, albumId }: SharedSpaceAlbumParamDto): Promise<void> {
+    return this.service.unlinkAlbum(auth, id, albumId);
   }
 }
