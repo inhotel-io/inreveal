@@ -280,17 +280,17 @@ export class SharedSpaceController {
 
   @Delete(':id/assets')
   @Authenticated({ permission: Permission.SharedSpaceAssetDelete })
-  @HttpCode(HttpStatus.NO_CONTENT)
   @Endpoint({
     summary: 'Remove assets from a shared space',
-    description: 'Remove one or more assets from a shared space.',
+    description:
+      'Remove one or more assets from a shared space. Returns the ids that were actually removed (a selected asset that is only present via a linked album, not a direct member, is a no-op and is not returned).',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
   removeAssets(
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,
     @Body() dto: SharedSpaceAssetRemoveDto,
-  ): Promise<void> {
+  ): Promise<string[]> {
     return this.service.removeAssets(auth, id, dto);
   }
 

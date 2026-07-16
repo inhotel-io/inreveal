@@ -858,12 +858,13 @@ describe('/shared-spaces', () => {
       const space = await utils.createSpace(user1.accessToken, { name: 'Remove Asset Owner' });
       await utils.addSpaceAssets(user1.accessToken, space.id, [user1Asset1.id]);
 
-      const { status } = await request(app)
+      const { status, body } = await request(app)
         .delete(`/shared-spaces/${space.id}/assets`)
         .set('Authorization', `Bearer ${user1.accessToken}`)
         .send({ assetIds: [user1Asset1.id] });
 
-      expect(status).toBe(204);
+      expect(status).toBe(200);
+      expect(body).toEqual([user1Asset1.id]);
 
       // Verify asset was removed
       const { body: spaceDetail } = await request(app)
@@ -878,12 +879,13 @@ describe('/shared-spaces', () => {
       await utils.addSpaceMember(user1.accessToken, space.id, { userId: user2.userId, role: SharedSpaceRole.Editor });
       await utils.addSpaceAssets(user1.accessToken, space.id, [user1Asset1.id]);
 
-      const { status } = await request(app)
+      const { status, body } = await request(app)
         .delete(`/shared-spaces/${space.id}/assets`)
         .set('Authorization', `Bearer ${user2.accessToken}`)
         .send({ assetIds: [user1Asset1.id] });
 
-      expect(status).toBe(204);
+      expect(status).toBe(200);
+      expect(body).toEqual([user1Asset1.id]);
     });
 
     it('should reject viewer removing assets', async () => {

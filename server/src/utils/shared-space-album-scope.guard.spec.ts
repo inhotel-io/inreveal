@@ -58,7 +58,7 @@ const EXTRA_FILES = ['src/utils/database.ts'];
 // encode the direct/library/album access path). Detected as bare identifiers so a
 // call, spread, or import all count.
 const SPACE_HELPER =
-  /\b(spaceAssetPathBranches|spaceAlbumAssetExists|spaceAlbumAssetExistsSql|spaceDirectAssetExists|spaceLibraryAssetExists|accessibleSpaces|accessibleSpaceAlbums|accessibleLibraries)\b/;
+  /\b(spaceAssetPathBranches|spaceAlbumAssetExists|spaceAlbumAssetExistsSql|spaceContributedAssetExists|spaceDirectAssetExists|spaceLibraryAssetExists|accessibleSpaces|accessibleSpaceAlbums|accessibleLibraries)\b/;
 
 // The raw join tables. A reference to any of these is also a space read.
 const SPACE_TABLE = /\bshared_space_(asset|library|album)\b/;
@@ -104,6 +104,11 @@ const NON_DECL = new Set([
   // (e.g. albumSharedSpaceScope) — misattributing the enclosing fn and defeating its allowlist
   // entry (Slice 1 / security-1 regression).
   'spaceVisibilityGate',
+  // Same reason: `spaceAlbumAssetExists(eb, {` / `spaceContributedAssetExists(eb, {` as the first
+  // token of a wrapped `.where((eb) => eb.not(...))` arm would otherwise be read as a declaration,
+  // misattributing the enclosing membership/retention fn and defeating its VIS_ALLOWLIST entry.
+  'spaceAlbumAssetExists',
+  'spaceContributedAssetExists',
   // SQL keywords that appear as the first token in raw sql`` template literal lines
   // and would otherwise be misidentified as TypeScript function names by DECL.
   'AND',
@@ -298,14 +303,10 @@ const VIS_ALLOWLIST: Record<string, string> = {
   'shared-space.repository.ts::getAlbumAssetIdsWithoutOtherSpacePath':
     'anti-join membership check for removals; no asset data',
 
-  // — Remove-path stack expansion (#751): reads shared_space_asset JOIN to find the
-  //   same-stack DIRECT members of a space so the whole stack is removed together.
-  //   Returns member ids for DELETION (never asset content to a client), and must
-  //   catch every member regardless of visibility — a gate would orphan Hidden/Locked
-  //   members. (The add-path sibling query getOwnedStackSiblingIds carries the gate
-  //   via visibleSpaceAssetVisibilities and passes the guard directly.)
-  'shared-space.repository.ts::getStackSiblingIdsInSpace':
-    'removal-path stack expansion; returns direct-member ids for deletion, not asset content',
+  // — Remove-path direct-membership check (#751 / S5): reads shared_space_asset to find which of the
+  //   selected assets are DIRECT space members, so stack-atomic removal only ever expands from — and
+  //   deletes — direct members. Returns member ids for DELETION, never asset content to a client.
+  'shared-space.repository.ts::getDirectAssetIds': 'direct-membership id check for removals; no asset content',
 
   // — addedById attribution: select shared_space_*.addedById (who added the asset),
   //   never asset content. No visibility gate needed.

@@ -296,12 +296,12 @@ describe('/sync — shared-space streams', () => {
       );
       await ackAll(member.accessToken, initial);
 
-      // Remove the asset from the space (DELETE /shared-spaces/:id/assets).
+      // Remove the asset from the space (DELETE /shared-spaces/:id/assets) — returns 200 + removed ids.
       await request(app)
         .delete(`/shared-spaces/${space.id}/assets`)
         .set(asBearerAuth(admin.accessToken))
         .send({ assetIds: [asset.id] })
-        .expect(204);
+        .expect(200);
 
       const next = await syncStream(member.accessToken, [
         SyncRequestType.SharedSpaceAssetsV1,

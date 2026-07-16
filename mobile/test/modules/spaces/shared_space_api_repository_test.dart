@@ -427,7 +427,7 @@ void main() {
 
   group('removeAssets', () {
     test('calls removeAssets on API with correct DTO', () async {
-      when(() => mockApi.removeAssets('space-1', any())).thenAnswer((_) async => true);
+      when(() => mockApi.removeAssets('space-1', any())).thenAnswer((_) async => <String>['asset-1']);
 
       await repository.removeAssets('space-1', ['asset-1']);
 

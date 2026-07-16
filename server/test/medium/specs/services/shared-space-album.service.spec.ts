@@ -990,6 +990,115 @@ describe('removeAssets (medium) — multi-path face retention', () => {
     expect(remainingIds).toContain(faceXId);
     expect(remainingIds).not.toContain(faceYId);
   });
+
+  // B1: the asset is still in the space via a CROSS-OWNER CONTRIBUTION (album_space_asset, not
+  // album_asset). The read/timeline layer keeps it visible, so removing the direct add must NOT
+  // sweep its face — otherwise the person vanishes from the space while the photo still shows.
+  it('retains face for an asset still reachable via a cross-owner contribution (album_space_asset) after direct removal', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { user: partner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'ContribRetentionAlbum' });
+
+    // assetZ: direct-added AND reachable via a cross-owner contribution (album_space_asset, NOT album_asset).
+    const { asset: assetZ } = await ctx.newAsset({ ownerId: user.id });
+
+    // Link the album to the space and direct-add assetZ.
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: assetZ.id });
+
+    // Contribute assetZ into the linked album via the #764 cross-owner path (album_space_asset).
+    await defaultDatabase
+      .insertInto('album_space_asset')
+      .values({ albumId: album.id, assetId: assetZ.id, spaceId: space.id, addedById: partner.id })
+      .execute();
+
+    // Project a space person onto assetZ's face.
+    const { result: faceZId } = await ctx.newAssetFace({ assetId: assetZ.id });
+    const repo = ctx.get(SharedSpaceRepository);
+    const spacePerson = await repo.createPerson({
+      spaceId: space.id,
+      name: 'ContribPerson',
+      type: 'person',
+      representativeFaceId: null,
+    });
+    await repo.addPersonFaces([{ personId: spacePerson.id, assetFaceId: faceZId }]);
+
+    // Remove assetZ from the DIRECT list only.
+    await sut.removeAssets(authFromUser(user), space.id, { assetIds: [assetZ.id] });
+
+    // assetZ is still in the space via the contribution → its face MUST be retained.
+    const facesAfter = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    expect(facesAfter.map((f) => f.assetFaceId)).toContain(faceZId);
+  });
+});
+
+// The read/timeline layer unions cross-owner contributions (album_space_asset) via the scope
+// helper. The count + reconcile-pager surfaces must union them too, or the space header undercounts
+// and the face-projection reconcile can never (re)cover a contributed asset.
+describe('contributed asset consistency (count + reconcile pager)', () => {
+  it('getAssetCount and getAssetIdsInSpacePage include a cross-owner contribution', async () => {
+    const { ctx } = setup();
+    const repo = ctx.get(SharedSpaceRepository);
+    const { user } = await ctx.newUser();
+    const { user: partner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'ContribSweepAlbum' });
+    await repo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+
+    // A cross-owner contribution lives in album_space_asset (not album_asset); showInTimeline defaults true.
+    const { asset } = await ctx.newAsset({ ownerId: partner.id, visibility: AssetVisibility.Timeline });
+    await defaultDatabase
+      .insertInto('album_space_asset')
+      .values({ albumId: album.id, assetId: asset.id, spaceId: space.id, addedById: partner.id })
+      .execute();
+
+    // S6: the space header count must include the contribution (agree with the timeline).
+    expect(await repo.getAssetCount(space.id)).toBe(1);
+
+    // S1: the reconcile pager must enumerate it so face projection can (re)cover it.
+    const page = await repo.getAssetIdsInSpacePage(space.id, { limit: 100 });
+    expect(page.map((r) => r.assetId)).toContain(asset.id);
+  });
+});
+
+// S5: removeAssets expands stacks for atomicity, but only DIRECT members can be removed. Expanding
+// from an album-only selection would otherwise drag a directly-added stack sibling out of the space.
+describe('removeAssets (medium) — stack expansion bounded to direct members (S5)', () => {
+  it('removing an album-only asset does not remove a directly-added stack sibling', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'owner' });
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'StackBoundAlbum' });
+
+    // A stack: primaryA is DIRECTLY in the space; childC is ONLY in the linked album (not direct).
+    const { asset: primaryA } = await ctx.newAsset({ ownerId: user.id });
+    const { asset: childC } = await ctx.newAsset({ ownerId: user.id });
+    await ctx.newStack({ ownerId: user.id }, [primaryA.id, childC.id]);
+
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: childC.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: primaryA.id });
+
+    // Remove the album-only childC from the space (a no-op for the direct list).
+    await sut.removeAssets(authFromUser(user), space.id, { assetIds: [childC.id] });
+
+    // primaryA was directly added and NOT selected — childC's stack expansion must not drag it out.
+    const directRows = await defaultDatabase
+      .selectFrom('shared_space_asset')
+      .select('assetId')
+      .where('spaceId', '=', space.id)
+      .execute();
+    expect(directRows.map((r) => r.assetId)).toContain(primaryA.id);
+  });
 });
 
 /**

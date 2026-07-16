@@ -274,6 +274,9 @@ describe(SharedSpaceService.name, () => {
     // Default: no stacks — expansion is the identity. Individual tests override
     // this to exercise stack-atomic add/remove (#751).
     mocks.stack.getStackedAssetIds.mockImplementation((ids: string[]) => Promise.resolve(ids));
+    // Default: treat every selected asset as a direct member and remove exactly what was asked (the
+    // real repo filters to direct members and returns the deleted ids — see the medium S5 test).
+    mocks.sharedSpace.getDirectAssetIds.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
   });
 
   it('should work', () => {
@@ -2945,7 +2948,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(new Date());
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2963,7 +2966,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(lastDate);
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId, lastActivityAt: lastDate }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -2981,7 +2984,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(void 0);
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId, lastActivityAt: null }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -3000,7 +3003,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
       mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(void 0);
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId, thumbnailAssetId: null }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -3023,7 +3026,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
       mocks.sharedSpace.getById.mockResolvedValue(space);
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(new Date());
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -3051,7 +3054,7 @@ describe(SharedSpaceService.name, () => {
     it('should log activity when removing assets', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace());
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(void 0);
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace());
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -3075,7 +3078,7 @@ describe(SharedSpaceService.name, () => {
 
       mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(new Date());
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -3097,7 +3100,7 @@ describe(SharedSpaceService.name, () => {
         makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor }),
       );
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(new Date());
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -3138,7 +3141,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
       mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
       mocks.stack.getStackedAssetIds.mockResolvedValue([primaryId, childId]);
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(void 0);
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -3163,7 +3166,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(editorMember);
       mocks.sharedSpace.getById.mockResolvedValue(space);
       mocks.stack.getStackedAssetIds.mockResolvedValue([primaryId, childId]);
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(void 0);
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId, thumbnailAssetId: null }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -3187,7 +3190,7 @@ describe(SharedSpaceService.name, () => {
       // getStackedAssetIds excludes soft-deleted assets, so a trashed input is
       // absent from its result — the service must still honor the explicit id.
       mocks.stack.getStackedAssetIds.mockResolvedValue([]);
-      mocks.sharedSpace.removeAssets.mockResolvedValue(void 0);
+      mocks.sharedSpace.removeAssets.mockImplementation((_spaceId: string, ids: string[]) => Promise.resolve(ids));
       mocks.sharedSpace.getLastAssetAddedAt.mockResolvedValue(void 0);
       mocks.sharedSpace.update.mockResolvedValue(factory.sharedSpace({ id: spaceId }));
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);

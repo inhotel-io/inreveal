@@ -26,15 +26,18 @@
 
     try {
       const assetIds = assets.map((a) => a.id);
-      await removeAssets({
+      // The server removes only DIRECT space members and returns exactly what it removed — a selected
+      // asset that is present only via a linked album is a no-op. Reflect the real result so we never
+      // optimistically hide (or claim to have removed) an album-projected asset.
+      const removedAssetIds = await removeAssets({
         id: spaceId,
         sharedSpaceAssetRemoveDto: { assetIds },
       });
 
-      eventManager.emit('SpaceRemoveAssets', { assetIds, spaceId });
-      onRemove?.(assetIds);
+      eventManager.emit('SpaceRemoveAssets', { assetIds: removedAssetIds, spaceId });
+      onRemove?.(removedAssetIds);
 
-      toastManager.success($t('assets_removed_count', { values: { count: assetIds.length } }));
+      toastManager.success($t('assets_removed_count', { values: { count: removedAssetIds.length } }));
       assetMultiSelectManager.clear();
     } catch (error) {
       handleError(error, $t('errors.error_removing_assets_from_space'));

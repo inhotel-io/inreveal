@@ -901,24 +901,35 @@ export class SharedSpaceService extends BaseService {
     }));
   }
 
-  async removeAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetRemoveDto): Promise<void> {
+  async removeAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetRemoveDto): Promise<string[]> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
 
     const space = await this.sharedSpaceRepository.getById(spaceId);
     if (!space) {
       throw new NotFoundException('Space not found');
     }
-    // Removal is stack-atomic too — removing any member removes the whole stack
-    // so no orphaned child is left contributed to the space (#751).
-    const assetIds = await this.expandStackAssetIds(dto.assetIds);
-    await this.sharedSpaceRepository.removeAssets(spaceId, assetIds);
+    // Only DIRECT space members can be removed here. Stack atomicity (#751) then expands from those
+    // direct selections — never from an album-projected asset, which would otherwise drag a
+    // directly-added stack sibling out of the space (S5). removeAssets deletes only shared_space_asset
+    // rows and returns exactly the ids it deleted, so any album-only sibling in the expanded set is a
+    // harmless no-op and never counted as removed.
+    const directAssetIds = await this.sharedSpaceRepository.getDirectAssetIds(spaceId, dto.assetIds);
+    const expandedAssetIds = await this.expandStackAssetIds(directAssetIds);
+    const removedAssetIds = await this.sharedSpaceRepository.removeAssets(spaceId, expandedAssetIds);
+
+    // Nothing was actually a direct member (e.g. only album-projected assets were selected) — the
+    // removal is a true no-op, so we skip the activity log and thumbnail/face bookkeeping and report
+    // that zero assets were removed (the client must not claim success it did not achieve).
+    if (removedAssetIds.length === 0) {
+      return [];
+    }
 
     const lastAddedAt = await this.sharedSpaceRepository.getLastAssetAddedAt(spaceId);
     const updateData: { lastActivityAt: Date | null; thumbnailAssetId?: null } = {
       lastActivityAt: lastAddedAt ?? null,
     };
 
-    if (space?.thumbnailAssetId && assetIds.includes(space.thumbnailAssetId)) {
+    if (space?.thumbnailAssetId && removedAssetIds.includes(space.thumbnailAssetId)) {
       updateData.thumbnailAssetId = null;
     }
 
@@ -928,18 +939,23 @@ export class SharedSpaceService extends BaseService {
       spaceId,
       userId: auth.user.id,
       type: SharedSpaceActivityType.AssetRemove,
-      data: { count: assetIds.length },
+      data: { count: removedAssetIds.length },
     });
 
     // Multi-path face retention: an asset removed as a DIRECT space asset may still
     // be in the space via a linked album or library — only sweep faces for assets
     // that have no other path into the space (space-album feature).
-    const orphanedAssetIds = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(spaceId, assetIds);
+    const orphanedAssetIds = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(
+      spaceId,
+      removedAssetIds,
+    );
     if (orphanedAssetIds.length > 0) {
       await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphanedAssetIds);
       await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
       await this.queueSpacePersonMetadataBackfill();
     }
+
+    return removedAssetIds;
   }
 
   async getMapMarkers(auth: AuthDto, id: string) {

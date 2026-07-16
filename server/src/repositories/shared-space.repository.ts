@@ -18,6 +18,7 @@ import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, searchAssetBuilder } from 'src/utils/database';
 import {
   spaceAlbumAssetExists,
+  spaceContributedAssetExists,
   spaceVisibilityGate,
   spaceVisibleAssetVisibilities,
 } from 'src/utils/shared-space-album-scope';
@@ -373,6 +374,23 @@ export class SharedSpaceRepository {
               .where('asset.isOffline', '=', false)
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
+          .union(
+            this.db
+              .selectFrom('asset')
+              .select('asset.id')
+              // Cross-owner contributions (#764) live in album_space_asset, not album_asset. Every
+              // read/timeline surface unions them via the scope helper, so this surface must too.
+              .where((eb) =>
+                spaceContributedAssetExists(eb, {
+                  correlateAssetId: 'asset.id',
+                  scope: { spaceId },
+                  requireShowInTimeline: true,
+                }),
+              )
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
           .as('combined'),
       )
       .select((eb) => eb.fn.countAll().as('count'))
@@ -412,28 +430,6 @@ export class SharedSpaceRepository {
       .execute();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
-  async getOwnedStackSiblingIds(userId: string, assetIds: string[]): Promise<string[]> {
-    if (assetIds.length === 0) {
-      return [];
-    }
-
-    const rows = await this.db
-      .selectFrom('asset as seed')
-      .innerJoin('asset as sibling', 'sibling.stackId', 'seed.stackId')
-      .select('sibling.id as assetId')
-      .distinct()
-      .where('seed.id', 'in', assetIds)
-      .where('seed.stackId', 'is not', null)
-      .where('sibling.ownerId', '=', userId)
-      .where('sibling.deletedAt', 'is', null)
-      .where('sibling.isOffline', '=', false)
-      .where('sibling.visibility', 'in', visibleSpaceAssetVisibilities)
-      .execute();
-
-    return rows.map((row) => row.assetId);
-  }
-
   /**
    * Returns the set of space IDs that contain ANY of the given asset IDs
    * via direct membership (`shared_space_asset`) AND in which the user has
@@ -469,32 +465,34 @@ export class SharedSpaceRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
-  async removeAssets(spaceId: string, assetIds: string[]) {
-    await this.db
-      .deleteFrom('shared_space_asset')
-      .where('spaceId', '=', spaceId)
-      .where('assetId', 'in', assetIds)
-      .execute();
-  }
-
-  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
-  async getStackSiblingIdsInSpace(spaceId: string, assetIds: string[]): Promise<string[]> {
+  async removeAssets(spaceId: string, assetIds: string[]): Promise<string[]> {
     if (assetIds.length === 0) {
       return [];
     }
-
     const rows = await this.db
-      .selectFrom('asset as seed')
-      .innerJoin('asset as sibling', 'sibling.stackId', 'seed.stackId')
-      .innerJoin('shared_space_asset', 'shared_space_asset.assetId', 'sibling.id')
-      .select('sibling.id as assetId')
-      .distinct()
-      .where('seed.id', 'in', assetIds)
-      .where('seed.stackId', 'is not', null)
-      .where('shared_space_asset.spaceId', '=', spaceId)
+      .deleteFrom('shared_space_asset')
+      .where('spaceId', '=', spaceId)
+      .where('assetId', 'in', assetIds)
+      .returning('assetId')
       .execute();
+    return rows.map((r) => r.assetId);
+  }
 
-    return rows.map((row) => row.assetId);
+  // The subset of assetIds that are DIRECT members of the space (shared_space_asset rows). Used by
+  // removeAssets to bound stack-atomic expansion to direct selections, so an album-projected asset
+  // can never drag a directly-added stack sibling out of the space (S5).
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
+  async getDirectAssetIds(spaceId: string, assetIds: string[]): Promise<string[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+    const rows = await this.db
+      .selectFrom('shared_space_asset')
+      .select('assetId')
+      .where('spaceId', '=', spaceId)
+      .where('assetId', 'in', assetIds)
+      .execute();
+    return rows.map((r) => r.assetId);
   }
 
   /**
@@ -1059,6 +1057,25 @@ export class SharedSpaceRepository {
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
               .where('asset.thumbhash', 'is not', null),
           )
+          .union(
+            this.db
+              .selectFrom('asset')
+              .select(['asset.id', 'asset.thumbhash', 'asset.fileCreatedAt'])
+              // Cross-owner contributions (#764) live in album_space_asset, not album_asset. Every
+              // read/timeline surface unions them via the scope helper, so this surface must too.
+              .where((eb) =>
+                spaceContributedAssetExists(eb, {
+                  correlateAssetId: 'asset.id',
+                  scope: { spaceId },
+                  requireShowInTimeline: true,
+                }),
+              )
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.type', '=', AssetType.Image)
+              .where('asset.thumbhash', 'is not', null)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
           .as('combined'),
       )
       .select(['combined.id', 'combined.thumbhash'])
@@ -1100,6 +1117,23 @@ export class SharedSpaceRepository {
               .select('asset.createdAt as ts')
               .where('shared_space_album.spaceId', '=', spaceId)
               .where('shared_space_album.showInTimeline', '=', true)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
+          .union(
+            this.db
+              .selectFrom('asset')
+              .select('asset.createdAt as ts')
+              // Cross-owner contributions (#764) live in album_space_asset, not album_asset. Every
+              // read/timeline surface unions them via the scope helper, so this surface must too.
+              .where((eb) =>
+                spaceContributedAssetExists(eb, {
+                  correlateAssetId: 'asset.id',
+                  scope: { spaceId },
+                  requireShowInTimeline: true,
+                }),
+              )
               .where('asset.deletedAt', 'is', null)
               .where('asset.isOffline', '=', false)
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
@@ -2680,10 +2714,14 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
   async getAlbumAssetIdsWithoutOtherSpacePath(spaceId: string, albumId: string): Promise<string[]> {
+    // NB: arms are hand-rolled (not routed through spaceAlbumAssetExists) because the outer query
+    // already selects from album_asset; the helper joins its OWN unaliased album_asset and a bare
+    // correlateAssetId would resolve to the helper's join (a self-match returning every row).
     const rows = await this.db
       .selectFrom('album_asset')
       .select('album_asset.assetId')
       .where('album_asset.albumId', '=', albumId)
+      // Not directly added to the space.
       .where((eb) =>
         eb.not(
           eb.exists(
@@ -2694,6 +2732,7 @@ export class SharedSpaceRepository {
           ),
         ),
       )
+      // Not reachable via ANOTHER linked album's own contents (album_asset), excluding this album.
       .where((eb) =>
         eb.not(
           eb.exists(
@@ -2709,6 +2748,28 @@ export class SharedSpaceRepository {
           ),
         ),
       )
+      // Not reachable via ANOTHER linked album's cross-owner contributions (album_space_asset, #764),
+      // excluding this album — the arm the read layer unions but this anti-join previously omitted.
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_space_asset', (join) =>
+                join
+                  .onRef('album_space_asset.albumId', '=', 'shared_space_album.albumId')
+                  .onRef('album_space_asset.spaceId', '=', 'shared_space_album.spaceId'),
+              )
+              .whereRef('album_space_asset.assetId', '=', 'album_asset.assetId')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.albumId', '!=', albumId),
+          ),
+        ),
+      )
+      // Not reachable via a linked library.
       .where((eb) =>
         eb.not(
           eb.exists(
@@ -2746,20 +2807,11 @@ export class SharedSpaceRepository {
           ),
         ),
       )
-      .where((eb) =>
-        eb.not(
-          eb.exists(
-            eb
-              .selectFrom('shared_space_album')
-              .innerJoin('album', (join) =>
-                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
-              )
-              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
-              .whereRef('album_asset.assetId', '=', 'asset.id')
-              .where('shared_space_album.spaceId', '=', spaceId),
-          ),
-        ),
-      )
+      // Album path — BOTH the album owner's own album_asset rows AND cross-owner album_space_asset
+      // contributions (#764), via the canonical scope helper. Every read/visibility surface unions
+      // both arms; routing retention through the same helper keeps them in agreement. Omitting the
+      // contributed arm sweeps faces for assets still visible in the space via a contribution.
+      .where((eb) => eb.not(spaceAlbumAssetExists(eb, { correlateAssetId: 'asset.id', scope: { spaceId } })))
       .where((eb) =>
         eb.not(
           eb.exists(
@@ -3076,6 +3128,23 @@ export class SharedSpaceRepository {
               .where('asset.isOffline', '=', false)
               .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
           )
+          .union(
+            this.db
+              .selectFrom('asset')
+              .select('asset.id')
+              .where('asset.id', '=', assetId)
+              // Cross-owner contributions (#764) live in album_space_asset, not album_asset. Every
+              // read/timeline surface unions them via the scope helper, so this surface must too.
+              .where((eb) =>
+                spaceContributedAssetExists(eb, {
+                  correlateAssetId: 'asset.id',
+                  scope: { spaceId },
+                }),
+              )
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
           .as('combined'),
       )
       .select('combined.id')
@@ -3167,6 +3236,18 @@ export class SharedSpaceRepository {
           .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
           .select('asset.id')
           .where('shared_space_library.spaceId', '=', spaceId)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+      )
+      .union(
+        this.db
+          .selectFrom('asset')
+          .select('asset.id')
+          // Album path: owner album_asset + cross-owner album_space_asset contributions (#764).
+          // Face membership is NOT gated by showInTimeline, so the reconcile re-projects every album
+          // asset's faces — matching the retention helper's union so projection and retention agree.
+          .where((eb) => spaceAlbumAssetExists(eb, { correlateAssetId: 'asset.id', scope: { spaceId } }))
           .where('asset.deletedAt', 'is', null)
           .where('asset.isOffline', '=', false)
           .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
