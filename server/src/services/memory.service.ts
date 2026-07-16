@@ -134,6 +134,11 @@ export class MemoryService extends BaseService {
     const startOfDay = target.startOf('day');
     const showAt = startOfDay.toJSDate();
     const seenDedupeKeys = new Set<string>();
+    // A multi-day (recap) rule may occupy at most one slot per trigger day. Without this, a
+    // single recap type that qualifies for several past years could take BOTH daily slots and
+    // hold them for its whole 7–10-day window, monthly starving the 1-day rules. 1-day rules
+    // are unaffected and may still fill every remaining slot on their own day.
+    const insertedMultiDayRuleIds = new Set<string>();
     const evaluatedCandidates = await this.evaluateRuleCandidates(ownerId, target, enabledRuleKeys);
     const candidates = evaluatedCandidates.toSorted((left, right) => right.score - left.score);
     let inserted = 0;
@@ -148,6 +153,11 @@ export class MemoryService extends BaseService {
       }
 
       seenDedupeKeys.add(candidate.dedupeKey);
+
+      const isMultiDay = (candidate.visibleForDays ?? 1) > 1;
+      if (isMultiDay && insertedMultiDayRuleIds.has(candidate.ruleId)) {
+        continue;
+      }
 
       if (await this.memoryRepository.hasRuleMemory(ownerId, candidate.ruleId, candidate.dedupeKey)) {
         continue;
@@ -176,6 +186,9 @@ export class MemoryService extends BaseService {
         },
         new Set(candidate.assetIds),
       );
+      if (isMultiDay) {
+        insertedMultiDayRuleIds.add(candidate.ruleId);
+      }
       inserted++;
     }
   }

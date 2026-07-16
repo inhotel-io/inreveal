@@ -117,26 +117,28 @@ monthly recap generated on the 1st would vanish on the 2nd. To let recaps linger
 10 days, `on_this_day_place` 1 day (it is date-anchored and regenerates every day, so it
 does not need a window).
 
-**Daily-limit interaction (unchanged logic, documented):** `RULE_DAILY_LIMIT` (2) is
-enforced by counting rule memories **visible on `target`** (`search({ type: Rule, for:
-target })`, a visibility query — so a multi-day recap holds its slot for its whole window).
-Be precise about the consequence: a single recap **type** emits up to `MAX_YEARS`
-candidates (`month_recap`/`favorites_throwback` up to 3, `season_recap` up to 2), so on a
-trigger day when **two or more prior years qualify**, that one type can take **both** daily
-slots and hold them for its 7–10-day window. So whenever ≥2 prior years qualify:
+**Daily-limit interaction:** `RULE_DAILY_LIMIT` (2) is enforced by counting rule memories
+**visible on `target`** (`search({ type: Rule, for: target })`, a visibility query — so a
+multi-day recap holds its slot for its whole window). A single recap **type** emits up to
+`MAX_YEARS` candidates (`month_recap`/`favorites_throwback` up to 3, `season_recap` up to 2),
+so without a guard one type qualifying for several past years could take **both** daily
+slots and hold them for its 7–10-day window — roughly **monthly** — fully suppressing the
+daily rules (`on_this_day_place`, `recent_trip`).
 
-- the **1st**–7th of most months, `month_recap` can occupy both slots;
-- the **15th**–21st, `favorites_throwback` can occupy both slots (it also scores highest of
-  the recaps, 200–270);
-- at season starts, `month_recap` + `season_recap` compound.
+**Per-day cap (implemented):** `createRuleMemories` allows a **multi-day rule**
+(`visibleForDays > 1`) at most **one** inserted memory per trigger day
+(`insertedMultiDayRuleIds`). 1-day rules are unaffected (they can still fill every remaining
+slot on their own day). Consequences:
 
-During those windows `on_this_day_place` (and `recent_trip`) are fully suppressed. That is
-roughly **monthly** for libraries with several years of history — not the rare event an
-earlier draft implied. It is self-healing (windows expire) and no data is lost, but it is a
-real product trade-off. Levers, all **out of scope here** and flagged in §8: cap emission to
-**one memory per recap type per day**, and/or bump `RULE_DAILY_LIMIT`. The slot-counting
-itself is covered by the existing `memory.service.spec` daily-cap test (an already-visible
-rule memory reduces `remainingSlots`).
+- **1st** of a month: `month_recap` takes one slot, one stays free for a daily rule.
+- **15th**: `favorites_throwback` takes one slot, one stays free.
+- **Season starts** (Mar/Jun/Sep/Dec 1): `month_recap` + `season_recap` are two _different_
+  multi-day rules, so they can still take both slots — but that is only **~4×/yr** and is two
+  distinct recaps, not two of the same. This is the acceptable residual.
+
+Covered by `memory.service.spec` ("caps a multi-day recap rule to one memory per day, leaving
+a slot for a daily rule") plus the existing daily-cap test (a visible rule memory reduces
+`remainingSlots`).
 
 ## 4. Shared repository query
 
@@ -493,11 +495,9 @@ persisted `showAt`/`hideAt`:
 - [ ] Verify mobile memory-type settings enumeration; edit if it hardcodes a list.
 - [ ] Decide whether to refactor `recent_trip` to import the shared `pickEvenlySpaced`
       (optional cleanup; keep behavior identical + its existing tests green).
-- [ ] Out of scope, but revisit — the recap-starvation trade-off (§3.2, corrected): a single
-      recap type can take **both** daily slots for its 7–10-day window (roughly monthly),
-      fully suppressing `on_this_day_place`/`recent_trip`. Two candidate levers: **cap emission
-      to one memory per recap type per day** (keeps a slot free for daily rules) and/or bump
-      `RULE_DAILY_LIMIT` 2 → 3. Product decision for the maintainer.
+- [x] **Resolved** — recap-starvation trade-off (§3.2): implemented the per-day cap (a
+      multi-day rule inserts at most one memory per trigger day), so the daily rules keep a
+      slot except at the ~4×/yr season-starts. `RULE_DAILY_LIMIT` stays 2.
 - [ ] Out of scope unless profiling demands it: the month/season queries filter on
       `extract(month …)`, which the existing `date_trunc('MONTH', …)` functional index does
       **not** serve, so they scan the owner's Timeline assets and filter in-heap (background
