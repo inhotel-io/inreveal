@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
-import { AssetVisibility, SharedSpaceRole } from 'src/enum';
+import { AssetVisibility, SharedSpaceRole, SyncEntityType } from 'src/enum';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SyncRepository } from 'src/repositories/sync.repository';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
@@ -452,5 +453,129 @@ describe('SharedSpaceAlbumToAssetSync — multi-space co-linked album (I2 §8.3)
 
     const s1 = await drain(sut.getBackfill({ nowId: NOW_ID, beforeUpdateId: BEFORE_UPDATE_ID }, album.id, memberS1.id));
     expect(s1.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+});
+
+describe('SharedSpaceAlbumToAssetSync — unlink revocation + re-link re-delivery (P0-1 / D1-b)', () => {
+  // eslint-disable-next-line unicorn/consistent-function-scoping -- test-local seed factory
+  const seedCoLinked = async (ctx: SyncTestContext) => {
+    const { user: owner } = await ctx.newUser();
+    const { user: m } = await ctx.newUser(); // member of BOTH spaces
+    const { user: carol } = await ctx.newUser(); // asset owner
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space: s1 } = await ctx.newSharedSpace({ createdById: owner.id });
+    const { space: s2 } = await ctx.newSharedSpace({ createdById: owner.id });
+    for (const s of [s1, s2]) {
+      await ctx.newSharedSpaceMember({ spaceId: s.id, userId: owner.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: s.id, userId: m.id, role: SharedSpaceRole.Editor });
+      await ctx.newSharedSpaceAlbum({ spaceId: s.id, albumId: album.id });
+    }
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: s1.id });
+    return { owner, m, album, asset, s1, s2 };
+  };
+
+  it('unlink tombstones the contribution for a member who keeps the album via a co-linked space; the row is retained', async () => {
+    const { ctx, db, sut } = setup();
+    const spaceRepo = ctx.get(SharedSpaceRepository);
+    const { m, album, asset, s1 } = await seedCoLinked(ctx);
+
+    await spaceRepo.removeAlbum(s1.id, album.id);
+
+    // D1-(b) retention: the row survives for re-link reversibility …
+    const row = await db
+      .selectFrom('album_space_asset')
+      .select('assetId')
+      .where('albumId', '=', album.id)
+      .executeTakeFirst();
+    expect(row).toBeDefined();
+    // … but the member device receives a delete tombstone (album stays accessible via S2).
+    const deletes = await drain(sut.getDeletes({ nowId: NOW_ID, userId: m.id }));
+    expect(deletes.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+
+  it('re-link bumps the retained contribution so getUpserts re-delivers past a pre-unlink ack', async () => {
+    const { ctx, db, sut } = setup();
+    const spaceRepo = ctx.get(SharedSpaceRepository);
+    const { owner, m, album, asset, s1 } = await seedCoLinked(ctx);
+
+    const before = await db
+      .selectFrom('album_space_asset')
+      .select('updateId')
+      .where('albumId', '=', album.id)
+      .executeTakeFirstOrThrow();
+
+    await spaceRepo.removeAlbum(s1.id, album.id);
+    const relinked = await spaceRepo.addAlbum({ spaceId: s1.id, albumId: album.id, addedById: owner.id });
+    expect(relinked).toBeDefined();
+
+    // A device that acked past the original updateId must re-receive the edge.
+    const rows = await drain(
+      sut.getUpserts({
+        nowId: NOW_ID,
+        userId: m.id,
+        ack: { type: SyncEntityType.SharedSpaceAlbumToAssetV1, updateId: before.updateId },
+      }),
+    );
+    expect(rows.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+  });
+
+  it('member-departure link cleanup (removeOwnedAlbumLinksAddedBy) tombstones the removed links’ contributions', async () => {
+    const { ctx, db, sut } = setup();
+    const spaceRepo = ctx.get(SharedSpaceRepository);
+    const { user: dep } = await ctx.newUser(); // departing member, owns + added the album
+    const { user: m } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: dep.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space: s1 } = await ctx.newSharedSpace({ createdById: dep.id });
+    const { space: s2 } = await ctx.newSharedSpace({ createdById: dep.id });
+    for (const s of [s1, s2]) {
+      await ctx.newSharedSpaceMember({ spaceId: s.id, userId: dep.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: s.id, userId: m.id, role: SharedSpaceRole.Editor });
+      await ctx.newSharedSpaceAlbum({ spaceId: s.id, albumId: album.id, addedById: dep.id });
+    }
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: s1.id });
+
+    const removed = await spaceRepo.removeOwnedAlbumLinksAddedBy(s1.id, dep.id);
+    expect(removed).toContain(album.id);
+
+    const deletes = await drain(sut.getDeletes({ nowId: NOW_ID, userId: m.id }));
+    expect(deletes.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+    // sanity: retention here too
+    const row = await db
+      .selectFrom('album_space_asset')
+      .select('assetId')
+      .where('albumId', '=', album.id)
+      .executeTakeFirst();
+    expect(row).toBeDefined();
+  });
+
+  it('single-space unlink: member gets the whole-album drop; the edge tombstone is correctly withheld', async () => {
+    // Expected-GREEN regression guard for the removeAlbum rewrite (BDD 4): in the common
+    // single-space case the device converges via the album-level metadata drop, NOT the edge
+    // tombstone (getDeletes filters it out once the album leaves accessibleSpaceAlbums).
+    const { ctx, sut } = setup();
+    const spaceRepo = ctx.get(SharedSpaceRepository);
+    const { user: owner } = await ctx.newUser();
+    const { user: m } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: m.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    await spaceRepo.removeAlbum(space.id, album.id);
+
+    const edgeDeletes = await drain(sut.getDeletes({ nowId: NOW_ID, userId: m.id }));
+    expect(edgeDeletes.some((r) => r.albumId === album.id)).toBe(false);
+    // Album-metadata sync delivers the whole-album drop via the (gated) grant tombstone. Adjust
+    // the sut property + delete-row shape to mirror sync-shared-space-album.spec.ts.
+    const albumSync = ctx.get(SyncRepository).sharedSpaceAlbum;
+    const albumDeletes = await drain(albumSync.getDeletes({ nowId: NOW_ID, userId: m.id }));
+    expect(JSON.stringify(albumDeletes)).toContain(album.id);
   });
 });

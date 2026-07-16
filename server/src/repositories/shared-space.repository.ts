@@ -550,6 +550,34 @@ export class SharedSpaceRepository {
       .execute();
   }
 
+  // D1 (#752 P0-1): synthetic unlink tombstones. Contributions are RETAINED across unlink
+  // (re-link reversibility, pinned by album-space-asset-permissions.service.spec) — but a device
+  // that synced the edge must still purge it, and the ONLY tombstone producer is the AFTER-DELETE
+  // trigger, which never fires for retained rows. Insert audit rows directly: an audit row means
+  // "revoke this edge on devices", NOT "the row was deleted". getDeletes scopes delivery by
+  // accessibleSpaceAlbums; members without album access get nothing, extra deliveries are
+  // idempotent client deletes.
+  private async tombstoneContributionsForUnlink(
+    db: Kysely<DB> | Transaction<DB>,
+    spaceId: string,
+    albumIds: string[],
+  ): Promise<void> {
+    if (albumIds.length === 0) {
+      return;
+    }
+    await db
+      .insertInto('album_space_asset_audit')
+      .columns(['albumId', 'assetId'])
+      .expression(
+        db
+          .selectFrom('album_space_asset')
+          .select(['album_space_asset.albumId', 'album_space_asset.assetId'])
+          .where('album_space_asset.spaceId', '=', spaceId)
+          .where('album_space_asset.albumId', 'in', albumIds),
+      )
+      .execute();
+  }
+
   /**
    * Slice 1 ALBUM-path purge: when the owner flips an album-linked asset to
    * Hidden, the album_asset join row is retained (unlike Locked), so no
@@ -758,21 +786,38 @@ export class SharedSpaceRepository {
   // ==========================================
 
   addAlbum(values: Insertable<SharedSpaceAlbumTable>) {
-    return this.db
-      .insertInto('shared_space_album')
-      .values(values)
-      .onConflict((oc) => oc.doNothing())
-      .returningAll()
-      .executeTakeFirst();
+    return this.db.transaction().execute(async (trx) => {
+      const inserted = await trx
+        .insertInto('shared_space_album')
+        .values(values)
+        .onConflict((oc) => oc.doNothing())
+        .returningAll()
+        .executeTakeFirst();
+      if (inserted) {
+        // D1 (#752 P0-1): re-link re-delivery — touch retained contributions so the
+        // album_space_asset_updatedAt trigger bumps updateId and getUpserts re-emits them to
+        // devices that purged on the unlink tombstone. No-op on a first-time link.
+        await trx
+          .updateTable('album_space_asset')
+          .set({ updatedAt: sql`clock_timestamp()` })
+          .where('spaceId', '=', values.spaceId)
+          .where('albumId', '=', values.albumId)
+          .execute();
+      }
+      return inserted;
+    });
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  removeAlbum(spaceId: string, albumId: string) {
-    return this.db
-      .deleteFrom('shared_space_album')
-      .where('spaceId', '=', spaceId)
-      .where('albumId', '=', albumId)
-      .execute();
+  async removeAlbum(spaceId: string, albumId: string): Promise<void> {
+    await this.db.transaction().execute(async (trx) => {
+      await this.tombstoneContributionsForUnlink(trx, spaceId, [albumId]);
+      await trx
+        .deleteFrom('shared_space_album')
+        .where('spaceId', '=', spaceId)
+        .where('albumId', '=', albumId)
+        .execute();
+    });
   }
 
   // albums-6: on member removal/leave, unlink the shared_space_album rows the
@@ -809,6 +854,14 @@ export class SharedSpaceRepository {
       )
       .returning('shared_space_album.albumId')
       .execute();
+
+    // D1 (#752 P0-1): member-departure link removal has the identical revocation gap as unlinkAlbum.
+    await this.tombstoneContributionsForUnlink(
+      db,
+      spaceId,
+      deleted.map((row) => row.albumId),
+    );
+
     return deleted.map((row) => row.albumId);
   }
 
