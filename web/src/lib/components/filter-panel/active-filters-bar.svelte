@@ -114,11 +114,12 @@
       result.push({ type: 'location', icon: mdiMapMarker, label: locationParts.join(', ') });
     }
 
-    // Camera chip
-    if (filters.make && filters.model) {
-      result.push({ type: 'camera', icon: mdiCamera, label: `${filters.make} ${filters.model}` });
-    } else if (filters.make) {
-      result.push({ type: 'camera', icon: mdiCamera, label: filters.make });
+    // Camera chip (make + model fold into ONE chip — getActiveFilterCount counts them once).
+    // Render whenever EITHER is present: a model-only asset (no make) still applies a ?model=
+    // filter server-side, so it must surface a removable chip rather than being invisible.
+    const cameraParts = [filters.make, filters.model].filter(Boolean);
+    if (cameraParts.length > 0) {
+      result.push({ type: 'camera', icon: mdiCamera, label: cameraParts.join(' ') });
     }
 
     // Tag chips (one per selected tag)

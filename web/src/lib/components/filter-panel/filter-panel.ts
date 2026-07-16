@@ -145,7 +145,7 @@ export function getActiveFilterCount(state: FilterState): number {
   return (
     (state.personIds.length > 0 ? 1 : 0) +
     (state.city || state.country || state.state ? 1 : 0) + // location counts once (city/state/country)
-    (state.make ? 1 : 0) + // `model` is intentionally not counted separately from `make`
+    (state.make || state.model ? 1 : 0) + // camera counts once; a model-only value (no make) still applies ?model=
     (state.lensModel ? 1 : 0) +
     (state.albumId ? 1 : 0) +
     (state.ownerId ? 1 : 0) +

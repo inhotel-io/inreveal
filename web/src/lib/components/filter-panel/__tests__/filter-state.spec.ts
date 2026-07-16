@@ -102,6 +102,23 @@ describe('FilterState utilities', () => {
     expect(getActiveFilterCount(state)).toBe(1);
   });
 
+  it('should count a model-only camera filter (no make) as one active filter', () => {
+    const state = createFilterState();
+    state.model = 'iPhone 17 Pro Max';
+    // A model-only camera value (some EXIF has a model but no make) is still applied by
+    // every surface as ?model=; if it is not counted the badge shows "0 filters" and
+    // Clear-all hides, leaving an invisible, unremovable filter.
+    expect(getActiveFilterCount(state)).toBe(1);
+  });
+
+  it('should count make and model together as a single camera filter', () => {
+    const state = createFilterState();
+    state.make = 'Canon';
+    state.model = 'EOS R5';
+    // make+model are ONE dimension — they must never double-count.
+    expect(getActiveFilterCount(state)).toBe(1);
+  });
+
   it('should clear filters but preserve sortOrder', () => {
     const state = createFilterState();
     state.personIds = ['p1'];

@@ -596,6 +596,25 @@ describe('ActiveFiltersBar', () => {
     expect(chips[0].textContent).toContain('Canon EOS R5');
   });
 
+  it('should render a camera chip for a model-only value (no make)', () => {
+    const filters = createFilterState();
+    filters.model = 'iPhone 17 Pro Max';
+
+    // make is absent, but ?model= is applied by every surface, so the bar MUST surface a
+    // removable chip (label = the model) rather than hiding the filter entirely.
+    const { getAllByTestId } = render(ActiveFiltersBar, {
+      props: {
+        filters,
+        onRemoveFilter: () => {},
+        onClearAll: () => {},
+      },
+    });
+
+    const chips = getAllByTestId('active-chip');
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent).toContain('iPhone 17 Pro Max');
+  });
+
   it('should render tag chips with names', () => {
     const filters = createFilterState();
     filters.tagIds = ['t1', 't2'];
