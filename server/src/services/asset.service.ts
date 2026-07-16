@@ -884,7 +884,16 @@ export class AssetService extends BaseService {
       // Audio-only file check. getProbeInput hands ffprobe an absolute path (disk) or a
       // presigned URL (S3) — it does NOT download the video, which matters here because
       // this runs inside the request.
-      const probeResult = await this.mediaRepository.probe(await this.getProbeInput(asset.originalPath));
+      let probeResult: Awaited<ReturnType<typeof this.mediaRepository.probe>>;
+      try {
+        probeResult = await this.mediaRepository.probe(await this.getProbeInput(asset.originalPath));
+      } catch {
+        // Never surface or log the raw ffprobe error: for S3 originals getProbeInput yields a
+        // presigned URL (a bearer credential) that ffprobe echoes in its stderr, which would
+        // otherwise leak into error logs. Log only the asset id.
+        this.logger.error(`Failed to probe video for trim (asset ${id})`);
+        throw new BadRequestException('Unable to read video for trimming');
+      }
       if (!probeResult.videoStreams || probeResult.videoStreams.length === 0) {
         throw new BadRequestException('Cannot trim audio-only files');
       }

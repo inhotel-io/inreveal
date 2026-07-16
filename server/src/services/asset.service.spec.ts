@@ -2691,6 +2691,40 @@ describe(AssetService.name, () => {
       vi.restoreAllMocks();
     });
 
+    it('surfaces a generic error, never the presigned url, when the probe fails', async () => {
+      const assetId = newUuid();
+      const getReadableUrl = vi.fn().mockResolvedValue('https://bucket.s3/key?X-Amz-Signature=SECRET');
+      const { StorageService } = await import('src/services/storage.service.js');
+      vi.spyOn(StorageService, 'resolveBackendForKey').mockReturnValue({ getReadableUrl } as any);
+
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
+      mocks.asset.getForEdit.mockResolvedValue({
+        type: AssetType.Video,
+        livePhotoVideoId: null,
+        originalPath: 'upload/admin/ab/cd/video.mp4',
+        originalFileName: 'video.mp4',
+        duration: 30_000,
+        exifImageWidth: 1920,
+        exifImageHeight: 1080,
+        orientation: null,
+        projectionType: null,
+      } as any);
+      mocks.assetEdit.getAll.mockResolvedValue([]);
+      // ffprobe echoes the input (the presigned url, with its signature) in its error message.
+      mocks.media.probe.mockRejectedValue(new Error('https://bucket.s3/key?X-Amz-Signature=SECRET: Invalid data'));
+
+      const error = await sut
+        .editAsset(authStub.admin, assetId, {
+          edits: [{ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } }],
+        })
+        .catch((error_: unknown) => error_);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as Error).message).not.toContain('X-Amz-Signature');
+
+      vi.restoreAllMocks();
+    });
+
     it('should reject trim on external library videos', async () => {
       const assetId = newUuid();
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([assetId]));
