@@ -497,4 +497,15 @@ describe('Timeline scroll-space scaling', () => {
       /translate3d\(\s*0(?:px)?\s*,\s*346px\s*,\s*0(?:px)?\s*\)/,
     );
   });
+
+  it('offsets the lead-in/top section transform by renderOffset so it stays flush with the first month', () => {
+    // The top section renders at logical position 0, so its DOM position must be `0 + renderOffset`.
+    // Without this, an above-cap library (renderOffset != 0) draws the first month over the still-visible
+    // lead-in as it scrolls, because months use `top + renderOffset` and the top section did not.
+    testState.renderOffset = 50;
+    const { getByTestId } = renderTimeline();
+    expect(getByTestId('timeline-top-section').getAttribute('style')).toMatch(
+      /translate3d\(\s*0(?:px)?\s*,\s*50px\s*,\s*0(?:px)?\s*\)/,
+    );
+  });
 });

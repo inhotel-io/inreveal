@@ -739,9 +739,11 @@
     <section
       bind:clientHeight={timelineManager.topSectionHeight}
       class:invisible
+      data-testid="timeline-top-section"
       style:position="absolute"
       style:left="0"
       style:right="0"
+      style:transform={`translate3d(0,${timelineManager.renderOffset}px,0)`}
     >
       {@render children?.()}
       {#if isEmpty}
