@@ -1555,6 +1555,26 @@ Then poll `gh run list --branch rebase/space-albums-onto-main-v303` and **inspec
 
 ---
 
+### Task 9: D1-b residue — live-link gate on `inAlbums`' contributed arm (post-review amendment)
+
+**Decision (Pierre, 2026-07-16, after the final whole-branch review):** fix the `inAlbums` search residue now; the other deferred finding (unlink leaves contributed-only face projections in space People until a coarse reconcile — pre-existing candidate-set gap in `getAlbumAssetIdsWithoutOtherSpacePath`) is **accepted as-is, no fix, no tracking issue**.
+
+**Behavior specs (BDD):**
+
+1. Given member M of space S, album L linked to S, contribution X (owned by carol) tethered to S; When a search-side query using `inAlbums` filters on [L] for M; Then X matches (existing behavior — keep green).
+2. When L is unlinked from S (retained rows, D1-b); Then X NO LONGER matches for M — RED today: the contributed arm gates on `timelineSpaceIds` membership but not on a live `shared_space_album` link, producing "listed in search but 403 on thumbnail" after P1-4.
+3. Re-link → X matches again (D1-b reversibility).
+4. The `album_asset` arm is untouched: owner/album-shared rows match by album-access rules regardless of space links.
+
+**Files:**
+
+- Modify: `server/src/utils/database.ts` (`inAlbums` contributed arm, ~`:466-503`) — add the live `shared_space_album` correlation on BOTH albumId AND spaceId to the `album_space_asset` join, mirroring `contributionVisibleToMember` / `spaceContributedAssetExists`.
+- Test: extend whichever medium spec already pins `inAlbums`' contributed arm (grep `inAlbums` consumers and `album_space_asset` under `test/medium`); if none pins the unlink case, add a focused describe to the search repository medium spec. TDD: BDD-2 is the RED driver; BDD-1/3/4 pin.
+
+**Constraints:** all Global Constraints apply (tsc/eslint/prettier; scope-guard allowlists if flagged; no `make sql` locally — if the arm is inside a `@GenerateSql` consumer the CI regen handles the doc). One commit: `fix(search): gate contributed album search matches on a live album-space link (#752)`.
+
+---
+
 ## Self-review notes (spec coverage)
 
 - P0-1 → Task 2 (D1-b); P0-2 → Task 3; P0-3 → Task 1; P1-4 → Task 4; P1-5 → Task 3 (same commit as P0-2 ✓); P1-6 → Task 5; P1-7 (3 parts + D3) → Task 6; P2-8/9/10/11 → Tasks 7 / 2 / 7 / 7. ✓
