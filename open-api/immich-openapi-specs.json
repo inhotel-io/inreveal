@@ -25756,6 +25756,7 @@
               ],
               "type": "object"
             },
+            "maxItems": 1000,
             "type": "array"
           },
           "persons": {
@@ -25772,6 +25773,7 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
                     "type": "string"
                   },
+                  "maxItems": 1000,
                   "type": "array"
                 }
               },
@@ -25781,6 +25783,7 @@
               ],
               "type": "object"
             },
+            "maxItems": 1000,
             "type": "array"
           }
         },
@@ -26070,6 +26073,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
+            "maxItems": 1000,
             "type": "array"
           },
           "entireCluster": {
@@ -26092,6 +26096,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
+            "maxItems": 1000,
             "type": "array"
           },
           "moveToPerson": {
@@ -26109,6 +26114,7 @@
                     "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
                     "type": "string"
                   },
+                  "maxItems": 1000,
                   "minItems": 1,
                   "type": "array"
                 },
@@ -26123,6 +26129,7 @@
               ],
               "type": "object"
             },
+            "maxItems": 1000,
             "type": "array"
           },
           "personId": {
@@ -26137,6 +26144,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
+            "maxItems": 1000,
             "type": "array"
           },
           "unknown": {
@@ -26146,6 +26154,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
+            "maxItems": 1000,
             "type": "array"
           }
         },

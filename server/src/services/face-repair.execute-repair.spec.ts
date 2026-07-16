@@ -24,7 +24,9 @@ describe(FaceRepairService.name, () => {
 
   describe('executeRepair', () => {
     it('direct-assigns each flagged face to its suspected owner with a manual identity link', async () => {
-      mocks.person.getById.mockResolvedValue({ id: 'q' } as any);
+      // executeRepair now also compares the source and destination owners (C6): both p1 and q share owner u1,
+      // so the cross-owner guard never fires and the move proceeds.
+      mocks.person.getById.mockResolvedValue({ id: 'q', ownerId: 'u1' } as any);
       mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1', 'f2']);
       mocks.faceRepair.reconcileRepresentativeFaces.mockResolvedValue([]);
       mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
@@ -63,7 +65,9 @@ describe(FaceRepairService.name, () => {
     });
 
     it('reconciles representative faces for both the source and the destination person', async () => {
-      mocks.person.getById.mockResolvedValue({ id: 'q' } as any);
+      // executeRepair now also compares the source and destination owners (C6): both p1 and q share owner u1,
+      // so the cross-owner guard never fires and the move proceeds.
+      mocks.person.getById.mockResolvedValue({ id: 'q', ownerId: 'u1' } as any);
       mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
       mocks.faceRepair.reconcileRepresentativeFaces.mockResolvedValue([]);
       mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
@@ -75,7 +79,9 @@ describe(FaceRepairService.name, () => {
     });
 
     it('queues a thumbnail regen for every person whose representative face was repointed', async () => {
-      mocks.person.getById.mockResolvedValue({ id: 'q' } as any);
+      // executeRepair now also compares the source and destination owners (C6): both p1 and q share owner u1,
+      // so the cross-owner guard never fires and the move proceeds.
+      mocks.person.getById.mockResolvedValue({ id: 'q', ownerId: 'u1' } as any);
       mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
       mocks.faceRepair.reconcileRepresentativeFaces.mockResolvedValue(['p1']);
       mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
