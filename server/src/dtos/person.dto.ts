@@ -44,7 +44,9 @@ const PeopleUpdateSchema = z
 
 const MergePersonSchema = z
   .object({
-    ids: z.array(z.uuidv4()).describe('Person IDs to merge'),
+    // Capped so a single request cannot hold the instance-wide merge advisory lock while doing one DB round-trip
+    // per source (design §5.2 row 6; the web UI caps at 5).
+    ids: z.array(z.uuidv4()).max(20).describe('Person IDs to merge'),
     confirmCrossOwner: z
       .boolean()
       .optional()
@@ -74,7 +76,9 @@ const ScopedPersonProfileRefSchema = z
 const MergeScopedPeopleSchema = z
   .object({
     target: ScopedPersonProfileRefSchema.describe('Target scoped profile'),
-    sources: z.array(ScopedPersonProfileRefSchema).min(1).describe('Source scoped profiles'),
+    // Capped so a single request cannot hold the instance-wide merge advisory lock while doing one DB round-trip
+    // per source (design §5.2 row 6; the web UI caps at 5).
+    sources: z.array(ScopedPersonProfileRefSchema).min(1).max(20).describe('Source scoped profiles'),
     confirmCrossOwner: z
       .boolean()
       .optional()
