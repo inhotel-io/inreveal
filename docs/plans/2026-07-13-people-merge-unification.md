@@ -68,12 +68,17 @@ machine performs automatically anyway.
 
 1. **One engine.** All three endpoints go through `IdentityMergePropagationService`. The raw
    `mergeIdentities` stays only for the automatic jobs.
-2. **Space profiles are system-derived.** Collapsing `shared_space_person` profiles is ungated in **any**
-   space, including spaces the actor is only a viewer of or not a member of — the dedup job already does
-   this unattended. Consequence: a merge of your own two people never fails because a stranger's space also
-   contains them. The current hard block (`hasInaccessibleAttachedSpaceProfile` → 403) is removed.
+2. **Space profiles are system-derived, but collapsing them where you can't edit is still destructive.**
+   Collapsing `shared_space_person` profiles is ungated in a space where the actor is Owner/Editor — the dedup
+   job already does this unattended. In a space the actor is only a viewer of or not a member of, a **collapse**
+   is governed by the same `server.mergePeopleAcrossOwners` toggle and confirmation as an other-owner collapse
+   (off → refused, ask an administrator to enable it; on → explicit confirmation → commit); a **re-point** of a
+   single space profile stays free in any space. Consequence: a merge of your own two people never fails merely
+   because a stranger's space happens to contain one profile of each identity — only a collapse inside a space
+   you cannot edit is gated. The earlier toggle-independent hard block (`hasInaccessibleAttachedSpaceProfile` → 403) is removed and folded into the toggle gate (see the revision note below).
 3. **Only destructive cross-owner work is gated.** (a) re-point is free on all paths. (b) collapse of
-   another owner's people requires `server.mergePeopleAcrossOwners` **and** `confirmCrossOwner`.
+   another owner's people — or of two people in a **shared space the actor cannot edit** — requires
+   `server.mergePeopleAcrossOwners` **and** `confirmCrossOwner`.
 4. **Refs stay RBAC-checked.** You may only name a person you can repair: your own `person`, or a
    `shared_space_person` in a space where you are Owner/Editor. Naming anything else is a 400.
 5. **Types may mix on manual merges; the target's type wins.** Merging a mis-classified pet into the right
@@ -82,6 +87,12 @@ machine performs automatically anyway.
    **Automatic** paths stay conservative and never fuse across types.
 6. **Automatic fusion stays ungated.** The recognition job keeps fusing identities across owners (that is
    the cross-library recognition feature) and keeps skipping (b).
+
+> **Revision (follow-up on the #733 review).** The earlier design refused an un-editable-space collapse with a
+> separate toggle-independent hard block ("ask a space editor"). That block is **gone**: a collapse in a space
+> the actor cannot edit (viewer or non-member) is now folded into the `server.mergePeopleAcrossOwners` gate and
+> treated exactly like an other-owner collapse — off → refused with a message to ask an administrator to enable
+> cross-owner merges, on → explicit confirmation → commit. Re-points in any space remain free and ungated.
 
 Net effect for the reporter: their merge succeeds with **no admin toggle**. Net effect for
 `/people/:id/merge`: stricter in exactly one case — where it currently deletes another user's person
@@ -153,8 +164,11 @@ private async authorizeDestructiveCrossOwnerMerge(plan, dto: { confirmCrossOwner
 `confirmCrossOwner` is added to `MergePersonDto` and `SharedSpacePersonMergeDto` (it already exists on
 `MergeScopedPeopleDto`). Both web flows gain the confirmation dialog they lack today.
 
-The toggle's meaning narrows: it now governs **merging other users' people together**, not any cross-owner
-identity write. Admin description and i18n copy update accordingly.
+The toggle's meaning narrows: it now governs **collapsing two of another user's people together — or two people
+in a shared space the actor cannot edit — into one**, not any cross-owner identity write (a re-point is always
+free). Admin description and i18n copy update accordingly. (Review P1 folded the un-editable-space collapse into
+this same toggle; the `authorizeDestructiveCrossOwnerMerge` sketch above keys on `collapsedOwnerIds` **and**
+`unrepairableSpaceCollapseIds`, and the single `blocked` / `confirmation_required` pair covers both.)
 
 ### 4.3 Type compatibility
 
@@ -169,9 +183,13 @@ sources, so the automatic jobs stay conservative.
 With the planner in place, `mergeScopedPeople` no longer needs the repairability pre-computation:
 `hasRepairProfileConflict`, `resolveAttachedProfileRepairability`, and the `hasScopedProfileConflict` /
 `allAttachedProfilesRepairable` / `hasInaccessibleAttachedSpaceProfile` fields of `RepairRefsResolution` are
-deleted. `resolveRepairRefs` slims to ref resolution + type compatibility.
-`mergeIdentitiesAfterProfileResolution`'s "unresolved profile conflicts" throw stays as an invariant
-assertion (a 500 there means the planner has a bug).
+deleted. Removing `hasInaccessibleAttachedSpaceProfile` drops only the toggle-independent hard block: an
+un-editable-space collapse is no longer refused outright but is instead gated by `server.mergePeopleAcrossOwners`
+
+- explicit confirmation, exactly like an other-owner collapse (see the §3 revision note). `resolveRepairRefs`
+  slims to ref resolution + type compatibility.
+  `mergeIdentitiesAfterProfileResolution`'s "unresolved profile conflicts" throw stays as an invariant
+  assertion (a 500 there means the planner has a bug).
 
 ### 4.5 Client (web)
 
@@ -223,23 +241,23 @@ directly selectable — it comes along with the identity).
 
 Applies **identically to all three endpoints**. "Commit" = 204/200 + identity merged.
 
-| #   | What else hangs off the two identities                  | Toggle | `confirmCrossOwner` | Outcome                                                                                                                                           |
-| --- | ------------------------------------------------------- | ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| T1  | Nothing                                                 | any    | any                 | **Commit.** Faces re-linked to the target identity                                                                                                |
-| T2  | Actor's own `person` on both identities                 | any    | any                 | **Commit.** Actor's two people collapsed (this is the classic own-merge)                                                                          |
-| T3  | Same space, profiles on both — actor Owner/Editor there | any    | any                 | **Commit.** Space profiles collapsed; aliases migrated; counts recounted                                                                          |
-| T4  | Same space, profiles on both — actor **Viewer** there   | any    | any                 | **Commit.** Collapsed (space profiles are system-derived) — _was a 403_                                                                           |
-| T5  | Same space, profiles on both — actor **not a member**   | any    | any                 | **Commit.** Collapsed — _was a 403_                                                                                                               |
-| T6  | Other owner, **one** person on the set → re-point (a)   | off    | —                   | **Commit.** Their `identityId` rewritten; row, name, faces untouched — _was 403_                                                                  |
-| T7  | Other owner, **two** people on the set → collapse (b)   | off    | —                   | **403** `cross_owner_merge_blocked`; nothing written                                                                                              |
-| T8  | Other owner, **two** people on the set → collapse (b)   | on     | absent              | **409** `cross_owner_merge_confirmation_required` + `impactedOwnerCount`; nothing written                                                         |
-| T9  | Other owner, **two** people on the set → collapse (b)   | on     | `true`              | **Commit.** Their two people merged (survivor: faceCount → named → id); loser row deleted, faces moved                                            |
-| T10 | Two other owners, each with two people (b)×2            | on     | `true`              | **Commit.** The preceding 409 reported `impactedOwnerCount = 2`                                                                                   |
-| T11 | Mixed: same-space conflict **and** other-owner collapse | off    | —                   | **403** (the (b) gate governs; nothing written, space untouched)                                                                                  |
-| T12 | Multi-scope: 3 spaces + 2 owners, one with (b)          | on     | `true`              | **Commit.** Every scope collapsed; one metadata-backfill job; one dedup job per affected space; one `PersonMerge` activity row per affected space |
-| T13 | Target hidden, source visible                           | any    | any                 | **Commit.** Survivor keeps the **target's** hidden/favorite flags                                                                                 |
-| T14 | Target has no name, source named                        | any    | any                 | **Commit.** Blank target fields (name, birthDate, color, species) filled from source; non-blank never overwritten                                 |
-| T15 | Target's feature face invalidated by the merge          | any    | any                 | **Commit.** Feature face repaired; `PersonGenerateThumbnail` queued; source thumbnail deleted post-commit                                         |
+| #   | What else hangs off the two identities                  | Toggle   | `confirmCrossOwner` | Outcome                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------- | -------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T1  | Nothing                                                 | any      | any                 | **Commit.** Faces re-linked to the target identity                                                                                                                                                          |
+| T2  | Actor's own `person` on both identities                 | any      | any                 | **Commit.** Actor's two people collapsed (this is the classic own-merge)                                                                                                                                    |
+| T3  | Same space, profiles on both — actor Owner/Editor there | any      | any                 | **Commit.** Space profiles collapsed; aliases migrated; counts recounted                                                                                                                                    |
+| T4  | Same space, profiles on both — actor **Viewer** there   | off / on | — / `true`          | Toggle **off** → **403** `cross_owner_merge_blocked` (ask an administrator to enable cross-owner merges). Toggle **on** + confirmed → **Commit**; space profiles collapsed — _was a toggle-independent 403_ |
+| T5  | Same space, profiles on both — actor **not a member**   | off / on | — / `true`          | Toggle **off** → **403** `cross_owner_merge_blocked` (ask an administrator to enable). Toggle **on** + confirmed → **Commit**; space profiles collapsed — _was a toggle-independent 403_                    |
+| T6  | Other owner, **one** person on the set → re-point (a)   | off      | —                   | **Commit.** Their `identityId` rewritten; row, name, faces untouched — _was 403_                                                                                                                            |
+| T7  | Other owner, **two** people on the set → collapse (b)   | off      | —                   | **403** `cross_owner_merge_blocked`; nothing written                                                                                                                                                        |
+| T8  | Other owner, **two** people on the set → collapse (b)   | on       | absent              | **409** `cross_owner_merge_confirmation_required` + `impactedOwnerCount`; nothing written                                                                                                                   |
+| T9  | Other owner, **two** people on the set → collapse (b)   | on       | `true`              | **Commit.** Their two people merged (survivor: faceCount → named → id); loser row deleted, faces moved                                                                                                      |
+| T10 | Two other owners, each with two people (b)×2            | on       | `true`              | **Commit.** The preceding 409 reported `impactedOwnerCount = 2`                                                                                                                                             |
+| T11 | Mixed: same-space conflict **and** other-owner collapse | off      | —                   | **403** (the (b) gate governs; nothing written, space untouched)                                                                                                                                            |
+| T12 | Multi-scope: 3 spaces + 2 owners, one with (b)          | on       | `true`              | **Commit.** Every scope collapsed; one metadata-backfill job; one dedup job per affected space; one `PersonMerge` activity row per affected space                                                           |
+| T13 | Target hidden, source visible                           | any      | any                 | **Commit.** Survivor keeps the **target's** hidden/favorite flags                                                                                                                                           |
+| T14 | Target has no name, source named                        | any      | any                 | **Commit.** Blank target fields (name, birthDate, color, species) filled from source; non-blank never overwritten                                                                                           |
+| T15 | Target's feature face invalidated by the merge          | any      | any                 | **Commit.** Feature face repaired; `PersonGenerateThumbnail` queued; source thumbnail deleted post-commit                                                                                                   |
 
 ### 5.4 Entry-point parity
 
@@ -548,9 +566,13 @@ guardrail.
 - **Behavior change on `/people/:id/merge`** (Slice 4). With the toggle off (default), a merge that would
   collapse another owner's two people now 403s instead of silently doing it. Intended, but visible — release-note
   it.
-- **Space collapse without a role check** (Slice 3, T4/T5). A viewer's merge can regroup people in a space they
-  cannot edit. Justified by the dedup job doing exactly this unattended, but it is a deliberate loosening: the
-  medium RBAC test asserting the old hard block is **rewritten, not deleted**, so the new intent is explicit.
+- **Space collapse in a space you can't edit is gated, not free** (Slice 3, T4/T5). A viewer or non-member can
+  still **re-point** a single space profile unattended (the dedup job does this too), but a merge that would
+  **collapse two profiles** in a space they cannot edit is now governed by the `server.mergePeopleAcrossOwners`
+  toggle and explicit confirmation — exactly like an other-owner collapse (off → refused, ask an administrator to
+  enable; on → confirmation → commit). This replaces the earlier toggle-independent hard block; the medium RBAC
+  test that asserted that hard block is **rewritten** to assert the new gated behavior, so the new intent is
+  explicit.
 - **Advisory-lock contention.** All merges serialize on one instance-wide advisory lock. Routing a third endpoint
   through it does not change that; the optional source cap (Slice 6) keeps a pathological plan from holding it.
 
