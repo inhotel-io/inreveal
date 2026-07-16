@@ -295,6 +295,48 @@ where
 order by
   "asset"."localDateTime" asc
 
+-- AssetRepository.getMemoryFacesForPeriod
+select
+  "asset"."id" as "assetId",
+  "asset"."localDateTime",
+  "person"."id" as "personId",
+  "person"."name" as "personName",
+  extract(
+    year
+    from
+      (asset."localDateTime" at time zone 'UTC')
+  )::int as "year"
+from
+  "asset"
+  inner join "asset_face" on "asset_face"."assetId" = "asset"."id"
+  inner join "person" on "person"."id" = "asset_face"."personId"
+where
+  "asset"."ownerId" = $1
+  and "asset"."visibility" = $2
+  and "asset"."deletedAt" is null
+  and "asset"."localDateTime" <= $3
+  and extract(
+    month
+    from
+      (asset."localDateTime" at time zone 'UTC')
+  )::int in ($4)
+  and "asset_face"."deletedAt" is null
+  and "asset_face"."isVisible" = $5
+  and "person"."ownerId" = $6
+  and "person"."name" != $7
+  and "person"."isHidden" = $8
+  and exists (
+    select
+      "asset_file"."assetId"
+    from
+      "asset_file"
+    where
+      "asset_file"."assetId" = "asset"."id"
+      and "asset_file"."type" = $9
+  )
+order by
+  "asset"."localDateTime" asc
+
 -- AssetRepository.getOwnedManifestAssets
 select
   "asset"."id",

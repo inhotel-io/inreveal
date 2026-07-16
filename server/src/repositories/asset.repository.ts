@@ -179,6 +179,14 @@ export interface MemoryPeriodAsset {
   isFavorite: boolean;
 }
 
+export interface MemoryPeriodFace {
+  assetId: string;
+  localDateTime: Date;
+  year: number;
+  personId: string;
+  personName: string;
+}
+
 export interface MemoryPeriodOptions {
   /** calendar months (1–12) to include */
   months: number[];
@@ -969,6 +977,40 @@ export class AssetRepository {
         qb.where(sql<number>`extract(day from (asset."localDateTime" at time zone 'UTC'))::int`, '=', day!),
       )
       .$if(favoritesOnly === true, (qb) => qb.where('asset.isFavorite', '=', true))
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_file')
+            .select('asset_file.assetId')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', AssetFileType.Preview),
+        ),
+      )
+      .orderBy('asset.localDateTime', 'asc')
+      .execute();
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, { months: [6], takenBefore: DummyValue.DATE }] })
+  getMemoryFacesForPeriod(
+    ownerId: string,
+    { months, takenBefore }: { months: number[]; takenBefore: Date },
+  ): Promise<MemoryPeriodFace[]> {
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
+      .innerJoin('person', 'person.id', 'asset_face.personId')
+      .select(['asset.id as assetId', 'asset.localDateTime', 'person.id as personId', 'person.name as personName'])
+      .select(sql<number>`extract(year from (asset."localDateTime" at time zone 'UTC'))::int`.as('year'))
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.localDateTime', '<=', takenBefore)
+      .where(sql<number>`extract(month from (asset."localDateTime" at time zone 'UTC'))::int`, 'in', months)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('person.ownerId', '=', ownerId)
+      .where('person.name', '!=', '')
+      .where('person.isHidden', '=', false)
       .where((eb) =>
         eb.exists(
           eb
