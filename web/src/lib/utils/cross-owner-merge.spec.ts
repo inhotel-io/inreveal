@@ -11,6 +11,22 @@ vi.mock('@immich/sdk', () => ({
   mergeScopedPeople: vi.fn(),
 }));
 
+const toastDanger = vi.fn();
+vi.mock('@immich/ui', () => ({
+  toastManager: { danger: (...args: unknown[]) => toastDanger(...args) },
+  modalManager: { showDialog: vi.fn() },
+}));
+
+// A minimal readable store whose value is a passthrough translator, so `get(t)(key)` returns the key.
+vi.mock('svelte-i18n', () => ({
+  t: {
+    subscribe: (run: (value: (key: string) => string) => void) => {
+      run((key: string) => key);
+      return () => {};
+    },
+  },
+}));
+
 const httpError = (status: number, data: Record<string, unknown>) => ({ __http: true, status, data, message: 'raw' });
 
 // Void endpoints (e.g. /people/same-person) return the body unparsed, so `data` is a raw string.
@@ -161,6 +177,8 @@ describe('runScopedMergeWithCrossOwnerConfirmation', () => {
 // is now a thin wrapper over this — these tests exercise it directly with a bare merge function so
 // they don't depend on any particular SDK call shape.
 describe('runMergeWithCrossOwnerConfirmation', () => {
+  beforeEach(() => toastDanger.mockClear());
+
   it('commits when the merge succeeds, without asking for confirmation', async () => {
     const merge = vi.fn().mockResolvedValue(undefined);
     const confirmCrossOwner = vi.fn();
@@ -241,6 +259,43 @@ describe('runMergeWithCrossOwnerConfirmation', () => {
     expect(committed).toBe(false);
     expect(confirmCrossOwner).toHaveBeenCalledTimes(1);
     expect(merge).toHaveBeenCalledTimes(1);
+  });
+
+  // #733 review L7: the other terminal merge errors get a localized toast instead of the raw truncated server
+  // sentence, and are not retried or re-thrown.
+  it('shows a localized toast for a known terminal merge error (not-accessible) without retrying or rethrowing', async () => {
+    const merge = vi.fn().mockRejectedValueOnce(httpError(400, { code: 'merge_not_accessible', message: 'raw' }));
+    const confirmCrossOwner = vi.fn();
+    const onBlocked = vi.fn();
+
+    const committed = await runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner, onBlocked });
+
+    expect(committed).toBe(false);
+    expect(toastDanger).toHaveBeenCalledWith('merge_error_not_accessible');
+    expect(onBlocked).not.toHaveBeenCalled();
+    expect(confirmCrossOwner).not.toHaveBeenCalled();
+    expect(merge).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the localized retry toast for a concurrent-change conflict', async () => {
+    const merge = vi.fn().mockRejectedValueOnce(httpError(409, { code: 'merge_conflict', message: 'raw conflict' }));
+
+    const committed = await runMergeWithCrossOwnerConfirmation(merge, {
+      confirmCrossOwner: vi.fn(),
+      onBlocked: vi.fn(),
+    });
+
+    expect(committed).toBe(false);
+    expect(toastDanger).toHaveBeenCalledWith('merge_error_conflict');
+  });
+
+  it('rethrows a terminal error whose code is not a known merge code (no toast)', async () => {
+    const merge = vi.fn().mockRejectedValueOnce(httpError(400, { code: 'some_unknown_code', message: 'boom' }));
+
+    await expect(
+      runMergeWithCrossOwnerConfirmation(merge, { confirmCrossOwner: vi.fn(), onBlocked: vi.fn() }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(toastDanger).not.toHaveBeenCalled();
   });
 
   it('rethrows unrelated errors', async () => {

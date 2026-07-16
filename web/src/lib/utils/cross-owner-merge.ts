@@ -16,6 +16,15 @@ export const CrossOwnerMergeErrorCode = {
   ConfirmationRequired: 'cross_owner_merge_confirmation_required',
 } as const;
 
+/**
+ * Other terminal merge error codes (issue #733 review, L7). Each maps to a localized message so the merge flows
+ * surface a clean toast instead of the raw, truncated "(… Server Error)" server sentence.
+ */
+const TERMINAL_MERGE_ERROR_MESSAGE = {
+  merge_not_accessible: 'merge_error_not_accessible',
+  merge_conflict: 'merge_error_conflict',
+} as const;
+
 /** Read the machine-readable cross-owner merge error code from a thrown SDK error, if present. */
 export const getCrossOwnerMergeErrorCode = (error: unknown): string | undefined => {
   if (!isHttpError(error)) {
@@ -95,6 +104,17 @@ export const runMergeWithCrossOwnerConfirmation = async (
     }
 
     if (code !== CrossOwnerMergeErrorCode.ConfirmationRequired) {
+      // Other known terminal merge errors (not-accessible, self-merge, a concurrent-change conflict) get a
+      // localized toast instead of the raw truncated server sentence (#733 review L7). Anything we don't
+      // recognise is re-thrown to the caller's generic error handling.
+      const messageKey =
+        code && code in TERMINAL_MERGE_ERROR_MESSAGE
+          ? TERMINAL_MERGE_ERROR_MESSAGE[code as keyof typeof TERMINAL_MERGE_ERROR_MESSAGE]
+          : undefined;
+      if (messageKey) {
+        toastManager.danger(get(t)(messageKey));
+        return false;
+      }
       throw error;
     }
 

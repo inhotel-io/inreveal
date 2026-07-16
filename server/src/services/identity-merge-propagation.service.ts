@@ -11,6 +11,7 @@ import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
+import { MERGE_ERROR_CODE } from 'src/utils/merge-error-code';
 
 export type MergeProfileKind = 'person' | 'space-person';
 
@@ -240,7 +241,7 @@ export class IdentityMergePropagationService {
       const message = error instanceof Error ? error.message : '';
       if (code === '23505' || message.includes('unresolved profile conflicts')) {
         throw new ConflictException({
-          code: 'merge_conflict',
+          code: MERGE_ERROR_CODE.conflict,
           message: 'This merge conflicts with a concurrent change to the same people. Please try again.',
         });
       }
@@ -488,7 +489,10 @@ export class IdentityMergePropagationService {
       db,
     );
     if (!origins) {
-      throw new BadRequestException('One or more people were not found or are not accessible');
+      throw new BadRequestException({
+        code: MERGE_ERROR_CODE.notAccessible,
+        message: 'One or more people were not found or are not accessible',
+      });
     }
 
     const [targetOrigin, ...sourceOrigins] = origins;

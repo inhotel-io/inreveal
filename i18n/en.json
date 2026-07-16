@@ -1978,6 +1978,8 @@
   "memory_type_recent_trip_description": "Memories from places you recently visited away from home.",
   "menu": "Menu",
   "merge": "Merge",
+  "merge_error_conflict": "This merge ran into a concurrent change to the same people. Please try again.",
+  "merge_error_not_accessible": "One or more of these people can't be merged because they aren't accessible to you.",
   "merge_people": "Merge people",
   "merge_people_across_owners": "Merge people across owners",
   "merge_people_across_owners_blocked": "This merge would combine people that belong to another user, or people in a shared space you can't edit, which can't be undone. An administrator can enable cross-owner merges in the server settings to allow it.",
