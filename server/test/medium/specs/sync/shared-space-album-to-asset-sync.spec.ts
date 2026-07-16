@@ -592,6 +592,11 @@ describe('SharedSpaceAlbumToAssetSync — unlink revocation + re-link re-deliver
       .where('albumId', '=', album.id)
       .executeTakeFirst();
     expect(row).toBeDefined();
+    // Over-revocation guard: only s1's link was removed — the album stays linked via s2, so
+    // the whole-album drop must NOT reach m. Mirrors the album-level assert in the next test.
+    const albumSync = ctx.get(SyncRepository).sharedSpaceAlbum;
+    const albumDeletes = await drain(albumSync.getDeletes({ nowId: NOW_ID, userId: m.id }));
+    expect(JSON.stringify(albumDeletes)).not.toContain(album.id);
   });
 
   it('single-space unlink: member gets the whole-album drop; the edge tombstone is correctly withheld', async () => {

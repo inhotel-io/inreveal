@@ -99,8 +99,8 @@ describe('raw-SQL album arm ≡ Kysely album arm', () => {
     expect(kysely.has(viaHidden.id)).toBe(true);
     // #752 P1-7: cross-owner contributions (co-resident and contribution-only) are visible
     // through both the raw-SQL and Kysely album arms.
-    expect(kysely.has(viaContribution.id ?? viaContribution)).toBe(true);
-    expect(kysely.has(viaContributionOnly.id ?? viaContributionOnly)).toBe(true);
+    expect(kysely.has(viaContribution.id)).toBe(true);
+    expect(kysely.has(viaContributionOnly.id)).toBe(true);
   });
 
   it('returns the identical asset set with A1 off (soft-deleted album included by both)', async () => {

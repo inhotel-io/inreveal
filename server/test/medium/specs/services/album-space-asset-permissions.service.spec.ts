@@ -449,12 +449,18 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
       const { ctx: freshCtx, sut: freshSut } = setup();
       const jobMock = freshCtx.getMock(JobRepository);
       await db.updateTable('shared_space').set({ faceRecognitionEnabled: false }).where('id', '=', spaceS).execute();
-      const { asset } = await freshCtx.newAsset({ ownerId: actors.carol.id, visibility: AssetVisibility.Timeline });
-      await freshCtx.newSharedSpaceAsset({ spaceId: spaceS, assetId: asset.id, addedById: actors.carol.id });
+      try {
+        const { asset } = await freshCtx.newAsset({ ownerId: actors.carol.id, visibility: AssetVisibility.Timeline });
+        await freshCtx.newSharedSpaceAsset({ spaceId: spaceS, assetId: asset.id, addedById: actors.carol.id });
 
-      const [res] = await freshSut.addAssets(authOf('spaceEditor'), albumL, { ids: [asset.id] });
-      expect(res.success).toBe(true);
-      expect(jobMock.queueAll).not.toHaveBeenCalled();
+        const [res] = await freshSut.addAssets(authOf('spaceEditor'), albumL, { ids: [asset.id] });
+        expect(res.success).toBe(true);
+        expect(jobMock.queueAll).not.toHaveBeenCalled();
+      } finally {
+        // Restore the shared spaceS fixture's default so any describe appended after this one
+        // (last in the file today) doesn't inherit faceRecognitionEnabled=false.
+        await db.updateTable('shared_space').set({ faceRecognitionEnabled: true }).where('id', '=', spaceS).execute();
+      }
     });
   });
 });
