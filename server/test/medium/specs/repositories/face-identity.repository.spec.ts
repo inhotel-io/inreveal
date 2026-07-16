@@ -326,6 +326,55 @@ const getLinkedIdentityIds = async (ctx: ReturnType<typeof setup>['ctx'], assetF
 };
 
 describe(FaceIdentityRepository.name, () => {
+  // #733 review: a manual merge may mix types (target type wins). A profile re-pointed onto the surviving identity
+  // must not keep its old type — a pet-typed profile pointing at a person identity would be misread by the
+  // automatic dedup/matching queries that filter on type. mergeIdentitiesAfterProfileResolution reconciles it.
+  it('reconciles a re-pointed profile’s type to the surviving identity on a manual cross-type merge', async () => {
+    const { sut, ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: otherOwner } = await ctx.newUser();
+
+    // Target: a person-typed identity carrying the owner's own person profile.
+    const targetIdentity = await ctx.database
+      .insertInto('face_identity')
+      .values({ type: 'person' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    const { person: targetPerson } = await ctx.newPerson({ ownerId: owner.id });
+    await ctx.database
+      .updateTable('person')
+      .set({ identityId: targetIdentity.id, type: 'person' })
+      .where('id', '=', targetPerson.id)
+      .execute();
+
+    // Source: a pet-typed identity that ANOTHER owner holds a pet profile on, so the merge re-points it (survives).
+    const sourceIdentity = await ctx.database
+      .insertInto('face_identity')
+      .values({ type: 'pet' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    const { person: petProfile } = await ctx.newPerson({ ownerId: otherOwner.id });
+    await ctx.database
+      .updateTable('person')
+      .set({ identityId: sourceIdentity.id, type: 'pet' })
+      .where('id', '=', petProfile.id)
+      .execute();
+
+    await sut.mergeIdentitiesAfterProfileResolution({
+      targetIdentityId: targetIdentity.id,
+      sourceIdentityIds: [sourceIdentity.id],
+      source: 'manual',
+    });
+
+    const reconciled = await ctx.database
+      .selectFrom('person')
+      .select(['identityId', 'type'])
+      .where('id', '=', petProfile.id)
+      .executeTakeFirstOrThrow();
+    expect(reconciled.identityId).toBe(targetIdentity.id);
+    expect(reconciled.type).toBe('person');
+  });
+
   it('returns no accessible identity match when multiple shared identities are within threshold', async () => {
     const { ctx, sut } = setup();
     const { user: member } = await ctx.newUser();

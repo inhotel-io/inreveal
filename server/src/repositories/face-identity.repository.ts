@@ -2886,6 +2886,23 @@ export class FaceIdentityRepository {
       .where('identityId', 'in', sourceIdentityIds)
       .execute();
 
+    // Manual merges may mix types; the target's type wins (§4.3). Every profile now on the surviving identity must
+    // carry that type, so a re-pointed pet profile does not keep type='pet' while pointing at a person identity —
+    // a mismatch the automatic dedup/matching queries (which filter on type) would misread (#733 review). The
+    // type-inequality guard keeps this a no-op for the common same-type merge.
+    await db
+      .updateTable('person')
+      .set({ type: targetIdentity.type })
+      .where('identityId', '=', input.targetIdentityId)
+      .where('type', '!=', targetIdentity.type)
+      .execute();
+    await db
+      .updateTable('shared_space_person')
+      .set({ type: targetIdentity.type })
+      .where('identityId', '=', input.targetIdentityId)
+      .where('type', '!=', targetIdentity.type)
+      .execute();
+
     const deletable = await db
       .selectFrom('face_identity')
       .leftJoin('person', 'person.identityId', 'face_identity.id')
