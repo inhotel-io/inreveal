@@ -1794,6 +1794,26 @@ describe(MediaService.name, () => {
       expect(mocks.storage.rename).toHaveBeenCalledWith(trimOutputPath, expect.stringMatching(/_edited\.mp4$/));
     });
 
+    it('cleans up the trimmed video when a post-trim step fails', async () => {
+      const asset = AssetFactory.from({ type: AssetType.Video })
+        .exif()
+        .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+        .build();
+      mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+      mocks.media.probe.mockResolvedValue({
+        ...videoInfoStub.noAudioStreams,
+        format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+      });
+      // trim() succeeds, but a later step (frame extraction) throws. The locally-written
+      // trimmed video must not be left behind — on S3 outputPath is a pod-local temp.
+      mocks.media.extractFrame.mockRejectedValue(new Error('bad frame'));
+
+      await expect(sut.handleAssetEditThumbnailGeneration({ id: asset.id })).rejects.toThrow('bad frame');
+
+      const outputPath = StorageCore.getEditedEncodedVideoPath(asset as any);
+      expect(mocks.storage.unlink).toHaveBeenCalledWith(outputPath);
+    });
+
     it('should handle video undo by cleaning up edited files', async () => {
       const asset = AssetFactory.from({ type: AssetType.Video })
         .exif()
@@ -1891,6 +1911,31 @@ describe(MediaService.name, () => {
             expect.objectContaining({ type: AssetFileType.EncodedVideo, isEdited: true, path: editedKey }),
           ]),
         );
+      });
+
+      it('does not commit the trimmed duration when persisting the video fails (S3)', async () => {
+        // Upload fails part-way. The new duration must NOT already be committed, or the DB would
+        // report the trimmed length while getForVideo still serves the full-length original.
+        const put = vi.fn().mockRejectedValue(new Error('s3 down'));
+        const { StorageService } = await import('src/services/storage.service.js');
+        vi.spyOn(StorageService, 'getWriteBackend').mockReturnValue({ put } as any);
+        mocks.storage.createPlainReadStream.mockReturnValue(makeStream([Buffer.from('mp4')]) as any);
+
+        const asset = AssetFactory.from({ type: AssetType.Video })
+          .exif()
+          .edit({ action: AssetEditAction.Trim, parameters: { startTime: 5, endTime: 25 } as any })
+          .build();
+        mocks.assetJob.getForGenerateThumbnailJob.mockResolvedValue(getForGenerateThumbnail(asset));
+        mocks.media.probe.mockResolvedValue({
+          ...videoInfoStub.noAudioStreams,
+          format: { ...videoInfoStub.noAudioStreams.format, duration: 20 },
+        });
+        mocks.media.decodeImage.mockResolvedValue({ data: rawBuffer, info: rawInfo as OutputInfo });
+        mocks.media.getImageMetadata.mockResolvedValue({ width: 1920, height: 1080, isTransparent: false });
+
+        await expect(sut.handleAssetEditThumbnailGeneration({ id: asset.id })).rejects.toThrow('s3 down');
+
+        expect(mocks.asset.update).not.toHaveBeenCalledWith(expect.objectContaining({ duration: expect.anything() }));
       });
 
       it('never uploads the trimmed video over the transcoded original (S3)', async () => {

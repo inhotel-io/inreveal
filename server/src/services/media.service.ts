@@ -334,74 +334,92 @@ export class MediaService extends BaseService {
       return JobStatus.Failed;
     }
 
-    // Re-probe for actual duration and update asset
-    const probeResult = await this.mediaRepository.probe(outputPath);
-    const probedDuration = probeResult.format.duration;
-    if (probedDuration && probedDuration > 0) {
-      const newDuration = Math.round(probedDuration * 1000);
-      this.logger.debug(`Trim: updating duration from probe: ${newDuration} (${probedDuration}s)`);
-      await this.assetRepository.update({ id: asset.id, duration: newDuration });
-    } else {
-      // Probe didn't return duration — use calculated duration from trim parameters
-      const calculatedDuration = Math.round((params.endTime - params.startTime) * 1000);
-      this.logger.debug(`Trim: probe duration unavailable, using calculated: ${calculatedDuration}`);
-      await this.assetRepository.update({ id: asset.id, duration: calculatedDuration });
-    }
-
-    // Extract a frame at ~10% into the trimmed video for thumbnail generation.
-    // The path is unique per invocation: the in-process trim lock does not cover
-    // other worker processes, and a fixed name would let one job's cleanup unlink
-    // the frame another job is still reading (issue #743 item 2).
-    const frameTime = duration * 0.1;
+    // outputPath is now a locally-written trimmed video. Every step below can throw; on failure
+    // the catch removes it (and the extracted frame) so an S3-mode error doesn't leak temps on
+    // the pod's local disk — persistFile is what hands ownership of outputPath to the write backend.
+    //
+    // The frame path is unique per invocation: the in-process trim lock does not cover other
+    // worker processes, and a fixed name would let one job's cleanup unlink the frame another
+    // job is still reading (issue #743 item 2).
     const framePath = `${outputPath}.frame-${randomUUID()}.jpg`;
-    await this.mediaRepository.extractFrame(outputPath, framePath, frameTime);
+    try {
+      // Re-probe for the actual trimmed duration. It is committed to the DB only after the
+      // trimmed video is durably persisted (below), so a mid-op failure can't leave the asset's
+      // duration pointing at a video that was never stored.
+      const probeResult = await this.mediaRepository.probe(outputPath);
+      const probedDuration = probeResult.format.duration;
+      let newDuration: number;
+      if (probedDuration && probedDuration > 0) {
+        newDuration = Math.round(probedDuration * 1000);
+        this.logger.debug(`Trim: updating duration from probe: ${newDuration} (${probedDuration}s)`);
+      } else {
+        // Probe didn't return duration — use calculated duration from trim parameters
+        newDuration = Math.round((params.endTime - params.startTime) * 1000);
+        this.logger.debug(`Trim: probe duration unavailable, using calculated: ${newDuration}`);
+      }
 
-    // Generate thumbnail/preview/fullsize from extracted frame
-    const thumbnailResult = await this.generateImageThumbnails(
-      { ...asset, originalPath: framePath },
-      config,
-      true,
-      framePath,
-    );
+      // Extract a frame at ~10% into the trimmed video for thumbnail generation
+      const frameTime = duration * 0.1;
+      await this.mediaRepository.extractFrame(outputPath, framePath, frameTime);
 
-    // Clean up temp frame
-    await this.storageRepository.unlink(framePath).catch(() => {});
+      // Generate thumbnail/preview/fullsize from extracted frame
+      const thumbnailResult = await this.generateImageThumbnails(
+        { ...asset, originalPath: framePath },
+        config,
+        true,
+        framePath,
+      );
 
-    // Persist output files to S3 if needed
-    await this.persistImageFiles(asset, thumbnailResult.files);
+      // Clean up temp frame
+      await this.storageRepository.unlink(framePath).catch(() => {});
 
-    // persistFile unlinks the local file after uploading, so this must come AFTER
-    // probe() and extractFrame() have read outputPath.
-    const editedVideoPath = await this.persistFile(
-      outputPath,
-      StorageCore.getRelativeEditedEncodedVideoPath(asset),
-      'video/mp4',
-    );
+      // Persist output files to S3 if needed
+      await this.persistImageFiles(asset, thumbnailResult.files);
 
-    // Sync both edited encoded video and edited thumbnail files
-    const editedVideoFile: UpsertFileOptions = {
-      assetId: asset.id,
-      type: AssetFileType.EncodedVideo,
-      path: editedVideoPath,
-      isEdited: true,
-      isProgressive: false,
-      isTransparent: false,
-    };
-    const newFiles = [editedVideoFile, ...thumbnailResult.files];
+      // persistFile unlinks the local file after uploading, so this must come AFTER
+      // probe() and extractFrame() have read outputPath.
+      const editedVideoPath = await this.persistFile(
+        outputPath,
+        StorageCore.getRelativeEditedEncodedVideoPath(asset),
+        'video/mp4',
+      );
 
-    await this.syncFiles(
-      asset.files.filter((file) => file.isEdited),
-      newFiles,
-    );
+      // Sync both edited encoded video and edited thumbnail files
+      const editedVideoFile: UpsertFileOptions = {
+        assetId: asset.id,
+        type: AssetFileType.EncodedVideo,
+        path: editedVideoPath,
+        isEdited: true,
+        isProgressive: false,
+        isTransparent: false,
+      };
+      const newFiles = [editedVideoFile, ...thumbnailResult.files];
 
-    if (
-      thumbnailResult.thumbhash &&
-      (!asset.thumbhash || Buffer.compare(asset.thumbhash, thumbnailResult.thumbhash) !== 0)
-    ) {
-      await this.assetRepository.update({ id: asset.id, thumbhash: thumbnailResult.thumbhash });
+      await this.syncFiles(
+        asset.files.filter((file) => file.isEdited),
+        newFiles,
+      );
+
+      // Commit the new duration only now that the trimmed video + files are persisted.
+      await this.assetRepository.update({ id: asset.id, duration: newDuration });
+
+      if (
+        thumbnailResult.thumbhash &&
+        (!asset.thumbhash || Buffer.compare(asset.thumbhash, thumbnailResult.thumbhash) !== 0)
+      ) {
+        await this.assetRepository.update({ id: asset.id, thumbhash: thumbnailResult.thumbhash });
+      }
+
+      return JobStatus.Success;
+    } catch (error) {
+      // A post-trim step failed. Remove the local trimmed video + extracted frame so an S3-mode
+      // failure doesn't leak temps on local disk (persistFile may already have removed outputPath
+      // on the S3 happy path — unlink is best-effort). Rethrow so the job fails and BullMQ retries.
+      this.logger.error(`Trim post-processing failed for asset ${asset.id}: ${error}`);
+      await this.storageRepository.unlink(outputPath).catch(() => {});
+      await this.storageRepository.unlink(framePath).catch(() => {});
+      throw error;
     }
-
-    return JobStatus.Success;
   }
 
   @OnJob({ name: JobName.AssetGenerateThumbnails, queue: QueueName.ThumbnailGeneration })
