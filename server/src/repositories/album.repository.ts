@@ -461,13 +461,24 @@ export class AlbumRepository {
       return;
     }
 
-    await this.db
-      .insertInto('album_asset')
-      .expression((eb) =>
-        eb.selectFrom(dummy).select([asUuid(albumId).as('albumId'), sql`unnest(${assetIds}::uuid[])`.as('assetId')]),
-      )
-      .onConflict((oc) => oc.doNothing())
-      .execute();
+    // #752 P1-6 coexistence invariant: an (albumId, assetId) pair lives in EXACTLY ONE of
+    // album_asset / album_space_asset. An owner-add of a previously-contributed asset converts the
+    // contribution atomically: the delete fires the audit trigger (device tombstone) while the
+    // fresh album_asset row upserts — mobile converges to the owner edge in one sync window.
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .insertInto('album_asset')
+        .expression((eb) =>
+          eb.selectFrom(dummy).select([asUuid(albumId).as('albumId'), sql`unnest(${assetIds}::uuid[])`.as('assetId')]),
+        )
+        .onConflict((oc) => oc.doNothing())
+        .execute();
+      await trx
+        .deleteFrom('album_space_asset')
+        .where('album_space_asset.albumId', '=', albumId)
+        .where('album_space_asset.assetId', 'in', assetIds)
+        .execute();
+    });
   }
 
   // --- Cross-owner contributions (album_space_asset) — #764 ---------------------------------------
@@ -600,12 +611,31 @@ export class AlbumRepository {
     if (values.length === 0) {
       return;
     }
-    await this.db
-      .insertInto('album_asset')
-      .values(values)
-      // Allow idempotent album sync without failing on existing album memberships.
-      .onConflict((oc) => oc.columns(['albumId', 'assetId']).doNothing())
-      .execute();
+    // #752 P1-6: same conversion as addAssetIds, per album in the batch (see comment there).
+    const byAlbum = new Map<string, string[]>();
+    for (const { albumId, assetId } of values) {
+      const ids = byAlbum.get(albumId);
+      if (ids) {
+        ids.push(assetId);
+      } else {
+        byAlbum.set(albumId, [assetId]);
+      }
+    }
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .insertInto('album_asset')
+        .values(values)
+        // Allow idempotent album sync without failing on existing album memberships.
+        .onConflict((oc) => oc.columns(['albumId', 'assetId']).doNothing())
+        .execute();
+      for (const [albumId, assetIds] of byAlbum) {
+        await trx
+          .deleteFrom('album_space_asset')
+          .where('album_space_asset.albumId', '=', albumId)
+          .where('album_space_asset.assetId', 'in', assetIds)
+          .execute();
+      }
+    });
   }
 
   /**

@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
 import { AssetVisibility, SharedSpaceRole, SyncEntityType } from 'src/enum';
+import { AlbumRepository } from 'src/repositories/album.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SyncRepository } from 'src/repositories/sync.repository';
 import { DB } from 'src/schema';
@@ -402,6 +403,48 @@ describe('SharedSpaceAlbumToAssetSync — contributions (album_space_asset)', ()
 
     const after = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
     expect(after.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);
+  });
+
+  it('P1-6 convergence: owner-add conversion delivers tombstone + album_asset upsert in one window', async () => {
+    const { ctx, db, sut } = setup();
+    const albumRepo = ctx.get(AlbumRepository);
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { user: carol } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({ ownerId: carol.id });
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    await albumRepo.addAssetIds(album.id, [asset.id]); // the owner-add conversion site
+
+    const remaining = await db
+      .selectFrom('album_space_asset')
+      .select('assetId')
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(remaining).toHaveLength(0);
+    const deletes = await drain(sut.getDeletes({ nowId: NOW_ID, userId: member.id }));
+    expect(deletes.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+    const upserts = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
+    expect(upserts.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(true);
+
+    // Post-conversion removal (P1-6 spec seed): the owner now removes the asset — devices must get
+    // a NEW tombstone (album_asset_audit) beyond the conversion ones, and the edge must stop
+    // upserting. (Convergence order is safe by construction: the server handler streams deletes
+    // before upserts and the client applies batches sequentially.)
+    const conversionTombstoneIds = new Set(
+      deletes.filter((r) => r.albumId === album.id && r.assetId === asset.id).map((r) => r.id),
+    );
+    await albumRepo.removeAssetIds(album.id, [asset.id]);
+    const deletesAfter = await drain(sut.getDeletes({ nowId: NOW_ID, userId: member.id }));
+    expect(
+      deletesAfter.some((r) => r.albumId === album.id && r.assetId === asset.id && !conversionTombstoneIds.has(r.id)),
+    ).toBe(true);
+    const upsertsAfter = await drain(sut.getUpserts({ nowId: NOW_ID, userId: member.id }));
+    expect(upsertsAfter.some((r) => r.albumId === album.id && r.assetId === asset.id)).toBe(false);
   });
 });
 

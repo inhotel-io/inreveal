@@ -355,4 +355,51 @@ describe('AlbumService — cross-owner contribution permission matrix (#764)', (
       await expect(sut.removeAssets(authOf('nonMember'), albumL, { ids: [assetId] })).rejects.toThrow();
     });
   });
+
+  // ===============================================================================================
+  // COEXISTENCE (P1-6) — an (albumId, assetId) pair lives in EXACTLY ONE of album_asset /
+  // album_space_asset. Reachable ordering is contribution-first; the owner-add converts it.
+  // ===============================================================================================
+  describe('COEXISTENCE (P1-6)', () => {
+    // eslint-disable-next-line unicorn/consistent-function-scoping -- closes over the shared fixture
+    const contributeFreshCarolAsset = async () => {
+      const { ctx } = setup();
+      const { asset } = await ctx.newAsset({ ownerId: actors.carol.id, visibility: AssetVisibility.Timeline });
+      await ctx.newSharedSpaceAsset({ spaceId: spaceS, assetId: asset.id, addedById: actors.carol.id });
+      const [res] = await sut.addAssets(authOf('spaceEditor'), albumL, { ids: [asset.id] });
+      expect(res.success).toBe(true);
+      return asset.id;
+    };
+
+    it('owner-add of a contributed asset converts it: album_asset row present, contribution row gone, tombstone written', async () => {
+      const assetId = await contributeFreshCarolAsset();
+      const [res] = await sut.addAssets(authOf('carol'), albumL, { ids: [assetId] });
+      expect(res).toEqual({ id: assetId, success: true });
+      expect(await isAlbumAssetRow(assetId)).toBe(true);
+      expect(await isContributionRow(assetId)).toBeUndefined();
+      const tombstone = await db
+        .selectFrom('album_space_asset_audit')
+        .select('assetId')
+        .where('albumId', '=', albumL)
+        .where('assetId', '=', assetId)
+        .executeTakeFirst();
+      expect(tombstone).toBeDefined();
+    });
+
+    it('bulk path (addAssetsToAlbums) converts too', async () => {
+      const assetId = await contributeFreshCarolAsset();
+      const res = await sut.addAssetsToAlbums(authOf('carol'), { albumIds: [albumL], assetIds: [assetId] });
+      expect(res.success).toBe(true);
+      expect(await isAlbumAssetRow(assetId)).toBe(true);
+      expect(await isContributionRow(assetId)).toBeUndefined();
+    });
+
+    it('re-contribution after conversion → DUPLICATE, no contribution row', async () => {
+      const assetId = await contributeFreshCarolAsset();
+      await sut.addAssets(authOf('carol'), albumL, { ids: [assetId] });
+      const [res] = await sut.addAssets(authOf('spaceEditor'), albumL, { ids: [assetId] });
+      expect(res).toEqual({ id: assetId, success: false, error: 'duplicate' });
+      expect(await isContributionRow(assetId)).toBeUndefined();
+    });
+  });
 });
