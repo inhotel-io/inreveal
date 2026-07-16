@@ -382,11 +382,31 @@ export class IdentityMergePropagationService {
   }
 
   private async queueFollowUpsBestEffort(plan: IdentityMergePropagationPlan, followUps: ExecutedPlanFollowUps) {
+    this.auditDestructiveCrossOwnerCollapse(plan);
+
     try {
       await this.queueFollowUps(plan, followUps);
     } catch (error: Error | any) {
       this.deps.logger.error(`Failed to queue merge propagation follow-up jobs: ${error}`, error?.stack);
     }
+  }
+
+  /**
+   * Record a committed cross-owner COLLAPSE (issue #733 review A1). Collapsing another owner's two people deletes
+   * one of their person rows — an irreversible action on data the actor does not own. A collapse that touches a
+   * space leaves a space-activity trace, but a purely-personal one leaves none at all, so log every one here.
+   * Runs post-commit (from the best-effort follow-up step), so it only records merges that actually landed.
+   */
+  private auditDestructiveCrossOwnerCollapse(plan: IdentityMergePropagationPlan): void {
+    if (plan.collapsedOwnerIds.length === 0) {
+      return;
+    }
+
+    this.deps.logger.warn(
+      `Cross-owner people merge committed by ${plan.actorUserId}: collapsed people belonging to ` +
+        `${plan.collapsedOwnerIds.length} other owner(s) [${plan.collapsedOwnerIds.join(', ')}] into identity ` +
+        `${plan.targetIdentityId} — one person per owner deleted, irreversible.`,
+    );
   }
 
   private async queueFollowUps(plan: IdentityMergePropagationPlan, followUps: ExecutedPlanFollowUps) {

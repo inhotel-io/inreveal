@@ -492,6 +492,7 @@ const makeService = (profiles: MergeProfile[], options: { unrepairableSpaceIds?:
   };
   const logger = {
     error: vi.fn(),
+    warn: vi.fn(),
   };
   const sharedSpaceRepository = {
     lockSpacePeopleForMerge: vi.fn().mockResolvedValue(void 0),
@@ -1095,6 +1096,35 @@ describe('IdentityMergePropagationService', () => {
       // Two distinct other owners collapse; owner-1 (the actor) is never counted; owner-3 only re-points.
       expect(plan.collapsedOwnerIds).toEqual(['owner-2', 'owner-4']);
       expect(plan.repointedOwnerIds).toEqual(['owner-3']);
+    });
+
+    // #733 review A1: a cross-owner collapse deletes one of another owner's people; a purely-personal collapse
+    // leaves no space-activity trace, so the merge must record an audit log naming the impacted owners.
+    it('logs an audit warning when a merge collapses another owner’s people', async () => {
+      const { sut, mocks } = makeService([
+        profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x' }),
+        profile({ kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y' }),
+        // owner-2 holds a person on BOTH merged identities -> a destructive collapse of one of THEIR people.
+        profile({ kind: 'person', id: 'owner-2-a', ownerId: 'owner-2', identityId: 'identity-x' }),
+        profile({ kind: 'person', id: 'owner-2-b', ownerId: 'owner-2', identityId: 'identity-y' }),
+      ]);
+
+      await sut.mergePersonalPeople({ user: { id: 'owner-1' } } as never, 'person-x', ['person-y'], () =>
+        Promise.resolve(),
+      );
+
+      expect(mocks.logger.warn).toHaveBeenCalledWith(expect.stringContaining('owner-2'));
+    });
+
+    it('does not log an audit warning for an own-merge with no cross-owner collapse', async () => {
+      const { sut, mocks } = makeService([
+        profile({ kind: 'person', id: 'person-x', ownerId: 'owner-1', identityId: 'identity-x' }),
+        profile({ kind: 'person', id: 'person-y', ownerId: 'owner-1', identityId: 'identity-y' }),
+      ]);
+
+      await sut.mergePersonalPeople({ user: { id: 'owner-1' } } as never, 'person-x', ['person-y']);
+
+      expect(mocks.logger.warn).not.toHaveBeenCalled();
     });
 
     it('prefers named survivor candidates over unnamed candidates with equal face counts outside the initiating scope', async () => {
