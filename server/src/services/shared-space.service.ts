@@ -1327,15 +1327,17 @@ export class SharedSpaceService extends BaseService {
     // Same cross-owner policy as every other merge path (#733). An in-space merge propagates out to every
     // scope the identities are attached to, including other users' libraries, so if it would combine two of
     // another user's people it needs the instance toggle and an explicit acknowledgement.
+    //
+    // Resolve the toggle BEFORE the merge transaction opens: the authorizer runs inside that transaction while it
+    // holds the instance-wide advisory lock, and reading config there would query a second pool connection a
+    // saturated pool cannot grant, deadlocking every merge (#595). The authorizer gets an already-resolved value.
+    const { server } = await this.getConfig({ withCache: false });
     await this.identityMergePropagationService.mergeSpacePeople(
       auth,
       spaceId,
       targetPersonId,
       dto.ids,
-      createCrossOwnerMergeAuthorizer(async () => {
-        const { server } = await this.getConfig({ withCache: false });
-        return server;
-      }, dto),
+      createCrossOwnerMergeAuthorizer(() => Promise.resolve(server), dto),
     );
   }
 

@@ -4893,6 +4893,23 @@ describe(PersonService.name, () => {
       expect(mocks.faceIdentity.mergeIdentities).not.toHaveBeenCalled();
     });
 
+    // #733 review H1: the cross-owner toggle must be resolved BEFORE the merge transaction opens. The authorizer
+    // runs inside that transaction while it holds the instance-wide advisory lock, and a config read there needs a
+    // second pool connection a saturated pool cannot grant — deadlocking every merge (#595). So the service reads
+    // the config eagerly and hands the authorizer an already-resolved value; invoking it does no further config I/O.
+    it('resolves the cross-owner toggle before delegating to the planner (not inside the merge transaction)', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: false } });
+      const identityMergePropagation = useIdentityMergePropagation();
+
+      await sut.mergeScopedPeople(AuthFactory.create(), crossOwnerMergeDto() as never);
+
+      expect(mocks.systemMetadata.get).toHaveBeenCalled();
+      const readsBeforeAuthorize = mocks.systemMetadata.get.mock.calls.length;
+      const authorize = identityMergePropagation.mergeScopedProfiles.mock.calls[0][2] as MergeAuthorizerFn;
+      await authorize(planWith({ collapsedOwnerIds: ['owner-b'] })).catch(() => {});
+      expect(mocks.systemMetadata.get).toHaveBeenCalledTimes(readsBeforeAuthorize);
+    });
+
     // (a) A merge that only RE-POINTS another owner's person is not destructive — their row keeps its name and
     // faces, and the recognition job does exactly this unattended. It is never gated, even with the toggle off.
     it('does not gate a merge that only re-points another owner’s person', async () => {

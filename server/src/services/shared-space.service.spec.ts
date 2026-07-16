@@ -7246,6 +7246,35 @@ describe(SharedSpaceService.name, () => {
       );
     });
 
+    // #733 review H1: the cross-owner toggle must be resolved BEFORE the merge transaction opens. The authorizer
+    // runs inside that transaction while it holds the instance-wide advisory lock, and a config read there needs a
+    // second pool connection a saturated pool cannot grant — deadlocking every merge (#595). So the service reads
+    // the config eagerly and hands the authorizer an already-resolved value; invoking it does no further config I/O.
+    it('resolves the cross-owner toggle before delegating to the planner (not inside the merge transaction)', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ server: { mergePeopleAcrossOwners: false } });
+      const identityMergePropagation = useIdentityMergePropagation(sut);
+      const auth = factory.auth();
+      const spaceId = newUuid();
+      const targetId = newUuid();
+      const sourceId = newUuid();
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.sharedSpace.getPersonById
+        .mockResolvedValueOnce(factory.sharedSpacePerson({ id: targetId, spaceId }))
+        .mockResolvedValueOnce(factory.sharedSpacePerson({ id: sourceId, spaceId }));
+
+      await sut.mergeSpacePeople(auth, spaceId, targetId, { ids: [sourceId] });
+
+      expect(mocks.systemMetadata.get).toHaveBeenCalled();
+      const readsBeforeAuthorize = mocks.systemMetadata.get.mock.calls.length;
+      const authorize = identityMergePropagation.mergeSpacePeople.mock.calls[0][4] as SpaceMergeAuthorizerFn;
+      await authorize({
+        collapsedOwnerIds: ['owner-b'],
+        repointedOwnerIds: [],
+        unrepairableSpaceCollapseIds: [],
+      }).catch(() => {});
+      expect(mocks.systemMetadata.get).toHaveBeenCalledTimes(readsBeforeAuthorize);
+    });
+
     // §5.4 parity: the in-space merge propagates out to every scope the identities are attached to, including
     // other users' libraries. Before #733 it could silently merge two of another user's people — no toggle, no
     // confirmation. It now hands the planner the same cross-owner authorizer every other merge path uses.

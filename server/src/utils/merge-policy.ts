@@ -82,9 +82,11 @@ export const assertCrossOwnerCollapseAllowed = (
 };
 
 /**
- * Builds the authorizer every merge entry point hands to the planner. The instance config is read lazily — only
- * a plan that would actually destroy another owner's data needs the toggle, so an ordinary merge costs no
- * config lookup.
+ * Builds the authorizer every merge entry point hands to the planner. The caller resolves the instance config
+ * BEFORE opening the merge transaction and passes it in as an already-settled `getServerConfig`; the authorizer
+ * itself runs inside the transaction (while it holds the instance-wide advisory lock) and must never perform any
+ * `this.db` I/O there — a config read on a second pool connection can deadlock every merge (#595 / issue #733).
+ * The toggle is still only consulted on the destructive-collapse path, so an ordinary merge ignores it.
  */
 export const createCrossOwnerMergeAuthorizer = (
   getServerConfig: () => Promise<{ mergePeopleAcrossOwners: boolean }>,

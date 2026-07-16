@@ -55,6 +55,7 @@ import {
   chooseAutomaticTargetIdentity,
 } from 'src/services/accessible-identity-reconciliation';
 import { BaseService } from 'src/services/base.service';
+import { MergeAuthorizer } from 'src/services/identity-merge-propagation.service';
 import { JobItem, JobOf } from 'src/types';
 import { getDimensions } from 'src/utils/asset.util';
 import { asDateTimeString } from 'src/utils/date';
@@ -78,11 +79,13 @@ export const FACE_IDENTITY_BACKFILL_MAX_CONTINUATIONS = 5;
 
 @Injectable()
 export class PersonService extends BaseService {
-  private crossOwnerMergeAuthorizer(dto: { confirmCrossOwner?: boolean }) {
-    return createCrossOwnerMergeAuthorizer(async () => {
-      const { server } = await this.getConfig({ withCache: false });
-      return server;
-    }, dto);
+  private async crossOwnerMergeAuthorizer(dto: { confirmCrossOwner?: boolean }): Promise<MergeAuthorizer> {
+    // Resolve the toggle here, BEFORE the merge transaction opens. The authorizer runs inside that transaction
+    // while it holds the instance-wide advisory lock; reading config there would query a second pool connection
+    // that a saturated pool cannot grant, deadlocking every merge (#595). Handing over an already-resolved value
+    // keeps the transaction free of any `this.db` I/O.
+    const { server } = await this.getConfig({ withCache: false });
+    return createCrossOwnerMergeAuthorizer(() => Promise.resolve(server), dto);
   }
 
   @OnEvent({ name: 'AppBootstrap', workers: [ImmichWorker.Microservices] })
@@ -199,7 +202,11 @@ export class PersonService extends BaseService {
    * user's people. Re-pointing another owner's single person is free — that is what recognition does on its own.
    */
   async mergeScopedPeople(auth: AuthDto, dto: MergeScopedPeopleDto): Promise<void> {
-    await this.identityMergePropagationService.mergeScopedProfiles(auth, dto, this.crossOwnerMergeAuthorizer(dto));
+    await this.identityMergePropagationService.mergeScopedProfiles(
+      auth,
+      dto,
+      await this.crossOwnerMergeAuthorizer(dto),
+    );
   }
 
   async detachScopedPerson(auth: AuthDto, dto: DetachScopedPersonDto): Promise<void> {
@@ -1267,7 +1274,7 @@ export class PersonService extends BaseService {
       auth,
       id,
       mergeIds,
-      this.crossOwnerMergeAuthorizer(dto),
+      await this.crossOwnerMergeAuthorizer(dto),
     );
   }
 
