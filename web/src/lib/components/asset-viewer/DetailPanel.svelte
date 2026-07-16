@@ -78,6 +78,10 @@
    * a query the album timeline can express, so we do not offer it.
    */
   let isOnAlbum = $derived(filterTarget?.kind === 'album');
+  // A space-scoped map cannot represent an album filter — space ∩ album is unsatisfiable and the
+  // server 400s it (hydrateMapFilters drops albumId there). Treat it like the album surface and
+  // withhold the album filter affordance, so we never offer a control that silently does nothing.
+  let albumFilterUnsupported = $derived(isOnAlbum || (filterTarget?.kind === 'map' && !!filterTarget.spaceId));
 
   // R9/E6/E7 — a value that is empty or whitespace-only trims to nothing (filter-url.ts's
   // setTrimmed), so it must not render as a clickable filter affordance: the click would close the
@@ -512,7 +516,7 @@
                 </div>
               </div>
             </a>
-            {#if canFilter && !isOnAlbum}
+            {#if canFilter && !albumFilterUnsupported}
               <IconButton
                 icon={mdiFilterOutline}
                 aria-label="{$t('filter_by_album')}: {album.albumName}"

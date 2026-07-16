@@ -392,7 +392,10 @@ const SURFACES: Surface[] = [
     url: `https://gallery.test/map/photos/a5e70000-0000-4000-8000-00000000000f?spaceId=${SPACE_ID}`,
     basePath: '/map',
     personKey: 'spacePersonIds',
-    forwardsAlbumId: true,
+    // A space-scoped map cannot express an album filter — space ∩ album is unsatisfiable, the server
+    // 400s it, and DetailPanel (albumFilterUnsupported) + hydrateMapFilters + buildContextualMapUrl
+    // all withhold/drop it. So, like the album surface, the album ⚗️ row is not offered here.
+    forwardsAlbumId: false,
     buildOptions: (filters) => buildMapTimeBucketOptions(filters, SPACE_ID),
   },
 ];

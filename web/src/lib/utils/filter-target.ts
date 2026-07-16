@@ -166,6 +166,13 @@ export function buildContextualMapUrl(url: URL, point?: { lat: number; lng: numb
   const spaceId = target && (target.kind === 'space' || target.kind === 'map') ? target.spaceId : undefined;
   const query = carryOver ? (url.searchParams.get('q') ?? undefined) : undefined;
 
+  // A space-scoped map cannot represent an album filter: space ∩ album is unsatisfiable and the
+  // server 400s it (see hydrateMapFilters, which drops it on arrival). Don't let albumId ride along
+  // into the carried URL — it would be a dead param.
+  if (spaceId) {
+    filters.albumId = undefined;
+  }
+
   return Route.map({ spaceId, query, filters, ...point });
 }
 
