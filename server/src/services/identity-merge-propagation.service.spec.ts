@@ -1678,6 +1678,37 @@ describe('IdentityMergePropagationService', () => {
       );
     });
 
+    // #733 review L3: executePlan has no authorizer to consult, so it must FAIL CLOSED on a destructive plan
+    // (collapsing another owner's — or an un-editable space's — people) rather than silently committing it. This
+    // is the backstop that keeps a future merge path which forgets the gate from re-opening the cross-owner hole.
+    it('refuses a destructive cross-owner plan because there is no authorizer to gate it', async () => {
+      const { sut, mocks } = makeService([]);
+
+      await expect(
+        sut.executePlan(
+          {
+            actorUserId: 'owner-1',
+            origin: { type: 'person', targetProfileId: 'person-x', sourceProfileIds: ['person-y'], ownerId: 'owner-1' },
+            targetIdentityId: 'identity-x',
+            sourceIdentityIds: ['identity-y'],
+            personalProfileMerges: [{ ownerId: 'owner-b', targetPersonId: 'b-x', sourcePersonIds: ['b-y'] }],
+            spaceProfileMerges: [],
+            profileIdentityUpdates: [],
+            affectedOwnerIds: ['owner-b'],
+            repointedOwnerIds: [],
+            collapsedOwnerIds: ['owner-b'],
+            unrepairableSpaceCollapseIds: [],
+            affectedSpaceIds: [],
+            followUpJobs: [],
+            activityEvents: [],
+          },
+          { actorUserId: 'owner-1' },
+        ),
+      ).rejects.toThrow(/without an authorizer/);
+
+      expect(mocks.person.mergePersonProfile).not.toHaveBeenCalled();
+    });
+
     it('links moved personal faces to the target identity with manual source before collapsing identities', async () => {
       const { sut, mocks } = makeService([]);
 

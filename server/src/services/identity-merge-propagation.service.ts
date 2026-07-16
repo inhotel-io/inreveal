@@ -147,7 +147,7 @@ export class IdentityMergePropagationService {
         },
         db,
       );
-      await authorize?.(plan);
+      await this.authorizePlan(plan, authorize);
       await this.lockPlanForExecution(plan, db);
       return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
@@ -172,7 +172,7 @@ export class IdentityMergePropagationService {
         },
         db,
       );
-      await authorize?.(plan);
+      await this.authorizePlan(plan, authorize);
       await this.lockPlanForExecution(plan, db);
       return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
@@ -198,7 +198,7 @@ export class IdentityMergePropagationService {
         },
         db,
       );
-      await authorize?.(plan);
+      await this.authorizePlan(plan, authorize);
       await this.lockPlanForExecution(plan, db);
       return { plan, followUps: await this.executePlanInTransaction(plan, db) };
     });
@@ -209,10 +209,33 @@ export class IdentityMergePropagationService {
   async executePlan(plan: IdentityMergePropagationPlan, _context: { actorUserId: string }): Promise<void> {
     const followUps = await this.deps.databaseRepository.transaction(async (db) => {
       await this.lockMergePropagation(db);
+      // executePlan has no authorizer to consult, so it may only run non-destructive plans (issue #733 review, L3).
+      await this.authorizePlan(plan);
       await this.lockPlanForExecution(plan, db);
       return this.executePlanInTransaction(plan, db);
     });
     await this.queueFollowUpsBestEffort(plan, followUps);
+  }
+
+  /**
+   * The gate every merge entry point applies before execution. `authorize` is optional so the engine's mechanics
+   * can be tested in isolation — but a plan that would DESTRUCTIVELY collapse another owner's people, or people in
+   * a space the actor cannot edit, must never execute without one. Failing closed here means a future merge path
+   * (or a call to `executePlan`) that forgets the authorizer cannot silently re-open the #733 cross-owner hole; it
+   * throws instead. Tests that intentionally exercise destructive execution pass an explicit permissive authorizer.
+   */
+  private async authorizePlan(plan: IdentityMergePropagationPlan, authorize?: MergeAuthorizer): Promise<void> {
+    if (authorize) {
+      await authorize(plan);
+      return;
+    }
+
+    if (plan.collapsedOwnerIds.length > 0 || plan.unrepairableSpaceCollapseIds.length > 0) {
+      throw new Error(
+        'Refusing to execute a destructive cross-boundary merge without an authorizer (issue #733). ' +
+          'Every merge entry point must pass a MergeAuthorizer that applies the cross-owner policy.',
+      );
+    }
   }
 
   private async lockPlanForExecution(plan: IdentityMergePropagationPlan, db: Transaction<DB>): Promise<void> {

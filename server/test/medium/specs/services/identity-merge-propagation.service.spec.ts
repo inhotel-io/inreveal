@@ -8,7 +8,7 @@ import { PersonRepository } from 'src/repositories/person.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
-import { IdentityMergePropagationService } from 'src/services/identity-merge-propagation.service';
+import { IdentityMergePropagationService, MergeAuthorizer } from 'src/services/identity-merge-propagation.service';
 import { asDateString } from 'src/utils/date';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
@@ -126,6 +126,12 @@ const getSpacePeople = (db: Kysely<DB>, ids: string[]) => {
 const getIdentityIds = (db: Kysely<DB>, ids: string[]) => {
   return db.selectFrom('face_identity').select('id').where('id', 'in', ids).orderBy('id').execute();
 };
+
+// These tests drive the engine DIRECTLY to exercise its propagation mechanics, including destructive cross-owner
+// and cross-space collapses. The engine now fails closed on a destructive plan unless an authorizer ran (#733
+// review L3), so the destructive-mechanics tests pass this explicit permissive authorizer — the gate itself is
+// covered in merge-policy.spec.ts and people-identity-rbac.spec.ts.
+const ALLOW_MERGE: MergeAuthorizer = () => Promise.resolve();
 
 describe('IdentityMergePropagationService medium tests', () => {
   // The #733 topology, end to end against a real database: userA's own person and userB's person (from a
@@ -272,7 +278,7 @@ describe('IdentityMergePropagationService medium tests', () => {
     const source = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: sourceIdentity.id });
 
     await expect(
-      sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]),
+      sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id], ALLOW_MERGE),
     ).resolves.toBeUndefined();
 
     const people = await ctx.database
@@ -359,7 +365,7 @@ describe('IdentityMergePropagationService medium tests', () => {
     });
 
     await expect(
-      sut.mergePersonalPeople(factory.auth({ user: actor }), actorTarget.id, [actorSource.id]),
+      sut.mergePersonalPeople(factory.auth({ user: actor }), actorTarget.id, [actorSource.id], ALLOW_MERGE),
     ).resolves.toEqual([{ id: actorSource.id, success: true }]);
 
     await expect(
@@ -459,9 +465,13 @@ describe('IdentityMergePropagationService medium tests', () => {
     });
 
     await expect(
-      sut.mergeSpacePeople(factory.auth({ user: actor }), initiatingSpace.id, initiatingTarget.id, [
-        initiatingSource.id,
-      ]),
+      sut.mergeSpacePeople(
+        factory.auth({ user: actor }),
+        initiatingSpace.id,
+        initiatingTarget.id,
+        [initiatingSource.id],
+        ALLOW_MERGE,
+      ),
     ).resolves.toBeUndefined();
 
     await expect(
@@ -663,8 +673,8 @@ describe('IdentityMergePropagationService medium tests', () => {
         name: 'Source',
       });
       const results = await Promise.allSettled([
-        sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]),
-        sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]),
+        sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id], ALLOW_MERGE),
+        sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id], ALLOW_MERGE),
       ]);
 
       const fulfilled = results.filter((result) => result.status === 'fulfilled');
@@ -715,9 +725,9 @@ describe('IdentityMergePropagationService medium tests', () => {
         }
       });
 
-      const first = sut.mergeSpacePeople(factory.auth({ user }), space.id, personA.id, [personB.id]);
+      const first = sut.mergeSpacePeople(factory.auth({ user }), space.id, personA.id, [personB.id], ALLOW_MERGE);
       await firstLockReached;
-      const second = sut.mergeSpacePeople(factory.auth({ user }), space.id, personB.id, [personC.id]);
+      const second = sut.mergeSpacePeople(factory.auth({ user }), space.id, personB.id, [personC.id], ALLOW_MERGE);
       await new Promise((resolve) => setTimeout(resolve, 25));
       releaseFirst();
 
@@ -764,9 +774,9 @@ describe('IdentityMergePropagationService medium tests', () => {
         }
       });
 
-      const first = sut.mergeSpacePeople(factory.auth({ user }), space.id, personA.id, [personB.id]);
+      const first = sut.mergeSpacePeople(factory.auth({ user }), space.id, personA.id, [personB.id], ALLOW_MERGE);
       await firstLockReached;
-      const second = sut.mergeSpacePeople(factory.auth({ user }), space.id, personB.id, [personA.id]);
+      const second = sut.mergeSpacePeople(factory.auth({ user }), space.id, personB.id, [personA.id], ALLOW_MERGE);
       await new Promise((resolve) => setTimeout(resolve, 25));
       releaseFirst();
 
@@ -795,7 +805,7 @@ describe('IdentityMergePropagationService medium tests', () => {
     const spaceSource = await createSpacePerson(ctx.database, { spaceId: space.id, identityId: sourceIdentity.id });
     vi.spyOn(sharedSpaceRepository, 'logActivity').mockRejectedValueOnce(new Error('activity failed'));
 
-    await expect(sut.mergePersonalPeople(factory.auth({ user }), target.id, [source.id])).rejects.toThrow(
+    await expect(sut.mergePersonalPeople(factory.auth({ user }), target.id, [source.id], ALLOW_MERGE)).rejects.toThrow(
       'activity failed',
     );
 
@@ -985,7 +995,7 @@ describe('IdentityMergePropagationService medium tests', () => {
       ])
       .execute();
 
-    await sut.mergeSpacePeople(factory.auth({ user: actor }), space.id, target.id, [source.id]);
+    await sut.mergeSpacePeople(factory.auth({ user: actor }), space.id, target.id, [source.id], ALLOW_MERGE);
 
     const survivingAliases = await ctx.database
       .selectFrom('shared_space_person_alias')
@@ -1051,7 +1061,7 @@ describe('IdentityMergePropagationService medium tests', () => {
         .executeTakeFirstOrThrow(),
     ).resolves.toEqual({ faceCount: 0, assetCount: 0 });
 
-    await sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id]);
+    await sut.mergeSpacePeople(factory.auth({ user }), space.id, target.id, [source.id], ALLOW_MERGE);
 
     await expect(
       ctx.database
