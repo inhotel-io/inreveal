@@ -221,15 +221,29 @@ export class FaceRepairService extends BaseService {
     let skipped = 0;
     const movedFaceIds: string[] = [];
     const affectedPersonIds = new Set<string>();
-    const ownerExists = new Map<string, boolean>();
+    // Cache each person's owner (undefined = person no longer exists). Used both to skip a route whose
+    // destination was deleted/merged since the plan was built AND to enforce the same-owner invariant below.
+    const ownerOf = new Map<string, string | undefined>();
+    const resolveOwner = async (id: string): Promise<string | undefined> => {
+      if (!ownerOf.has(id)) {
+        const person = await this.personRepository.getById(id);
+        ownerOf.set(id, person?.ownerId);
+      }
+      return ownerOf.get(id);
+    };
 
     for (const { from, to, faceIds } of routes.values()) {
-      let exists = ownerExists.get(to);
-      if (exists === undefined) {
-        exists = !!(await this.personRepository.getById(to));
-        ownerExists.set(to, exists);
+      const toOwner = await resolveOwner(to);
+      if (toOwner === undefined) {
+        skipped += faceIds.length; // destination person deleted/merged since the plan was built
+        continue;
       }
-      if (!exists) {
+      // C6 (defense-in-depth): never move a face across owners. resolveFaces already guards every interactive
+      // destination up-front, but the write layer independently refuses a cross-owner route so no caller —
+      // present or future (e.g. a shared-space-aware neighbour search) — can silently collapse two owners'
+      // identities here. Every current caller is same-owner by construction, so this never fires today.
+      const fromOwner = await resolveOwner(from);
+      if (fromOwner !== toOwner) {
         skipped += faceIds.length;
         continue;
       }
@@ -768,10 +782,17 @@ export class FaceRepairService extends BaseService {
     for (const group of moveToPerson) {
       for (const assetFaceId of group.faceIds) {
         const isFlagged = flaggedIds.has(assetFaceId);
-        if (isFlagged && !resolvable.has(assetFaceId)) {
-          preSkipped++; // flagged but declined/dismissed since scan — don't re-move a declined pairing
+        // Pre-skip a flagged face only when this move re-applies a pairing the admin already settled: the face
+        // is locked (owner-agnostic confirm), or it was declined toward THIS SAME destination. A face declined
+        // toward a different owner is a NEW pairing — the admin deliberately picked another destination — and
+        // must be honored. (Keying the skip on "declined at all" silently swallowed such deliberate moves.)
+        const declinedTowardDestination =
+          declineMaps.declinedFaceOwners.get(assetFaceId)?.has(group.destinationPersonId) ?? false;
+        const locked = declineMaps.lockedFaceIds?.has(assetFaceId) ?? false;
+        if (isFlagged && (locked || declinedTowardDestination)) {
+          preSkipped++;
         } else {
-          // Either a resolvable flagged face, or a non-flagged rest-of-cluster face (§5.3: moveToPerson
+          // Either an actionable flagged face, or a non-flagged rest-of-cluster face (§5.3: moveToPerson
           // accepts any eligible face currently on personId). executeRepair's still-on-source re-check at
           // write time skips anything not actually on personId, so no separate eligibility check is needed here.
           toRepair.push({ assetFaceId, currentPersonId: personId, suspectedOwnerId: group.destinationPersonId });
@@ -823,16 +844,28 @@ export class FaceRepairService extends BaseService {
     // (never one shared owner — a mixed cluster can point faces at different owners). `createDeclines` is
     // idempotent via its `(assetFaceId, suspectedOwnerId)` ON CONFLICT DO NOTHING, so re-staying an
     // already-declined pairing is a no-op here (M22/E20) rather than a unique-violation.
-    const declined =
-      stay.length > 0
-        ? await this.faceRepairDeclineRepository.createDeclines({
-            faces: stay.map((assetFaceId) => ({
-              assetFaceId,
-              suspectedOwnerId: snapshotOwnerByFace.get(assetFaceId)!,
-            })),
-            declinedBy: resolvedBy,
-          })
-        : 0;
+    // A stay face whose scan-suggested owner was deleted or merged away since the scan carries a dangling
+    // suspectedOwnerId (the flagged snapshot stores it as a bare uuid, no person FK). Writing a decline against
+    // it would violate the decline table's person FK (23503) and 500 the whole resolve — after any moveToPerson
+    // faces above already committed. Such a face is already effectively "kept": the owner it would have moved to
+    // is gone, so it can never be re-flagged toward that owner. Drop it from the decline write; it still counts
+    // as settled for the drain check below (settledFaceIds includes the raw `stay` bucket).
+    let declined = 0;
+    if (stay.length > 0) {
+      const liveOwnerIds = new Set<string>();
+      for (const ownerId of new Set(stay.map((assetFaceId) => snapshotOwnerByFace.get(assetFaceId)!))) {
+        if (await this.personRepository.getById(ownerId)) {
+          liveOwnerIds.add(ownerId);
+        }
+      }
+      const declineFaces = stay
+        .map((assetFaceId) => ({ assetFaceId, suspectedOwnerId: snapshotOwnerByFace.get(assetFaceId)! }))
+        .filter((face) => liveOwnerIds.has(face.suspectedOwnerId));
+      declined =
+        declineFaces.length > 0
+          ? await this.faceRepairDeclineRepository.createDeclines({ faces: declineFaces, declinedBy: resolvedBy })
+          : 0;
+    }
 
     // Confirm/lock (Slice 3, state 4): durably, owner-agnostically lock each `lock`-bucket face to this
     // reviewed person. `insertLocks` is idempotent via the plain unique index on assetFaceId — re-locking an
@@ -951,7 +984,11 @@ export class FaceRepairService extends BaseService {
     // flagged faces included. moveToPerson destinations only ever gain faces from this call, so there is no
     // destination to additionally drain.
     const settledFaceIds = new Set([...moveFaceIds, ...stay, ...lock, ...detach, ...unknown]);
-    const settlesFlaggedSnapshot = [...flaggedIds].every((assetFaceId) => settledFaceIds.has(assetFaceId));
+    // Compare against `resolvable` (the decline/lock-filtered pending set the review page shows), NOT the raw
+    // `flaggedIds`: a face declined or locked in a PRIOR resolve is already settled and is filtered out of the
+    // review UI, so the admin can never re-submit it here — measuring the drain against the raw snapshot would
+    // strand a partially-resolved person in the console with a nonzero flagged count that can never clear.
+    const settlesFlaggedSnapshot = [...resolvable].every((assetFaceId) => settledFaceIds.has(assetFaceId));
     if (entireCluster || settlesFlaggedSnapshot) {
       await this.faceRepairScanRepository.removePersonsFromLatestScan([personId]);
     }

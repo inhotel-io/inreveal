@@ -296,6 +296,49 @@ describe(FaceRepairAdminController.name, () => {
     });
   });
 
+  describe('GET /admin/face-repair/scan/latest', () => {
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get('/admin/face-repair/scan/latest');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates to service.getLatestScanStatus', async () => {
+      service.getLatestScanStatus.mockResolvedValue(null);
+      const { status } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/scan/latest')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(service.getLatestScanStatus).toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /admin/face-repair/scan/person/:personId', () => {
+    const personId = '00000000-0000-4000-a000-000000000010';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get(`/admin/face-repair/scan/person/${personId}`);
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('delegates to service.getPersonFlaggedFaces', async () => {
+      service.getPersonFlaggedFaces.mockResolvedValue({ personId, flaggedFaces: [] });
+      const { status, body } = await request(ctx.getHttpServer())
+        .get(`/admin/face-repair/scan/person/${personId}`)
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(service.getPersonFlaggedFaces).toHaveBeenCalledWith(personId);
+      expect(body).toMatchObject({ personId, flaggedFaces: [] });
+    });
+
+    it('rejects a non-uuid personId with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/scan/person/not-a-uuid')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(400);
+      expect(service.getPersonFlaggedFaces).not.toHaveBeenCalled();
+    });
+  });
+
   describe('POST /admin/face-repair/resolve', () => {
     const personId = '00000000-0000-4000-a000-000000000030';
     const ownerA = '00000000-0000-4000-a000-000000000031';

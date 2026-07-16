@@ -2105,3 +2105,199 @@ describe('FaceRepairService.resolveFaces: a failed park leaves no orphan cluster
     expect(afterFailure[f1]).toBe(source.id);
   });
 });
+
+// ── C1: the console-drain check must ignore faces already settled (declined/locked) in a PRIOR resolve ──
+// The review page only ever surfaces the decline/lock-filtered pending set, so on a later resolve the admin
+// can only settle the still-visible faces. If the drain gate compared against the RAW flagged snapshot it
+// would never fire for a person that was partially resolved across sessions, stranding it in the console.
+describe('FaceRepairService.resolveFaces: draining ignores faces already settled in a prior resolve (C1)', () => {
+  it('drains the person once every STILL-PENDING flagged face is settled, even though an earlier face was soft-stayed in a prior resolve', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const a = await seedFace(ctx, user.id, source.id);
+    const b = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: a, suspectedOwnerId: owner.id },
+      { assetFaceId: b, suspectedOwnerId: owner.id },
+    ]);
+
+    // Resolve 1: soft-stay A only. B is still pending, so the person must NOT drain yet.
+    await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [a], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+    let latest = await scanRepo.getLatestScan();
+    let snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+
+    // Resolve 2: settle the only still-pending face B. A is filtered out of the review UI (declined in resolve
+    // 1), so the admin never re-submits it — yet the person MUST now drain from the console.
+    await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [b], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+    latest = await scanRepo.getLatestScan();
+    snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).not.toContain(source.id);
+  });
+});
+
+// ── C7: a "keep here" (stay) whose scan-suggested owner was deleted/merged since the scan must not 500 ──
+// The flagged-snapshot row stores suspectedOwnerId as a bare uuid (no person FK), so it survives a deleted
+// owner; writing a decline against it would hit the decline table's real person FK (23503).
+describe('FaceRepairService.resolveFaces: stay tolerates a suspected owner deleted since the scan (C7)', () => {
+  it("does not 500 when a stayed face's scan-suggested owner was deleted after the scan; the face is kept and the person drains", async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const a = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: a, suspectedOwnerId: owner.id }]);
+
+    // The scan-suggested owner is deleted (e.g. merged away) before the admin resolves.
+    await db.deleteFrom('person').where('id', '=', owner.id).execute();
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [a], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+
+    // No 500: the dangling-owner stay is dropped from the decline write (declined: 0) but still settles the face.
+    expect(result).toEqual({ moved: 0, declined: 0, locked: 0, detached: 0, unknown: 0, skipped: 0 });
+
+    // The face is untouched (kept here) and the person drains from the console.
+    const byId = await personIdsOf([a]);
+    expect(byId[a]).toBe(source.id);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).not.toContain(source.id);
+  });
+});
+
+// ── C2: moveToPerson pre-skip must be scoped to the requested destination, not "declined at all" ──
+describe('FaceRepairService.resolveFaces: moveToPerson honors a face declined toward a DIFFERENT owner (C2)', () => {
+  it('moves a previously soft-stayed face when the admin picks a DIFFERENT destination', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerO } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: ownerY } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Kept' });
+    const a = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: a, suspectedOwnerId: ownerO.id }]);
+
+    // Resolve 1: soft-stay A — declines the A→O pairing.
+    await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [a], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+
+    // Resolve 2: the admin changes their mind and moves A to a DIFFERENT person Y. This is a new pairing and
+    // must be honored, not silently pre-skipped because A was declined toward O.
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: ownerY.id, faceIds: [a], lock: false }],
+        stay: [],
+        lock: [],
+        detach: [],
+        unknown: [],
+      },
+      user.id,
+    );
+    expect(result.moved).toBe(1);
+    expect(result.skipped).toBe(0);
+    const byId = await personIdsOf([a]);
+    expect(byId[a]).toBe(ownerY.id);
+  });
+
+  it('still skips a re-move toward the SAME owner the face was declined against (preserves "do not re-apply a declined pairing")', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerO } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Kept' });
+    const a = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: a, suspectedOwnerId: ownerO.id }]);
+
+    // Resolve 1: soft-stay A (declines A→O).
+    await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [a], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+
+    // Resolve 2: re-move A toward the SAME owner O it was declined against — skipped, A stays put.
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: ownerO.id, faceIds: [a], lock: false }],
+        stay: [],
+        lock: [],
+        detach: [],
+        unknown: [],
+      },
+      user.id,
+    );
+    expect(result.moved).toBe(0);
+    expect(result.skipped).toBe(1);
+    const byId = await personIdsOf([a]);
+    expect(byId[a]).toBe(source.id);
+  });
+});
+
+// ── C6: executeRepair must never move a face across owners, even on a caller that skips resolveFaces's guard ──
+describe('FaceRepairService.executeRepair: never moves a face across owners (C6)', () => {
+  it('skips a route whose destination is owned by a different user, leaving the face untouched', async () => {
+    const { sut, ctx } = setup();
+    const { user: userA } = await ctx.newUser();
+    const { user: userB } = await ctx.newUser();
+    const { person: source } = await ctx.newPerson({ ownerId: userA.id, name: '' });
+    const { person: foreign } = await ctx.newPerson({ ownerId: userB.id, name: '' });
+    const a = await seedFace(ctx, userA.id, source.id);
+
+    const result = await sut.executeRepair({
+      toRepair: [{ assetFaceId: a, currentPersonId: source.id, suspectedOwnerId: foreign.id }],
+      reviewOnlyFaces: [],
+      reviewOnlyPersonIds: [],
+      unAttributableFaces: [],
+      perPerson: [],
+    });
+
+    expect(result.moved).toBe(0);
+    expect(result.skipped).toBe(1);
+    const byId = await personIdsOf([a]);
+    expect(byId[a]).toBe(source.id);
+  });
+});
+
+// ── C10: boundary — a resolve with no persisted scan treats moveToPerson faces as rest-of-cluster ──
+describe('FaceRepairService.resolveFaces: boundary cases (C10)', () => {
+  it('treats a moveToPerson face as a rest-of-cluster face when no scan has ever been persisted (latest is null)', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Named' });
+    const a = await seedFace(ctx, user.id, source.id);
+
+    // No seedFlaggedSnapshot — there is no persisted scan at all, so `stored` is [] and `flaggedIds` is empty.
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: owner.id, faceIds: [a], lock: false }],
+        stay: [],
+        lock: [],
+        detach: [],
+        unknown: [],
+      },
+      user.id,
+    );
+
+    expect(result.moved).toBe(1);
+    const byId = await personIdsOf([a]);
+    expect(byId[a]).toBe(owner.id);
+  });
+});

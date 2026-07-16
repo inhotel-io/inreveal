@@ -72,31 +72,16 @@ export class FaceRepairLockRepository {
     }));
   }
 
-  // Remove locks by row id and/or by natural key (assetFaceId — a lock's uniqueness is keyed on the face
-  // alone, unlike a decline's (assetFaceId, suspectedOwnerId) pairing). Undoing a lock this way re-enables
-  // flagging: the face drops out of `getLockedFaceIds()` and the next scan can suspect it again. Mirrors
-  // `FaceRepairDeclineRepository.removeDeclines()`. Returns the total number of rows removed.
-  async removeLocks(input: { ids?: string[]; faces?: string[] }): Promise<number> {
+  // Remove locks by row id. Undoing a lock re-enables flagging: the face drops out of `getLockedFaceIds()` and
+  // the next scan can suspect it again. Unlike a decline, a lock has no natural-key removal path — its
+  // uniqueness is keyed on `assetFaceId` alone, with no per-request pairing to disambiguate — so the
+  // resolutions page always undoes a lock by its row id. Returns the number of rows removed.
+  async removeLocks(input: { ids?: string[] }): Promise<number> {
     const ids = input.ids ?? [];
-    const faces = input.faces ?? [];
-    if (ids.length === 0 && faces.length === 0) {
+    if (ids.length === 0) {
       return 0;
     }
-    return this.db.transaction().execute(async (trx) => {
-      let removed = 0;
-      if (ids.length > 0) {
-        const rows = await trx.deleteFrom('face_repair_lock').where('id', 'in', ids).returning('id').execute();
-        removed += rows.length;
-      }
-      if (faces.length > 0) {
-        const rows = await trx
-          .deleteFrom('face_repair_lock')
-          .where('assetFaceId', 'in', faces)
-          .returning('id')
-          .execute();
-        removed += rows.length;
-      }
-      return removed;
-    });
+    const rows = await this.db.deleteFrom('face_repair_lock').where('id', 'in', ids).returning('id').execute();
+    return rows.length;
   }
 }

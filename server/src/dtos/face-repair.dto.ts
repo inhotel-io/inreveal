@@ -129,13 +129,23 @@ export const FaceRepairPersonFacesSchema = z
   .meta({ id: 'FaceRepairPersonFacesDto' });
 export class FaceRepairPersonFacesDto extends createZodDto(FaceRepairPersonFacesSchema) {}
 
+// Upper bound on every per-request face/owner array (C4). These endpoints are all admin-only, so this is a
+// backstop against a runaway payload rather than a hostile-input guard: the DB write path already chunks
+// IN-lists at 1000 to stay under Postgres's bind-parameter limit, and a single reviewed person never has a
+// realistic selection this large (whole-cluster moves go through `entireCluster`, server-enumerated, with no
+// client array). Mirrors the max(200) already bounding FaceRepairClusterFacesRequestSchema's page size.
+const MAX_RESOLVE_FACES = 1000;
+
 const FaceDeclineSchema = z.object({ assetFaceId: z.uuidv4(), suspectedOwnerId: z.uuidv4() });
-const PersonDeclineSchema = z.object({ personId: z.uuidv4(), suspectedOwnerIds: z.array(z.uuidv4()) });
+const PersonDeclineSchema = z.object({
+  personId: z.uuidv4(),
+  suspectedOwnerIds: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES),
+});
 
 export const FaceRepairDeclineRequestSchema = z
   .object({
-    faces: z.array(FaceDeclineSchema).optional(),
-    persons: z.array(PersonDeclineSchema).optional(),
+    faces: z.array(FaceDeclineSchema).max(MAX_RESOLVE_FACES).optional(),
+    persons: z.array(PersonDeclineSchema).max(MAX_RESOLVE_FACES).optional(),
   })
   .meta({ id: 'FaceRepairDeclineRequestDto' });
 export class FaceRepairDeclineRequestDto extends createZodDto(FaceRepairDeclineRequestSchema) {}
@@ -247,25 +257,25 @@ export const FaceRepairClusterFacesResponseSchema = z
   .meta({ id: 'FaceRepairClusterFacesResponseDto' });
 export class FaceRepairClusterFacesResponseDto extends createZodDto(FaceRepairClusterFacesResponseSchema) {}
 
-// Slice 1 of the full per-face resolution: `resolve` replaces the 2-state `apply` (spec
-// docs/plans/2026-07-10-face-cleanup-full-resolution-design.md). Only `moveToPerson` is wired end-to-end this
-// slice; `stay`/`lock`/`detach` default to [] and are validated (disjoint buckets) but not yet acted on —
-// Slices 2/3/5 wire them without another DTO/SDK change.
-// `lock` (temporal-consistency hardening, Slice 3, "move-and-lock"): a deliberate move can also durably,
+// `resolve` (the full per-face resolution, spec docs/plans/2026-07-10-face-cleanup-full-resolution-design.md)
+// replaces the retired 2-state `apply`. Every bucket is now wired end-to-end: `moveToPerson` (move to a chosen
+// person / owner), `stay` (soft-decline "keep here"), `lock` (confirm/lock), `detach` ("not a face"), `unknown`
+// (park in a fresh cluster), and `entireCluster` (server-enumerated whole-cluster move).
+// `lock` on a MoveGroup (temporal-consistency hardening, "move-and-lock"): a deliberate move can also durably,
 // owner-agnostically lock the moved faces to their destination, so a later re-scan never re-flags them.
 // Defaults to false — plain moves stay undurable unless the caller opts in.
 const MoveGroupSchema = z.object({
   destinationPersonId: z.uuidv4(),
-  faceIds: z.array(z.uuidv4()).min(1),
+  faceIds: z.array(z.uuidv4()).min(1).max(MAX_RESOLVE_FACES),
   lock: z.boolean().default(false),
 });
 export const FaceRepairResolveRequestSchema = z
   .object({
     personId: z.uuidv4(),
-    moveToPerson: z.array(MoveGroupSchema).default([]),
-    stay: z.array(z.uuidv4()).default([]),
-    lock: z.array(z.uuidv4()).default([]),
-    detach: z.array(z.uuidv4()).default([]),
+    moveToPerson: z.array(MoveGroupSchema).max(MAX_RESOLVE_FACES).default([]),
+    stay: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES).default([]),
+    lock: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES).default([]),
+    detach: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES).default([]),
     // "Unknown person" (state 6): a real face of a real person the admin cannot name — the standard case when
     // reviewing someone else's library. The server moves these into a FRESH unnamed person owned by the
     // reviewed cluster's owner and locks them there. Deliberately NOT a bare unassign: an unassigned face is
@@ -273,7 +283,7 @@ export const FaceRepairResolveRequestSchema = z
     // it was just pulled out of), so "send it back to the unknown pool" would boomerang. Giving it a person of
     // its own means recognition skips it, the lock means no future scan re-flags it, and it still surfaces as an
     // unnamed cluster on the People page for anyone to name later.
-    unknown: z.array(z.uuidv4()).default([]),
+    unknown: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES).default([]),
     entireCluster: z.object({ destinationPersonId: z.uuidv4() }).optional(),
   })
   .meta({ id: 'FaceRepairResolveRequestDto' });

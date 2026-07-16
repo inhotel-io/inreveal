@@ -213,3 +213,27 @@ describe('FaceRepairClusterFacesRequestSchema', () => {
     expect(FaceRepairClusterFacesRequestSchema.safeParse({ page: 0, size: 1.5 }).success).toBe(false);
   });
 });
+
+// C4: every per-request face/owner array is bounded so a runaway admin payload cannot drive unbounded work.
+const bulkUuid = (n: number) => `00000000-0000-4000-a000-${String(n).padStart(12, '0')}`;
+
+describe('FaceRepairResolveRequestSchema face-array bounds (C4)', () => {
+  it('accepts a large-but-bounded bucket (1000 faces)', () => {
+    const stay = Array.from({ length: 1000 }, (_, i) => bulkUuid(i + 1));
+    expect(FaceRepairResolveRequestSchema.safeParse({ personId: UUID_V4, stay }).success).toBe(true);
+  });
+
+  it('rejects a bucket over the 1000-face ceiling', () => {
+    const stay = Array.from({ length: 1001 }, (_, i) => bulkUuid(i + 1));
+    expect(FaceRepairResolveRequestSchema.safeParse({ personId: UUID_V4, stay }).success).toBe(false);
+  });
+
+  it('rejects a moveToPerson group whose faceIds exceed the ceiling', () => {
+    const faceIds = Array.from({ length: 1001 }, (_, i) => bulkUuid(i + 1));
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: UUID_V4,
+      moveToPerson: [{ destinationPersonId: bulkUuid(999_999), faceIds }],
+    });
+    expect(result.success).toBe(false);
+  });
+});
