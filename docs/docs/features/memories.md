@@ -11,7 +11,7 @@ Gallery supports two memory families:
 | **On this day** | Photos taken around the same calendar day in previous years | App-generated "N years ago" title  |
 | **Rule memory** | Server-curated sets such as birthdays and recent trips      | Server-provided title and subtitle |
 
-Each individual type — **On this day**, **Birthdays**, and **Recent trips** — can be enabled or disabled both globally by an admin and per user. See [Generated memory controls](#generated-memory-controls) below.
+Each individual type can be enabled or disabled both globally by an admin and per user. See [Generated memory controls](#generated-memory-controls) below for the full list of type keys.
 
 Saved memories stay available after their normal display window. Hidden or deleted assets are excluded from generated memories.
 
@@ -71,15 +71,19 @@ Every memory type is controlled at two independent layers:
 
 A user receives a memory type only when it is **both** globally available **and** enabled in that user's own settings.
 
-The three built-in types each have a stable key used in configuration:
+The built-in types each have a stable key used in configuration:
 
-| Type key      | Setting label | Controls                                |
-| ------------- | ------------- | --------------------------------------- |
-| `on_this_day` | On this day   | "N years ago" photo memories            |
-| `birthday`    | Birthdays     | Birthday rule memories for named people |
-| `recent_trip` | Recent trips  | Recent trip rule memories               |
+| Type key              | Setting label           | Controls                                                                |
+| --------------------- | ----------------------- | ----------------------------------------------------------------------- |
+| `on_this_day`         | On this day             | "N years ago" photo memories                                            |
+| `birthday`            | Birthdays               | Birthday rule memories for named people                                 |
+| `recent_trip`         | Recent trips            | Recent trip rule memories                                               |
+| `month_recap`         | This month              | A past year's photos from this calendar month, shown early in the month |
+| `favorites_throwback` | Favorite moments        | Your favorite photos from this calendar month in a past year            |
+| `on_this_day_place`   | On this day, in a place | A past year's on-this-day photos when they cluster in one place         |
+| `season_recap`        | Season recap            | A past meteorological season, shown when the new season begins          |
 
-All three default to **on**.
+All default to **on**.
 
 ### Per-user toggles
 

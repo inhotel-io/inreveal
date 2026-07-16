@@ -38,6 +38,29 @@ const setup = (db?: Kysely<DB>) => {
   });
 };
 
+const seedRuleAsset = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  {
+    ownerId,
+    localDateTime,
+    city = null,
+    country = null,
+    isFavorite = false,
+  }: { ownerId: string; localDateTime: string; city?: string | null; country?: string | null; isFavorite?: boolean },
+) => {
+  const assetRepo = ctx.get(AssetRepository);
+  const { asset } = await ctx.newAsset({ ownerId, localDateTime, isFavorite });
+  await Promise.all([
+    ctx.newExif({ assetId: asset.id, city, country }),
+    ctx.newJobStatus({ assetId: asset.id }),
+    assetRepo.upsertFiles([
+      { assetId: asset.id, type: AssetFileType.Preview, path: `/preview-${asset.id}.jpg` },
+      { assetId: asset.id, type: AssetFileType.Thumbnail, path: `/thumb-${asset.id}.jpg` },
+    ]),
+  ]);
+  return asset;
+};
+
 describe(MemoryService.name, () => {
   beforeEach(async () => {
     defaultDatabase = await getKyselyDB();
@@ -641,6 +664,97 @@ describe(MemoryService.name, () => {
 
       const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
       expect(memories).toEqual([]);
+    });
+  });
+
+  describe('onMemoriesCreate — Tier 1 rules (end-to-end generation)', () => {
+    it('creates a month_recap memory on the 1st with a 7-day visibility window', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 1 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // 12 ungeotagged July 2023 photos spread across days 5–16 (no city -> no on_this_day_place;
+      // not on the ±3-day on-this-day window around Jul 1 -> no OnThisDay memory).
+      const assetIds: string[] = [];
+      for (let day = 5; day <= 16; day++) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-07-${day}T12:00:00Z` });
+        assetIds.push(asset.id);
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          type: MemoryType.Rule,
+          memoryAt: expect.any(Date),
+          showAt: now.startOf('day').toJSDate(),
+          hideAt: now.startOf('day').plus({ days: 6 }).endOf('day').toJSDate(),
+          data: expect.objectContaining({
+            ruleId: 'month_recap',
+            title: 'July 2023',
+            subtitle: '12 photos',
+            context: expect.objectContaining({ year: 2023, month: 7, count: 12 }),
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...assetIds].toSorted());
+      // still visible three days later, gone after the window
+      expect(
+        await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.plus({ days: 3 }).toJSDate() }),
+      ).toHaveLength(1);
+      expect(
+        await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.plus({ days: 8 }).toJSDate() }),
+      ).toHaveLength(0);
+    });
+
+    it('creates an on_this_day_place memory from a city-dominant prior-year day (1-day window)', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 10 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // 6 Lisbon + 2 Porto on Jul 10 2023 -> Lisbon dominates 6/8 = 75% (>= 60%, >= 4).
+      const lisbonIds: string[] = [];
+      for (let i = 0; i < 6; i++) {
+        const asset = await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2023-07-10T0${i}:00:00Z`,
+          city: 'Lisbon',
+          country: 'Portugal',
+        });
+        lisbonIds.push(asset.id);
+      }
+      for (let i = 0; i < 2; i++) {
+        await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2023-07-10T1${i}:00:00Z`,
+          city: 'Porto',
+          country: 'Portugal',
+        });
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          type: MemoryType.Rule,
+          showAt: now.startOf('day').toJSDate(),
+          hideAt: now.endOf('day').toJSDate(), // single-day window
+          data: expect.objectContaining({
+            ruleId: 'on_this_day_place',
+            title: 'On this day in Lisbon',
+            subtitle: '6 photos from 2023',
+            context: expect.objectContaining({ year: 2023, city: 'Lisbon', country: 'Portugal', count: 6 }),
+          }),
+        }),
+      ]);
+      // only the dominant-city (Lisbon) assets are attached
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...lisbonIds].toSorted());
     });
   });
 

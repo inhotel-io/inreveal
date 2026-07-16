@@ -49,8 +49,10 @@ describe(FavoritesThrowbackMemoryRule.name, () => {
         subtitle: '6 favorites',
         score: 225, // 200 + min(6,20)*3=18 + recencyBonus(2023,2026)=7
         visibleForDays: 7,
+        context: { year: 2023, month: 7, count: 6 },
       });
-      expect(candidate.assetIds).toHaveLength(6);
+      expect(candidate.assetIds).toEqual(['f-2023-0', 'f-2023-1', 'f-2023-2', 'f-2023-3', 'f-2023-4', 'f-2023-5']);
+      expect(candidate.memoryAt.toISODate()).toBe('2023-07-01');
     });
   });
 

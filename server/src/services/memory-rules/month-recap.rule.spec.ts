@@ -50,7 +50,10 @@ describe(MonthRecapMemoryRule.name, () => {
         visibleForDays: 7,
         context: { year: 2023, month: 7, count: 12 },
       });
+      expect(candidate.memoryAt.toISODate()).toBe('2023-07-01');
       expect(candidate.assetIds).toHaveLength(12);
+      expect(candidate.assetIds[0]).toBe('a-2023-0');
+      expect(candidate.assetIds.at(-1)).toBe('a-2023-11');
     });
   });
 
