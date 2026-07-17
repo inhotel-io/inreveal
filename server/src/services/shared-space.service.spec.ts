@@ -251,6 +251,7 @@ describe(SharedSpaceService.name, () => {
   beforeEach(() => {
     ({ sut, mocks } = newTestService(SharedSpaceService));
     mocks.sharedSpace.hasPetsBySpaceId.mockResolvedValue(false);
+    mocks.sharedSpace.getAlbumNamesByIds.mockResolvedValue([]);
     mocks.sharedSpace.recountPersons.mockResolvedValue(void 0);
     mocks.sharedSpace.isAssetInSpace.mockResolvedValue(true);
     mocks.sharedSpace.getPersonFaceAssignmentsForSpace.mockResolvedValue([]);
@@ -3348,6 +3349,51 @@ describe(SharedSpaceService.name, () => {
       ]);
     });
 
+    it('resolves the CURRENT album name for link/unlink activities (create-then-rename)', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult());
+      mocks.sharedSpace.getActivities.mockResolvedValue([
+        {
+          id: 'act-link',
+          type: 'album_link',
+          data: { albumId: 'album-1', albumName: '' }, // empty name captured at create-then-link time
+          createdAt: new Date('2026-03-10T12:00:00Z'),
+          userId: 'user-1',
+          name: 'Writer',
+          email: 'w@test.com',
+          profileImagePath: null,
+          avatarColor: UserAvatarColor.Primary,
+        },
+      ]);
+      mocks.sharedSpace.getAlbumNamesByIds.mockResolvedValue([{ id: 'album-1', albumName: 'USA Trip' }]);
+
+      const result = await sut.getActivities(factory.auth(), 'space-1', {});
+
+      expect(mocks.sharedSpace.getAlbumNamesByIds).toHaveBeenCalledWith(['album-1']);
+      expect((result[0].data as Record<string, unknown>).albumName).toBe('USA Trip');
+    });
+
+    it('drops link/unlink activities whose album no longer exists (abandoned create → auto-deleted)', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult());
+      mocks.sharedSpace.getActivities.mockResolvedValue([
+        {
+          id: 'act-link',
+          type: 'album_link',
+          data: { albumId: 'gone-1', albumName: '' },
+          createdAt: new Date('2026-03-10T12:00:00Z'),
+          userId: 'user-1',
+          name: 'Writer',
+          email: 'w@test.com',
+          profileImagePath: null,
+          avatarColor: UserAvatarColor.Primary,
+        },
+      ]);
+      mocks.sharedSpace.getAlbumNamesByIds.mockResolvedValue([]); // album no longer exists
+
+      const result = await sut.getActivities(factory.auth(), 'space-1', {});
+
+      expect(result).toEqual([]);
+    });
+
     it('should pass limit and offset to repository', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult());
       mocks.sharedSpace.getActivities.mockResolvedValue([]);
@@ -3398,12 +3444,14 @@ describe(SharedSpaceService.name, () => {
     it('passes non-PersonMerge activity data through unchanged', async () => {
       const auth = factory.auth();
       const spaceId = newUuid();
+      const albumId = newUuid();
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ spaceId, userId: auth.user.id }));
+      mocks.sharedSpace.getAlbumNamesByIds.mockResolvedValue([{ id: albumId, albumName: 'Trip' }]);
       mocks.sharedSpace.getActivities.mockResolvedValue([
         {
           id: newUuid(),
           type: SharedSpaceActivityType.AlbumLink,
-          data: { albumId: newUuid(), albumName: 'Trip' },
+          data: { albumId, albumName: 'Trip' },
           createdAt: new Date(),
           userId: auth.user.id,
           name: 'Owner',

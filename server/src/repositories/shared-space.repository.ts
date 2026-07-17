@@ -560,6 +560,23 @@ export class SharedSpaceRepository {
   }
 
   /**
+   * Current names for the given album ids (live albums only). Used to resolve the CURRENT album name
+   * for link/unlink activities, so an album created-then-renamed isn't stuck showing the empty or stale
+   * name captured at link time.
+   */
+  async getAlbumNamesByIds(albumIds: string[]): Promise<{ id: string; albumName: string }[]> {
+    if (albumIds.length === 0) {
+      return [];
+    }
+    return this.db
+      .selectFrom('album')
+      .select(['album.id as id', 'album.albumName as albumName'])
+      .where('album.id', 'in', albumIds)
+      .where('album.deletedAt', 'is', null)
+      .execute();
+  }
+
+  /**
    * Slice 4.B DIRECT-path purge: when the owner flips one of these assets OUT of
    * the space-shareable visibility set (Timeline/Archive) to Hidden or Locked,
    * the `shared_space_asset` join row is NOT deleted, so the delete-audit trigger

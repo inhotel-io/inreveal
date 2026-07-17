@@ -894,17 +894,52 @@ export class SharedSpaceService extends BaseService {
 
     const activities = await this.sharedSpaceRepository.getActivities(spaceId, query.limit ?? 50, query.offset ?? 0);
 
-    return activities.map((a) => ({
-      id: a.id,
-      type: a.type,
-      data: this.redactActivityData(a.type as SharedSpaceActivityType, a.data as Record<string, unknown>),
-      createdAt: (a.createdAt as unknown as Date).toISOString(),
-      userId: a.userId,
-      userName: a.name,
-      userEmail: a.email,
-      userProfileImagePath: a.profileImagePath,
-      userAvatarColor: a.avatarColor,
-    }));
+    // Resolve the CURRENT album name for link/unlink activities. The name is captured at link time,
+    // which is empty for the create-album flow (create empty → link → name later) and stale after a
+    // rename; resolving it live from the stored albumId keeps the feed accurate.
+    const albumIds = [
+      ...new Set(
+        activities
+          .filter((a) => a.type === SharedSpaceActivityType.AlbumLink || a.type === SharedSpaceActivityType.AlbumUnlink)
+          .map((a) => (a.data as Record<string, unknown>)?.albumId)
+          .filter((id): id is string => typeof id === 'string'),
+      ),
+    ];
+    const albumNameRows = albumIds.length > 0 ? await this.sharedSpaceRepository.getAlbumNamesByIds(albumIds) : [];
+    const albumNames = new Map(albumNameRows.map((a) => [a.id, a.albumName]));
+
+    return activities
+      .filter((a) => {
+        // Drop album link/unlink activities whose album no longer exists — e.g. an abandoned create-flow
+        // album that was auto-deleted on navigate-away. Otherwise it lingers with a stale/empty name for
+        // an album that's gone. Albums that still exist (incl. unlinked ones) keep their history.
+        if (a.type === SharedSpaceActivityType.AlbumLink || a.type === SharedSpaceActivityType.AlbumUnlink) {
+          const albumId = (a.data as Record<string, unknown>)?.albumId;
+          return typeof albumId === 'string' && albumNames.has(albumId);
+        }
+        return true;
+      })
+      .map((a) => {
+        const data = this.redactActivityData(a.type as SharedSpaceActivityType, a.data as Record<string, unknown>);
+        if (
+          (a.type === SharedSpaceActivityType.AlbumLink || a.type === SharedSpaceActivityType.AlbumUnlink) &&
+          typeof data.albumId === 'string' &&
+          albumNames.has(data.albumId)
+        ) {
+          data.albumName = albumNames.get(data.albumId);
+        }
+        return {
+          id: a.id,
+          type: a.type,
+          data,
+          createdAt: (a.createdAt as unknown as Date).toISOString(),
+          userId: a.userId,
+          userName: a.name,
+          userEmail: a.email,
+          userProfileImagePath: a.profileImagePath,
+          userAvatarColor: a.avatarColor,
+        };
+      });
   }
 
   async removeAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetRemoveDto): Promise<string[]> {
