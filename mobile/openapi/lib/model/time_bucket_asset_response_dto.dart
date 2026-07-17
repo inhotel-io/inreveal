@@ -35,16 +35,16 @@ class TimeBucketAssetResponseDto {
   });
 
   /// Array of city names extracted from EXIF GPS data
-  Optional<List<String>?> city;
+  Optional<List<String?>?> city;
 
   /// Array of country names extracted from EXIF GPS data
-  Optional<List<String>?> country;
+  Optional<List<String?>?> country;
 
   /// Array of UTC timestamps when each asset was originally uploaded to Immich
   List<String> createdAt;
 
   /// Array of video/gif durations in milliseconds (null for static images)
-  List<int> duration;
+  List<int?> duration;
 
   /// Array of file creation timestamps in UTC
   List<String> fileCreatedAt;
@@ -62,22 +62,22 @@ class TimeBucketAssetResponseDto {
   List<bool> isTrashed;
 
   /// Array of latitude coordinates extracted from EXIF GPS data
-  Optional<List<num>?> latitude;
+  Optional<List<num?>?> latitude;
 
   /// Array of live photo video asset IDs (null for non-live photos)
-  List<String> livePhotoVideoId;
+  List<String?> livePhotoVideoId;
 
   /// Array of UTC offset hours at the time each photo was taken. Positive values are east of UTC, negative values are west of UTC. Values may be fractional (e.g., 5.5 for +05:30, -9.75 for -09:45). Applying this offset to 'fileCreatedAt' will give you the time the photo was taken from the photographer's perspective.
   List<num> localOffsetHours;
 
   /// Array of longitude coordinates extracted from EXIF GPS data
-  Optional<List<num>?> longitude;
+  Optional<List<num?>?> longitude;
 
   /// Array of owner IDs for each asset
   List<String> ownerId;
 
   /// Array of projection types for 360° content (e.g., \"EQUIRECTANGULAR\", \"CUBEFACE\", \"CYLINDRICAL\")
-  List<String> projectionType;
+  List<String?> projectionType;
 
   /// Array of aspect ratios (width/height) for each asset
   List<num> ratio;
@@ -86,7 +86,7 @@ class TimeBucketAssetResponseDto {
   Optional<List<List<String>?>?> stack;
 
   /// Array of BlurHash strings for generating asset previews (base64 encoded)
-  List<String> thumbhash;
+  List<String?> thumbhash;
 
   /// Array of visibility statuses for each asset (e.g., ARCHIVE, TIMELINE, HIDDEN, LOCKED)
   List<AssetVisibility> visibility;
@@ -188,16 +188,16 @@ class TimeBucketAssetResponseDto {
 
       return TimeBucketAssetResponseDto(
         city: json.containsKey(r'city') ? Optional.present(json[r'city'] is Iterable
-            ? (json[r'city'] as Iterable).cast<String>().toList(growable: false)
+            ? (json[r'city'] as Iterable).cast<String?>().toList(growable: false)
             : const []) : const Optional.absent(),
         country: json.containsKey(r'country') ? Optional.present(json[r'country'] is Iterable
-            ? (json[r'country'] as Iterable).cast<String>().toList(growable: false)
+            ? (json[r'country'] as Iterable).cast<String?>().toList(growable: false)
             : const []) : const Optional.absent(),
         createdAt: json[r'createdAt'] is Iterable
             ? (json[r'createdAt'] as Iterable).cast<String>().toList(growable: false)
             : const [],
         duration: json[r'duration'] is Iterable
-            ? (json[r'duration'] as Iterable).cast<int>().toList(growable: false)
+            ? (json[r'duration'] as Iterable).cast<int?>().toList(growable: false)
             : const [],
         fileCreatedAt: json[r'fileCreatedAt'] is Iterable
             ? (json[r'fileCreatedAt'] as Iterable).cast<String>().toList(growable: false)
@@ -215,22 +215,22 @@ class TimeBucketAssetResponseDto {
             ? (json[r'isTrashed'] as Iterable).cast<bool>().toList(growable: false)
             : const [],
         latitude: json.containsKey(r'latitude') ? Optional.present(json[r'latitude'] is Iterable
-            ? (json[r'latitude'] as Iterable).cast<num>().toList(growable: false)
+            ? (json[r'latitude'] as Iterable).cast<num?>().toList(growable: false)
             : const []) : const Optional.absent(),
         livePhotoVideoId: json[r'livePhotoVideoId'] is Iterable
-            ? (json[r'livePhotoVideoId'] as Iterable).cast<String>().toList(growable: false)
+            ? (json[r'livePhotoVideoId'] as Iterable).cast<String?>().toList(growable: false)
             : const [],
         localOffsetHours: json[r'localOffsetHours'] is Iterable
             ? (json[r'localOffsetHours'] as Iterable).cast<num>().toList(growable: false)
             : const [],
         longitude: json.containsKey(r'longitude') ? Optional.present(json[r'longitude'] is Iterable
-            ? (json[r'longitude'] as Iterable).cast<num>().toList(growable: false)
+            ? (json[r'longitude'] as Iterable).cast<num?>().toList(growable: false)
             : const []) : const Optional.absent(),
         ownerId: json[r'ownerId'] is Iterable
             ? (json[r'ownerId'] as Iterable).cast<String>().toList(growable: false)
             : const [],
         projectionType: json[r'projectionType'] is Iterable
-            ? (json[r'projectionType'] as Iterable).cast<String>().toList(growable: false)
+            ? (json[r'projectionType'] as Iterable).cast<String?>().toList(growable: false)
             : const [],
         ratio: json[r'ratio'] is Iterable
             ? (json[r'ratio'] as Iterable).cast<num>().toList(growable: false)
@@ -241,7 +241,7 @@ class TimeBucketAssetResponseDto {
             ).toList()
           :  const []) : const Optional.absent(),
         thumbhash: json[r'thumbhash'] is Iterable
-            ? (json[r'thumbhash'] as Iterable).cast<String>().toList(growable: false)
+            ? (json[r'thumbhash'] as Iterable).cast<String?>().toList(growable: false)
             : const [],
         visibility: AssetVisibility.listFromJson(json[r'visibility']),
       );
