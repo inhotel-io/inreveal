@@ -15,6 +15,7 @@ class PersonDto {
     required this.thumbnailPath,
     this.updatedAt,
     this.numberOfAssets,
+    this.spaceId,
   });
 
   final String id;
@@ -29,9 +30,15 @@ class PersonDto {
   /// (e.g. the offline local-Drift fallback path never populates it).
   final int? numberOfAssets;
 
+  /// Space scope for a photos-filter person. Non-null when this is a shared-space person, in
+  /// which case [id] is the tokenized `space-person:<uuid>` filter id and the avatar routes to
+  /// the membership-gated space thumbnail endpoint (the owner endpoint 404s that id). Null for
+  /// personal/owned people. Mirrors [DriftPerson.spaceId] / web `primaryProfile.spaceId`.
+  final String? spaceId;
+
   @override
   String toString() {
-    return 'Person(id: $id, birthDate: $birthDate, isHidden: $isHidden, name: $name, thumbnailPath: $thumbnailPath, updatedAt: $updatedAt, numberOfAssets: $numberOfAssets)';
+    return 'Person(id: $id, birthDate: $birthDate, isHidden: $isHidden, name: $name, thumbnailPath: $thumbnailPath, updatedAt: $updatedAt, numberOfAssets: $numberOfAssets, spaceId: $spaceId)';
   }
 
   PersonDto copyWith({
@@ -42,6 +49,7 @@ class PersonDto {
     String? thumbnailPath,
     DateTime? updatedAt,
     int? numberOfAssets,
+    String? spaceId,
   }) {
     return PersonDto(
       id: id ?? this.id,
@@ -51,6 +59,7 @@ class PersonDto {
       thumbnailPath: thumbnailPath ?? this.thumbnailPath,
       updatedAt: updatedAt ?? this.updatedAt,
       numberOfAssets: numberOfAssets ?? this.numberOfAssets,
+      spaceId: spaceId ?? this.spaceId,
     );
   }
 
@@ -63,6 +72,7 @@ class PersonDto {
       'thumbnailPath': thumbnailPath,
       'updatedAt': updatedAt?.millisecondsSinceEpoch,
       'numberOfAssets': numberOfAssets,
+      'spaceId': spaceId,
     };
   }
 
@@ -75,6 +85,7 @@ class PersonDto {
       thumbnailPath: map['thumbnailPath'] as String,
       updatedAt: map['updatedAt'] != null ? DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int) : null,
       numberOfAssets: map['numberOfAssets'] as int?,
+      spaceId: map['spaceId'] as String?,
     );
   }
 
@@ -94,7 +105,8 @@ class PersonDto {
         other.name == name &&
         other.thumbnailPath == thumbnailPath &&
         other.updatedAt == updatedAt &&
-        other.numberOfAssets == numberOfAssets;
+        other.numberOfAssets == numberOfAssets &&
+        other.spaceId == spaceId;
   }
 
   @override
@@ -105,7 +117,8 @@ class PersonDto {
         name.hashCode ^
         thumbnailPath.hashCode ^
         updatedAt.hashCode ^
-        numberOfAssets.hashCode;
+        numberOfAssets.hashCode ^
+        spaceId.hashCode;
   }
 }
 
