@@ -10,6 +10,9 @@ rm -rf ../mobile/openapi
 cd ./templates/mobile/serialization/native
 wget -O native_class.mustache https://raw.githubusercontent.com/OpenAPITools/openapi-generator/$OPENAPI_GENERATOR_VERSION/modules/openapi-generator/src/main/resources/dart2/serialization/native/native_class.mustache
 patch --no-backup-if-mismatch -u native_class.mustache <native_class.mustache.patch
+# Must apply AFTER native_class.mustache.patch — its hunks are authored against the
+# patched template. Types nullable-item arrays as List<T?> (issue #743 item 3).
+patch --no-backup-if-mismatch -u native_class.mustache <native_class_nullable_items_in_arrays.patch
 
 cd ../../
 wget -O api.mustache https://raw.githubusercontent.com/OpenAPITools/openapi-generator/$OPENAPI_GENERATOR_VERSION/modules/openapi-generator/src/main/resources/dart2/api.mustache
