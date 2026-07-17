@@ -225,14 +225,6 @@ main > div:has([data-testid='page-header-title-row']) {
   background-color: color-mix(in oklab, var(--immich-ui-muted) 65%, transparent);
 }
 
-/* Collapsed filter panel: the w-14 strip leaves a lot of empty space around the
- * 24px icons. Tighten it so the icons read as centered, and drop the now-
- * redundant right divider. Scoped to the collapsed state via :has. */
-[data-testid='filter-panel-shell']:has(> [data-testid='collapsed-icon-strip']) {
-  width: 3rem;
-  border-inline-end-width: 0;
-}
-
 /* Admin pages use @immich/ui's AppShell (not the <main> layout above), so they
  * miss the treatments. Bring them in line:
  *  1. drop the AppShellHeader's own bottom border (navbar already has none),

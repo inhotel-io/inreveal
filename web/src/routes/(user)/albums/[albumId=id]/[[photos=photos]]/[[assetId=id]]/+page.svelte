@@ -14,6 +14,7 @@
     clearFilters,
     createFilterState,
     getActiveFilterCount,
+    loadFilterCollapsed,
     type FilterState,
   } from '$lib/components/filter-panel/filter-panel';
   import HeaderActionButton from '$lib/components/HeaderActionButton.svelte';
@@ -341,6 +342,9 @@
   const isTimelineEmpty = $derived(
     timelineManager?.isInitialized && !hasTimelineMonths && totalAssetCount === 0 && activeFilterCount === 0,
   );
+
+  // Filter-panel collapse is driven here so a header filter button can reclaim the panel's space.
+  let filterCollapsed = $state(loadFilterCollapsed());
   const showFilteredEmptyState = $derived(
     timelineManager?.isInitialized && !hasTimelineMonths && totalAssetCount === 0 && activeFilterCount > 0,
   );
@@ -511,6 +515,8 @@
             <FilterPanel
               config={albumFilterConfig}
               bind:filters={albumFilters}
+              bind:collapsed={filterCollapsed}
+              externalToggle
               {timeBuckets}
               storageKey="gallery-filter-visible-sections-album-detail"
               hidden={isTimelineEmpty}
@@ -561,6 +567,12 @@
               showGrouping={isBrowseTimeline && !assetMultiSelectManager.selectionActive}
               showFilters={getActiveFilterCount(albumFilters) > 0}
               filters={albumFiltersBar}
+              showFilterButton={filterCollapsed &&
+                isBrowseTimeline &&
+                !assetMultiSelectManager.selectionActive &&
+                !isTimelineEmpty}
+              filterActive={getActiveFilterCount(albumFilters) > 0}
+              onExpandFilters={() => (filterCollapsed = false)}
             />
           {/if}
 

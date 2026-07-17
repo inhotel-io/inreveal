@@ -9,6 +9,7 @@
     createFilterState,
     clearFilters,
     getActiveFilterCount,
+    loadFilterCollapsed,
     type FilterPanelConfig,
     type FilterState,
   } from '$lib/components/filter-panel/filter-panel';
@@ -582,6 +583,9 @@
   const isTimelineEmpty = $derived(
     !!timelineManager?.isEmptyForOptions(options) && getActiveFilterCount(filters) === 0 && !showSearchResults,
   );
+
+  // Filter-panel collapse is driven here so a header filter button can reclaim the panel's space.
+  let filterCollapsed = $state(loadFilterCollapsed());
   const isFilteredTimelineEmpty = $derived(
     timelineManager?.isInitialized && totalAssetCount === 0 && getActiveFilterCount(filters) > 0 && !showSearchResults,
   );
@@ -758,6 +762,8 @@
       <FilterPanel
         config={filterConfig}
         bind:filters
+        bind:collapsed={filterCollapsed}
+        externalToggle
         timeBuckets={smartFacetBuckets}
         hidden={isTimelineEmpty}
         {personNames}
@@ -791,6 +797,9 @@
         showGrouping={!showSearchResults && !assetMultiSelectManager.selectionActive}
         showFilters={getActiveFilterCount(filters) > 0 || committedSearchQuery.trim().length > 0}
         filters={spaceFiltersBar}
+        showFilterButton={filterCollapsed && !isTimelineEmpty && !assetMultiSelectManager.selectionActive}
+        filterActive={getActiveFilterCount(filters) > 0}
+        onExpandFilters={() => (filterCollapsed = false)}
       />
     {/if}
 

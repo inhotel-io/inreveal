@@ -1,8 +1,14 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
-  import { clearFilters, createFilterState, getActiveFilterCount } from '$lib/components/filter-panel/filter-panel';
+  import {
+    clearFilters,
+    createFilterState,
+    getActiveFilterCount,
+    loadFilterCollapsed,
+  } from '$lib/components/filter-panel/filter-panel';
   import FilterPanel from '$lib/components/filter-panel/filter-panel.svelte';
+  import FilterToggleButton from '$lib/components/filter-panel/filter-toggle-button.svelte';
   import ActiveFiltersBar from '$lib/components/filter-panel/active-filters-bar.svelte';
   import ControlAppBar from '$lib/components/shared-components/ControlAppBar.svelte';
   import DownloadAction from '$lib/components/timeline/actions/DownloadAction.svelte';
@@ -94,6 +100,9 @@
   const isBrowseEmpty = $derived(
     Boolean(timelineManager?.isInitialized) && !browseHasMonths && browseTotal === 0 && browseActive === 0,
   );
+
+  // Filter-panel collapse is driven here so the header filter button can reclaim the panel's space.
+  let filterCollapsed = $state(loadFilterCollapsed());
   const showBrowseFilteredEmpty = $derived(
     Boolean(timelineManager?.isInitialized) && !browseHasMonths && browseTotal === 0 && browseActive > 0,
   );
@@ -234,6 +243,8 @@
           <FilterPanel
             config={browseFilterConfig}
             bind:filters={browseFilters}
+            bind:collapsed={filterCollapsed}
+            externalToggle
             timeBuckets={browseTimeBuckets}
             storageKey="gallery-filter-visible-sections-space-album"
             hidden={isBrowseEmpty}
@@ -244,9 +255,15 @@
       <div class="flex flex-1 flex-col overflow-hidden pl-4">
         {#if !assetMultiSelectManager.selectionActive}
           <div
-            class="mb-2 hidden shrink-0 items-center gap-2 bg-transparent px-4 py-2 md:flex dark:bg-transparent"
+            class="mb-2 hidden shrink-0 items-center gap-2 bg-transparent py-2 pe-4 md:flex dark:bg-transparent {filterCollapsed &&
+            !isBrowseEmpty
+              ? 'ps-2'
+              : 'ps-4'}"
             data-testid="timeline-desktop-grouping-control"
           >
+            {#if filterCollapsed && !isBrowseEmpty}
+              <FilterToggleButton active={browseActive > 0} onExpand={() => (filterCollapsed = false)} />
+            {/if}
             <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
           </div>
         {/if}
