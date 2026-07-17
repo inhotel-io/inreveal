@@ -496,7 +496,9 @@
 
   $effect(() => {
     if (persistCollapsed) {
-      saveFilterCollapsed(collapsed);
+      // `collapsed` is a bindable with no default (`boolean | undefined`) so the `=== undefined`
+      // init above can decide whether to seed from storage; it's always a boolean by here.
+      saveFilterCollapsed(collapsed ?? false);
     }
   });
 
@@ -708,7 +710,7 @@
             class="flex h-6 w-6 items-center justify-center rounded-full text-gray-500 hover:bg-subtle dark:text-gray-400"
             onclick={() => (collapsed = true)}
             data-testid="collapse-panel-btn"
-            aria-label={$t('close')}
+            aria-label={$t('collapse')}
           >
             <Icon icon={mdiClose} size="16" />
           </button>
