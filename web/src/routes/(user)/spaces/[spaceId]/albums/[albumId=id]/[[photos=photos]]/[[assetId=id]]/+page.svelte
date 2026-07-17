@@ -1,6 +1,10 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { goto, onNavigate } from '$app/navigation';
   import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
+  import AlbumTitle from '$lib/components/album-page/AlbumTitle.svelte';
+  import AlbumDescription from '$lib/components/album-page/AlbumDescription.svelte';
+  import AlbumSummary from '$lib/components/album-page/AlbumSummary.svelte';
+  import { isSpaceAlbumRoute } from '$lib/utils/navigation';
   import {
     clearFilters,
     createFilterState,
@@ -21,7 +25,7 @@
   import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineAsset, TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import { addAssetsToAlbums, getAlbumAssetsActions } from '$lib/services/album.service';
+  import { addAssetsToAlbums, getAlbumAssetsActions, handleDeleteAlbum } from '$lib/services/album.service';
   import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
   import { buildAlbumAssetPickerFilterConfig, buildAlbumDetailFilterConfig } from '$lib/utils/album-filter-config';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
@@ -90,6 +94,17 @@
     ),
   );
   const canManage = $derived(isSpaceEditor || isAlbumEditor);
+  // Album title/description editing is owner-gated, mirroring the regular album page's `isOwned`.
+  const isOwned = $derived(album.albumUsers[0]?.user.id === authManager.user.id);
+
+  // Match the regular album flow: an abandoned empty + unnamed album (created here and left without a
+  // title or any photos) is cleaned up on navigate-away. Deleting it also drops the shared_space_album
+  // link (FK cascade), so it won't linger as a nameless, empty card in the space.
+  onNavigate(async ({ to }) => {
+    if (!isSpaceAlbumRoute(to?.route.id) && album.assetCount === 0 && !album.albumName) {
+      await handleDeleteAlbum(album, { notify: false, prompt: false });
+    }
+  });
 
   const browseFilterConfig = $derived(
     withNameCapture(buildAlbumDetailFilterConfig(album.id), browsePersonNames, browseTagNames),
@@ -206,11 +221,9 @@
   const { AddAssets, Upload } = $derived(getAlbumAssetsActions($t, album, pickerMultiSelectManager.assets));
 </script>
 
-<UserPageLayout
-  hideNavbar={assetMultiSelectManager.selectionActive}
-  title={album.albumName}
-  description={`${$t('items_count', { values: { count: album.assetCount } })} · ${$t('space_album_in_space', { values: { space: space.name } })}`}
->
+<!-- Header shows the space (context/breadcrumb); the album name lives in the editable AlbumTitle in the
+     timeline below, mirroring the regular album page (which has no page-header title). -->
+<UserPageLayout hideNavbar={assetMultiSelectManager.selectionActive} title={space.name}>
   {#snippet leading()}
     <IconButton
       variant="ghost"
@@ -321,6 +334,26 @@
             {temporalAnchor}
             onTemporalAnchorResolved={() => (temporalAnchor = undefined)}
           >
+            <!-- Editable album header (Timeline leading content — always rendered, incl. for an empty
+                 album so it can be named). Owner-gated, mirroring the regular album page. Unlike that
+                 page, the header + period control already sit above, so it needs almost no top padding. -->
+            <section class="pt-2">
+              <AlbumTitle
+                id={album.id}
+                albumName={album.albumName}
+                {isOwned}
+                onUpdate={(albumName) => (album = { ...album, albumName })}
+              />
+              {#if album.assetCount > 0}
+                <AlbumSummary {album} />
+              {/if}
+              <AlbumDescription
+                id={album.id}
+                {isOwned}
+                bind:description={() => album.description, (description) => (album = { ...album, description })}
+              />
+            </section>
+
             {#snippet empty()}
               <section class="mt-50 flex place-content-center place-items-center">
                 <div class="flex flex-col items-center gap-4 text-center">

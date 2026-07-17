@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto, invalidateAll } from '$app/navigation';
+  import { onMount } from 'svelte';
   import SpaceAlbumsControls from '$lib/components/spaces/space-albums-controls.svelte';
   import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -47,6 +48,13 @@
       handleError(error, $t('spaces_linked_albums_error_load'));
     }
   }
+
+  // linkedAlbums comes from the space layout's cached load, which isn't invalidated when an album is
+  // edited on its detail page (rename, added photos, or abandoned-empty cleanup). Re-fetch on mount so
+  // returning to the list always shows current names and counts.
+  onMount(() => {
+    void reload();
+  });
 
   async function handleUnlink(album: SharedSpaceLinkedAlbumDto) {
     const confirmed = await modalManager.showDialog({

@@ -59,7 +59,7 @@ vi.mock('$lib/components/filter-panel/active-filters-bar.svelte', async () => {
   return { default: MockComponent };
 });
 
-vi.mock('$app/navigation', () => ({ goto: vi.fn() }));
+vi.mock('$app/navigation', () => ({ goto: vi.fn(), onNavigate: vi.fn() }));
 
 vi.mock('$lib/components/timeline/TimelineGroupingControl.svelte', async () => {
   const { default: MockComponent } = await import('./mock-grouping-control.test-wrapper.svelte');
@@ -224,16 +224,15 @@ describe('Space album detail page', () => {
     expect(screen.getByTestId('space-album-timeline')).toBeInTheDocument();
   });
 
-  it('shows the album name in the page title', () => {
-    renderPage({ album: makeAlbum({ albumName: 'Summer Trips' }) });
+  it('shows the space name in the page title (the album name lives in the editable AlbumTitle below)', () => {
+    renderPage({
+      album: makeAlbum({ albumName: 'Summer Trips' }),
+      space: { ...BASE_SPACE, name: 'Family Memories' },
+    });
     const layout = screen.getByTestId('user-page-layout');
-    expect(layout).toHaveAttribute('data-title', 'Summer Trips');
-  });
-
-  it('shows "in {space}" context in description', () => {
-    renderPage({ album: makeAlbum(), space: { ...BASE_SPACE, name: 'Family Memories' } });
-    const layout = screen.getByTestId('user-page-layout');
-    expect(layout.dataset.description).toMatch(/in Family Memories/);
+    expect(layout).toHaveAttribute('data-title', 'Family Memories');
+    // The album name is no longer duplicated in the page header (it moved to the editable AlbumTitle).
+    expect(layout.dataset.title).not.toBe('Summer Trips');
   });
 
   it('renders the back button in leading slot', () => {

@@ -105,8 +105,8 @@
   import { fly } from 'svelte/transition';
   import { SvelteMap } from 'svelte/reactivity';
   import type { PageData } from './$types';
-  import AlbumDescription from './AlbumDescription.svelte';
-  import AlbumTitle from './AlbumTitle.svelte';
+  import AlbumDescription from '$lib/components/album-page/AlbumDescription.svelte';
+  import AlbumTitle from '$lib/components/album-page/AlbumTitle.svelte';
 
   interface Props {
     data: PageData;

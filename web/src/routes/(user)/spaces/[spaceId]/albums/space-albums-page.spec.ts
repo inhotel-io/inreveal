@@ -98,6 +98,9 @@ function makeMember(role: SharedSpaceRole): SharedSpaceMemberResponseDto {
 }
 
 function renderPage(albums: SharedSpaceLinkedAlbumDto[], role: SharedSpaceRole = SharedSpaceRole.Editor) {
+  // The page re-fetches linked albums on mount (reload) to pick up edits made on the detail page;
+  // return the same set so the mount reload doesn't wipe the rendered cards.
+  sdkMock.getSharedSpaceAlbums.mockResolvedValue(albums);
   const props = {
     data: {
       space: BASE_SPACE,
@@ -204,7 +207,8 @@ describe('Space albums page', () => {
       await fireEvent.click(screen.getByTestId('empty-link-album-button'));
 
       await waitFor(() => expect(modalManagerMock.show).toHaveBeenCalled());
-      expect(sdkMock.getSharedSpaceAlbums).not.toHaveBeenCalled();
+      // getSharedSpaceAlbums is called once on mount (reload); the no-op link must not trigger another.
+      expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledTimes(1);
       expect(invalidateAll).not.toHaveBeenCalled();
     });
 
