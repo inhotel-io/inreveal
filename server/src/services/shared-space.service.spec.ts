@@ -7787,6 +7787,12 @@ describe(SharedSpaceService.name, () => {
   });
 
   describe('mergeSpacePeople delegation', () => {
+    beforeEach(() => {
+      // A successful in-space merge records a PersonMerge activity; the strict auto-mock fails on any
+      // unmocked repository call, so give logActivity an implementation for the delegating cases below.
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+    });
+
     it('rejects viewer-initiated requests before delegation', async () => {
       const identityMergePropagation = useIdentityMergePropagation(sut);
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Viewer }));
