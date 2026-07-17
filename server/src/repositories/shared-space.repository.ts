@@ -517,6 +517,49 @@ export class SharedSpaceRepository {
   }
 
   /**
+   * The linked albums (id + name) in this space that project any of the given assets into the space —
+   * via the global `album_asset` arm OR the cross-owner `album_space_asset` contribution arm. Used to
+   * explain why "Remove from space" is a no-op on an album-projected asset: it is present via a linked
+   * album, not as a direct space member, so the user must remove it from that album instead.
+   */
+  async getLinkedAlbumsContainingAssets(
+    spaceId: string,
+    assetIds: string[],
+  ): Promise<{ albumId: string; albumName: string }[]> {
+    if (assetIds.length === 0) {
+      return [];
+    }
+    return this.db
+      .selectFrom('shared_space_album')
+      .innerJoin('album', 'album.id', 'shared_space_album.albumId')
+      .where('shared_space_album.spaceId', '=', spaceId)
+      .where('album.deletedAt', 'is', null)
+      .where((eb) =>
+        eb.or([
+          eb.exists(
+            eb
+              .selectFrom('album_asset')
+              .select('album_asset.assetId')
+              .whereRef('album_asset.albumId', '=', 'album.id')
+              .where('album_asset.assetId', 'in', assetIds),
+          ),
+          eb.exists(
+            eb
+              .selectFrom('album_space_asset')
+              .select('album_space_asset.assetId')
+              .whereRef('album_space_asset.albumId', '=', 'album.id')
+              .where('album_space_asset.spaceId', '=', spaceId)
+              .where('album_space_asset.assetId', 'in', assetIds),
+          ),
+        ]),
+      )
+      .select(['album.id as albumId', 'album.albumName as albumName'])
+      .distinct()
+      .orderBy('album.albumName', 'asc')
+      .execute();
+  }
+
+  /**
    * Slice 4.B DIRECT-path purge: when the owner flips one of these assets OUT of
    * the space-shareable visibility set (Timeline/Archive) to Hidden or Locked,
    * the `shared_space_asset` join row is NOT deleted, so the delete-audit trigger

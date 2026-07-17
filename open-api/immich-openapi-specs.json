@@ -14955,6 +14955,76 @@
         "x-immich-state": "Beta"
       }
     },
+    "/shared-spaces/{id}/assets/linked-albums": {
+      "post": {
+        "description": "Return the albums linked to this space that project any of the given assets into it (via the album or a cross-owner contribution). Used to explain why an album-projected asset cannot be removed from the space directly — it must be removed from the album instead.",
+        "operationId": "getSharedSpaceAssetLinkedAlbums",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceAssetRemoveDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SharedSpaceAssetLinkedAlbumDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "List linked albums that contain the given assets",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "sharedSpace.read",
+        "x-immich-state": "Beta"
+      }
+    },
     "/shared-spaces/{id}/libraries": {
       "put": {
         "description": "Link an external library so its assets appear in the space. Requires admin and space editor/owner.",
@@ -30054,6 +30124,23 @@
         },
         "required": [
           "assetIds"
+        ],
+        "type": "object"
+      },
+      "SharedSpaceAssetLinkedAlbumDto": {
+        "properties": {
+          "albumId": {
+            "description": "Album ID",
+            "type": "string"
+          },
+          "albumName": {
+            "description": "Album name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "albumId",
+          "albumName"
         ],
         "type": "object"
       },

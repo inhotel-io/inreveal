@@ -344,6 +344,7 @@ part 'model/shared_links_update.dart';
 part 'model/shared_space_activity_response_dto.dart';
 part 'model/shared_space_album_link_update_dto.dart';
 part 'model/shared_space_asset_add_dto.dart';
+part 'model/shared_space_asset_linked_album_dto.dart';
 part 'model/shared_space_asset_remove_dto.dart';
 part 'model/shared_space_create_dto.dart';
 part 'model/shared_space_library_link_dto.dart';

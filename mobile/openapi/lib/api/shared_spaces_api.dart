@@ -569,6 +569,71 @@ class SharedSpacesApi {
     return null;
   }
 
+  /// List linked albums that contain the given assets
+  ///
+  /// Return the albums linked to this space that project any of the given assets into it (via the album or a cross-owner contribution). Used to explain why an album-projected asset cannot be removed from the space directly — it must be removed from the album instead.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceAssetRemoveDto] sharedSpaceAssetRemoveDto (required):
+  Future<Response> getSharedSpaceAssetLinkedAlbumsWithHttpInfo(String id, SharedSpaceAssetRemoveDto sharedSpaceAssetRemoveDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/assets/linked-albums'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceAssetRemoveDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// List linked albums that contain the given assets
+  ///
+  /// Return the albums linked to this space that project any of the given assets into it (via the album or a cross-owner contribution). Used to explain why an album-projected asset cannot be removed from the space directly — it must be removed from the album instead.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceAssetRemoveDto] sharedSpaceAssetRemoveDto (required):
+  Future<List<SharedSpaceAssetLinkedAlbumDto>?> getSharedSpaceAssetLinkedAlbums(String id, SharedSpaceAssetRemoveDto sharedSpaceAssetRemoveDto, { Future<void>? abortTrigger, }) async {
+    final response = await getSharedSpaceAssetLinkedAlbumsWithHttpInfo(id, sharedSpaceAssetRemoveDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<SharedSpaceAssetLinkedAlbumDto>') as List)
+        .cast<SharedSpaceAssetLinkedAlbumDto>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
   /// Get a shared space
   ///
   /// Retrieve details of a specific shared space.

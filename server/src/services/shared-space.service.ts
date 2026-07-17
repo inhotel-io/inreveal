@@ -25,6 +25,7 @@ import {
   SharedSpaceActivityResponseDto,
   SharedSpaceAlbumLinkUpdateDto,
   SharedSpaceAssetAddDto,
+  SharedSpaceAssetLinkedAlbumDto,
   SharedSpaceAssetRemoveDto,
   SharedSpaceCreateDto,
   SharedSpaceLibraryLinkDto,
@@ -961,6 +962,24 @@ export class SharedSpaceService extends BaseService {
     }
 
     return removedAssetIds;
+  }
+
+  /**
+   * The linked albums that project the given assets into this space. The web uses this to explain why
+   * "Remove from space" removed nothing for an album-projected asset (it's present via a linked album,
+   * not as a direct member) and to name the album the user should manage it in. Membership-gated: only
+   * surfaces albums linked to a space the caller belongs to (the same visibility as `getLinkedAlbums`).
+   */
+  async getAssetLinkedAlbums(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceAssetRemoveDto,
+  ): Promise<SharedSpaceAssetLinkedAlbumDto[]> {
+    await this.requireMembership(auth, spaceId);
+    if (dto.assetIds.length === 0) {
+      return [];
+    }
+    return this.sharedSpaceRepository.getLinkedAlbumsContainingAssets(spaceId, dto.assetIds);
   }
 
   async getMapMarkers(auth: AuthDto, id: string) {

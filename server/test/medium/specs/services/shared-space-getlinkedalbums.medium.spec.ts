@@ -253,3 +253,89 @@ describe('SharedSpaceService.getLinkedAlbums — rich AlbumResponseDto shape', (
     });
   });
 });
+
+// getAssetLinkedAlbums powers the web "Remove from space" explanation: when a selected asset isn't a
+// direct space member the removal is a no-op, and the web names the album(s) the asset is projected
+// through so the user knows where to manage it. It must union BOTH album arms (global `album_asset` +
+// cross-owner `album_space_asset` contribution) and only surface albums linked to THIS space.
+describe('SharedSpaceService.getAssetLinkedAlbums — which linked albums project an asset', () => {
+  it('returns the album for an asset present via album_asset (global album membership)', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'USA Trip' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    const result = await sut.getAssetLinkedAlbums(authFromUser(owner), space.id, { assetIds: [asset.id] });
+
+    expect(result).toEqual([{ albumId: album.id, albumName: 'USA Trip' }]);
+  });
+
+  it('returns the album for a cross-owner contribution (album_space_asset)', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: contributor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: contributor.id, role: 'editor' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'Shared Album' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+    // The contributor bookmarks their own asset into the linked album — an album_space_asset row, NOT a
+    // global album_asset row — so only the contributed arm can surface it.
+    const { asset } = await ctx.newAsset({ ownerId: contributor.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const result = await sut.getAssetLinkedAlbums(authFromUser(contributor), space.id, { assetIds: [asset.id] });
+
+    expect(result).toEqual([{ albumId: album.id, albumName: 'Shared Album' }]);
+  });
+
+  it('returns [] for a direct space member that is not in any linked album', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const { asset } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+
+    const result = await sut.getAssetLinkedAlbums(authFromUser(owner), space.id, { assetIds: [asset.id] });
+
+    expect(result).toEqual([]);
+  });
+
+  it('returns [] when the asset is in an album that is NOT linked to the space', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'Unlinked' });
+    const { asset } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    // Intentionally NOT linked to the space.
+
+    const result = await sut.getAssetLinkedAlbums(authFromUser(owner), space.id, { assetIds: [asset.id] });
+
+    expect(result).toEqual([]);
+  });
+
+  it('rejects a non-member (membership-gated)', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: stranger } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+
+    const { asset } = await ctx.newAsset({ ownerId: owner.id });
+
+    await expect(
+      sut.getAssetLinkedAlbums(authFromUser(stranger), space.id, { assetIds: [asset.id] }),
+    ).rejects.toThrow();
+  });
+});

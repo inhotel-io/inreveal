@@ -300,6 +300,7 @@ Class | Method | HTTP request | Description
 *SharedSpacesApi* | [**getAllSpaces**](doc//SharedSpacesApi.md#getallspaces) | **GET** /shared-spaces | Get all shared spaces
 *SharedSpacesApi* | [**getMembers**](doc//SharedSpacesApi.md#getmembers) | **GET** /shared-spaces/{id}/members | Get members of a shared space
 *SharedSpacesApi* | [**getSharedSpaceAlbums**](doc//SharedSpacesApi.md#getsharedspacealbums) | **GET** /shared-spaces/{id}/albums | List albums linked to a shared space
+*SharedSpacesApi* | [**getSharedSpaceAssetLinkedAlbums**](doc//SharedSpacesApi.md#getsharedspaceassetlinkedalbums) | **POST** /shared-spaces/{id}/assets/linked-albums | List linked albums that contain the given assets
 *SharedSpacesApi* | [**getSpace**](doc//SharedSpacesApi.md#getspace) | **GET** /shared-spaces/{id} | Get a shared space
 *SharedSpacesApi* | [**getSpaceActivities**](doc//SharedSpacesApi.md#getspaceactivities) | **GET** /shared-spaces/{id}/activities | Get space activity feed
 *SharedSpacesApi* | [**getSpaceMapMarkers**](doc//SharedSpacesApi.md#getspacemapmarkers) | **GET** /shared-spaces/{id}/map-markers | Get map markers for a shared space
@@ -685,6 +686,7 @@ Class | Method | HTTP request | Description
  - [SharedSpaceActivityResponseDto](doc//SharedSpaceActivityResponseDto.md)
  - [SharedSpaceAlbumLinkUpdateDto](doc//SharedSpaceAlbumLinkUpdateDto.md)
  - [SharedSpaceAssetAddDto](doc//SharedSpaceAssetAddDto.md)
+ - [SharedSpaceAssetLinkedAlbumDto](doc//SharedSpaceAssetLinkedAlbumDto.md)
  - [SharedSpaceAssetRemoveDto](doc//SharedSpaceAssetRemoveDto.md)
  - [SharedSpaceCreateDto](doc//SharedSpaceCreateDto.md)
  - [SharedSpaceLibraryLinkDto](doc//SharedSpaceLibraryLinkDto.md)

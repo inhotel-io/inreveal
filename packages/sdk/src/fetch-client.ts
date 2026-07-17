@@ -2824,6 +2824,12 @@ export type SharedSpaceAssetAddDto = {
     /** Asset IDs */
     assetIds: string[];
 };
+export type SharedSpaceAssetLinkedAlbumDto = {
+    /** Album ID */
+    albumId: string;
+    /** Album name */
+    albumName: string;
+};
 export type SharedSpaceLibraryLinkDto = {
     /** Library ID */
     libraryId: string;
@@ -7679,6 +7685,22 @@ export function bulkAddAssets({ id }: {
         ...opts,
         method: "POST"
     }));
+}
+/**
+ * List linked albums that contain the given assets
+ */
+export function getSharedSpaceAssetLinkedAlbums({ id, sharedSpaceAssetRemoveDto }: {
+    id: string;
+    sharedSpaceAssetRemoveDto: SharedSpaceAssetRemoveDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: SharedSpaceAssetLinkedAlbumDto[];
+    }>(`/shared-spaces/${encodeURIComponent(id)}/assets/linked-albums`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: sharedSpaceAssetRemoveDto
+    })));
 }
 /**
  * Link a library to a shared space

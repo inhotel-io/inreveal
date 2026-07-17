@@ -39,6 +39,7 @@ import {
   SharedSpaceAlbumLinkUpdateDto,
   SharedSpaceAlbumParamDto,
   SharedSpaceAssetAddDto,
+  SharedSpaceAssetLinkedAlbumDto,
   SharedSpaceAssetRemoveDto,
   SharedSpaceCreateDto,
   SharedSpaceLibraryLinkDto,
@@ -292,6 +293,23 @@ export class SharedSpaceController {
     @Body() dto: SharedSpaceAssetRemoveDto,
   ): Promise<string[]> {
     return this.service.removeAssets(auth, id, dto);
+  }
+
+  @Post(':id/assets/linked-albums')
+  @Authenticated({ permission: Permission.SharedSpaceRead })
+  @Endpoint({
+    operationId: 'getSharedSpaceAssetLinkedAlbums',
+    summary: 'List linked albums that contain the given assets',
+    description:
+      'Return the albums linked to this space that project any of the given assets into it (via the album or a cross-owner contribution). Used to explain why an album-projected asset cannot be removed from the space directly — it must be removed from the album instead.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  getSharedSpaceAssetLinkedAlbums(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: SharedSpaceAssetRemoveDto,
+  ): Promise<SharedSpaceAssetLinkedAlbumDto[]> {
+    return this.service.getAssetLinkedAlbums(auth, id, dto);
   }
 
   @Get(':id/activities')

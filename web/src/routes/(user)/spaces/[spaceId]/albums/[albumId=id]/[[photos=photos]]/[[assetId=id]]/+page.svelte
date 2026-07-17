@@ -198,6 +198,7 @@
 </script>
 
 <UserPageLayout
+  hideNavbar={assetMultiSelectManager.selectionActive}
   title={album.albumName}
   description={`${$t('items_count', { values: { count: album.assetCount } })} · ${$t('space_album_in_space', { values: { space: space.name } })}`}
 >
@@ -225,23 +226,6 @@
       />
     {/if}
   {/snippet}
-
-  <!-- Browse selection control bar (shows when assets are selected in browse mode).
-       rbac-5/albums-8: album-path assets never grant space-editor metadata-edit (checkSpaceEditAccess
-       omits the album arm, pinned by shared-space-album-scope.guard.spec.ts). This route is entirely
-       album-path, so it intentionally exposes ONLY Download + RemoveFromAlbum — never Archive / Change
-       date/location / Tag / visibility. In the MERGED direct-space timeline those metadata-edit actions
-       are separately gated by `isAllUserOwned`, so an editor can never trigger them on a non-owned
-       album-path asset; the residual mixed-bulk case is refused server-side (400 on album-path-only ids),
-       which the client cannot pre-empt without a per-asset origin signal (none exists on TimelineAsset). -->
-  {#if mode === 'browse' && assetMultiSelectManager.selectionActive}
-    <AssetSelectControlBar>
-      <DownloadAction filename="{album.albumName}.zip" />
-      {#if canManage}
-        <RemoveFromAlbum bind:album onRemove={handleRemoveAssets} data-testid="album-remove-from-album" />
-      {/if}
-    </AssetSelectControlBar>
-  {/if}
 
   {#if mode === 'browse'}
     <div class="flex h-full">
@@ -344,6 +328,26 @@
     </div>
   {/if}
 </UserPageLayout>
+
+<!-- Browse selection control bar (shows when assets are selected in browse mode). Rendered OUTSIDE
+     UserPageLayout: its wrapper is `relative z-0`, which is a stacking context, so a control bar nested
+     inside it (and before the Timeline) paints UNDER the asset grid and the z-1 scrubber. Matching the
+     other timeline pages (recently-added/favorites/…), the bar sits after the layout so it paints on top.
+     rbac-5/albums-8: album-path assets never grant space-editor metadata-edit (checkSpaceEditAccess
+     omits the album arm, pinned by shared-space-album-scope.guard.spec.ts). This route is entirely
+     album-path, so it intentionally exposes ONLY Download + RemoveFromAlbum — never Archive / Change
+     date/location / Tag / visibility. In the MERGED direct-space timeline those metadata-edit actions
+     are separately gated by `isAllUserOwned`, so an editor can never trigger them on a non-owned
+     album-path asset; the residual mixed-bulk case is refused server-side (400 on album-path-only ids),
+     which the client cannot pre-empt without a per-asset origin signal (none exists on TimelineAsset). -->
+{#if mode === 'browse' && assetMultiSelectManager.selectionActive}
+  <AssetSelectControlBar>
+    <DownloadAction filename="{album.albumName}.zip" />
+    {#if canManage}
+      <RemoveFromAlbum bind:album onRemove={handleRemoveAssets} data-testid="album-remove-from-album" />
+    {/if}
+  </AssetSelectControlBar>
+{/if}
 
 {#if mode === 'add'}
   <section class="fixed inset-0 z-40 bg-immich-bg dark:bg-immich-dark-bg" data-testid="add-photos-overlay">
