@@ -151,6 +151,21 @@ body {
 #sidebar a[class~='rounded-e-full'] {
   border-radius: 9999px;
 }
+/* Reserve the scrollbar gutter so expanding Spaces/Albums (which overflows the sidebar and shows the
+ * thin scrollbar) doesn't shrink the pill width and shift the side margins. */
+#sidebar {
+  scrollbar-gutter: stable;
+}
+/* The Spaces/Albums expand-collapse caret is an absolute sibling of the pill link — it shouldn't carry
+ * its own hover background. Kill it, and instead highlight the parent item's pill when the caret is
+ * hovered, so the caret and label share a single hover state. */
+#sidebar div.relative > button.absolute:hover {
+  background-color: transparent;
+}
+#sidebar div.relative:has(> button.absolute:hover) > a {
+  background-color: var(--color-subtle);
+  color: var(--color-primary);
+}
 /* Drop the navbar's bottom divider — the chrome/content two-tone already
  * separates it (targets the navbar's inner grid row that carries `border-b`). */
 #dashboard-navbar > div {
