@@ -153,6 +153,7 @@ describe('/server', () => {
           'favorites_throwback',
           'on_this_day_place',
           'season_recap',
+          'people_together',
         ],
       });
     });

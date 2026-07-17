@@ -325,6 +325,7 @@ The `memories` section configures generated memory retention and which memory ty
   - `favorites_throwback` — your favorite photos from this calendar month in a past year
   - `on_this_day_place` — a past year's on-this-day photos concentrated in one place
   - `season_recap` — a recap of a past meteorological season
+  - `people_together` — two people or pets often photographed together in a past year
 
 For example, to disable recent trips globally and leave the rest on:
 
