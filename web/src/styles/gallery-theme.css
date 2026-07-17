@@ -145,6 +145,12 @@ body {
 #sidebar {
   background-color: var(--gallery-chrome);
 }
+/* Google-Photos-style sidebar nav pills: fully-rounded on BOTH sides for the hover/active background,
+ * instead of @immich/ui's rounded-e-full (right-only). Scoped to the NavbarItem links via their
+ * rounded-e-full class so the bottom-info links (ServerStatus / PurchaseInfo) keep their own styling. */
+#sidebar a[class~='rounded-e-full'] {
+  border-radius: 9999px;
+}
 /* Drop the navbar's bottom divider — the chrome/content two-tone already
  * separates it (targets the navbar's inner grid row that carries `border-b`). */
 #dashboard-navbar > div {
