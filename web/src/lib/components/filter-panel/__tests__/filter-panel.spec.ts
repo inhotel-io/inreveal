@@ -336,19 +336,21 @@ describe('FilterPanel', () => {
     expect(shell.className).not.toContain('w-64');
   });
 
-  it('renders nothing when collapsed in externalToggle mode (the page reclaims the space)', async () => {
+  it('collapses to zero width in externalToggle mode (space reclaimed, still animatable)', async () => {
     const { getByTestId, queryByTestId } = render(FilterPanel, {
       props: { config: { sections: ['timeline'], providers: {} }, timeBuckets: [], externalToggle: true },
     });
-    // Starts expanded — the shell (and its collapse button) are present.
-    expect(getByTestId('filter-panel-shell')).toBeTruthy();
+    const shell = getByTestId('filter-panel-shell');
+    expect(shell.className).toContain('w-64');
 
     await fireEvent.click(getByTestId('collapse-panel-btn'));
 
-    // Collapsed + externalToggle → the whole panel is gone (no rail, no built-in button); the page
-    // supplies a header filter button instead.
-    expect(queryByTestId('filter-panel-shell')).toBeNull();
+    // Stays mounted (so the width transition animates) but at w-0 — no built-in button, and the panel
+    // content is inert while hidden. The page supplies its own header filter button.
+    expect(shell.className).toContain('w-0');
+    expect(shell.className).not.toContain('w-64');
     expect(queryByTestId('collapsed-icon-strip')).toBeNull();
+    expect(getByTestId('discovery-panel').hasAttribute('inert')).toBe(true);
   });
 
   it('gives the toggle-row pills a press-scale and a reduced-motion guard', () => {

@@ -657,19 +657,23 @@
   let anyActiveFilter = $derived(config.sections.some((section) => hasActiveFilter(section)));
 </script>
 
-{#if hidden || (collapsed && externalToggle)}
-  <!-- Nothing rendered: either there are no assets to filter, or the panel is collapsed and the page
-       owns a header filter button (externalToggle) — so the panel reclaims its horizontal space. -->
+{#if hidden}
+  <!-- No assets to filter — nothing to render. -->
 {:else}
+  <!-- The shell stays mounted even when collapsed so the width transition animates open/close. In
+       externalToggle mode it collapses to w-0 (space reclaimed, content clipped + inert); otherwise it
+       collapses to the w-12 built-in filter button. -->
   <div
     class="flex h-full flex-shrink-0 overflow-hidden transition-[width] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none {collapsed
-      ? 'w-12'
+      ? externalToggle
+        ? 'w-0'
+        : 'w-12'
       : 'w-64 border-r border-gray-200/60 bg-light dark:border-white/5'}"
     data-testid="filter-panel-shell"
   >
-    {#if collapsed}
-      <!-- Collapsed: a single filter button (not a rail of per-section icons). Clicking it re-opens the
-           panel; a dot marks any active filter. Keeps the collapsed-icon-strip / expand-panel-btn testids. -->
+    {#if collapsed && !externalToggle}
+      <!-- Collapsed (built-in): a single filter button. Clicking it re-opens the panel; a dot marks any
+           active filter. Keeps the collapsed-icon-strip / expand-panel-btn testids. -->
       <div class="flex flex-shrink-0 items-start p-1.5" data-testid="collapsed-icon-strip">
         <button
           type="button"
@@ -688,7 +692,13 @@
         </button>
       </div>
     {:else}
-      <div class="immich-scrollbar flex h-full w-64 flex-col overflow-y-auto bg-light" data-testid="discovery-panel">
+      <!-- inert while collapsed: in externalToggle mode this panel stays mounted at w-0 (clipped) so the
+           open/close animates, but its inputs must not be focusable/announced while hidden. -->
+      <div
+        class="immich-scrollbar flex h-full w-64 flex-col overflow-y-auto bg-light"
+        data-testid="discovery-panel"
+        inert={collapsed}
+      >
         <div
           class="sticky top-0 z-5 flex items-center justify-between border-b border-gray-200 bg-light px-4 py-2.5 dark:border-gray-700"
         >
