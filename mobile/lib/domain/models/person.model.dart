@@ -18,6 +18,12 @@ abstract class PersonDto with _$PersonDto {
     /// [DriftPerson.numberOfAssets] with no extra network call; null hides the subtitle
     /// (e.g. the offline local-Drift fallback path never populates it).
     int? numberOfAssets,
+
+    /// Space scope for a photos-filter person. Non-null when this is a shared-space person, in
+    /// which case [id] is the tokenized `space-person:<uuid>` filter id and the avatar routes to
+    /// the membership-gated space thumbnail endpoint (the owner endpoint 404s that id). Null for
+    /// personal/owned people. Mirrors [DriftPerson.spaceId] / web `primaryProfile.spaceId`.
+    String? spaceId,
   }) = _PersonDto;
 }
 
