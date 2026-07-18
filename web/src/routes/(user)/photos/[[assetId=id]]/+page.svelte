@@ -621,7 +621,12 @@
           withStacked
         >
           {#if authManager.preferences.memories.enabled && !hasActiveFilters}
-            <ImageCarousel {items} />
+            <!-- In month/year grouping the timeline renders large representative cards; add breathing
+                 room below the memories strip so those cards don't hug it. The wrapper's height feeds
+                 the timeline's measured topSectionHeight, so this shifts the cards down cleanly. -->
+            <div class={{ 'pb-8': timelineGrouping !== 'day' }}>
+              <ImageCarousel {items} />
+            </div>
           {/if}
           {#snippet empty()}
             <EmptyPlaceholder
