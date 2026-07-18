@@ -1386,15 +1386,69 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID] })
   getContributionCounts(spaceId: string) {
+    // A member's contribution = the DISTINCT set of assets they brought into the space, across the
+    // same four sources getAssetCount unions (direct pool, linked library, on-timeline linked album,
+    // cross-owner contribution), attributed to whoever performed that action (addedById). Each source
+    // emits (userId, assetId); UNION dedupes so an asset a member added via several paths counts once.
     return this.db
-      .selectFrom('shared_space_asset')
-      .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
-      .where('shared_space_asset.spaceId', '=', spaceId)
-      .where('asset.deletedAt', 'is', null)
-      .where('asset.isOffline', '=', false)
-      .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
-      .groupBy('shared_space_asset.addedById')
-      .select(['shared_space_asset.addedById', (eb) => eb.fn.countAll().as('count')])
+      .selectFrom(
+        this.db
+          .selectFrom('shared_space_asset')
+          .innerJoin('asset', 'asset.id', 'shared_space_asset.assetId')
+          .select(['shared_space_asset.addedById as userId', 'asset.id as assetId'])
+          .where('shared_space_asset.spaceId', '=', spaceId)
+          .where('asset.deletedAt', 'is', null)
+          .where('asset.isOffline', '=', false)
+          .where('asset.visibility', 'in', visibleSpaceAssetVisibilities)
+          .union(
+            this.db
+              .selectFrom('shared_space_library')
+              .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+              .select(['shared_space_library.addedById as userId', 'asset.id as assetId'])
+              .where('shared_space_library.spaceId', '=', spaceId)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
+          .union(
+            this.db
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
+              .innerJoin('asset', 'asset.id', 'album_asset.assetId')
+              .select(['shared_space_album.addedById as userId', 'asset.id as assetId'])
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
+          .union(
+            this.db
+              .selectFrom('album_space_asset')
+              .innerJoin('shared_space_album', (join) =>
+                join
+                  .onRef('shared_space_album.albumId', '=', 'album_space_asset.albumId')
+                  .onRef('shared_space_album.spaceId', '=', 'album_space_asset.spaceId'),
+              )
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('asset', 'asset.id', 'album_space_asset.assetId')
+              .select(['album_space_asset.addedById as userId', 'asset.id as assetId'])
+              .where('album_space_asset.spaceId', '=', spaceId)
+              .where('shared_space_album.showInTimeline', '=', true)
+              .where('asset.deletedAt', 'is', null)
+              .where('asset.isOffline', '=', false)
+              .where('asset.visibility', 'in', visibleSpaceAssetVisibilities),
+          )
+          .as('combined'),
+      )
+      .where('combined.userId', 'is not', null)
+      .groupBy('combined.userId')
+      .select(['combined.userId as addedById', (eb) => eb.fn.countAll().as('count')])
       .execute();
   }
 

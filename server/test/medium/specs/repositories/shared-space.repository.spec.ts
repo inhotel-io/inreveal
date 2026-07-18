@@ -863,6 +863,84 @@ describe(SharedSpaceRepository.name, () => {
     });
   });
 
+  // A member's "N Photos" on the Members page must reflect every way that member brought assets
+  // into the space — direct adds, on-timeline linked albums, linked libraries, and cross-owner
+  // contributions — attributed by who performed the action (addedById), matching getAssetCount's
+  // source composition. Historically it only counted the direct shared_space_asset pool.
+  describe('getContributionCounts — attribution across all space sources', () => {
+    it('counts assets from an on-timeline album linked by the member', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'MemberAlbum' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: true });
+
+      const counts = await sut.getContributionCounts(space.id);
+      expect(Number(counts.find((c) => c.addedById === user.id)?.count ?? 0)).toBe(1);
+    });
+
+    it('does not count assets from an off-timeline linked album', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'OffTimelineAlbum' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: false });
+
+      const counts = await sut.getContributionCounts(space.id);
+      expect(Number(counts.find((c) => c.addedById === user.id)?.count ?? 0)).toBe(0);
+    });
+
+    it('counts assets from a library linked by the member', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { library } = await ctx.newLibrary({ ownerId: user.id });
+      await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+      await ctx.newAsset({ ownerId: user.id, libraryId: library.id, visibility: AssetVisibility.Timeline });
+
+      const counts = await sut.getContributionCounts(space.id);
+      expect(Number(counts.find((c) => c.addedById === user.id)?.count ?? 0)).toBe(1);
+    });
+
+    it('counts a cross-owner contribution for the contributing member, not the album owner', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: contributor } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ContribAlbum' });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id, showInTimeline: true });
+      const { asset } = await ctx.newAsset({ ownerId: contributor.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAlbumSpaceAsset({
+        albumId: album.id,
+        assetId: asset.id,
+        spaceId: space.id,
+        addedById: contributor.id,
+      });
+
+      const counts = await sut.getContributionCounts(space.id);
+      expect(Number(counts.find((c) => c.addedById === contributor.id)?.count ?? 0)).toBe(1);
+      expect(Number(counts.find((c) => c.addedById === owner.id)?.count ?? 0)).toBe(0);
+    });
+
+    it('counts an asset added both directly and via a linked album only once for the member', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'DedupAlbum' });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+      await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: true });
+
+      const counts = await sut.getContributionCounts(space.id);
+      expect(Number(counts.find((c) => c.addedById === user.id)?.count ?? 0)).toBe(1);
+    });
+  });
+
   describe('getAssetCount', () => {
     it('should count non-deleted assets', async () => {
       const { ctx, sut } = setup();
