@@ -199,12 +199,13 @@ from
       inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
       inner join "asset" on "asset"."id" = "album_asset"."assetId"
       and "asset"."deletedAt" is null
+      and "asset"."isOffline" = $12
     where
-      "shared_space_member"."userId" = $12
-      and "asset"."visibility" in ($13, $14)
+      "shared_space_member"."userId" = $13
+      and "asset"."visibility" in ($14, $15)
       and (
-        "asset"."id" in ($15)
-        or "asset"."livePhotoVideoId" in ($16)
+        "asset"."id" in ($16)
+        or "asset"."livePhotoVideoId" in ($17)
       )
     union
     select
@@ -219,12 +220,13 @@ from
       and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
       inner join "asset" on "asset"."id" = "album_space_asset"."assetId"
       and "asset"."deletedAt" is null
+      and "asset"."isOffline" = $18
     where
-      "shared_space_member"."userId" = $17
-      and "asset"."visibility" in ($18, $19)
+      "shared_space_member"."userId" = $19
+      and "asset"."visibility" in ($20, $21)
       and (
-        "asset"."id" in ($20)
-        or "asset"."livePhotoVideoId" in ($21)
+        "asset"."id" in ($22)
+        or "asset"."livePhotoVideoId" in ($23)
       )
   ) as "combined"
 
@@ -280,13 +282,14 @@ from
       inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
       inner join "asset" on "asset"."id" = "album_asset"."assetId"
       and "asset"."deletedAt" is null
+      and "asset"."isOffline" = $14
     where
-      "shared_space_member"."userId" = $14
-      and "shared_space_album"."spaceId" = $15
-      and "asset"."visibility" in ($16, $17)
+      "shared_space_member"."userId" = $15
+      and "shared_space_album"."spaceId" = $16
+      and "asset"."visibility" in ($17, $18)
       and (
-        "asset"."id" in ($18)
-        or "asset"."livePhotoVideoId" in ($19)
+        "asset"."id" in ($19)
+        or "asset"."livePhotoVideoId" in ($20)
       )
     union
     select
@@ -301,13 +304,14 @@ from
       and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
       inner join "asset" on "asset"."id" = "album_space_asset"."assetId"
       and "asset"."deletedAt" is null
+      and "asset"."isOffline" = $21
     where
-      "shared_space_member"."userId" = $20
-      and "shared_space_album"."spaceId" = $21
-      and "asset"."visibility" in ($22, $23)
+      "shared_space_member"."userId" = $22
+      and "shared_space_album"."spaceId" = $23
+      and "asset"."visibility" in ($24, $25)
       and (
-        "asset"."id" in ($24)
-        or "asset"."livePhotoVideoId" in ($25)
+        "asset"."id" in ($26)
+        or "asset"."livePhotoVideoId" in ($27)
       )
   ) as "combined"
 

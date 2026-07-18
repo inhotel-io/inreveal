@@ -316,7 +316,10 @@ class AssetAccess {
               .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
               .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
               .innerJoin('asset', (join) =>
-                join.onRef('asset.id', '=', 'album_asset.assetId').on('asset.deletedAt', 'is', null),
+                join
+                  .onRef('asset.id', '=', 'album_asset.assetId')
+                  .on('asset.deletedAt', 'is', null)
+                  .on('asset.isOffline', '=', false),
               )
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
@@ -341,7 +344,10 @@ class AssetAccess {
                   .onRef('album_space_asset.spaceId', '=', 'shared_space_album.spaceId'),
               )
               .innerJoin('asset', (join) =>
-                join.onRef('asset.id', '=', 'album_space_asset.assetId').on('asset.deletedAt', 'is', null),
+                join
+                  .onRef('asset.id', '=', 'album_space_asset.assetId')
+                  .on('asset.deletedAt', 'is', null)
+                  .on('asset.isOffline', '=', false),
               )
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
@@ -417,7 +423,10 @@ class AssetAccess {
               .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
               .innerJoin('album_asset', 'album_asset.albumId', 'shared_space_album.albumId')
               .innerJoin('asset', (join) =>
-                join.onRef('asset.id', '=', 'album_asset.assetId').on('asset.deletedAt', 'is', null),
+                join
+                  .onRef('asset.id', '=', 'album_asset.assetId')
+                  .on('asset.deletedAt', 'is', null)
+                  .on('asset.isOffline', '=', false),
               )
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)
@@ -443,7 +452,10 @@ class AssetAccess {
                   .onRef('album_space_asset.spaceId', '=', 'shared_space_album.spaceId'),
               )
               .innerJoin('asset', (join) =>
-                join.onRef('asset.id', '=', 'album_space_asset.assetId').on('asset.deletedAt', 'is', null),
+                join
+                  .onRef('asset.id', '=', 'album_space_asset.assetId')
+                  .on('asset.deletedAt', 'is', null)
+                  .on('asset.isOffline', '=', false),
               )
               .select(['asset.id', 'asset.livePhotoVideoId'])
               .where('shared_space_member.userId', '=', userId)

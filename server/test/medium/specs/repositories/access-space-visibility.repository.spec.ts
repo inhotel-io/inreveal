@@ -32,6 +32,11 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+// Flip ONLY `asset.isOffline` (leaving `deletedAt` null) — pins the album access arms' isOffline gate
+// directly, independent of the production `isOffline ⟹ deletedAt` coupling enforced elsewhere.
+const markOffline = (assetId: string) =>
+  defaultDatabase.updateTable('asset').set({ isOffline: true }).where('id', '=', assetId).execute();
+
 const seedPersonOnSpaceAsset = async (visibility: AssetVisibility) => {
   const { ctx, accessRepo } = setup();
   const { user: owner } = await ctx.newUser();
@@ -751,6 +756,149 @@ describe('P1-4: contributed-only assets — checkSpaceAccess / checkSpaceAccessF
     expect(wrongSpace.size).toBe(0);
     const rightSpace = await accessRepo.asset.checkSpaceAccessForSpace(s.member.id, s.space.id, new Set([s.asset.id]));
     expect(rightSpace.has(s.asset.id)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// External-library assets reached through a space album (offline parity).
+//
+// An external-library asset can enter a space album two ways: the library owner
+// adds their own (album_asset), or a space editor contributes someone else's
+// linked-library asset (album_space_asset). Members must reach them like any
+// asset — but an OFFLINE external asset must be blocked, matching the
+// shared_space_library arm which already gates `isOffline`. In production an
+// offline transition also sets `deletedAt` (which the album arms check), so
+// these tests flip `isOffline` on its own to pin the guard directly and stop
+// the album arms from leaning on that cross-module coupling.
+// ---------------------------------------------------------------------------
+
+describe('checkSpaceAccess — external-library assets via a space album (offline parity)', () => {
+  it('grants a member an owner-added external-library asset through the album', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+
+    const { library } = await ctx.newLibrary({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+    const allowed = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([asset.id]));
+    expect(allowed.has(asset.id)).toBe(true);
+  });
+
+  it('blocks an offline owner-added external-library asset (album_asset arm gates isOffline)', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+
+    const { library } = await ctx.newLibrary({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    await markOffline(asset.id);
+
+    const allowed = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([asset.id]));
+    expect(allowed.has(asset.id)).toBe(false);
+  });
+
+  it('grants online but blocks offline for a cross-owner external-library contribution (album_space_asset arm)', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser(); // space + album owner
+    const { user: contributor } = await ctx.newUser(); // external-library owner
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+
+    const { library } = await ctx.newLibrary({ ownerId: contributor.id });
+    const { asset } = await ctx.newAsset({
+      ownerId: contributor.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const online = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([asset.id]));
+    expect(online.has(asset.id)).toBe(true);
+
+    await markOffline(asset.id);
+    const offline = await accessRepo.asset.checkSpaceAccess(viewer.id, new Set([asset.id]));
+    expect(offline.has(asset.id)).toBe(false);
+  });
+
+  it('checkSpaceAccessForSpace also blocks the offline external-library album asset', async () => {
+    const { ctx, accessRepo } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+
+    const { library } = await ctx.newLibrary({ ownerId: owner.id });
+    const { asset } = await ctx.newAsset({
+      ownerId: owner.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+    await markOffline(asset.id);
+
+    const allowed = await accessRepo.asset.checkSpaceAccessForSpace(viewer.id, space.id, new Set([asset.id]));
+    expect(allowed.has(asset.id)).toBe(false);
+  });
+
+  it('hard-deleting the asset cascades its space-album contribution away (no dangling rows)', async () => {
+    const { ctx } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: contributor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    const { library } = await ctx.newLibrary({ ownerId: contributor.id });
+    const { asset } = await ctx.newAsset({
+      ownerId: contributor.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: asset.id, spaceId: space.id });
+
+    const before = await defaultDatabase
+      .selectFrom('album_space_asset')
+      .select('assetId')
+      .where('assetId', '=', asset.id)
+      .execute();
+    expect(before).toHaveLength(1);
+
+    // Deleting an external library hard-deletes its assets; here we delete the asset row directly to
+    // exercise the album_space_asset.assetId FK cascade that guarantees no dangling contribution rows.
+    await defaultDatabase.deleteFrom('asset').where('id', '=', asset.id).execute();
+
+    const after = await defaultDatabase
+      .selectFrom('album_space_asset')
+      .select('assetId')
+      .where('assetId', '=', asset.id)
+      .execute();
+    expect(after).toHaveLength(0);
   });
 });
 
