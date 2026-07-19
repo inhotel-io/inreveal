@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SharedSpaceRole } from 'src/enum';
+import { AlbumUserRole, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { SyncTestContext } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
@@ -218,5 +218,45 @@ describe('re-link after unlink refreshes the grant createId (albums-9)', () => {
     await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
     const grantsAfterRelink = await grantsFor(album.id);
     expect(grantsAfterRelink.filter((g) => g.userId === member.id)).toHaveLength(1);
+  });
+});
+
+describe('member re-join refreshes a surviving grant createId (#752 launch review F-A)', () => {
+  it('re-adding a member refreshes a surviving grant createId so backfill re-fires', async () => {
+    const ctx = new SyncTestContext(db);
+    // Given: member M in space S; M is also an album_user Editor of album L, so removing M from S
+    // leaves the shared_space_album_user(M, L) grant in place (user_has_album_path stays true).
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+    const { album } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newAlbumUser({ albumId: album.id, userId: member.id, role: AlbumUserRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id }); // link → grant created
+
+    const readGrant = () =>
+      db
+        .selectFrom('shared_space_album_user')
+        .select('createId')
+        .where('userId', '=', member.id)
+        .where('albumId', '=', album.id)
+        .executeTakeFirst();
+
+    const before = await readGrant();
+    // Remove M from S — the delete-audit trigger keeps the grant (survives via album_user).
+    await db
+      .deleteFrom('shared_space_member')
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', member.id)
+      .execute();
+    const afterRemoval = await readGrant();
+    expect(afterRemoval?.createId).toBe(before?.createId); // precondition: grant survived, createId stale
+
+    // When: M is re-added → the member-join trigger fires against the surviving grant.
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Editor });
+
+    // Then: the grant's createId was refreshed (and createdAt bumped) so backfill re-fires.
+    const afterRejoin = await readGrant();
+    expect(afterRejoin?.createId).not.toBe(before?.createId);
   });
 });

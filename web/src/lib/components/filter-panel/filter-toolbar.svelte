@@ -37,6 +37,8 @@
   <!--
     Root display is responsive-by-intent:
     - showFilters → `flex` (visible on ALL sizes, so the chip bar still shows on mobile)
+    - showFilterButton && onExpandFilters → `flex` (visible on ALL sizes, so a collapsed panel is
+      always reopenable — the panel's own collapse control has no breakpoint gate, #752 launch review F3)
     - grouping-only → `hidden md:flex` (desktop-only, matching today's behavior)
     `bg-transparent` keeps the toolbar a hairline surface on the content background (never the old gray band).
     A caller MAY pass `class="hidden md:flex"` to force desktop-only even when showFilters is true
@@ -51,12 +53,16 @@
       // The compact filter button leads the row when shown — tighten the leading inset so it sits
       // closer to the edge; grouping-only usages keep the standard ps-4.
       showFilterButton ? 'ps-2' : 'ps-4',
-      showFilters ? 'flex' : 'hidden md:flex',
+      showFilters || (showFilterButton && onExpandFilters) ? 'flex' : 'hidden md:flex',
       className,
     )}
+    data-testid="filter-toolbar-root"
   >
     {#if showFilterButton && onExpandFilters}
-      <div class="hidden md:flex md:items-center">
+      <!-- Visible at EVERY viewport: collapsing is possible at every viewport (the panel's X has no
+           breakpoint) and the collapsed flag is a global preference — an md:-gated reopen button
+           permanently strands small screens (#752 launch review F3). -->
+      <div class="flex items-center" data-testid="filter-toolbar-reopen">
         <FilterToggleButton active={filterActive} onExpand={onExpandFilters} />
       </div>
     {/if}

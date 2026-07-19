@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { AssetVisibility, SharedSpaceRole } from 'src/enum';
+import { AssetVisibility, SharedSpaceActivityType, SharedSpaceRole } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { DB } from 'src/schema';
@@ -1377,6 +1377,98 @@ describe(SharedSpaceRepository.name, () => {
       expect(activities[0].userId).toBeNull();
       expect(activities[0].name).toBeNull();
       expect(activities[0].email).toBeNull();
+    });
+  });
+
+  // #752 F4: getActivities must filter dead-album link/unlink rows IN SQL, not post-hoc — a
+  // post-SQL filter (the service-level pass) shrinks pages below LIMIT, which dead-ends the
+  // client's hasMore/offset pagination and makes older activity unreachable.
+  describe('getActivities — dead-album entries are filtered in SQL (full pages)', () => {
+    it('returns a full page even when deleted-album link entries fall inside it', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'editor' });
+
+      const { result: liveAlbum } = await ctx.newAlbum({ ownerId: user.id, albumName: 'LiveAlbum' });
+      const { result: deadAlbum } = await ctx.newAlbum({ ownerId: user.id, albumName: 'DeadAlbum' });
+
+      // 10 live-album link activities, then the dead-album one, then 12 more live — enough padding
+      // past the dead entry that a full second page of live rows still remains, so the test also
+      // pins the pagination-offset side of the bug (not just "no dead row on page 1").
+      for (let i = 0; i < 10; i++) {
+        await sut.logActivity({
+          spaceId: space.id,
+          userId: user.id,
+          type: SharedSpaceActivityType.AlbumLink,
+          data: { albumId: liveAlbum.id },
+        });
+      }
+      await sut.logActivity({
+        spaceId: space.id,
+        userId: user.id,
+        type: SharedSpaceActivityType.AlbumLink,
+        data: { albumId: deadAlbum.id },
+      });
+      await ctx.softDeleteAlbum(deadAlbum.id);
+      for (let i = 0; i < 12; i++) {
+        await sut.logActivity({
+          spaceId: space.id,
+          userId: user.id,
+          type: SharedSpaceActivityType.AlbumLink,
+          data: { albumId: liveAlbum.id },
+        });
+      }
+
+      const page = await sut.getActivities(space.id, 20, 0);
+
+      expect(page).toHaveLength(20);
+      expect(page.every((a) => (a.data as { albumId?: string }).albumId !== deadAlbum.id)).toBe(true);
+
+      // Older activity stays reachable: the second page delivers the remaining live rows.
+      const rest = await sut.getActivities(space.id, 20, 20);
+      expect(rest.length).toBeGreaterThan(0);
+      expect(rest.every((a) => (a.data as { albumId?: string }).albumId !== deadAlbum.id)).toBe(true);
+    });
+
+    it('excludes album link entries whose album was hard-deleted', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'editor' });
+
+      const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'HardDeletedAlbum' });
+      await sut.logActivity({
+        spaceId: space.id,
+        userId: user.id,
+        type: SharedSpaceActivityType.AlbumLink,
+        data: { albumId: album.id },
+      });
+      await ctx.database.deleteFrom('album').where('id', '=', album.id).execute();
+
+      const page = await sut.getActivities(space.id, 20, 0);
+
+      expect(page).toHaveLength(0);
+    });
+
+    it('keeps non-album activity types regardless of their data payload', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: 'editor' });
+
+      // A non-album activity carrying an albumId-shaped payload (or none) must never be
+      // filtered — the exists() check only applies to album_link/album_unlink rows.
+      await sut.logActivity({
+        spaceId: space.id,
+        userId: user.id,
+        type: SharedSpaceActivityType.MemberJoin,
+        data: { albumId: 'not-a-real-album-id' },
+      });
+
+      const page = await sut.getActivities(space.id, 20, 0);
+
+      expect(page.some((a) => a.type === SharedSpaceActivityType.MemberJoin)).toBe(true);
     });
   });
 

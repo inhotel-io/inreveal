@@ -154,6 +154,64 @@ describe('getAlbumAssetIdsWithoutOtherSpacePath', () => {
     const result = await sut.getAlbumAssetIdsWithoutOtherSpacePath(space.id, albumA.id);
     expect(new Set(result)).toEqual(new Set([a1.id]));
   });
+
+  // #752 F1 (launch review): the severed album's CONTRIBUTED memberships (album_space_asset) are
+  // candidates too — an asset whose only space path was a contribution into this album must be
+  // swept, or its projected faces outlive the link.
+  it('includes an asset whose only space path is a contribution into the severed album', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: contributor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+
+    const { result: albumA } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ContribAlbumA' });
+    await sut.addAlbum({ spaceId: space.id, albumId: albumA.id, addedById: owner.id });
+
+    // X reaches the space ONLY via a contribution into A — no album_asset row, not in the space
+    // pool, no library path.
+    const { asset: x } = await ctx.newAsset({ ownerId: contributor.id });
+    await ctx.newAlbumSpaceAsset({ albumId: albumA.id, assetId: x.id, spaceId: space.id, addedById: contributor.id });
+
+    const result = await sut.getAlbumAssetIdsWithoutOtherSpacePath(space.id, albumA.id);
+    expect(result).toContain(x.id);
+  });
+
+  it('retains an asset still contributed into ANOTHER linked album of the same space', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: contributor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+
+    const { result: albumA } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ContribAlbumA2' });
+    const { result: albumB } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ContribAlbumB2' });
+    await sut.addAlbum({ spaceId: space.id, albumId: albumA.id, addedById: owner.id });
+    await sut.addAlbum({ spaceId: space.id, albumId: albumB.id, addedById: owner.id });
+
+    const { asset: x } = await ctx.newAsset({ ownerId: contributor.id });
+    await ctx.newAlbumSpaceAsset({ albumId: albumA.id, assetId: x.id, spaceId: space.id, addedById: contributor.id });
+    // X is ALSO contributed into B — B still links X into the space after A is severed.
+    await ctx.newAlbumSpaceAsset({ albumId: albumB.id, assetId: x.id, spaceId: space.id, addedById: contributor.id });
+
+    const result = await sut.getAlbumAssetIdsWithoutOtherSpacePath(space.id, albumA.id);
+    expect(result).not.toContain(x.id);
+  });
+
+  it('retains a contributed asset that is also directly in the space pool', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: contributor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+
+    const { result: albumA } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ContribAlbumA3' });
+    await sut.addAlbum({ spaceId: space.id, albumId: albumA.id, addedById: owner.id });
+
+    const { asset: x } = await ctx.newAsset({ ownerId: contributor.id });
+    await ctx.newAlbumSpaceAsset({ albumId: albumA.id, assetId: x.id, spaceId: space.id, addedById: contributor.id });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: x.id });
+
+    const result = await sut.getAlbumAssetIdsWithoutOtherSpacePath(space.id, albumA.id);
+    expect(result).not.toContain(x.id);
+  });
 });
 
 describe('getAssetCount — soft-deleted album', () => {

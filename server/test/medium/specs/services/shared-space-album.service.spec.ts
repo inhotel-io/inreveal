@@ -341,6 +341,62 @@ describe('SharedSpaceService — unlinkAlbum face retention', () => {
       .execute();
     expect(remaining).toHaveLength(0);
   });
+
+  // #752 F1 (launch review): an asset whose ONLY space path is a contribution (album_space_asset)
+  // into the severed album must be swept too, or its projected faces (and any person left with no
+  // other faces) outlive the unlink.
+  it('unlinking an album sweeps faces projected from contribution-only assets and deletes the orphaned person', async () => {
+    const { ctx, sut } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { user: contributor } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: contributor.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ContribFaceTestAlbum' });
+    await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    // X reaches the space ONLY as a contribution into album A — no album_asset row, not in the
+    // space pool, no library path.
+    const { asset: x } = await ctx.newAsset({ ownerId: contributor.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: x.id, spaceId: space.id, addedById: contributor.id });
+
+    const { result: faceId } = await ctx.newAssetFace({ assetId: x.id });
+
+    const spacePersonRepo = ctx.get(SharedSpaceRepository);
+    const spacePerson = await spacePersonRepo.createPerson({
+      spaceId: space.id,
+      name: 'ContribOnlyPerson',
+      type: 'person',
+      representativeFaceId: null,
+    });
+    await spacePersonRepo.addPersonFaces([{ personId: spacePerson.id, assetFaceId: faceId }]);
+
+    const facesBefore = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    expect(facesBefore.map((f) => f.assetFaceId)).toContain(faceId);
+
+    // Unlink the album — X has no other path, so its face must be swept and the now-orphaned
+    // person deleted.
+    await sut.unlinkAlbum(authFromUser(owner), space.id, album.id);
+
+    const facesAfter = await defaultDatabase
+      .selectFrom('shared_space_person_face')
+      .select('assetFaceId')
+      .where('personId', '=', spacePerson.id)
+      .execute();
+    expect(facesAfter).toHaveLength(0);
+
+    const personAfter = await defaultDatabase
+      .selectFrom('shared_space_person')
+      .select('id')
+      .where('id', '=', spacePerson.id)
+      .execute();
+    expect(personAfter).toHaveLength(0);
+  });
 });
 
 describe('SharedSpaceService — handleSharedSpaceAlbumFaceSync', () => {

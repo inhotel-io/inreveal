@@ -268,16 +268,19 @@
       <div class="flex flex-1 flex-col overflow-hidden pl-4">
         {#if !assetMultiSelectManager.selectionActive}
           <div
-            class="mb-2 hidden shrink-0 items-center gap-2 bg-transparent py-2 pe-4 md:flex dark:bg-transparent {filterCollapsed &&
+            class="mb-2 shrink-0 items-center gap-2 bg-transparent py-2 pe-4 dark:bg-transparent {filterCollapsed &&
             !isBrowseEmpty
-              ? 'ps-2'
-              : 'ps-4'}"
-            data-testid="timeline-desktop-grouping-control"
+              ? 'flex ps-2'
+              : 'hidden ps-4 md:flex'}"
           >
             {#if filterCollapsed && !isBrowseEmpty}
+              <!-- Visible at EVERY viewport: the panel's own collapse control has no breakpoint gate,
+                   so the reopen affordance can't be desktop-only either (#752 launch review F3). -->
               <FilterToggleButton active={browseActive > 0} onExpand={() => (filterCollapsed = false)} />
             {/if}
-            <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
+            <div class="hidden md:flex md:items-center" data-testid="timeline-desktop-grouping-control">
+              <TimelineGroupingControl grouping={timelineGrouping} onGroupingChange={handleTimelineGroupingChange} />
+            </div>
           </div>
         {/if}
 
@@ -479,7 +482,7 @@
                 [album.id],
                 added.map(({ id }) => id),
                 { notify: true },
-              ).then(() => handleAddAssetsSuccess(added));
+              ).then((ok) => (ok ? handleAddAssetsSuccess(added) : undefined));
             },
           }}
         />

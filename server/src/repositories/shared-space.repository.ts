@@ -2,7 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { Insertable, Kysely, NotNull, sql, Transaction, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
-import { AlbumUserRole, AssetType, AssetVisibility, SharedSpaceRole, VectorIndex } from 'src/enum';
+import {
+  AlbumUserRole,
+  AssetType,
+  AssetVisibility,
+  SharedSpaceActivityType,
+  SharedSpaceRole,
+  VectorIndex,
+} from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
 import type { PeopleFaceStatistics } from 'src/repositories/person.repository';
 import type { AssetSearchBuilderOptions } from 'src/repositories/search.repository';
@@ -1558,25 +1565,46 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID, 50, 0] })
   getActivities(spaceId: string, limit: number = 50, offset: number = 0) {
-    return this.db
-      .selectFrom('shared_space_activity')
-      .leftJoin('user', 'user.id', 'shared_space_activity.userId')
-      .select([
-        'shared_space_activity.id',
-        'shared_space_activity.type',
-        'shared_space_activity.data',
-        'shared_space_activity.createdAt',
-        'shared_space_activity.userId',
-        'user.name',
-        'user.email',
-        'user.profileImagePath',
-        'user.avatarColor',
-      ])
-      .where('shared_space_activity.spaceId', '=', spaceId)
-      .orderBy('shared_space_activity.createdAt', 'desc')
-      .limit(limit)
-      .offset(offset)
-      .execute();
+    return (
+      this.db
+        .selectFrom('shared_space_activity')
+        .leftJoin('user', 'user.id', 'shared_space_activity.userId')
+        .select([
+          'shared_space_activity.id',
+          'shared_space_activity.type',
+          'shared_space_activity.data',
+          'shared_space_activity.createdAt',
+          'shared_space_activity.userId',
+          'user.name',
+          'user.email',
+          'user.profileImagePath',
+          'user.avatarColor',
+        ])
+        .where('shared_space_activity.spaceId', '=', spaceId)
+        // Drop album link/unlink entries whose album no longer exists (e.g. the abandoned create-flow
+        // album deleted on navigate-away) IN SQL, not post-hoc: LIMIT must yield full pages, because
+        // the client infers hasMore from a full page and advances its offset by the returned count —
+        // a post-SQL filter shrinks pages, dead-ends pagination, and desyncs the offset (#752 F4).
+        .where((eb) =>
+          eb.or([
+            eb('shared_space_activity.type', 'not in', [
+              SharedSpaceActivityType.AlbumLink,
+              SharedSpaceActivityType.AlbumUnlink,
+            ]),
+            eb.exists(
+              eb
+                .selectFrom('album')
+                .select('album.id')
+                .where('album.deletedAt', 'is', null)
+                .where(sql<boolean>`album.id::text = shared_space_activity.data->>'albumId'`),
+            ),
+          ]),
+        )
+        .orderBy('shared_space_activity.createdAt', 'desc')
+        .limit(limit)
+        .offset(offset)
+        .execute()
+    );
   }
 
   // ==========================================
@@ -2970,7 +2998,77 @@ export class SharedSpaceRepository {
         ),
       )
       .execute();
-    return rows.map((r) => r.assetId);
+
+    // #752 F1 (launch review): the severed album's CONTRIBUTED memberships (album_space_asset) are
+    // candidates too — an asset whose only space path was a contribution into this album must be
+    // swept, or its projected faces outlive the link. Same four anti-join retention arms as above.
+    // CRITICAL: the outer MUST be aliased `as cand` and every arm correlated on `cand.assetId` — the
+    // method's own header documents the self-correlation footgun (the album_asset outer is why the arms
+    // are hand-rolled), and here the third arm itself joins album_space_asset (as `otherContribution`),
+    // so an unaliased outer `album_space_asset.assetId` correlation is ambiguous / self-matches.
+    const contributedRows = await this.db
+      .selectFrom('album_space_asset as cand')
+      .select('cand.assetId')
+      .where('cand.albumId', '=', albumId)
+      .where('cand.spaceId', '=', spaceId)
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'cand.assetId')
+              .where('shared_space_asset.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset as other', 'other.albumId', 'shared_space_album.albumId')
+              .whereRef('other.assetId', '=', 'cand.assetId')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.albumId', '!=', albumId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_space_asset as otherContribution', (join) =>
+                join
+                  .onRef('otherContribution.albumId', '=', 'shared_space_album.albumId')
+                  .onRef('otherContribution.spaceId', '=', 'shared_space_album.spaceId'),
+              )
+              .whereRef('otherContribution.assetId', '=', 'cand.assetId')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.albumId', '!=', albumId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+              .whereRef('asset.id', '=', 'cand.assetId')
+              .where('shared_space_library.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .execute();
+
+    return [...new Set([...rows, ...contributedRows].map((r) => r.assetId))];
   }
 
   // Per-asset analogue of getAlbumAssetIdsWithoutOtherSpacePath. Call AFTER the album_asset

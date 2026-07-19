@@ -5,8 +5,9 @@ import { Kysely, sql } from 'kysely';
 // checkpoint got no backfill and missed assets added while unlinked. Refresh the
 // createId on conflict so getCreatedAfter re-delivers.
 //
-// Only the re-link create-side trigger (shared_space_album INSERT) is changed;
-// shared_space_member_after_insert_album (member-join) keeps DO NOTHING.
+// Only the re-link create-side trigger (shared_space_album INSERT) is changed here;
+// shared_space_member_after_insert_album (member-join) kept DO NOTHING until
+// 1783700000000 (#752 launch review F-A) fixed the identical bug on that trigger.
 
 export async function up(db: Kysely<any>): Promise<void> {
   await sql`CREATE OR REPLACE FUNCTION shared_space_album_after_insert_user()
