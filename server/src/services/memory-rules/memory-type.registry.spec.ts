@@ -16,6 +16,12 @@ describe('createMemoryRules', () => {
     expect(rules.map((r) => r.id)).toEqual(['birthday', 'recent_trip']);
   });
 
+  it('instantiates video_moments by key', () => {
+    const rules = createMemoryRules(['video_moments'], deps);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe('video_moments');
+  });
+
   it('returns nothing for a non-rule key', () => {
     expect(createMemoryRules(['on_this_day'], deps)).toEqual([]);
   });

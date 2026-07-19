@@ -670,7 +670,11 @@ these are written given/when/then to keep setup, trigger and assertion distinct.
 - `favoriteCount` is capped in the score: 20 favourites and 10 favourites yield the **same** score.
 - `count`/`favoriteCount` are pre-selection (a year with 12 in-band videos reports `12 videos` in the
   subtitle despite 8 `assetIds`).
-- Pluralization: `1 video` vs `6 videos`.
+- Pluralization: exercise the plural branch at `3` and `6` videos. **The singular branch is
+  unreachable through the public API** — `MIN_ASSETS = 3` means a year with one survivor never fires,
+  and `count` is that same pre-selection survivor set, so a fired candidate can never report
+  `count === 1`. Keep the singular-safe ternary in the candidate for consistency with the other
+  rules, but do not assert an unreachable `1 video` subtitle.
 - Skips current/future years; caps at `MAX_YEARS`.
 - Passes `type: AssetType.Video` to the repository (assert the call argument).
 

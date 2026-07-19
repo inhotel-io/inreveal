@@ -58,7 +58,7 @@ export interface MemoryPeriodAsset {
   country: string | null;
   city: string | null;
   isFavorite: boolean;
-  type: AssetType;         // NEW
+  type: AssetType; // NEW
   duration: number | null; // NEW — milliseconds
 }
 
@@ -66,7 +66,7 @@ export interface MemoryPeriodOptions {
   months: number[];
   day?: number;
   favoritesOnly?: boolean;
-  type?: AssetType;        // NEW
+  type?: AssetType; // NEW
   takenBefore: Date;
 }
 ```

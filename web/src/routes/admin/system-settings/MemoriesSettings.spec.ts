@@ -103,6 +103,7 @@ describe('MemoriesSettings', () => {
           on_this_day_place: true,
           season_recap: true,
           people_together: true,
+          video_moments: true,
         },
       },
     });

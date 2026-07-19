@@ -66,7 +66,7 @@ Spec (#5): [`2026-07-16-memory-types-tier2-people-together-spec.md`](./2026-07-1
 | --- | ------------------------ | -------------------------------------------------- | ------ | -------------- | --------------------------------------------------------- |
 | 9   | Someone you haven't seen | A person whose most-recent photo is > N months old | 🟠     | High but risky | Sensitivity risk (deceased people); needs a careful frame |
 | 10  | Your pet [name]          | Leverages Gallery's pet detection                  | 🟠     | High           | Fork differentiator; needs a look at how pets are stored  |
-| 11  | Video moments            | Memorable videos, not just stills                  | 🟠     | Medium         | Query easy; memory viewer must play video well            |
+| 11  | Video moments            | Memorable videos, not just stills                  | 🟠     | Medium         | **Shipped** — `video_moments`                             |
 
 ### 🔴 Tier 4 — Hard (north star)
 

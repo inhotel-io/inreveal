@@ -83,6 +83,7 @@ The built-in types each have a stable key used in configuration:
 | `on_this_day_place`   | On this day, in a place | A past year's on-this-day photos when they cluster in one place         |
 | `season_recap`        | Season recap            | A past meteorological season, shown when the new season begins          |
 | `people_together`     | People together         | Two people or pets often photographed together in a past year           |
+| `video_moments`       | Video moments           | Videos you filmed in this month of a past year                          |
 
 All default to **on**.
 
