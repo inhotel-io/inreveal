@@ -301,7 +301,10 @@ describe('Space album detail page', () => {
 
   it('the grouping-control bar is transparent (no navy/border bar) to match the space page', () => {
     renderPage();
-    const bar = screen.getByTestId('timeline-desktop-grouping-control');
+    // data-testid="timeline-desktop-grouping-control" now sits on the grouping wrapper (kept
+    // desktop-only, #752 launch review F3); the surrounding bar carrying the background utilities
+    // is its parent.
+    const bar = screen.getByTestId('timeline-desktop-grouping-control').parentElement!;
     // The rolling/main fix dropped the bordered grey/navy bar in favour of a transparent container.
     expect(bar.className).toContain('bg-transparent');
     expect(bar.className).toContain('dark:bg-transparent');
