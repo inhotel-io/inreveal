@@ -340,6 +340,8 @@ For example, to disable recent trips globally and leave the rest on:
 }
 ```
 
+`themeMaxDistance` is the maximum CLIP cosine distance for the `themed` memory type (sunsets, food, beach days, etc. — found via smart search, not tags). It only takes effect for values `0 < x < 2`; the default is `0.3`. Setting it to `0` disables the quality gate entirely, so every smart-search result within a themed year is accepted regardless of similarity. `themed` requires smart search to be enabled — see the [Memories docs](/features/memories).
+
 The config file only controls **global availability**. Within each available type, every user can still enable or disable it for themselves in their account settings. Disabling a type globally removes it from every user's settings and immediately hides existing unsaved memories of that type (saved memories are kept).
 
 The per-type switches do not control whether the nightly task runs. To disable all generated memories, set `nightlyTasks.generateMemories` to `false`.

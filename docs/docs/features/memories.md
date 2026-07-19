@@ -89,6 +89,8 @@ The built-in types each have a stable key used in configuration:
 
 All default to **on**.
 
+`themed` (Themes) additionally requires [Smart Search](/features/searching) to be enabled — it matches photos to a rotating monthly theme (sunsets, food, beach days, etc.) via CLIP embeddings. If smart search is disabled or the machine learning service is unavailable, Gallery simply skips the rule for that night; it does not surface an error.
+
 ### Per-user toggles
 
 Each user manages their own memory types from **Account Settings → Features → Memories**. Below the master memory switch, a toggle appears for every memory type the admin has made available. Turning one off:
