@@ -263,6 +263,8 @@ select
   "asset"."id",
   "asset"."localDateTime",
   "asset"."isFavorite",
+  "asset"."type",
+  "asset"."duration",
   "asset_exif"."country" as "country",
   "asset_exif"."city" as "city",
   extract(

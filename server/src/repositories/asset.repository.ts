@@ -177,6 +177,8 @@ export interface MemoryPeriodAsset {
   country: string | null;
   city: string | null;
   isFavorite: boolean;
+  type: AssetType;
+  duration: number | null;
 }
 
 export interface MemoryPeriodFace {
@@ -194,6 +196,8 @@ export interface MemoryPeriodOptions {
   day?: number;
   /** when true, only favorited assets are returned */
   favoritesOnly?: boolean;
+  /** when set, only assets of this type are returned */
+  type?: AssetType;
   /** exclude assets taken after this instant (defensive guard against future-dated assets) */
   takenBefore: Date;
 }
@@ -955,7 +959,7 @@ export class AssetRepository {
   @GenerateSql({ params: [DummyValue.UUID, { months: [7], takenBefore: DummyValue.DATE }] })
   getMemoryAssetsForPeriod(
     ownerId: string,
-    { months, day, favoritesOnly, takenBefore }: MemoryPeriodOptions,
+    { months, day, favoritesOnly, type, takenBefore }: MemoryPeriodOptions,
   ): Promise<MemoryPeriodAsset[]> {
     return this.db
       .selectFrom('asset')
@@ -964,6 +968,8 @@ export class AssetRepository {
         'asset.id',
         'asset.localDateTime',
         'asset.isFavorite',
+        'asset.type',
+        'asset.duration',
         'asset_exif.country as country',
         'asset_exif.city as city',
       ])
@@ -977,6 +983,7 @@ export class AssetRepository {
         qb.where(sql<number>`extract(day from (asset."localDateTime" at time zone 'UTC'))::int`, '=', day!),
       )
       .$if(favoritesOnly === true, (qb) => qb.where('asset.isFavorite', '=', true))
+      .$if(type !== undefined, (qb) => qb.where('asset.type', '=', type!))
       .where((eb) =>
         eb.exists(
           eb

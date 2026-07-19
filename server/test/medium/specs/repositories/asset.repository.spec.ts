@@ -39,6 +39,8 @@ const seedPeriodAsset = async (
     withPreview = true,
     visibility = AssetVisibility.Timeline,
     deleted = false,
+    type = AssetType.Image,
+    duration = null,
   }: {
     localDateTime: Date;
     country?: string | null;
@@ -47,6 +49,8 @@ const seedPeriodAsset = async (
     withPreview?: boolean;
     visibility?: AssetVisibility;
     deleted?: boolean;
+    type?: AssetType;
+    duration?: number | null;
   },
 ) => {
   const { asset } = await ctx.newAsset({
@@ -55,6 +59,8 @@ const seedPeriodAsset = async (
     localDateTime,
     isFavorite,
     deletedAt: deleted ? new Date() : null,
+    type,
+    duration,
   });
   await Promise.all([
     ctx.newExif({ assetId: asset.id, country, city }),
@@ -1038,6 +1044,125 @@ describe(AssetRepository.name, () => {
       });
 
       expect(result.map((r) => r.id)).toEqual([first.id, second.id]);
+    });
+
+    it('returns type and duration on each row', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const image = await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-10T12:00:00Z'),
+        type: AssetType.Image,
+        duration: null,
+      });
+      const video = await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-11T12:00:00Z'),
+        type: AssetType.Video,
+        duration: 5000,
+      });
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: image.id, type: AssetType.Image, duration: null }),
+          expect.objectContaining({ id: video.id, type: AssetType.Video, duration: 5000 }),
+        ]),
+      );
+    });
+
+    it('type: AssetType.Video returns only videos', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-10T12:00:00Z'),
+        type: AssetType.Image,
+        duration: null,
+      });
+      const video1 = await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-11T12:00:00Z'),
+        type: AssetType.Video,
+        duration: 5000,
+      });
+      const video2 = await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-12T12:00:00Z'),
+        type: AssetType.Video,
+        duration: 8000,
+      });
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        type: AssetType.Video,
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.id).toSorted()).toEqual([video1.id, video2.id].toSorted());
+      for (const row of result) {
+        expect(row.type).toBe(AssetType.Video);
+      }
+    });
+
+    it('omitting type returns both images and videos', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-10T12:00:00Z'),
+        type: AssetType.Image,
+        duration: null,
+      });
+      await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-11T12:00:00Z'),
+        type: AssetType.Video,
+        duration: 5000,
+      });
+      await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-12T12:00:00Z'),
+        type: AssetType.Video,
+        duration: 8000,
+      });
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result).toHaveLength(3);
+    });
+
+    it('returns a video with a null duration', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const video = await seedPeriodAsset(ctx, user.id, {
+        localDateTime: new Date('2023-07-10T12:00:00Z'),
+        type: AssetType.Video,
+        duration: null,
+      });
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        takenBefore: new Date('2026-01-01T00:00:00Z'),
+      });
+
+      expect(result.map((r) => r.id)).toEqual([video.id]);
+      expect(result[0].type).toBe(AssetType.Video);
+      expect(result[0].duration).toBeNull();
+    });
+
+    it('includes an asset exactly on takenBefore', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const takenBefore = new Date('2023-07-10T12:00:00Z');
+      const asset = await seedPeriodAsset(ctx, user.id, { localDateTime: takenBefore });
+
+      const result = await sut.getMemoryAssetsForPeriod(user.id, {
+        months: [7],
+        takenBefore,
+      });
+
+      expect(result.map((r) => r.id)).toEqual([asset.id]);
     });
   });
 
