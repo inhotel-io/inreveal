@@ -15,6 +15,8 @@ import {
   isMemoryTypeEnabledForUser,
 } from 'src/services/memory-rules/memory-type.metadata';
 import { createMemoryRules } from 'src/services/memory-rules/memory-type.registry';
+import { MemoryThemeSearchAdapter } from 'src/services/memory-rules/theme-search.adapter';
+import { ThemeSearchPort } from 'src/services/memory-rules/theme-search.port';
 import { addAssets, removeAssets } from 'src/utils/asset.util';
 import { getPreferences } from 'src/utils/preferences';
 
@@ -112,11 +114,33 @@ export class MemoryService extends BaseService {
     );
   }
 
+  private themeSearchPort?: ThemeSearchPort;
+
+  /** Overridable seam: the medium test subclasses MemoryService to inject a stub. */
+  protected createThemeSearchPort(): ThemeSearchPort {
+    return new MemoryThemeSearchAdapter(
+      this.machineLearningRepository,
+      this.searchRepository,
+      () => this.getConfig({ withCache: true }),
+      this.logger,
+    );
+  }
+
+  /**
+   * Memoized per-service-instance: the adapter holds the embedding cache, so a theme is encoded
+   * once per process rather than once per user per night.
+   */
+  private getThemeSearchPort(): ThemeSearchPort {
+    this.themeSearchPort ??= this.createThemeSearchPort();
+    return this.themeSearchPort;
+  }
+
   private getMemoryRules(enabledKeys: Iterable<string>): MemoryRule[] {
     return createMemoryRules(enabledKeys, {
       personRepository: this.personRepository,
       assetRepository: this.assetRepository,
       memoryRepository: this.memoryRepository,
+      themeSearchPort: this.getThemeSearchPort(),
     });
   }
 

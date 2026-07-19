@@ -204,6 +204,7 @@ describe(ServerService.name, () => {
           'people_together',
           'video_moments',
           'trip_anniversary',
+          'themed',
         ],
       });
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
@@ -229,6 +230,7 @@ describe(ServerService.name, () => {
         'people_together',
         'video_moments',
         'trip_anniversary',
+        'themed',
       ]);
     });
 

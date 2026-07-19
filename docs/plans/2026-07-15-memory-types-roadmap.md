@@ -51,12 +51,12 @@ Spec: [`2026-07-15-memory-types-tier1-spec.md`](./2026-07-15-memory-types-tier1-
 
 ### 🟡 Tier 2 — Easy (planned)
 
-| #   | Idea                    | Surfaces                                                 | Effort | Impact     | Notes                                                                |
-| --- | ----------------------- | -------------------------------------------------------- | ------ | ---------- | -------------------------------------------------------------------- |
-| 5   | You & [person]          | Two named people who co-occur often                      | 🟡     | High       | **Shipped** — `people_together` (reframed to a pair, month-anchored) |
-| 6   | Trip anniversary        | A _past_ trip resurfaced on its anniversary              | 🟡     | High       | **Shipped** — `trip_anniversary`                                     |
-| 7   | Themed / classification | "Sunsets", "Food", "Beach days" from auto-classification | 🟡     | High       | Query `tag_asset`; depends on classification being enabled           |
-| 8   | Shot on [camera/lens]   | Gear nostalgia grouped by `make`/`model`                 | 🟡     | Low-medium | Niche; photographers only                                            |
+| #   | Idea                    | Surfaces                                                 | Effort | Impact     | Notes                                                                                |
+| --- | ----------------------- | -------------------------------------------------------- | ------ | ---------- | ------------------------------------------------------------------------------------ |
+| 5   | You & [person]          | Two named people who co-occur often                      | 🟡     | High       | **Shipped** — `people_together` (reframed to a pair, month-anchored)                 |
+| 6   | Trip anniversary        | A _past_ trip resurfaced on its anniversary              | 🟡     | High       | **Shipped** — `trip_anniversary`                                                     |
+| 7   | Themed / classification | "Sunsets", "Food", "Beach days" from auto-classification | 🟡     | High       | **Shipped** — `themed` (reframed onto smart-search CLIP embeddings, not `tag_asset`) |
+| 8   | Shot on [camera/lens]   | Gear nostalgia grouped by `make`/`model`                 | 🟡     | Low-medium | Niche; photographers only                                                            |
 
 Spec (#5): [`2026-07-16-memory-types-tier2-people-together-spec.md`](./2026-07-16-memory-types-tier2-people-together-spec.md)
 

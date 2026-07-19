@@ -20,6 +20,7 @@
     'people_together',
     'video_moments',
     'trip_anniversary',
+    'themed',
   ];
 
   const disabled = $derived(featureFlagsManager.value.configFile);

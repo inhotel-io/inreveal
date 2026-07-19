@@ -28,6 +28,7 @@ describe('memory-type.metadata', () => {
         { key: 'people_together', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'video_moments', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'trip_anniversary', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'themed', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
       ]);
     });
 
@@ -50,6 +51,7 @@ describe('memory-type.metadata', () => {
         'people_together',
         'video_moments',
         'trip_anniversary',
+        'themed',
       ]);
     });
   });
@@ -67,6 +69,7 @@ describe('memory-type.metadata', () => {
         people_together: true,
         video_moments: true,
         trip_anniversary: true,
+        themed: true,
       });
     });
   });
@@ -115,6 +118,7 @@ describe('memory-type.metadata', () => {
           'people_together',
           'video_moments',
           'trip_anniversary',
+          'themed',
         ]),
       );
     });
@@ -160,6 +164,7 @@ describe('memory-type.metadata', () => {
           'people_together',
           'video_moments',
           'trip_anniversary',
+          'themed',
         ]),
       );
     });

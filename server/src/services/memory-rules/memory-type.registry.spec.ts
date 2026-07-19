@@ -1,7 +1,9 @@
 import { MEMORY_TYPE_KEYS, MEMORY_TYPE_METADATA } from 'src/services/memory-rules/memory-type.metadata';
 import { createMemoryRules, MemoryRuleDeps } from 'src/services/memory-rules/memory-type.registry';
 
-const deps = {} as MemoryRuleDeps;
+const deps = {
+  themeSearchPort: { resolveEmbedding: vi.fn(), searchByEmbedding: vi.fn() },
+} as unknown as MemoryRuleDeps;
 const ruleKeys = MEMORY_TYPE_METADATA.filter((m) => m.kind === 'rule').map((m) => m.key);
 
 describe('createMemoryRules', () => {
@@ -26,6 +28,12 @@ describe('createMemoryRules', () => {
     const rules = createMemoryRules(['trip_anniversary'], deps);
     expect(rules).toHaveLength(1);
     expect(rules[0].id).toBe('trip_anniversary');
+  });
+
+  it('instantiates themed by key', () => {
+    const rules = createMemoryRules(['themed'], deps);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe('themed');
   });
 
   it('returns nothing for a non-rule key', () => {

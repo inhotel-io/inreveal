@@ -105,6 +105,7 @@ describe('MemoriesSettings', () => {
           people_together: true,
           video_moments: true,
           trip_anniversary: true,
+          themed: true,
         },
       },
     });

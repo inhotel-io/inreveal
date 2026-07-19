@@ -26,6 +26,7 @@ const getDefaultPreferences = (): UserPreferences => ({
       people_together: true,
       video_moments: true,
       trip_anniversary: true,
+      themed: true,
     },
   },
   people: {
@@ -183,6 +184,7 @@ describe('getPreferences', () => {
       people_together: true,
       video_moments: true,
       trip_anniversary: true,
+      themed: true,
     });
   });
 

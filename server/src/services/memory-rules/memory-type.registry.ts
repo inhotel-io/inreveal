@@ -10,6 +10,8 @@ import { OnThisDayPlaceMemoryRule } from 'src/services/memory-rules/on-this-day-
 import { PeopleTogetherMemoryRule } from 'src/services/memory-rules/people-together.rule';
 import { RecentTripMemoryRule } from 'src/services/memory-rules/recent-trip.rule';
 import { SeasonRecapMemoryRule } from 'src/services/memory-rules/season-recap.rule';
+import { ThemeSearchPort } from 'src/services/memory-rules/theme-search.port';
+import { ThemedMemoryRule } from 'src/services/memory-rules/themed.rule';
 import { TripAnniversaryMemoryRule } from 'src/services/memory-rules/trip-anniversary.rule';
 import { VideoMomentsMemoryRule } from 'src/services/memory-rules/video-moments.rule';
 
@@ -17,6 +19,7 @@ export interface MemoryRuleDeps {
   personRepository: PersonRepository;
   assetRepository: AssetRepository;
   memoryRepository: MemoryRepository;
+  themeSearchPort: ThemeSearchPort;
 }
 
 /** per rule-kind key, how to construct its MemoryRule */
@@ -30,6 +33,7 @@ const RULE_FACTORIES: Record<string, (deps: MemoryRuleDeps) => MemoryRule> = {
   people_together: (deps) => new PeopleTogetherMemoryRule(deps.assetRepository),
   video_moments: (deps) => new VideoMomentsMemoryRule(deps.assetRepository),
   trip_anniversary: (deps) => new TripAnniversaryMemoryRule(deps.assetRepository),
+  themed: (deps) => new ThemedMemoryRule(deps.themeSearchPort),
 };
 
 /** instantiate the rule-kind memory rules whose key is in `enabledKeys` (in registry order, deduped) */

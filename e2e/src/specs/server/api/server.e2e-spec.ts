@@ -156,6 +156,7 @@ describe('/server', () => {
           'people_together',
           'video_moments',
           'trip_anniversary',
+          'themed',
         ],
       });
     });
