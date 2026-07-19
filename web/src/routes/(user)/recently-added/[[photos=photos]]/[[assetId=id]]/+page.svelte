@@ -31,6 +31,7 @@
     type OnUnlink,
   } from '$lib/utils/actions';
   import { openFileUploadDialog } from '$lib/utils/file-uploader';
+  import { shouldShowRecentlyAddedCount } from '$lib/utils/recently-added-filter-options';
   import { AssetVisibility, AssetOrderBy } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider } from '@immich/ui';
   import { mdiDotsVertical } from '@mdi/js';
@@ -50,6 +51,13 @@
     withPartners: true,
     orderBy: AssetOrderBy.CreatedAt,
   };
+
+  const assetCount = $derived(timelineManager?.assetCount ?? 0);
+  // Slice 1 has no filters yet, so `hasActiveFilters` is always false here; Slice 2 replaces
+  // the literal with `getActiveFilterCount(filters) > 0`.
+  const countLabel = $derived(
+    shouldShowRecentlyAddedCount(assetCount, false) ? $t('items_count', { values: { count: assetCount } }) : undefined,
+  );
 
   let selectedAssets = $derived(assetMultiSelectManager.assets);
   let isAssetStackSelected = $derived(selectedAssets.length === 1 && !!selectedAssets[0].stack);
@@ -89,7 +97,12 @@
   };
 </script>
 
-<UserPageLayout hideNavbar={assetMultiSelectManager.selectionActive} title={data.meta.title} scrollbar={false}>
+<UserPageLayout
+  hideNavbar={assetMultiSelectManager.selectionActive}
+  title={data.meta.title}
+  description={countLabel}
+  scrollbar={false}
+>
   <Timeline
     enableRouting={true}
     bind:timelineManager
