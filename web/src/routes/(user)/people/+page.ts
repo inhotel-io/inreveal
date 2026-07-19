@@ -7,7 +7,13 @@ import type { PageLoad } from './$types';
 
 export const load = (async ({ parent, url }) => {
   await authenticate(url);
-  // Wait for the root layout's init() so the feature-flags manager is populated before we read it.
+
+  // Fire the (heavy) people query up front so it overlaps the root layout's init() instead of
+  // serializing behind await parent(). ssr=false, so the SDK's global fetch works even before
+  // init() assigns defaults.fetch. It is awaited below via Promise.all.
+  const peoplePromise = getAllPeople({ withHidden: true, withSharedSpaces: true, size: PEOPLE_PAGE_SIZE });
+
+  // parent() resolves once the root layout's init() has populated the feature-flags manager.
   await parent();
 
   // The peopleStatistics flag only gates *display* in +page.svelte, but the overview stats query is
@@ -17,7 +23,7 @@ export const load = (async ({ parent, url }) => {
   const statisticsEnabled = featureFlagsManager.valueOrUndefined?.peopleStatistics ?? false;
 
   const [people, peopleStatistics] = await Promise.all([
-    getAllPeople({ withHidden: true, withSharedSpaces: true, size: PEOPLE_PAGE_SIZE }),
+    peoplePromise,
     statisticsEnabled ? getPeopleStatistics({ withSharedSpaces: true }).catch(() => null) : Promise.resolve(null),
   ]);
   const $t = await getFormatter();

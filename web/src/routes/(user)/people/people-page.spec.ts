@@ -600,10 +600,18 @@ describe('Global people page', () => {
     expect(screen.queryByText('hide_person')).not.toBeInTheDocument();
   });
 
-  it('loads the next page with the shared page size and the correct page offset', async () => {
+  it('requests the next page at the shared size and merges the rows across the boundary', async () => {
     // The initial load fetched page 1 at PEOPLE_PAGE_SIZE; infinite scroll must continue with the
     // SAME size or the page*size offset would skip or duplicate people across the boundary.
-    sdkMock.getAllPeople.mockResolvedValue({ people: [], total: 3, hidden: 0, hasNextPage: false });
+    sdkMock.getAllPeople.mockResolvedValue({
+      people: [
+        makePerson({ id: 'p3', name: 'Carol', numberOfAssets: 3 }),
+        makePerson({ id: 'p4', name: 'Dave', numberOfAssets: 2 }),
+      ],
+      total: 4,
+      hidden: 0,
+      hasNextPage: false,
+    });
 
     // Drive the infinite-scroll sentinel deterministically: capture the grid's IntersectionObserver
     // callback and the element it observes, then report an intersection.
@@ -623,8 +631,11 @@ describe('Global people page', () => {
     );
 
     renderPage(
-      [makePerson({ id: 'p1' }), makePerson({ id: 'p2' })],
-      { total: 3, hidden: 0, detectedFaceCount: 0 },
+      [
+        makePerson({ id: 'p1', name: 'Alice', numberOfAssets: 5 }),
+        makePerson({ id: 'p2', name: 'Bob', numberOfAssets: 4 }),
+      ],
+      { total: 4, hidden: 0, detectedFaceCount: 0 },
       true,
     );
 
@@ -642,5 +653,14 @@ describe('Global people page', () => {
         size: PEOPLE_PAGE_SIZE,
       });
     });
+
+    // Page 2's rows are appended to page 1's — all four render, none dropped or duplicated.
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Carol')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Dave')).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Bob')).toBeInTheDocument();
+    expect(screen.getAllByPlaceholderText('add_a_name')).toHaveLength(4);
   });
 });
