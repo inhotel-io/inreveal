@@ -16,6 +16,7 @@ class SystemConfigMemoriesDto {
     required this.birthday,
     required this.recentTrips,
     required this.retentionDays,
+    this.themeMaxDistance = const Optional.present(0.3),
     this.types = const Optional.present(const {}),
   });
 
@@ -31,6 +32,12 @@ class SystemConfigMemoriesDto {
   /// Maximum value: 9007199254740991
   int retentionDays;
 
+  /// Max CLIP cosine distance for themed memories
+  ///
+  /// Minimum value: 0
+  /// Maximum value: 2
+  Optional<num?> themeMaxDistance;
+
   /// Per-type memory availability overrides
   Optional<Map<String, bool>?> types;
 
@@ -39,6 +46,7 @@ class SystemConfigMemoriesDto {
     other.birthday == birthday &&
     other.recentTrips == recentTrips &&
     other.retentionDays == retentionDays &&
+    other.themeMaxDistance == themeMaxDistance &&
     _deepEquality.equals(other.types, types);
 
   @override
@@ -47,16 +55,21 @@ class SystemConfigMemoriesDto {
     (birthday.hashCode) +
     (recentTrips.hashCode) +
     (retentionDays.hashCode) +
+    (themeMaxDistance.hashCode) +
     (types.hashCode);
 
   @override
-  String toString() => 'SystemConfigMemoriesDto[birthday=$birthday, recentTrips=$recentTrips, retentionDays=$retentionDays, types=$types]';
+  String toString() => 'SystemConfigMemoriesDto[birthday=$birthday, recentTrips=$recentTrips, retentionDays=$retentionDays, themeMaxDistance=$themeMaxDistance, types=$types]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'birthday'] = this.birthday;
       json[r'recentTrips'] = this.recentTrips;
       json[r'retentionDays'] = this.retentionDays;
+    if (this.themeMaxDistance.isPresent) {
+      final value = this.themeMaxDistance.value;
+      json[r'themeMaxDistance'] = value;
+    }
     if (this.types.isPresent) {
       final value = this.types.value;
       json[r'types'] = value;
@@ -76,6 +89,7 @@ class SystemConfigMemoriesDto {
         birthday: mapValueOfType<bool>(json, r'birthday')!,
         recentTrips: mapValueOfType<bool>(json, r'recentTrips')!,
         retentionDays: mapValueOfType<int>(json, r'retentionDays')!,
+        themeMaxDistance: json.containsKey(r'themeMaxDistance') ? Optional.present(json[r'themeMaxDistance'] == null ? null : num.parse('${json[r'themeMaxDistance']}')) : const Optional.absent(),
         types: json.containsKey(r'types') ? Optional.present(mapCastOfType<String, bool>(json, r'types')) : const Optional.absent(),
       );
     }
