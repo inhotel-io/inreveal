@@ -1014,7 +1014,7 @@ where
         "album"
       where
         "album"."deletedAt" is null
-        and album.id::text = shared_space_activity.data->>'albumId'
+        and album.id::text = shared_space_activity.data ->> 'albumId'
     )
   )
 order by
@@ -2220,8 +2220,6 @@ where
       "asset"."id" = "album_asset"."assetId"
       and "shared_space_library"."spaceId" = $7
   )
-
--- SharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath
 select
   "cand"."assetId"
 from
