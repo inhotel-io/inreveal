@@ -184,6 +184,7 @@ export type SystemConfig = {
     recentTrips: boolean;
     /** sparse admin availability overrides, memory-type key -> enabled */
     types: Record<string, boolean>;
+    themeMaxDistance: number;
   };
   trash: {
     enabled: boolean;
@@ -445,6 +446,7 @@ export const defaults = Object.freeze<SystemConfig>({
     birthday: true,
     recentTrips: true,
     types: {},
+    themeMaxDistance: 0.3,
   },
   trash: {
     enabled: true,

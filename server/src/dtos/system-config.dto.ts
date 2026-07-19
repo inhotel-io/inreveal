@@ -270,6 +270,12 @@ const SystemConfigMemoriesSchema = z
     birthday: configBool.describe('Birthday memories'),
     recentTrips: configBool.describe('Recent trip memories'),
     types: z.record(z.string(), z.boolean()).default({}).describe('Per-type memory availability overrides'),
+    themeMaxDistance: z.coerce
+      .number()
+      .min(0)
+      .max(2)
+      .default(0.3)
+      .describe('Max CLIP cosine distance for themed memories'),
   })
   .meta({ id: 'SystemConfigMemoriesDto' });
 

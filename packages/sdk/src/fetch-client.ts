@@ -3230,6 +3230,8 @@ export type SystemConfigMemoriesDto = {
     recentTrips: boolean;
     /** Retention days */
     retentionDays: number;
+    /** Max CLIP cosine distance for themed memories */
+    themeMaxDistance?: number;
     /** Per-type memory availability overrides */
     types?: {
         [key: string]: boolean;

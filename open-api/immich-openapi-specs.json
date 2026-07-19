@@ -34668,6 +34668,13 @@
             "minimum": 0,
             "type": "integer"
           },
+          "themeMaxDistance": {
+            "default": 0.3,
+            "description": "Max CLIP cosine distance for themed memories",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number"
+          },
           "types": {
             "additionalProperties": {
               "type": "boolean"
