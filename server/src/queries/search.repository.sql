@@ -51,23 +51,55 @@ where
   (
     "asset"."ownerId" = any ($3::uuid[])
     or (
-      "asset"."visibility" = $4
+      "asset"."visibility" in ($4, $5)
+      and "asset"."deletedAt" is null
       and (
         exists (
           select
+            1 as "exists"
           from
             "shared_space_asset"
           where
             "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($5::uuid[])
+            and "shared_space_asset"."spaceId" = any ($6::uuid[])
         )
         or exists (
           select
+            1 as "exists"
           from
             "shared_space_library"
           where
             "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($6::uuid[])
+            and "shared_space_library"."spaceId" = any ($7::uuid[])
+        )
+        or (
+          exists (
+            select
+              1 as "exists"
+            from
+              "shared_space_album"
+              inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+              inner join "album" on "album"."id" = "shared_space_album"."albumId"
+              and "album"."deletedAt" is null
+            where
+              "album_asset"."assetId" = "asset"."id"
+              and "shared_space_album"."spaceId" = any ($8::uuid[])
+              and "shared_space_album"."showInTimeline" = $9
+          )
+          or exists (
+            select
+              1 as "exists"
+            from
+              "shared_space_album"
+              inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+              and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+              inner join "album" on "album"."id" = "shared_space_album"."albumId"
+              and "album"."deletedAt" is null
+            where
+              "album_space_asset"."assetId" = "asset"."id"
+              and "shared_space_album"."spaceId" = any ($10::uuid[])
+              and "shared_space_album"."showInTimeline" = $11
+          )
         )
       )
     )
@@ -76,9 +108,9 @@ where
 order by
   "asset"."fileCreatedAt" desc
 limit
-  $7
+  $12
 offset
-  $8
+  $13
 
 -- SearchRepository.searchStatistics
 select
@@ -147,23 +179,55 @@ from
       (
         "asset"."ownerId" = any ($1::uuid[])
         or (
-          "asset"."visibility" = $2
+          "asset"."visibility" in ($2, $3)
+          and "asset"."deletedAt" is null
           and (
             exists (
               select
+                1 as "exists"
               from
                 "shared_space_asset"
               where
                 "shared_space_asset"."assetId" = "asset"."id"
-                and "shared_space_asset"."spaceId" = any ($3::uuid[])
+                and "shared_space_asset"."spaceId" = any ($4::uuid[])
             )
             or exists (
               select
+                1 as "exists"
               from
                 "shared_space_library"
               where
                 "shared_space_library"."libraryId" = "asset"."libraryId"
-                and "shared_space_library"."spaceId" = any ($4::uuid[])
+                and "shared_space_library"."spaceId" = any ($5::uuid[])
+            )
+            or (
+              exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($6::uuid[])
+                  and "shared_space_album"."showInTimeline" = $7
+              )
+              or exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                  and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_space_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($8::uuid[])
+                  and "shared_space_album"."showInTimeline" = $9
+              )
             )
           )
         )
@@ -177,25 +241,25 @@ from
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "shared_space_person_face"."personId" = $5::uuid
+          and "shared_space_person_face"."personId" = $10::uuid
       )
-      and "asset"."fileCreatedAt" >= $6
-      and "asset_exif"."lensModel" = $7
-      and "asset"."isFavorite" = $8
+      and "asset"."fileCreatedAt" >= $11
+      and "asset_exif"."lensModel" = $12
+      and "asset"."isFavorite" = $13
       and "asset"."deletedAt" is null
-      and (smart_search.embedding <=> $9) <= $10
+      and (smart_search.embedding <=> $14) <= $15
     order by
-      smart_search.embedding <=> $11
+      smart_search.embedding <=> $16
     limit
-      $12
+      $17
   ) as "candidates"
 order by
   "candidates"."fileCreatedAt" desc nulls last,
   "candidates"."id"
 limit
-  $13
+  $18
 offset
-  $14
+  $19
 commit
 
 -- SearchRepository.getSmartSearchFacets
@@ -215,29 +279,61 @@ drop as (
     (
       "asset"."ownerId" = any ($1::uuid[])
       or (
-        "asset"."visibility" = $2
+        "asset"."visibility" in ($2, $3)
+        and "asset"."deletedAt" is null
         and (
           exists (
             select
+              1 as "exists"
             from
               "shared_space_asset"
             where
               "shared_space_asset"."assetId" = "asset"."id"
-              and "shared_space_asset"."spaceId" = any ($3::uuid[])
+              and "shared_space_asset"."spaceId" = any ($4::uuid[])
           )
           or exists (
             select
+              1 as "exists"
             from
               "shared_space_library"
             where
               "shared_space_library"."libraryId" = "asset"."libraryId"
-              and "shared_space_library"."spaceId" = any ($4::uuid[])
+              and "shared_space_library"."spaceId" = any ($5::uuid[])
+          )
+          or (
+            exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_album"
+                inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                and "album"."deletedAt" is null
+              where
+                "album_asset"."assetId" = "asset"."id"
+                and "shared_space_album"."spaceId" = any ($6::uuid[])
+                and "shared_space_album"."showInTimeline" = $7
+            )
+            or exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_album"
+                inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                and "album"."deletedAt" is null
+              where
+                "album_space_asset"."assetId" = "asset"."id"
+                and "shared_space_album"."spaceId" = any ($8::uuid[])
+                and "shared_space_album"."showInTimeline" = $9
+            )
           )
         )
       )
     )
     and "asset"."deletedAt" is null
-    and (smart_search.embedding <=> $5) <= $6
+    and (smart_search.embedding <=> $10) <= $11
     and "smart_search"."embedding" is not null
 )
 create index smart_search_facet_candidates_asset_id_idx on smart_search_facet_candidates ("id")
@@ -992,24 +1088,60 @@ where
       "asset"."deletedAt" is null
       and (
         "asset"."ownerId" = any ($1::uuid[])
-        or exists (
-          select
-          from
-            "shared_space_asset"
-          where
-            "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($2::uuid[])
-        )
-        or exists (
-          select
-          from
-            "shared_space_library"
-          where
-            "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($3::uuid[])
+        or (
+          "asset"."visibility" = $2
+          and (
+            exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_asset"
+              where
+                "shared_space_asset"."assetId" = "asset"."id"
+                and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            )
+            or exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_library"
+              where
+                "shared_space_library"."libraryId" = "asset"."libraryId"
+                and "shared_space_library"."spaceId" = any ($4::uuid[])
+            )
+            or (
+              exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($5::uuid[])
+                  and "shared_space_album"."showInTimeline" = $6
+              )
+              or exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                  and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_space_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($7::uuid[])
+                  and "shared_space_album"."showInTimeline" = $8
+              )
+            )
+          )
         )
       )
-      and "asset"."fileCreatedAt" >= $4
+      and "asset"."fileCreatedAt" >= $9
       and exists (
         select
         from
@@ -1019,11 +1151,11 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $5::uuid
+          and "face_identity_face"."identityId" = $10::uuid
       )
   )
   and "country" is not null
-  and "country" != $6
+  and "country" != $11
 order by
   "country"
 select distinct
@@ -1040,24 +1172,60 @@ where
       "asset"."deletedAt" is null
       and (
         "asset"."ownerId" = any ($1::uuid[])
-        or exists (
-          select
-          from
-            "shared_space_asset"
-          where
-            "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($2::uuid[])
-        )
-        or exists (
-          select
-          from
-            "shared_space_library"
-          where
-            "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($3::uuid[])
+        or (
+          "asset"."visibility" = $2
+          and (
+            exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_asset"
+              where
+                "shared_space_asset"."assetId" = "asset"."id"
+                and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            )
+            or exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_library"
+              where
+                "shared_space_library"."libraryId" = "asset"."libraryId"
+                and "shared_space_library"."spaceId" = any ($4::uuid[])
+            )
+            or (
+              exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($5::uuid[])
+                  and "shared_space_album"."showInTimeline" = $6
+              )
+              or exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                  and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_space_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($7::uuid[])
+                  and "shared_space_album"."showInTimeline" = $8
+              )
+            )
+          )
         )
       )
-      and "asset"."fileCreatedAt" >= $4
+      and "asset"."fileCreatedAt" >= $9
       and exists (
         select
         from
@@ -1067,11 +1235,11 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $5::uuid
+          and "face_identity_face"."identityId" = $10::uuid
       )
   )
   and "make" is not null
-  and "make" != $6
+  and "make" != $11
 order by
   "make"
 select distinct
@@ -1090,24 +1258,60 @@ where
       "asset"."deletedAt" is null
       and (
         "asset"."ownerId" = any ($1::uuid[])
-        or exists (
-          select
-          from
-            "shared_space_asset"
-          where
-            "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($2::uuid[])
-        )
-        or exists (
-          select
-          from
-            "shared_space_library"
-          where
-            "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($3::uuid[])
+        or (
+          "asset"."visibility" = $2
+          and (
+            exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_asset"
+              where
+                "shared_space_asset"."assetId" = "asset"."id"
+                and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            )
+            or exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_library"
+              where
+                "shared_space_library"."libraryId" = "asset"."libraryId"
+                and "shared_space_library"."spaceId" = any ($4::uuid[])
+            )
+            or (
+              exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($5::uuid[])
+                  and "shared_space_album"."showInTimeline" = $6
+              )
+              or exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                  and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_space_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($7::uuid[])
+                  and "shared_space_album"."showInTimeline" = $8
+              )
+            )
+          )
         )
       )
-      and "asset"."fileCreatedAt" >= $4
+      and "asset"."fileCreatedAt" >= $9
       and exists (
         select
         from
@@ -1117,7 +1321,7 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $5::uuid
+          and "face_identity_face"."identityId" = $10::uuid
       )
   )
 order by
@@ -1133,24 +1337,60 @@ WITH
         "asset"."deletedAt" is null
         and (
           "asset"."ownerId" = any ($1::uuid[])
-          or exists (
-            select
-            from
-              "shared_space_asset"
-            where
-              "shared_space_asset"."assetId" = "asset"."id"
-              and "shared_space_asset"."spaceId" = any ($2::uuid[])
-          )
-          or exists (
-            select
-            from
-              "shared_space_library"
-            where
-              "shared_space_library"."libraryId" = "asset"."libraryId"
-              and "shared_space_library"."spaceId" = any ($3::uuid[])
+          or (
+            "asset"."visibility" = $2
+            and (
+              exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_asset"
+                where
+                  "shared_space_asset"."assetId" = "asset"."id"
+                  and "shared_space_asset"."spaceId" = any ($3::uuid[])
+              )
+              or exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_library"
+                where
+                  "shared_space_library"."libraryId" = "asset"."libraryId"
+                  and "shared_space_library"."spaceId" = any ($4::uuid[])
+              )
+              or (
+                exists (
+                  select
+                    1 as "exists"
+                  from
+                    "shared_space_album"
+                    inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                    inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                    and "album"."deletedAt" is null
+                  where
+                    "album_asset"."assetId" = "asset"."id"
+                    and "shared_space_album"."spaceId" = any ($5::uuid[])
+                    and "shared_space_album"."showInTimeline" = $6
+                )
+                or exists (
+                  select
+                    1 as "exists"
+                  from
+                    "shared_space_album"
+                    inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                    and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                    inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                    and "album"."deletedAt" is null
+                  where
+                    "album_space_asset"."assetId" = "asset"."id"
+                    and "shared_space_album"."spaceId" = any ($7::uuid[])
+                    and "shared_space_album"."showInTimeline" = $8
+                )
+              )
+            )
           )
         )
-        and "asset"."fileCreatedAt" >= $4
+        and "asset"."fileCreatedAt" >= $9
     )
   ),
   identity_faces AS (
@@ -1177,7 +1417,7 @@ WITH
     FROM
       person
     WHERE
-      person."ownerId" = $5
+      person."ownerId" = $10
       AND person."identityId" IS NOT NULL
       AND EXISTS (
         SELECT
@@ -1207,9 +1447,9 @@ WITH
     FROM
       shared_space_person
       LEFT JOIN shared_space_person_alias ON shared_space_person_alias."personId" = shared_space_person.id
-      AND shared_space_person_alias."userId" = $6
+      AND shared_space_person_alias."userId" = $11
     WHERE
-      shared_space_person."spaceId" = any ($7::uuid[])
+      shared_space_person."spaceId" = any ($12::uuid[])
       AND shared_space_person."identityId" IS NOT NULL
       AND EXISTS (
         SELECT
@@ -1312,24 +1552,60 @@ where
       "asset"."deletedAt" is null
       and (
         "asset"."ownerId" = any ($1::uuid[])
-        or exists (
-          select
-          from
-            "shared_space_asset"
-          where
-            "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($2::uuid[])
-        )
-        or exists (
-          select
-          from
-            "shared_space_library"
-          where
-            "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($3::uuid[])
+        or (
+          "asset"."visibility" = $2
+          and (
+            exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_asset"
+              where
+                "shared_space_asset"."assetId" = "asset"."id"
+                and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            )
+            or exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_library"
+              where
+                "shared_space_library"."libraryId" = "asset"."libraryId"
+                and "shared_space_library"."spaceId" = any ($4::uuid[])
+            )
+            or (
+              exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($5::uuid[])
+                  and "shared_space_album"."showInTimeline" = $6
+              )
+              or exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                  and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_space_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($7::uuid[])
+                  and "shared_space_album"."showInTimeline" = $8
+              )
+            )
+          )
         )
       )
-      and "asset"."fileCreatedAt" >= $4
+      and "asset"."fileCreatedAt" >= $9
       and exists (
         select
         from
@@ -1339,11 +1615,11 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $5::uuid
+          and "face_identity_face"."identityId" = $10::uuid
       )
   )
   and "rating" is not null
-  and "rating" > $6
+  and "rating" > $11
 order by
   "rating"
 select distinct
@@ -1360,24 +1636,60 @@ where
       "asset"."deletedAt" is null
       and (
         "asset"."ownerId" = any ($1::uuid[])
-        or exists (
-          select
-          from
-            "shared_space_asset"
-          where
-            "shared_space_asset"."assetId" = "asset"."id"
-            and "shared_space_asset"."spaceId" = any ($2::uuid[])
-        )
-        or exists (
-          select
-          from
-            "shared_space_library"
-          where
-            "shared_space_library"."libraryId" = "asset"."libraryId"
-            and "shared_space_library"."spaceId" = any ($3::uuid[])
+        or (
+          "asset"."visibility" = $2
+          and (
+            exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_asset"
+              where
+                "shared_space_asset"."assetId" = "asset"."id"
+                and "shared_space_asset"."spaceId" = any ($3::uuid[])
+            )
+            or exists (
+              select
+                1 as "exists"
+              from
+                "shared_space_library"
+              where
+                "shared_space_library"."libraryId" = "asset"."libraryId"
+                and "shared_space_library"."spaceId" = any ($4::uuid[])
+            )
+            or (
+              exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($5::uuid[])
+                  and "shared_space_album"."showInTimeline" = $6
+              )
+              or exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_album"
+                  inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                  and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                  inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                  and "album"."deletedAt" is null
+                where
+                  "album_space_asset"."assetId" = "asset"."id"
+                  and "shared_space_album"."spaceId" = any ($7::uuid[])
+                  and "shared_space_album"."showInTimeline" = $8
+              )
+            )
+          )
         )
       )
-      and "asset"."fileCreatedAt" >= $4
+      and "asset"."fileCreatedAt" >= $9
       and exists (
         select
         from
@@ -1387,7 +1699,7 @@ where
           "asset_face"."assetId" = "asset"."id"
           and "asset_face"."deletedAt" is null
           and "asset_face"."isVisible" is true
-          and "face_identity_face"."identityId" = $5::uuid
+          and "face_identity_face"."identityId" = $10::uuid
       )
   )
 order by

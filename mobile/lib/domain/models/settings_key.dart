@@ -6,6 +6,7 @@ import 'package:immich_mobile/constants/enums.dart';
 import 'package:immich_mobile/domain/models/log.model.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/pages/library/spaces/collection_sort.dart';
 import 'package:immich_mobile/providers/album/album_sort_by_options.provider.dart';
 import 'package:immich_mobile/utils/semver.dart';
 
@@ -40,6 +41,12 @@ enum SettingsKey<T> {
 
   // People
   peopleSortBy<PeopleSortBy>(codec: _EnumCodec(PeopleSortBy.values)),
+
+  // Spaces
+  spaceAlbumsSortMode<SpaceAlbumSortMode>(codec: _EnumCodec(SpaceAlbumSortMode.values)),
+  spaceAlbumsIsReverse<bool>(),
+  spacesSortMode<SpaceSortMode>(codec: _EnumCodec(SpaceSortMode.values)),
+  spacesIsReverse<bool>(),
 
   // Backup
   backupEnabled<bool>(),

@@ -1,0 +1,99 @@
+// M8: mobile album owners can't view/revoke space links. This pins the new
+// DriftAlbumApiRepository.getSharedSpaceLinks fetch — the owner-only
+// AlbumResponseDto.sharedSpaceLinks field, not part of the Drift sync stream.
+import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/repositories/drift_album_api_repository.dart';
+import 'package:immich_mobile/services/api.service.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:openapi/api.dart' as api;
+
+class MockAlbumsApi extends Mock implements api.AlbumsApi {}
+
+class MockApiService extends Mock implements ApiService {}
+
+api.AlbumResponseDto _album({
+  required String id,
+  api.Optional<List<api.AlbumSharedSpaceLinkResponseDto>?> sharedSpaceLinks = const api.Optional.absent(),
+}) {
+  return api.AlbumResponseDto(
+    albumName: 'Test Album',
+    albumThumbnailAssetId: null,
+    assetCount: 0,
+    createdAt: DateTime(2024),
+    description: '',
+    hasSharedLink: false,
+    id: id,
+    isActivityEnabled: true,
+    shared: false,
+    sharedSpaceLinks: sharedSpaceLinks,
+    updatedAt: DateTime(2024),
+  );
+}
+
+void main() {
+  late MockAlbumsApi mockApi;
+  late MockApiService mockApiService;
+  late DriftAlbumApiRepository repository;
+
+  setUp(() {
+    mockApi = MockAlbumsApi();
+    mockApiService = MockApiService();
+    when(() => mockApiService.albumsApi).thenReturn(mockApi);
+    repository = DriftAlbumApiRepository(mockApiService);
+  });
+
+  group('getSharedSpaceLinks', () {
+    test('returns the links from GET /albums/:id', () async {
+      final links = [
+        api.AlbumSharedSpaceLinkResponseDto(
+          linkedById: 'user-1',
+          showInTimeline: true,
+          spaceId: 'space-1',
+          spaceName: 'Family',
+        ),
+        api.AlbumSharedSpaceLinkResponseDto(
+          linkedById: 'user-1',
+          showInTimeline: false,
+          spaceId: 'space-2',
+          spaceName: 'Friends',
+        ),
+      ];
+      when(
+        () => mockApi.getAlbumInfo('album-1'),
+      ).thenAnswer((_) async => _album(id: 'album-1', sharedSpaceLinks: api.Optional.present(links)));
+
+      final result = await repository.getSharedSpaceLinks('album-1');
+
+      expect(result, hasLength(2));
+      expect(result[0].spaceId, 'space-1');
+      expect(result[0].showInTimeline, isTrue);
+      expect(result[1].spaceId, 'space-2');
+      expect(result[1].showInTimeline, isFalse);
+      verify(() => mockApi.getAlbumInfo('album-1')).called(1);
+    });
+
+    test('returns an empty list when the server omits the field (non-owner / no links)', () async {
+      when(() => mockApi.getAlbumInfo('album-1')).thenAnswer((_) async => _album(id: 'album-1'));
+
+      final result = await repository.getSharedSpaceLinks('album-1');
+
+      expect(result, isEmpty);
+    });
+
+    test('returns an empty list when the field is explicitly present but null', () async {
+      when(
+        () => mockApi.getAlbumInfo('album-1'),
+      ).thenAnswer((_) async => _album(id: 'album-1', sharedSpaceLinks: const api.Optional.present(null)));
+
+      final result = await repository.getSharedSpaceLinks('album-1');
+
+      expect(result, isEmpty);
+    });
+
+    test('throws when the API returns null', () async {
+      when(() => mockApi.getAlbumInfo('album-1')).thenAnswer((_) async => null);
+
+      expect(() => repository.getSharedSpaceLinks('album-1'), throwsA(isA<Exception>()));
+    });
+  });
+}
