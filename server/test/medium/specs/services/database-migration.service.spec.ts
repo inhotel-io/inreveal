@@ -210,7 +210,7 @@ describe('Database Migration Scenarios', () => {
   // Scenario H: the fork migration disables PostgreSQL JIT for the connecting role.
   // JIT-compiling the high-cost (but fast-executing) cross-space People aggregates
   // adds a ~2s per-backend LLVM penalty; jit=off makes the People page ~4x faster
-  // and regresses nothing (see 1783000000000-DisablePostgresJit).
+  // and regresses nothing (see 1783628194057-DisablePostgresJit).
   it('should disable PostgreSQL JIT for the connecting role', async () => {
     const dbName = 'migration_test_jit';
     const setup = await createRawDatabase(dbName);
