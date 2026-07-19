@@ -1282,6 +1282,7 @@
     "error_deleting_shared_user": "Error deleting shared user",
     "error_downloading": "Error downloading {filename}",
     "error_hiding_buy_button": "Error hiding buy button",
+    "error_loading_activities": "Could not load more activity",
     "error_removing_assets_from_album": "Error removing assets from album, check console for more details",
     "error_removing_assets_from_space": "Error removing assets from space",
     "error_removing_member": "Error removing member",

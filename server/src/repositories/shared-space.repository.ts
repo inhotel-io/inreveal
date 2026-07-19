@@ -2,7 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { Insertable, Kysely, NotNull, sql, Transaction, Updateable } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { ChunkedArray, ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
-import { AlbumUserRole, AssetType, AssetVisibility, SharedSpaceRole, VectorIndex } from 'src/enum';
+import {
+  AlbumUserRole,
+  AssetType,
+  AssetVisibility,
+  SharedSpaceActivityType,
+  SharedSpaceRole,
+  VectorIndex,
+} from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
 import type { PeopleFaceStatistics } from 'src/repositories/person.repository';
 import type { AssetSearchBuilderOptions } from 'src/repositories/search.repository';
@@ -1558,25 +1565,46 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID, 50, 0] })
   getActivities(spaceId: string, limit: number = 50, offset: number = 0) {
-    return this.db
-      .selectFrom('shared_space_activity')
-      .leftJoin('user', 'user.id', 'shared_space_activity.userId')
-      .select([
-        'shared_space_activity.id',
-        'shared_space_activity.type',
-        'shared_space_activity.data',
-        'shared_space_activity.createdAt',
-        'shared_space_activity.userId',
-        'user.name',
-        'user.email',
-        'user.profileImagePath',
-        'user.avatarColor',
-      ])
-      .where('shared_space_activity.spaceId', '=', spaceId)
-      .orderBy('shared_space_activity.createdAt', 'desc')
-      .limit(limit)
-      .offset(offset)
-      .execute();
+    return (
+      this.db
+        .selectFrom('shared_space_activity')
+        .leftJoin('user', 'user.id', 'shared_space_activity.userId')
+        .select([
+          'shared_space_activity.id',
+          'shared_space_activity.type',
+          'shared_space_activity.data',
+          'shared_space_activity.createdAt',
+          'shared_space_activity.userId',
+          'user.name',
+          'user.email',
+          'user.profileImagePath',
+          'user.avatarColor',
+        ])
+        .where('shared_space_activity.spaceId', '=', spaceId)
+        // Drop album link/unlink entries whose album no longer exists (e.g. the abandoned create-flow
+        // album deleted on navigate-away) IN SQL, not post-hoc: LIMIT must yield full pages, because
+        // the client infers hasMore from a full page and advances its offset by the returned count —
+        // a post-SQL filter shrinks pages, dead-ends pagination, and desyncs the offset (#752 F4).
+        .where((eb) =>
+          eb.or([
+            eb('shared_space_activity.type', 'not in', [
+              SharedSpaceActivityType.AlbumLink,
+              SharedSpaceActivityType.AlbumUnlink,
+            ]),
+            eb.exists(
+              eb
+                .selectFrom('album')
+                .select('album.id')
+                .where('album.deletedAt', 'is', null)
+                .where(sql<boolean>`album.id::text = shared_space_activity.data->>'albumId'`),
+            ),
+          ]),
+        )
+        .orderBy('shared_space_activity.createdAt', 'desc')
+        .limit(limit)
+        .offset(offset)
+        .execute()
+    );
   }
 
   // ==========================================

@@ -1,5 +1,6 @@
 <script lang="ts">
   import SpaceActivityFeed from '$lib/components/spaces/space-activity-feed.svelte';
+  import { handleError } from '$lib/utils/handle-error';
   import { getSpaceActivities } from '@immich/sdk';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
@@ -14,10 +15,14 @@
   let activityOffset = $state(data.activities.length);
 
   async function loadMoreActivities() {
-    const result = await getSpaceActivities({ id: space.id, limit: ACTIVITY_PAGE_SIZE, offset: activityOffset });
-    activities = [...activities, ...result];
-    activityOffset += result.length;
-    hasMoreActivities = result.length === ACTIVITY_PAGE_SIZE;
+    try {
+      const result = await getSpaceActivities({ id: space.id, limit: ACTIVITY_PAGE_SIZE, offset: activityOffset });
+      activities = [...activities, ...result];
+      activityOffset += result.length;
+      hasMoreActivities = result.length === ACTIVITY_PAGE_SIZE;
+    } catch (error) {
+      handleError(error, $t('errors.error_loading_activities'));
+    }
   }
 </script>
 

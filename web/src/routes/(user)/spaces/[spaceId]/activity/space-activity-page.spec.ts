@@ -7,6 +7,10 @@ import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import ActivityPage from './+page.svelte';
 
+const { handleErrorMock } = vi.hoisted(() => ({ handleErrorMock: vi.fn() }));
+
+vi.mock('$lib/utils/handle-error', () => ({ handleError: handleErrorMock }));
+
 const space = (o: Partial<SharedSpaceResponseDto> = {}): SharedSpaceResponseDto =>
   ({ id: 's1', name: 'Trip', color: 'primary', ...o }) as never;
 const activity = (o: Partial<SharedSpaceActivityResponseDto> = {}): SharedSpaceActivityResponseDto =>
@@ -67,6 +71,19 @@ describe('Activity page', () => {
 
       await waitFor(() => expect(sdkMock.getSpaceActivities).toHaveBeenCalledWith({ id: 's1', limit: 20, offset: 20 }));
       await waitFor(() => expect(screen.getByTestId('activity-item-a-next')).toBeInTheDocument());
+    });
+
+    it('keeps the feed and the load-more button when loading more fails', async () => {
+      const initial = Array.from({ length: 20 }, (_, i) => activity({ id: `a${i}`, data: { count: i } }));
+      sdkMock.getSpaceActivities.mockRejectedValueOnce(new Error('network'));
+      renderPage({ activities: initial, hasMoreActivities: true });
+
+      await fireEvent.click(within(screen.getByTestId('load-more-button')).getByRole('button'));
+
+      await waitFor(() => expect(handleErrorMock).toHaveBeenCalled());
+      expect(screen.getAllByTestId(/^activity-item-/)).toHaveLength(20);
+      expect(screen.getByTestId('load-more-button')).toBeInTheDocument();
+      expect(within(screen.getByTestId('load-more-button')).getByRole('button')).toBeInTheDocument();
     });
   });
 });

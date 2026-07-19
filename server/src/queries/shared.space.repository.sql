@@ -1005,12 +1005,24 @@ from
   left join "user" on "user"."id" = "shared_space_activity"."userId"
 where
   "shared_space_activity"."spaceId" = $1
+  and (
+    "shared_space_activity"."type" not in ($2, $3)
+    or exists (
+      select
+        "album"."id"
+      from
+        "album"
+      where
+        "album"."deletedAt" is null
+        and album.id::text = shared_space_activity.data->>'albumId'
+    )
+  )
 order by
   "shared_space_activity"."createdAt" desc
 limit
-  $2
+  $4
 offset
-  $3
+  $5
 
 -- SharedSpaceRepository.hasPetsBySpaceId
 select
