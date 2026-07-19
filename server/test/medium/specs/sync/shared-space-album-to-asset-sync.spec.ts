@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { AssetVisibility, SharedSpaceRole, SyncEntityType } from 'src/enum';
+import { AlbumUserRole, AssetVisibility, SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SyncRepository } from 'src/repositories/sync.repository';
@@ -625,5 +625,101 @@ describe('SharedSpaceAlbumToAssetSync — unlink revocation + re-link re-deliver
     const albumSync = ctx.get(SyncRepository).sharedSpaceAlbum;
     const albumDeletes = await drain(albumSync.getDeletes({ nowId: NOW_ID, userId: m.id }));
     expect(JSON.stringify(albumDeletes)).toContain(album.id);
+  });
+});
+
+describe('SharedSpaceAlbumToAssetSync — member re-join re-delivery after absence (#752 launch review F-A)', () => {
+  // End-to-end regression for 1783700000000: the member-join trigger used to grant
+  // shared_space_album_user with ON CONFLICT DO NOTHING, so a re-added member whose grant SURVIVED
+  // removal (via a direct album_user path) kept its stale createId. The per-album backfill loop
+  // (syncSharedSpaceAlbumToAssetsV1) only re-fires for an album whose grant createId is fresh past
+  // the client's backfill watermark — a stale createId means the loop never revisits that album, so
+  // a contribution made during the absence window is never redelivered once the client's plain
+  // upsert ack has also moved past it (see the "unrelated delivery" step below).
+  it('a re-added member receives contributions made during their absence when their grant survived via album_user', async () => {
+    const { ctx, db } = setup();
+    const { user: owner } = await ctx.newUser();
+    const { auth: memberAuth, user: member } = await ctx.newSyncAuthUser();
+    const { user: carol } = await ctx.newUser();
+
+    // Space S / album L: M is a member of S AND a direct album_user Editor of L, so the
+    // shared_space_album_user(M, L) grant survives M's removal from S via the album_user path.
+    const { space: s } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: s.id, userId: member.id, role: SharedSpaceRole.Editor });
+    const { album: l } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newAlbumUser({ albumId: l.id, userId: member.id, role: AlbumUserRole.Editor });
+    await ctx.newSharedSpaceAlbum({ spaceId: s.id, albumId: l.id, addedById: owner.id });
+
+    // An UNRELATED space T / album L2: M stays a member of T throughout. Used below to advance M's
+    // global SharedSpaceAlbumToAssetV1 upsert ack past the absence-window contribution's updateId
+    // without that contribution ever being delivered — mirroring the real "unrelated same-type
+    // deliveries race the ack past it" mechanism the finding describes.
+    const { space: t } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: t.id, userId: member.id, role: SharedSpaceRole.Editor });
+    const { album: l2 } = await ctx.newAlbum({ ownerId: owner.id });
+    await ctx.newSharedSpaceAlbum({ spaceId: t.id, albumId: l2.id, addedById: owner.id });
+
+    // Seed one asset in L before the first sync so the first (unbounded) upsert response
+    // establishes a concrete upsert-ack checkpoint instead of leaving it unset.
+    const { asset: w } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: l.id, assetId: w.id });
+
+    const initial = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    expect(
+      initial.some((r) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1 && (r as any).data.assetId === w.id),
+    ).toBe(true);
+    await ctx.syncAckAll(memberAuth, initial);
+    await ctx.assertSyncIsComplete(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+
+    // M is removed from S — the grant on L survives via the direct album_user path (albums-9 /
+    // F-A precondition, already covered at the trigger level in shared-space-album-create-triggers.spec.ts).
+    await db.deleteFrom('shared_space_member').where('spaceId', '=', s.id).where('userId', '=', member.id).execute();
+    const grantAfterRemoval = await db
+      .selectFrom('shared_space_album_user')
+      .select('createId')
+      .where('userId', '=', member.id)
+      .where('albumId', '=', l.id)
+      .executeTakeFirstOrThrow();
+
+    // While M is absent, carol's asset X is contributed into L via S. It's invisible to M right now:
+    // accessibleSpaceAlbums(M) no longer includes L (M isn't currently a member of any space linking
+    // it), so neither arm of getUpserts can surface it yet — independent of the grant surviving.
+    const { asset: x } = await ctx.newAsset({ ownerId: carol.id });
+    await ctx.newAlbumSpaceAsset({ albumId: l.id, assetId: x.id, spaceId: s.id });
+
+    // An unrelated upsert (asset Z2 added to L2, reached via T, which M never left) IS delivered and
+    // acked — advancing M's SharedSpaceAlbumToAssetV1 watermark past X's updateId without ever
+    // showing X.
+    const { asset: z2 } = await ctx.newAsset({ ownerId: owner.id });
+    await ctx.newAlbumAsset({ albumId: l2.id, assetId: z2.id });
+    const whileAbsent = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    expect(whileAbsent.some((r) => (r as any).data?.assetId === x.id)).toBe(false); // X withheld during absence
+    expect(
+      whileAbsent.some((r) => r.type === SyncEntityType.SharedSpaceAlbumToAssetV1 && (r as any).data.assetId === z2.id),
+    ).toBe(true);
+    await ctx.syncAckAll(memberAuth, whileAbsent);
+
+    // M is re-added to S — the member-join trigger fires against the surviving (stale) grant.
+    await ctx.newSharedSpaceMember({ spaceId: s.id, userId: member.id, role: SharedSpaceRole.Editor });
+    const grantAfterRejoin = await db
+      .selectFrom('shared_space_album_user')
+      .select('createId')
+      .where('userId', '=', member.id)
+      .where('albumId', '=', l.id)
+      .executeTakeFirstOrThrow();
+    expect(grantAfterRejoin.createId).not.toBe(grantAfterRemoval.createId); // 1783700000000: createId refreshed
+
+    // M syncs again: the fresh grant createId re-triggers L's per-album backfill loop, which is
+    // bounded by absolute updateId (not the stale ack) and re-delivers X — the absence-window
+    // contribution that would otherwise be permanently lost.
+    const afterRejoin = await ctx.syncStream(memberAuth, [SyncRequestType.SharedSpaceAlbumToAssetsV1]);
+    const deliveredEdges = afterRejoin
+      .filter(
+        (r) =>
+          r.type === SyncEntityType.SharedSpaceAlbumToAssetV1 ||
+          r.type === SyncEntityType.SharedSpaceAlbumToAssetBackfillV1,
+      )
+      .map((r) => (r as any).data);
+    expect(deliveredEdges).toContainEqual(expect.objectContaining({ albumId: l.id, assetId: x.id }));
   });
 });
