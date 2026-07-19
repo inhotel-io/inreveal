@@ -2221,6 +2221,57 @@ where
       and "shared_space_library"."spaceId" = $7
   )
 
+-- SharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath
+select
+  "cand"."assetId"
+from
+  "album_space_asset" as "cand"
+where
+  "cand"."albumId" = $1
+  and "cand"."spaceId" = $2
+  and not exists (
+    select
+    from
+      "shared_space_asset"
+    where
+      "shared_space_asset"."assetId" = "cand"."assetId"
+      and "shared_space_asset"."spaceId" = $3
+  )
+  and not exists (
+    select
+    from
+      "shared_space_album"
+      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+      and "album"."deletedAt" is null
+      inner join "album_asset" as "other" on "other"."albumId" = "shared_space_album"."albumId"
+    where
+      "other"."assetId" = "cand"."assetId"
+      and "shared_space_album"."spaceId" = $4
+      and "shared_space_album"."albumId" != $5
+  )
+  and not exists (
+    select
+    from
+      "shared_space_album"
+      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+      and "album"."deletedAt" is null
+      inner join "album_space_asset" as "otherContribution" on "otherContribution"."albumId" = "shared_space_album"."albumId"
+      and "otherContribution"."spaceId" = "shared_space_album"."spaceId"
+    where
+      "otherContribution"."assetId" = "cand"."assetId"
+      and "shared_space_album"."spaceId" = $6
+      and "shared_space_album"."albumId" != $7
+  )
+  and not exists (
+    select
+    from
+      "shared_space_library"
+      inner join "asset" on "asset"."libraryId" = "shared_space_library"."libraryId"
+    where
+      "asset"."id" = "cand"."assetId"
+      and "shared_space_library"."spaceId" = $8
+  )
+
 -- SharedSpaceRepository.getAssetIdsWithoutOtherSpacePath
 select
   "asset"."id"

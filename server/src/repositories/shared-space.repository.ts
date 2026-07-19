@@ -2998,7 +2998,77 @@ export class SharedSpaceRepository {
         ),
       )
       .execute();
-    return rows.map((r) => r.assetId);
+
+    // #752 F1 (launch review): the severed album's CONTRIBUTED memberships (album_space_asset) are
+    // candidates too — an asset whose only space path was a contribution into this album must be
+    // swept, or its projected faces outlive the link. Same four anti-join retention arms as above.
+    // CRITICAL: the outer MUST be aliased `as cand` and every arm correlated on `cand.assetId` — the
+    // method's own header documents the self-correlation footgun (the album_asset outer is why the arms
+    // are hand-rolled), and here the third arm itself joins album_space_asset (as `otherContribution`),
+    // so an unaliased outer `album_space_asset.assetId` correlation is ambiguous / self-matches.
+    const contributedRows = await this.db
+      .selectFrom('album_space_asset as cand')
+      .select('cand.assetId')
+      .where('cand.albumId', '=', albumId)
+      .where('cand.spaceId', '=', spaceId)
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_asset')
+              .whereRef('shared_space_asset.assetId', '=', 'cand.assetId')
+              .where('shared_space_asset.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_asset as other', 'other.albumId', 'shared_space_album.albumId')
+              .whereRef('other.assetId', '=', 'cand.assetId')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.albumId', '!=', albumId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_album')
+              .innerJoin('album', (join) =>
+                join.onRef('album.id', '=', 'shared_space_album.albumId').on('album.deletedAt', 'is', null),
+              )
+              .innerJoin('album_space_asset as otherContribution', (join) =>
+                join
+                  .onRef('otherContribution.albumId', '=', 'shared_space_album.albumId')
+                  .onRef('otherContribution.spaceId', '=', 'shared_space_album.spaceId'),
+              )
+              .whereRef('otherContribution.assetId', '=', 'cand.assetId')
+              .where('shared_space_album.spaceId', '=', spaceId)
+              .where('shared_space_album.albumId', '!=', albumId),
+          ),
+        ),
+      )
+      .where((eb) =>
+        eb.not(
+          eb.exists(
+            eb
+              .selectFrom('shared_space_library')
+              .innerJoin('asset', 'asset.libraryId', 'shared_space_library.libraryId')
+              .whereRef('asset.id', '=', 'cand.assetId')
+              .where('shared_space_library.spaceId', '=', spaceId),
+          ),
+        ),
+      )
+      .execute();
+
+    return [...new Set([...rows, ...contributedRows].map((r) => r.assetId))];
   }
 
   // Per-asset analogue of getAlbumAssetIdsWithoutOtherSpacePath. Call AFTER the album_asset
