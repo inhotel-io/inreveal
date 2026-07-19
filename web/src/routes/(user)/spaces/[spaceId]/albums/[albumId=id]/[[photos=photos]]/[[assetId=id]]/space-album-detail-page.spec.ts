@@ -12,11 +12,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import { authManager } from '$lib/managers/auth-manager.svelte';
-import { getAlbumAssetsActions } from '$lib/services/album.service';
+import { addAssetsToAlbums, getAlbumAssetsActions } from '$lib/services/album.service';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import SpaceAlbumDetailPage from './+page.svelte';
-import { resetMockTimelineState, setMockTimelineEmpty } from './mock-timeline-state';
+import { mockTimelineState, resetMockTimelineState, setMockTimelineEmpty } from './mock-timeline-state';
 
 vi.mock('$lib/components/layouts/UserPageLayout.svelte', async () => {
   const { default: MockComponent } = await import('$lib/components/spaces/mock-user-page-layout.test-wrapper.svelte');
@@ -121,6 +121,7 @@ vi.mock('$lib/services/album.service', async (importOriginal) => {
         onAction: vi.fn(),
       },
     }),
+    addAssetsToAlbums: vi.fn().mockResolvedValue(true),
   };
 });
 
@@ -467,6 +468,7 @@ describe('Space album detail page', () => {
   it('firing AddAssets action in add mode returns to browse and refreshes album', async () => {
     const refreshedAlbum = makeAlbum({ id: 'album-1', albumName: 'Refreshed', assetCount: 5 });
     vi.mocked(getAlbumInfo).mockResolvedValue(refreshedAlbum);
+    vi.mocked(addAssetsToAlbums).mockResolvedValue(true);
 
     // Provide AddAssets whose onAction resolves immediately
     const addAssetsOnAction = vi.fn().mockResolvedValue(undefined);
@@ -506,6 +508,21 @@ describe('Space album detail page', () => {
     await waitFor(() => {
       expect(screen.getByTestId('add-photos-button')).toBeInTheDocument();
     });
+  });
+
+  it('does not insert photos into the album grid when the add call fails', async () => {
+    // The service never rejects — on 5xx/network it toasts and resolves false.
+    vi.mocked(addAssetsToAlbums).mockResolvedValue(false);
+    renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+
+    // Enter add mode and fire the header Add action, exactly as the success test does.
+    await fireEvent.click(screen.getByTestId('add-photos-button'));
+    await waitFor(() => expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-mode', 'add'));
+    await fireEvent.click(screen.getByRole('button', { name: /add assets/i }));
+
+    // The picker stays open (retry) and nothing was optimistically upserted into the browse timeline.
+    expect(screen.getByTestId('add-photos-overlay')).toBeInTheDocument();
+    expect(mockTimelineState.upsertAssets).not.toHaveBeenCalled();
   });
 
   it('browse mode renders the FilterPanel', () => {
@@ -623,6 +640,7 @@ describe('Space album detail page', () => {
   it('picker filters are reset after a successful add (returns to browse with no active filters)', async () => {
     const refreshedAlbum = makeAlbum({ id: 'album-1', albumName: 'Refreshed', assetCount: 5 });
     vi.mocked(getAlbumInfo).mockResolvedValue(refreshedAlbum);
+    vi.mocked(addAssetsToAlbums).mockResolvedValue(true);
     const addAssetsOnAction = vi.fn().mockResolvedValue(undefined);
     vi.mocked(getAlbumAssetsActions).mockReturnValue({
       AddAssets: { title: 'Add assets', icon: '', onAction: addAssetsOnAction, $if: () => true },

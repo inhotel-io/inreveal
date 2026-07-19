@@ -479,7 +479,7 @@
                 [album.id],
                 added.map(({ id }) => id),
                 { notify: true },
-              ).then(() => handleAddAssetsSuccess(added));
+              ).then((ok) => (ok ? handleAddAssetsSuccess(added) : undefined));
             },
           }}
         />
