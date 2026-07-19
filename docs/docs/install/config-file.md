@@ -327,6 +327,7 @@ The `memories` section configures generated memory retention and which memory ty
   - `season_recap` — a recap of a past meteorological season
   - `people_together` — two people or pets often photographed together in a past year
   - `video_moments` — videos filmed in this calendar month in a past year
+  - `trip_anniversary` — a past trip resurfaced on the anniversary of the day it began
 
 For example, to disable recent trips globally and leave the rest on:
 

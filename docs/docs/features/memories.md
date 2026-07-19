@@ -84,6 +84,7 @@ The built-in types each have a stable key used in configuration:
 | `season_recap`        | Season recap            | A past meteorological season, shown when the new season begins          |
 | `people_together`     | People together         | Two people or pets often photographed together in a past year           |
 | `video_moments`       | Video moments           | Videos you filmed in this month of a past year                          |
+| `trip_anniversary`    | Trip anniversaries      | A past trip resurfaced on the anniversary of the day it began           |
 
 All default to **on**.
 

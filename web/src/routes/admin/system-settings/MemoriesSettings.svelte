@@ -19,6 +19,7 @@
     'season_recap',
     'people_together',
     'video_moments',
+    'trip_anniversary',
   ];
 
   const disabled = $derived(featureFlagsManager.value.configFile);

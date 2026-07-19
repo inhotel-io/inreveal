@@ -10,6 +10,7 @@ import { OnThisDayPlaceMemoryRule } from 'src/services/memory-rules/on-this-day-
 import { PeopleTogetherMemoryRule } from 'src/services/memory-rules/people-together.rule';
 import { RecentTripMemoryRule } from 'src/services/memory-rules/recent-trip.rule';
 import { SeasonRecapMemoryRule } from 'src/services/memory-rules/season-recap.rule';
+import { TripAnniversaryMemoryRule } from 'src/services/memory-rules/trip-anniversary.rule';
 import { VideoMomentsMemoryRule } from 'src/services/memory-rules/video-moments.rule';
 
 export interface MemoryRuleDeps {
@@ -28,6 +29,7 @@ const RULE_FACTORIES: Record<string, (deps: MemoryRuleDeps) => MemoryRule> = {
   season_recap: (deps) => new SeasonRecapMemoryRule(deps.assetRepository),
   people_together: (deps) => new PeopleTogetherMemoryRule(deps.assetRepository),
   video_moments: (deps) => new VideoMomentsMemoryRule(deps.assetRepository),
+  trip_anniversary: (deps) => new TripAnniversaryMemoryRule(deps.assetRepository),
 };
 
 /** instantiate the rule-kind memory rules whose key is in `enabledKeys` (in registry order, deduped) */

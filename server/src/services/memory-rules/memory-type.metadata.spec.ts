@@ -27,6 +27,7 @@ describe('memory-type.metadata', () => {
         { key: 'season_recap', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'people_together', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'video_moments', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'trip_anniversary', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
       ]);
     });
 
@@ -48,6 +49,7 @@ describe('memory-type.metadata', () => {
         'season_recap',
         'people_together',
         'video_moments',
+        'trip_anniversary',
       ]);
     });
   });
@@ -64,6 +66,7 @@ describe('memory-type.metadata', () => {
         season_recap: true,
         people_together: true,
         video_moments: true,
+        trip_anniversary: true,
       });
     });
   });
@@ -111,6 +114,7 @@ describe('memory-type.metadata', () => {
           'season_recap',
           'people_together',
           'video_moments',
+          'trip_anniversary',
         ]),
       );
     });
@@ -155,6 +159,7 @@ describe('memory-type.metadata', () => {
           'season_recap',
           'people_together',
           'video_moments',
+          'trip_anniversary',
         ]),
       );
     });

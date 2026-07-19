@@ -203,6 +203,7 @@ describe(ServerService.name, () => {
           'season_recap',
           'people_together',
           'video_moments',
+          'trip_anniversary',
         ],
       });
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
@@ -227,6 +228,7 @@ describe(ServerService.name, () => {
         'season_recap',
         'people_together',
         'video_moments',
+        'trip_anniversary',
       ]);
     });
 

@@ -104,6 +104,7 @@ describe('MemoriesSettings', () => {
           season_recap: true,
           people_together: true,
           video_moments: true,
+          trip_anniversary: true,
         },
       },
     });
