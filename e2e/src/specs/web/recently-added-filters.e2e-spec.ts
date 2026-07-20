@@ -1,5 +1,5 @@
 import type { LoginResponseDto } from '@immich/sdk';
-import { updateAsset } from '@immich/sdk';
+import { SharedSpaceRole, updateAsset, updateMemberTimeline } from '@immich/sdk';
 import { expect, test } from '@playwright/test';
 import { thumbnailUtils } from 'src/ui/specs/timeline/utils';
 import { asBearerAuth, utils } from 'src/utils';
@@ -237,5 +237,134 @@ test.describe('Recently Added filters', () => {
     const first = thumbnailUtils.locator(page).first();
     await expect(first).toBeVisible();
     await expect(first).toHaveAttribute('data-asset', videos.at(-1)!.id);
+  });
+});
+
+// Slice 3 Task 4: acceptance scenarios for the text-search path, driven exclusively through the
+// `?q=` deep link (the navbar global search commits to the same URL) — NOT through the panel's
+// `'text'` section, which is `<TextFilter>` editing description/originalFileName/ocr *metadata*
+// filters and cannot submit a smart-search query. This describe resets the database and builds
+// its own fixture: it cannot inherit from either describe above, both of which reset it too.
+
+// Search-results mode never renders the browse-mode Timeline (`#asset-grid`); it renders either a
+// result count or the empty state via SpaceSearchResults — the same component /photos uses (see
+// photos-search.e2e-spec.ts). Asserting this MODE SWITCH first, before anything else, is what
+// makes every scenario below fail for the right reason pre-wiring: today `/recently-added` ignores
+// `?q=` entirely and keeps rendering the timeline, so this is exactly what goes red.
+async function expectSearchResultsMode(page: import('@playwright/test').Page) {
+  await expect(page.locator('#asset-grid')).toHaveCount(0);
+  await expect(page.getByTestId('result-count').or(page.getByTestId('search-empty'))).toBeVisible({
+    timeout: 15_000,
+  });
+}
+
+test.describe('Recently Added text search', () => {
+  let admin: LoginResponseDto;
+
+  test.beforeAll(async () => {
+    utils.initSdk();
+    await utils.resetDatabase();
+    admin = await utils.adminSetup();
+
+    // A few personal assets so the browse-mode header has a real, non-empty count to fall back to
+    // once the query is cleared (an empty library hides the count entirely — see the "Recently
+    // Added" describe above — which would make the clear-query scenario's count assertion moot).
+    await Promise.all([
+      utils.createAsset(admin.accessToken),
+      utils.createAsset(admin.accessToken),
+      utils.createAsset(admin.accessToken),
+    ]);
+  });
+
+  async function gotoRecentlyAdded(
+    context: import('@playwright/test').BrowserContext,
+    page: import('@playwright/test').Page,
+    path = '/recently-added',
+  ) {
+    await utils.setAuthCookies(context, admin.accessToken);
+    await page.goto(path);
+    // Panel collapse is persisted in localStorage — start every test from a clean state (same
+    // precaution as the "Recently Added filters" describe above).
+    await page.evaluate(() => localStorage.clear());
+    await page.goto(path);
+    await page.waitForSelector(
+      '[data-testid="discovery-panel"], [data-testid="collapsed-icon-strip"], [data-testid="result-count"], [data-testid="search-empty"]',
+    );
+  }
+
+  // Scenario: A text query switches to search results with a total count
+  test('a text query in the URL switches to search results with a total count', async ({ context, page }) => {
+    await gotoRecentlyAdded(context, page, '/recently-added?q=beach');
+
+    await expectSearchResultsMode(page);
+    // The header count now comes from the search total, not the timeline's asset count. Its exact
+    // value depends on ML availability in this e2e stack (see the scope scenario below for why
+    // that can't be made deterministic here) — this only pins the *shape* of the header text.
+    await expect(page.getByTestId('page-header-description')).toHaveText(/^\d+ items$/, { timeout: 15_000 });
+  });
+
+  // Scenario: Clearing the query returns to the added-date timeline
+  test('clearing the query returns to the added-date timeline', async ({ context, page }) => {
+    await gotoRecentlyAdded(context, page, '/recently-added?q=beach');
+    await expectSearchResultsMode(page);
+
+    await page.goto('/recently-added');
+
+    await expect(page.locator('#asset-grid')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('page-header-description')).toHaveText(/^\d+ items$/, { timeout: 15_000 });
+  });
+
+  // Scenario: Text search stays within own + partner scope
+  test('text search stays within own + partner scope', async ({ context, page }) => {
+    test.setTimeout(45_000);
+
+    // A second user OWNS the shared asset and adds it to a space our test actor (admin) is a
+    // member of — the reverse of the usual owner-is-admin shape used elsewhere in this file.
+    const ownerLogin = await utils.userSetup(admin.accessToken, {
+      email: 'recently-added-search-owner@immich.cloud',
+      name: 'Search Space Owner',
+      password: 'password',
+    });
+
+    const sharedAsset = await utils.createAsset(ownerLogin.accessToken);
+    const space = await utils.createSpace(ownerLogin.accessToken, { name: 'Search Scope Space' });
+    await utils.addSpaceMember(ownerLogin.accessToken, space.id, {
+      userId: admin.userId,
+      role: SharedSpaceRole.Viewer,
+    });
+    await utils.addSpaceAssets(ownerLogin.accessToken, space.id, [sharedAsset.id]);
+
+    // Member-level timeline opt-in — NOT the album-level `showInTimeline` toggle, the two are not
+    // interchangeable (spaces-albums-timeline.e2e-spec.ts:19-23). Self-PATCH:
+    // `/shared-spaces/{id}/members/me/timeline` requires the member's own token, not the owner's
+    // (see space-map-markers.e2e-spec.ts:62-66).
+    await updateMemberTimeline(
+      { id: space.id, sharedSpaceMemberTimelineDto: { showInTimeline: true } },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+
+    const query = 'harbor';
+    const sharedThumbnail = page.locator(`img[src="/api/assets/${sharedAsset.id}/thumbnail"]`);
+
+    // Positive control: the identical query on /photos (own + partner + shared spaces — it always
+    // sends `withSharedSpaces: true`) DOES find the shared-space asset. Without this, the absence
+    // assertion below would be unfalsifiable — it would pass for a dozen unrelated reasons (never
+    // indexed, no semantic match, a missed opt-in, or a seeding bug), not because Recently Added
+    // actually enforces its narrower own+partner scope.
+    await utils.setAuthCookies(context, admin.accessToken);
+    await page.goto(`/photos?q=${query}`);
+    await expect(page.locator('#asset-grid')).toHaveCount(0);
+    await expect(page.getByTestId('result-count').or(page.getByTestId('search-empty'))).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(sharedThumbnail).toBeVisible({ timeout: 15_000 });
+
+    // The real assertion: Recently Added is own + partner only, so the same query must still
+    // switch into search mode (asserted BEFORE the absence check — otherwise this would also pass
+    // against today's unwired route, whose own+partner *timeline* trivially never contains an
+    // asset it was never seeded with in the first place).
+    await page.goto(`/recently-added?q=${query}`);
+    await expectSearchResultsMode(page);
+    await expect(sharedThumbnail).toHaveCount(0);
   });
 });
