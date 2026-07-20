@@ -1831,7 +1831,8 @@ describe(SearchService.name, () => {
 
       const result = await sut.getAssetsByCity(authStub.user1);
 
-      expect(mocks.search.getAssetsByCity).toHaveBeenCalledWith([authStub.user1.user.id]);
+      // #763: getAssetsByCity now also threads the caller's id to project isFavoriteForUser.
+      expect(mocks.search.getAssetsByCity).toHaveBeenCalledWith([authStub.user1.user.id], authStub.user1.user.id);
       expect(result).toHaveLength(1);
     });
   });
