@@ -99,7 +99,16 @@ export class TimelineService extends BaseService {
 
     const scopedOptions = await this.resolveScopedPersonFilters(auth, { ...options, timelineSpaceIds });
 
-    return { ...scopedOptions, bucketSize: dto.bucketSize ?? TimeBucketSize.Month, userIds, albumSpaceIds };
+    return {
+      ...scopedOptions,
+      bucketSize: dto.bucketSize ?? TimeBucketSize.Month,
+      userIds,
+      albumSpaceIds,
+      // #763: the caller, threaded separately from `userIds` (the timeline *target*, which is not
+      // necessarily the caller on space/album browse paths) so the isFavorite overlay predicate in
+      // withTimeBucketAssetFilters resolves against the right user.
+      authUserId: auth.user.id,
+    };
   }
 
   private async resolveScopedPersonFilters(auth: AuthDto, options: TimeBucketOptions): Promise<TimeBucketOptions> {
