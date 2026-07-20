@@ -24,4 +24,10 @@ describe('recentSpaceAlbumsExpanded', () => {
     setSpaceAlbumsExpanded('space-1', false, ['space-1']); // valid set excludes gone-1
     expect(get(recentSpaceAlbumsExpanded)['gone-1']).toBeUndefined();
   });
+
+  it('keeps still-valid keys while pruning stale ones and setting the target', () => {
+    recentSpaceAlbumsExpanded.set({ a: true, b: true });
+    setSpaceAlbumsExpanded('c', true, ['c', 'a']);
+    expect(get(recentSpaceAlbumsExpanded)).toEqual({ a: true, c: true });
+  });
 });
