@@ -18,7 +18,15 @@ where
   "asset"."fileCreatedAt" >= $1
   and "asset_exif"."lensModel" = $2
   and "asset"."ownerId" = any ($3::uuid[])
-  and "asset"."isFavorite" = $4
+  and exists (
+    select
+      1 as "exists"
+    from
+      "asset_favorite"
+    where
+      "asset_favorite"."assetId" = "asset"."id"
+      and "asset_favorite"."userId" = $4::uuid
+  )
   and "asset"."deletedAt" is null
 order by
   "asset"."fileCreatedAt" desc
@@ -122,7 +130,15 @@ where
   "asset"."fileCreatedAt" >= $1
   and "asset_exif"."lensModel" = $2
   and "asset"."ownerId" = any ($3::uuid[])
-  and "asset"."isFavorite" = $4
+  and exists (
+    select
+      1 as "exists"
+    from
+      "asset_favorite"
+    where
+      "asset_favorite"."assetId" = "asset"."id"
+      and "asset_favorite"."userId" = $4::uuid
+  )
   and "asset"."deletedAt" is null
 
 -- SearchRepository.searchRandom
@@ -135,7 +151,15 @@ where
   "asset"."fileCreatedAt" >= $1
   and "asset_exif"."lensModel" = $2
   and "asset"."ownerId" = any ($3::uuid[])
-  and "asset"."isFavorite" = $4
+  and exists (
+    select
+      1 as "exists"
+    from
+      "asset_favorite"
+    where
+      "asset_favorite"."assetId" = "asset"."id"
+      and "asset_favorite"."userId" = $4::uuid
+  )
   and "asset"."deletedAt" is null
 order by
   random()
@@ -153,7 +177,15 @@ where
   "asset"."fileCreatedAt" >= $1
   and "asset_exif"."lensModel" = $2
   and "asset"."ownerId" = any ($3::uuid[])
-  and "asset"."isFavorite" = $4
+  and exists (
+    select
+      1 as "exists"
+    from
+      "asset_favorite"
+    where
+      "asset_favorite"."assetId" = "asset"."id"
+      and "asset_favorite"."userId" = $4::uuid
+  )
   and "asset"."deletedAt" is null
   and "asset_exif"."fileSizeInByte" > $5
 order by
@@ -245,7 +277,15 @@ from
       )
       and "asset"."fileCreatedAt" >= $11
       and "asset_exif"."lensModel" = $12
-      and "asset"."isFavorite" = $13
+      and exists (
+        select
+          1 as "exists"
+        from
+          "asset_favorite"
+        where
+          "asset_favorite"."assetId" = "asset"."id"
+          and "asset_favorite"."userId" = $13::uuid
+      )
       and "asset"."deletedAt" is null
       and (smart_search.embedding <=> $14) <= $15
     order by
