@@ -96,7 +96,11 @@ export function getSelectionCapabilities(ctx: CommandContext, tagsEnabled: boole
     canShare: sel.ownedSelectedAssetIds.length > 0,
     canAddToAlbum: sel.isAllUserOwned || isSpaceEditor,
     addToAlbumRestrictedToSpace: !sel.isAllUserOwned && isSpaceEditor,
-    canFavorite: sel.isAllUserOwned,
+    // Not `isAllUserOwned` (#763): a favorite is a per-user row in the `asset_favorite` overlay,
+    // not a flag on the asset, so favoriting never mutates someone else's asset. Any viewer who
+    // can see the selection may favorite it — including a shared-space member favoriting another
+    // member's photo. Mirrors `canFavoriteSelected` in selection-command-handlers.ts.
+    canFavorite: true,
     canEditMetadata: sel.isAllUserOwned,
     canTag: sel.isAllUserOwned && tagsEnabled,
     canDelete: sel.isAllUserOwned,
