@@ -53,6 +53,7 @@
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
   import { buildRecentlyAddedFilterConfig } from '$lib/utils/recently-added-filter-config';
   import {
+    buildRecentlyAddedPickerBucketOptions,
     buildRecentlyAddedTimelineOptions,
     shouldShowRecentlyAddedCount,
   } from '$lib/utils/recently-added-filter-options';
@@ -68,13 +69,9 @@
     buildSmartSearchFacetsParams,
     mapSmartSearchFacetsToFilterSuggestions,
   } from '$lib/utils/space-search';
-  import {
-    getTimelineBucketZoomTarget,
-    getTimelineManagerTimeBuckets,
-    type ActivatableTimelineBucket,
-  } from '$lib/utils/timeline-zoom-navigation';
+  import { getTimelineBucketZoomTarget, type ActivatableTimelineBucket } from '$lib/utils/timeline-zoom-navigation';
   import { consumeTypedSearchNamesInto } from '$lib/utils/typed-search/typed-search-name-cache';
-  import { searchSmartFacets, type SmartSearchFacetsResponseDto } from '@immich/sdk';
+  import { getTimeBuckets, searchSmartFacets, type SmartSearchFacetsResponseDto } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider } from '@immich/ui';
   import { mdiDotsVertical } from '@mdi/js';
   import { untrack } from 'svelte';
@@ -139,8 +136,37 @@
       }
     | undefined;
 
-  const timelineBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
-  const smartFacetBuckets = $derived(showSearchResults ? (smartFacets?.timeBuckets ?? []) : timelineBuckets);
+  // The temporal picker's year/month grid must be built from *taken*-date buckets, because clicking
+  // a year emits takenAfter/takenBefore. `timelineManager` groups by *added* date (orderBy
+  // CreatedAt, the whole point of this view), so its buckets would list upload years that the
+  // resulting predicate then matches against nothing — see `buildRecentlyAddedPickerBucketOptions`.
+  // Browse mode fetches its own bucket set; query mode keeps the smart-search facets, which already
+  // bucket on takenAt.
+  let pickerBuckets = $state<Array<{ timeBucket: string; count: number }>>([]);
+  const pickerBucketOptions = $derived(buildRecentlyAddedPickerBucketOptions(filters));
+
+  $effect(() => {
+    // Read the derived options up front so every filter change is tracked as a dependency.
+    const options = pickerBucketOptions;
+    if (showSearchResults) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void getTimeBuckets(options, { signal: controller.signal })
+      .then((buckets) => {
+        pickerBuckets = buckets.map(({ timeBucket, count }) => ({ timeBucket, count }));
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          console.error('Failed to fetch Recently Added filter buckets:', error);
+        }
+      });
+
+    return () => controller.abort();
+  });
+
+  const smartFacetBuckets = $derived(showSearchResults ? (smartFacets?.timeBuckets ?? []) : pickerBuckets);
   const smartFacetTotal = $derived(showSearchResults ? smartFacets?.total : undefined);
 
   const emptyFilterSuggestions = () => ({

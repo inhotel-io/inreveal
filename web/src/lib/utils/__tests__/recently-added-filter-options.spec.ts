@@ -2,6 +2,7 @@ import { AssetOrder, AssetOrderBy, AssetTypeEnum, AssetVisibility } from '@immic
 import { describe, expect, it } from 'vitest';
 import { createFilterState } from '$lib/components/filter-panel/filter-panel';
 import {
+  buildRecentlyAddedPickerBucketOptions,
   buildRecentlyAddedSuggestionRequest,
   buildRecentlyAddedTimelineOptions,
   shouldShowRecentlyAddedCount,
@@ -207,6 +208,74 @@ describe('buildRecentlyAddedTimelineOptions', () => {
 
     expect(options.orderBy).toBe(AssetOrderBy.CreatedAt);
     expect(options).not.toHaveProperty('withSharedSpaces');
+  });
+});
+
+describe('buildRecentlyAddedPickerBucketOptions', () => {
+  it('buckets by taken date, not by added date', () => {
+    // The regression this exists to prevent: the temporal picker's year/month grid used to be
+    // sourced from the CreatedAt-ordered *timeline* buckets, so it listed **upload** years — while
+    // clicking a year emits takenAfter/takenBefore against localDateTime. A library imported in
+    // 2026 therefore showed a single "2026" chip that matched zero assets. The grid and the
+    // predicate must read the same column, and takenAt is the one the predicate uses.
+    expect(buildRecentlyAddedPickerBucketOptions(createFilterState()).orderBy).toBe(AssetOrderBy.TakenAt);
+  });
+
+  it('keeps the own+partner scope of the view it describes', () => {
+    // Same invariant as the timeline: a facet grid must never count shared-space assets the
+    // timeline below it will not show.
+    expect(buildRecentlyAddedPickerBucketOptions(createFilterState())).toEqual({
+      visibility: AssetVisibility.Timeline,
+      withStacked: true,
+      withPartners: true,
+      order: AssetOrder.Desc,
+      orderBy: AssetOrderBy.TakenAt,
+    });
+  });
+
+  it('never sends withSharedSpaces under any filter', () => {
+    const cases = [
+      { ...createFilterState(), country: 'Germany' },
+      { ...createFilterState(), isFavorite: true },
+      { ...createFilterState(), personIds: ['person:p1'] },
+    ];
+    for (const filters of cases) {
+      expect(buildRecentlyAddedPickerBucketOptions(filters)).not.toHaveProperty('withSharedSpaces');
+    }
+  });
+
+  it('keeps orderBy TakenAt under every filter combination', () => {
+    const cases = [
+      createFilterState(),
+      { ...createFilterState(), country: 'Germany' },
+      { ...createFilterState(), isFavorite: true },
+      { ...createFilterState(), sortOrder: 'asc' as const },
+      { ...createFilterState(), selectedYear: 2024 },
+    ];
+    for (const filters of cases) {
+      expect(buildRecentlyAddedPickerBucketOptions(filters).orderBy).toBe(AssetOrderBy.TakenAt);
+    }
+  });
+
+  it('scopes the grid by the other active filters', () => {
+    // The counts on each year chip must describe the set the timeline is showing, so every
+    // non-temporal predicate carries over.
+    expect(
+      buildRecentlyAddedPickerBucketOptions({
+        ...createFilterState(),
+        personIds: ['person:p1'],
+        country: 'Germany',
+        tagIds: ['tag-1'],
+        rating: 5,
+        mediaType: 'video',
+      }),
+    ).toMatchObject({
+      personIds: ['person:p1'],
+      country: 'Germany',
+      tagIds: ['tag-1'],
+      rating: 5,
+      $type: AssetTypeEnum.Video,
+    });
   });
 });
 

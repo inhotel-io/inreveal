@@ -25,10 +25,29 @@ export function shouldShowRecentlyAddedCount(count: number, hasActiveFilters: bo
  *
  * Note the date filter still filters *taken* date (there is no created-at range predicate);
  * day-groups reflect added date. That mismatch is intentional — e.g. old photos just imported.
+ * The filter panel's year/month grid must therefore be built from
+ * `buildRecentlyAddedPickerBucketOptions`, NOT from these buckets.
  */
 export function buildRecentlyAddedTimelineOptions(filters: FilterState): Record<string, unknown> {
   const { withSharedSpaces: _, ...base } = buildPhotosTimelineOptions(filters);
   return { ...base, orderBy: AssetOrderBy.CreatedAt };
+}
+
+/**
+ * Bucket query backing the filter panel's temporal picker (the year / month grid).
+ *
+ * Identical to the timeline query except that it groups by **taken** date. The picker's grid and
+ * the predicate a click on it produces have to read the same column: clicking a year emits
+ * `takenAfter` / `takenBefore`, which the server applies to `asset.localDateTime`. Deriving the
+ * grid from the timeline's `orderBy: CreatedAt` buckets instead listed *upload* years, so a
+ * library imported this year offered a single chip that matched nothing.
+ *
+ * This is also what query mode already does — smart-search facets bucket on takenAt — so browse
+ * and query mode now agree.
+ */
+export function buildRecentlyAddedPickerBucketOptions(filters: FilterState): Record<string, unknown> {
+  const { withSharedSpaces: _, ...base } = buildPhotosTimelineOptions(filters);
+  return { ...base, orderBy: AssetOrderBy.TakenAt };
 }
 
 /**

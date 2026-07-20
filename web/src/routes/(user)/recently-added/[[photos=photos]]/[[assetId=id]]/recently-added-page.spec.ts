@@ -206,6 +206,7 @@ describe('Recently Added page filters', () => {
       hasUnnamedPeople: false,
     });
     sdkMock.getSearchSuggestions.mockResolvedValue([]);
+    sdkMock.getTimeBuckets.mockResolvedValue([]);
   });
 
   it('derives timeline options from the filters — orderBy CreatedAt, no withSharedSpaces', async () => {
@@ -215,6 +216,33 @@ describe('Recently Added page filters', () => {
       expect(buildRecentlyAddedTimelineOptions).toHaveBeenCalled();
       expect(screen.getByTestId('timeline-options')).toHaveTextContent('"orderBy":"createdAt"');
       expect(screen.getByTestId('timeline-options')).not.toHaveTextContent('"withSharedSpaces"');
+    });
+  });
+
+  it('fetches the temporal picker buckets by taken date, not by added date', async () => {
+    // The timeline groups by added date (orderBy createdAt) — but the year/month grid must be
+    // built from taken-date buckets, because clicking a year filters on takenAfter/takenBefore.
+    // Sourcing the grid from the timeline's own buckets listed upload years that then matched
+    // nothing.
+    renderPage();
+
+    await waitFor(() => expect(sdkMock.getTimeBuckets).toHaveBeenCalled());
+    expect(sdkMock.getTimeBuckets.mock.calls[0][0]).toMatchObject({ orderBy: 'takenAt' });
+    expect(sdkMock.getTimeBuckets.mock.calls[0][0]).not.toHaveProperty('withSharedSpaces');
+  });
+
+  it('rescopes the picker buckets when another filter changes', async () => {
+    // Each year chip carries a count, so the grid has to describe the currently filtered set.
+    renderPage();
+
+    await waitFor(() => expect(sdkMock.getTimeBuckets).toHaveBeenCalled());
+    await fireEvent.click(await screen.findByTestId('filter-panel-set-country'));
+
+    await waitFor(() => {
+      expect(sdkMock.getTimeBuckets).toHaveBeenCalledWith(
+        expect.objectContaining({ country: 'Germany', orderBy: 'takenAt' }),
+        expect.anything(),
+      );
     });
   });
 
@@ -300,6 +328,7 @@ describe('Recently Added page query mode', () => {
       hasUnnamedPeople: false,
     });
     sdkMock.getSearchSuggestions.mockResolvedValue([]);
+    sdkMock.getTimeBuckets.mockResolvedValue([]);
     sdkMock.searchSmartFacets.mockResolvedValue({
       total: 12,
       timeBuckets: [{ timeBucket: '2024-01-01', count: 12 }],
