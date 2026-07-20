@@ -338,7 +338,16 @@ select
           "asset"."id" = "tag_asset"."assetId"
       ) as agg
   ) as "tags",
-  to_json("asset_exif") as "exifInfo"
+  to_json("asset_exif") as "exifInfo",
+  exists (
+    select
+      1 as "exists"
+    from
+      "asset_favorite"
+    where
+      "asset_favorite"."assetId" = "asset"."id"
+      and "asset_favorite"."userId" = "asset"."ownerId"
+  ) as "isFavorite"
 from
   "asset"
   left join "asset_exif" on "asset"."id" = "asset_exif"."assetId"
@@ -392,6 +401,15 @@ select
       ) as agg
   ) as "tags",
   to_json("asset_exif") as "exifInfo",
+  exists (
+    select
+      1 as "exists"
+    from
+      "asset_favorite"
+    where
+      "asset_favorite"."assetId" = "asset"."id"
+      and "asset_favorite"."userId" = "asset"."ownerId"
+  ) as "isFavorite",
   exists (
     select
       1 as "exists"
@@ -532,7 +550,16 @@ limit
 
 -- AssetRepository.getById
 select
-  "asset".*
+  "asset".*,
+  exists (
+    select
+      1 as "exists"
+    from
+      "asset_favorite"
+    where
+      "asset_favorite"."assetId" = "asset"."id"
+      and "asset_favorite"."userId" = "asset"."ownerId"
+  ) as "isFavorite"
 from
   "asset"
 where
@@ -543,6 +570,15 @@ limit
 -- AssetRepository.getById (with authUserId)
 select
   "asset".*,
+  exists (
+    select
+      1 as "exists"
+    from
+      "asset_favorite"
+    where
+      "asset_favorite"."assetId" = "asset"."id"
+      and "asset_favorite"."userId" = "asset"."ownerId"
+  ) as "isFavorite",
   exists (
     select
       1 as "exists"
