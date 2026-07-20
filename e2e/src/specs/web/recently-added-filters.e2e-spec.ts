@@ -127,11 +127,6 @@ test.describe('Recently Added filters', () => {
     await page.waitForSelector('[data-testid="discovery-panel"], [data-testid="filter-toggle-btn"]');
   }
 
-  // Slice 3 Task 1 (`recently-added-filter-config.ts`) added `text` as the tenth section; this
-  // assertion originally pinned the pre-Slice-3 nine-section, no-text state but was never updated
-  // when that section landed, leaving it stale. `recently-added-page.spec.ts`'s "passes all ten
-  // sections to the filter panel" case (unrelated to query mode, already green) is the up-to-date
-  // pin for this — ten sections, `text` included — so this scenario now matches it instead.
   test('renders all ten metadata filter sections, including text', async ({ context, page }) => {
     await gotoRecentlyAdded(context, page);
 
@@ -251,7 +246,7 @@ test.describe('Recently Added filters', () => {
 // its own fixture: it cannot inherit from either describe above, both of which reset it too.
 
 // Search-results mode never renders the browse-mode Timeline (`#asset-grid`); it renders either a
-// result count or the empty state via SpaceSearchResults — the same component /photos uses (see
+// result count or the empty state via SmartSearchResults — the same component /photos uses (see
 // photos-search.e2e-spec.ts). Asserting this MODE SWITCH first, before anything else, is what
 // makes every scenario below fail for the right reason pre-wiring: today `/recently-added` ignores
 // `?q=` entirely and keeps rendering the timeline, so this is exactly what goes red.

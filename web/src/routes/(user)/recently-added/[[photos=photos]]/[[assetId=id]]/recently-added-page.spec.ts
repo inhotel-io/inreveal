@@ -332,6 +332,13 @@ describe('Recently Added page query mode', () => {
     });
   });
 
+  it('omits withSharedSpaces from the real searchSmartFacets payload', async () => {
+    renderPage();
+
+    await waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalled());
+    expect(sdkMock.searchSmartFacets.mock.calls[0][0].smartSearchFacetsDto).not.toHaveProperty('withSharedSpaces');
+  });
+
   it('stays in browse mode for a blank/whitespace-only query', async () => {
     mockPage.url = new URL('https://gallery.test/recently-added?q=%20%20');
 

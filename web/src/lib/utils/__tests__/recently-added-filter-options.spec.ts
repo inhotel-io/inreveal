@@ -277,4 +277,15 @@ describe('buildRecentlyAddedSuggestionRequest', () => {
     expect(custom.takenAfter).toBe('2024-01-01T00:00:00.000Z');
     expect(custom.takenBefore).toBe('2025-01-01T00:00:00.000Z');
   });
+
+  it('passes album membership flags only when true', () => {
+    expect(buildRecentlyAddedSuggestionRequest({ ...createFilterState(), isNotInAlbum: true }).isNotInAlbum).toBe(true);
+    expect(buildRecentlyAddedSuggestionRequest({ ...createFilterState(), isInAlbum: true }).isInAlbum).toBe(true);
+    expect(
+      buildRecentlyAddedSuggestionRequest({ ...createFilterState(), isNotInAlbum: false }).isNotInAlbum,
+    ).toBeUndefined();
+    expect(buildRecentlyAddedSuggestionRequest({ ...createFilterState(), isInAlbum: false }).isInAlbum).toBeUndefined();
+    expect(buildRecentlyAddedSuggestionRequest(createFilterState()).isNotInAlbum).toBeUndefined();
+    expect(buildRecentlyAddedSuggestionRequest(createFilterState()).isInAlbum).toBeUndefined();
+  });
 });
