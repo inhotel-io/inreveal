@@ -36,6 +36,13 @@ const resetRecentSpaces = () => {
   userInteraction.recentSpaces = undefined;
 };
 
+const dropSpaceAlbumCache = (spaceId: string) => {
+  if (userInteraction.spaceAlbums) {
+    const { [spaceId]: _, ...rest } = userInteraction.spaceAlbums;
+    userInteraction.spaceAlbums = rest;
+  }
+};
+
 const reset = () => {
   Object.assign(userInteraction, defaultUserInteraction);
 };
@@ -46,5 +53,13 @@ eventManager.on({
   AlbumDelete: () => resetRecentAlbums(),
   SpaceAddAssets: () => resetRecentSpaces(),
   SpaceRemoveAssets: () => resetRecentSpaces(),
+  SpaceLinkAlbum: ({ spaceId }) => {
+    resetRecentSpaces();
+    dropSpaceAlbumCache(spaceId);
+  },
+  SpaceUnlinkAlbum: ({ spaceId }) => {
+    resetRecentSpaces();
+    dropSpaceAlbumCache(spaceId);
+  },
   AuthLogout: () => reset(),
 });

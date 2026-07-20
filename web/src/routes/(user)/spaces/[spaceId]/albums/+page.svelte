@@ -4,6 +4,7 @@
   import SpaceAlbumsControls from '$lib/components/spaces/space-albums-controls.svelte';
   import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
+  import { eventManager } from '$lib/managers/event-manager.svelte';
   import SpaceLinkAlbumModal from '$lib/modals/SpaceLinkAlbumModal.svelte';
   import { Route } from '$lib/route';
   import { handleError } from '$lib/utils/handle-error';
@@ -67,6 +68,7 @@
     }
     try {
       await unlinkAlbum({ id: space.id, albumId: album.id });
+      eventManager.emit('SpaceUnlinkAlbum', { spaceId: space.id });
       await reload();
       // Refresh the [spaceId] layout's cached linkedAlbums so other tabs (and a re-mount of this
       // page on tab navigation) reflect the change without a full page refresh.
@@ -98,6 +100,7 @@
     }
     try {
       await linkAlbum({ id: space.id, albumId: newAlbum.id });
+      eventManager.emit('SpaceLinkAlbum', { spaceId: space.id });
       await invalidateAll();
       await goto(Route.viewSpaceAlbum({ spaceId: space.id, albumId: newAlbum.id }));
     } catch (error) {
@@ -114,6 +117,7 @@
     });
     // The modal returns how many albums it linked; only refresh when something changed.
     if (linkedCount) {
+      eventManager.emit('SpaceLinkAlbum', { spaceId: space.id });
       await reload();
       // Refresh the [spaceId] layout's cached linkedAlbums so other tabs (and a re-mount of this
       // page on tab navigation) reflect the change without a full page refresh.
