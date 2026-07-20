@@ -1244,9 +1244,25 @@ git commit -m "test(e2e): acceptance scenarios for Recently Added browse filters
 **Concrete adaptations:**
 - `const options = $derived({ ...buildRecentlyAddedTimelineOptions(filters), grouping: timelineGrouping });` — this **replaces** the static `const options = {...}`. That is the one sanctioned change to it.
 - `const filterConfig = withNameCapture(buildRecentlyAddedFilterConfig(), personNames, tagNames);` — `withNameCapture(config: FilterPanelConfig, personNames: Map<string, string>, tagNames: Map<string, string>): FilterPanelConfig` from `$lib/utils/filter-name-capture` (verified signature; real call site: `spaces/[spaceId]/albums/[albumId=id]/…/+page.svelte:110`). This is what lets chips render person/tag names.
-- `syncFilterUrl` passes a literal empty query — there is no search this slice:
-  `const nextUrl = buildSearchablePageUrl(page.url, '', nextFilters.sortOrder, nextFilters);`
-  Drop Photos' `relevance` fallback branch (query-mode only).
+- `syncFilterUrl` passes a literal empty query — there is no search this slice. **You must keep an equivalent of Photos' `relevance` fallback**, or every filter URL gains a spurious `sort=desc`:
+
+  ```ts
+  function syncFilterUrl(nextFilters: FilterState) {
+    const currentSearchState = getSearchablePageState(page.url);
+    // `buildSearchablePageUrl` writes an explicit `sort=` param whenever it is handed a literal
+    // 'asc' | 'desc'; only 'relevance' clears it. `createFilterState()` defaults sortOrder to
+    // 'desc', so passing it straight through would stamp `sort=desc` onto every filter URL the
+    // user never asked for. Convert the *implicit* default to 'relevance' (= "no explicit sort")
+    // and pass through anything the user actually chose. Photos does the same thing; its extra
+    // `!committedQuery.trim()` condition is query-mode-only and drops out here.
+    const sortOrder =
+      nextFilters.sortOrder === 'desc' && !currentSearchState.hasExplicitSort ? 'relevance' : nextFilters.sortOrder;
+    const nextUrl = buildSearchablePageUrl(page.url, '', sortOrder, nextFilters);
+    …
+  }
+  ```
+
+  Expected URL shapes, which Task 4's route spec asserts exactly: applying a country filter gives `/recently-added?country=Germany` (no `sort`), and clearing all filters gives bare `/recently-added`. If you see `sort=desc` in either, this conversion is missing.
 - `<FilterPanel … storageKey="gallery-filter-visible-sections-recently-added" timeBuckets={timelineBuckets} hidden={isTimelineEmpty} />` — view-specific storage key.
 - `<ActiveFiltersBar embedded {filters} {personNames} {tagNames} onRemoveFilter={handleRemoveActiveFilter} onClearAll={handleClearAllFilters} />` — **no** `resultCount`, **no** `onAddAllToCollection`, **no** `searchQuery` / `onClearSearch`.
 - `<FilterToolbar … showGrouping={!assetMultiSelectManager.selectionActive} showFilters={hasActiveFilters} filters={recentlyAddedFiltersBar} showFilterButton={filterCollapsed && !isTimelineEmpty && !assetMultiSelectManager.selectionActive} filterActive={getActiveFilterCount(filters) > 0} onExpandFilters={() => (filterCollapsed = false)} />` — drops Photos' `!showSearchResults`.
