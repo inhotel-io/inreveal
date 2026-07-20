@@ -36,6 +36,7 @@ class SyncRequestType {
   static const assetEditsV1 = SyncRequestType._(r'AssetEditsV1');
   static const assetMetadataV1 = SyncRequestType._(r'AssetMetadataV1');
   static const assetOcrV1 = SyncRequestType._(r'AssetOcrV1');
+  static const assetFavoritesV1 = SyncRequestType._(r'AssetFavoritesV1');
   static const authUsersV1 = SyncRequestType._(r'AuthUsersV1');
   static const memoriesV1 = SyncRequestType._(r'MemoriesV1');
   static const memoryToAssetsV1 = SyncRequestType._(r'MemoryToAssetsV1');
@@ -80,6 +81,7 @@ class SyncRequestType {
     assetEditsV1,
     assetMetadataV1,
     assetOcrV1,
+    assetFavoritesV1,
     authUsersV1,
     memoriesV1,
     memoryToAssetsV1,
@@ -159,6 +161,7 @@ class SyncRequestTypeTypeTransformer {
         case r'AssetEditsV1': return SyncRequestType.assetEditsV1;
         case r'AssetMetadataV1': return SyncRequestType.assetMetadataV1;
         case r'AssetOcrV1': return SyncRequestType.assetOcrV1;
+        case r'AssetFavoritesV1': return SyncRequestType.assetFavoritesV1;
         case r'AuthUsersV1': return SyncRequestType.authUsersV1;
         case r'MemoriesV1': return SyncRequestType.memoriesV1;
         case r'MemoryToAssetsV1': return SyncRequestType.memoryToAssetsV1;
