@@ -442,5 +442,21 @@ describe('RecentSpaces component', () => {
       expect(seeAll).toHaveAttribute('href', '/spaces/space-a/albums');
       expect(seeAll.textContent).toContain('5');
     });
+
+    it('auto-loads albums on mount for a persisted-expanded space without a click', async () => {
+      const space = buildSpaceWithAlbums(2);
+      const albums = sharedSpaceLinkedAlbumFactory.buildList(2);
+      recentSpaceAlbumsExpanded.set({ 'space-a': true });
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue(albums);
+
+      await renderAndFlush();
+      await tick();
+      await tick();
+
+      expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledTimes(1);
+      expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledWith({ id: 'space-a' });
+      expect(screen.getAllByTestId(/^sidebar-space-album-/)).toHaveLength(2);
+    });
   });
 });

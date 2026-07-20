@@ -14,6 +14,7 @@
   import { UserAvatarColor, getAllSpaces, getSharedSpaceAlbums } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiChevronDown, mdiChevronRight } from '@mdi/js';
+  import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
 
   const bgClasses: Record<string, string> = {
@@ -47,10 +48,15 @@
 
   const topSpaceIds = $derived(spaces.map((s) => s.id));
 
+  // Spaces with a fetch currently in flight — guards against a duplicate `getSharedSpaceAlbums`
+  // call when the mount/refresh effect below re-runs while the cache is still unset.
+  const inFlightSpaceAlbumFetches = new SvelteSet<string>();
+
   const loadAlbums = async (spaceId: string) => {
-    if (userInteraction.spaceAlbums?.[spaceId]) {
-      return; // already fetched (possibly an empty list) — never refetch
+    if (userInteraction.spaceAlbums?.[spaceId] || inFlightSpaceAlbumFetches.has(spaceId)) {
+      return; // already fetched (possibly an empty list), or a fetch is already in flight — never refetch
     }
+    inFlightSpaceAlbumFetches.add(spaceId);
     try {
       const albums = await getSharedSpaceAlbums({ id: spaceId });
       const sorted = [...albums].sort((a, b) => (a.linkedAt > b.linkedAt ? -1 : a.linkedAt < b.linkedAt ? 1 : 0));
@@ -58,6 +64,8 @@
     } catch (error) {
       handleError(error, $t('failed_to_load_albums'));
       setSpaceAlbumsExpanded(spaceId, false, topSpaceIds); // cache stays unset → retry on next expand
+    } finally {
+      inFlightSpaceAlbumFetches.delete(spaceId);
     }
   };
 
@@ -68,6 +76,21 @@
       void loadAlbums(spaceId);
     }
   };
+
+  // Re-fetch albums for any currently-shown space whose expansion state was persisted as `true`
+  // (e.g. from a prior session) but whose in-memory album cache hasn't been populated yet — covers
+  // both a fresh page load (cache always starts undefined) and an in-session cache eviction after
+  // a link/unlink while the space is still marked expanded.
+  $effect(() => {
+    for (const space of spaces) {
+      if (
+        isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, space.id) &&
+        userInteraction.spaceAlbums?.[space.id] === undefined
+      ) {
+        void loadAlbums(space.id);
+      }
+    }
+  });
 
   const refreshSpaces = async () => {
     try {
