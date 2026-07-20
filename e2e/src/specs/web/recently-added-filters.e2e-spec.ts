@@ -127,7 +127,12 @@ test.describe('Recently Added filters', () => {
     await page.waitForSelector('[data-testid="discovery-panel"], [data-testid="filter-toggle-btn"]');
   }
 
-  test('renders the nine metadata filter sections and no text section', async ({ context, page }) => {
+  // Slice 3 Task 1 (`recently-added-filter-config.ts`) added `text` as the tenth section; this
+  // assertion originally pinned the pre-Slice-3 nine-section, no-text state but was never updated
+  // when that section landed, leaving it stale. `recently-added-page.spec.ts`'s "passes all ten
+  // sections to the filter panel" case (unrelated to query mode, already green) is the up-to-date
+  // pin for this — ten sections, `text` included — so this scenario now matches it instead.
+  test('renders all ten metadata filter sections, including text', async ({ context, page }) => {
     await gotoRecentlyAdded(context, page);
 
     await expect(page.getByTestId('discovery-panel')).toBeVisible();
@@ -141,11 +146,10 @@ test.describe('Recently Added filters', () => {
       'media',
       'favorites',
       'albums',
+      'text',
     ]) {
       await expect(page.getByTestId(`filter-section-${section}`)).toBeVisible();
     }
-    // Slice 3 adds this; it must not exist yet.
-    await expect(page.getByTestId('filter-section-text')).toHaveCount(0);
   });
 
   // Spec scenario: Filtering by media type updates grid, URL, and count
