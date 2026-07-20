@@ -355,8 +355,9 @@ git commit -m "chore(sdk): regenerate clients for albumCount (#816)"
 **Interfaces:**
 
 - Produces: `Route.viewSpaceAlbum({ spaceId, albumId }: { spaceId: string; albumId: string }): string` → `/spaces/${spaceId}/albums/${albumId}`
+- Produces: `Route.viewSpaceAlbums({ id }: { id: string }): string` → `/spaces/${id}/albums` (the album tab, consumed by Task 10's "See all")
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 Add to `web/src/lib/route.spec.ts` inside `describe('Route', () => { ... })`:
 
@@ -365,26 +366,31 @@ describe('viewSpaceAlbum', () => {
   it('links to an album inside a space', () => {
     expect(Route.viewSpaceAlbum({ spaceId: 'space-1', albumId: 'album-2' })).toBe('/spaces/space-1/albums/album-2');
   });
+
+  it('links to a space albums tab', () => {
+    expect(Route.viewSpaceAlbums({ id: 'space-1' })).toBe('/spaces/space-1/albums');
+  });
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `export PATH="$HOME/.local/share/mise/shims:$PATH" && cd web && pnpm test -- --run src/lib/route.spec.ts -t viewSpaceAlbum`
 Expected: FAIL — `Route.viewSpaceAlbum is not a function`.
 
-- [ ] **Step 3: Add the helper**
+- [ ] **Step 3: Add the helpers**
 
 In `web/src/lib/route.ts`, in the `// spaces` block (~`:127`, right after `viewSpace`):
 
 ```ts
+  viewSpaceAlbums: ({ id }: { id: string }) => `/spaces/${id}/albums`,
   viewSpaceAlbum: ({ spaceId, albumId }: { spaceId: string; albumId: string }) => `/spaces/${spaceId}/albums/${albumId}`,
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd web && pnpm test -- --run src/lib/route.spec.ts -t viewSpaceAlbum`
-Expected: PASS.
+Expected: PASS (both cases — the `-t viewSpaceAlbum` filter matches the `viewSpaceAlbum` describe that now holds both).
 
 - [ ] **Step 5: Migrate the three call sites**
 
@@ -650,25 +656,20 @@ Expected: PASS.
 
 - [ ] **Step 6: Write the failing page-emit tests**
 
-In `web/src/routes/(user)/spaces/[spaceId]/albums/space-albums-page.spec.ts`, add at the top-level mocks (after the existing `vi.mock` calls near `:22`):
-
-```ts
-vi.mock('$lib/managers/event-manager.svelte', () => ({
-  eventManager: { emit: vi.fn(), on: vi.fn(), off: vi.fn() },
-}));
-```
-
-Import the mocked manager near the other imports:
+In `web/src/routes/(user)/spaces/[spaceId]/albums/space-albums-page.spec.ts`, import the **real** event manager near the other imports:
 
 ```ts
 import { eventManager } from '$lib/managers/event-manager.svelte';
 ```
+
+Do **not** `vi.mock` the whole module — the page and its child components call `eventManager.on(...)` during mount, and replacing the module with `{ emit: vi.fn() }` would break those subscriptions. Instead spy on `emit` per test (it still calls through, so real handlers run harmlessly).
 
 Add a new `describe` (mirror the existing unlink/link test setup at `:215-335` for how the page is rendered and the confirm dialog resolved):
 
 ```ts
 describe('album link/unlink events', () => {
   it('emits SpaceUnlinkAlbum after a confirmed unlink', async () => {
+    const emitSpy = vi.spyOn(eventManager, 'emit');
     // ...render the page with a linked album and a space where the user is owner/editor,
     // resolve the confirm dialog to true, click the unlink control (copy setup from the
     // existing 'unlink: after confirm resolves true, calls unlinkAlbum' test at ~:215)...
@@ -676,21 +677,22 @@ describe('album link/unlink events', () => {
 
     // trigger unlink here (same interaction as the existing unlink test)
 
-    await waitFor(() => expect(eventManager.emit).toHaveBeenCalledWith('SpaceUnlinkAlbum', { spaceId: 'space-1' }));
+    await waitFor(() => expect(emitSpy).toHaveBeenCalledWith('SpaceUnlinkAlbum', { spaceId: 'space-1' }));
   });
 
   it('emits SpaceLinkAlbum after creating and linking a new album', async () => {
+    const emitSpy = vi.spyOn(eventManager, 'emit');
     // ...copy setup from the existing 'linkAlbum' create test at ~:323...
     sdkMock.linkAlbum.mockResolvedValue(undefined as never);
 
     // trigger the create-album flow here (same interaction as the existing create test)
 
-    await waitFor(() => expect(eventManager.emit).toHaveBeenCalledWith('SpaceLinkAlbum', { spaceId: BASE_SPACE.id }));
+    await waitFor(() => expect(emitSpy).toHaveBeenCalledWith('SpaceLinkAlbum', { spaceId: BASE_SPACE.id }));
   });
 });
 ```
 
-> Implementer note: reuse the exact render/interaction lines from the neighbouring tests at `:215` (unlink) and `:323` (create+link) — they already establish `BASE_SPACE`, the modal manager mock, and the confirm-dialog resolution. Only the final `eventManager.emit` assertion is new.
+> Implementer note: reuse the exact render/interaction lines from the neighbouring tests at `:215` (unlink) and `:323` (create+link) — they already establish `BASE_SPACE`, the modal manager mock, and the confirm-dialog resolution. Only the `emitSpy` assertion is new. If the file's `beforeEach` calls `vi.restoreAllMocks()`, the per-test `vi.spyOn` is already isolated; otherwise add `emitSpy.mockRestore()` at the end of each test.
 
 - [ ] **Step 7: Run to verify failure**
 
@@ -926,7 +928,7 @@ Inside the `{#each spaces as space (space.id)}` block, wrap the existing `<a>` i
         aria-label={expanded ? $t('collapse') : $t('expand')}
         aria-expanded={expanded}
         data-testid="sidebar-space-chevron-{space.id}"
-        class="absolute start-4 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg p-0.5 hover:bg-subtle md:block"
+        class="absolute start-2 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg p-0.5 hover:bg-subtle md:block"
         onclick={() => toggleAlbums(space.id)}
       >
         <Icon icon={expanded ? mdiChevronDown : mdiChevronRight} size="1.25em" />
@@ -942,7 +944,9 @@ Inside the `{#each spaces as space (space.id)}` block, wrap the existing `<a>` i
 {/each}
 ```
 
-> Keep every existing attribute and child of the `<a>` exactly as-is — only wrap it in `<div class="relative">` and add the chevron button before it. The `collapse` / `expand` i18n keys already exist (used by `@immich/ui`'s NavbarItem); confirm with `grep '"collapse"\|"expand"' i18n/en.json` and add them only if missing.
+> Keep every existing attribute and child of the `<a>` exactly as-is — only wrap it in `<div class="relative">` and add the chevron button before it. The chevron is `absolute z-10` over the row's start padding (the `<a>` keeps `ps-10`, so the thumbnail begins ~40px in and the chevron at `start-2` clears it); because the chevron is a sibling `<button>` with `z-10`, clicking it toggles without navigating, while the rest of the row still follows the link. The `collapse` / `expand` i18n keys already exist (used by `@immich/ui`'s NavbarItem); confirm with `grep '"collapse"\|"expand"' i18n/en.json` and add them only if missing.
+
+> **Visual check (not unit-testable):** the chevron offset (`start-2`) and the album-row indent (`ps-14`) are layout choices happy-dom cannot verify. After this task and Task 9, run the app (`make dev`, or the `run` skill) and eyeball the sidebar: chevron should not overlap the thumbnail, and album rows should sit one clear level under their space. Adjust `start-*` / `ps-*` if needed.
 
 - [ ] **Step 4: Run to verify passing**
 
@@ -1040,6 +1044,28 @@ describe('album drill-down list', () => {
     ]);
   });
 
+  it('renders nothing when the fetch resolves empty despite a stale albumCount > 0', async () => {
+    const space = buildSpaceWithAlbums(2); // stale count says 2...
+    sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+    sdkMock.getSharedSpaceAlbums.mockResolvedValue([]); // ...but the space actually has none now
+    await renderAndFlush();
+
+    await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+    await tick();
+    await tick();
+
+    // No album rows, no "See all", no crash — the derived `expanded` collapses on an empty result.
+    expect(screen.queryAllByTestId(/^sidebar-space-album-/)).toHaveLength(0);
+    expect(screen.queryByTestId('sidebar-space-see-all-space-a')).not.toBeInTheDocument();
+    // Cached empty → a second expand does not refetch.
+    await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+    await tick();
+    await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+    await tick();
+    await tick();
+    expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledTimes(1);
+  });
+
   it('toasts and collapses on fetch failure', async () => {
     const space = buildSpaceWithAlbums(1);
     sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
@@ -1069,41 +1095,47 @@ In `recent-spaces.svelte` `<script>`, extend imports:
 import { getAllSpaces, getSharedSpaceAlbums, UserAvatarColor } from '@immich/sdk';
 ```
 
-Add fetch-on-expand logic. Replace `toggleAlbums` from Task 8 with a version that fetches when expanding:
+Add fetch-on-expand logic. The `toggleAlbums` below **replaces the stub from Task 8** (it now also triggers the fetch). `loadAlbums` fetches once and caches (including an empty result, so we never refetch). It does **not** imperatively collapse on empty — the derived `expanded` (below) handles that declaratively. Only the error path collapses, and it leaves the cache unset so a later expand retries:
 
 ```ts
 const loadAlbums = async (spaceId: string) => {
   if (userInteraction.spaceAlbums?.[spaceId]) {
-    return;
+    return; // already fetched (possibly an empty list) — never refetch
   }
   try {
     const albums = await getSharedSpaceAlbums({ id: spaceId });
     const sorted = [...albums].sort((a, b) => (a.linkedAt > b.linkedAt ? -1 : a.linkedAt < b.linkedAt ? 1 : 0));
     userInteraction.spaceAlbums = { ...(userInteraction.spaceAlbums ?? {}), [spaceId]: sorted };
-    if (sorted.length === 0) {
-      setSpaceAlbumsExpanded(spaceId, false, topSpaceIds);
-    }
   } catch (error) {
     handleError(error, $t('failed_to_load_albums'));
-    setSpaceAlbumsExpanded(spaceId, false, topSpaceIds);
+    setSpaceAlbumsExpanded(spaceId, false, topSpaceIds); // cache stays unset → retry on next expand
   }
 };
 
 const toggleAlbums = (spaceId: string) => {
-  const expanded = !isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, spaceId);
-  setSpaceAlbumsExpanded(spaceId, expanded, topSpaceIds);
-  if (expanded) {
+  const nowExpanded = !isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, spaceId);
+  setSpaceAlbumsExpanded(spaceId, nowExpanded, topSpaceIds);
+  if (nowExpanded) {
     void loadAlbums(spaceId);
   }
 };
 ```
 
-Render the album rows inside the `<div class="relative">`, after the `<a>` space row, when expanded. Add a helper `getAssetMediaUrl` is already imported:
+Now make `expanded` (the `{@const}` from Task 8, used for both the chevron icon and the `{#if}`) also account for the fetched result, so an **empty** fetched list renders as collapsed with no dangling open chevron. Replace the Task 8 `expanded` line inside the `{#each}`:
+
+```svelte
+  {@const cachedAlbums = userInteraction.spaceAlbums?.[space.id]}
+  {@const expanded =
+    isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, space.id) && (cachedAlbums === undefined || cachedAlbums.length > 0)}
+```
+
+`userInteraction.spaceAlbums` is a Svelte 5 `$state` proxy, so reading `cachedAlbums` here creates a reactive dependency — when `loadAlbums` reassigns it, `expanded` re-derives with no extra plumbing. Truth table: not fetched (`undefined`) → follows the persisted flag (lets the first expand trigger the fetch); fetched non-empty → expanded; fetched empty → collapsed regardless of the persisted flag.
+
+Render the album rows inside the `<div class="relative">`, after the `<a>` space row, when expanded (`getAssetMediaUrl` is already imported):
 
 ```svelte
     {#if expanded}
-      {@const albums = ($recentSpaceAlbumsExpanded, userInteraction.spaceAlbums?.[space.id] ?? [])}
-      {#each albums.slice(0, 3) as album (album.id)}
+      {#each (cachedAlbums ?? []).slice(0, 3) as album (album.id)}
         <a
           href={Route.viewSpaceAlbum({ spaceId: space.id, albumId: album.id })}
           title={album.albumName}
@@ -1121,8 +1153,6 @@ Render the album rows inside the `<div class="relative">`, after the `<a>` space
       {/each}
     {/if}
 ```
-
-> The `($recentSpaceAlbumsExpanded, ...)` sequence-expression forces the block to re-evaluate when the expansion store changes; `userInteraction.spaceAlbums` is a Svelte 5 `$state` proxy, so writes to it already trigger reactivity.
 
 - [ ] **Step 4: Run to verify passing**
 
@@ -1199,21 +1229,19 @@ In `i18n/en.json`:
 
 - [ ] **Step 4: Render the overflow row**
 
-In `recent-spaces.svelte`, inside the `{#if expanded}` block, after the album `{#each}` (still inside the `<div class="relative">`):
+In `recent-spaces.svelte`, inside the `{#if expanded}` block, after the album `{#each}` (still inside the `<div class="relative">`). Uses `cachedAlbums` (defined in Task 9) as the length source of truth, and the `Route.viewSpaceAlbums` tab helper added in Task 4:
 
 ```svelte
-      {#if albums.length > 3}
+      {#if (cachedAlbums?.length ?? 0) > 3}
         <a
-          href={Route.viewSpace({ id: space.id })}/albums
+          href={Route.viewSpaceAlbums({ id: space.id })}
           data-testid="sidebar-space-see-all-{space.id}"
           class="flex w-full place-items-center rounded-e-full py-2 ps-14 text-sm font-medium text-immich-primary hover:bg-subtle dark:text-immich-dark-primary"
         >
-          {$t('sidebar_space_see_all_albums', { values: { count: albums.length } })}
+          {$t('sidebar_space_see_all_albums', { values: { count: cachedAlbums?.length ?? 0 } })}
         </a>
       {/if}
 ```
-
-> `href` must be the albums tab: use `href={`/spaces/${space.id}/albums`}` — write it as `href={Route.viewSpace({ id: space.id }) + '/albums'}` to route through the helper. Do not hardcode the bare string.
 
 - [ ] **Step 5: Run to verify passing**
 
@@ -1292,18 +1320,27 @@ Expected: no new issues from the regenerated `shared_space_response_dto.dart`.
 - `albumCount` DTO + repo + getAll → Task 1 ✓ (unit + medium, incl. per-space isolation and soft-delete exclusion)
 - `lastActivityAt` bump inside `if (result)`, no bump on re-link/unlink → Task 2 ✓
 - SDK regen (TS + Dart) → Task 3 ✓
-- `Route.viewSpaceAlbum` + 3 call sites → Task 4 ✓
+- `Route.viewSpaceAlbum` (album) + `Route.viewSpaceAlbums` (tab) + 3 call sites → Task 4 ✓
 - `SpaceLinkAlbum`/`SpaceUnlinkAlbum` events + emits from all three page handlers + cache reset → Task 6 ✓
 - Per-space persisted expansion with prune-on-write → Task 7 ✓
 - Chevron only when `albumCount > 0` (0 and undefined) → Task 8 ✓
-- Lazy fetch, cache-once, sort by `linkedAt` desc, slice 3, thumbnail/name, error toast, empty-fetch collapse → Task 9 ✓
+- Lazy fetch, cache-once, sort by `linkedAt` desc, slice 3, thumbnail/name, error toast → Task 9 ✓
+- Empty-fetch collapse (resolves `[]` with stale count) → Task 9 ✓ (declarative via derived `expanded`; asserted explicitly)
 - "See all (N)" using fetched length, absent at 3 / present at 4 → Task 10 ✓
 - `failed_to_load_albums` i18n → Task 5 ✓; `sidebar_space_see_all_albums` → Task 10 ✓
 - Verification gates (server/web/medium/prettier/openapi/dart) → Task 11 ✓
 
-**Deliberately deferred to a later task (documented, not a gap):**
+**Deliberately deferred / documented (not gaps):**
 
-- The empty-fetch-collapse assertion lives in Task 9 (fetch behavior), not Task 8 (chevron) — the chevron cannot auto-collapse before the fetch exists.
-- Cross-user real-time updates: out of scope per spec.
+- Cross-user real-time updates: out of scope per spec (matches today's local-emit asset behavior).
+- Chevron/indent pixel placement: not unit-testable — Task 8 carries an explicit in-browser visual-check step.
 
-**Type consistency:** `getLinkedAlbumCount(spaceId): Promise<number>` (Task 1) is called identically in the service (Task 1) and mocked identically in tests. `SpaceLinkAlbum`/`SpaceUnlinkAlbum` payload `{ spaceId: string }` is declared (Task 6), emitted (Task 6), and asserted (Task 6) identically. `setSpaceAlbumsExpanded(spaceId, expanded, validSpaceIds)` signature (Task 7) matches its call in `recent-spaces.svelte` (Tasks 8–10). `Route.viewSpaceAlbum({ spaceId, albumId })` (Task 4) matches every call site.
+**Correctness fixes applied during plan review (verified against source):**
+
+- `linkAlbum` already logs an `AlbumLink` activity (`:755-761`) — the bump is additive inside `if (result)`; there is no "no activity log" assertion (it would be false).
+- `NavbarItem` renders an mdi icon only, not the space thumbnail — the chevron is hand-rolled, the `<a>` row is untouched.
+- `getLinkedAlbumCount` joins `album` and filters `deletedAt is null` to match `getLinkedAlbums`, so count and list agree (soft-delete case covered by the medium test).
+- Page-emit tests use `vi.spyOn(eventManager, 'emit')`, not a full `vi.mock` of the module — the page's child components subscribe via `eventManager.on(...)` at mount and a full mock would break them.
+- The empty-fetch collapse is declarative (derived `expanded` folds in `cachedAlbums.length`), avoiding a fragile imperative double-collapse that misbehaved on re-expand of a cached-empty space.
+
+**Type consistency:** `getLinkedAlbumCount(spaceId): Promise<number>` (Task 1) is called and mocked identically. `SpaceLinkAlbum`/`SpaceUnlinkAlbum` payload `{ spaceId: string }` is declared, emitted, and asserted identically (Task 6). `setSpaceAlbumsExpanded(spaceId, expanded, validSpaceIds)` (Task 7) matches its calls in `recent-spaces.svelte` (Tasks 8–10). `Route.viewSpaceAlbum({ spaceId, albumId })` and `Route.viewSpaceAlbums({ id })` (Task 4) match every call site.
