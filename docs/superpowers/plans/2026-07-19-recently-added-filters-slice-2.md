@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give the Recently Added view the 9-section metadata filter panel (Timeline-date, People, Location, Camera, Tags, Rating, Media type, Favorites, Albums) with chips, URL persistence, and a header count that reflects the filtered set — while never surfacing shared-space assets and always ordering/grouping by *added* date.
+**Goal:** Give the Recently Added view the 9-section metadata filter panel (Timeline-date, People, Location, Camera, Tags, Rating, Media type, Favorites, Albums) with chips, URL persistence, and a header count that reflects the filtered set — while never surfacing shared-space assets and always ordering/grouping by _added_ date.
 
 **Architecture:** Pure modules carry the decision logic under exhaustive unit tests: `recently-added-filter-options.ts` (extended from Slice 1) gains `buildRecentlyAddedTimelineOptions` and `buildRecentlyAddedSuggestionRequest`; a new `recently-added-filter-config.ts` builds the `FilterPanelConfig`. A prerequisite change registers `/recently-added` as a URL-persisting page without granting it query support. The route mirrors the Photos page minus everything search-related, and is covered both by a route-level vitest spec and by Playwright acceptance scenarios.
 
@@ -43,21 +43,26 @@ Do not reorder — Tasks 4 and 5 are only genuinely red before Task 6.
 ## Reference: commands used in this slice
 
 Web unit tests (`"test": "vitest"` is watch-mode by default, so `--run` is required):
+
 ```bash
 cd web && pnpm test -- --run src/lib/utils/__tests__/recently-added-filter-options.spec.ts
 ```
+
 Note: in this repo's vitest workspace setup the path argument does not always isolate to one file — the whole project suite may run. That is expected; find your file's results in the output.
 
 E2E web suite — **never use `:2283`** (a `mise dev` stack returns HTTP 200 with a 0-byte body for page routes there, producing bogus "element not found" failures; the dev stack's real web app is the Vite container on `:3000`).
 
 **Preferred — the dedicated e2e stack** (Playwright defaults; serves the built web app on `:2285` with Postgres on `5435`, the port `utils.resetDatabase()` hardcodes):
+
 ```bash
 cd e2e && docker compose up --build -d     # rebuild after any web source change — the app is baked into the image
 cd e2e && pnpm exec playwright test --project=web --retries=0 src/specs/web/recently-added-filters.e2e-spec.ts
 ```
+
 Pass `--retries=0` on the deliberate red runs — the `web` project sets `retries: 4`, which would otherwise multiply every expected 30s `waitForSelector` timeout by five.
 
 **Fallback — against a running `mise dev` stack** (serves from source via Vite HMR, no rebuild between runs):
+
 ```bash
 socat TCP-LISTEN:5435,fork,reuseaddr TCP:127.0.0.1:5432 &   # resetDatabase() hardcodes 5435; dev Postgres is on 5432
 cd e2e && PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 PLAYWRIGHT_DISABLE_WEBSERVER=1 \
@@ -71,27 +76,29 @@ Prettier is a **separate CI gate** from ESLint — always `prettier --check` tou
 
 ## File Structure
 
-| File | Status | Responsibility |
-|---|---|---|
-| `web/src/lib/utils/searchable-page-search.ts` | **Modify** (Task 1) | Register `/recently-added` as a URL-persisting page; split `isSearchable` from `basePath`. |
-| `web/src/lib/utils/__tests__/searchable-page-search.spec.ts` | **Modify** (Task 1) | Cases for the new path and the split flag. |
-| `web/src/lib/utils/recently-added-filter-options.ts` | **Modify** (Task 2) | Add `buildRecentlyAddedTimelineOptions`, `buildRecentlyAddedSuggestionRequest`. |
-| `web/src/lib/utils/__tests__/recently-added-filter-options.spec.ts` | **Modify** (Task 2) | Exhaustive cases for both builders. |
-| `web/src/lib/utils/recently-added-filter-config.ts` | **Create** (Task 3) | `buildRecentlyAddedFilterConfig(): FilterPanelConfig`. |
-| `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts` | **Create** (Task 3) | Config unit tests, mirroring `album-filter-config.spec.ts`. |
-| `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts` | **Create** (Task 4) | Route-level component spec, mirroring `photos-page.spec.ts`. |
-| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts` | **Modify** (Task 5) | Append the browse-filter acceptance scenarios. |
-| `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/+page.svelte` | **Modify** (Task 6) | Host the filter panel, toolbar, chips, URL sync; count reflects filters. |
+| File                                                                                                | Status              | Responsibility                                                                             |
+| --------------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------ |
+| `web/src/lib/utils/searchable-page-search.ts`                                                       | **Modify** (Task 1) | Register `/recently-added` as a URL-persisting page; split `isSearchable` from `basePath`. |
+| `web/src/lib/utils/__tests__/searchable-page-search.spec.ts`                                        | **Modify** (Task 1) | Cases for the new path and the split flag.                                                 |
+| `web/src/lib/utils/recently-added-filter-options.ts`                                                | **Modify** (Task 2) | Add `buildRecentlyAddedTimelineOptions`, `buildRecentlyAddedSuggestionRequest`.            |
+| `web/src/lib/utils/__tests__/recently-added-filter-options.spec.ts`                                 | **Modify** (Task 2) | Exhaustive cases for both builders.                                                        |
+| `web/src/lib/utils/recently-added-filter-config.ts`                                                 | **Create** (Task 3) | `buildRecentlyAddedFilterConfig(): FilterPanelConfig`.                                     |
+| `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts`                                  | **Create** (Task 3) | Config unit tests, mirroring `album-filter-config.spec.ts`.                                |
+| `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts` | **Create** (Task 4) | Route-level component spec, mirroring `photos-page.spec.ts`.                               |
+| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts`                                              | **Modify** (Task 5) | Append the browse-filter acceptance scenarios.                                             |
+| `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/+page.svelte`                | **Modify** (Task 6) | Host the filter panel, toolbar, chips, URL sync; count reflects filters.                   |
 
 ---
 
 ## Task 1: Register `/recently-added` for URL persistence, without granting query support
 
 **Files:**
+
 - Modify: `web/src/lib/utils/searchable-page-search.ts`
 - Test: `web/src/lib/utils/__tests__/searchable-page-search.spec.ts`
 
 **Interfaces:**
+
 - Produces: `getSearchablePageBasePath('/recently-added…')` → `'/recently-added'`, which makes `buildSearchablePageUrl` return a real URL for this route (Task 6 depends on it); and `getSearchablePageState(url).isSearchable === false` for that same path.
 
 **Why this task exists.** `buildSearchablePageUrl` bails to `null` when `getSearchablePageBasePath` does not recognise the pathname (`searchable-page-search.ts:115-118`), and today it recognises only `/photos` and `/spaces/…`:
@@ -110,7 +117,7 @@ export function getSearchablePageBasePath(pathname: string): string | null {
 }
 ```
 
-Without registering the path, every filter change on Recently Added would update the grid but never the URL — the write path fails silently. (The *read* path already works: `getSearchablePageFilterState` parses `searchParams` with no basePath check, which is why deep links would appear to half-work.)
+Without registering the path, every filter change on Recently Added would update the grid but never the URL — the write path fails silently. (The _read_ path already works: `getSearchablePageFilterState` parses `searchParams` with no basePath check, which is why deep links would appear to half-work.)
 
 But `getSearchablePageState` currently derives the query capability from the same fact:
 
@@ -206,6 +213,7 @@ Add any imports the file does not already have (`getSearchablePageBasePath`, `ge
 ```bash
 cd web && pnpm test -- --run src/lib/utils/__tests__/searchable-page-search.spec.ts
 ```
+
 Expected: **FAIL** — `getSearchablePageBasePath('/recently-added')` returns `null`, `buildSearchablePageUrl` returns `null`, and `isSearchable` is `false` only because `basePath` is null (so that one case may pass for the wrong reason — the first two failures are the real signal). Paste the output.
 
 - [ ] **Step 3: Implement**
@@ -213,9 +221,9 @@ Expected: **FAIL** — `getSearchablePageBasePath('/recently-added')` returns `n
 In `web/src/lib/utils/searchable-page-search.ts`, add the path to `getSearchablePageBasePath`, immediately after the `/photos` branch:
 
 ```ts
-  if (pathname.startsWith('/recently-added')) {
-    return '/recently-added';
-  }
+if (pathname.startsWith('/recently-added')) {
+  return '/recently-added';
+}
 ```
 
 Add the capability predicate above `getSearchablePageState`, and enforce it in **both** places below:
@@ -237,24 +245,24 @@ function isQueryCapablePage(basePath: string): boolean {
 Enforcement 1 — `getSearchablePageState` reports the capability:
 
 ```ts
-  return {
-    basePath,
-    isSearchable: isQueryCapablePage(basePath),
-    query,
-    hasExplicitSort: rawSort === 'asc' || rawSort === 'desc',
-    sortOrder: getSortOrder(query, rawSort),
-  };
+return {
+  basePath,
+  isSearchable: isQueryCapablePage(basePath),
+  query,
+  hasExplicitSort: rawSort === 'asc' || rawSort === 'desc',
+  sortOrder: getSortOrder(query, rawSort),
+};
 ```
 
-Enforcement 2 — `buildSearchablePageUrl` refuses to *write* a query for such a page. Insert this immediately after the existing `const trimmedQuery = query.trim();` line (which currently sits just below the `basePath` null check):
+Enforcement 2 — `buildSearchablePageUrl` refuses to _write_ a query for such a page. Insert this immediately after the existing `const trimmedQuery = query.trim();` line (which currently sits just below the `basePath` null check):
 
 ```ts
-  // A page that persists filters in the URL is not necessarily able to answer a `?q=`.
-  // Returning null here keeps global-search-manager's buildSearchDestination falling back to
-  // /photos, instead of stranding a query on a route that would silently ignore it.
-  if (trimmedQuery && !isQueryCapablePage(basePath)) {
-    return null;
-  }
+// A page that persists filters in the URL is not necessarily able to answer a `?q=`.
+// Returning null here keeps global-search-manager's buildSearchDestination falling back to
+// /photos, instead of stranding a query on a route that would silently ignore it.
+if (trimmedQuery && !isQueryCapablePage(basePath)) {
+  return null;
+}
 ```
 
 Filter-only calls (empty query) are unaffected, which is exactly what this slice's `syncFilterUrl` needs.
@@ -264,6 +272,7 @@ Filter-only calls (empty query) are unaffected, which is exactly what this slice
 ```bash
 cd web && pnpm test -- --run src/lib/utils/__tests__/searchable-page-search.spec.ts
 ```
+
 Expected: **PASS** — the new cases and every pre-existing case in the file. The pre-existing ones passing is the proof that Photos and Spaces are unaffected. Paste the output.
 
 - [ ] **Step 5: Format and commit**
@@ -279,10 +288,12 @@ git commit -m "feat(web): persist Recently Added filters in the URL without enab
 ## Task 2: Timeline-options and suggestion-request builders
 
 **Files:**
+
 - Modify: `web/src/lib/utils/recently-added-filter-options.ts`
 - Test: `web/src/lib/utils/__tests__/recently-added-filter-options.spec.ts`
 
 **Interfaces:**
+
 - Produces:
   - `export function buildRecentlyAddedTimelineOptions(filters: FilterState): Record<string, unknown>`
   - `export function buildRecentlyAddedSuggestionRequest(filters: FilterState)` (inferred object return)
@@ -292,6 +303,7 @@ git commit -m "feat(web): persist Recently Added filters in the URL without enab
 **Facts about the code you build on:**
 
 `buildPhotosTimelineOptions` (`web/src/lib/utils/photos-filter-options.ts`) starts from:
+
 ```ts
 const includeSharedTimelineAssets = filters.isFavorite === undefined;
 const base: Record<string, unknown> = {
@@ -300,6 +312,7 @@ const base: Record<string, unknown> = {
   ...(includeSharedTimelineAssets ? { withPartners: true, withSharedSpaces: true } : {}),
 };
 ```
+
 then conditionally sets `personIds`, `city`, `country`, `make`, `model`, trimmed `description`/`originalFileName`/`ocr`, `tagIds`, `rating`, `isFavorite`, `isNotInAlbum` (true only), `isInAlbum` (true only), `$type` (when `mediaType !== 'all'`), always sets `order` (`AssetOrder.Asc` for `sortOrder === 'asc'`, else `AssetOrder.Desc`), and adds `takenAfter`/`takenBefore` from `buildFilterContext(filters)`.
 
 `withPartners` and `withSharedSpaces` are added **together**, gated only on `filters.isFavorite === undefined`. Stripping `withSharedSpaces` therefore leaves `withPartners` for non-favorite filters and drops both under Favorites — exactly the intended behavior.
@@ -379,7 +392,9 @@ describe('buildRecentlyAddedTimelineOptions', () => {
 
   it('maps sortOrder to order without touching orderBy', () => {
     expect(buildRecentlyAddedTimelineOptions({ ...createFilterState(), sortOrder: 'asc' }).order).toBe(AssetOrder.Asc);
-    expect(buildRecentlyAddedTimelineOptions({ ...createFilterState(), sortOrder: 'desc' }).order).toBe(AssetOrder.Desc);
+    expect(buildRecentlyAddedTimelineOptions({ ...createFilterState(), sortOrder: 'desc' }).order).toBe(
+      AssetOrder.Desc,
+    );
     expect(buildRecentlyAddedTimelineOptions({ ...createFilterState(), sortOrder: 'relevance' }).order).toBe(
       AssetOrder.Desc,
     );
@@ -571,6 +586,7 @@ describe('buildRecentlyAddedSuggestionRequest', () => {
 ```bash
 cd web && pnpm test -- --run src/lib/utils/__tests__/recently-added-filter-options.spec.ts
 ```
+
 Expected: **FAIL** — the module does not export the two new builders, so the import fails (`does not provide an export named 'buildRecentlyAddedTimelineOptions'`). Paste the output.
 
 - [ ] **Step 3: Implement both builders**
@@ -636,6 +652,7 @@ export function buildRecentlyAddedSuggestionRequest(filters: FilterState) {
 ```bash
 cd web && pnpm test -- --run src/lib/utils/__tests__/recently-added-filter-options.spec.ts
 ```
+
 Expected: **PASS**, all three describes. Paste the output.
 
 - [ ] **Step 5: Format and commit**
@@ -651,10 +668,12 @@ git commit -m "feat(web): Recently Added timeline options and suggestion request
 ## Task 3: The filter-panel config
 
 **Files:**
+
 - Create: `web/src/lib/utils/recently-added-filter-config.ts`
 - Test: `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `buildRecentlyAddedSuggestionRequest` (Task 2); `getPhotosPersonFilterId` / `getPhotosPersonFilterThumbnailUrl` from `$lib/utils/photos-filter-options`; `FilterPanelConfig` from `$lib/components/filter-panel/filter-panel`.
 - Produces: `export function buildRecentlyAddedFilterConfig(): FilterPanelConfig` — used by Task 6, extended in Slice 3.
 
@@ -852,6 +871,7 @@ describe('buildRecentlyAddedFilterConfig', () => {
 ```bash
 cd web && pnpm test -- --run src/lib/utils/__tests__/recently-added-filter-config.spec.ts
 ```
+
 Expected: **FAIL** — `Failed to resolve import "$lib/utils/recently-added-filter-config"`. Paste the output.
 
 - [ ] **Step 3: Implement**
@@ -921,6 +941,7 @@ This is deliberately near-identical to `buildAlbumAssetPickerFilterConfig` (diff
 ```bash
 cd web && pnpm test -- --run src/lib/utils/__tests__/recently-added-filter-config.spec.ts
 ```
+
 Expected: **PASS** — all 7 cases. Paste the output.
 
 - [ ] **Step 5: Format and commit**
@@ -936,9 +957,11 @@ git commit -m "feat(web): Recently Added filter-panel config (#805)"
 ## Task 4: Route-level component spec (red-first for the wiring)
 
 **Files:**
+
 - Create: `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts`
 
 **Interfaces:**
+
 - Consumes: the route component. Asserts the wiring Task 6 must produce.
 - Produces: fast, deterministic coverage of the URL-sync and options-derivation behavior that Playwright can only verify slowly.
 
@@ -982,6 +1005,7 @@ Create the file following the template above. Set `mockPage.url` to `new URL('ht
 ```bash
 cd web && pnpm test -- --run "src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts"
 ```
+
 Expected: **FAIL** — the route renders no filter panel, so the stub receives nothing and no `goto` is called. Confirm the failures are assertion failures about missing filter wiring, **not** mock/setup errors (an unresolved stub import or a missing manager mock means your harness is wrong, not the route). Paste the output.
 
 - [ ] **Step 3: Commit the red spec**
@@ -996,29 +1020,34 @@ git commit -m "test(web): route-level spec for Recently Added filters (#805)"
 ## Task 5: BDD acceptance scenarios (red-first)
 
 **Files:**
+
 - Modify: `e2e/src/specs/web/recently-added-filters.e2e-spec.ts`
 
 **Interfaces:**
+
 - Consumes: filter-panel testids already exercised by `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts` — `discovery-panel`, `filter-toggle-btn`, `collapse-panel-btn`, `filter-section-<name>` (the template is `data-testid="filter-section-{testId}"` in `filter-section.svelte:25`, fed `testId={section}` from `filter-panel.svelte:754`, so every section emits one), `media-type-image` / `media-type-video`, `rating-star-5`, `active-filters-bar`, `active-chip`, `clear-all-btn`. The header count is `page-header-description`.
 - Produces: the scenarios Task 6 turns green. Slice 3 appends search scenarios to the same file.
 
 **Structure:** keep Slice 1's `test.describe('Recently Added', …)` exactly as-is and add a **sibling** `test.describe('Recently Added filters', …)` with its own `beforeAll`. The `web` Playwright project is `fullyParallel: false` with `workers: 1`, and Playwright runs `beforeAll` lazily per describe, so a second resetting `beforeAll` is safe.
 
 **Video seeding — verified, use this.** `utils.createAsset(accessToken, dto?)` accepts `assetData?: { bytes?: Buffer; filename: string }`, and the server derives asset type from the **filename extension** (`mimeTypes.assetType(file.originalPath)`), so no real video fixture is needed. Existing precedent — `e2e/src/specs/server/api/shared-space-album-timeline.e2e-spec.ts:561`:
+
 ```ts
 const videoAsset = await utils.createAsset(owner.accessToken, { assetData: { filename: 'example.mp4' } });
 ```
 
-**URL parameters — verified** against `SEARCHABLE_PAGE_FILTER_PARAMS` (`web/src/lib/utils/searchable-page-search.ts:5-21`): rating is `rating`, camera make is `make`, and media type is **`type`** (e.g. `type=video`) — *not* `mediaType`.
+**URL parameters — verified** against `SEARCHABLE_PAGE_FILTER_PARAMS` (`web/src/lib/utils/searchable-page-search.ts:5-21`): rating is `rating`, camera make is `make`, and media type is **`type`** (e.g. `type=video`) — _not_ `mediaType`.
 
 - [ ] **Step 1: Write the scenarios**
 
 Extend the file's imports (Slice 1's version has none of these):
+
 ```ts
 import { updateAsset } from '@immich/sdk';
 import { thumbnailUtils } from 'src/ui/specs/timeline/utils';
 import { asBearerAuth, utils } from 'src/utils';
 ```
+
 (`thumbnailUtils` import path matches `e2e/src/specs/web/timeline-grouping.e2e-spec.ts:3`.)
 
 Append:
@@ -1216,15 +1245,18 @@ git commit -m "test(e2e): acceptance scenarios for Recently Added browse filters
 ## Task 6: Wire the filter panel into the route (turns Tasks 4 and 5 green)
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 
 **Interfaces:**
+
 - Consumes: `buildRecentlyAddedTimelineOptions` (Task 2), `buildRecentlyAddedFilterConfig` (Task 3), `shouldShowRecentlyAddedCount` (Slice 1), and the URL registration from Task 1.
 - Produces: the rendered filter UI asserted by Tasks 4 and 5.
 
 **The template is the Photos page** — `web/src/routes/(user)/photos/[[assetId=id]]/+page.svelte`. Copy its structure, then delete every search-related part. Do not modify the Photos page itself.
 
 **Take from Photos (line refs):**
+
 - filter state seeding (`:105-124`), `filtersBeforePanelChange` + its `$effect` (`:116-140`)
 - `timelineGrouping` / `temporalAnchor` (`:125-126`), `pendingFilterUrlSync` (`:129-131`)
 - `personNames` / `tagNames` `SvelteMap`s + `consumeTypedSearchNamesInto` (`:141-143`)
@@ -1234,6 +1266,7 @@ git commit -m "test(e2e): acceptance scenarios for Recently Added browse filters
 - the layout shell (`:556-641`): `<div class="flex h-full">` → `<FilterPanel>` → `<div class="flex flex-1 flex-col overflow-hidden pl-4">` → filters-bar snippet → `<FilterToolbar>` → `<Timeline>`
 
 **OMIT (all Slice 3 territory):**
+
 - `committedQuery`, `showSearchResults`, `isLoading`, `clearSearch`, and the query parts of `lastHandledSearchState`
 - `smartFacets`, `smartFacetKey`, `smartFacetInFlight`, `loadPhotoSmartFacets`, `smartFacetBuckets`, `smartFacetTotal`, and the `buildSmartSearchFacetKey` / `buildSmartSearchFacetsParams` / `mapSmartSearchFacetsToFilterSuggestions` imports
 - `<SmartSearchResults>` and the `{#if showSearchResults}` branch — render `<Timeline>` unconditionally
@@ -1242,6 +1275,7 @@ git commit -m "test(e2e): acceptance scenarios for Recently Added browse filters
 - the memories `ImageCarousel`, and `registerSelectionContext` (not in this route today — do not add it)
 
 **Concrete adaptations:**
+
 - `const options = $derived({ ...buildRecentlyAddedTimelineOptions(filters), grouping: timelineGrouping });` — this **replaces** the static `const options = {...}`. That is the one sanctioned change to it.
 - `const filterConfig = withNameCapture(buildRecentlyAddedFilterConfig(), personNames, tagNames);` — `withNameCapture(config: FilterPanelConfig, personNames: Map<string, string>, tagNames: Map<string, string>): FilterPanelConfig` from `$lib/utils/filter-name-capture` (verified signature; real call site: `spaces/[spaceId]/albums/[albumId=id]/…/+page.svelte:110`). This is what lets chips render person/tag names.
 - `syncFilterUrl` passes a literal empty query — there is no search this slice. **You must keep an equivalent of Photos' `relevance` fallback**, or every filter URL gains a spurious `sort=desc`:
@@ -1263,6 +1297,7 @@ git commit -m "test(e2e): acceptance scenarios for Recently Added browse filters
   ```
 
   Expected URL shapes, which Task 4's route spec asserts exactly: applying a country filter gives `/recently-added?country=Germany` (no `sort`), and clearing all filters gives bare `/recently-added`. If you see `sort=desc` in either, this conversion is missing.
+
 - `<FilterPanel … storageKey="gallery-filter-visible-sections-recently-added" timeBuckets={timelineBuckets} hidden={isTimelineEmpty} />` — view-specific storage key.
 - `<ActiveFiltersBar embedded {filters} {personNames} {tagNames} onRemoveFilter={handleRemoveActiveFilter} onClearAll={handleClearAllFilters} />` — **no** `resultCount`, **no** `onAddAllToCollection`, **no** `searchQuery` / `onClearSearch`.
 - `<FilterToolbar … showGrouping={!assetMultiSelectManager.selectionActive} showFilters={hasActiveFilters} filters={recentlyAddedFiltersBar} showFilterButton={filterCollapsed && !isTimelineEmpty && !assetMultiSelectManager.selectionActive} filterActive={getActiveFilterCount(filters) > 0} onExpandFilters={() => (filterCollapsed = false)} />` — drops Photos' `!showSearchResults`.
@@ -1282,6 +1317,7 @@ Work with the Photos file open beside you; copy its handler code exactly rather 
 ```bash
 cd web && pnpm test -- --run "src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts"
 ```
+
 Expected: **PASS** — all six cases from Task 4. This is your fast feedback loop — get it green before touching Playwright. Paste the output.
 
 - [ ] **Step 3: Type-check and lint**
@@ -1289,6 +1325,7 @@ Expected: **PASS** — all six cases from Task 4. This is your fast feedback loo
 ```bash
 cd web && pnpm check:typescript && pnpm lint
 ```
+
 Fix errors before running e2e. (`check:svelte` reports 0 files locally — a known no-op; CI is authoritative. Run it anyway.)
 
 - [ ] **Step 4: Turn the e2e spec GREEN**
@@ -1342,23 +1379,23 @@ git commit -m "feat(web): browse filters for Recently Added (#805)"
 
 ## Coverage check against the spec
 
-| Spec item (§Slice 2) | Covered by |
-|---|---|
-| URL persistence works at all (spec §3.1.1 prerequisite) | Task 1 units; Task 4 route-spec URL-sync case; Task 5 e2e reload/deep-link |
-| Filter matches zero assets → panel stays open, "0 items" | Task 5 e2e "matches nothing"; Slice 1 unit `shouldShowRecentlyAddedCount(0, true)` |
-| `withSharedSpaces` leakage in any path | Task 2 options `toEqual` + `not.toHaveProperty` ×2 + suggestion-request unit; Task 3 config unit (all 3 request types); Done-Gate grep |
-| Future stray key from `buildPhotosTimelineOptions` | Task 2 default-case `toEqual` (exact shape) |
-| Favorites filter → own-only | Task 2 "drops partner assets under a favorites filter" |
-| Any filter combination keeps `orderBy: CreatedAt` | Task 2 "keeps orderBy CreatedAt under every filter combination" + multi-filter case; Task 5 e2e "stays ordered by added date" |
-| Sort asc/desc flips `order`, not `orderBy` | Task 2 "maps sortOrder to order without touching orderBy" |
-| All predicate passthroughs + date ranges (year, year+month, custom, from-only, to-only) | Task 2 predicate / mediaType / text-trim / album-flag / date cases |
-| Suggestion request omits shared/album/space scope | Task 2 "never scopes to shared spaces, albums, or spaces" |
-| Config = 9 sections, correct suggestion/provider calls | Task 3, all 7 cases |
-| BDD 1: media type updates grid, URL, count | Task 5 "filtering by media type…" |
-| BDD 2: removing a chip restores the full view | Task 5 "removing the media-type chip…" (chip control, not clear-all) + "clear all removes every active filter" |
-| BDD 3: filter matching nothing → 0 items | Task 5 "matches nothing" |
-| BDD 4: filters survive a reload | Task 5 "filters survive a reload" |
-| BDD 5: stays ordered by added date under a filter | Task 5 "stays ordered by added date under a filter" |
-| Count flicker on apply | Accepted + documented (spec §5.5); e2e asserts the settled count via auto-retrying assertions |
-| Grouping day↔month | Copied `handleTimelineGroupingChange` / `FilterToolbar` wiring; manual smoke |
-| Suggestion fetch failure | `FilterPanel`'s own AbortController path — no new handling, matching `album-filter-config.ts` |
+| Spec item (§Slice 2)                                                                    | Covered by                                                                                                                             |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| URL persistence works at all (spec §3.1.1 prerequisite)                                 | Task 1 units; Task 4 route-spec URL-sync case; Task 5 e2e reload/deep-link                                                             |
+| Filter matches zero assets → panel stays open, "0 items"                                | Task 5 e2e "matches nothing"; Slice 1 unit `shouldShowRecentlyAddedCount(0, true)`                                                     |
+| `withSharedSpaces` leakage in any path                                                  | Task 2 options `toEqual` + `not.toHaveProperty` ×2 + suggestion-request unit; Task 3 config unit (all 3 request types); Done-Gate grep |
+| Future stray key from `buildPhotosTimelineOptions`                                      | Task 2 default-case `toEqual` (exact shape)                                                                                            |
+| Favorites filter → own-only                                                             | Task 2 "drops partner assets under a favorites filter"                                                                                 |
+| Any filter combination keeps `orderBy: CreatedAt`                                       | Task 2 "keeps orderBy CreatedAt under every filter combination" + multi-filter case; Task 5 e2e "stays ordered by added date"          |
+| Sort asc/desc flips `order`, not `orderBy`                                              | Task 2 "maps sortOrder to order without touching orderBy"                                                                              |
+| All predicate passthroughs + date ranges (year, year+month, custom, from-only, to-only) | Task 2 predicate / mediaType / text-trim / album-flag / date cases                                                                     |
+| Suggestion request omits shared/album/space scope                                       | Task 2 "never scopes to shared spaces, albums, or spaces"                                                                              |
+| Config = 9 sections, correct suggestion/provider calls                                  | Task 3, all 7 cases                                                                                                                    |
+| BDD 1: media type updates grid, URL, count                                              | Task 5 "filtering by media type…"                                                                                                      |
+| BDD 2: removing a chip restores the full view                                           | Task 5 "removing the media-type chip…" (chip control, not clear-all) + "clear all removes every active filter"                         |
+| BDD 3: filter matching nothing → 0 items                                                | Task 5 "matches nothing"                                                                                                               |
+| BDD 4: filters survive a reload                                                         | Task 5 "filters survive a reload"                                                                                                      |
+| BDD 5: stays ordered by added date under a filter                                       | Task 5 "stays ordered by added date under a filter"                                                                                    |
+| Count flicker on apply                                                                  | Accepted + documented (spec §5.5); e2e asserts the settled count via auto-retrying assertions                                          |
+| Grouping day↔month                                                                      | Copied `handleTimelineGroupingChange` / `FilterToolbar` wiring; manual smoke                                                           |
+| Suggestion fetch failure                                                                | `FilterPanel`'s own AbortController path — no new handling, matching `album-filter-config.ts`                                          |

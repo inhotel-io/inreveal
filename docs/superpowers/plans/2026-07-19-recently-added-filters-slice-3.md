@@ -28,8 +28,9 @@ Committed: the header count; `shouldShowRecentlyAddedCount`; `buildRecentlyAdded
 Slice 2's review flagged this and deferred it to this slice. `getSortOrder(query, rawSort)` returns `'relevance'` whenever a non-empty `q` is present without an explicit `sort`. Until now that was unreachable on this route.
 
 **Resolution — no special handling needed, and this is deliberate:**
+
 - **In query mode**, results come from `<SmartSearchResults>`, which does its own relevance ordering. `'relevance'` is meaningful there, exactly as on Photos.
-- **In browse mode**, `buildRecentlyAddedTimelineOptions` already maps `'relevance'` → `AssetOrder.Desc` (asserted by a Slice-2 unit test: *"maps sortOrder to order without touching orderBy"*), and `orderBy` stays `CreatedAt`. So a stale `relevance` degrades to "newest added first" — the view's natural default.
+- **In browse mode**, `buildRecentlyAddedTimelineOptions` already maps `'relevance'` → `AssetOrder.Desc` (asserted by a Slice-2 unit test: _"maps sortOrder to order without touching orderBy"_), and `orderBy` stays `CreatedAt`. So a stale `relevance` degrades to "newest added first" — the view's natural default.
 
 Task 1 adds a regression test pinning this, so the behaviour is asserted rather than incidental.
 
@@ -41,13 +42,16 @@ Task 1 adds a regression test pinning this, so the behaviour is asserted rather 
 cd web && pnpm test -- --run src/lib/utils/__tests__/recently-added-filter-config.spec.ts
 cd web && pnpm test -- --run "src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts"
 ```
+
 (`"test": "vitest"` is watch-mode; `--run` is mandatory. The path argument may not isolate to one file — expected.)
 
 E2E — **never use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:2283`** (serves 0-byte page bodies; produces meaningless failures). Use the dedicated e2e stack on `:2285`, which **bakes the web app into its image** — rebuild after any web source change:
+
 ```bash
 cd e2e && docker compose up --build -d
 cd e2e && pnpm exec playwright test --project=web --retries=0 src/specs/web/recently-added-filters.e2e-spec.ts
 ```
+
 Use `--retries=0` on deliberate red runs (the `web` project sets `retries: 4`).
 
 Prettier is a separate CI gate. A `**/*.svelte` glob does not match inside the `[[…]]` route directory — use the concrete escaped path.
@@ -58,16 +62,16 @@ Prettier is a separate CI gate. A `**/*.svelte` glob does not match inside the `
 
 ## File Structure
 
-| File | Status | Responsibility |
-|---|---|---|
-| `web/src/lib/utils/recently-added-filter-config.ts` | **Modify** (Task 1) | Append `'text'`; add the query-mode branch to `suggestionsProvider` and the two dependent providers. |
-| `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts` | **Modify** (Task 1) | Bump to 10 sections; add search-branch cases. |
-| `web/src/lib/utils/__tests__/recently-added-filter-options.spec.ts` | **Modify** (Task 1) | Add the `'relevance'`-in-browse-mode regression case. |
-| `web/src/lib/utils/searchable-page-search.ts` | **Modify** (Task 2) | Remove the `/recently-added` exclusion — the route becomes query-capable. |
-| `web/src/lib/utils/__tests__/searchable-page-search.spec.ts` | **Modify** (Task 2) | Flip the Slice-2 assertions to the query-capable end state. |
-| `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts` | **Modify** (Tasks 1 & 3) | Task 1 updates the sections case to ten (or the repo lands red); Task 3 adds the query-mode cases. |
-| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts` | **Modify** (Task 4) | Search acceptance scenarios (red). |
-| `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/+page.svelte` | **Modify** (Task 5) | Query state, smart facets, mode switch (green). |
+| File                                                                                                | Status                   | Responsibility                                                                                       |
+| --------------------------------------------------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `web/src/lib/utils/recently-added-filter-config.ts`                                                 | **Modify** (Task 1)      | Append `'text'`; add the query-mode branch to `suggestionsProvider` and the two dependent providers. |
+| `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts`                                  | **Modify** (Task 1)      | Bump to 10 sections; add search-branch cases.                                                        |
+| `web/src/lib/utils/__tests__/recently-added-filter-options.spec.ts`                                 | **Modify** (Task 1)      | Add the `'relevance'`-in-browse-mode regression case.                                                |
+| `web/src/lib/utils/searchable-page-search.ts`                                                       | **Modify** (Task 2)      | Remove the `/recently-added` exclusion — the route becomes query-capable.                            |
+| `web/src/lib/utils/__tests__/searchable-page-search.spec.ts`                                        | **Modify** (Task 2)      | Flip the Slice-2 assertions to the query-capable end state.                                          |
+| `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts` | **Modify** (Tasks 1 & 3) | Task 1 updates the sections case to ten (or the repo lands red); Task 3 adds the query-mode cases.   |
+| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts`                                              | **Modify** (Task 4)      | Search acceptance scenarios (red).                                                                   |
+| `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/+page.svelte`                | **Modify** (Task 5)      | Query state, smart facets, mode switch (green).                                                      |
 
 ## Task order
 
@@ -84,23 +88,28 @@ Tasks 3 and 4 are only genuinely red before Task 5. Do not reorder.
 ## Task 1: Config gains the `text` section and a query-mode branch
 
 **Files:**
+
 - Modify: `web/src/lib/utils/recently-added-filter-config.ts`
 - Test: `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts`, `web/src/lib/utils/__tests__/recently-added-filter-options.spec.ts`
 
 **Interfaces:**
+
 - Produces: `buildRecentlyAddedFilterConfig(getSearchContext?: () => RecentlyAddedSearchContext | undefined): FilterPanelConfig`, and `export type RecentlyAddedSearchContext = { query: string; language: string; filters: FilterState };`
 
-**Design — why an accessor rather than a plain argument.** The panel's providers are called *later*, during user interaction, and must see the query **and the live filters** as they are at call time. Values captured when the config is built would go stale the moment the user edits either. Photos solves this by defining its config inline in the route, closing over reactive state; keeping ours in a module means the route passes a thunk instead. The parameter is optional and defaults to `() => undefined`, so a caller that never searches keeps exactly the Slice-2 browse behaviour (verified: the route's current bare call site stays correct).
+**Design — why an accessor rather than a plain argument.** The panel's providers are called _later_, during user interaction, and must see the query **and the live filters** as they are at call time. Values captured when the config is built would go stale the moment the user edits either. Photos solves this by defining its config inline in the route, closing over reactive state; keeping ours in a module means the route passes a thunk instead. The parameter is optional and defaults to `() => undefined`, so a caller that never searches keeps exactly the Slice-2 browse behaviour (verified: the route's current bare call site stays correct).
 
-**The context must carry `filters`, not just the query.** Photos builds its dependent-provider facet payloads from the *live* `FilterState` (`photos/+page.svelte:318`, `:336`):
+**The context must carry `filters`, not just the query.** Photos builds its dependent-provider facet payloads from the _live_ `FilterState` (`photos/+page.svelte:318`, `:336`):
+
 ```ts
 filters: { ...filters, country },
 ```
+
 Do **not** reconstruct a `FilterState` from the panel-supplied `FilterContext`. They are different types: `FilterContext` has no `city` / `make` / `model` / `mediaType` / `description` / `originalFileName` / `ocr` / `sortOrder`, and it carries dates as `takenAfter`/`takenBefore` whereas `buildSmartSearchParams` derives dates by calling `buildFilterContext(filters)` on `dateAfter` / `dateBefore` / `selectedYear`. A `{ ...createFilterState(), ...filterContext }` spread **type-checks but silently drops most of the filter scope**, including all dates — so the city/camera dropdowns would be scoped differently from Photos with nothing to catch it.
 
 **`withSharedSpaces: false` produces NO key.** `buildSmartSearchParams` only sets it when truthy (`space-search.ts:38-40`: `if (withSharedSpaces) { params.withSharedSpaces = true; }`). So assert its **absence** — `expect(dto).not.toHaveProperty('withSharedSpaces')`. An `expect.objectContaining({ withSharedSpaces: false })` can never pass, and chasing it would mean breaking the shared `space-search.ts`. Photos' own spec uses the absence form (`photos-page.spec.ts:528`).
 
 **Facts you need:**
+
 - `buildSmartSearchFacetsParams(args: SmartSearchParamsArgs): SmartSearchFacetsDto` and `mapSmartSearchFacetsToFilterSuggestions(facets, options?)` live in `$lib/utils/space-search`. `mapSmartSearchFacetsToFilterSuggestions` with **no** `spaceId` option resolves people via `getPhotosPersonFilterId` / `getPhotosPersonFilterThumbnailUrl` — which is what we want (no space scoping).
 - `searchSmartFacets({ smartSearchFacetsDto }, opts?)` is the SDK call.
 - `SmartSearchParamsArgs` takes `{ query, filters, withSharedSpaces, language }`.
@@ -110,20 +119,20 @@ Do **not** reconstruct a `FilterState` from the panel-supplied `FilterContext`. 
 In `recently-added-filter-config.spec.ts`, **change** the sections case to expect ten:
 
 ```ts
-  it('exposes all ten filter sections in plan order', () => {
-    expect(buildRecentlyAddedFilterConfig().sections).toEqual([
-      'timeline',
-      'people',
-      'location',
-      'camera',
-      'tags',
-      'rating',
-      'media',
-      'favorites',
-      'albums',
-      'text',
-    ]);
-  });
+it('exposes all ten filter sections in plan order', () => {
+  expect(buildRecentlyAddedFilterConfig().sections).toEqual([
+    'timeline',
+    'people',
+    'location',
+    'camera',
+    'tags',
+    'rating',
+    'media',
+    'favorites',
+    'albums',
+    'text',
+  ]);
+});
 ```
 
 Add `searchSmartFacets` to the `@immich/sdk` mock:
@@ -266,14 +275,14 @@ and include `recently-added-page.spec.ts` in this task's commit. (Task 3 then ge
 In `recently-added-filter-options.spec.ts`, append to the `buildRecentlyAddedTimelineOptions` describe:
 
 ```ts
-  it('degrades a relevance sort to newest-added-first in browse mode', () => {
-    // A `?q=` in the URL resolves sortOrder to 'relevance'. Browse mode has no relevance ranking,
-    // so it must fall back to the view's natural default rather than producing an invalid order.
-    const options = buildRecentlyAddedTimelineOptions({ ...createFilterState(), sortOrder: 'relevance' });
+it('degrades a relevance sort to newest-added-first in browse mode', () => {
+  // A `?q=` in the URL resolves sortOrder to 'relevance'. Browse mode has no relevance ranking,
+  // so it must fall back to the view's natural default rather than producing an invalid order.
+  const options = buildRecentlyAddedTimelineOptions({ ...createFilterState(), sortOrder: 'relevance' });
 
-    expect(options.order).toBe(AssetOrder.Desc);
-    expect(options.orderBy).toBe(AssetOrderBy.CreatedAt);
-  });
+  expect(options.order).toBe(AssetOrder.Desc);
+  expect(options.orderBy).toBe(AssetOrderBy.CreatedAt);
+});
 ```
 
 - [ ] **Step 2: Run to verify RED**
@@ -387,6 +396,7 @@ Before committing, run the **full** unit suite (`cd web && pnpm test -- --run`) 
 ## Task 2: Make `/recently-added` query-capable
 
 **Files:**
+
 - Modify: `web/src/lib/utils/searchable-page-search.ts`
 - Test: `web/src/lib/utils/__tests__/searchable-page-search.spec.ts`
 
@@ -397,16 +407,16 @@ Before committing, run the **full** unit suite (`cd web && pnpm test -- --run`) 
 In `searchable-page-search.spec.ts`, replace the two Slice-2 cases that pinned the withheld state:
 
 ```ts
-  it('is query-capable now that the text section and search path exist', () => {
-    const state = getSearchablePageState(new URL('https://gallery.test/recently-added'));
+it('is query-capable now that the text section and search path exist', () => {
+  const state = getSearchablePageState(new URL('https://gallery.test/recently-added'));
 
-    expect(state.basePath).toBe('/recently-added');
-    expect(state.isSearchable).toBe(true);
-  });
+  expect(state.basePath).toBe('/recently-added');
+  expect(state.isSearchable).toBe(true);
+});
 
-  it('builds a query URL for the recently added page', () => {
-    expect(buildSearchablePageUrl(new URL('https://gallery.test/recently-added'), 'beach')).toContain('q=beach');
-  });
+it('builds a query URL for the recently added page', () => {
+  expect(buildSearchablePageUrl(new URL('https://gallery.test/recently-added'), 'beach')).toContain('q=beach');
+});
 ```
 
 (These replace `'is not query-capable until the text slice lands'` and `'refuses to build a query URL for a page that cannot answer one'`. Leave every other case — including the filter-only URL case and the Photos/Spaces regression cases — untouched.)
@@ -416,11 +426,13 @@ In `searchable-page-search.spec.ts`, replace the two Slice-2 cases that pinned t
 ```bash
 cd web && pnpm test -- --run src/lib/utils/__tests__/searchable-page-search.spec.ts
 ```
+
 Expected: the two updated cases fail (`isSearchable` is false; the query URL is null). Paste the output.
 
 - [ ] **Step 3: Implement**
 
 Delete the `isQueryCapablePage` function and its two call sites, restoring the original shapes:
+
 - `getSearchablePageState` → `isSearchable: true`
 - `buildSearchablePageUrl` → remove the `if (trimmedQuery && !isQueryCapablePage(basePath)) { return null; }` guard.
 
@@ -443,6 +455,7 @@ git commit -m "feat(web): enable query mode for Recently Added (#805)"
 ## Task 3: Route-level spec for query mode (red-first)
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts`
 
 Keep the six existing cases unchanged (Task 1 already updated the sections one) — they are the browse-mode regression guard. Append a `describe` for query mode with these **six** cases (Task 5 Step 2 checks for twelve passing total):
@@ -464,9 +477,15 @@ Cases 5 and 6 transplant almost verbatim from `photos-page.spec.ts` — the reje
 sdkMock.searchSmartFacets.mockResolvedValue({
   total: 12,
   timeBuckets: [{ timeBucket: '2024-01-01', count: 12 }],
-  countries: ['Germany'], cities: ['Berlin'], cameraMakes: ['Sony'], cameraModels: ['A7'],
-  tags: [{ id: 'tag-1', value: 'Travel' }], people: [{ id: 'person-1', name: 'Ada' }],
-  ratings: [4], mediaTypes: [AssetTypeEnum.Image], hasUnnamedPeople: false,
+  countries: ['Germany'],
+  cities: ['Berlin'],
+  cameraMakes: ['Sony'],
+  cameraModels: ['A7'],
+  tags: [{ id: 'tag-1', value: 'Travel' }],
+  people: [{ id: 'person-1', name: 'Ada' }],
+  ratings: [4],
+  mediaTypes: [AssetTypeEnum.Image],
+  hasUnnamedPeople: false,
 });
 ```
 
@@ -485,6 +504,7 @@ Drive query mode by setting `mockPage.url` to `new URL('https://gallery.test/rec
 ## Task 4: E2E search scenarios (red-first)
 
 **Files:**
+
 - Modify: `e2e/src/specs/web/recently-added-filters.e2e-spec.ts`
 
 Keep the existing 10 scenarios unchanged. Append a sibling `test.describe('Recently Added text search', …)` with its own `beforeAll`, covering the spec's three BDD scenarios:
@@ -508,11 +528,11 @@ Scenario: Text search stays within own + partner scope
   And the shared-space asset is not among those results
 ```
 
-**Drive the query via `?q=` deep-link or the navbar global search — NOT "the text filter".** The panel's `'text'` section is `<TextFilter>` editing the description / originalFileName / ocr **metadata** filters; it is not a smart-search box and cannot submit a query. The smart query reaches the route only through the URL or the global search bar. Scenario 1's wording above is corrected accordingly: *"When I open the view with a text query in the URL"*.
+**Drive the query via `?q=` deep-link or the navbar global search — NOT "the text filter".** The panel's `'text'` section is `<TextFilter>` editing the description / originalFileName / ocr **metadata** filters; it is not a smart-search box and cannot submit a query. The smart query reaches the route only through the URL or the global search bar. Scenario 1's wording above is corrected accordingly: _"When I open the view with a text query in the URL"_.
 
 **Seeding notes.** Smart search is ML-backed and its ranking is not deterministic in e2e — do **not** assert on which assets match semantically. Assert on the **mode switch, the count source, and the scope**.
 
-**Scenario 3 must assert the REQUEST, not the results — the e2e stack has no ML.** (Discovered during implementation: `e2e/docker-compose.yml` has no `machine-learning` service and `IMMICH_MACHINE_LEARNING_ENABLED=false`, so `searchSmart` errors and `smart-search-results.svelte` falls back to an empty list for *every* query. `photos-search.e2e-spec.ts:88-91` documents the same limitation.) A result-based scope test is therefore untestable here: nothing is ever found, so absence proves nothing and no positive control can succeed.
+**Scenario 3 must assert the REQUEST, not the results — the e2e stack has no ML.** (Discovered during implementation: `e2e/docker-compose.yml` has no `machine-learning` service and `IMMICH_MACHINE_LEARNING_ENABLED=false`, so `searchSmart` errors and `smart-search-results.svelte` falls back to an empty list for _every_ query. `photos-search.e2e-spec.ts:88-91` documents the same limitation.) A result-based scope test is therefore untestable here: nothing is ever found, so absence proves nothing and no positive control can succeed.
 
 Assert what the client **sends** instead. `smart-search-results.svelte:46-52` posts `buildSmartSearchParams({ …, withSharedSpaces, … })` to `POST /api/search/smart`, and `buildSmartSearchParams` sets `withSharedSpaces: true` only when truthy. So intercept the request with Playwright and assert:
 
@@ -528,12 +548,12 @@ The shared-space seeding below is no longer needed for scenario 3 — drop it. (
 <details>
 <summary>Superseded: the result-based approach and its seeding requirements (kept for context)</summary>
 
-Asserting only that a shared-space asset is *absent* passes for a dozen unrelated reasons: never indexed, matched nothing semantically, the member never opted the space into their timeline, or the seeding silently failed. It would have needed:
+Asserting only that a shared-space asset is _absent_ passes for a dozen unrelated reasons: never indexed, matched nothing semantically, the member never opted the space into their timeline, or the seeding silently failed. It would have needed:
 
 1. A **second user** owns the asset and adds it to a space the test actor is a member of (this direction, not the reverse).
-2. Set the **member-level** timeline opt-in explicitly (`updateMemberTimeline`, imported straight from `@immich/sdk` and called with the **member's own** token — see `space-map-markers.e2e-spec.ts:62-63`), so it is a controlled variable rather than an accidental confound. Note this is *not* the album-level `showInTimeline` toggle; the two are not interchangeable (`spaces-albums-timeline.e2e-spec.ts:19-23`).
-3. **Positive control:** run the identical query on `/photos` (which *is* `withSharedSpaces: true`) in the same test and assert the asset **is** present there. Only then assert its absence on `/recently-added`.
-4. **Assert the mode switch before asserting absence.** On `/recently-added`, first assert that search results are rendered rather than the timeline, *then* assert the asset is absent **from those results**. Without this the scenario passes before Task 5 too — the unwired route renders an own+partner timeline from which the asset is trivially absent — and it would never demonstrate the invariant it names. With it, Task 4's red gate is genuinely **10 passed, 3 failed**.
+2. Set the **member-level** timeline opt-in explicitly (`updateMemberTimeline`, imported straight from `@immich/sdk` and called with the **member's own** token — see `space-map-markers.e2e-spec.ts:62-63`), so it is a controlled variable rather than an accidental confound. Note this is _not_ the album-level `showInTimeline` toggle; the two are not interchangeable (`spaces-albums-timeline.e2e-spec.ts:19-23`).
+3. **Positive control:** run the identical query on `/photos` (which _is_ `withSharedSpaces: true`) in the same test and assert the asset **is** present there. Only then assert its absence on `/recently-added`.
+4. **Assert the mode switch before asserting absence.** On `/recently-added`, first assert that search results are rendered rather than the timeline, _then_ assert the asset is absent **from those results**. Without this the scenario passes before Task 5 too — the unwired route renders an own+partner timeline from which the asset is trivially absent — and it would never demonstrate the invariant it names. With it, Task 4's red gate is genuinely **10 passed, 3 failed**.
 
 Helpers (all in `e2e/src/utils.ts`): `utils.userSetup`, `utils.createSpace(accessToken, dto)` (`:367`), `utils.addSpaceMember(accessToken, spaceId, { userId, role })` (`:370`), `utils.addSpaceAssets(accessToken, spaceId, assetIds)` (`:373`). Closest precedent: `e2e/src/specs/web/space-map-markers.e2e-spec.ts:26-55` — note it calls the SDK directly for the per-member timeline opt-in, because that endpoint needs the **member's own** token, not admin's.
 
@@ -541,7 +561,7 @@ This third `describe` must call `utils.resetDatabase()` in its own `beforeAll` a
 
 </details>
 
-**Do not try to make the semantic match deterministic — you do not need to, and the obvious workaround does not exist.** The mode switch is guaranteed by the URL carrying `?q=`, whatever it matches; the assertion is that one specific shared-space asset id is absent from the rendered results; and the `/photos` positive control is precisely what proves the query *can* find it. If the query matches nothing even on `/photos`, the positive control fails loudly — which is the correct outcome, turning semantic non-determinism into a visible failure rather than a silent pass.
+**Do not try to make the semantic match deterministic — you do not need to, and the obvious workaround does not exist.** The mode switch is guaranteed by the URL carrying `?q=`, whatever it matches; the assertion is that one specific shared-space asset id is absent from the rendered results; and the `/photos` positive control is precisely what proves the query _can_ find it. If the query matches nothing even on `/photos`, the positive control fails loudly — which is the correct outcome, turning semantic non-determinism into a visible failure rather than a silent pass.
 
 (For the record, swapping in an `originalFileName` / `description` / `ocr` filter as a "deterministic discriminator" is not an option: those three are metadata-only. `buildSmartSearchParams` never reads them — grep `space-search.ts`, zero occurrences — so they are silently dropped from the smart-search DTO. And dropping `?q=` would put the page back in browse mode, making the mandated mode-switch assertion unsatisfiable.)
 
@@ -554,11 +574,13 @@ This third `describe` must call `utils.resetDatabase()` in its own `beforeAll` a
 ## Task 5: Wire query mode into the route (turns Tasks 3 and 4 green)
 
 **Files:**
+
 - Modify: `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/+page.svelte`
 
 **Template:** the Photos page's search plumbing — `photos/[[assetId=id]]/+page.svelte` lines `:127-133` (`committedQuery`, `showSearchResults`), `:145-157` (facet state + derived buckets/total), `:216-266` (`loadPhotoSmartFacets` — the AbortController + key-cache loader), `:429-436` (`clearSearch`), the query parts of the URL→filters `$effect` (`:510-543`), and the render switch (`:598-607`).
 
 **Adaptations:**
+
 - `withSharedSpaces` is **`false` everywhere** — in `buildSmartSearchFacetsParams`, in the facet cache key, and on `<SmartSearchResults withSharedSpaces={false}>`. Photos computes `filters.isFavorite === undefined`; we do not. This is the slice's headline invariant.
 - Pass the search context into the config — **including `filters`**, which the dependent providers scope their facet query by:
   ```ts
@@ -608,15 +630,15 @@ cd ../e2e && pnpm exec prettier --check src/specs/web/recently-added-filters.e2e
 
 ## Coverage check against the spec
 
-| Spec item (§Slice 3) | Covered by |
-|---|---|
-| Config = 10 sections incl. text | Task 1 sections case |
-| Query-mode provider calls `searchSmartFacets` with `withSharedSpaces: false` | Task 1 query-mode cases (suggestions + both dependent providers) |
-| Browse-mode provider unchanged | Task 1 — every pre-existing browse case retained and passing |
-| Text query → search results + search-total count | Task 3 cases 1 & 4; Task 4 scenario 1 (driven via `?q=`) |
-| Clear query → back to added-date timeline | Task 4 scenario 2 |
-| Search stays own + partner | Task 1 unit (DTO lacks `withSharedSpaces`) + Task 3 case 2 + Task 4 scenario 3 **with its `/photos` positive control** |
-| Empty query submitted → stays browse | Task 1 blank-query fallback case; Task 3 case 3 |
-| Smart-facet fetch failure → console.error + fall back to prior facets | Task 3 case 5 (route-level, copied from Photos `:581-597`) |
-| Query then filter change → refetch keyed by query+filters | Task 3 case 6 (key-cache dedup, copied from Photos `:517-528`); Task 1 read-at-call-time case. **Abort-in-flight is not separately asserted** — it is carried by the copied Photos loader; dedup ≠ abort. |
-| `'relevance'` sort on an added-date timeline | Task 1 regression case (browse degrades to newest-added-first); query mode ranks in `SmartSearchResults` |
+| Spec item (§Slice 3)                                                         | Covered by                                                                                                                                                                                                |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Config = 10 sections incl. text                                              | Task 1 sections case                                                                                                                                                                                      |
+| Query-mode provider calls `searchSmartFacets` with `withSharedSpaces: false` | Task 1 query-mode cases (suggestions + both dependent providers)                                                                                                                                          |
+| Browse-mode provider unchanged                                               | Task 1 — every pre-existing browse case retained and passing                                                                                                                                              |
+| Text query → search results + search-total count                             | Task 3 cases 1 & 4; Task 4 scenario 1 (driven via `?q=`)                                                                                                                                                  |
+| Clear query → back to added-date timeline                                    | Task 4 scenario 2                                                                                                                                                                                         |
+| Search stays own + partner                                                   | Task 1 unit (DTO lacks `withSharedSpaces`) + Task 3 case 2 + Task 4 scenario 3 **with its `/photos` positive control**                                                                                    |
+| Empty query submitted → stays browse                                         | Task 1 blank-query fallback case; Task 3 case 3                                                                                                                                                           |
+| Smart-facet fetch failure → console.error + fall back to prior facets        | Task 3 case 5 (route-level, copied from Photos `:581-597`)                                                                                                                                                |
+| Query then filter change → refetch keyed by query+filters                    | Task 3 case 6 (key-cache dedup, copied from Photos `:517-528`); Task 1 read-at-call-time case. **Abort-in-flight is not separately asserted** — it is carried by the copied Photos loader; dedup ≠ abort. |
+| `'relevance'` sort on an added-date timeline                                 | Task 1 regression case (browse degrades to newest-added-first); query mode ranks in `SmartSearchResults`                                                                                                  |

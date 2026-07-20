@@ -20,7 +20,7 @@ Give the web **Recently Added** view (`/recently-added`) the two things the disc
    (Timeline, People, Location, Camera, Tags, Rating, Media type, Favorites, Albums, Text).
 
 …while preserving what makes the view "recently added": assets are **ordered and day-grouped by
-*added* date** (`orderBy: AssetOrderBy.CreatedAt`) and the view stays scoped to **own + partner**
+_added_ date** (`orderBy: AssetOrderBy.CreatedAt`) and the view stays scoped to **own + partner**
 assets (never shared spaces).
 
 ## 2. Background: how the pieces work today
@@ -90,7 +90,7 @@ route with no query handling until Slice 3. Unfiltered grid, stale `q`, no error
 `isSearchable: false` does not prevent this: it only suppresses pre-filling the search box.
 
 **Decision:** separate the two capabilities, and enforce the separation where the query is
-*written*, not merely where it is advertised. Slice 2 registers `/recently-added` in
+_written_, not merely where it is advertised. Slice 2 registers `/recently-added` in
 `getSearchablePageBasePath()` (so filter URL persistence works) and adds a query-capable predicate
 that excludes `/recently-added`. That predicate is enforced in **two** places: `getSearchablePageState()`
 reports `isSearchable: false`, and `buildSearchablePageUrl()` returns `null` when asked to build a
@@ -104,12 +104,12 @@ To keep the route thin (a full `+page.svelte` with all managers is impractical t
 branching logic is extracted into pure functions that get exhaustive TDD unit coverage. The route is glue
 whose behavior is verified by BDD e2e acceptance scenarios.
 
-| Pure function | Module | Slice |
-|---|---|---|
-| `shouldShowRecentlyAddedCount(count, hasActiveFilters)` | `recently-added-filter-options.ts` | 1 |
-| `buildRecentlyAddedTimelineOptions(filters)` | `recently-added-filter-options.ts` | 2 |
-| `buildRecentlyAddedSuggestionRequest(filters)` | `recently-added-filter-options.ts` | 2 |
-| `buildRecentlyAddedFilterConfig()` | `recently-added-filter-config.ts` | 2 (extended in 3) |
+| Pure function                                           | Module                             | Slice             |
+| ------------------------------------------------------- | ---------------------------------- | ----------------- |
+| `shouldShowRecentlyAddedCount(count, hasActiveFilters)` | `recently-added-filter-options.ts` | 1                 |
+| `buildRecentlyAddedTimelineOptions(filters)`            | `recently-added-filter-options.ts` | 2                 |
+| `buildRecentlyAddedSuggestionRequest(filters)`          | `recently-added-filter-options.ts` | 2                 |
+| `buildRecentlyAddedFilterConfig()`                      | `recently-added-filter-config.ts`  | 2 (extended in 3) |
 
 ### 3.3 Testing strategy: TDD + BDD
 
@@ -117,30 +117,30 @@ whose behavior is verified by BDD e2e acceptance scenarios.
   red→green→refactor with concrete failing-test commands and expected red output (per slice).
 - **BDD (Given/When/Then)** for user-facing behavior — the count display, applying/removing filters, and
   search. These become Playwright e2e specs under `e2e/src/specs/web/`, written **red-first** (the feature
-  is absent → scenario fails), then made green by the route wiring. BDD is deliberately *not* forced onto
+  is absent → scenario fails), then made green by the route wiring. BDD is deliberately _not_ forced onto
   the pure functions, where example tables are clearer.
 
 ### 3.4 Files (whole feature)
 
 **New source:**
 
-| File | Responsibility | Slice |
-|---|---|---|
-| `web/src/lib/utils/recently-added-filter-options.ts` | `shouldShowRecentlyAddedCount`, `buildRecentlyAddedTimelineOptions`, `buildRecentlyAddedSuggestionRequest` | 1, 2 |
-| `web/src/lib/utils/recently-added-filter-config.ts` | `buildRecentlyAddedFilterConfig()` → `FilterPanelConfig` | 2, 3 |
+| File                                                 | Responsibility                                                                                             | Slice |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----- |
+| `web/src/lib/utils/recently-added-filter-options.ts` | `shouldShowRecentlyAddedCount`, `buildRecentlyAddedTimelineOptions`, `buildRecentlyAddedSuggestionRequest` | 1, 2  |
+| `web/src/lib/utils/recently-added-filter-config.ts`  | `buildRecentlyAddedFilterConfig()` → `FilterPanelConfig`                                                   | 2, 3  |
 
 **New tests:**
 
-| File | Covers | Slice |
-|---|---|---|
-| `web/src/lib/utils/__tests__/recently-added-filter-options.spec.ts` | the three pure functions | 1, 2 |
-| `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts` | the config (mirrors `album-filter-config.spec.ts`) | 2, 3 |
-| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts` (mirrors `photos-filter-panel.e2e-spec.ts`) | BDD acceptance scenarios | 1, 2, 3 |
+| File                                                                                               | Covers                                             | Slice   |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------- |
+| `web/src/lib/utils/__tests__/recently-added-filter-options.spec.ts`                                | the three pure functions                           | 1, 2    |
+| `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts`                                 | the config (mirrors `album-filter-config.spec.ts`) | 2, 3    |
+| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts` (mirrors `photos-filter-panel.e2e-spec.ts`) | BDD acceptance scenarios                           | 1, 2, 3 |
 
 **Modified:**
 
-| File | Change | Slice |
-|---|---|---|
+| File                                                                                 | Change                                                                                                                                    | Slice   |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `web/src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/+page.svelte` | header count (1); filter panel + toolbar + chips + URL sync (2); text/search mode (3). The `AssetSelectControlBar` block stays unchanged. | 1, 2, 3 |
 
 No i18n additions: `items_count` exists (Slices 1–2); Slice 3 reuses existing search keys
@@ -148,11 +148,11 @@ No i18n additions: `items_count` exists (Slices 1–2); Slice 3 reuses existing 
 
 ## 4. Slice overview
 
-| Slice | Delivers (shippable) | Depends on |
-|---|---|---|
-| **1 — Header item count** | "N items" in the header for the (unfiltered) view; hides on empty/loading. Half of #805, ships alone. | — |
-| **2 — Browse filter panel (9 sections)** | Full metadata filtering (People, Location, Camera, Tags, Rating, Media type, Favorites, Albums, Timeline-date) with chips, URL persistence, and the count reflecting the filtered set. The bulk of #805. | 1 |
-| **3 — Text / smart-search (10th section)** | Free-text search → `SmartSearchResults`, search-total count; completes all-10 parity. | 2 |
+| Slice                                      | Delivers (shippable)                                                                                                                                                                                     | Depends on |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| **1 — Header item count**                  | "N items" in the header for the (unfiltered) view; hides on empty/loading. Half of #805, ships alone.                                                                                                    | —          |
+| **2 — Browse filter panel (9 sections)**   | Full metadata filtering (People, Location, Camera, Tags, Rating, Media type, Favorites, Albums, Timeline-date) with chips, URL persistence, and the count reflecting the filtered set. The bulk of #805. | 1          |
+| **3 — Text / smart-search (10th section)** | Free-text search → `SmartSearchResults`, search-total count; completes all-10 parity.                                                                                                                    | 2          |
 
 ---
 
@@ -232,12 +232,12 @@ Feature: Recently Added item count
 
 ### Edge cases
 
-| Edge case | Expected | Verified by |
-|---|---|---|
-| Buckets not yet loaded (`assetCount` 0 transiently) | No "0 items" flash | `shouldShowRecentlyAddedCount(0,false)=false` |
-| Empty account | Count hidden; placeholder shown | unit + e2e "empty library" |
-| Multi-select active (`hideNavbar`) | Header + count hidden; selection bar shown | e2e "while selecting" |
-| Plural vs singular ("1 item") | Handled by `items_count` ICU plural | rendered by i18n (not this fn) |
+| Edge case                                           | Expected                                   | Verified by                                   |
+| --------------------------------------------------- | ------------------------------------------ | --------------------------------------------- |
+| Buckets not yet loaded (`assetCount` 0 transiently) | No "0 items" flash                         | `shouldShowRecentlyAddedCount(0,false)=false` |
+| Empty account                                       | Count hidden; placeholder shown            | unit + e2e "empty library"                    |
+| Multi-select active (`hideNavbar`)                  | Header + count hidden; selection bar shown | e2e "while selecting"                         |
+| Plural vs singular ("1 item")                       | Handled by `items_count` ICU plural        | rendered by i18n (not this fn)                |
 
 ### Done gate
 
@@ -276,14 +276,14 @@ export function buildRecentlyAddedTimelineOptions(filters: FilterState): Record<
 
 - **`orderBy: CreatedAt` always** — the defining trait; holds under every filter combination.
 - **`withSharedSpaces` never present** — asserted by exact-shape `toEqual` on the default case (so a
-  *future* new shared-scope key added by `buildPhotosTimelineOptions` would fail the test), plus explicit
+  _future_ new shared-scope key added by `buildPhotosTimelineOptions` would fail the test), plus explicit
   `not.toHaveProperty('withSharedSpaces')` under a filter and under favorites.
 - **`withPartners` inherited** — `true` by default / non-favorite filters (own+partners, matching today's
   static options); **absent** under a Favorites filter (own-only, matching Photos: a favorite is a
   personal flag). New behavior for a new capability → no regression.
 - **`order`** inherited from `filters.sortOrder`; default `Desc` = newest-added first.
 - **Date filters → `takenAfter`/`takenBefore`** (inherited). Documented semantic: the Timeline date
-  filter filters *taken* date while day-groups reflect *added* date — intentional (e.g. old photos just
+  filter filters _taken_ date while day-groups reflect _added_ date — intentional (e.g. old photos just
   imported); not remapped to created-at (no created-at range predicate exists; that is backend work,
   a non-goal).
 
@@ -305,7 +305,9 @@ export function buildRecentlyAddedSuggestionRequest(filters: FilterState) {
     mediaType:
       filters.mediaType === 'all'
         ? undefined
-        : filters.mediaType === 'image' ? AssetTypeEnum.Image : AssetTypeEnum.Video,
+        : filters.mediaType === 'image'
+          ? AssetTypeEnum.Image
+          : AssetTypeEnum.Video,
     takenAfter: context?.takenAfter,
     takenBefore: context?.takenBefore,
     // no withSharedSpaces / albumId / spaceId — own+partners scope only
@@ -335,7 +337,8 @@ export function buildRecentlyAddedFilterConfig(): FilterPanelConfig {
       mapSuggestions(await getFilterSuggestions(buildRecentlyAddedSuggestionRequest(filters))),
     providers: {
       cities: (country, context) => getSearchSuggestions({ $type: SearchSuggestionType.City, country, ...context }),
-      cameraModels: (make, context) => getSearchSuggestions({ $type: SearchSuggestionType.CameraModel, make, ...context }),
+      cameraModels: (make, context) =>
+        getSearchSuggestions({ $type: SearchSuggestionType.CameraModel, make, ...context }),
     },
   };
 }
@@ -446,18 +449,18 @@ Feature: Recently Added filters
 
 ### Edge cases
 
-| Edge case | Expected | Verified by |
-|---|---|---|
-| Filter matches zero assets | Panel stays open; count "0 items" | config/options units + e2e "matching nothing" |
-| `withSharedSpaces` leakage (any path) | Never sent in options or suggestions | options `toEqual` + config unit |
-| Future stray key from `buildPhotosTimelineOptions` | Caught | options default `toEqual` |
-| Favorites filter | Own-only (partners excluded) | options unit |
-| Any filter combination | `orderBy` stays `CreatedAt` | options units + e2e "ordered by added date" |
-| Sort asc/desc | `order` flips; `orderBy` unchanged | options units |
-| Count flicker on filter apply (`assetCount`→0→N) | Accept: momentary "0 items"→"N items" reflects the reload; not gated further (added date, own+partners; extra gating would risk the panel-unmount race Photos avoids with `isEmptyForOptions`). Documented, not hidden. | e2e observes final count; noted decision |
-| Deep-link with filter params | Filters seeded from URL on load | e2e "survive a reload" / deep-link |
-| Grouping day↔month via toolbar | Grouping changes; temporal anchor preserved | mirrors Photos (manual/e2e smoke) |
-| Suggestion fetch failure | `FilterPanel`'s own AbortController path; no uncaught throw | mirrors album/Photos (no new handling) |
+| Edge case                                          | Expected                                                                                                                                                                                                                | Verified by                                   |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Filter matches zero assets                         | Panel stays open; count "0 items"                                                                                                                                                                                       | config/options units + e2e "matching nothing" |
+| `withSharedSpaces` leakage (any path)              | Never sent in options or suggestions                                                                                                                                                                                    | options `toEqual` + config unit               |
+| Future stray key from `buildPhotosTimelineOptions` | Caught                                                                                                                                                                                                                  | options default `toEqual`                     |
+| Favorites filter                                   | Own-only (partners excluded)                                                                                                                                                                                            | options unit                                  |
+| Any filter combination                             | `orderBy` stays `CreatedAt`                                                                                                                                                                                             | options units + e2e "ordered by added date"   |
+| Sort asc/desc                                      | `order` flips; `orderBy` unchanged                                                                                                                                                                                      | options units                                 |
+| Count flicker on filter apply (`assetCount`→0→N)   | Accept: momentary "0 items"→"N items" reflects the reload; not gated further (added date, own+partners; extra gating would risk the panel-unmount race Photos avoids with `isEmptyForOptions`). Documented, not hidden. | e2e observes final count; noted decision      |
+| Deep-link with filter params                       | Filters seeded from URL on load                                                                                                                                                                                         | e2e "survive a reload" / deep-link            |
+| Grouping day↔month via toolbar                     | Grouping changes; temporal anchor preserved                                                                                                                                                                             | mirrors Photos (manual/e2e smoke)             |
+| Suggestion fetch failure                           | `FilterPanel`'s own AbortController path; no uncaught throw                                                                                                                                                             | mirrors album/Photos (no new handling)        |
 
 ### Done gate
 
@@ -530,13 +533,13 @@ Feature: Recently Added text search
 
 ### Edge cases
 
-| Edge case | Expected | Verified by |
-|---|---|---|
-| Empty query submitted | Stays in browse mode (`showSearchResults` false) | route logic + e2e |
-| Smart-facet fetch failure | Caught, `console.error`, falls back to prior facets | mirrors Photos §252–257 |
-| `withSharedSpaces` in search path | Forced `false` (own+partners) | config search-branch unit + e2e "own+partner scope" |
-| Query then filter change | Facets refetch (keyed by query+filters); abort in-flight | mirrors Photos key-cache |
-| Count in query mode | Uses `smartFacetTotal`, not `assetCount` | route derivation + e2e |
+| Edge case                         | Expected                                                 | Verified by                                         |
+| --------------------------------- | -------------------------------------------------------- | --------------------------------------------------- |
+| Empty query submitted             | Stays in browse mode (`showSearchResults` false)         | route logic + e2e                                   |
+| Smart-facet fetch failure         | Caught, `console.error`, falls back to prior facets      | mirrors Photos §252–257                             |
+| `withSharedSpaces` in search path | Forced `false` (own+partners)                            | config search-branch unit + e2e "own+partner scope" |
+| Query then filter change          | Facets refetch (keyed by query+filters); abort in-flight | mirrors Photos key-cache                            |
+| Count in query mode               | Uses `smartFacetTotal`, not `assetCount`                 | route derivation + e2e                              |
 
 ### Done gate
 
@@ -580,31 +583,31 @@ Repo gate + e2e web run; commit `feat(web): text/smart-search filter for Recentl
 
 ## 6. Coverage matrix (every edge case → slice → test)
 
-| # | Edge case / behavior | Slice | Test |
-|---|---|---|---|
-| 1 | Count hidden while loading / empty account | 1 | unit `shouldShowRecentlyAddedCount(0,false)`; e2e empty library |
-| 2 | Count shown for populated library | 1 | e2e populated |
-| 3 | Count hidden during multi-select | 1 | e2e selecting |
-| 4 | Plural/singular wording | 1 | i18n `items_count` (ICU) |
-| 5 | `orderBy` always CreatedAt | 2 | options units; e2e "ordered by added date" |
-| 6 | `withSharedSpaces` never in options | 2 | options `toEqual` + `not.toHaveProperty` |
-| 7 | Future stray key regression | 2 | options default `toEqual` |
-| 8 | `withPartners` inherited / dropped on favorites | 2 | options units |
-| 9 | `order` asc/desc | 2 | options units |
-| 10 | All predicate passthroughs + date ranges | 2 | options units |
-| 11 | Suggestion request omits shared/album/space scope | 2 | options unit |
-| 12 | Config = 9 sections, correct suggestion/provider calls | 2 | config unit |
-| 13 | Filter matches nothing → "0 items", panel stays | 2 | e2e "matching nothing" |
-| 14 | Filters persist via URL / deep-link / reload | 2 | e2e reload |
-| 15 | Chip removal / clear all | 2 | e2e remove chip |
-| 16 | Count flicker on apply | 2 | documented decision; e2e final count |
-| 17 | Grouping day↔month | 2 | e2e/manual smoke |
-| 18 | Config = 10 sections incl. text | 3 | config unit |
-| 19 | Text query → search results + search-total count | 3 | e2e search |
-| 20 | Clear query → back to added-date timeline | 3 | e2e clear |
-| 21 | Search stays own+partner (no shared spaces) | 3 | config search-branch unit + e2e scope |
-| 22 | Empty query submitted → stays browse | 3 | route logic + e2e |
-| 23 | Smart-facet fetch failure fallback | 3 | mirrors Photos (manual/e2e) |
+| #   | Edge case / behavior                                   | Slice | Test                                                            |
+| --- | ------------------------------------------------------ | ----- | --------------------------------------------------------------- |
+| 1   | Count hidden while loading / empty account             | 1     | unit `shouldShowRecentlyAddedCount(0,false)`; e2e empty library |
+| 2   | Count shown for populated library                      | 1     | e2e populated                                                   |
+| 3   | Count hidden during multi-select                       | 1     | e2e selecting                                                   |
+| 4   | Plural/singular wording                                | 1     | i18n `items_count` (ICU)                                        |
+| 5   | `orderBy` always CreatedAt                             | 2     | options units; e2e "ordered by added date"                      |
+| 6   | `withSharedSpaces` never in options                    | 2     | options `toEqual` + `not.toHaveProperty`                        |
+| 7   | Future stray key regression                            | 2     | options default `toEqual`                                       |
+| 8   | `withPartners` inherited / dropped on favorites        | 2     | options units                                                   |
+| 9   | `order` asc/desc                                       | 2     | options units                                                   |
+| 10  | All predicate passthroughs + date ranges               | 2     | options units                                                   |
+| 11  | Suggestion request omits shared/album/space scope      | 2     | options unit                                                    |
+| 12  | Config = 9 sections, correct suggestion/provider calls | 2     | config unit                                                     |
+| 13  | Filter matches nothing → "0 items", panel stays        | 2     | e2e "matching nothing"                                          |
+| 14  | Filters persist via URL / deep-link / reload           | 2     | e2e reload                                                      |
+| 15  | Chip removal / clear all                               | 2     | e2e remove chip                                                 |
+| 16  | Count flicker on apply                                 | 2     | documented decision; e2e final count                            |
+| 17  | Grouping day↔month                                     | 2     | e2e/manual smoke                                                |
+| 18  | Config = 10 sections incl. text                        | 3     | config unit                                                     |
+| 19  | Text query → search results + search-total count       | 3     | e2e search                                                      |
+| 20  | Clear query → back to added-date timeline              | 3     | e2e clear                                                       |
+| 21  | Search stays own+partner (no shared spaces)            | 3     | config search-branch unit + e2e scope                           |
+| 22  | Empty query submitted → stays browse                   | 3     | route logic + e2e                                               |
+| 23  | Smart-facet fetch failure fallback                     | 3     | mirrors Photos (manual/e2e)                                     |
 
 ## 7. Process notes for impl-loop
 
