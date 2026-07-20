@@ -1,7 +1,8 @@
 import type { LoginResponseDto } from '@immich/sdk';
+import { updateAsset } from '@immich/sdk';
 import { expect, test } from '@playwright/test';
 import { thumbnailUtils } from 'src/ui/specs/timeline/utils';
-import { utils } from 'src/utils';
+import { asBearerAuth, utils } from 'src/utils';
 
 test.describe('Recently Added', () => {
   let admin: LoginResponseDto;
@@ -65,5 +66,176 @@ test.describe('Recently Added', () => {
     // `hideNavbar` collapses the entire header row (title + count); the selection bar takes over.
     await expect(page.getByTestId('page-header-description')).toHaveCount(0);
     await expect(page.getByTestId('page-header')).toHaveCount(0);
+  });
+});
+
+test.describe('Recently Added filters', () => {
+  let admin: LoginResponseDto;
+  const videos: Awaited<ReturnType<typeof utils.createAsset>>[] = [];
+
+  const TOTAL = 20;
+  const VIDEOS = 5;
+  const RATED = 3;
+
+  test.beforeAll(async () => {
+    utils.initSdk();
+    await utils.resetDatabase();
+    admin = await utils.adminSetup();
+
+    // Seed with *taken* dates deliberately unrelated to upload order, so "ordered by added date"
+    // is a meaningful assertion: taken dates run backwards while added order runs forwards.
+    const images = [];
+    for (let i = 0; i < TOTAL - VIDEOS; i++) {
+      const day = String(TOTAL - VIDEOS - i).padStart(2, '0');
+      images.push(
+        await utils.createAsset(admin.accessToken, {
+          fileCreatedAt: `2023-09-${day}T10:00:00.000Z`,
+          fileModifiedAt: `2023-09-${day}T10:00:00.000Z`,
+        }),
+      );
+    }
+
+    // Videos' taken dates run *opposite* to their upload order, so within the video-filtered set
+    // "newest added first" and "newest taken first" disagree. That disagreement is the whole point
+    // of the ordering scenario below — seeding them ascending would make the test pass equally
+    // against orderBy: TakenAt, i.e. unable to detect the bug it exists to catch.
+    for (let i = 0; i < VIDEOS; i++) {
+      videos.push(
+        await utils.createAsset(admin.accessToken, {
+          fileCreatedAt: `2023-10-0${VIDEOS - i}T10:00:00.000Z`,
+          fileModifiedAt: `2023-10-0${VIDEOS - i}T10:00:00.000Z`,
+          assetData: { filename: `example-${i}.mp4` },
+        }),
+      );
+    }
+
+    for (const asset of images.slice(0, RATED)) {
+      await updateAsset({ id: asset.id, updateAssetDto: { rating: 5 } }, { headers: asBearerAuth(admin.accessToken) });
+    }
+  });
+
+  async function gotoRecentlyAdded(
+    context: import('@playwright/test').BrowserContext,
+    page: import('@playwright/test').Page,
+    search = '',
+  ) {
+    await utils.setAuthCookies(context, admin.accessToken);
+    await page.goto('/recently-added');
+    // Panel collapse is persisted in localStorage — start every test from a clean state.
+    await page.evaluate(() => localStorage.clear());
+    await page.goto(`/recently-added${search}`);
+    await page.waitForSelector('[data-testid="discovery-panel"], [data-testid="filter-toggle-btn"]');
+  }
+
+  test('renders the nine metadata filter sections and no text section', async ({ context, page }) => {
+    await gotoRecentlyAdded(context, page);
+
+    await expect(page.getByTestId('discovery-panel')).toBeVisible();
+    for (const section of [
+      'timeline',
+      'people',
+      'location',
+      'camera',
+      'tags',
+      'rating',
+      'media',
+      'favorites',
+      'albums',
+    ]) {
+      await expect(page.getByTestId(`filter-section-${section}`)).toBeVisible();
+    }
+    // Slice 3 adds this; it must not exist yet.
+    await expect(page.getByTestId('filter-section-text')).toHaveCount(0);
+  });
+
+  // Spec scenario: Filtering by media type updates grid, URL, and count
+  test('filtering by media type updates the count and the URL', async ({ context, page }) => {
+    await gotoRecentlyAdded(context, page);
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${TOTAL} items`);
+
+    const bucketResponse = page.waitForResponse((r) => r.url().includes('/timeline/buckets'));
+    await page.getByTestId('media-type-video').click();
+    await bucketResponse;
+
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${VIDEOS} items`);
+    await expect(page).toHaveURL(/type=video/);
+  });
+
+  // Spec scenario: Removing a filter chip restores the full view
+  test('removing the media-type chip restores the full view', async ({ context, page }) => {
+    await gotoRecentlyAdded(context, page);
+
+    const filtered = page.waitForResponse((r) => r.url().includes('/timeline/buckets'));
+    await page.getByTestId('media-type-video').click();
+    await filtered;
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${VIDEOS} items`);
+
+    // Collapse the panel so the ActiveFiltersBar and its chips are shown.
+    await page.getByTestId('collapse-panel-btn').click();
+    await expect(page.getByTestId('active-filters-bar')).toBeVisible();
+    const chip = page.getByTestId('active-chip').first();
+    await expect(chip).toBeVisible();
+
+    const restored = page.waitForResponse((r) => r.url().includes('/timeline/buckets'));
+    // Remove the chip itself (exercises handleRemoveActiveFilter), not "clear all".
+    // dispatchEvent avoids the UserPageLayout absolute header overlaying the control,
+    // the same workaround photos-filter-panel.e2e-spec.ts uses.
+    await chip.getByRole('button').last().dispatchEvent('click');
+    await restored;
+
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${TOTAL} items`);
+    await expect(page).not.toHaveURL(/type=video/);
+  });
+
+  test('clear all removes every active filter', async ({ context, page }) => {
+    await gotoRecentlyAdded(context, page, '?rating=5');
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${RATED} items`);
+
+    await page.getByTestId('collapse-panel-btn').click();
+    await expect(page.getByTestId('active-filters-bar')).toBeVisible();
+
+    const cleared = page.waitForResponse((r) => r.url().includes('/timeline/buckets'));
+    await page.getByTestId('clear-all-btn').dispatchEvent('click');
+    await cleared;
+
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${TOTAL} items`);
+  });
+
+  // Spec scenario: A filter matching nothing shows a zero count, not an empty account
+  test('a filter that matches nothing shows "0 items" and keeps the panel open', async ({ context, page }) => {
+    await gotoRecentlyAdded(context, page, '?make=NoSuchCameraMake');
+
+    await expect(page.getByTestId('page-header-description')).toHaveText('0 items');
+    // The panel must stay mounted so the user can change the filter.
+    await expect(page.getByTestId('discovery-panel')).toBeVisible();
+  });
+
+  // Spec scenario: Filters survive a reload (URL is source of truth)
+  test('filters survive a reload', async ({ context, page }) => {
+    await gotoRecentlyAdded(context, page, '?rating=5');
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${RATED} items`);
+
+    await page.reload();
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${RATED} items`);
+    await expect(page).toHaveURL(/rating=5/);
+  });
+
+  // Spec scenario: Recently Added stays ordered by added date under a filter
+  test('stays ordered by added date under a filter', async ({ context, page }) => {
+    // Within the video-filtered set, added order and taken order run opposite (see the seeding),
+    // so this scenario can tell the two ordering bases apart. Applying a filter must not change
+    // the basis: the grid stays ordered by *added* date, newest first.
+    await gotoRecentlyAdded(context, page);
+
+    const filtered = page.waitForResponse((r) => r.url().includes('/timeline/buckets'));
+    await page.getByTestId('media-type-video').click();
+    await filtered;
+    await expect(page.getByTestId('page-header-description')).toHaveText(`${VIDEOS} items`);
+
+    // The LAST-UPLOADED video must lead the grid. Its taken date is the *oldest* of the five, so
+    // this assertion fails if the view ever orders by taken date instead of added date.
+    const first = thumbnailUtils.locator(page).first();
+    await expect(first).toBeVisible();
+    await expect(first).toHaveAttribute('data-asset', videos.at(-1)!.id);
   });
 });
