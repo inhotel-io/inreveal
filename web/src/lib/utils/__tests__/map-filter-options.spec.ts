@@ -168,7 +168,7 @@ describe('buildMapTimelineOptions', () => {
     });
   });
 
-  it('omits partners when favorites filter is selected for global map cluster timelines', () => {
+  it('keeps partners when favorites filter is selected for global map cluster timelines (#763 slice 4)', () => {
     const filters = {
       ...createFilterState(),
       isFavorite: true,
@@ -182,12 +182,12 @@ describe('buildMapTimelineOptions', () => {
     expect(options).toEqual(
       expect.objectContaining({
         isFavorite: true,
+        withPartners: true,
       }),
     );
-    expect(options).not.toHaveProperty('withPartners');
   });
 
-  it('omits partners when map favorites setting is enabled for global map cluster timelines', () => {
+  it('keeps partners when map favorites setting is enabled for global map cluster timelines (#763 slice 4)', () => {
     const selectedClusterIds = new Set(['asset-1']);
 
     const options = buildMapTimelineOptions(createFilterState(), '1,2,3,4', selectedClusterIds, undefined, {
@@ -198,9 +198,9 @@ describe('buildMapTimelineOptions', () => {
     expect(options).toEqual(
       expect.objectContaining({
         isFavorite: true,
+        withPartners: true,
       }),
     );
-    expect(options).not.toHaveProperty('withPartners');
   });
 
   it('keeps partners when global map cluster timelines are not narrowed to favorites', () => {

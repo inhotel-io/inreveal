@@ -93,7 +93,7 @@ describe('buildAlbumAssetPickerOptions', () => {
     );
   });
 
-  it('maps favorites and omits partners for album asset picker options', () => {
+  it('maps favorites and keeps partner scope active for album asset picker options (#763 slice 4)', () => {
     const filters = { ...createFilterState(), isFavorite: true };
     const options = buildAlbumAssetPickerOptions('album-1', filters);
 
@@ -101,9 +101,9 @@ describe('buildAlbumAssetPickerOptions', () => {
       expect.objectContaining({
         timelineAlbumId: 'album-1',
         isFavorite: true,
+        withPartners: true,
       }),
     );
-    expect(options).not.toHaveProperty('withPartners');
   });
 });
 

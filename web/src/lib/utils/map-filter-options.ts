@@ -115,7 +115,7 @@ export function buildMapTimelineOptions(
     if (isFavorite !== undefined) {
       base.isFavorite = isFavorite;
     }
-    if (isFavorite === undefined && settings.withPartners) {
+    if (settings.withPartners) {
       base.withPartners = true;
     }
   }

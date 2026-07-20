@@ -15,11 +15,14 @@ type PhotosPersonFilterReference = {
 };
 
 export function buildPhotosTimelineOptions(filters: FilterState): Record<string, unknown> {
-  const includeSharedTimelineAssets = filters.isFavorite === undefined;
   const base: Record<string, unknown> = {
     visibility: AssetVisibility.Timeline,
     withStacked: true,
-    ...(includeSharedTimelineAssets ? { withPartners: true, withSharedSpaces: true } : {}),
+    // #763 slice 4: favorites no longer suppress cross-user scopes — the server guard is gone
+    // and the favorite predicate is per-user, so partner/space content stays in scope while
+    // filtering by favorite.
+    withPartners: true,
+    withSharedSpaces: true,
   };
 
   if (filters.personIds.length > 0) {
