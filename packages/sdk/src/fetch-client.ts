@@ -4051,6 +4051,14 @@ export type SyncAssetFaceV2 = {
     /** Source type */
     sourceType: string;
 };
+export type SyncAssetFavoriteDeleteV1 = {
+    /** Asset ID */
+    assetId: string;
+};
+export type SyncAssetFavoriteV1 = {
+    /** Asset ID */
+    assetId: string;
+};
 export type SyncAssetMetadataDeleteV1 = {
     /** Asset ID */
     assetId: string;
@@ -10439,6 +10447,8 @@ export enum SyncEntityType {
     AssetMetadataDeleteV1 = "AssetMetadataDeleteV1",
     AssetOcrV1 = "AssetOcrV1",
     AssetOcrDeleteV1 = "AssetOcrDeleteV1",
+    AssetFavoriteV1 = "AssetFavoriteV1",
+    AssetFavoriteDeleteV1 = "AssetFavoriteDeleteV1",
     PartnerV1 = "PartnerV1",
     PartnerDeleteV1 = "PartnerDeleteV1",
     PartnerAssetV1 = "PartnerAssetV1",
@@ -10539,6 +10549,7 @@ export enum SyncRequestType {
     AssetEditsV1 = "AssetEditsV1",
     AssetMetadataV1 = "AssetMetadataV1",
     AssetOcrV1 = "AssetOcrV1",
+    AssetFavoritesV1 = "AssetFavoritesV1",
     AuthUsersV1 = "AuthUsersV1",
     MemoriesV1 = "MemoriesV1",
     MemoryToAssetsV1 = "MemoryToAssetsV1",
