@@ -61,8 +61,10 @@ A was chosen because it adds the smallest genuinely reusable piece of data and d
 ### `albumCount` on the space DTO
 
 - **`server/src/repositories/shared-space.repository.ts`** — add `getLinkedAlbumCount(spaceId)`: `COUNT(*)` over `shared_space_album` for the space. Decorate with `@GenerateSql` to match neighbouring methods so `make sql` picks it up.
-- **`server/src/dtos/shared-space.dto.ts`** — add `albumCount: number` to `SharedSpaceResponseSchema` (~`:78-104`), alongside `memberCount` and `assetCount`.
+- **`server/src/dtos/shared-space.dto.ts`** — add `albumCount: z.number().optional()` to `SharedSpaceResponseSchema` (~`:79-103`), alongside `memberCount` and `assetCount`. **Optional, not required:** every sibling count (`memberCount`, `assetCount`, `newAssetCount`) is `.optional()`; matching that keeps the serializer contract uniform and generates a nullable Dart field. The web guards with `space.albumCount && space.albumCount > 0`, mirroring the existing `space.newAssetCount && space.newAssetCount > 0` check in `recent-spaces.svelte`.
 - **`server/src/services/shared-space.service.ts`** — in `getAll` (`:133-194`), one additional `await` inside the existing per-space loop; populate `albumCount` on the pushed result.
+
+**`albumCount` counts every linked album**, regardless of `showInTimeline`. `showInTimeline` controls only whether an album's assets appear in the aggregated space timeline; it is orthogonal to navigation. The sidebar list (below) applies the same rule, so the count and the rendered list never disagree about which albums "exist" for a space.
 
 **RBAC:** a plain per-space count is correct. `getLinkedAlbums` (`:820-850`) gates on `requireMembership` alone with no per-album filtering, so every member sees every linked album; and `getAll` only returns spaces via `getAllByUserId`. The count cannot reveal albums the viewer is not entitled to see.
 
@@ -91,6 +93,10 @@ Adding a DTO field requires regeneration: `pnpm build` (server) → `pnpm sync:o
 
 The chevron renders only when `space.albumCount > 0`. Spaces without albums keep their current appearance exactly.
 
+**Album row visuals** mirror `RecentAlbums.svelte:34-44`: a `size-6` rounded square showing the album cover via `getAssetMediaUrl({ id: album.albumThumbnailAssetId })`, falling back to a gray square when the album has no thumbnail, then the `albumName` truncated. Indented one level deeper than the space row (space rows sit at `ps-10`; album rows go deeper, e.g. `ps-14`, or rely on the `NavbarItem` child indent). This keeps the drill-down visually consistent with the existing Albums section rather than introducing a new icon vocabulary.
+
+**Active state:** each album row sets `aria-current="page"` on an exact-ish match of the album path (`/spaces/{spaceId}/albums/{albumId}`). Because the space row's active check is `page.url.pathname.startsWith('/spaces/${space.id}')`, viewing an album also keeps its **parent** space highlighted — acceptable and desirable (the album lives under that space).
+
 ### Expansion state
 
 `preferences.store.ts:157-158` has `recentSpacesDropdown` as a single persisted boolean. Per-space state needs a keyed structure: a persisted `Record<string, boolean>` under `recent-space-albums-open`, defaulting to collapsed for unknown ids. Entries for spaces no longer in the top three are pruned on write so the key does not grow unbounded as spaces churn.
@@ -101,40 +107,82 @@ On first expand, call `getSharedSpaceAlbums({ id })` and cache into `userInterac
 
 Persisted expansion means a returning user re-fetches once per session on mount for already-open spaces. This is accepted: it keeps the list honest rather than serving a stale album set.
 
+### Cache invalidation on link / unlink
+
+**Problem the first draft missed.** `recentSpaces` (which will carry `albumCount`) is reset only on `SpaceAddAssets` / `SpaceRemoveAssets` / `AuthLogout` (`user.svelte.ts:40-46`). The space albums page links and unlinks by calling the SDK directly with **no** `eventManager` emit (`albums/+page.svelte:68,99`). So after a user links an album in the same session, the sidebar's chevron and `albumCount` stay stale until logout or a hard reload — the drill-down would not show the album the user just added.
+
+**Fix, matching the existing asset pattern.** `SpaceAddAssets` is a **local** client emit (`space.service.ts:15`), not a server socket broadcast; the acting client invalidates its own `recentSpaces` and other members refresh on next mount. Mirror that for albums:
+
+- Add `SpaceLinkAlbum` and `SpaceUnlinkAlbum` to `event-manager.svelte.ts` (payload `{ spaceId: string; albumId: string }`).
+- Emit them from `albums/+page.svelte` right after `linkAlbum` / `unlinkAlbum` resolve.
+- In `user.svelte.ts`, reset `recentSpaces` on both — the cheapest correct move, since `albumCount` is recomputed by the next `getAllSpaces`. Also drop the affected space's entry from the `spaceAlbums` cache so a re-expand refetches the new list.
+
+**Cross-user real time is out of scope.** A member whose sidebar is open when _another_ user links an album will not see it until their next mount — exactly today's behavior for cross-user asset adds (local emit only). Matching that limitation is consistent; changing it would require a new server socket event and belongs in a separate change.
+
 ### Routing
 
 The space-album URL is currently hardcoded in three places: `space-album-card.svelte:49`, `space-albums-table.svelte:41`, and `albums/+page.svelte:101`. Add `Route.viewSpaceAlbum({ spaceId, albumId })` to `web/src/lib/route.ts` (near `viewSpace` at `:126-128`) and migrate all three call sites plus the new sidebar link. Leaving a fourth hardcoded copy is how that string drifts.
 
-### "See all"
+### "See all", and count-vs-list consistency
 
-Renders only when `albumCount > 3`, showing the total from `albumCount` and linking to `/spaces/{spaceId}/albums`.
+`albumCount` is a snapshot taken at page load (in `getAll`); the album list is fetched later, on expand. They can diverge if albums are linked/unlinked in between. Rules that keep the row internally consistent:
+
+- **Chevron** uses `albumCount` for first paint (before any list fetch) — this is the whole reason the field exists.
+- **Once the list is fetched, the fetched list is the source of truth** for what renders. The three rows come from the fetched list (sorted by `linkedAt` desc, sliced to 3). The "See all (N)" row renders when the fetched list length `> 3`, and **N is the fetched length**, not the stale `albumCount` — so the number always matches reality at expand time.
+- **Empty fetch despite `albumCount > 0`** (e.g. the last album was deleted between load and expand — `shared_space_album` cascades on album delete, `shared-space-album.table.ts:40`): render nothing and collapse the row rather than showing an empty expander. The next `getAllSpaces` corrects the stale count.
+
+The "See all" row links to the space's Albums tab (`/spaces/{spaceId}/albums`). Route it through a helper for consistency rather than hardcoding.
 
 ### Error handling
 
 A failed `getSharedSpaceAlbums` collapses the row and toasts via the existing `handleError` path. Add a `failed_to_load_albums` key to `i18n/en.json` — English only, per repo convention. Note `i18n/` is shared between web and mobile.
 
-## Testing
+## Testing (test-driven)
 
-### Server
+Every unit below is written **red first**: the listed test is added and watched to fail before the implementation exists, then made green. The order in "Implementation order" reflects that dependency chain. The lists here are the red checklist, not an afterthought.
 
-`shared-space.service.spec.ts`:
+### Server — `shared-space.service.spec.ts` (unit, mocked repo)
 
 - `getAll` returns `albumCount: 0` for a space with no linked albums
-- `getAll` returns the correct count for a space with several
-- `linkAlbum` bumps `lastActivityAt`
-- `unlinkAlbum` does **not** bump it — asserted explicitly, so a later refactor symmetrizing the two is caught
+- `getAll` returns the correct count for a space with several linked albums
+- `getAll` reports **per-space** counts independently — two spaces with different link sets return different counts (guards against a missing `WHERE spaceId` in the query)
+- `linkAlbum` bumps `lastActivityAt` (asserts the repository `update` call)
+- `unlinkAlbum` does **not** bump `lastActivityAt` — asserted explicitly, so a later refactor symmetrizing the two is caught
+- `linkAlbum` does **not** write an activity-log row (the deliberate `logActivity` omission)
 
-A medium test is also needed. `albumCount` is a real SQL aggregate, and unit tests mock the repository, so they pass even if the query is wrong. Medium tests hit a real DB via testcontainers, which is where a bad `COUNT` surfaces.
+### Server — medium test (real DB, testcontainers)
 
-### Web
+`albumCount` is a real SQL aggregate; the unit tests mock the repository and would pass even if the `COUNT` query is wrong. A medium test links N albums into a space and asserts `getAll` returns `albumCount === N`, and that unlinking decrements it. This is the only layer that exercises the actual query and the `WHERE spaceId` scoping.
 
-`recent-spaces.spec.ts`:
+### Web — `recent-spaces.spec.ts`
 
-- chevron present iff `albumCount > 0`
-- expanding fires exactly one `getSharedSpaceAlbums`; a second expand fires none (cache)
-- albums sorted by `linkedAt` descending and sliced to three
-- "See all" appears only above three and shows the right total
-- fetch failure collapses the row and toasts
+Chevron / rendering:
+
+- chevron present iff `albumCount > 0`; absent (unchanged appearance) when `albumCount` is `0` or `undefined`
+- album row renders the thumbnail when `albumThumbnailAssetId` is set and the gray fallback when it is not
+
+Fetch / cache:
+
+- expanding a space fires exactly one `getSharedSpaceAlbums({ id })`
+- a second expand of the same space fires **zero** further calls (served from the `spaceAlbums` cache)
+- a `SpaceLinkAlbum` / `SpaceUnlinkAlbum` event invalidates the cache so the next expand refetches
+- fetch failure collapses the row and toasts (`failed_to_load_albums`)
+
+Ordering / overflow:
+
+- albums sorted by `linkedAt` descending (a just-linked album appears first) and sliced to three
+- "See all" is **absent** at exactly three albums and **present** at four, showing the fetched length (`See all (4)`)
+- fetched list empty while `albumCount > 0` → row collapses, nothing renders, no crash
+
+Persistence:
+
+- expansion state persists per space; a space that drops out of the top three and later returns comes back **collapsed** (its pruned key is gone) — asserts the prune-on-write
+
+### Web — link/unlink invalidation `albums/space-albums-page.spec.ts`
+
+- confirming a link emits `SpaceLinkAlbum` with `{ spaceId, albumId }`
+- confirming an unlink emits `SpaceUnlinkAlbum`
+- (extends the existing link/unlink tests at `:215-335`)
 
 New test ids follow the existing convention (`sidebar-space-{id}`, `sidebar-space-dot-{id}`, `sidebar-space-thumbnail-{id}`): `sidebar-space-albums-{spaceId}`, `sidebar-space-album-{albumId}`, `sidebar-space-see-all-{spaceId}`.
 
@@ -142,9 +190,16 @@ New test ids follow the existing convention (`sidebar-space-{id}`, `sidebar-spac
 
 Skipped. The web component tests cover the logic, and the Playwright web suite against `:2283` serves empty bodies on a dev stack while the `:2285` path needs a full image rebuild per change — a poor trade for sidebar chrome.
 
-### Approach
+## Implementation order (TDD)
 
-Tests first. The server assertions are cheap to write against the mocked repository before the query exists.
+Each step is red → green before the next. Server precedes web so the regenerated SDK types are real when the web tests import them.
+
+1. **Server `albumCount`** — red: the three `getAll` count unit tests + the medium test. Green: `getLinkedAlbumCount` repo method, DTO field, `getAll` wiring.
+2. **Server `lastActivityAt` bump** — red: the `linkAlbum` bump / `unlinkAlbum` no-bump / no-activity-log tests. Green: the single `update` call in `linkAlbum`.
+3. **SDK regen** — `pnpm build` → `pnpm sync:open-api` → full `make open-api` (TS + Dart). Not test-gated, but the web step depends on the new `albumCount` type.
+4. **Route helper** — add `Route.viewSpaceAlbum` and migrate the three hardcoded call sites (their existing tests stay green).
+5. **Link/unlink events** — red: the two emit tests in `space-albums-page.spec.ts`. Green: the events + emits + `user.svelte.ts` reset handlers.
+6. **Sidebar drill-down** — red: the `recent-spaces.spec.ts` groups above. Green: nested `NavbarItem`, lazy fetch + cache, per-space persisted expansion with prune, album rows, "See all".
 
 ## Verification gates
 
@@ -158,12 +213,13 @@ Tests first. The server assertions are cheap to write against the mocked reposit
 
 ## Risks
 
-| Risk                                          | Mitigation                                                           |
-| --------------------------------------------- | -------------------------------------------------------------------- |
-| Sidebar depth pushes nav items below the fold | Collapsed by default; chevron only where albums exist                |
-| Extra query on a hot path (`getAll`)          | One count added to a loop already doing 6+; #817 tracks the real fix |
-| Stale album list after persisted expansion    | Cache is per session, re-fetched on mount                            |
-| Dart client drift                             | Full `make open-api` plus the mobile analyze gate                    |
+| Risk                                              | Mitigation                                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Sidebar depth pushes nav items below the fold     | Collapsed by default; chevron only where albums exist                           |
+| Extra query on a hot path (`getAll`)              | One count added to a loop already doing 6+; #817 tracks the real fix            |
+| Stale `albumCount` after in-session link / unlink | New `SpaceLinkAlbum` / `SpaceUnlinkAlbum` events reset the cache (see Fetching) |
+| Count vs list divergence / empty fetch            | Fetched list is source of truth once loaded; empty fetch collapses the row      |
+| Dart client drift                                 | Full `make open-api` plus the mobile analyze gate                               |
 
 ## Out of scope
 
@@ -171,3 +227,4 @@ Tests first. The server assertions are cheap to write against the mocked reposit
 - Making shared albums appear in the top-level Albums section — the discussion's alternative suggestion, and a separate feature with its own opt-in question
 - Mobile sidebar parity
 - Activity-feed entries for album links
+- Cross-user real-time sidebar updates (another member linking an album) — matches today's local-emit behavior for asset adds; would need a new server socket event
