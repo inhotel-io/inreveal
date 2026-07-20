@@ -267,6 +267,7 @@ describe(SharedSpaceService.name, () => {
     mocks.sharedSpace.getSpacePersonAssetAdderIds.mockResolvedValue([]);
     mocks.sharedSpace.getSpacePersonMetadataBackfillPage.mockResolvedValue([]);
     mocks.sharedSpace.getIdentityEvidenceForSpacePerson.mockResolvedValue([]);
+    mocks.sharedSpace.getLinkedAlbumCount.mockResolvedValue(0);
     (mocks.sharedSpace as any).getPeopleFaceStatisticsBySpaceId ??= vi.fn();
     mocks.faceIdentity.mergeIdentities.mockResolvedValue({
       personalProfileConflictCount: 0,
@@ -608,6 +609,41 @@ describe(SharedSpaceService.name, () => {
 
       expect(result[0].newAssetCount).toBe(0);
       expect(result[0].lastContributor).toBeNull();
+    });
+
+    it('includes albumCount from getLinkedAlbumCount for each space', async () => {
+      const auth = factory.auth();
+      const space = factory.sharedSpace({ name: 'Space 1' });
+
+      mocks.sharedSpace.getAllByUserId.mockResolvedValue([space]);
+      mocks.sharedSpace.getMembers.mockResolvedValue([]);
+      mocks.sharedSpace.getAssetCount.mockResolvedValue(0);
+      mocks.sharedSpace.getRecentAssets.mockResolvedValue([]);
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ lastViewedAt: null }));
+      mocks.sharedSpace.getLinkedAlbumCount.mockResolvedValue(3);
+
+      const result = await sut.getAll(auth);
+
+      expect(result[0].albumCount).toBe(3);
+      expect(mocks.sharedSpace.getLinkedAlbumCount).toHaveBeenCalledWith(space.id);
+    });
+
+    it('reports albumCount per space independently', async () => {
+      const auth = factory.auth();
+      const spaceA = factory.sharedSpace({ name: 'A' });
+      const spaceB = factory.sharedSpace({ name: 'B' });
+
+      mocks.sharedSpace.getAllByUserId.mockResolvedValue([spaceA, spaceB]);
+      mocks.sharedSpace.getMembers.mockResolvedValue([]);
+      mocks.sharedSpace.getAssetCount.mockResolvedValue(0);
+      mocks.sharedSpace.getRecentAssets.mockResolvedValue([]);
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ lastViewedAt: null }));
+      mocks.sharedSpace.getLinkedAlbumCount.mockResolvedValueOnce(2).mockResolvedValueOnce(0);
+
+      const result = await sut.getAll(auth);
+
+      expect(result[0].albumCount).toBe(2);
+      expect(result[1].albumCount).toBe(0);
     });
   });
 
