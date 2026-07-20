@@ -74,10 +74,12 @@ A was chosen because it adds the smallest genuinely reusable piece of data and d
 
 `linkAlbum` (`:734`) gains `await this.sharedSpaceRepository.update(spaceId, { lastActivityAt: new Date() })`, matching `addAssets` (`:675`).
 
+**The bump goes inside the existing `if (result)` block** (`:753`), next to the face-sync queue and the activity log. `addAlbum` returns the inserted row only for a genuinely new link and `undefined` for an idempotent re-link (`onConflict().doNothing()`, `shared-space.repository.ts`). Re-linking an already-linked album must **not** promote the space, so the bump belongs where the other new-link side effects already live.
+
 Two deliberate asymmetries:
 
 - **`unlinkAlbum` does not bump.** Removing content is not activity worth promoting a space for.
-- **No `logActivity` call.** `addAssets` follows its bump with an activity-log write. Links do not get one, because that feeds the user-visible activity feed and would be a behaviour change beyond what #816 asks for.
+- **`linkAlbum` already logs an `AlbumLink` activity** (`:755-761`) — this change does **not** touch that. We are adding only the `lastActivityAt` bump, not a new activity-feed row. (An earlier draft of this spec wrongly claimed links write no activity log; they always have.)
 
 ### Migration and SDK
 
@@ -89,11 +91,9 @@ Adding a DTO field requires regeneration: `pnpm build` (server) → `pnpm sync:o
 
 ### Rendering
 
-`recent-spaces.svelte` currently emits plain `<a>` rows at hardcoded `ps-10`. Each space row becomes a nested `NavbarItem` from `@immich/ui`, which already provides the chevron affordance, an `expanded` bindable, and `ps-8` auto-indent for children. This is the same primitive the Spaces item itself uses (`UserSidebar.svelte:48-60`), so the nested chevron matches the existing one rather than being a lookalike.
+`recent-spaces.svelte` currently emits plain `<a>` rows at hardcoded `ps-10`, each showing a thumbnail square or a colored activity dot. **The chevron is hand-rolled inside `recent-spaces.svelte`, not delegated to `NavbarItem`.** `@immich/ui`'s `NavbarItem` renders its leading slot from an mdi `icon` prop only (`NavbarItem.svelte:19`, `asIconProps`) and indents at `ps-5` — it has no way to show the space thumbnail/dot. Converting space rows to `NavbarItem` would drop that visual and shift indentation, violating "keep their current appearance exactly." So the existing `<a>` space row stays byte-for-byte, and we add a sibling chevron toggle button that mirrors `NavbarItem`'s own chevron (`mdiChevronRight` collapsed / `mdiChevronDown` expanded, `hidden md:block`), rendered **only** when `space.albumCount > 0`. Spaces without albums keep their current appearance exactly.
 
-The chevron renders only when `space.albumCount > 0`. Spaces without albums keep their current appearance exactly.
-
-**Album row visuals** mirror `RecentAlbums.svelte:34-44`: a `size-6` rounded square showing the album cover via `getAssetMediaUrl({ id: album.albumThumbnailAssetId })`, falling back to a gray square when the album has no thumbnail, then the `albumName` truncated. Indented one level deeper than the space row (space rows sit at `ps-10`; album rows go deeper, e.g. `ps-14`, or rely on the `NavbarItem` child indent). This keeps the drill-down visually consistent with the existing Albums section rather than introducing a new icon vocabulary.
+**Album row visuals** mirror `RecentAlbums.svelte:34-44`: a `size-6` rounded square showing the album cover via `getAssetMediaUrl({ id: album.albumThumbnailAssetId })`, falling back to a gray square when the album has no thumbnail, then the `albumName` truncated. Album rows are indented one level deeper than the space row (`ps-14` vs the space row's `ps-10`), keeping the drill-down visually consistent with the existing Albums section rather than introducing a new icon vocabulary.
 
 **Active state:** each album row sets `aria-current="page"` on an exact-ish match of the album path (`/spaces/{spaceId}/albums/{albumId}`). Because the space row's active check is `page.url.pathname.startsWith('/spaces/${space.id}')`, viewing an album also keeps its **parent** space highlighted — acceptable and desirable (the album lives under that space).
 
@@ -109,13 +109,13 @@ Persisted expansion means a returning user re-fetches once per session on mount 
 
 ### Cache invalidation on link / unlink
 
-**Problem the first draft missed.** `recentSpaces` (which will carry `albumCount`) is reset only on `SpaceAddAssets` / `SpaceRemoveAssets` / `AuthLogout` (`user.svelte.ts:40-46`). The space albums page links and unlinks by calling the SDK directly with **no** `eventManager` emit (`albums/+page.svelte:68,99`). So after a user links an album in the same session, the sidebar's chevron and `albumCount` stay stale until logout or a hard reload — the drill-down would not show the album the user just added.
+**Problem the first draft missed.** `recentSpaces` (which will carry `albumCount`) is reset only on `SpaceAddAssets` / `SpaceRemoveAssets` / `AuthLogout` (`user.svelte.ts:40-46`). The space albums page links and unlinks by calling the SDK directly with **no** `eventManager` emit. So after a user links an album in the same session, the sidebar's chevron and `albumCount` stay stale until logout or a hard reload — the drill-down would not show the album the user just added.
 
 **Fix, matching the existing asset pattern.** `SpaceAddAssets` is a **local** client emit (`space.service.ts:15`), not a server socket broadcast; the acting client invalidates its own `recentSpaces` and other members refresh on next mount. Mirror that for albums:
 
-- Add `SpaceLinkAlbum` and `SpaceUnlinkAlbum` to `event-manager.svelte.ts` (payload `{ spaceId: string; albumId: string }`).
-- Emit them from `albums/+page.svelte` right after `linkAlbum` / `unlinkAlbum` resolve.
-- In `user.svelte.ts`, reset `recentSpaces` on both — the cheapest correct move, since `albumCount` is recomputed by the next `getAllSpaces`. Also drop the affected space's entry from the `spaceAlbums` cache so a re-expand refetches the new list.
+- Add `SpaceLinkAlbum` and `SpaceUnlinkAlbum` to `event-manager.svelte.ts` with payload `{ spaceId: string }`. A single `albumId` does not fit: `openLinkAlbumModal` links several albums in one action (`SpaceLinkAlbumModal` loops `linkAlbum`), and the reset handler only needs the space to invalidate. Keep the payload minimal.
+- Emit them from **all three** link/unlink outcomes in `albums/+page.svelte`: `handleUnlink` (`:59`, emit `SpaceUnlinkAlbum`), `handleCreateAlbum` (`:93`, emit `SpaceLinkAlbum`), and `openLinkAlbumModal` (`:109`, emit `SpaceLinkAlbum` when `linkedCount` is truthy). Emit after the SDK call resolves, alongside the existing `invalidateAll()`.
+- In `user.svelte.ts`, on both events reset `recentSpaces` (so `albumCount` is recomputed by the next `getAllSpaces`) **and** drop the affected space's entry from the `spaceAlbums` cache so a re-expand refetches the new list.
 
 **Cross-user real time is out of scope.** A member whose sidebar is open when _another_ user links an album will not see it until their next mount — exactly today's behavior for cross-user asset adds (local emit only). Matching that limitation is consistent; changing it would require a new server socket event and belongs in a separate change.
 
@@ -146,9 +146,9 @@ Every unit below is written **red first**: the listed test is added and watched 
 - `getAll` returns `albumCount: 0` for a space with no linked albums
 - `getAll` returns the correct count for a space with several linked albums
 - `getAll` reports **per-space** counts independently — two spaces with different link sets return different counts (guards against a missing `WHERE spaceId` in the query)
-- `linkAlbum` bumps `lastActivityAt` (asserts the repository `update` call)
+- `linkAlbum` bumps `lastActivityAt` on a **new** link (asserts the repository `update` call with `{ lastActivityAt }`)
+- `linkAlbum` does **not** bump on an **idempotent re-link** — when `addAlbum` returns `undefined`, no `update` fires (the bump lives inside `if (result)`)
 - `unlinkAlbum` does **not** bump `lastActivityAt` — asserted explicitly, so a later refactor symmetrizing the two is caught
-- `linkAlbum` does **not** write an activity-log row (the deliberate `logActivity` omission)
 
 ### Server — medium test (real DB, testcontainers)
 
@@ -180,8 +180,8 @@ Persistence:
 
 ### Web — link/unlink invalidation `albums/space-albums-page.spec.ts`
 
-- confirming a link emits `SpaceLinkAlbum` with `{ spaceId, albumId }`
-- confirming an unlink emits `SpaceUnlinkAlbum`
+- confirming a link (create-album path and modal path) emits `SpaceLinkAlbum` with `{ spaceId }`
+- confirming an unlink emits `SpaceUnlinkAlbum` with `{ spaceId }`
 - (extends the existing link/unlink tests at `:215-335`)
 
 New test ids follow the existing convention (`sidebar-space-{id}`, `sidebar-space-dot-{id}`, `sidebar-space-thumbnail-{id}`): `sidebar-space-albums-{spaceId}`, `sidebar-space-album-{albumId}`, `sidebar-space-see-all-{spaceId}`.
@@ -195,11 +195,11 @@ Skipped. The web component tests cover the logic, and the Playwright web suite a
 Each step is red → green before the next. Server precedes web so the regenerated SDK types are real when the web tests import them.
 
 1. **Server `albumCount`** — red: the three `getAll` count unit tests + the medium test. Green: `getLinkedAlbumCount` repo method, DTO field, `getAll` wiring.
-2. **Server `lastActivityAt` bump** — red: the `linkAlbum` bump / `unlinkAlbum` no-bump / no-activity-log tests. Green: the single `update` call in `linkAlbum`.
+2. **Server `lastActivityAt` bump** — red: the `linkAlbum` new-link-bumps / idempotent-re-link-no-bump / `unlinkAlbum` no-bump tests. Green: the single `update` call inside `linkAlbum`'s `if (result)` block.
 3. **SDK regen** — `pnpm build` → `pnpm sync:open-api` → full `make open-api` (TS + Dart). Not test-gated, but the web step depends on the new `albumCount` type.
 4. **Route helper** — add `Route.viewSpaceAlbum` and migrate the three hardcoded call sites (their existing tests stay green).
-5. **Link/unlink events** — red: the two emit tests in `space-albums-page.spec.ts`. Green: the events + emits + `user.svelte.ts` reset handlers.
-6. **Sidebar drill-down** — red: the `recent-spaces.spec.ts` groups above. Green: nested `NavbarItem`, lazy fetch + cache, per-space persisted expansion with prune, album rows, "See all".
+5. **Link/unlink events** — red: the emit tests in `space-albums-page.spec.ts`. Green: the events + emits from all three page handlers + `user.svelte.ts` reset handlers.
+6. **Sidebar drill-down** — red: the `recent-spaces.spec.ts` groups above. Green: hand-rolled chevron in `recent-spaces.svelte`, lazy fetch + cache, per-space persisted expansion with prune, album rows, "See all".
 
 ## Verification gates
 
