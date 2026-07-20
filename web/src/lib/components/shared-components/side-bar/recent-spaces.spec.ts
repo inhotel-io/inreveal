@@ -1,6 +1,7 @@
 import { UserAvatarColor } from '@immich/sdk';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
+import { init, register, waitLocale } from 'svelte-i18n';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import RecentSpaces from '$lib/components/shared-components/side-bar/recent-spaces.svelte';
 import { recentSpaceAlbumsExpanded } from '$lib/stores/preferences.store';
@@ -20,6 +21,12 @@ vi.mock('$lib/utils', async (importOriginal) => ({
 }));
 
 describe('RecentSpaces component', () => {
+  beforeAll(async () => {
+    register('en-US', () => import('$i18n/en.json'));
+    await init({ fallbackLocale: 'en-US' });
+    await waitLocale('en-US');
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     userInteraction.recentSpaces = undefined;
@@ -406,6 +413,34 @@ describe('RecentSpaces component', () => {
 
       expect(handleError).toHaveBeenCalledWith(expect.any(Error), expect.any(String));
       expect(screen.queryAllByTestId(/^sidebar-space-album-/)).toHaveLength(0);
+    });
+
+    it('shows no "See all" row at exactly three albums', async () => {
+      const space = sharedSpaceFactory.build({ id: 'space-a', albumCount: 3, newAssetCount: 0 });
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue(sharedSpaceLinkedAlbumFactory.buildList(3));
+      await renderAndFlush();
+
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+
+      expect(screen.queryByTestId('sidebar-space-see-all-space-a')).not.toBeInTheDocument();
+    });
+
+    it('shows a "See all (N)" row above three albums using the fetched length', async () => {
+      const space = sharedSpaceFactory.build({ id: 'space-a', albumCount: 3, newAssetCount: 0 }); // stale count
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue(sharedSpaceLinkedAlbumFactory.buildList(5)); // fetched truth
+      await renderAndFlush();
+
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+
+      const seeAll = screen.getByTestId('sidebar-space-see-all-space-a');
+      expect(seeAll).toHaveAttribute('href', '/spaces/space-a/albums');
+      expect(seeAll.textContent).toContain('5');
     });
   });
 });

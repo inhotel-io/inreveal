@@ -151,6 +151,15 @@
           <div class="grow truncate text-sm font-medium">{album.albumName}</div>
         </a>
       {/each}
+      {#if (cachedAlbums?.length ?? 0) > 3}
+        <a
+          href={Route.viewSpaceAlbums({ id: space.id })}
+          data-testid="sidebar-space-see-all-{space.id}"
+          class="flex w-full place-items-center rounded-e-full py-2 ps-14 text-sm font-medium text-immich-primary hover:bg-subtle dark:text-immich-dark-primary"
+        >
+          {$t('sidebar_space_see_all_albums', { values: { count: cachedAlbums?.length ?? 0 } })}
+        </a>
+      {/if}
     {/if}
   </div>
 {/each}
