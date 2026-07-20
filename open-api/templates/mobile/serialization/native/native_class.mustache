@@ -163,14 +163,14 @@ class {{{classname}}} {
     {{/isDateTime}}
     {{#isNullable}}
     } else {
-    //  json[r'{{{baseName}}}'] = null;
+      json[r'{{{baseName}}}'] = null;
     }
     {{/isNullable}}
     {{^isNullable}}
       {{^required}}
         {{^defaultValue}}
     } else {
-    //  json[r'{{{baseName}}}'] = null;
+      json[r'{{{baseName}}}'] = null;
     }
         {{/defaultValue}}
       {{/required}}
