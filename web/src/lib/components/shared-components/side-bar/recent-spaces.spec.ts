@@ -1,12 +1,14 @@
 import { UserAvatarColor } from '@immich/sdk';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import RecentSpaces from '$lib/components/shared-components/side-bar/recent-spaces.svelte';
+import { recentSpaceAlbumsExpanded } from '$lib/stores/preferences.store';
 import { pinnedSpaceIds } from '$lib/stores/space-view.store';
 import { userInteraction } from '$lib/stores/user.svelte';
 import { handleError } from '$lib/utils/handle-error';
 import { sharedSpaceFactory } from '@test-data/factories/shared-space-factory';
+import { sharedSpaceLinkedAlbumFactory } from '@test-data/factories/shared-space-linked-album-factory';
 
 vi.mock('$lib/utils/handle-error', () => ({
   handleError: vi.fn(),
@@ -22,6 +24,8 @@ describe('RecentSpaces component', () => {
     vi.resetAllMocks();
     userInteraction.recentSpaces = undefined;
     pinnedSpaceIds.set([]);
+    recentSpaceAlbumsExpanded.set({});
+    userInteraction.spaceAlbums = undefined;
   });
 
   const renderAndFlush = async () => {
@@ -315,6 +319,93 @@ describe('RecentSpaces component', () => {
       links = screen.getAllByRole('link');
       expect(links[0]).toHaveAttribute('href', '/spaces/a');
       expect(links[1]).toHaveAttribute('href', '/spaces/b');
+    });
+  });
+
+  describe('album drill-down list', () => {
+    const buildSpaceWithAlbums = (albums: number) =>
+      sharedSpaceFactory.build({ id: 'space-a', albumCount: albums, newAssetCount: 0 });
+
+    it('fetches albums once on first expand and caches on the second', async () => {
+      const space = buildSpaceWithAlbums(2);
+      const albums = sharedSpaceLinkedAlbumFactory.buildList(2);
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue(albums);
+      await renderAndFlush();
+
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+      expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledTimes(1);
+      expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledWith({ id: 'space-a' });
+
+      // collapse then expand again — served from cache, no second call
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+      expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders albums sorted by linkedAt descending, sliced to three', async () => {
+      const space = buildSpaceWithAlbums(4);
+      const albums = [
+        sharedSpaceLinkedAlbumFactory.build({ id: 'old', albumName: 'Old', linkedAt: '2024-01-01T00:00:00Z' }),
+        sharedSpaceLinkedAlbumFactory.build({ id: 'new', albumName: 'New', linkedAt: '2024-06-01T00:00:00Z' }),
+        sharedSpaceLinkedAlbumFactory.build({ id: 'mid', albumName: 'Mid', linkedAt: '2024-03-01T00:00:00Z' }),
+        sharedSpaceLinkedAlbumFactory.build({ id: 'older', albumName: 'Older', linkedAt: '2023-01-01T00:00:00Z' }),
+      ];
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue(albums);
+      await renderAndFlush();
+
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+
+      const rows = screen.getAllByTestId(/^sidebar-space-album-/);
+      expect(rows.map((r) => r.getAttribute('href'))).toEqual([
+        '/spaces/space-a/albums/new',
+        '/spaces/space-a/albums/mid',
+        '/spaces/space-a/albums/old',
+      ]);
+    });
+
+    it('renders nothing when the fetch resolves empty despite a stale albumCount > 0', async () => {
+      const space = buildSpaceWithAlbums(2); // stale count says 2...
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue([]); // ...but the space actually has none now
+      await renderAndFlush();
+
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+
+      // No album rows, no "See all", no crash — the derived `expanded` collapses on an empty result.
+      expect(screen.queryAllByTestId(/^sidebar-space-album-/)).toHaveLength(0);
+      expect(screen.queryByTestId('sidebar-space-see-all-space-a')).not.toBeInTheDocument();
+      // Cached empty → a second expand does not refetch.
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+      expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledTimes(1);
+    });
+
+    it('toasts and collapses on fetch failure', async () => {
+      const space = buildSpaceWithAlbums(1);
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockRejectedValueOnce(new Error('nope'));
+      await renderAndFlush();
+
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+
+      expect(handleError).toHaveBeenCalledWith(expect.any(Error), expect.any(String));
+      expect(screen.queryAllByTestId(/^sidebar-space-album-/)).toHaveLength(0);
     });
   });
 });

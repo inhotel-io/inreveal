@@ -11,7 +11,7 @@
   import { getAssetMediaUrl } from '$lib/utils';
   import { splitPinnedSpaces } from '$lib/utils/space-utils';
   import { handleError } from '$lib/utils/handle-error';
-  import { UserAvatarColor, getAllSpaces } from '@immich/sdk';
+  import { UserAvatarColor, getAllSpaces, getSharedSpaceAlbums } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiChevronDown, mdiChevronRight } from '@mdi/js';
   import { t } from 'svelte-i18n';
@@ -47,9 +47,26 @@
 
   const topSpaceIds = $derived(spaces.map((s) => s.id));
 
+  const loadAlbums = async (spaceId: string) => {
+    if (userInteraction.spaceAlbums?.[spaceId]) {
+      return; // already fetched (possibly an empty list) — never refetch
+    }
+    try {
+      const albums = await getSharedSpaceAlbums({ id: spaceId });
+      const sorted = [...albums].sort((a, b) => (a.linkedAt > b.linkedAt ? -1 : a.linkedAt < b.linkedAt ? 1 : 0));
+      userInteraction.spaceAlbums = { ...userInteraction.spaceAlbums, [spaceId]: sorted };
+    } catch (error) {
+      handleError(error, $t('failed_to_load_albums'));
+      setSpaceAlbumsExpanded(spaceId, false, topSpaceIds); // cache stays unset → retry on next expand
+    }
+  };
+
   const toggleAlbums = (spaceId: string) => {
-    const expanded = !isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, spaceId);
-    setSpaceAlbumsExpanded(spaceId, expanded, topSpaceIds);
+    const nowExpanded = !isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, spaceId);
+    setSpaceAlbumsExpanded(spaceId, nowExpanded, topSpaceIds);
+    if (nowExpanded) {
+      void loadAlbums(spaceId);
+    }
   };
 
   const refreshSpaces = async () => {
@@ -71,7 +88,10 @@
 {#each spaces as space (space.id)}
   {@const active = page.url.pathname.startsWith(`/spaces/${space.id}`)}
   {@const hasAlbums = (space.albumCount ?? 0) > 0}
-  {@const expanded = isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, space.id)}
+  {@const cachedAlbums = userInteraction.spaceAlbums?.[space.id]}
+  {@const expanded =
+    isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, space.id) &&
+    (cachedAlbums === undefined || cachedAlbums.length > 0)}
   <div class="relative">
     {#if hasAlbums}
       <button
@@ -114,5 +134,23 @@
         {space.name}
       </div>
     </a>
+    {#if expanded}
+      {#each (cachedAlbums ?? []).slice(0, 3) as album (album.id)}
+        <a
+          href={Route.viewSpaceAlbum({ spaceId: space.id, albumId: album.id })}
+          title={album.albumName}
+          data-testid="sidebar-space-album-{album.id}"
+          class="flex w-full place-items-center gap-4 rounded-e-full py-2 ps-14 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary"
+        >
+          <div
+            class="size-6 rounded-sm bg-gray-200 bg-cover dark:bg-gray-600"
+            style={album.albumThumbnailAssetId
+              ? `background-image:url('${getAssetMediaUrl({ id: album.albumThumbnailAssetId })}')`
+              : ''}
+          ></div>
+          <div class="grow truncate text-sm font-medium">{album.albumName}</div>
+        </a>
+      {/each}
+    {/if}
   </div>
 {/each}
