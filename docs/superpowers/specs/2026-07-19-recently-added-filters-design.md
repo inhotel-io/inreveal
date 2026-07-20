@@ -323,6 +323,13 @@ export function buildRecentlyAddedFilterConfig(): FilterPanelConfig {
   return {
     // 9 metadata sections. 'text' is appended in Slice 3 together with its search path, so the text
     // input is never present without a working submit.
+    // NOTE (corrected during Slice 3 planning): the `'text'` section is NOT a smart-search query
+    // box — `filter-panel.svelte` renders it as `<TextFilter>` editing three *metadata* filters
+    // (description / originalFileName / ocr), which already round-trip through the URL and through
+    // `buildRecentlyAddedTimelineOptions`. The smart-search query arrives only via `?q=` or the
+    // navbar global search. Deferring `'text'` to Slice 3 was therefore a conservative grouping,
+    // not a correctness requirement; the "never render a text input without a working submit"
+    // rationale below is mistaken about what the section does.
     sections: ['timeline', 'people', 'location', 'camera', 'tags', 'rating', 'media', 'favorites', 'albums'],
     suggestionsProvider: async (filters) =>
       mapSuggestions(await getFilterSuggestions(buildRecentlyAddedSuggestionRequest(filters))),
