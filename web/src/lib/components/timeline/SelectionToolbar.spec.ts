@@ -157,8 +157,9 @@ describe('SelectionToolbar', () => {
 
     expect(screen.queryByLabelText('share')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('add_to_album_or_space')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('to_favorite')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('remove_from_favorites')).not.toBeInTheDocument();
+    // Shown even for a viewer on someone else's asset: a favorite is the viewer's own
+    // `asset_favorite` overlay row (#763), so it is not owner-gated.
+    expect(screen.getByLabelText('to_favorite')).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'delete' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('remove_from_space')).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'set_as_space_cover' })).not.toBeInTheDocument();
@@ -226,7 +227,8 @@ describe('SelectionToolbar', () => {
     expect(screen.getByRole('menuitem', { name: 'remove_from_album' })).toBeInTheDocument();
     expect(screen.queryByLabelText('remove_from_space')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('share')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('to_favorite')).not.toBeInTheDocument();
+    // Favorites are a per-user overlay row (#763), so they are never owner-gated.
+    expect(screen.getByLabelText('to_favorite')).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'delete' })).not.toBeInTheDocument();
   });
 
@@ -243,8 +245,9 @@ describe('SelectionToolbar', () => {
 
     expect(screen.getByLabelText('share')).toBeInTheDocument();
     expect(screen.getByLabelText('add_to_album_or_space')).toBeInTheDocument();
-    // Still hidden: these mutate every selected asset and the server refuses the non-owned ones.
-    expect(screen.queryByLabelText('to_favorite')).not.toBeInTheDocument();
+    // Shown regardless of ownership: a favorite is the viewer's own `asset_favorite` row (#763).
+    expect(screen.getByLabelText('to_favorite')).toBeInTheDocument();
+    // Still hidden: this mutates every selected asset and the server refuses the non-owned ones.
     expect(screen.queryByRole('menuitem', { name: 'delete' })).not.toBeInTheDocument();
   });
 
