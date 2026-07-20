@@ -204,7 +204,7 @@
       isInAlbum: nextFilters.isInAlbum === true ? true : undefined,
       takenAfter: context?.takenAfter,
       takenBefore: context?.takenBefore,
-      ...(nextFilters.isFavorite === undefined && { withSharedSpaces: true }),
+      withSharedSpaces: true,
     });
     const mappedPeople = response.people.map((p) => ({
       id: getPhotosPersonFilterId(p),
@@ -234,7 +234,7 @@
       return undefined;
     }
 
-    const withSharedSpaces = nextFilters.isFavorite === undefined;
+    const withSharedSpaces = true;
     const key = buildSmartSearchFacetKey({ query, filters: nextFilters, withSharedSpaces, language: $lang });
     if (smartFacets && smartFacetKey === key) {
       return smartFacets;
@@ -286,14 +286,14 @@
         $type: SearchSuggestionType.City,
         country,
         ...context,
-        ...(context?.isFavorite === undefined && { withSharedSpaces: true }),
+        withSharedSpaces: true,
       }),
     cameraModels: (make, context) =>
       getSearchSuggestions({
         $type: SearchSuggestionType.CameraModel,
         make,
         ...context,
-        ...(context?.isFavorite === undefined && { withSharedSpaces: true }),
+        withSharedSpaces: true,
       }),
   };
 
@@ -331,7 +331,7 @@
           smartSearchFacetsDto: buildSmartSearchFacetsParams({
             query,
             filters: { ...filters, country },
-            withSharedSpaces: filters.isFavorite === undefined,
+            withSharedSpaces: true,
             language: $lang,
           }),
         });
@@ -349,7 +349,7 @@
           smartSearchFacetsDto: buildSmartSearchFacetsParams({
             query,
             filters: { ...filters, make },
-            withSharedSpaces: filters.isFavorite === undefined,
+            withSharedSpaces: true,
             language: $lang,
           }),
         });
@@ -372,7 +372,7 @@
     const terms: SearchTerms = { ...filterStateToSearchTerms(filters), visibility: AssetVisibility.Timeline };
     if (query) {
       terms.query = query;
-    } else if (filters.isFavorite === undefined) {
+    } else {
       terms.withSharedSpaces = true;
     }
     void modalManager.show(SearchAddAllToCollectionModal, {
@@ -645,7 +645,7 @@
           {filters}
           language={$lang}
           isShared={false}
-          withSharedSpaces={filters.isFavorite === undefined}
+          withSharedSpaces={true}
           total={smartFacetTotal}
         />
       {:else}
