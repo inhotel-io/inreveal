@@ -1,4 +1,4 @@
-import { AssetTypeEnum, getFilterSuggestions, getSearchSuggestions, Type } from '@immich/sdk';
+import { AssetTypeEnum, getFilterSuggestions, getSearchSuggestions, searchSmartFacets, Type } from '@immich/sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFilterState } from '$lib/components/filter-panel/filter-panel';
 import { buildRecentlyAddedFilterConfig } from '$lib/utils/recently-added-filter-config';
@@ -17,6 +17,19 @@ vi.mock('@immich/sdk', async (importOriginal) => {
       hasUnnamedPeople: false,
     }),
     getSearchSuggestions: vi.fn().mockResolvedValue(['Berlin']),
+    searchSmartFacets: vi.fn().mockResolvedValue({
+      countries: ['Germany'],
+      cities: ['Berlin'],
+      cameraMakes: ['Sony'],
+      cameraModels: ['A7'],
+      tags: [{ id: 'tag-1', value: 'Vacation' }],
+      people: [{ id: 'person-1', name: 'Alice' }],
+      ratings: [5],
+      mediaTypes: ['IMAGE'],
+      hasUnnamedPeople: false,
+      total: 7,
+      timeBuckets: [],
+    }),
   };
 });
 
@@ -25,9 +38,7 @@ beforeEach(() => {
 });
 
 describe('buildRecentlyAddedFilterConfig', () => {
-  it('exposes the nine metadata sections in plan order', () => {
-    // 'text' is deliberately absent — it arrives in Slice 3 with the search path, so the input
-    // is never rendered without a working submit.
+  it('exposes all ten filter sections in plan order', () => {
     expect(buildRecentlyAddedFilterConfig().sections).toEqual([
       'timeline',
       'people',
@@ -38,6 +49,7 @@ describe('buildRecentlyAddedFilterConfig', () => {
       'media',
       'favorites',
       'albums',
+      'text',
     ]);
   });
 
@@ -176,5 +188,94 @@ describe('buildRecentlyAddedFilterConfig', () => {
       2,
       expect.objectContaining({ make: 'Sony', takenBefore: '2024-12-31T00:00:00.000Z' }),
     );
+  });
+});
+
+describe('buildRecentlyAddedFilterConfig in query mode', () => {
+  const searchContext = () => ({ query: 'beach', language: 'en', filters: createFilterState() });
+
+  it('routes suggestions through smart facets, never shared spaces', async () => {
+    const config = buildRecentlyAddedFilterConfig(searchContext);
+
+    await config.suggestionsProvider!(createFilterState());
+
+    expect(getFilterSuggestions).not.toHaveBeenCalled();
+    expect(searchSmartFacets).toHaveBeenCalledWith(
+      expect.objectContaining({ smartSearchFacetsDto: expect.objectContaining({ query: 'beach' }) }),
+    );
+    // Absence, not `false` — buildSmartSearchParams only sets the key when truthy.
+    expect(vi.mocked(searchSmartFacets).mock.calls[0][0].smartSearchFacetsDto).not.toHaveProperty('withSharedSpaces');
+  });
+
+  it('maps smart facets to filter suggestions', async () => {
+    const result = await buildRecentlyAddedFilterConfig(searchContext).suggestionsProvider!(createFilterState());
+
+    expect(result.tags).toEqual([{ id: 'tag-1', name: 'Vacation' }]);
+    expect(result.people[0]).toEqual(expect.objectContaining({ id: 'person-1', name: 'Alice' }));
+    expect(result.countries).toEqual(['Germany']);
+  });
+
+  it('routes the dependent providers through smart facets without shared spaces', async () => {
+    const config = buildRecentlyAddedFilterConfig(searchContext);
+
+    const cities = await config.providers!.cities!('Germany');
+    const cameraModels = await config.providers!.cameraModels!('Sony');
+
+    expect(getSearchSuggestions).not.toHaveBeenCalled();
+    expect(cities).toEqual(['Berlin']);
+    expect(cameraModels).toEqual(['A7']);
+    for (const call of vi.mocked(searchSmartFacets).mock.calls) {
+      expect(call[0].smartSearchFacetsDto).not.toHaveProperty('withSharedSpaces');
+    }
+  });
+
+  it('scopes the dependent providers by the live filters, not just the dependent value', async () => {
+    // Regression pin: reconstructing a FilterState from the panel's FilterContext type-checks but
+    // silently drops city/make/model/mediaType/text filters AND all dates (buildSmartSearchParams
+    // derives dates from dateAfter/dateBefore/selectedYear, not takenAfter/takenBefore).
+    const config = buildRecentlyAddedFilterConfig(() => ({
+      query: 'beach',
+      language: 'en',
+      filters: { ...createFilterState(), make: 'Sony', rating: 4, selectedYear: 2024 },
+    }));
+
+    await config.providers!.cities!('Germany');
+
+    expect(vi.mocked(searchSmartFacets).mock.calls[0][0].smartSearchFacetsDto).toEqual(
+      expect.objectContaining({
+        country: 'Germany',
+        make: 'Sony',
+        rating: 4,
+        takenAfter: '2024-01-01T00:00:00.000Z',
+      }),
+    );
+  });
+
+  it('reads the query and filters at call time, not at build time', async () => {
+    // The panel calls providers during interaction; values captured at build time would go stale
+    // the moment the user edits the query or another filter.
+    let context = { query: 'beach', language: 'en', filters: createFilterState() };
+    const config = buildRecentlyAddedFilterConfig(() => context);
+
+    await config.suggestionsProvider!(createFilterState());
+    context = { query: 'sunset', language: 'en', filters: { ...createFilterState(), rating: 5 } };
+    await config.suggestionsProvider!(createFilterState());
+
+    expect(vi.mocked(searchSmartFacets).mock.calls[1][0].smartSearchFacetsDto).toEqual(
+      expect.objectContaining({ query: 'sunset' }),
+    );
+  });
+
+  it('falls back to the browse path when the query is blank', async () => {
+    const config = buildRecentlyAddedFilterConfig(() => ({
+      query: '   ',
+      language: 'en',
+      filters: createFilterState(),
+    }));
+
+    await config.suggestionsProvider!(createFilterState());
+
+    expect(searchSmartFacets).not.toHaveBeenCalled();
+    expect(getFilterSuggestions).toHaveBeenCalled();
   });
 });

@@ -90,6 +90,15 @@ describe('buildRecentlyAddedTimelineOptions', () => {
     );
   });
 
+  it('degrades a relevance sort to newest-added-first in browse mode', () => {
+    // A `?q=` in the URL resolves sortOrder to 'relevance'. Browse mode has no relevance ranking,
+    // so it must fall back to the view's natural default rather than producing an invalid order.
+    const options = buildRecentlyAddedTimelineOptions({ ...createFilterState(), sortOrder: 'relevance' });
+
+    expect(options.order).toBe(AssetOrder.Desc);
+    expect(options.orderBy).toBe(AssetOrderBy.CreatedAt);
+  });
+
   it('passes metadata predicates through', () => {
     const options = buildRecentlyAddedTimelineOptions({
       ...createFilterState(),

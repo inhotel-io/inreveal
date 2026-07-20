@@ -253,15 +253,14 @@ describe('Recently Added page filters', () => {
     await waitFor(() => expect(mockRegisterSearchablePageFilters).toHaveBeenCalledOnce());
   });
 
-  it("passes the nine sections to the filter panel, and no 'text' section", async () => {
+  it('passes all ten sections to the filter panel', async () => {
     renderPage();
 
     const panel = await screen.findByTestId('filter-panel-stub');
 
     expect(panel).toHaveAttribute(
       'data-sections',
-      'timeline,people,location,camera,tags,rating,media,favorites,albums',
+      'timeline,people,location,camera,tags,rating,media,favorites,albums,text',
     );
-    expect(panel.dataset.sections).not.toContain('text');
   });
 });
