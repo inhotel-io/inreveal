@@ -747,6 +747,7 @@ export class SharedSpaceService extends BaseService {
 
     // Only queue face sync for newly created links (not idempotent re-links).
     if (result) {
+      await this.sharedSpaceRepository.update(spaceId, { lastActivityAt: new Date() });
       const space = await this.sharedSpaceRepository.getById(spaceId);
       if (space?.faceRecognitionEnabled) {
         await this.jobRepository.queue({
