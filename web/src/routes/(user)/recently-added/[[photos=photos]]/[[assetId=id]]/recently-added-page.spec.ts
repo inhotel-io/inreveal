@@ -1,6 +1,8 @@
+import { AssetTypeEnum } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
+import { init, register, waitLocale } from 'svelte-i18n';
 import { goto } from '$app/navigation';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
@@ -47,6 +49,11 @@ vi.mock('$lib/components/filter-panel/active-filters-bar.svelte', async () => {
 
 vi.mock('$lib/components/filter-panel/filter-panel.svelte', async () => {
   const { default: MockComponent } = await import('@test-data/mocks/bindable-filter-panel.stub.svelte');
+  return { default: MockComponent };
+});
+
+vi.mock('$lib/components/search/smart-search-results.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/smart-search-results.stub.svelte');
   return { default: MockComponent };
 });
 
@@ -262,5 +269,105 @@ describe('Recently Added page filters', () => {
       'data-sections',
       'timeline,people,location,camera,tags,rating,media,favorites,albums,text',
     );
+  });
+});
+
+describe('Recently Added page query mode', () => {
+  beforeAll(async () => {
+    // Global test setup (`src/test-data/setup.ts`) only inits the `dev` fallback locale, which
+    // returns raw i18n keys — fine for tests that never inspect translated text, but the header
+    // count's `$t('items_count', { values: { count } })` needs real ICU plural interpolation to
+    // tell "12 items" apart from "2 items". Load the real English bundle, mirroring
+    // `recent-row.spec.ts`'s precedent for the same `items_count` key.
+    register('en-US', () => import('$i18n/en.json'));
+    await init({ fallbackLocale: 'en-US' });
+    await waitLocale('en-US');
+  });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockPage.url = new URL('https://gallery.test/recently-added?q=beach');
+    mockAssetMultiSelectManager.selectionActive = false;
+    mockAssetMultiSelectManager.assets = [];
+    mockRegisterSearchablePageFilters.mockReturnValue(vi.fn());
+    sdkMock.getFilterSuggestions.mockResolvedValue({
+      people: [],
+      countries: [],
+      cameraMakes: [],
+      tags: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+    });
+    sdkMock.getSearchSuggestions.mockResolvedValue([]);
+    sdkMock.searchSmartFacets.mockResolvedValue({
+      total: 12,
+      timeBuckets: [{ timeBucket: '2024-01-01', count: 12 }],
+      countries: ['Germany'],
+      cities: ['Berlin'],
+      cameraMakes: ['Sony'],
+      cameraModels: ['A7'],
+      tags: [{ id: 'tag-1', value: 'Travel' }],
+      people: [{ id: 'person-1', name: 'Ada' }],
+      ratings: [4],
+      mediaTypes: [AssetTypeEnum.Image],
+      hasUnnamedPeople: false,
+    });
+  });
+
+  it('renders SmartSearchResults instead of the timeline when the URL carries ?q=', async () => {
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-search-query', 'beach');
+    });
+    expect(screen.queryByTestId('timeline-options')).not.toBeInTheDocument();
+  });
+
+  it('does not send shared-space scope to SmartSearchResults', async () => {
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-with-shared-spaces', 'false');
+    });
+  });
+
+  it('stays in browse mode for a blank/whitespace-only query', async () => {
+    mockPage.url = new URL('https://gallery.test/recently-added?q=%20%20');
+
+    renderPage();
+
+    expect(screen.queryByTestId('smart-search-results')).not.toBeInTheDocument();
+    expect(sdkMock.searchSmartFacets).not.toHaveBeenCalled();
+    await waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
+  });
+
+  it('the header count uses the search total in query mode, not timelineManager.assetCount', async () => {
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user-page-layout')).toHaveAttribute('data-description', '12 items');
+    });
+  });
+
+  it('a failed facet fetch falls back to the previous facets (count survives)', async () => {
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-total', '12'));
+
+    sdkMock.searchSmartFacets.mockRejectedValueOnce(new Error('facets failed'));
+    await fireEvent.click(screen.getByTestId('filter-panel-set-country'));
+
+    await waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-total', '12');
+  });
+
+  it('re-rendering with an unchanged query+filters does not refetch facets (key cache)', async () => {
+    renderPage();
+    await waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1));
+
+    await fireEvent.click(screen.getByTestId('filter-panel-set-sort-asc'));
+
+    await waitFor(() => expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-sort-order', 'asc'));
+    expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1);
   });
 });
