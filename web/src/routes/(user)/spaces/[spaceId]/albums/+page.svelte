@@ -5,6 +5,7 @@
   import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import SpaceLinkAlbumModal from '$lib/modals/SpaceLinkAlbumModal.svelte';
+  import { Route } from '$lib/route';
   import { handleError } from '$lib/utils/handle-error';
   import { createAlbum } from '$lib/utils/album-utils';
   import {
@@ -98,7 +99,7 @@
     try {
       await linkAlbum({ id: space.id, albumId: newAlbum.id });
       await invalidateAll();
-      await goto(`/spaces/${space.id}/albums/${newAlbum.id}`);
+      await goto(Route.viewSpaceAlbum({ spaceId: space.id, albumId: newAlbum.id }));
     } catch (error) {
       handleError(error, $t('spaces_linked_albums_error_link'));
       await reload();
