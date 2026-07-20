@@ -66,6 +66,26 @@ Recently Added is an **own + partner** surface, **never shared spaces**. This ho
 timeline options (Slice 2), filter suggestions (Slice 2), and smart search (Slice 3). It is the one rule
 distinguishing Recently Added from Photos.
 
+### 3.1.1 Prerequisite discovered during Slice 2 planning: `/recently-added` is not a searchable page
+
+`buildSearchablePageUrl()` returns `null` unless `getSearchablePageBasePath()` recognises the pathname,
+and today it recognises only `/photos` and `/spaces/…`. On `/recently-added` the filter→URL write path
+would therefore **silently no-op** — filters would apply to the grid but never reach the URL, breaking
+"URL is the source of truth", deep links, and survive-a-reload.
+
+Registering the path is necessary but not sufficient: `getSearchablePageState()` derives
+`isSearchable` directly from `basePath !== null`, and three consumers key off that flag
+(`global-search-input-trigger.svelte`'s sort control, and `global-search-manager`'s typed-display
+text plus its "which page do I apply a filter to" base — which today redirects to `/photos`).
+Flipping it on in Slice 2 would make global search stay on Recently Added and write a `?q=` that
+nothing handles until Slice 3.
+
+**Decision:** separate the two capabilities. Slice 2 registers `/recently-added` in
+`getSearchablePageBasePath()` (so URL persistence works) while computing `isSearchable` from a
+separate query-capable predicate that excludes `/recently-added`. Slice 3 removes that exclusion
+together with the text section and the search path, so query support arrives complete. Photos and
+Spaces behaviour is unchanged throughout.
+
 ### 3.2 Decision logic lives in pure, unit-tested functions
 
 To keep the route thin (a full `+page.svelte` with all managers is impractical to mount in vitest), all
