@@ -512,7 +512,23 @@ Scenario: Text search stays within own + partner scope
 
 **Seeding notes.** Smart search is ML-backed and its ranking is not deterministic in e2e — do **not** assert on which assets match semantically. Assert on the **mode switch, the count source, and the scope**.
 
-**Scenario 3 needs a positive control, or it is unfalsifiable.** Asserting only that a shared-space asset is *absent* passes for a dozen unrelated reasons: never indexed, matched nothing semantically, the member never opted the space into their timeline, or the seeding silently failed. The test must prove the asset *would* have been found:
+**Scenario 3 must assert the REQUEST, not the results — the e2e stack has no ML.** (Discovered during implementation: `e2e/docker-compose.yml` has no `machine-learning` service and `IMMICH_MACHINE_LEARNING_ENABLED=false`, so `searchSmart` errors and `smart-search-results.svelte` falls back to an empty list for *every* query. `photos-search.e2e-spec.ts:88-91` documents the same limitation.) A result-based scope test is therefore untestable here: nothing is ever found, so absence proves nothing and no positive control can succeed.
+
+Assert what the client **sends** instead. `smart-search-results.svelte:46-52` posts `buildSmartSearchParams({ …, withSharedSpaces, … })` to `POST /api/search/smart`, and `buildSmartSearchParams` sets `withSharedSpaces: true` only when truthy. So intercept the request with Playwright and assert:
+
+- on `/recently-added?q=…` the payload **has no `withSharedSpaces`** (own + partner);
+- **positive control:** on `/photos?q=…` the payload **does** carry `withSharedSpaces: true`.
+
+This is deterministic, ML-independent, and tests the invariant directly. Capture with `page.waitForRequest` / `route.request().postDataJSON()`.
+
+It is also genuinely red before Task 5: the unwired route never enters query mode, so no `/api/search/smart` request is issued at all from `/recently-added` and the wait times out.
+
+The shared-space seeding below is no longer needed for scenario 3 — drop it. (Keep it only if you also want a result-level assertion, which cannot pass in this environment.)
+
+<details>
+<summary>Superseded: the result-based approach and its seeding requirements (kept for context)</summary>
+
+Asserting only that a shared-space asset is *absent* passes for a dozen unrelated reasons: never indexed, matched nothing semantically, the member never opted the space into their timeline, or the seeding silently failed. It would have needed:
 
 1. A **second user** owns the asset and adds it to a space the test actor is a member of (this direction, not the reverse).
 2. Set the **member-level** timeline opt-in explicitly (`updateMemberTimeline`, imported straight from `@immich/sdk` and called with the **member's own** token — see `space-map-markers.e2e-spec.ts:62-63`), so it is a controlled variable rather than an accidental confound. Note this is *not* the album-level `showInTimeline` toggle; the two are not interchangeable (`spaces-albums-timeline.e2e-spec.ts:19-23`).
@@ -522,6 +538,8 @@ Scenario: Text search stays within own + partner scope
 Helpers (all in `e2e/src/utils.ts`): `utils.userSetup`, `utils.createSpace(accessToken, dto)` (`:367`), `utils.addSpaceMember(accessToken, spaceId, { userId, role })` (`:370`), `utils.addSpaceAssets(accessToken, spaceId, assetIds)` (`:373`). Closest precedent: `e2e/src/specs/web/space-map-markers.e2e-spec.ts:26-55` — note it calls the SDK directly for the per-member timeline opt-in, because that endpoint needs the **member's own** token, not admin's.
 
 This third `describe` must call `utils.resetDatabase()` in its own `beforeAll` and build its own fixture — it cannot inherit from either existing block, both of which reset the database themselves.
+
+</details>
 
 **Do not try to make the semantic match deterministic — you do not need to, and the obvious workaround does not exist.** The mode switch is guaranteed by the URL carrying `?q=`, whatever it matches; the assertion is that one specific shared-space asset id is absent from the rendered results; and the `/photos` positive control is precisely what proves the query *can* find it. If the query matches nothing even on `/photos`, the positive control fails loudly — which is the correct outcome, turning semantic non-determinism into a visible failure rather than a silent pass.
 
