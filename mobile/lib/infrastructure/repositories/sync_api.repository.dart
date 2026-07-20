@@ -33,6 +33,11 @@ class SyncApiRepository {
     SyncRequestType.sharedSpaceAlbumAssetExifsV1,
   ];
 
+  /// The #763 per-user favorites request type. Same one-place rule as
+  /// [_spaceAlbumSyncTypes] so the capability filter and the version-gate fallback
+  /// can never drift apart.
+  static const _assetFavoriteSyncTypes = [SyncRequestType.assetFavoritesV1];
+
   Future<void> streamChanges(
     Future<void> Function(List<SyncEvent>, Function() abort, Function() reset) onData, {
     required SemVer serverVersion,
@@ -138,6 +143,14 @@ class SyncApiRepository {
             ...(_spaceAlbumSyncTypes.where((type) => supportedSyncTypes.contains(type.value)))
           else if (serverVersion > const SemVer(major: 5, minor: 0, patch: 0))
             ..._spaceAlbumSyncTypes,
+          // #763 per-user favorites stream. Routed through the same M14 capability declaration as
+          // the space-album types above, falling back to a fork-version gate (>= 5.3) on servers
+          // that predate capability signalling. An unknown enum value 400s the WHOLE /sync/stream
+          // request, so this gate is the only protection.
+          if (supportedSyncTypes != null)
+            ...(_assetFavoriteSyncTypes.where((type) => supportedSyncTypes.contains(type.value)))
+          else if (serverVersion > const SemVer(major: 5, minor: 2, patch: 0))
+            ..._assetFavoriteSyncTypes,
         ],
       ).toJson(),
     );
@@ -313,6 +326,9 @@ const _kResponseMap = <SyncEntityType, Function(Object)>{
   SyncEntityType.sharedSpaceAlbumAssetExifCreateV1: SyncAssetExifV1.fromJson,
   SyncEntityType.sharedSpaceAlbumAssetExifUpdateV1: SyncAssetExifV1.fromJson,
   SyncEntityType.sharedSpaceAlbumAssetExifBackfillV1: SyncAssetExifV1.fromJson,
+  // --- gallery-fork: per-user favorites sync (#763) ---
+  SyncEntityType.assetFavoriteV1: SyncAssetFavoriteV1.fromJson,
+  SyncEntityType.assetFavoriteDeleteV1: SyncAssetFavoriteDeleteV1.fromJson,
 };
 
 class _SyncEmptyDto {

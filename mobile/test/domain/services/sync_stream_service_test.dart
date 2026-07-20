@@ -206,6 +206,9 @@ void main() {
     when(() => mockSyncStreamRepo.deleteSharedSpaceAlbumToAssetsV1(any())).thenAnswer(successHandler);
     when(() => mockSyncStreamRepo.updateSharedSpaceAlbumAssetsV1(any())).thenAnswer(successHandler);
     when(() => mockSyncStreamRepo.updateSharedSpaceAlbumAssetExifsV1(any())).thenAnswer(successHandler);
+    // Per-user favorites sync handlers (#763).
+    when(() => mockSyncStreamRepo.updateAssetFavoritesV1(any())).thenAnswer(successHandler);
+    when(() => mockSyncStreamRepo.deleteAssetFavoritesV1(any())).thenAnswer(successHandler);
     when(() => mockSyncMigrationRepo.v20260128CopyExifWidthHeightToAsset()).thenAnswer(successHandler);
 
     sut = SyncStreamService(
@@ -668,6 +671,21 @@ void main() {
         await simulateEvents([SyncStreamStub.sharedSpaceAlbumAssetExifBackfillV1]);
         verify(() => mockSyncStreamRepo.updateSharedSpaceAlbumAssetExifsV1(any())).called(1);
         verify(() => mockSyncApiRepo.ack(['sa-exif-backfill-ack'])).called(1);
+      });
+    });
+
+    // --- gallery-fork: per-user favorites dispatch arm tests (#763) ---
+    group('SyncStreamService - asset favorites dispatch arms', () {
+      test('assetFavoriteV1 → updateAssetFavoritesV1', () async {
+        await simulateEvents([SyncStreamStub.assetFavoriteV1]);
+        verify(() => mockSyncStreamRepo.updateAssetFavoritesV1(any())).called(1);
+        verify(() => mockSyncApiRepo.ack(['asset-favorite-v1-ack'])).called(1);
+      });
+
+      test('assetFavoriteDeleteV1 → deleteAssetFavoritesV1', () async {
+        await simulateEvents([SyncStreamStub.assetFavoriteDeleteV1]);
+        verify(() => mockSyncStreamRepo.deleteAssetFavoritesV1(any())).called(1);
+        verify(() => mockSyncApiRepo.ack(['asset-favorite-delete-ack'])).called(1);
       });
     });
   });

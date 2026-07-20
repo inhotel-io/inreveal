@@ -418,6 +418,11 @@ class SyncStreamService {
       case SyncEntityType.sharedSpaceAlbumAssetExifUpdateV1:
       case SyncEntityType.sharedSpaceAlbumAssetExifBackfillV1:
         return _syncStreamRepository.updateSharedSpaceAlbumAssetExifsV1(data.cast());
+      // --- gallery-fork: per-user favorites sync dispatch (#763) ---
+      case SyncEntityType.assetFavoriteV1:
+        return _syncStreamRepository.updateAssetFavoritesV1(data.cast());
+      case SyncEntityType.assetFavoriteDeleteV1:
+        return _syncStreamRepository.deleteAssetFavoritesV1(data.cast());
       // Forward-compat: any new SyncEntityType added on the server but not yet
       // wired here lands in this default arm. Must NOT throw — the sync stream
       // should continue processing subsequent events of known types. The plan's
