@@ -266,6 +266,34 @@ describe('RecentSpaces component', () => {
     });
   });
 
+  describe('album drill-down chevron', () => {
+    it('shows a chevron when albumCount > 0', async () => {
+      const space = sharedSpaceFactory.build({ id: 'has-albums', albumCount: 2 });
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      await renderAndFlush();
+
+      expect(screen.getByTestId('sidebar-space-chevron-has-albums')).toBeInTheDocument();
+    });
+
+    it('shows no chevron when albumCount is 0', async () => {
+      const space = sharedSpaceFactory.build({ id: 'no-albums', albumCount: 0 });
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      await renderAndFlush();
+
+      expect(screen.queryByTestId('sidebar-space-chevron-no-albums')).not.toBeInTheDocument();
+    });
+
+    it('shows no chevron when albumCount is undefined', async () => {
+      const space = sharedSpaceFactory.build({ id: 'undef-albums' });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (space as any).albumCount = undefined;
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      await renderAndFlush();
+
+      expect(screen.queryByTestId('sidebar-space-chevron-undef-albums')).not.toBeInTheDocument();
+    });
+  });
+
   describe('pin reactivity', () => {
     it('re-sorts when pinnedSpaceIds changes', async () => {
       const a = sharedSpaceFactory.build({ id: 'a', lastActivityAt: '2024-01-01T00:00:00Z' });
