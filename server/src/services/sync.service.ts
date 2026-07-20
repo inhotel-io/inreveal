@@ -96,9 +96,6 @@ export const SYNC_TYPES_ORDER = [
   SyncRequestType.UserMetadataV1,
   SyncRequestType.AssetMetadataV1,
   SyncRequestType.AssetEditsV1,
-  // #763: asset_favorite is its own synced entity (design doc §4.3) — grouped with the other
-  // per-asset overlay streams above.
-  SyncRequestType.AssetFavoritesV1,
   // Shared spaces — wired in Task 10. Order: parent metadata before assets, exifs after assets.
   SyncRequestType.SharedSpacesV1,
   SyncRequestType.SharedSpaceMembersV1,
@@ -126,6 +123,10 @@ export const SYNC_TYPES_ORDER = [
   SyncRequestType.SharedSpaceAlbumToAssetsV1,
   SyncRequestType.SharedSpaceAlbumAssetsV1,
   SyncRequestType.SharedSpaceAlbumAssetExifsV1,
+  // #763: favorites reference assets a viewer does not own, so this overlay stream sits after
+  // EVERY asset-delivering stream (own, partner, album, library, shared-space, space-album) —
+  // same delivering-stream-first pattern as PartnerAssetExifsV1.
+  SyncRequestType.AssetFavoritesV1,
 ];
 
 const throwSessionRequired = () => {
