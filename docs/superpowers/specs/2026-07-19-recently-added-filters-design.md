@@ -73,18 +73,30 @@ and today it recognises only `/photos` and `/spaces/…`. On `/recently-added` t
 would therefore **silently no-op** — filters would apply to the grid but never reach the URL, breaking
 "URL is the source of truth", deep links, and survive-a-reload.
 
-Registering the path is necessary but not sufficient: `getSearchablePageState()` derives
-`isSearchable` directly from `basePath !== null`, and three consumers key off that flag
-(`global-search-input-trigger.svelte`'s sort control, and `global-search-manager`'s typed-display
-text plus its "which page do I apply a filter to" base — which today redirects to `/photos`).
-Flipping it on in Slice 2 would make global search stay on Recently Added and write a `?q=` that
-nothing handles until Slice 3.
+Registering the path is necessary but not sufficient, and the flag is not where the risk lives.
+`global-search-manager`'s `buildSearchDestination()` branches purely on whether
+`buildSearchablePageUrl()` returns non-null — it never consults `isSearchable`:
 
-**Decision:** separate the two capabilities. Slice 2 registers `/recently-added` in
-`getSearchablePageBasePath()` (so URL persistence works) while computing `isSearchable` from a
-separate query-capable predicate that excludes `/recently-added`. Slice 3 removes that exclusion
-together with the text section and the search path, so query support arrives complete. Photos and
-Spaces behaviour is unchanged throughout.
+```ts
+const searchablePageUrl = buildSearchablePageUrl(page.url, text, this.searchSortOrder, filters);
+if (searchablePageUrl) { return searchablePageUrl; }
+…
+return buildSearchablePageUrl(new URL('/photos', page.url), text, …) ?? '/photos';
+```
+
+Today a global search typed on Recently Added falls through to `/photos` and works. The moment the
+base path resolves, that fallback stops firing and the user lands on `/recently-added?q=beach` — a
+route with no query handling until Slice 3. Unfiltered grid, stale `q`, no error. Setting
+`isSearchable: false` does not prevent this: it only suppresses pre-filling the search box.
+
+**Decision:** separate the two capabilities, and enforce the separation where the query is
+*written*, not merely where it is advertised. Slice 2 registers `/recently-added` in
+`getSearchablePageBasePath()` (so filter URL persistence works) and adds a query-capable predicate
+that excludes `/recently-added`. That predicate is enforced in **two** places: `getSearchablePageState()`
+reports `isSearchable: false`, and `buildSearchablePageUrl()` returns `null` when asked to build a
+URL carrying a non-empty query for a non-query-capable page — which keeps `buildSearchDestination`'s
+`/photos` fallback intact. Slice 3 deletes the exclusion in one place, and the text section, the
+search path, and query support all land together. Photos and Spaces behaviour is unchanged throughout.
 
 ### 3.2 Decision logic lives in pure, unit-tested functions
 
