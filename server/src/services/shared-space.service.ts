@@ -1059,6 +1059,7 @@ export class SharedSpaceService extends BaseService {
 
     const markers = await this.sharedSpaceRepository.getFilteredMapMarkers({
       userIds: dto.spaceId ? undefined : [auth.user.id],
+      authUserId: auth.user.id,
       spaceId: dto.spaceId,
       timelineSpaceIds,
       personIds: scopedPersonFilters.personIds,

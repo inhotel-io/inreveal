@@ -800,6 +800,7 @@ describe(SearchService.name, () => {
           query: 'test',
           embedding: '[1, 2, 3]',
           userIds: [authStub.user1.user.id],
+          authUserId: authStub.user1.user.id,
           maxDistance: 0,
           visibility: 'not-locked',
         },

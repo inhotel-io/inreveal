@@ -17,6 +17,7 @@ import {
   truncatedDate,
   withExifInner,
 } from 'src/utils/database';
+import { favoriteExistsFor } from 'src/utils/favorite';
 import { without } from 'src/utils/filter-suggestions';
 import { paginationHelper } from 'src/utils/pagination';
 import { spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
@@ -30,6 +31,14 @@ export interface SearchAssetIdOptions {
 export interface SearchUserIdOptions {
   libraryId?: string | null;
   userIds?: string[];
+  /**
+   * #763: the caller making the request — NOT `userIds` (the timeline/search *target*, which
+   * differs from the caller on space/album scoped paths — e.g. `getFilteredMapMarkers`'s
+   * `userIds: dto.spaceId ? undefined : [auth.user.id]` leaves `userIds` unset entirely when
+   * browsing a specific space). Required by `searchAssetBuilder` and the smart-facet pipeline
+   * whenever `isFavorite` is set, so they resolve the `asset_favorite` overlay for the right user.
+   */
+  authUserId?: string;
 }
 
 export type SearchIdOptions = SearchAssetIdOptions & SearchUserIdOptions;
@@ -649,7 +658,13 @@ export class SearchRepository {
         qb.where('asset.fileCreatedAt', '<=', options.takenBefore!),
       )
       .$if(exclude !== 'media' && !!options.type, (qb) => qb.where('asset.type', '=', options.type!))
-      .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
+      .$if(options.isFavorite !== undefined, (qb) =>
+        qb.where((eb) =>
+          options.isFavorite
+            ? favoriteExistsFor(eb, options.authUserId!)
+            : eb.not(favoriteExistsFor(eb, options.authUserId!)),
+        ),
+      )
       .$if(needsExifJoin, (qb) =>
         qb
           .innerJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
@@ -1416,7 +1431,13 @@ export class SearchRepository {
       )
       .$if(!!options.mediaType, (qb) => qb.where('asset.type', '=', options.mediaType!))
       .$if(options.isFavorite !== undefined && options.isFavorite !== null, (qb) =>
-        qb.where('asset.isFavorite', '=', options.isFavorite!),
+        qb.where((eb) =>
+          // #763: buildFilteredAssetIds has no dedicated authUserId param — userIds[0] is the
+          // caller here (every call path resolves userIds via SearchService.getUserIdsToSearch,
+          // which always returns `[auth.user.id, ...partnerIds]`; unlike searchAssetBuilder's
+          // options.userIds, this is never left unset or reordered on a space/album path).
+          options.isFavorite ? favoriteExistsFor(eb, userIds[0]) : eb.not(favoriteExistsFor(eb, userIds[0])),
+        ),
       );
   }
 
