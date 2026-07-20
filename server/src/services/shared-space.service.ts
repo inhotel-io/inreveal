@@ -1042,7 +1042,7 @@ export class SharedSpaceService extends BaseService {
     }
 
     let timelineSpaceIds: string[] | undefined;
-    if (!dto.spaceId && dto.withSharedSpaces && dto.isFavorite !== true) {
+    if (!dto.spaceId && dto.withSharedSpaces) {
       const spaceRows = await this.sharedSpaceRepository.getSpaceIdsForTimeline(auth.user.id);
       if (spaceRows.length > 0) {
         timelineSpaceIds = spaceRows.map((row) => row.spaceId);
