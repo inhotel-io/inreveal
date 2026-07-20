@@ -8,7 +8,11 @@ import 'package:immich_ui/immich_ui.dart';
 class FavoriteAction extends AssetAction<RemoteAsset> {
   final bool shouldFavorite;
 
-  FavoriteAction({required super.assets}) : shouldFavorite = assets.any((asset) => !asset.isFavorite);
+  // #763 (E32): the direction must derive from the SAME set the action mutates. Candidates are
+  // every remote asset in the selection — favorites are per-user, so read access (implied by the
+  // asset being in the local mirror) is sufficient; ownership is irrelevant.
+  FavoriteAction({required super.assets})
+    : shouldFavorite = assets.whereType<RemoteAsset>().any((asset) => !asset.isFavorite);
 
   @override
   IconData get icon => shouldFavorite ? Icons.favorite_border_rounded : Icons.favorite_rounded;
@@ -17,11 +21,8 @@ class FavoriteAction extends AssetAction<RemoteAsset> {
   String label(ActionScope scope) => shouldFavorite ? scope.context.t.favorite : scope.context.t.unfavorite;
 
   @override
-  Iterable<RemoteAsset> filter(ActionScope scope) => assets
-      .where(
-        (asset) => asset is RemoteAsset && asset.ownerId == scope.authUser.id && asset.isFavorite == !shouldFavorite,
-      )
-      .cast<RemoteAsset>();
+  Iterable<RemoteAsset> filter(ActionScope scope) =>
+      assets.whereType<RemoteAsset>().where((asset) => asset.isFavorite == !shouldFavorite);
 
   @override
   bool isVisible(ActionScope scope) => filter(scope).isNotEmpty;

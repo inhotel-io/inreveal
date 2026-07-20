@@ -42,8 +42,10 @@ class AssetApiRepository extends ApiRepository {
     await _api.updateAssets(AssetBulkUpdateDto(ids: ids, visibility: Optional.present(_mapVisibility(visibility))));
   }
 
+  // #763: favorites are per-user (not owner-gated), so they route through the dedicated
+  // /assets/favorites endpoint rather than the owner-only bulk-update endpoint.
   Future<void> updateFavorite(List<String> ids, bool isFavorite) async {
-    await _api.updateAssets(AssetBulkUpdateDto(ids: ids, isFavorite: Optional.present(isFavorite)));
+    await _api.updateAssetFavorites(AssetFavoriteUpdateDto(ids: ids, isFavorite: isFavorite));
   }
 
   Future<void> updateLocation(List<String> ids, LatLng location) async {

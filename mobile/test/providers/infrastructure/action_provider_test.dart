@@ -41,6 +41,17 @@ final _asset = RemoteAsset(
   isEdited: false,
 );
 
+final _theirAsset = RemoteAsset(
+  id: 'asset-2',
+  name: 'their-photo.jpg',
+  ownerId: 'someone-else',
+  checksum: 'checksum-2',
+  type: AssetType.image,
+  createdAt: DateTime(2026, 6, 10, 10, 27),
+  updatedAt: DateTime(2026, 6, 10, 10, 27),
+  isEdited: false,
+);
+
 void main() {
   late ProviderContainer container;
   late MockActionService actionService;
@@ -81,7 +92,9 @@ void main() {
       container.listen(assetExifProvider(_asset), (_, __) {});
       await container.read(assetExifProvider(_asset).future);
 
-      final result = await container.read(actionProvider.notifier).editDateTime(ActionSource.viewer, FakeBuildContext());
+      final result = await container
+          .read(actionProvider.notifier)
+          .editDateTime(ActionSource.viewer, FakeBuildContext());
 
       expect(result?.success, isTrue);
       await container.read(assetExifProvider(_asset).future);
@@ -93,7 +106,9 @@ void main() {
       container.listen(assetExifProvider(_asset), (_, __) {});
       await container.read(assetExifProvider(_asset).future);
 
-      final result = await container.read(actionProvider.notifier).editDateTime(ActionSource.timeline, FakeBuildContext());
+      final result = await container
+          .read(actionProvider.notifier)
+          .editDateTime(ActionSource.timeline, FakeBuildContext());
 
       expect(result?.success, isTrue);
       await container.read(assetExifProvider(_asset).future);
@@ -106,11 +121,42 @@ void main() {
       container.listen(assetExifProvider(_asset), (_, __) {});
       await container.read(assetExifProvider(_asset).future);
 
-      final result = await container.read(actionProvider.notifier).editDateTime(ActionSource.viewer, FakeBuildContext());
+      final result = await container
+          .read(actionProvider.notifier)
+          .editDateTime(ActionSource.viewer, FakeBuildContext());
 
       expect(result, isNull);
       await container.read(assetExifProvider(_asset).future);
       verify(() => assetService.getExif(_asset)).called(1);
+    });
+  });
+
+  // #763: unlike every other action, favorite/unFavorite must NOT filter to owned assets — a
+  // viewer can favorite an asset they only have read access to via a shared space. This is the
+  // legacy `FavoriteActionButton`/`actionProvider.notifier).favorite(...)` path (still live from
+  // the timeline's and Space detail's long-press bottom sheets), separate from the modern
+  // `FavoriteAction` un-gated in favorite_action_test.dart.
+  group('favorite', () {
+    test('includes a non-owned remote asset (favorites are per-user, not owner-gated)', () async {
+      when(() => actionService.favorite(any())).thenAnswer((_) async {});
+      container.read(assetViewerProvider.notifier).setAsset(_theirAsset);
+
+      final result = await container.read(actionProvider.notifier).favorite(ActionSource.viewer);
+
+      expect(result.success, isTrue);
+      verify(() => actionService.favorite([_theirAsset.id])).called(1);
+    });
+  });
+
+  group('unFavorite', () {
+    test('includes a non-owned remote asset (favorites are per-user, not owner-gated)', () async {
+      when(() => actionService.unFavorite(any())).thenAnswer((_) async {});
+      container.read(assetViewerProvider.notifier).setAsset(_theirAsset);
+
+      final result = await container.read(actionProvider.notifier).unFavorite(ActionSource.viewer);
+
+      expect(result.success, isTrue);
+      verify(() => actionService.unFavorite([_theirAsset.id])).called(1);
     });
   });
 }

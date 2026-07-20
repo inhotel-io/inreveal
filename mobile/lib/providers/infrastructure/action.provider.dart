@@ -165,8 +165,11 @@ class ActionNotifier extends Notifier<void> {
     }
   }
 
+  // #763: favorites are per-user, not owner-gated — unlike the other actions below, favorite/
+  // unFavorite must NOT filter to owned assets, so they use `_getRemoteIdsForSource` (all remote
+  // ids in the selection) rather than `_getOwnedRemoteIdsForSource`.
   Future<ActionResult> favorite(ActionSource source) async {
-    final ids = _getOwnedRemoteIdsForSource(source);
+    final ids = _getRemoteIdsForSource(source);
     try {
       await _service.favorite(ids);
       return ActionResult(count: ids.length, success: true);
@@ -177,7 +180,7 @@ class ActionNotifier extends Notifier<void> {
   }
 
   Future<ActionResult> unFavorite(ActionSource source) async {
-    final ids = _getOwnedRemoteIdsForSource(source);
+    final ids = _getRemoteIdsForSource(source);
     try {
       await _service.unFavorite(ids);
       return ActionResult(count: ids.length, success: true);
