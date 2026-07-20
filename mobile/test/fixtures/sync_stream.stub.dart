@@ -533,4 +533,18 @@ abstract final class SyncStreamStub {
     data: _makeExifV1(assetId: 'sa-asset-stub-3'),
     ack: 'sa-exif-backfill-ack',
   );
+
+  // --- gallery-fork: per-user favorites sync stubs (#763) ---
+
+  static final assetFavoriteV1 = SyncEvent(
+    type: SyncEntityType.assetFavoriteV1,
+    data: SyncAssetFavoriteV1(assetId: 'asset-favorite-1'),
+    ack: 'asset-favorite-v1-ack',
+  );
+
+  static final assetFavoriteDeleteV1 = SyncEvent(
+    type: SyncEntityType.assetFavoriteDeleteV1,
+    data: SyncAssetFavoriteDeleteV1(assetId: 'asset-favorite-2'),
+    ack: 'asset-favorite-delete-ack',
+  );
 }
