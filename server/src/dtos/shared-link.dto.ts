@@ -89,6 +89,9 @@ export function mapSharedLink(sharedLink: SharedLink, options: { stripAssetMetad
     type: sharedLink.type,
     createdAt: sharedLink.createdAt,
     expiresAt: sharedLink.expiresAt,
+    // #763: deliberately NOT projecting isFavoriteForUser — there is no auth object at all for an
+    // anonymous shared-link visitor, so `false` is correct (and is what mapAsset's fail-safe
+    // `?? false` already yields for a row with the field unset).
     assets: assets.map((asset) => mapAsset(asset, { stripMetadata: options.stripAssetMetadata })),
     album: sharedLink.album ? mapAlbum(sharedLink.album) : undefined,
     allowUpload: sharedLink.allowUpload,

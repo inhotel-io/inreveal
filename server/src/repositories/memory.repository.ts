@@ -9,6 +9,7 @@ import { AssetOrderWithRandom, AssetVisibility, MemoryType } from 'src/enum';
 import { DB } from 'src/schema';
 import { MemoryTable } from 'src/schema/tables/memory.table';
 import { IBulkAsset } from 'src/types';
+import { favoriteExistsFor } from 'src/utils/favorite';
 import { spaceAlbumAssetExists } from 'src/utils/shared-space-album-scope';
 
 @Injectable()
@@ -182,6 +183,12 @@ export class MemoryRepository implements IBulkAsset {
                 ),
               ),
             )
+            // #763: userId here is the VIEWER (searchAccessible surfaces memories owned by
+            // others, reachable via partner/space share) — the overlay must be keyed to them,
+            // never to the memory's own ownerId. Gated on `.$if` (always true — userId is a
+            // required param) purely so Kysely infers `isFavoriteForUser` as optional, matching
+            // MapAsset and every other projection site instead of forcing it required here alone.
+            .$if(!!userId, (qb) => qb.select((eb) => favoriteExistsFor(eb, userId).as('isFavoriteForUser')))
             .orderBy('asset.localDateTime', 'asc'),
         ).as('assets'),
       )
@@ -195,12 +202,15 @@ export class MemoryRepository implements IBulkAsset {
       .execute();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID] })
-  get(id: string) {
-    return this.getByIdBuilder(id).executeTakeFirst();
+  @GenerateSql({ params: [DummyValue.UUID] }, { name: 'with authUserId', params: [DummyValue.UUID, DummyValue.UUID] })
+  get(id: string, authUserId?: string) {
+    return this.getByIdBuilder(id, authUserId).executeTakeFirst();
   }
 
-  async create(memory: Insertable<MemoryTable>, assetIds: Set<string>) {
+  // #763: authUserId is the CALLER's id, used only to project `isFavoriteForUser` onto each
+  // returned memory asset. Optional — memory.service.ts's addAssets/removeAssets call `update`
+  // purely for its side effect and never consume the returned assets, so they omit it.
+  async create(memory: Insertable<MemoryTable>, assetIds: Set<string>, authUserId?: string) {
     const id = await this.db.transaction().execute(async (tx) => {
       const { id } = await tx.insertInto('memory').values(memory).returning('id').executeTakeFirstOrThrow();
 
@@ -212,13 +222,13 @@ export class MemoryRepository implements IBulkAsset {
       return id;
     });
 
-    return this.getByIdBuilder(id).executeTakeFirstOrThrow();
+    return this.getByIdBuilder(id, authUserId).executeTakeFirstOrThrow();
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { ownerId: DummyValue.UUID, isSaved: true }] })
-  async update(id: string, memory: Updateable<MemoryTable>) {
+  async update(id: string, memory: Updateable<MemoryTable>, authUserId?: string) {
     await this.db.updateTable('memory').set(memory).where('id', '=', id).execute();
-    return this.getByIdBuilder(id).executeTakeFirstOrThrow();
+    return this.getByIdBuilder(id, authUserId).executeTakeFirstOrThrow();
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
@@ -280,7 +290,7 @@ export class MemoryRepository implements IBulkAsset {
     await this.db.deleteFrom('memory_asset').where('memoriesId', '=', id).where('assetId', 'in', assetIds).execute();
   }
 
-  private getByIdBuilder(id: string) {
+  private getByIdBuilder(id: string, authUserId?: string) {
     return this.db
       .selectFrom('memory')
       .selectAll('memory')
@@ -293,7 +303,10 @@ export class MemoryRepository implements IBulkAsset {
             .whereRef('memory_asset.memoriesId', '=', 'memory.id')
             .orderBy('asset.localDateTime', 'asc')
             .where('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
-            .where('asset.deletedAt', 'is', null),
+            .where('asset.deletedAt', 'is', null)
+            // #763: authUserId is the CALLER, threaded from get/create/update — optional, so an
+            // omitted call (e.g. addAssets/removeAssets, which discard the result) simply skips it.
+            .$if(!!authUserId, (qb) => qb.select((eb) => favoriteExistsFor(eb, authUserId!).as('isFavoriteForUser'))),
         ).as('assets'),
       )
       .where('id', '=', id)

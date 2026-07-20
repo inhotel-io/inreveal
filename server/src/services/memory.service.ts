@@ -244,7 +244,7 @@ export class MemoryService extends BaseService {
 
   async get(auth: AuthDto, id: string): Promise<MemoryResponseDto> {
     await this.requireAccess({ auth, permission: Permission.MemoryRead, ids: [id] });
-    const memory = await this.findOrFail(id);
+    const memory = await this.findOrFail(id, auth.user.id);
     return mapMemory(memory, auth);
   }
 
@@ -269,6 +269,7 @@ export class MemoryService extends BaseService {
         seenAt: dto.seenAt,
       },
       allowedAssetIds,
+      auth.user.id,
     );
 
     return mapMemory(memory, auth);
@@ -277,11 +278,15 @@ export class MemoryService extends BaseService {
   async update(auth: AuthDto, id: string, dto: MemoryUpdateDto): Promise<MemoryResponseDto> {
     await this.requireAccess({ auth, permission: Permission.MemoryUpdate, ids: [id] });
 
-    const memory = await this.memoryRepository.update(id, {
-      isSaved: dto.isSaved,
-      memoryAt: dto.memoryAt,
-      seenAt: dto.seenAt,
-    });
+    const memory = await this.memoryRepository.update(
+      id,
+      {
+        isSaved: dto.isSaved,
+        memoryAt: dto.memoryAt,
+        seenAt: dto.seenAt,
+      },
+      auth.user.id,
+    );
 
     return mapMemory(memory, auth);
   }
@@ -323,8 +328,8 @@ export class MemoryService extends BaseService {
     return results;
   }
 
-  private async findOrFail(id: string) {
-    const memory = await this.memoryRepository.get(id);
+  private async findOrFail(id: string, authUserId?: string) {
+    const memory = await this.memoryRepository.get(id, authUserId);
     if (!memory) {
       throw new BadRequestException('Memory not found');
     }
