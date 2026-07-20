@@ -254,20 +254,15 @@ describe('recently added page', () => {
     expect(url).toContain('rating=5');
   });
 
-  it('is not query-capable until the text slice lands', () => {
-    // Slice 3 flips this to true together with the text section and the search path, so the
-    // global search UI never offers a query this page cannot answer.
+  it('is query-capable now that the text section and search path exist', () => {
     const state = getSearchablePageState(new URL('https://gallery.test/recently-added'));
 
     expect(state.basePath).toBe('/recently-added');
-    expect(state.isSearchable).toBe(false);
+    expect(state.isSearchable).toBe(true);
   });
 
-  it('refuses to build a query URL for a page that cannot answer one', () => {
-    // This is the load-bearing case. global-search-manager's buildSearchDestination falls back to
-    // /photos only when this returns null, so returning a URL here would strand a `?q=` on a route
-    // with no query handling.
-    expect(buildSearchablePageUrl(new URL('https://gallery.test/recently-added'), 'beach')).toBeNull();
+  it('builds a query URL for the recently added page', () => {
+    expect(buildSearchablePageUrl(new URL('https://gallery.test/recently-added'), 'beach')).toContain('q=beach');
   });
 
   it('still builds a filter-only URL for the same page', () => {

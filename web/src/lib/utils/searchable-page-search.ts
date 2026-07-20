@@ -87,18 +87,6 @@ export function getSearchablePageBasePath(pathname: string): string | null {
   return null;
 }
 
-/**
- * Query (free-text) support is a separate capability from URL filter persistence.
- *
- * Recently Added persists its filters in the URL but cannot answer a `?q=` yet — its text
- * section and smart-search path arrive together in the text slice. Until then it must not
- * advertise itself as searchable, or the global search UI would offer a query that silently
- * does nothing. Remove this exclusion in the same change that adds the search path.
- */
-function isQueryCapablePage(basePath: string): boolean {
-  return basePath !== '/recently-added';
-}
-
 export function getSearchablePageState(url: URL): SearchablePageState {
   const basePath = getSearchablePageBasePath(url.pathname);
   if (!basePath) {
@@ -115,7 +103,7 @@ export function getSearchablePageState(url: URL): SearchablePageState {
   const rawSort = url.searchParams.get('sort');
   return {
     basePath,
-    isSearchable: isQueryCapablePage(basePath),
+    isSearchable: true,
     query,
     hasExplicitSort: rawSort === 'asc' || rawSort === 'desc',
     sortOrder: getSortOrder(query, rawSort),
@@ -134,13 +122,6 @@ export function buildSearchablePageUrl(
   }
 
   const trimmedQuery = query.trim();
-
-  // A page that persists filters in the URL is not necessarily able to answer a `?q=`.
-  // Returning null here keeps global-search-manager's buildSearchDestination falling back to
-  // /photos, instead of stranding a query on a route that would silently ignore it.
-  if (trimmedQuery && !isQueryCapablePage(basePath)) {
-    return null;
-  }
 
   const params = new URLSearchParams(url.searchParams);
 
