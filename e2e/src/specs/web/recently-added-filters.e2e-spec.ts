@@ -1,5 +1,5 @@
 import type { LoginResponseDto } from '@immich/sdk';
-import { SharedSpaceRole, updateAsset, updateMemberTimeline } from '@immich/sdk';
+import { updateAsset } from '@immich/sdk';
 import { expect, test } from '@playwright/test';
 import { thumbnailUtils } from 'src/ui/specs/timeline/utils';
 import { asBearerAuth, utils } from 'src/utils';
@@ -315,56 +315,47 @@ test.describe('Recently Added text search', () => {
   });
 
   // Scenario: Text search stays within own + partner scope
+  //
+  // This asserts the *request payload* sent to POST /search/smart, not the rendered results.
+  // Results are unusable for this: this e2e stack runs with IMMICH_MACHINE_LEARNING_ENABLED=false
+  // and has no machine-learning service in its docker-compose at all (confirmed by direct probe —
+  // even force-enabling ML via system-config still 500s, since machineLearning.urls points at a
+  // host that doesn't exist on this network), so /search/smart never returns real matches for any
+  // query and an absence-of-results assertion would be unfalsifiable either way.
+  //
+  // `buildSmartSearchParams` (space-search.ts:38-40) only sets `withSharedSpaces: true` on the
+  // outgoing DTO when the caller passes a truthy `withSharedSpaces`; when falsy, the key is
+  // omitted entirely (not sent as `false`). Recently Added always passes `withSharedSpaces={false}`
+  // (own + partner scope only — see the route-level spec's "does not send shared-space scope to
+  // SmartSearchResults"), while /photos passes `withSharedSpaces={filters.isFavorite === undefined}`,
+  // i.e. `true` by default. So the same query, run on both pages, must produce two different
+  // request bodies — that difference *is* the own+partner-vs-shared-spaces scope invariant, and
+  // it's fully deterministic (it never touches embeddings or matching).
   test('text search stays within own + partner scope', async ({ context, page }) => {
-    test.setTimeout(45_000);
-
-    // A second user OWNS the shared asset and adds it to a space our test actor (admin) is a
-    // member of — the reverse of the usual owner-is-admin shape used elsewhere in this file.
-    const ownerLogin = await utils.userSetup(admin.accessToken, {
-      email: 'recently-added-search-owner@immich.cloud',
-      name: 'Search Space Owner',
-      password: 'password',
-    });
-
-    const sharedAsset = await utils.createAsset(ownerLogin.accessToken);
-    const space = await utils.createSpace(ownerLogin.accessToken, { name: 'Search Scope Space' });
-    await utils.addSpaceMember(ownerLogin.accessToken, space.id, {
-      userId: admin.userId,
-      role: SharedSpaceRole.Viewer,
-    });
-    await utils.addSpaceAssets(ownerLogin.accessToken, space.id, [sharedAsset.id]);
-
-    // Member-level timeline opt-in — NOT the album-level `showInTimeline` toggle, the two are not
-    // interchangeable (spaces-albums-timeline.e2e-spec.ts:19-23). Self-PATCH:
-    // `/shared-spaces/{id}/members/me/timeline` requires the member's own token, not the owner's
-    // (see space-map-markers.e2e-spec.ts:62-66).
-    await updateMemberTimeline(
-      { id: space.id, sharedSpaceMemberTimelineDto: { showInTimeline: true } },
-      { headers: asBearerAuth(admin.accessToken) },
-    );
-
     const query = 'harbor';
-    const sharedThumbnail = page.locator(`img[src="/api/assets/${sharedAsset.id}/thumbnail"]`);
-
-    // Positive control: the identical query on /photos (own + partner + shared spaces — it always
-    // sends `withSharedSpaces: true`) DOES find the shared-space asset. Without this, the absence
-    // assertion below would be unfalsifiable — it would pass for a dozen unrelated reasons (never
-    // indexed, no semantic match, a missed opt-in, or a seeding bug), not because Recently Added
-    // actually enforces its narrower own+partner scope.
     await utils.setAuthCookies(context, admin.accessToken);
-    await page.goto(`/photos?q=${query}`);
-    await expect(page.locator('#asset-grid')).toHaveCount(0);
-    await expect(page.getByTestId('result-count').or(page.getByTestId('search-empty'))).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(sharedThumbnail).toBeVisible({ timeout: 15_000 });
 
-    // The real assertion: Recently Added is own + partner only, so the same query must still
-    // switch into search mode (asserted BEFORE the absence check — otherwise this would also pass
-    // against today's unwired route, whose own+partner *timeline* trivially never contains an
-    // asset it was never seeded with in the first place).
-    await page.goto(`/recently-added?q=${query}`);
-    await expectSearchResultsMode(page);
-    await expect(sharedThumbnail).toHaveCount(0);
+    // Positive control: on /photos, the identical query DOES carry `withSharedSpaces: true`.
+    // Without this, the assertion below (no `withSharedSpaces` key from Recently Added) would be
+    // vacuous — it would pass even if the whole scoping mechanism were broken and neither page
+    // ever sent the key.
+    const [photosRequest] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes('/search/smart') && req.method() === 'POST', {
+        timeout: 15_000,
+      }),
+      page.goto(`/photos?q=${query}`),
+    ]);
+    expect(photosRequest.postDataJSON()).toMatchObject({ withSharedSpaces: true });
+
+    // The real assertion: Recently Added is own + partner only, so its outgoing request must carry
+    // no `withSharedSpaces` key at all. Today this never even fires — the unwired route ignores
+    // `?q=` and never calls /search/smart in the first place, so this wait times out.
+    const [recentlyAddedRequest] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes('/search/smart') && req.method() === 'POST', {
+        timeout: 15_000,
+      }),
+      page.goto(`/recently-added?q=${query}`),
+    ]);
+    expect(recentlyAddedRequest.postDataJSON()).not.toHaveProperty('withSharedSpaces');
   });
 });
