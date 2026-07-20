@@ -258,6 +258,16 @@ async function expectSearchResultsMode(page: import('@playwright/test').Page) {
   });
 }
 
+// Matches the actual results-fetching POST /search/smart request, and ONLY that — NOT
+// POST /search/smart/facets, which `req.url().includes('/search/smart')` would also match. Both
+// endpoints fire on a query: FilterPanel's suggestionsProvider calls the facets endpoint at 0ms on
+// mount (filter-panel.svelte's isInitialMount branch), while SmartSearchResults' own search call
+// is behind a 250ms debounce (SEARCH_FILTER_DEBOUNCE_MS) — so an `includes` match would almost
+// always resolve to the facets request first, silently asserting against the wrong endpoint.
+function isSmartSearchRequest(req: import('@playwright/test').Request): boolean {
+  return req.method() === 'POST' && new URL(req.url()).pathname.endsWith('/search/smart');
+}
+
 test.describe('Recently Added text search', () => {
   let admin: LoginResponseDto;
 
@@ -300,7 +310,9 @@ test.describe('Recently Added text search', () => {
     // The header count now comes from the search total, not the timeline's asset count. Its exact
     // value depends on ML availability in this e2e stack (see the scope scenario below for why
     // that can't be made deterministic here) — this only pins the *shape* of the header text.
-    await expect(page.getByTestId('page-header-description')).toHaveText(/^\d+ items$/, { timeout: 15_000 });
+    // `items?` (not `items`) because `items_count` is `{count, plural, one {# item} other {# items}}`
+    // — a count of exactly 1 renders "1 item", singular.
+    await expect(page.getByTestId('page-header-description')).toHaveText(/^\d+ items?$/, { timeout: 15_000 });
   });
 
   // Scenario: Clearing the query returns to the added-date timeline
@@ -311,7 +323,9 @@ test.describe('Recently Added text search', () => {
     await page.goto('/recently-added');
 
     await expect(page.locator('#asset-grid')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('page-header-description')).toHaveText(/^\d+ items$/, { timeout: 15_000 });
+    // Same singular/plural note as scenario 1 — harmless here (3 seeded assets, never 1), but kept
+    // consistent.
+    await expect(page.getByTestId('page-header-description')).toHaveText(/^\d+ items?$/, { timeout: 15_000 });
   });
 
   // Scenario: Text search stays within own + partner scope
@@ -340,9 +354,7 @@ test.describe('Recently Added text search', () => {
     // vacuous — it would pass even if the whole scoping mechanism were broken and neither page
     // ever sent the key.
     const [photosRequest] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes('/search/smart') && req.method() === 'POST', {
-        timeout: 15_000,
-      }),
+      page.waitForRequest(isSmartSearchRequest, { timeout: 15_000 }),
       page.goto(`/photos?q=${query}`),
     ]);
     expect(photosRequest.postDataJSON()).toMatchObject({ withSharedSpaces: true });
@@ -351,9 +363,7 @@ test.describe('Recently Added text search', () => {
     // no `withSharedSpaces` key at all. Today this never even fires — the unwired route ignores
     // `?q=` and never calls /search/smart in the first place, so this wait times out.
     const [recentlyAddedRequest] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes('/search/smart') && req.method() === 'POST', {
-        timeout: 15_000,
-      }),
+      page.waitForRequest(isSmartSearchRequest, { timeout: 15_000 }),
       page.goto(`/recently-added?q=${query}`),
     ]);
     expect(recentlyAddedRequest.postDataJSON()).not.toHaveProperty('withSharedSpaces');
