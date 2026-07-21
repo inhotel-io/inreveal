@@ -1,10 +1,10 @@
-import PersonSuggestionBanner from '$lib/components/faces-page/person-suggestion-banner.svelte';
-import { snoozeSuggestions } from '$lib/utils/face-suggestion-snooze';
 import type { PersonFaceSuggestionResponseDto, PersonResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import PersonSuggestionBanner from '$lib/components/faces-page/person-suggestion-banner.svelte';
+import { snoozeSuggestions } from '$lib/utils/face-suggestion-snooze';
 
 vi.mock('svelte-i18n', () => ({
   t: { subscribe: (run: (f: (k: string) => string) => void) => (run((k) => k), () => {}) },
