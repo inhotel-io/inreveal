@@ -36,41 +36,41 @@ class {{{classname}}} {
   {{#required}}
     {{#isArray}}
       {{#items.isNullable}}
-  {{#uniqueItems}}Set{{/uniqueItems}}{{^uniqueItems}}List{{/uniqueItems}}<{{{items.datatypeWithEnum}}}?>{{#isNullable}}?{{/isNullable}} {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}{{#uniqueItems}}Set{{/uniqueItems}}{{^uniqueItems}}List{{/uniqueItems}}<{{{items.datatypeWithEnum}}}?>{{#isNullable}}?{{/isNullable}} {{{name}}};
       {{/items.isNullable}}
       {{^items.isNullable}}
-  {{{datatypeWithEnum}}}{{#isNullable}}?{{/isNullable}} {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}{{{datatypeWithEnum}}}{{#isNullable}}?{{/isNullable}} {{{name}}};
       {{/items.isNullable}}
     {{/isArray}}
     {{^isArray}}
-  {{{datatypeWithEnum}}}{{#isNullable}}?{{/isNullable}} {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}{{{datatypeWithEnum}}}{{#isNullable}}?{{/isNullable}} {{{name}}};
     {{/isArray}}
   {{/required}}
   {{^required}}
     {{#vendorExtensions.x-is-optional}}
       {{#isArray}}
         {{#items.isNullable}}
-  Optional<{{#uniqueItems}}Set{{/uniqueItems}}{{^uniqueItems}}List{{/uniqueItems}}<{{{items.datatypeWithEnum}}}?>?> {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}Optional<{{#uniqueItems}}Set{{/uniqueItems}}{{^uniqueItems}}List{{/uniqueItems}}<{{{items.datatypeWithEnum}}}?>?> {{{name}}};
         {{/items.isNullable}}
         {{^items.isNullable}}
-  {{{datatypeWithEnum}}} {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}{{{datatypeWithEnum}}} {{{name}}};
         {{/items.isNullable}}
       {{/isArray}}
       {{^isArray}}
-  {{{datatypeWithEnum}}} {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}{{{datatypeWithEnum}}} {{{name}}};
       {{/isArray}}
     {{/vendorExtensions.x-is-optional}}
     {{^vendorExtensions.x-is-optional}}
       {{#isArray}}
         {{#items.isNullable}}
-  {{#uniqueItems}}Set{{/uniqueItems}}{{^uniqueItems}}List{{/uniqueItems}}<{{{items.datatypeWithEnum}}}?>{{#isNullable}}?{{/isNullable}}{{^isNullable}}{{^defaultValue}}?{{/defaultValue}}{{/isNullable}} {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}{{#uniqueItems}}Set{{/uniqueItems}}{{^uniqueItems}}List{{/uniqueItems}}<{{{items.datatypeWithEnum}}}?>{{#isNullable}}?{{/isNullable}}{{^isNullable}}{{^defaultValue}}?{{/defaultValue}}{{/isNullable}} {{{name}}};
         {{/items.isNullable}}
         {{^items.isNullable}}
-  {{{datatypeWithEnum}}}{{#isNullable}}?{{/isNullable}}{{^isNullable}}{{^defaultValue}}?{{/defaultValue}}{{/isNullable}} {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}{{{datatypeWithEnum}}}{{#isNullable}}?{{/isNullable}}{{^isNullable}}{{^defaultValue}}?{{/defaultValue}}{{/isNullable}} {{{name}}};
         {{/items.isNullable}}
       {{/isArray}}
       {{^isArray}}
-  {{{datatypeWithEnum}}}{{#isNullable}}?{{/isNullable}}{{^isNullable}}{{^defaultValue}}?{{/defaultValue}}{{/isNullable}} {{{name}}};
+  {{#useFinalProperties}}final {{/useFinalProperties}}{{{datatypeWithEnum}}}{{#isNullable}}?{{/isNullable}}{{^isNullable}}{{^defaultValue}}?{{/defaultValue}}{{/isNullable}} {{{name}}};
       {{/isArray}}
     {{/vendorExtensions.x-is-optional}}
   {{/required}}
@@ -180,6 +180,21 @@ class {{{classname}}} {
     return json;
   }
 
+{{#useFinalProperties}}
+  /// Clones this instance of [{{{classname}}}] and returns a new one where some of the
+  /// properties have changed.
+  {{{classname}}} copyWith({
+  {{#vars}}
+    {{{datatypeWithEnum}}}? {{{name}}},{{#isNullable}}
+    bool {{{name}}}SetToNull = false,{{/isNullable}}
+  {{/vars}}
+  }) => {{{classname}}}(
+  {{#vars}}
+    {{{name}}}: {{#isNullable}}{{{name}}}SetToNull ? null : {{/isNullable}}{{{name}}} ?? this.{{{name}}},
+  {{/vars}}
+  );
+
+{{/useFinalProperties}}
   /// Returns a new [{{{classname}}}] instance and imports its values from
   /// [value] if it's a [Map], null otherwise.
   // ignore: prefer_constructors_over_static_methods
