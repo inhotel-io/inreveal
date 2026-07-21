@@ -1449,6 +1449,11 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       });
       expect(second).toBeUndefined();
 
+      // getPersonsBySpaceId only returns space people that have at least one visible face on an asset
+      // reachable from the space, so link the winner's face the way the real face-match path does before
+      // reading back. (createPersonForIdentity only records representativeFaceId; it does not link faces.)
+      await sut.addPersonFaces([{ personId: first!.id, assetFaceId: faceId }]);
+
       const persons = await sut.getPersonsBySpaceId(space.id, { withHidden: true, petsEnabled: true });
       expect(persons).toHaveLength(1);
       expect(persons[0].id).toBe(first!.id);
