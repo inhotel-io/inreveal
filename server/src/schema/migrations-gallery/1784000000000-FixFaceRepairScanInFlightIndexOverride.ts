@@ -2,7 +2,7 @@ import { Kysely, sql } from 'kysely';
 
 export async function up(db: Kysely<any>): Promise<void> {
   // Correct the schema override for `face_repair_scan_in_flight_uq`. The original migration
-  // (1783000000000-AddFaceRepairScanInFlightIndex) stored the partial-index DDL with a bare
+  // (1783050000000-AddFaceRepairScanInFlightIndex) stored the partial-index DDL with a bare
   // `WHERE "status" IN (...)`, but sql-tools' schemaFromCode always emits the predicate
   // parenthesized — `WHERE ("status" IN (...))` (see `asIndexCreate`). The mismatch made the
   // decorator-vs-database schema check report perpetual drift for this index on every boot (the
