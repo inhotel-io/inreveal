@@ -49,7 +49,6 @@ const setup = (db?: Kysely<DB>) => {
       AssetRepository,
       AssetEditRepository,
       SharedSpaceRepository,
-      SystemMetadataRepository,
     ],
     mock: [JobRepository, LoggingRepository, StorageRepository, SystemMetadataRepository],
   });
