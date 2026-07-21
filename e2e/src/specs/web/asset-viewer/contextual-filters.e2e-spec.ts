@@ -442,15 +442,18 @@ test.describe('Asset viewer contextual filters — the map handoff', () => {
     );
     await expect(page.locator('[data-testid="result-count"]')).toContainText('1 result');
 
-    // Step 2: click the Space's map icon. (An href-scoped locator: the sidebar has a `/map` link
-    // with the same accessible name, and only the Space's carries a spaceId.)
+    // Step 2: click the Space's Map tab (space-tabs.svelte). Scoped by test id, not by accessible
+    // name: the sidebar has a `/map` link that reads the same, and only the Space's carries a
+    // spaceId.
     const markers = page.waitForResponse(
       (response) =>
         response.url().includes('/gallery/map/markers') &&
         response.url().includes(`make=${encodeURIComponent(camera.make)}`) &&
         response.status() === 200,
     );
-    await page.locator('a[aria-label="Map"][href*="spaceId="]').click();
+    const mapTab = page.getByTestId('space-tab-map');
+    await expect(mapTab).toHaveAttribute('href', new RegExp(`spaceId=${spaceId}`));
+    await mapTab.click();
 
     await waitForMapUrl(page);
     const url = new URL(page.url());
