@@ -16,6 +16,65 @@ class PeopleApi {
 
   final ApiClient apiClient;
 
+  /// Confirm a face suggestion
+  ///
+  /// Assign the suggested face to the person. Idempotent.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] assetFaceId (required):
+  ///   Unassigned asset face ID being reviewed
+  ///
+  /// * [String] id (required):
+  ///   Person ID
+  Future<Response> confirmPersonFaceSuggestionWithHttpInfo(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/{id}/face-suggestions/{assetFaceId}/confirm'
+      .replaceAll('{assetFaceId}', assetFaceId)
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Confirm a face suggestion
+  ///
+  /// Assign the suggested face to the person. Idempotent.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] assetFaceId (required):
+  ///   Unassigned asset face ID being reviewed
+  ///
+  /// * [String] id (required):
+  ///   Person ID
+  Future<void> confirmPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+    final response = await confirmPersonFaceSuggestionWithHttpInfo(assetFaceId, id, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Create a person
   ///
   /// Create a new person that can have multiple faces assigned to them.
@@ -216,6 +275,65 @@ class PeopleApi {
   /// * [DetachScopedPersonDto] detachScopedPersonDto (required):
   Future<void> detachScopedPerson(DetachScopedPersonDto detachScopedPersonDto, { Future<void>? abortTrigger, }) async {
     final response = await detachScopedPersonWithHttpInfo(detachScopedPersonDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
+  /// Dismiss a face suggestion
+  ///
+  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] assetFaceId (required):
+  ///   Unassigned asset face ID being reviewed
+  ///
+  /// * [String] id (required):
+  ///   Person ID
+  Future<Response> dismissPersonFaceSuggestionWithHttpInfo(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/{id}/face-suggestions/{assetFaceId}/dismiss'
+      .replaceAll('{assetFaceId}', assetFaceId)
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Dismiss a face suggestion
+  ///
+  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] assetFaceId (required):
+  ///   Unassigned asset face ID being reviewed
+  ///
+  /// * [String] id (required):
+  ///   Person ID
+  Future<void> dismissPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+    final response = await dismissPersonFaceSuggestionWithHttpInfo(assetFaceId, id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -603,6 +721,83 @@ class PeopleApi {
     return null;
   }
 
+  /// Get face suggestions for a person
+  ///
+  /// Retrieve near-miss unassigned faces suggested for this person, best match first.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of suggestions per page
+  Future<Response> getPersonFaceSuggestionsWithHttpInfo(String id, { int? page, int? size, Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/{id}/face-suggestions'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    if (page != null) {
+      queryParams.addAll(_queryParams('', 'page', page));
+    }
+    if (size != null) {
+      queryParams.addAll(_queryParams('', 'size', size));
+    }
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get face suggestions for a person
+  ///
+  /// Retrieve near-miss unassigned faces suggested for this person, best match first.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of suggestions per page
+  Future<PersonFaceSuggestionPageResponseDto?> getPersonFaceSuggestions(String id, { int? page, int? size, Future<void>? abortTrigger, }) async {
+    final response = await getPersonFaceSuggestionsWithHttpInfo(id, page: page, size: size, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'PersonFaceSuggestionPageResponseDto',) as PersonFaceSuggestionPageResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Get person face thumbnail
   ///
   /// Retrieve an exact face-crop thumbnail for a person.
@@ -859,6 +1054,65 @@ class PeopleApi {
     return null;
   }
 
+  /// Ignore a face suggestion
+  ///
+  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] assetFaceId (required):
+  ///   Unassigned asset face ID being reviewed
+  ///
+  /// * [String] id (required):
+  ///   Person ID
+  Future<Response> ignorePersonFaceSuggestionWithHttpInfo(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/{id}/face-suggestions/{assetFaceId}/ignore'
+      .replaceAll('{assetFaceId}', assetFaceId)
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Ignore a face suggestion
+  ///
+  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] assetFaceId (required):
+  ///   Unassigned asset face ID being reviewed
+  ///
+  /// * [String] id (required):
+  ///   Person ID
+  Future<void> ignorePersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+    final response = await ignorePersonFaceSuggestionWithHttpInfo(assetFaceId, id, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
   /// Merge people
   ///
   /// Merge a list of people into the person specified in the path parameter.
@@ -1036,6 +1290,65 @@ class PeopleApi {
 
     }
     return null;
+  }
+
+  /// Reject a face suggestion
+  ///
+  /// Reject this suggestion for the person. The face stays unassigned. Idempotent.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] assetFaceId (required):
+  ///   Unassigned asset face ID being reviewed
+  ///
+  /// * [String] id (required):
+  ///   Person ID
+  Future<Response> rejectPersonFaceSuggestionWithHttpInfo(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/people/{id}/face-suggestions/{assetFaceId}/reject'
+      .replaceAll('{assetFaceId}', assetFaceId)
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Reject a face suggestion
+  ///
+  /// Reject this suggestion for the person. The face stays unassigned. Idempotent.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] assetFaceId (required):
+  ///   Unassigned asset face ID being reviewed
+  ///
+  /// * [String] id (required):
+  ///   Person ID
+  Future<void> rejectPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+    final response = await rejectPersonFaceSuggestionWithHttpInfo(assetFaceId, id, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
   }
 
   /// Update people

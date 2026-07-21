@@ -20,7 +20,7 @@ class PersonFaceSuggestionResponseDto {
     required this.boundingBoxY1,
     required this.boundingBoxY2,
     required this.distance,
-    this.fileCreatedAt,
+    this.fileCreatedAt = const Optional.absent(),
     required this.imageHeight,
     required this.imageWidth,
   });
@@ -65,7 +65,7 @@ class PersonFaceSuggestionResponseDto {
   /// source code must fall back to having a nullable type.
   /// Consider adding a "default:" property in the specification file to hide this note.
   ///
-  DateTime? fileCreatedAt;
+  Optional<DateTime?> fileCreatedAt;
 
   /// Image height in pixels
   ///
@@ -118,10 +118,9 @@ class PersonFaceSuggestionResponseDto {
       json[r'boundingBoxY1'] = this.boundingBoxY1;
       json[r'boundingBoxY2'] = this.boundingBoxY2;
       json[r'distance'] = this.distance;
-    if (this.fileCreatedAt != null) {
-      json[r'fileCreatedAt'] = this.fileCreatedAt!.toUtc().toIso8601String();
-    } else {
-    //  json[r'fileCreatedAt'] = null;
+    if (this.fileCreatedAt.isPresent) {
+      final value = this.fileCreatedAt.value;
+      json[r'fileCreatedAt'] = value == null ? null : value.toUtc().toIso8601String();
     }
       json[r'imageHeight'] = this.imageHeight;
       json[r'imageWidth'] = this.imageWidth;
@@ -143,8 +142,8 @@ class PersonFaceSuggestionResponseDto {
         boundingBoxX2: mapValueOfType<int>(json, r'boundingBoxX2')!,
         boundingBoxY1: mapValueOfType<int>(json, r'boundingBoxY1')!,
         boundingBoxY2: mapValueOfType<int>(json, r'boundingBoxY2')!,
-        distance: (mapValueOfType<num>(json, r'distance')!).toDouble(),
-        fileCreatedAt: mapDateTime(json, r'fileCreatedAt', r''),
+        distance: mapValueOfType<double>(json, r'distance')!,
+        fileCreatedAt: json.containsKey(r'fileCreatedAt') ? Optional.present(mapDateTime(json, r'fileCreatedAt', r'')) : const Optional.absent(),
         imageHeight: mapValueOfType<int>(json, r'imageHeight')!,
         imageWidth: mapValueOfType<int>(json, r'imageWidth')!,
       );
