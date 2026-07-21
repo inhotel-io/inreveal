@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Kysely, sql } from 'kysely';
+import { ExpressionBuilder, Kysely, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import { AssetVisibility } from 'src/enum';
 import { DB } from 'src/schema';
+import { spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
 
 @Injectable()
 export class PersonFaceSuggestionRepository {
@@ -239,23 +240,19 @@ export class PersonFaceSuggestionRepository {
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', 'is', false)
       .where('asset.visibility', 'in', [AssetVisibility.Archive, AssetVisibility.Timeline])
+      // All THREE space access paths (direct / linked library / linked album + cross-owner
+      // contributions) via the canonical helper, so an album-linked asset is a candidate too.
       .where((eb) =>
-        eb.or([
-          eb.exists(
-            eb
-              .selectFrom('shared_space_asset')
-              .select('shared_space_asset.assetId')
-              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-              .where('shared_space_asset.spaceId', '=', spaceId),
-          ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_library')
-              .select('shared_space_library.libraryId')
-              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-              .where('shared_space_library.spaceId', '=', spaceId),
-          ),
-        ]),
+        eb.or(
+          // The builder is alias-widened (pfs/af), which does not structurally match the helper's
+          // ExpressionBuilder<DB, keyof DB>. The helper only touches shared_space_*/album_* plus the
+          // correlate columns passed below, all present here, so the cast is sound.
+          spaceAssetPathBranches(eb as unknown as ExpressionBuilder<DB, keyof DB>, {
+            correlateAssetId: 'asset.id',
+            correlateLibraryId: 'asset.libraryId',
+            scope: { spaceId },
+          }),
+        ),
       );
 
     const totalRow = await base.select((eb) => eb.fn.countAll<string>().as('total')).executeTakeFirstOrThrow();
@@ -317,23 +314,19 @@ export class PersonFaceSuggestionRepository {
       .where('asset.deletedAt', 'is', null)
       .where('asset.isOffline', 'is', false)
       .where('asset.visibility', 'in', [AssetVisibility.Archive, AssetVisibility.Timeline])
+      // All THREE space access paths (direct / linked library / linked album + cross-owner
+      // contributions) via the canonical helper, so an album-linked asset is a candidate too.
       .where((eb) =>
-        eb.or([
-          eb.exists(
-            eb
-              .selectFrom('shared_space_asset')
-              .select('shared_space_asset.assetId')
-              .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-              .where('shared_space_asset.spaceId', '=', spaceId),
-          ),
-          eb.exists(
-            eb
-              .selectFrom('shared_space_library')
-              .select('shared_space_library.libraryId')
-              .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-              .where('shared_space_library.spaceId', '=', spaceId),
-          ),
-        ]),
+        eb.or(
+          // The builder is alias-widened (pfs/af), which does not structurally match the helper's
+          // ExpressionBuilder<DB, keyof DB>. The helper only touches shared_space_*/album_* plus the
+          // correlate columns passed below, all present here, so the cast is sound.
+          spaceAssetPathBranches(eb as unknown as ExpressionBuilder<DB, keyof DB>, {
+            correlateAssetId: 'asset.id',
+            correlateLibraryId: 'asset.libraryId',
+            scope: { spaceId },
+          }),
+        ),
       )
       .executeTakeFirst();
 
