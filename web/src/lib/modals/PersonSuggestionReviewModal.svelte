@@ -4,7 +4,7 @@
   import { getContentMetrics } from '$lib/utils/container-utils';
   import { handleError } from '$lib/utils/handle-error';
   import { getBoundingBox } from '$lib/utils/people-utils';
-  import type { Faces } from '$lib/stores/people.store';
+  import type { Faces } from '$lib/managers/asset-viewer-manager.svelte';
   import {
     AssetMediaSize,
     type PersonFaceSuggestionPageResponseDto,

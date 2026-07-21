@@ -15,6 +15,7 @@
 
 import { LoginResponseDto, PersonResponseDto, updateConfig } from '@immich/sdk';
 import { createUserDto, uuidDto } from 'src/fixtures';
+import { errorDto } from 'src/responses';
 import { app, asBearerAuth, utils } from 'src/utils';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -130,7 +131,7 @@ describe('/people/:id/face-suggestions', () => {
         .set(asBearerAuth(owner.accessToken));
       expect(status).toBe(400);
       // requireAccess throws BadRequestException for missing persons
-      expect(body).toMatchObject({ error: expect.any(String) });
+      expect(body).toEqual(errorDto.badRequest());
     });
 
     it("returns 400 when a stranger tries to access another user's person (edge 18)", async () => {

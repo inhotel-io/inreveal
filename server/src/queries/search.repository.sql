@@ -1039,6 +1039,7 @@ with
       (
         exists (
           select
+            1 as "exists"
           from
             "shared_space_asset"
           where
@@ -1047,26 +1048,55 @@ with
         )
         or exists (
           select
+            1 as "exists"
           from
             "shared_space_library"
           where
             "shared_space_library"."libraryId" = "asset"."libraryId"
             and "shared_space_library"."spaceId" = $3::uuid
         )
+        or (
+          exists (
+            select
+              1 as "exists"
+            from
+              "shared_space_album"
+              inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+              inner join "album" on "album"."id" = "shared_space_album"."albumId"
+              and "album"."deletedAt" is null
+            where
+              "album_asset"."assetId" = "asset"."id"
+              and "shared_space_album"."spaceId" = $4::uuid
+          )
+          or exists (
+            select
+              1 as "exists"
+            from
+              "shared_space_album"
+              inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+              and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+              inner join "album" on "album"."id" = "shared_space_album"."albumId"
+              and "album"."deletedAt" is null
+            where
+              "album_space_asset"."assetId" = "asset"."id"
+              and "shared_space_album"."spaceId" = $5::uuid
+          )
+        )
       )
+      and "asset"."visibility" in ($6, $7)
       and "asset"."deletedAt" is null
       and "asset_face"."personId" is null
     order by
       "distance"
     limit
-      $4
+      $8
   )
 select
   *
 from
   "cte"
 where
-  "cte"."distance" <= $5
+  "cte"."distance" <= $9
 commit
 
 -- SearchRepository.searchPlaces

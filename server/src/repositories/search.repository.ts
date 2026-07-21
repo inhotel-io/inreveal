@@ -984,23 +984,21 @@ export class SearchRepository {
             .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
             .leftJoin('person', 'person.id', 'asset_face.personId')
             .$if(!spaceId, (qb) => qb.where('asset.ownerId', '=', anyUuid(userIds!)))
+            // Space scope: all THREE access paths (direct / linked library / linked album +
+            // cross-owner contributions) via the canonical helper, plus the visibility gate so
+            // another member's Hidden/Locked assets never surface as face candidates.
             .$if(!!spaceId, (qb) =>
-              qb.where((eb) =>
-                eb.or([
-                  eb.exists(
-                    eb
-                      .selectFrom('shared_space_asset')
-                      .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                      .where('shared_space_asset.spaceId', '=', asUuid(spaceId!)),
+              qb
+                .where((eb) =>
+                  eb.or(
+                    spaceAssetPathBranches(eb, {
+                      correlateAssetId: 'asset.id',
+                      correlateLibraryId: 'asset.libraryId',
+                      scope: { spaceId: spaceId! },
+                    }),
                   ),
-                  eb.exists(
-                    eb
-                      .selectFrom('shared_space_library')
-                      .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                      .where('shared_space_library.spaceId', '=', asUuid(spaceId!)),
-                  ),
-                ]),
-              ),
+                )
+                .where((eb) => spaceVisibilityGate(eb)),
             )
             .where('asset.deletedAt', 'is', null)
             .$if(hasPerson === true, (qb) => qb.where('asset_face.personId', 'is not', null))
