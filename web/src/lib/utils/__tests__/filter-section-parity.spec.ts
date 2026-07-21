@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ALL_FILTER_SECTIONS, type FilterSection } from '$lib/components/filter-panel/filter-panel';
 import { buildAlbumAssetPickerFilterConfig, buildAlbumDetailFilterConfig } from '$lib/utils/album-filter-config';
 import { buildMapFilterConfig } from '$lib/utils/map-filter-config';
+import { buildRecentlyAddedFilterConfig } from '$lib/utils/recently-added-filter-config';
 
 vi.mock('@immich/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@immich/sdk')>();
@@ -54,6 +55,12 @@ describe('filter section parity (#802)', () => {
     expect(buildAlbumAssetPickerFilterConfig().sections).toEqual([...ALL_FILTER_SECTIONS]);
   });
 
+  it('exposes every section on the Recently Added view', () => {
+    // Recently Added (#805) landed after this guard was written; it is own+partner scoped but
+    // otherwise unrestricted, so it carries the full list like Photos does.
+    expect(buildRecentlyAddedFilterConfig().sections).toEqual([...ALL_FILTER_SECTIONS]);
+  });
+
   it('exposes every section except the documented exclusion on album detail', () => {
     const excluded = new Set(DOCUMENTED_EXCLUSIONS['album detail'].sections);
 
@@ -69,6 +76,7 @@ describe('filter section parity (#802)', () => {
       buildMapFilterConfig('space-1').sections,
       buildAlbumDetailFilterConfig('album-1').sections,
       buildAlbumAssetPickerFilterConfig().sections,
+      buildRecentlyAddedFilterConfig().sections,
     ]) {
       expect(sections).toContain('text');
     }
@@ -79,6 +87,7 @@ describe('filter section parity (#802)', () => {
       buildMapFilterConfig().sections,
       buildAlbumDetailFilterConfig('album-1').sections,
       buildAlbumAssetPickerFilterConfig().sections,
+      buildRecentlyAddedFilterConfig().sections,
     ]) {
       const canonicalPositions = sections.map((section) => ALL_FILTER_SECTIONS.indexOf(section));
 
@@ -94,6 +103,7 @@ describe('filter section parity (#802)', () => {
       buildMapFilterConfig().sections,
       buildAlbumDetailFilterConfig('album-1').sections,
       buildAlbumAssetPickerFilterConfig().sections,
+      buildRecentlyAddedFilterConfig().sections,
     ]) {
       for (const section of sections) {
         expect(canonical.has(section)).toBe(true);
