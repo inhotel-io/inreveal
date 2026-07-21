@@ -397,7 +397,7 @@ DELETE FROM "kysely_migrations"
    '1782100000000-FixSharedSpaceAlbumGrantRelinkCreateId',
    '1782300000000-AddSharedSpaceAlbumAuditSyncIndexes',
    '1783000000000-AddAlbumSpaceAssetTable',
-   '1783000000000-AddFaceRepairScanInFlightIndex',
+   '1783050000000-AddFaceRepairScanInFlightIndex',
    '1783100000000-AddAlbumSpaceAssetSyncAndAudit',
    '1783628194057-DisablePostgresJit',
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
