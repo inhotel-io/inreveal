@@ -109,7 +109,12 @@
 </script>
 
 {#each spaces as space (space.id)}
-  {@const active = page.url.pathname.startsWith(`/spaces/${space.id}`)}
+  {@const spacePath = `/spaces/${space.id}`}
+  {@const openAlbumPath = `${spacePath}/albums/`}
+  <!-- Opening one of the albums below hands the selection down to that album's own row, so only a
+       single row ever reads as selected. The space keeps it everywhere else — including its albums
+       *list* page (`/albums`, no trailing id), which has no row of its own to hand it to. -->
+  {@const active = page.url.pathname.startsWith(spacePath) && !page.url.pathname.startsWith(openAlbumPath)}
   {@const hasAlbums = (space.albumCount ?? 0) > 0}
   {@const cachedAlbums = userInteraction.spaceAlbums?.[space.id]}
   {@const expanded =
@@ -165,11 +170,15 @@
     </div>
     {#if expanded}
       {#each (cachedAlbums ?? []).slice(0, 3) as album (album.id)}
+        {@const albumActive = page.url.pathname.startsWith(`${openAlbumPath}${album.id}`)}
         <a
           href={Route.viewSpaceAlbum({ spaceId: space.id, albumId: album.id })}
           title={album.albumName}
+          aria-current={albumActive ? 'page' : undefined}
           data-testid="sidebar-space-album-{album.id}"
-          class="flex w-full place-items-center gap-4 rounded-e-full py-2 ps-14 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary"
+          class="flex w-full place-items-center gap-4 rounded-e-full py-2 ps-14 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {albumActive
+            ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
+            : ''}"
         >
           <div
             class="size-6 rounded-sm bg-gray-200 bg-cover dark:bg-gray-600"

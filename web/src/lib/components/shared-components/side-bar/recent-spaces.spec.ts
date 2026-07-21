@@ -11,6 +11,9 @@ import { handleError } from '$lib/utils/handle-error';
 import { sharedSpaceFactory } from '@test-data/factories/shared-space-factory';
 import { sharedSpaceLinkedAlbumFactory } from '@test-data/factories/shared-space-linked-album-factory';
 
+const mockPage = vi.hoisted(() => ({ url: new URL('https://gallery.test/photos') }));
+vi.mock('$app/state', () => ({ page: mockPage }));
+
 vi.mock('$lib/utils/handle-error', () => ({
   handleError: vi.fn(),
 }));
@@ -33,6 +36,7 @@ describe('RecentSpaces component', () => {
     pinnedSpaceIds.set([]);
     recentSpaceAlbumsExpanded.set({});
     userInteraction.spaceAlbums = undefined;
+    mockPage.url = new URL('https://gallery.test/photos');
   });
 
   const renderAndFlush = async () => {
@@ -469,6 +473,63 @@ describe('RecentSpaces component', () => {
       expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledTimes(1);
       expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledWith({ id: 'space-a' });
       expect(screen.getAllByTestId(/^sidebar-space-album-/)).toHaveLength(2);
+    });
+
+    // Only one row in the tree should read as selected at a time. Opening an album hands the
+    // selection down from the space to that album; the space keeps it everywhere else, including
+    // its own albums *list* page, which has no row of its own.
+    describe('selected row', () => {
+      const renderExpanded = async () => {
+        const space = sharedSpaceFactory.build({ id: 'space-a', albumCount: 4, newAssetCount: 0 });
+        sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+        sdkMock.getSharedSpaceAlbums.mockResolvedValue([
+          sharedSpaceLinkedAlbumFactory.build({ id: 'album-1', linkedAt: '2024-03-01T00:00:00Z' }),
+          sharedSpaceLinkedAlbumFactory.build({ id: 'album-2', linkedAt: '2024-02-01T00:00:00Z' }),
+        ]);
+        recentSpaceAlbumsExpanded.set({ 'space-a': true });
+        await renderAndFlush();
+        await tick();
+        await tick();
+      };
+
+      it('selects the space row on the space page', async () => {
+        mockPage.url = new URL('https://gallery.test/spaces/space-a');
+        await renderExpanded();
+
+        expect(screen.getByTestId('sidebar-space-space-a')).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByTestId('sidebar-space-album-album-1')).not.toHaveAttribute('aria-current');
+      });
+
+      it('hands the selection to the album row on an album page', async () => {
+        mockPage.url = new URL('https://gallery.test/spaces/space-a/albums/album-1');
+        await renderExpanded();
+
+        expect(screen.getByTestId('sidebar-space-album-album-1')).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByTestId('sidebar-space-space-a')).not.toHaveAttribute('aria-current');
+      });
+
+      it('selects only the open album, not its siblings', async () => {
+        mockPage.url = new URL('https://gallery.test/spaces/space-a/albums/album-2');
+        await renderExpanded();
+
+        expect(screen.getByTestId('sidebar-space-album-album-2')).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByTestId('sidebar-space-album-album-1')).not.toHaveAttribute('aria-current');
+      });
+
+      it('keeps the album row selected while viewing a photo inside it', async () => {
+        mockPage.url = new URL('https://gallery.test/spaces/space-a/albums/album-1/photos/asset-1');
+        await renderExpanded();
+
+        expect(screen.getByTestId('sidebar-space-album-album-1')).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByTestId('sidebar-space-space-a')).not.toHaveAttribute('aria-current');
+      });
+
+      it('keeps the space row selected on its albums list page, which has no row of its own', async () => {
+        mockPage.url = new URL('https://gallery.test/spaces/space-a/albums');
+        await renderExpanded();
+
+        expect(screen.getByTestId('sidebar-space-space-a')).toHaveAttribute('aria-current', 'page');
+      });
     });
 
     it('keeps the chevron anchored to the space row when expanded', async () => {
