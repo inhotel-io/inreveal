@@ -389,7 +389,7 @@ export class PersonService extends BaseService {
         boundingBoxX2: item.boundingBoxX2,
         boundingBoxY1: item.boundingBoxY1,
         boundingBoxY2: item.boundingBoxY2,
-        fileCreatedAt: asDateString(item.fileCreatedAt) ?? undefined,
+        fileCreatedAt: asDateTimeString(item.fileCreatedAt) ?? undefined,
       })),
     };
   }
