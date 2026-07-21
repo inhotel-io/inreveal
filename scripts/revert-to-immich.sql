@@ -391,8 +391,8 @@ DELETE FROM "kysely_migrations"
    '1783100000000-AddAlbumSpaceAssetSyncAndAudit',
    '1783628194057-DisablePostgresJit',
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
-   '1779000000000-AddSpacePersonFaceSuggestion',
-   '1779100000000-AddFaceSuggestionIntentStatuses',
+   '1784000000000-AddSpacePersonFaceSuggestion',
+   '1784100000000-AddFaceSuggestionIntentStatuses',
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
