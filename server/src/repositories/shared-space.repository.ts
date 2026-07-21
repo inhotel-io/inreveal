@@ -26,6 +26,7 @@ import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, searchAssetBuilder } from 'src/utils/database';
 import {
   spaceAlbumAssetExists,
+  spaceAssetPathBranches,
   spaceContributedAssetExists,
   spaceVisibilityGate,
   spaceVisibleAssetVisibilities,
@@ -3440,6 +3441,7 @@ export class SharedSpaceRepository {
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', 'is', true)
             .where('asset_face.sourceType', '=', SourceType.MachineLearning)
+            .where((eb) => spaceVisibilityGate(eb))
             .where((eb) =>
               eb.not(
                 eb.exists(
@@ -3455,23 +3457,16 @@ export class SharedSpaceRepository {
                 ),
               ),
             )
+            // All THREE space access paths (direct / linked library / linked album +
+            // cross-owner contributions) via the canonical helper.
             .where((eb) =>
-              eb.or([
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_asset')
-                    .select('shared_space_asset.assetId')
-                    .whereRef('shared_space_asset.assetId', '=', 'asset.id')
-                    .whereRef('shared_space_asset.spaceId', '=', 'shared_space_person.spaceId'),
-                ),
-                eb.exists(
-                  eb
-                    .selectFrom('shared_space_library')
-                    .select('shared_space_library.libraryId')
-                    .whereRef('shared_space_library.libraryId', '=', 'asset.libraryId')
-                    .whereRef('shared_space_library.spaceId', '=', 'shared_space_person.spaceId'),
-                ),
-              ]),
+              eb.or(
+                spaceAssetPathBranches(eb, {
+                  correlateAssetId: 'asset.id',
+                  correlateLibraryId: 'asset.libraryId',
+                  scope: { spaceIdRef: 'shared_space_person.spaceId' },
+                }),
+              ),
             ),
         ),
       )
