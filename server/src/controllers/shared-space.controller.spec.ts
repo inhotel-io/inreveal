@@ -217,7 +217,9 @@ describe(SharedSpaceController.name, () => {
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(400);
-      expect(body).toEqual(errorDto.badRequest(['[size] Too big: expected number to be <=100']));
+      expect(body).toEqual(
+        errorDto.validationError([{ path: ['size'], message: 'Too big: expected number to be <=100' }]),
+      );
       expect(service.getSpacePersonFaceSuggestions).not.toHaveBeenCalled();
     });
 
@@ -227,7 +229,7 @@ describe(SharedSpaceController.name, () => {
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(400);
-      expect(body).toEqual(errorDto.badRequest(['[id] Invalid UUID']));
+      expect(body).toEqual(errorDto.validationError([{ path: ['id'], message: 'Invalid UUID' }]));
       expect(service.getSpacePersonFaceSuggestions).not.toHaveBeenCalled();
     });
 
@@ -237,7 +239,7 @@ describe(SharedSpaceController.name, () => {
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(400);
-      expect(body).toEqual(errorDto.badRequest(['[personId] Invalid UUID']));
+      expect(body).toEqual(errorDto.validationError([{ path: ['personId'], message: 'Invalid UUID' }]));
       expect(service.getSpacePersonFaceSuggestions).not.toHaveBeenCalled();
     });
 
@@ -303,7 +305,7 @@ describe(SharedSpaceController.name, () => {
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(400);
-      expect(body).toEqual(errorDto.badRequest(['[assetFaceId] Invalid UUID']));
+      expect(body).toEqual(errorDto.validationError([{ path: ['assetFaceId'], message: 'Invalid UUID' }]));
       expect(service.confirmSpacePersonFaceSuggestion).not.toHaveBeenCalled();
     });
 
@@ -313,7 +315,7 @@ describe(SharedSpaceController.name, () => {
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(400);
-      expect(body).toEqual(errorDto.badRequest(['[assetFaceId] Invalid UUID']));
+      expect(body).toEqual(errorDto.validationError([{ path: ['assetFaceId'], message: 'Invalid UUID' }]));
       expect(service.rejectSpacePersonFaceSuggestion).not.toHaveBeenCalled();
     });
 
@@ -323,7 +325,7 @@ describe(SharedSpaceController.name, () => {
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(400);
-      expect(body).toEqual(errorDto.badRequest(['[assetFaceId] Invalid UUID']));
+      expect(body).toEqual(errorDto.validationError([{ path: ['assetFaceId'], message: 'Invalid UUID' }]));
       expect(service.ignoreSpacePersonFaceSuggestion).not.toHaveBeenCalled();
     });
   });
