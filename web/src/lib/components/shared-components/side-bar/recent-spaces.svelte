@@ -11,24 +11,11 @@
   import { getAssetMediaUrl } from '$lib/utils';
   import { splitPinnedSpaces } from '$lib/utils/space-utils';
   import { handleError } from '$lib/utils/handle-error';
-  import { UserAvatarColor, getAllSpaces, getSharedSpaceAlbums } from '@immich/sdk';
+  import { getAllSpaces, getSharedSpaceAlbums } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiChevronDown, mdiChevronRight } from '@mdi/js';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
-
-  const bgClasses: Record<string, string> = {
-    [UserAvatarColor.Primary]: 'bg-immich-primary',
-    [UserAvatarColor.Pink]: 'bg-pink-500',
-    [UserAvatarColor.Red]: 'bg-red-500',
-    [UserAvatarColor.Yellow]: 'bg-yellow-500',
-    [UserAvatarColor.Blue]: 'bg-blue-500',
-    [UserAvatarColor.Green]: 'bg-green-600',
-    [UserAvatarColor.Purple]: 'bg-purple-600',
-    [UserAvatarColor.Orange]: 'bg-orange-500',
-    [UserAvatarColor.Gray]: 'bg-gray-500',
-    [UserAvatarColor.Amber]: 'bg-amber-500',
-  };
 
   const sortByActivity = <T extends { lastActivityAt?: string | null }>(a: T, b: T): number => {
     const aTime = a.lastActivityAt ?? '';
@@ -148,20 +135,15 @@
           : ''}"
       >
         <div class="flex h-6 w-6 items-center justify-center">
-          {#if space.newAssetCount && space.newAssetCount > 0}
-            <div
-              class="h-3 w-3 rounded-full {bgClasses[space.color ?? 'primary'] ?? bgClasses[UserAvatarColor.Primary]}"
-              data-testid="sidebar-space-dot-{space.id}"
-            ></div>
-          {:else}
-            <div
-              class="h-6 w-6 bg-cover rounded bg-gray-200 dark:bg-gray-600"
-              style={space.thumbnailAssetId
-                ? `background-image:url('${getAssetMediaUrl({ id: space.thumbnailAssetId })}')`
-                : ''}
-              data-testid="sidebar-space-thumbnail-{space.id}"
-            ></div>
-          {/if}
+          <!-- Always the thumbnail: the sidebar identifies a space, it doesn't report on it. New
+               activity is surfaced on the Spaces page and by the in-timeline new-assets divider. -->
+          <div
+            class="h-6 w-6 bg-cover rounded bg-gray-200 dark:bg-gray-600"
+            style={space.thumbnailAssetId
+              ? `background-image:url('${getAssetMediaUrl({ id: space.thumbnailAssetId })}')`
+              : ''}
+            data-testid="sidebar-space-thumbnail-{space.id}"
+          ></div>
         </div>
         <div class="grow text-sm font-medium truncate">
           {space.name}

@@ -111,33 +111,10 @@ describe('RecentSpaces component', () => {
     });
   });
 
-  describe('colored dot', () => {
-    it('shows colored dot when newAssetCount > 0', async () => {
-      const space = sharedSpaceFactory.build({ id: 'dot-1', newAssetCount: 5, color: UserAvatarColor.Blue });
-      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
-      await renderAndFlush();
-
-      expect(screen.getByTestId('sidebar-space-dot-dot-1')).toBeInTheDocument();
-    });
-
-    it('hides colored dot when newAssetCount === 0', async () => {
-      const space = sharedSpaceFactory.build({ id: 'no-dot', newAssetCount: 0 });
-      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
-      await renderAndFlush();
-
-      expect(screen.queryByTestId('sidebar-space-dot-no-dot')).not.toBeInTheDocument();
-    });
-
-    it('hides colored dot when newAssetCount is undefined', async () => {
-      const space = sharedSpaceFactory.build({ id: 'undef-dot' });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (space as any).newAssetCount = undefined;
-      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
-      await renderAndFlush();
-
-      expect(screen.queryByTestId('sidebar-space-dot-undef-dot')).not.toBeInTheDocument();
-    });
-
+  // The sidebar always identifies a space by its thumbnail. New-activity is still surfaced on the
+  // Spaces page (space card / table) and by the in-timeline new-assets divider, so the sidebar
+  // doesn't trade the space's identity for an activity dot.
+  describe('space thumbnail', () => {
     it('shows the space thumbnail when there are no new assets', async () => {
       const space = sharedSpaceFactory.build({
         id: 'thumb-1',
@@ -154,51 +131,44 @@ describe('RecentSpaces component', () => {
       );
     });
 
-    it('applies correct bg class for blue color', async () => {
-      const space = sharedSpaceFactory.build({ id: 'blue-1', newAssetCount: 3, color: UserAvatarColor.Blue });
+    it('keeps showing the thumbnail when the space has new assets', async () => {
+      const space = sharedSpaceFactory.build({
+        id: 'thumb-2',
+        newAssetCount: 5,
+        color: UserAvatarColor.Blue,
+        thumbnailAssetId: 'asset-thumb-2',
+      });
       sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
       await renderAndFlush();
 
-      const dot = screen.getByTestId('sidebar-space-dot-blue-1');
-      expect(dot.className).toContain('bg-blue-500');
+      const thumbnail = screen.getByTestId('sidebar-space-thumbnail-thumb-2');
+      expect(thumbnail.getAttribute('style')).toContain(
+        'background-image: url("/api/assets/asset-thumb-2/thumbnail?edited=true")',
+      );
+      expect(screen.queryByTestId('sidebar-space-dot-thumb-2')).not.toBeInTheDocument();
     });
 
-    it('applies correct bg class for red color', async () => {
-      const space = sharedSpaceFactory.build({ id: 'red-1', newAssetCount: 3, color: UserAvatarColor.Red });
-      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+    it('never renders an activity dot, whatever the space colour', async () => {
+      const spaces = [
+        sharedSpaceFactory.build({ id: 'blue-1', newAssetCount: 3, color: UserAvatarColor.Blue }),
+        sharedSpaceFactory.build({ id: 'red-1', newAssetCount: 3, color: UserAvatarColor.Red }),
+        sharedSpaceFactory.build({ id: 'null-color', newAssetCount: 2, color: null }),
+      ];
+      sdkMock.getAllSpaces.mockResolvedValueOnce(spaces);
       await renderAndFlush();
 
-      const dot = screen.getByTestId('sidebar-space-dot-red-1');
-      expect(dot.className).toContain('bg-red-500');
+      expect(screen.queryAllByTestId(/^sidebar-space-dot-/)).toHaveLength(0);
+      expect(screen.queryAllByTestId(/^sidebar-space-thumbnail-/)).toHaveLength(3);
     });
 
-    it('applies correct bg class for green color', async () => {
-      const space = sharedSpaceFactory.build({ id: 'green-1', newAssetCount: 3, color: UserAvatarColor.Green });
+    it('falls back to the placeholder square when the space has no thumbnail asset', async () => {
+      const space = sharedSpaceFactory.build({ id: 'no-thumb', newAssetCount: 4, thumbnailAssetId: null });
       sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
       await renderAndFlush();
 
-      const dot = screen.getByTestId('sidebar-space-dot-green-1');
-      expect(dot.className).toContain('bg-green-600');
-    });
-
-    it('falls back to primary color when color is null', async () => {
-      const space = sharedSpaceFactory.build({ id: 'null-color', newAssetCount: 2, color: null });
-      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
-      await renderAndFlush();
-
-      const dot = screen.getByTestId('sidebar-space-dot-null-color');
-      expect(dot.className).toContain('bg-immich-primary');
-    });
-
-    it('falls back to primary color when color is undefined', async () => {
-      const space = sharedSpaceFactory.build({ id: 'undef-color', newAssetCount: 2 });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (space as any).color = undefined;
-      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
-      await renderAndFlush();
-
-      const dot = screen.getByTestId('sidebar-space-dot-undef-color');
-      expect(dot.className).toContain('bg-immich-primary');
+      const thumbnail = screen.getByTestId('sidebar-space-thumbnail-no-thumb');
+      expect(thumbnail.getAttribute('style')).toBeFalsy();
+      expect(screen.queryByTestId('sidebar-space-dot-no-thumb')).not.toBeInTheDocument();
     });
   });
 
