@@ -30851,6 +30851,10 @@
       },
       "SharedSpaceResponseDto": {
         "properties": {
+          "albumCount": {
+            "description": "Number of linked albums",
+            "type": "number"
+          },
           "assetCount": {
             "description": "Number of assets",
             "type": "number"
