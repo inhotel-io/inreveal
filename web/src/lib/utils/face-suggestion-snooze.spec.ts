@@ -1,5 +1,5 @@
-import { SUGGESTION_SNOOZE_MS, isSuggestionSnoozed, snoozeSuggestions } from '$lib/utils/face-suggestion-snooze';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { SUGGESTION_SNOOZE_MS, isSuggestionSnoozed, snoozeSuggestions } from '$lib/utils/face-suggestion-snooze';
 
 describe('face-suggestion-snooze', () => {
   beforeEach(() => localStorage.clear());

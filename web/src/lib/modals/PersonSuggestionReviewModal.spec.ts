@@ -1,9 +1,9 @@
-import PersonSuggestionReviewModal from '$lib/modals/PersonSuggestionReviewModal.svelte';
 import type { PersonFaceSuggestionPageResponseDto, PersonResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import PersonSuggestionReviewModal from '$lib/modals/PersonSuggestionReviewModal.svelte';
 
 vi.mock('svelte-i18n', () => ({
   t: { subscribe: (run: (f: (k: string) => string) => void) => (run((k) => k), () => {}) },
