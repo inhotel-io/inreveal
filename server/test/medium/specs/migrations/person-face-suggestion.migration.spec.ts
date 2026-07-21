@@ -2,7 +2,7 @@ import { Kysely, sql } from 'kysely';
 import { PersonFaceSuggestionRepository } from 'src/repositories/person-face-suggestion.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
-import { up as upIntentStatuses, down as downIntentStatuses } from 'src/schema/migrations-gallery/1779100000000-AddFaceSuggestionIntentStatuses';
+import { up as upIntentStatuses, down as downIntentStatuses } from 'src/schema/migrations-gallery/1784100000000-AddFaceSuggestionIntentStatuses';
 import { BaseService } from 'src/services/base.service';
 import { newMediumService } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
