@@ -280,6 +280,7 @@ export class BaseService {
       ctx.oauthRepository,
       ctx.ocrRepository,
       ctx.partnerRepository,
+      ctx.personFaceSuggestionRepository,
       ctx.personRepository,
       ctx.pluginRepository,
       ctx.processRepository,
