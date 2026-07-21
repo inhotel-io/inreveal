@@ -115,48 +115,54 @@
   {@const expanded =
     isSpaceAlbumsExpanded($recentSpaceAlbumsExpanded, space.id) &&
     (cachedAlbums === undefined || cachedAlbums.length > 0)}
-  <div class="relative">
-    {#if hasAlbums}
-      <button
-        type="button"
-        aria-label={expanded ? $t('collapse') : $t('expand')}
-        aria-expanded={expanded}
-        data-testid="sidebar-space-chevron-{space.id}"
-        class="absolute start-2 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg p-0.5 hover:bg-subtle md:block"
-        onclick={() => toggleAlbums(space.id)}
+  <div>
+    <!-- The chevron is absolutely positioned against this wrapper, so it must enclose the space row
+         alone: with the expanded album rows inside it, `top-1/2` would centre the chevron on the
+         whole group instead of on the space it belongs to. -->
+    <div class="relative">
+      {#if hasAlbums}
+        <button
+          type="button"
+          aria-label={expanded ? $t('collapse') : $t('expand')}
+          aria-expanded={expanded}
+          data-testid="sidebar-space-chevron-{space.id}"
+          class="absolute start-2 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg p-0.5 hover:bg-subtle md:block"
+          onclick={() => toggleAlbums(space.id)}
+        >
+          <!-- 1em matches the chevron @immich/ui's NavbarItem renders for the Spaces row above. -->
+          <Icon icon={expanded ? mdiChevronDown : mdiChevronRight} size="1em" />
+        </button>
+      {/if}
+      <a
+        href={Route.viewSpace({ id: space.id })}
+        title={space.name}
+        aria-current={active ? 'page' : undefined}
+        data-testid="sidebar-space-{space.id}"
+        class="flex w-full place-items-center gap-4 rounded-e-full py-3 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary ps-10 group-hover:sm:pe-4 md:pe-4 {active
+          ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
+          : ''}"
       >
-        <Icon icon={expanded ? mdiChevronDown : mdiChevronRight} size="1.25em" />
-      </button>
-    {/if}
-    <a
-      href={Route.viewSpace({ id: space.id })}
-      title={space.name}
-      aria-current={active ? 'page' : undefined}
-      data-testid="sidebar-space-{space.id}"
-      class="flex w-full place-items-center gap-4 rounded-e-full py-3 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary ps-10 group-hover:sm:pe-4 md:pe-4 {active
-        ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
-        : ''}"
-    >
-      <div class="flex h-6 w-6 items-center justify-center">
-        {#if space.newAssetCount && space.newAssetCount > 0}
-          <div
-            class="h-3 w-3 rounded-full {bgClasses[space.color ?? 'primary'] ?? bgClasses[UserAvatarColor.Primary]}"
-            data-testid="sidebar-space-dot-{space.id}"
-          ></div>
-        {:else}
-          <div
-            class="h-6 w-6 bg-cover rounded bg-gray-200 dark:bg-gray-600"
-            style={space.thumbnailAssetId
-              ? `background-image:url('${getAssetMediaUrl({ id: space.thumbnailAssetId })}')`
-              : ''}
-            data-testid="sidebar-space-thumbnail-{space.id}"
-          ></div>
-        {/if}
-      </div>
-      <div class="grow text-sm font-medium truncate">
-        {space.name}
-      </div>
-    </a>
+        <div class="flex h-6 w-6 items-center justify-center">
+          {#if space.newAssetCount && space.newAssetCount > 0}
+            <div
+              class="h-3 w-3 rounded-full {bgClasses[space.color ?? 'primary'] ?? bgClasses[UserAvatarColor.Primary]}"
+              data-testid="sidebar-space-dot-{space.id}"
+            ></div>
+          {:else}
+            <div
+              class="h-6 w-6 bg-cover rounded bg-gray-200 dark:bg-gray-600"
+              style={space.thumbnailAssetId
+                ? `background-image:url('${getAssetMediaUrl({ id: space.thumbnailAssetId })}')`
+                : ''}
+              data-testid="sidebar-space-thumbnail-{space.id}"
+            ></div>
+          {/if}
+        </div>
+        <div class="grow text-sm font-medium truncate">
+          {space.name}
+        </div>
+      </a>
+    </div>
     {#if expanded}
       {#each (cachedAlbums ?? []).slice(0, 3) as album (album.id)}
         <a

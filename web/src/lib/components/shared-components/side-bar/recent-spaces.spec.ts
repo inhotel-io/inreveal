@@ -294,6 +294,18 @@ describe('RecentSpaces component', () => {
       expect(screen.queryByTestId('sidebar-space-chevron-no-albums')).not.toBeInTheDocument();
     });
 
+    it('sizes the chevron like the NavbarItem chevron it sits under', async () => {
+      const space = sharedSpaceFactory.build({ id: 'space-a', albumCount: 2 });
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      await renderAndFlush();
+
+      // @immich/ui's NavbarItem renders its own expand/collapse chevron at size="1em"; the Spaces
+      // chevron sits directly above this one, so anything larger reads as a mismatched pair.
+      const icon = screen.getByTestId('sidebar-space-chevron-space-a').querySelector('svg');
+      expect(icon).toHaveAttribute('width', '1em');
+      expect(icon).toHaveAttribute('height', '1em');
+    });
+
     it('shows no chevron when albumCount is undefined', async () => {
       const space = sharedSpaceFactory.build({ id: 'undef-albums' });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -457,6 +469,31 @@ describe('RecentSpaces component', () => {
       expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledTimes(1);
       expect(sdkMock.getSharedSpaceAlbums).toHaveBeenCalledWith({ id: 'space-a' });
       expect(screen.getAllByTestId(/^sidebar-space-album-/)).toHaveLength(2);
+    });
+
+    it('keeps the chevron anchored to the space row when expanded', async () => {
+      const space = sharedSpaceFactory.build({ id: 'space-a', albumCount: 4, newAssetCount: 0 });
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue(sharedSpaceLinkedAlbumFactory.buildList(4));
+      await renderAndFlush();
+
+      await fireEvent.click(screen.getByTestId('sidebar-space-chevron-space-a'));
+      await tick();
+      await tick();
+
+      // The chevron is absolutely positioned and vertically centred (top-1/2 + -translate-y-1/2),
+      // so its containing block decides what it centres against. That block must wrap the space
+      // row alone — if the expanded album rows share the positioning context, the chevron drifts
+      // down to the middle of the whole expanded group instead of sitting beside the space name.
+      const chevron = screen.getByTestId('sidebar-space-chevron-space-a');
+      const positioningContext = chevron.offsetParent ?? chevron.closest('.relative');
+      expect(positioningContext).not.toBeNull();
+      expect(positioningContext).toContainElement(screen.getByTestId('sidebar-space-space-a'));
+
+      for (const albumRow of screen.getAllByTestId(/^sidebar-space-album-/)) {
+        expect(positioningContext).not.toContainElement(albumRow);
+      }
+      expect(positioningContext).not.toContainElement(screen.getByTestId('sidebar-space-see-all-space-a'));
     });
   });
 });
