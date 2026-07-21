@@ -75,10 +75,11 @@ describe('buildRecentlyAddedTimelineOptions', () => {
     expect(buildRecentlyAddedTimelineOptions({ ...createFilterState(), rating: 4 }).withPartners).toBe(true);
   });
 
-  it('drops partner assets under a favorites filter (favorites are personal)', () => {
-    expect(buildRecentlyAddedTimelineOptions({ ...createFilterState(), isFavorite: true })).not.toHaveProperty(
-      'withPartners',
-    );
+  it('keeps partner assets under a favorites filter (favorites are per-user, #763)', () => {
+    // Pre-#763 a favorite was the owner's flag on the asset, so a partner's favorites were
+    // meaningless to the viewer and the partner scope was dropped. Favorites are now per-user
+    // (asset_favorite overlay), so the viewer's own favorites on partner assets must stay in scope.
+    expect(buildRecentlyAddedTimelineOptions({ ...createFilterState(), isFavorite: true }).withPartners).toBe(true);
   });
 
   it('maps sortOrder to order without touching orderBy', () => {
