@@ -117,7 +117,10 @@
   >();
   let isLoading = $state(false);
   const showSearchResults = $derived(committedQuery.trim().length > 0);
-  const options = $derived({ ...buildRecentlyAddedTimelineOptions(filters), grouping: timelineGrouping });
+  const options = $derived({
+    ...buildRecentlyAddedTimelineOptions(filters, authManager.user.id),
+    grouping: timelineGrouping,
+  });
   $effect(() => {
     filtersBeforePanelChange = filters;
   });
@@ -143,7 +146,7 @@
   // Browse mode fetches its own bucket set; query mode keeps the smart-search facets, which already
   // bucket on takenAt.
   let pickerBuckets = $state<Array<{ timeBucket: string; count: number }>>([]);
-  const pickerBucketOptions = $derived(buildRecentlyAddedPickerBucketOptions(filters));
+  const pickerBucketOptions = $derived(buildRecentlyAddedPickerBucketOptions(filters, authManager.user.id));
 
   $effect(() => {
     // Read the derived options up front so every filter change is tracked as a dependency.
