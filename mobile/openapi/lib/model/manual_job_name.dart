@@ -39,6 +39,7 @@ class ManualJobName {
   static const integrityUntrackedFilesDeleteAll = ManualJobName._(r'integrity-untracked-files-delete-all');
   static const integrityChecksumMismatchDeleteAll = ManualJobName._(r'integrity-checksum-mismatch-delete-all');
   static const faceIdentityBackfill = ManualJobName._(r'face-identity-backfill');
+  static const faceSuggestionMaintenance = ManualJobName._(r'face-suggestion-maintenance');
   static const sharedSpacePersonMetadataBackfill = ManualJobName._(r'shared-space-person-metadata-backfill');
 
   /// List of all possible values in this [enum][ManualJobName].
@@ -59,6 +60,7 @@ class ManualJobName {
     integrityUntrackedFilesDeleteAll,
     integrityChecksumMismatchDeleteAll,
     faceIdentityBackfill,
+    faceSuggestionMaintenance,
     sharedSpacePersonMetadataBackfill,
   ];
 
@@ -114,6 +116,7 @@ class ManualJobNameTypeTransformer {
         case r'integrity-untracked-files-delete-all': return ManualJobName.integrityUntrackedFilesDeleteAll;
         case r'integrity-checksum-mismatch-delete-all': return ManualJobName.integrityChecksumMismatchDeleteAll;
         case r'face-identity-backfill': return ManualJobName.faceIdentityBackfill;
+        case r'face-suggestion-maintenance': return ManualJobName.faceSuggestionMaintenance;
         case r'shared-space-person-metadata-backfill': return ManualJobName.sharedSpacePersonMetadataBackfill;
         default:
           if (!allowNull) {
