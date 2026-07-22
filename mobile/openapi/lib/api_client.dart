@@ -467,6 +467,8 @@ class ApiClient {
           return FaceRepairScanTriggerRequestDtoParams.fromJson(value);
         case 'FaceRepairScanTriggerResponseDto':
           return FaceRepairScanTriggerResponseDto.fromJson(value);
+        case 'FaceRepairUnconfirmRequestDto':
+          return FaceRepairUnconfirmRequestDto.fromJson(value);
         case 'FacialRecognitionConfig':
           return FacialRecognitionConfig.fromJson(value);
         case 'FilterSuggestionsPersonDto':

@@ -744,4 +744,43 @@ describe(FaceRepairAdminController.name, () => {
       expect(service.removeResolutions).not.toHaveBeenCalled();
     });
   });
+
+  describe('POST /admin/face-repair/unconfirm', () => {
+    const uuid1 = '00000000-0000-4000-a000-000000000001';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).post('/admin/face-repair/unconfirm');
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('is admin-only: a non-admin caller gets 403', async () => {
+      ctx.authenticate.mockRejectedValue(new ForbiddenException('Forbidden'));
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/unconfirm')
+        .set('Authorization', 'Bearer token')
+        .send({ assetFaceIds: [uuid1] });
+      expect(status).toBe(403);
+      expect(service.unconfirmFaces).not.toHaveBeenCalled();
+    });
+
+    it('delegates to service.unconfirmFaces', async () => {
+      service.unconfirmFaces.mockResolvedValue({ removed: 1 });
+      const { status, body } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/unconfirm')
+        .set('Authorization', 'Bearer token')
+        .send({ assetFaceIds: [uuid1] });
+      expect(status).toBe(201);
+      expect(service.unconfirmFaces).toHaveBeenCalledWith([uuid1]);
+      expect(body).toEqual({ removed: 1 });
+    });
+
+    it('rejects an empty assetFaceIds array with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post('/admin/face-repair/unconfirm')
+        .set('Authorization', 'Bearer token')
+        .send({ assetFaceIds: [] });
+      expect(status).toBe(400);
+      expect(service.unconfirmFaces).not.toHaveBeenCalled();
+    });
+  });
 });
