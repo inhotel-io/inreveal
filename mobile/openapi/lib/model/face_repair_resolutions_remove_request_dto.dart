@@ -13,46 +13,37 @@ part of openapi.api;
 class FaceRepairResolutionsRemoveRequestDto {
   /// Returns a new [FaceRepairResolutionsRemoveRequestDto] instance.
   FaceRepairResolutionsRemoveRequestDto({
-    this.declineIds = const Optional.present(const []),
-    this.faces = const Optional.present(const []),
-    this.lockIds = const Optional.present(const []),
+    this.clusterMuteIds = const Optional.present(const []),
+    this.verdictIds = const Optional.present(const []),
   });
 
-  Optional<List<String>?> declineIds;
+  Optional<List<String>?> clusterMuteIds;
 
-  Optional<List<FaceRepairDeclineRemoveRequestDtoFacesInner>?> faces;
-
-  Optional<List<String>?> lockIds;
+  Optional<List<String>?> verdictIds;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairResolutionsRemoveRequestDto &&
-    _deepEquality.equals(other.declineIds, declineIds) &&
-    _deepEquality.equals(other.faces, faces) &&
-    _deepEquality.equals(other.lockIds, lockIds);
+    _deepEquality.equals(other.clusterMuteIds, clusterMuteIds) &&
+    _deepEquality.equals(other.verdictIds, verdictIds);
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (declineIds.hashCode) +
-    (faces.hashCode) +
-    (lockIds.hashCode);
+    (clusterMuteIds.hashCode) +
+    (verdictIds.hashCode);
 
   @override
-  String toString() => 'FaceRepairResolutionsRemoveRequestDto[declineIds=$declineIds, faces=$faces, lockIds=$lockIds]';
+  String toString() => 'FaceRepairResolutionsRemoveRequestDto[clusterMuteIds=$clusterMuteIds, verdictIds=$verdictIds]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.declineIds.isPresent) {
-      final value = this.declineIds.value;
-      json[r'declineIds'] = value;
+    if (this.clusterMuteIds.isPresent) {
+      final value = this.clusterMuteIds.value;
+      json[r'clusterMuteIds'] = value;
     }
-    if (this.faces.isPresent) {
-      final value = this.faces.value;
-      json[r'faces'] = value;
-    }
-    if (this.lockIds.isPresent) {
-      final value = this.lockIds.value;
-      json[r'lockIds'] = value;
+    if (this.verdictIds.isPresent) {
+      final value = this.verdictIds.value;
+      json[r'verdictIds'] = value;
     }
     return json;
   }
@@ -66,12 +57,11 @@ class FaceRepairResolutionsRemoveRequestDto {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairResolutionsRemoveRequestDto(
-        declineIds: json.containsKey(r'declineIds') ? Optional.present(json[r'declineIds'] is Iterable
-            ? (json[r'declineIds'] as Iterable).cast<String>().toList(growable: false)
+        clusterMuteIds: json.containsKey(r'clusterMuteIds') ? Optional.present(json[r'clusterMuteIds'] is Iterable
+            ? (json[r'clusterMuteIds'] as Iterable).cast<String>().toList(growable: false)
             : const []) : const Optional.absent(),
-        faces: json.containsKey(r'faces') ? Optional.present(FaceRepairDeclineRemoveRequestDtoFacesInner.listFromJson(json[r'faces'])) : const Optional.absent(),
-        lockIds: json.containsKey(r'lockIds') ? Optional.present(json[r'lockIds'] is Iterable
-            ? (json[r'lockIds'] as Iterable).cast<String>().toList(growable: false)
+        verdictIds: json.containsKey(r'verdictIds') ? Optional.present(json[r'verdictIds'] is Iterable
+            ? (json[r'verdictIds'] as Iterable).cast<String>().toList(growable: false)
             : const []) : const Optional.absent(),
       );
     }

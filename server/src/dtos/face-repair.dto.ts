@@ -234,6 +234,13 @@ export const FaceRepairResolutionsRemoveRequestSchema = z
   .meta({ id: 'FaceRepairResolutionsRemoveRequestDto' });
 export class FaceRepairResolutionsRemoveRequestDto extends createZodDto(FaceRepairResolutionsRemoveRequestSchema) {}
 
+export const FaceRepairUnconfirmRequestSchema = z
+  .object({
+    assetFaceIds: z.array(z.uuid()).min(1),
+  })
+  .meta({ id: 'FaceRepairUnconfirmRequestDto' });
+export class FaceRepairUnconfirmRequestDto extends createZodDto(FaceRepairUnconfirmRequestSchema) {}
+
 export const FaceRepairResolutionsRemovedSchema = z
   .object({ removed: z.number() })
   .meta({ id: 'FaceRepairResolutionsRemovedDto' });

@@ -19,6 +19,7 @@ import {
   FaceRepairResolutionsListDto,
   FaceRepairResolutionsRemovedDto,
   FaceRepairResolutionsRemoveRequestDto,
+  FaceRepairUnconfirmRequestDto,
   FaceRepairResolveRequestDto,
   FaceRepairResolveResponseDto,
   FaceRepairResponseDto,
@@ -140,6 +141,16 @@ export class FaceRepairAdminController {
     @Body() dto: FaceRepairResolutionsRemoveRequestDto,
   ): Promise<FaceRepairResolutionsRemovedDto> {
     return this.service.removeResolutions(dto) as Promise<FaceRepairResolutionsRemovedDto>;
+  }
+
+  @Post('unconfirm')
+  @Authenticated({ admin: true })
+  @Endpoint({
+    summary: 'Un-confirm human-placed faces so a re-scan may flag them again',
+    history: new HistoryBuilder().added('v1'),
+  })
+  unconfirmFaceRepairFaces(@Body() dto: FaceRepairUnconfirmRequestDto): Promise<FaceRepairResolutionsRemovedDto> {
+    return this.service.unconfirmFaces(dto.assetFaceIds) as Promise<FaceRepairResolutionsRemovedDto>;
   }
 
   @Get('owner/:ownerId/people')
