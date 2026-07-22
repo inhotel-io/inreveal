@@ -369,7 +369,7 @@ export const defaults = Object.freeze<SystemConfig>({
       maxResolution: 736,
     },
     petDetection: {
-      enabled: false,
+      enabled: true,
       modelName: 'yolo11s',
       minScore: 0.6,
     },
