@@ -12,7 +12,6 @@
   import ImportProgressStep from './import-progress-step.svelte';
   import ImportReviewStep from './import-review-step.svelte';
   import ImportScanStep from './import-scan-step.svelte';
-  import ImportSourceStep from './import-source-step.svelte';
   import ImportStepIndicator from './import-step-indicator.svelte';
 
   const manager = new ImportManager();
@@ -79,40 +78,37 @@
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
-      manager.importProgress = {
-        ...manager.importProgress,
-        currentFile: item.name,
-      };
+      manager.importProgress.currentFile = item.name;
 
       const result = await uploadTakeoutItem(item, manager.options);
 
       if (result.status === 'imported') {
-        manager.trackImported();
+        manager.importProgress.imported++;
         assetIdMap.set(item.path, result.assetId);
       } else if (result.status === 'duplicate') {
-        manager.trackSkipped();
+        manager.importProgress.skipped++;
         if (result.assetId) {
           assetIdMap.set(item.path, result.assetId);
         }
       } else {
-        manager.trackError(item.name, result.error ?? get(t)('import_unknown_error'));
+        manager.importProgress.errors++;
+        manager.importProgress.errorLog.push({
+          file: item.name,
+          error: result.error ?? get(t)('import_unknown_error'),
+        });
       }
     }
 
     // Create albums
     if (manager.selectedAlbums.size > 0) {
-      const albumCount = await createImportAlbums(items, assetIdMap, manager.selectedAlbums);
-      manager.importProgress = {
-        ...manager.importProgress,
-        albumsCreated: albumCount,
-      };
+      manager.importProgress.albumsCreated = await createImportAlbums(items, assetIdMap, manager.selectedAlbums);
     }
 
     manager.isComplete = true;
   }
 
   function handleSetOption(key: string, value: boolean) {
-    manager.setOption(key as keyof ImportOptions, value);
+    manager.options[key as keyof ImportOptions] = value;
   }
 </script>
 
@@ -120,16 +116,13 @@
   <div class="flex flex-col gap-6 py-8">
     <ImportStepIndicator currentStep={manager.currentStep} />
 
-    {#if manager.currentStep === ImportStep.Source}
-      <ImportSourceStep onNext={() => manager.nextStep()} />
-    {:else if manager.currentStep === ImportStep.Files}
+    {#if manager.currentStep === ImportStep.Files}
       <ImportFilesStep
         files={manager.selectedFiles}
         totalSize={manager.totalSize}
         onAddFiles={(files) => manager.addFiles(files)}
         onClearFiles={() => manager.clearFiles()}
         onNext={startScan}
-        onBack={() => manager.previousStep()}
       />
     {:else if manager.currentStep === ImportStep.Scan}
       <ImportScanStep progress={manager.scanProgress} onCancel={cancelScan} />

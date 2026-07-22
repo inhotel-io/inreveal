@@ -14,7 +14,7 @@ import { createWriteStream } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { finished, Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { ServeOptions, ServeStrategy, StorageBackend } from 'src/interfaces/storage-backend.interface';
 import { getContentDispositionHeader } from 'src/utils/file';
@@ -157,19 +157,14 @@ export class S3StorageBackend implements StorageBackend {
     return total;
   }
 
-  private releaseWhenStreamCloses(stream: Readable, release: () => void) {
-    stream.once('end', release);
-    stream.once('error', release);
-    stream.once('close', release);
-    return stream;
-  }
-
   async getServeStrategy(key: string, options: ServeOptions): Promise<ServeStrategy> {
     if (this.serveMode === 'proxy') {
       const release = await this.proxyReadLimiter.acquire();
       try {
         const { stream, length } = await this.get(key);
-        return { type: 'stream', stream: this.releaseWhenStreamCloses(stream, release), length };
+        // release the read slot once the stream ends, errors out or is closed
+        finished(stream, release);
+        return { type: 'stream', stream, length };
       } catch (error) {
         release();
         throw error;

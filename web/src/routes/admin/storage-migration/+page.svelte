@@ -1,5 +1,7 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
+  import { locale } from '$lib/stores/preferences.store';
+  import { getByteUnitString } from '$lib/utils/byte-units';
   import { handleError } from '$lib/utils/handle-error';
   import {
     StorageMigrationDirection,
@@ -7,7 +9,10 @@
     getStatus as getStatusRaw,
     start as startMigrationRaw,
     rollback as rollbackRaw,
+    type StorageMigrationEstimateResponseDto,
+    type StorageMigrationFileTypesDto,
     type StorageMigrationStartDto,
+    type StorageMigrationStatusResponseDto,
   } from '@immich/sdk';
   import { Button, Container } from '@immich/ui';
   import { onMount } from 'svelte';
@@ -20,54 +25,30 @@
 
   const { data }: Props = $props();
 
-  interface FileCounts {
-    originals: number;
-    thumbnails: number;
-    previews: number;
-    fullsize: number;
-    encodedVideos: number;
-    sidecars: number;
-    personThumbnails: number;
-    profileImages: number;
-    total: number;
-  }
-
-  interface EstimateResponse {
-    direction: string;
-    fileCounts: FileCounts;
-    estimatedSizeBytes: number;
-  }
-
-  interface StatusResponse {
-    isActive: boolean;
-    active: number;
-    waiting: number;
-    completed: number;
-    failed: number;
-    delayed: number;
-    paused: number;
-  }
+  type FileType = keyof StorageMigrationFileTypesDto;
 
   // StorageMigrationDirection
   let direction: StorageMigrationDirection = $state(StorageMigrationDirection.ToS3);
 
   // File types
-  let originals = $state(true);
-  let thumbnails = $state(true);
-  let previews = $state(true);
-  let fullsize = $state(true);
-  let encodedVideos = $state(true);
-  let sidecars = $state(true);
-  let personThumbnails = $state(true);
-  let profileImages = $state(true);
+  const fileTypes: StorageMigrationFileTypesDto = $state({
+    originals: true,
+    thumbnails: true,
+    previews: true,
+    fullsize: true,
+    encodedVideos: true,
+    sidecars: true,
+    personThumbnails: true,
+    profileImages: true,
+  });
 
   // Options
   let deleteSource = $state(false);
   let concurrency = $state(5);
 
   // Estimate & Status
-  let estimate: EstimateResponse | undefined = $state(undefined);
-  let status: StatusResponse | undefined = $state(undefined);
+  let estimate: StorageMigrationEstimateResponseDto | undefined = $state(undefined);
+  let status: StorageMigrationStatusResponseDto | undefined = $state(undefined);
   let loadingEstimate = $state(false);
   let loadingStatus = $state(false);
   let starting = $state(false);
@@ -76,7 +57,7 @@
   // Rollback
   let rollbackBatchId = $state('');
 
-  const fileTypeLabels = $derived<Record<string, string>>({
+  const fileTypeLabels = $derived<Record<FileType, string>>({
     originals: $t('admin.storage_migration_file_type_originals'),
     thumbnails: $t('admin.storage_migration_file_type_thumbnails'),
     previews: $t('admin.storage_migration_file_type_previews'),
@@ -87,21 +68,12 @@
     profileImages: $t('admin.storage_migration_file_type_profile_images'),
   });
 
-  function formatBytes(bytes: number): string {
-    if (bytes === 0) {
-      return '0 B';
-    }
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    const value = bytes / Math.pow(1024, i);
-    return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-  }
+  const fileTypeEntries = $derived(Object.entries(fileTypeLabels) as [FileType, string][]);
 
   async function fetchEstimate() {
     loadingEstimate = true;
     try {
-      const text = await getEstimateRaw({ direction });
-      estimate = JSON.parse(text) as EstimateResponse;
+      estimate = await getEstimateRaw({ direction });
     } catch (error) {
       handleError(error, $t('admin.storage_migration_fetch_estimate_failed'));
     } finally {
@@ -112,8 +84,7 @@
   async function fetchStatus() {
     loadingStatus = true;
     try {
-      const text = await getStatusRaw();
-      status = JSON.parse(text) as StatusResponse;
+      status = await getStatusRaw();
     } catch (error) {
       handleError(error, $t('admin.storage_migration_fetch_status_failed'));
     } finally {
@@ -128,16 +99,7 @@
         direction,
         deleteSource,
         concurrency,
-        fileTypes: {
-          originals,
-          thumbnails,
-          previews,
-          fullsize,
-          encodedVideos,
-          sidecars,
-          personThumbnails,
-          profileImages,
-        },
+        fileTypes: { ...fileTypes },
       };
       await startMigrationRaw({ storageMigrationStartDto: dto });
       await fetchStatus();
@@ -211,38 +173,12 @@
       <section class="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-900">
         <h2 class="mb-4 text-lg font-semibold">{$t('admin.storage_migration_file_types')}</h2>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" bind:checked={originals} />
-            <span>{$t('admin.storage_migration_file_type_originals')}</span>
-          </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" bind:checked={thumbnails} />
-            <span>{$t('admin.storage_migration_file_type_thumbnails')}</span>
-          </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" bind:checked={previews} />
-            <span>{$t('admin.storage_migration_file_type_previews')}</span>
-          </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" bind:checked={fullsize} />
-            <span>{$t('admin.storage_migration_file_type_full_size')}</span>
-          </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" bind:checked={encodedVideos} />
-            <span>{$t('admin.storage_migration_file_type_encoded_videos')}</span>
-          </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" bind:checked={sidecars} />
-            <span>{$t('admin.storage_migration_file_type_sidecars')}</span>
-          </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" bind:checked={personThumbnails} />
-            <span>{$t('admin.storage_migration_file_type_person_thumbnails')}</span>
-          </label>
-          <label class="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" bind:checked={profileImages} />
-            <span>{$t('admin.storage_migration_file_type_profile_images')}</span>
-          </label>
+          {#each fileTypeEntries as [key, label] (key)}
+            <label class="flex cursor-pointer items-center gap-2">
+              <input type="checkbox" bind:checked={fileTypes[key]} />
+              <span>{label}</span>
+            </label>
+          {/each}
         </div>
       </section>
 
@@ -253,12 +189,10 @@
           <p class="text-sm text-gray-500 dark:text-gray-400">{$t('admin.storage_migration_loading_estimate')}</p>
         {:else if estimate}
           <div class="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
-            {#each Object.entries(fileTypeLabels) as [key, label] (key)}
+            {#each fileTypeEntries as [key, label] (key)}
               <div class="flex flex-col">
                 <span class="text-gray-500 dark:text-gray-400">{label}</span>
-                <span class="font-medium"
-                  >{(estimate.fileCounts as unknown as Record<string, number>)[key]?.toLocaleString() ?? 0}</span
-                >
+                <span class="font-medium">{estimate.fileCounts[key]?.toLocaleString() ?? 0}</span>
               </div>
             {/each}
             <div class="flex flex-col">
@@ -267,7 +201,7 @@
             </div>
             <div class="flex flex-col">
               <span class="text-gray-500 dark:text-gray-400">{$t('admin.storage_migration_estimated_size')}</span>
-              <span class="font-bold">{formatBytes(estimate.estimatedSizeBytes)}</span>
+              <span class="font-bold">{getByteUnitString(estimate.estimatedSizeBytes, $locale)}</span>
             </div>
           </div>
         {:else}

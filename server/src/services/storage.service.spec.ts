@@ -494,6 +494,34 @@ describe(StorageService.name, () => {
     });
   });
 
+  describe('resolveBackendForKey', () => {
+    const diskBackend = {} as any;
+    const s3Backend = {} as any;
+
+    beforeEach(() => {
+      (StorageService as any).diskBackend = diskBackend;
+      (StorageService as any).s3Backend = s3Backend;
+    });
+
+    afterEach(() => {
+      (StorageService as any).s3Backend = undefined;
+    });
+
+    it('should return the disk backend for absolute paths', () => {
+      expect(StorageService.resolveBackendForKey('/data/upload/user1/ab/cd/file.jpg')).toBe(diskBackend);
+    });
+
+    it('should return the S3 backend for relative keys', () => {
+      expect(StorageService.resolveBackendForKey('upload/user1/ab/cd/file.jpg')).toBe(s3Backend);
+      expect(StorageService.resolveBackendForKey('thumbs/user1/ab/cd/thumb.webp')).toBe(s3Backend);
+    });
+
+    it('should return the disk backend when S3 is not configured', () => {
+      (StorageService as any).s3Backend = undefined;
+      expect(StorageService.resolveBackendForKey('upload/user1/ab/cd/file.jpg')).toBe(diskBackend);
+    });
+  });
+
   describe('handleDeleteFiles', () => {
     it('should handle null values', async () => {
       await sut.handleDeleteFiles({ files: [undefined, null] });

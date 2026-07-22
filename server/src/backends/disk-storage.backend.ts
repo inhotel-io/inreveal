@@ -5,6 +5,31 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { ServeOptions, ServeStrategy, StorageBackend } from 'src/interfaces/storage-backend.interface';
 
+/**
+ * Recursively sums the size of every file below `folder`. A folder that does not exist (or that
+ * disappears mid-walk) contributes only what was counted before it went missing, never an error.
+ * Shared with `StorageRepository.getFolderSize`.
+ */
+export async function getFolderSize(folder: string): Promise<number> {
+  let total = 0;
+
+  try {
+    const dir = await opendir(folder, { recursive: true });
+    for await (const entry of dir) {
+      if (entry.isFile()) {
+        const entryStat = await stat(join(entry.parentPath, entry.name));
+        total += entryStat.size;
+      }
+    }
+  } catch (error: any) {
+    if (error.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  return total;
+}
+
 export class DiskStorageBackend implements StorageBackend {
   constructor(private mediaLocation: string) {}
 
@@ -54,8 +79,8 @@ export class DiskStorageBackend implements StorageBackend {
     await rm(this.resolvePath(prefix), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 
-  async getPrefixUsage(prefix: string): Promise<number> {
-    return this.getFolderSize(this.resolvePath(prefix));
+  getPrefixUsage(prefix: string): Promise<number> {
+    return getFolderSize(this.resolvePath(prefix));
   }
 
   getServeStrategy(key: string, _options: ServeOptions): Promise<ServeStrategy> {
@@ -67,30 +92,5 @@ export class DiskStorageBackend implements StorageBackend {
       tempPath: this.resolvePath(key),
       cleanup: () => Promise.resolve(),
     });
-  }
-
-  private async getFolderSize(folder: string): Promise<number> {
-    let total = 0;
-    let dir;
-    try {
-      dir = await opendir(folder);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        return 0;
-      }
-      throw error;
-    }
-
-    for await (const entry of dir) {
-      const entryPath = join(folder, entry.name);
-      if (entry.isDirectory()) {
-        total += await this.getFolderSize(entryPath);
-      } else if (entry.isFile()) {
-        const entryStat = await stat(entryPath);
-        total += entryStat.size;
-      }
-    }
-
-    return total;
   }
 }

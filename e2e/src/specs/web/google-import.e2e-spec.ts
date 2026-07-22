@@ -76,12 +76,8 @@ test.describe('Google Photos Import', () => {
     // Increase timeout for multi-step flow
     test.setTimeout(60_000);
 
-    // Step 1: Navigate to import page and select source
+    // Step 1: Navigate to import page and select the zip file
     await page.goto('/import');
-    await page.locator('[data-testid="source-google"]').click();
-    await page.getByRole('button', { name: /next/i }).click();
-
-    // Step 2: Select zip file
     const fileInput = page.locator('input[type="file"][accept=".zip"]');
     await fileInput.setInputFiles(zipPath);
 
@@ -91,18 +87,18 @@ test.describe('Google Photos Import', () => {
     // Click next to start scan
     await page.locator('[data-testid="next-button"]').click();
 
-    // Step 3: Wait for scan to complete (auto-advances to review)
+    // Step 2: Wait for scan to complete (auto-advances to review)
     // The scan step shows a scanning indicator, then automatically moves to review
     await expect(page.locator('[data-testid="albums-section"]')).toBeVisible({ timeout: 30_000 });
 
-    // Step 4: Review — verify scan results (albums visible = scan found our photos)
+    // Step 3: Review — verify scan results (albums visible = scan found our photos)
     await expect(page.locator('[data-testid="album-Vacation"]')).toBeVisible();
     await expect(page.locator('[data-testid="album-Family"]')).toBeVisible();
 
     // Click import
     await page.locator('[data-testid="import-button"]').click();
 
-    // Step 5: Wait for import to complete
+    // Step 4: Wait for import to complete
     await expect(page.getByText(/import complete/i)).toBeVisible({ timeout: 30_000 });
   });
 });

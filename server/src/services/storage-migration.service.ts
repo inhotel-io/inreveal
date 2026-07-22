@@ -3,10 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { StorageCore } from 'src/cores/storage.core';
 import { OnJob } from 'src/decorators';
 import { AssetFileType, JobName, JobStatus, QueueName } from 'src/enum';
-import { StorageMigrationDirection } from 'src/repositories/storage-migration.repository';
+import { StorageMigrationDirection, StorageMigrationFileCounts } from 'src/repositories/storage-migration.repository';
 import { BaseService } from 'src/services/base.service';
 import { StorageService } from 'src/services/storage.service';
 import { JobOf } from 'src/types';
+
+const countFiles = (fileCounts: StorageMigrationFileCounts): number =>
+  Object.values(fileCounts).reduce((total, count) => total + count, 0);
 
 interface StorageMigrationFileTypes {
   originals: boolean;
@@ -52,19 +55,9 @@ export class StorageMigrationService extends BaseService {
       this.storageMigrationRepository.getOriginalsSizeEstimate(direction),
     ]);
 
-    const total =
-      fileCounts.originals +
-      fileCounts.thumbnails +
-      fileCounts.previews +
-      fileCounts.fullsize +
-      fileCounts.sidecars +
-      fileCounts.encodedVideos +
-      fileCounts.personThumbnails +
-      fileCounts.profileImages;
-
     return {
       direction,
-      fileCounts: { ...fileCounts, total },
+      fileCounts: { ...fileCounts, total: countFiles(fileCounts) },
       estimatedSizeBytes,
     };
   }
@@ -79,16 +72,7 @@ export class StorageMigrationService extends BaseService {
     await this.validateS3Connection();
 
     const fileCounts = await this.storageMigrationRepository.getFileCounts(options.direction);
-    const total =
-      fileCounts.originals +
-      fileCounts.thumbnails +
-      fileCounts.previews +
-      fileCounts.fullsize +
-      fileCounts.sidecars +
-      fileCounts.encodedVideos +
-      fileCounts.personThumbnails +
-      fileCounts.profileImages;
-    if (total === 0) {
+    if (countFiles(fileCounts) === 0) {
       throw new BadRequestException('No files to migrate');
     }
 

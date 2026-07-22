@@ -14,7 +14,6 @@ describe('ImportFilesStep', () => {
     onAddFiles: vi.fn(),
     onClearFiles: vi.fn(),
     onNext: vi.fn(),
-    onBack: vi.fn(),
   };
 
   beforeEach(() => {
@@ -50,12 +49,9 @@ describe('ImportFilesStep', () => {
     expect(getByTestId('next-button')).not.toBeDisabled();
   });
 
-  it('calls onBack when Back clicked', async () => {
-    const user = userEvent.setup();
+  it('links to Google Takeout', () => {
     const { getByText } = render(ImportFilesStep, { props: defaultProps });
-
-    await user.click(getByText('back'));
-    expect(defaultProps.onBack).toHaveBeenCalledOnce();
+    expect(getByText('takeout.google.com')).toHaveAttribute('href', 'https://takeout.google.com');
   });
 
   it('calls onClearFiles when Clear clicked', async () => {

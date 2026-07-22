@@ -4,7 +4,11 @@ import { Endpoint, HistoryBuilder } from 'src/decorators';
 import {
   StorageMigrationBatchParamDto,
   StorageMigrationEstimateQueryDto,
+  StorageMigrationEstimateResponseDto,
+  StorageMigrationRollbackResponseDto,
   StorageMigrationStartDto,
+  StorageMigrationStartResponseDto,
+  StorageMigrationStatusResponseDto,
 } from 'src/dtos/storage-migration.dto';
 import { ApiTag, Permission } from 'src/enum';
 import { Authenticated } from 'src/middleware/auth.guard';
@@ -22,7 +26,7 @@ export class StorageMigrationController {
     description: 'Estimate the number of files and approximate size that would be migrated for the given direction.',
     history: new HistoryBuilder().added('v2.5.0').alpha('v2.5.0'),
   })
-  getEstimate(@Query() { direction }: StorageMigrationEstimateQueryDto) {
+  getEstimate(@Query() { direction }: StorageMigrationEstimateQueryDto): Promise<StorageMigrationEstimateResponseDto> {
     return this.service.getEstimate(direction);
   }
 
@@ -33,7 +37,7 @@ export class StorageMigrationController {
     description: 'Start a storage backend migration job to move files between disk and S3 storage.',
     history: new HistoryBuilder().added('v2.5.0').alpha('v2.5.0'),
   })
-  start(@Body() dto: StorageMigrationStartDto) {
+  start(@Body() dto: StorageMigrationStartDto): Promise<StorageMigrationStartResponseDto> {
     return this.service.start(dto);
   }
 
@@ -44,7 +48,7 @@ export class StorageMigrationController {
     description: 'Retrieve the current status of the storage migration queue, including active and pending job counts.',
     history: new HistoryBuilder().added('v2.5.0').alpha('v2.5.0'),
   })
-  getStatus() {
+  getStatus(): Promise<StorageMigrationStatusResponseDto> {
     return this.service.getStatus();
   }
 
@@ -55,7 +59,7 @@ export class StorageMigrationController {
     description: 'Rollback a previously completed storage migration batch by reverting all database path changes.',
     history: new HistoryBuilder().added('v2.5.0').alpha('v2.5.0'),
   })
-  rollback(@Param() { batchId }: StorageMigrationBatchParamDto) {
+  rollback(@Param() { batchId }: StorageMigrationBatchParamDto): Promise<StorageMigrationRollbackResponseDto> {
     return this.service.rollback(batchId);
   }
 }

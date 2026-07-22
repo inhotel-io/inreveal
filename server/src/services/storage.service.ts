@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { isAbsolute, join } from 'node:path';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { S3StorageBackend } from 'src/backends/s3-storage.backend';
-import { resolveBackend } from 'src/backends/storage-backend.provider';
 import { ErrorMessages } from 'src/constants';
 import { StorageCore } from 'src/cores/storage.core';
 import { OnEvent, OnJob } from 'src/decorators';
@@ -43,9 +42,13 @@ export class StorageService extends BaseService {
     return StorageService.diskBackend;
   }
 
+  /**
+   * Determines which backend owns a given path/key.
+   * Absolute paths (starting with /) are disk assets (legacy), relative keys are S3 assets.
+   */
   static resolveBackendForKey(key: string): StorageBackend {
-    if (StorageService.s3Backend) {
-      return resolveBackend(key, StorageService.diskBackend, StorageService.s3Backend);
+    if (StorageService.s3Backend && !isAbsolute(key)) {
+      return StorageService.s3Backend;
     }
     return StorageService.diskBackend;
   }

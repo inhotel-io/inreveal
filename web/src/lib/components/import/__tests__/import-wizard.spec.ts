@@ -22,25 +22,13 @@ describe('ImportWizard', () => {
 
   it('renders step indicator', () => {
     const { getByTestId } = render(ImportWizard);
-    // Step indicator renders step-0 through step-4
+    // Step indicator renders step-0 through step-3
     expect(getByTestId('step-0')).toBeInTheDocument();
-    expect(getByTestId('step-4')).toBeInTheDocument();
+    expect(getByTestId('step-3')).toBeInTheDocument();
   });
 
-  it('renders source step initially', () => {
+  it('renders files step initially', () => {
     const { getByTestId } = render(ImportWizard);
-    // Source step shows Google source card
-    expect(getByTestId('source-google')).toBeInTheDocument();
-  });
-
-  it('advances to files step when Next clicked on source', async () => {
-    const user = userEvent.setup();
-    const { getByText, getByTestId } = render(ImportWizard);
-
-    // Click Next on source step
-    await user.click(getByText('next'));
-
-    // Should now show files step (drop zone)
     expect(getByTestId('drop-zone')).toBeInTheDocument();
   });
 
@@ -70,9 +58,7 @@ describe('ImportWizard', () => {
     });
     vi.mocked(uploadTakeoutItem).mockResolvedValue({ assetId: 'asset-1', status: 'imported' });
 
-    const { container, getByText, getByTestId } = render(ImportWizard);
-
-    await user.click(getByText('next'));
+    const { container, getByTestId } = render(ImportWizard);
 
     const zipInput = container.querySelector('input[type="file"][accept=".zip"]') as HTMLInputElement;
     await fireEvent.change(zipInput, {
@@ -90,5 +76,52 @@ describe('ImportWizard', () => {
       size: file.size,
       lastModified: file.lastModified,
     });
+  });
+
+  it('reactively renders imported/skipped/error counters as items are processed', async () => {
+    const user = userEvent.setup();
+    const makeItem = (name: string): TakeoutMediaItem => ({
+      path: `Takeout/Google Photos/Trip/${name}`,
+      name,
+      size: 5,
+      lastModified: 1_609_459_200_000,
+      getFile: () => Promise.resolve(new File(['bytes'], name)),
+      metadata: undefined,
+      albumName: undefined,
+    });
+    vi.mocked(scanTakeoutFiles).mockResolvedValue({
+      items: [makeItem('IMG_001.jpg'), makeItem('IMG_002.jpg'), makeItem('IMG_003.jpg')],
+      albums: [],
+      stats: {
+        totalMedia: 3,
+        withLocation: 0,
+        withDate: 0,
+        favorites: 0,
+        archived: 0,
+        dateRange: undefined,
+      },
+    });
+    vi.mocked(uploadTakeoutItem)
+      .mockResolvedValueOnce({ assetId: 'asset-1', status: 'imported' })
+      .mockResolvedValueOnce({ assetId: 'asset-2', status: 'duplicate' })
+      .mockResolvedValueOnce({ assetId: '', status: 'error', error: 'boom' });
+
+    const { container, getByTestId, getByText } = render(ImportWizard);
+
+    const zipInput = container.querySelector('input[type="file"][accept=".zip"]') as HTMLInputElement;
+    await fireEvent.change(zipInput, {
+      target: { files: [new File(['zip'], 'takeout.zip', { type: 'application/zip' })] },
+    });
+    await user.click(getByTestId('next-button'));
+
+    await waitFor(() => expect(getByTestId('import-button')).toBeInTheDocument());
+    await user.click(getByTestId('import-button'));
+
+    // The counters live in the progress step and must update as the manager mutates importProgress.
+    await waitFor(() => expect(getByText('import_complete')).toBeInTheDocument());
+
+    const counters = container.querySelectorAll('.grid .text-lg');
+    // imported, skipped, errors, albumsCreated
+    expect([...counters].map((element) => element.textContent)).toEqual(['1', '1', '1', '0']);
   });
 });

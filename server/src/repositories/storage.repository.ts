@@ -16,6 +16,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PassThrough, Readable, Writable } from 'node:stream';
 import { createGunzip, createGzip } from 'node:zlib';
+import { getFolderSize } from 'src/backends/disk-storage.backend';
 import { CrawlOptionsDto, WalkOptionsDto } from 'src/dtos/library.dto';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { mimeTypes } from 'src/utils/mime-types';
@@ -263,29 +264,8 @@ export class StorageRepository {
     };
   }
 
-  async getFolderSize(folder: string): Promise<number> {
-    let total = 0;
-    let dir;
-    try {
-      dir = await fs.opendir(folder);
-    } catch (error: any) {
-      if (error.code === 'ENOENT') {
-        return 0;
-      }
-      throw error;
-    }
-
-    for await (const entry of dir) {
-      const entryPath = path.join(folder, entry.name);
-      if (entry.isDirectory()) {
-        total += await this.getFolderSize(entryPath);
-      } else if (entry.isFile()) {
-        const entryStat = await fs.stat(entryPath);
-        total += entryStat.size;
-      }
-    }
-
-    return total;
+  getFolderSize(folder: string): Promise<number> {
+    return getFolderSize(folder);
   }
 
   crawl(crawlOptions: CrawlOptionsDto): Promise<string[]> {

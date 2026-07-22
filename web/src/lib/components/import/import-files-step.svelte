@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button, Icon } from '@immich/ui';
-  import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiFolderOpen, mdiTrayArrowDown, mdiZipBox } from '@mdi/js';
+  import { mdiArrowRight, mdiClose, mdiFolderOpen, mdiInformationOutline, mdiTrayArrowDown, mdiZipBox } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -9,10 +9,9 @@
     onAddFiles: (files: File[]) => void;
     onClearFiles: () => void;
     onNext: () => void;
-    onBack: () => void;
   }
 
-  let { files, totalSize, onAddFiles, onClearFiles, onNext, onBack }: Props = $props();
+  let { files, totalSize, onAddFiles, onClearFiles, onNext }: Props = $props();
 
   let zipInput: HTMLInputElement | undefined = $state();
   let folderInput: HTMLInputElement | undefined = $state();
@@ -118,11 +117,26 @@
     </div>
   {/if}
 
+  <!-- Takeout info -->
+  <div class="flex items-start gap-3 rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+    <Icon icon={mdiInformationOutline} size="20" class="mt-0.5 shrink-0 text-blue-600" />
+    <div class="text-sm">
+      <p>
+        {$t('import_takeout_info')}
+        <a
+          href="https://takeout.google.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="font-medium text-primary underline"
+        >
+          takeout.google.com
+        </a>
+      </p>
+    </div>
+  </div>
+
   <!-- Navigation -->
-  <div class="flex justify-between">
-    <Button variant="outline" leadingIcon={mdiArrowLeft} onclick={onBack}>
-      {$t('back')}
-    </Button>
+  <div class="flex justify-end">
     <Button data-testid="next-button" disabled={files.length === 0} trailingIcon={mdiArrowRight} onclick={onNext}>
       {$t('next')}
     </Button>

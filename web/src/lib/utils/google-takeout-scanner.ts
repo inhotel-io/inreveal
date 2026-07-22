@@ -64,23 +64,6 @@ function isStandaloneJson(path: string): boolean {
   return standaloneNames.has(basename);
 }
 
-function checkAbort(signal?: AbortSignal): void {
-  if (signal?.aborted) {
-    throw new DOMException('The operation was aborted.', 'AbortError');
-  }
-}
-
-interface ZipEntry {
-  filename: string;
-  directory?: boolean;
-  uncompressedSize?: number;
-  lastModDate?: Date;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getData?: (...args: any[]) => Promise<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  arrayBuffer?: (options?: any) => Promise<ArrayBuffer>;
-}
-
 interface ZipMediaDescriptor {
   path: string;
   name: string;
@@ -105,49 +88,31 @@ function basename(path: string): string {
   return path.slice(Math.max(0, path.lastIndexOf('/') + 1));
 }
 
-async function extractZipEntryFile(entry: ZipEntry, name: string, lastModified: number): Promise<File> {
-  if (entry.arrayBuffer) {
-    const buffer = await entry.arrayBuffer();
-    return new File([buffer], name, { lastModified });
-  }
-
-  if (entry.getData) {
-    const blob = (await entry.getData(new WritableStream())) as Blob;
-    return new File([blob], name, { type: blob.type || 'application/octet-stream', lastModified });
-  }
-
-  throw new Error(`Zip entry "${entry.filename}" cannot be extracted`);
-}
-
 async function getZipEntryFile(zipFile: File, entryPath: string, name: string, lastModified: number): Promise<File> {
   const { BlobReader, ZipReader } = await import('@zip.js/zip.js');
   const reader = new ZipReader(new BlobReader(zipFile));
 
   try {
-    const entries: ZipEntry[] = await reader.getEntries();
+    const entries = await reader.getEntries();
     const entry = entries.find((entry) => entry.filename === entryPath);
-    if (!entry) {
+    if (!entry || entry.directory) {
       throw new Error(`Zip entry "${entryPath}" not found`);
     }
 
-    return await extractZipEntryFile(entry, name, lastModified);
+    // zip.js file entries always expose arrayBuffer(), which creates a fresh TransformStream per
+    // call, avoiding the BlobWriter stream lifecycle issues that break repeat reads in browsers.
+    return new File([await entry.arrayBuffer()], name, { lastModified });
   } finally {
     await reader.close();
   }
 }
 
-function trackItemStats(
-  metadata: TakeoutMetadata | undefined,
-  filePath: string,
-  progress: ScanProgress,
-): string | undefined {
-  // Tentative album name for progress display only. Authoritative value is
-  // written later by finalizeItemAlbumNames once photoRoots is known.
+function trackItemStats(metadata: TakeoutMetadata | undefined, filePath: string, progress: ScanProgress): void {
+  // Tentative album name, for the live progress counter only. The authoritative set is written by
+  // scanTakeoutFiles once detectAlbums has run; item.albumName comes from finalizeItemAlbumNames.
   const parts = filePath.split('/');
-  let albumName: string | undefined;
   if (parts[0] === 'Takeout' && parts.length >= 4) {
-    albumName = parts[2];
-    progress.albumNames.add(albumName);
+    progress.albumNames.add(parts[2]);
   }
 
   progress.mediaCount++;
@@ -164,8 +129,6 @@ function trackItemStats(
   if (metadata?.isArchived) {
     progress.archived++;
   }
-
-  return albumName;
 }
 
 async function scanZipFile(
@@ -188,22 +151,14 @@ async function scanZipFile(
   const sidecarTexts = new Map<string, string>();
 
   try {
-    const entries: ZipEntry[] = await reader.getEntries();
+    const entries = await reader.getEntries();
 
     for (const entry of entries) {
-      if (!entry.filename || entry.filename.endsWith('/')) {
+      if (entry.directory || !entry.filename || entry.filename.endsWith('/')) {
         continue;
       }
 
-      // Prefer arrayBuffer() which creates a fresh TransformStream per call,
-      // avoiding the BlobWriter stream lifecycle issues that cause
-      // "Can not close stream after closing or error" in browsers.
-      const hasExtractor = entry.arrayBuffer || entry.getData;
-      if (!hasExtractor) {
-        continue;
-      }
-
-      checkAbort(signal);
+      signal?.throwIfAborted();
       progress.currentFile = entry.filename;
       onProgress?.(progress);
 
@@ -228,13 +183,8 @@ async function scanZipFile(
           }
           onProgress?.(progress);
         } else if (isSidecarFile(entry.filename)) {
-          if (entry.arrayBuffer) {
-            const buffer = await entry.arrayBuffer();
-            sidecarTexts.set(entry.filename, new TextDecoder().decode(buffer));
-          } else {
-            const blob = (await entry.getData!(new WritableStream())) as Blob;
-            sidecarTexts.set(entry.filename, await blob.text());
-          }
+          const buffer = await entry.arrayBuffer();
+          sidecarTexts.set(entry.filename, new TextDecoder().decode(buffer));
         }
       } catch (error) {
         console.warn(`Skipping zip entry "${entry.filename}":`, error);
@@ -319,7 +269,7 @@ async function scanFolderFiles(
   const metadataMap = new Map<string, TakeoutMetadata>();
 
   for (const sidecar of sidecarFiles) {
-    checkAbort(signal);
+    signal?.throwIfAborted();
 
     const sidecarPath = getFilePath(sidecar);
     progress.currentFile = sidecarPath;
@@ -341,7 +291,7 @@ async function scanFolderFiles(
 
   // Build items from media files
   for (const file of mediaFiles) {
-    checkAbort(signal);
+    signal?.throwIfAborted();
 
     const filePath = getFilePath(file);
     progress.currentFile = filePath;
@@ -367,7 +317,7 @@ async function scanFolderFiles(
 export async function scanTakeoutFiles(options: ScanOptions): Promise<ScanResult> {
   const { files, onProgress, signal } = options;
 
-  checkAbort(signal);
+  signal?.throwIfAborted();
 
   const allItems: TakeoutMediaItem[] = [];
   const progress: ScanProgress = {
@@ -399,7 +349,7 @@ export async function scanTakeoutFiles(options: ScanOptions): Promise<ScanResult
 
   // Process zip files
   for (let zipIndex = 0; zipIndex < zipFiles.length; zipIndex++) {
-    checkAbort(signal);
+    signal?.throwIfAborted();
 
     const zipFile = zipFiles[zipIndex];
     progress.zipIndex = zipIndex;

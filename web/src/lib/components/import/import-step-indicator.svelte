@@ -11,7 +11,6 @@
   let { currentStep }: Props = $props();
 
   const steps: Array<{ index: ImportStep; label: Translations }> = [
-    { index: ImportStep.Source, label: 'import_step_source' as Translations },
     { index: ImportStep.Files, label: 'import_step_files' as Translations },
     { index: ImportStep.Scan, label: 'import_step_scan' as Translations },
     { index: ImportStep.Review, label: 'import_step_review' as Translations },
