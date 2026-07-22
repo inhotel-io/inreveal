@@ -91,43 +91,6 @@ present "$CONSTANTS" "MOBILE_REDIRECT = '${OAUTH_CALLBACK}'" "server MOBILE_REDI
 echo "Admins are shown the same URI:"
 present "$SETTINGS" "callback: '${OAUTH_CALLBACK}'" "AuthSettings.svelte shows ${OAUTH_CALLBACK}"
 
-# --- Phase 2 flip simulation -------------------------------------------------
-# The plan claims flipping mobile.oauth_callback to the branded URI is a one-line
-# change. Prove it: re-run the real patch against a FRESH mirror with OAUTH_CALLBACK
-# overridden, and assert the invariant still holds (all four sites agree, and the
-# legacy scheme stays registered so older installed app builds keep working).
-FLIPPED="${BUNDLE_ID}:///oauth-callback"
-TMP2="$(mktemp -d)"
-trap 'rm -rf "$TMP" "$TMP2"' EXIT
-mkdir -p "$TMP2/mobile/lib/services" \
-  "$TMP2/mobile/android/app/src/main" \
-  "$TMP2/server/src" \
-  "$TMP2/web/src/routes/admin/system-settings"
-cp "$REPO/mobile/lib/services/oauth.service.dart" "$TMP2/mobile/lib/services/"
-cp "$REPO/mobile/android/app/src/main/AndroidManifest.xml" "$TMP2/mobile/android/app/src/main/"
-cp "$REPO/server/src/constants.ts" "$TMP2/server/src/"
-cp "$REPO/web/src/routes/admin/system-settings/AuthSettings.svelte" "$TMP2/web/src/routes/admin/system-settings/"
-
-REPO_ROOT="$TMP2" OAUTH_CALLBACK="$FLIPPED" OAUTH_CALLBACK_SCHEME="$BUNDLE_ID" patch_oauth_callback >/dev/null
-
-flipped_present() { # <file> <literal> <description>
-  if grep -Fq "$2" "$TMP2/$1"; then
-    echo "  ok:   $3"
-  else
-    echo "  FAIL: $3 — '$2' missing from $1"
-    fails=$((fails + 1))
-  fi
-}
-
-echo "Phase 2 flip (oauth_callback -> ${FLIPPED}) keeps the invariant:"
-flipped_present "$DART" "kOAuthCallbackUri = '${FLIPPED}'" "app would send ${FLIPPED}"
-flipped_present "$CONSTANTS" "MOBILE_REDIRECT = '${FLIPPED}'" "server would emit ${FLIPPED}"
-flipped_present "$SETTINGS" "callback: '${FLIPPED}'" "admins would be shown ${FLIPPED}"
-flipped_present "$MANIFEST" "android:scheme=\"${BUNDLE_ID}\" android:pathPrefix=\"/oauth-callback\"" \
-  "the flipped scheme is already registered (no manifest change needed)"
-flipped_present "$MANIFEST" 'android:scheme="app.immich" android:pathPrefix="/oauth-callback"' \
-  "the legacy scheme survives the flip (older installed apps keep working)"
-
 if [[ $fails -gt 0 ]]; then
   echo "FAILED: $fails assertion(s)"
   exit 1

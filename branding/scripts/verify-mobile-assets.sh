@@ -24,6 +24,24 @@ image_magick() {
   fi
 }
 
+# Shared centering assertion: a content box <box_w>x<box_h> at +<off_x>+<off_y>
+# must sit centred in a <width>x<height> canvas within max_offset_diff px on both
+# axes. Returns non-zero (and flips EXIT_CODE) when it doesn't.
+check_centered() { # <relative_file> <width> <height> <box_w> <box_h> <off_x> <off_y>
+  local relative_file="$1" width="$2" height="$3" box_width="$4" box_height="$5" offset_x="$6" offset_y="$7"
+  local max_offset_diff=2 right_pad bottom_pad horizontal_delta vertical_delta
+  right_pad=$((width - offset_x - box_width))
+  bottom_pad=$((height - offset_y - box_height))
+  horizontal_delta=$((offset_x > right_pad ? offset_x - right_pad : right_pad - offset_x))
+  vertical_delta=$((offset_y > bottom_pad ? offset_y - bottom_pad : bottom_pad - offset_y))
+
+  if ((horizontal_delta > max_offset_diff || vertical_delta > max_offset_diff)); then
+    echo "  FAIL: $relative_file content is not centered (left=$offset_x right=$right_pad top=$offset_y bottom=$bottom_pad)"
+    EXIT_CODE=1
+    return 1
+  fi
+}
+
 check_android12_splash_bounds() {
   local file="$1"
   local relative_file="${file#"$REPO_ROOT/"}"
@@ -34,7 +52,7 @@ check_android12_splash_bounds() {
     return
   fi
 
-  local details width height bbox box_width box_height offset_x offset_y max_box max_box_slack max_offset_diff right_pad bottom_pad horizontal_delta vertical_delta
+  local details width height bbox box_width box_height offset_x offset_y max_box max_box_slack
   details=$(identify -format "%w %h %@" "$file")
   read -r width height bbox <<<"$details"
 
@@ -50,11 +68,6 @@ check_android12_splash_bounds() {
   offset_y="${BASH_REMATCH[4]}"
   max_box=$((width * 4 / 9))
   max_box_slack=2
-  max_offset_diff=2
-  right_pad=$((width - offset_x - box_width))
-  bottom_pad=$((height - offset_y - box_height))
-  horizontal_delta=$((offset_x > right_pad ? offset_x - right_pad : right_pad - offset_x))
-  vertical_delta=$((offset_y > bottom_pad ? offset_y - bottom_pad : bottom_pad - offset_y))
 
   if (( box_width > max_box + max_box_slack || box_height > max_box + max_box_slack )); then
     echo "  FAIL: $relative_file content is ${box_width}x${box_height}; max is ${max_box}x${max_box}"
@@ -62,11 +75,7 @@ check_android12_splash_bounds() {
     return
   fi
 
-  if (( horizontal_delta > max_offset_diff || vertical_delta > max_offset_diff )); then
-    echo "  FAIL: $relative_file content is not centered (left=$offset_x right=$right_pad top=$offset_y bottom=$bottom_pad)"
-    EXIT_CODE=1
-    return
-  fi
+  check_centered "$relative_file" "$width" "$height" "$box_width" "$box_height" "$offset_x" "$offset_y" || return 0
 
   echo "  OK: $relative_file content ${box_width}x${box_height} within ${max_box}x${max_box} target (+${max_box_slack}px resize slack)"
 }
@@ -82,7 +91,7 @@ check_ios_app_icon_bounds() {
     return
   fi
 
-  local details width height box_width box_height offset offset_x offset_y min_box max_offset_diff right_pad bottom_pad horizontal_delta vertical_delta
+  local details width height box_width box_height offset offset_x offset_y min_box
   details=$(image_magick "$file" -fuzz 1% -trim -format "%w %h %O" info:)
   read -r box_width box_height offset <<<"$details"
 
@@ -104,11 +113,6 @@ check_ios_app_icon_bounds() {
   offset_x="${BASH_REMATCH[1]}"
   offset_y="${BASH_REMATCH[2]}"
   min_box=$((expected_size * 65 / 100))
-  max_offset_diff=2
-  right_pad=$((width - offset_x - box_width))
-  bottom_pad=$((height - offset_y - box_height))
-  horizontal_delta=$((offset_x > right_pad ? offset_x - right_pad : right_pad - offset_x))
-  vertical_delta=$((offset_y > bottom_pad ? offset_y - bottom_pad : bottom_pad - offset_y))
 
   if (( box_width < min_box || box_height < min_box )); then
     echo "  FAIL: $relative_file content is ${box_width}x${box_height}; minimum is ${min_box}x${min_box}"
@@ -116,11 +120,7 @@ check_ios_app_icon_bounds() {
     return
   fi
 
-  if (( horizontal_delta > max_offset_diff || vertical_delta > max_offset_diff )); then
-    echo "  FAIL: $relative_file content is not centered (left=$offset_x right=$right_pad top=$offset_y bottom=$bottom_pad)"
-    EXIT_CODE=1
-    return
-  fi
+  check_centered "$relative_file" "$width" "$height" "$box_width" "$box_height" "$offset_x" "$offset_y" || return 0
 
   echo "  OK: $relative_file content ${box_width}x${box_height} fills iOS icon target"
 }

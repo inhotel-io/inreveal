@@ -88,15 +88,12 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - name: Login to GHCR
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - name: Set up builder
+        id: builder
+        uses: ./.github/actions/docker-builder
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          platform: ${{ matrix.platform }}
 
       - name: Apply branding
         # Intentionally no `version` input — let the branding script fall through
@@ -109,12 +106,6 @@ jobs:
         uses: ./.github/actions/apply-branding
         with:
           version: ${{ inputs.fork_version }}
-
-      - name: Prepare platform pair
-        id: prepare
-        env:
-          PLATFORM: ${{ matrix.platform }}
-        run: echo "platform-pair=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push by digest
         id: build
@@ -129,56 +120,27 @@ jobs:
             BUILD_SOURCE_REF=${{ github.ref_name }}
             BUILD_SOURCE_COMMIT=${{ github.sha }}
           outputs: type=image,"name=ghcr.io/open-noodle/gallery-server",push-by-digest=true,name-resolution=short,push=true
-          cache-from: type=gha,scope=server-${{ steps.prepare.outputs.platform-pair }}
-          cache-to: type=gha,scope=server-${{ steps.prepare.outputs.platform-pair }},mode=max
-
-      - name: Export digest
-        run: | # zizmor: ignore[template-injection]
-          mkdir -p "${{ runner.temp }}/digests"
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+          cache-from: type=gha,scope=server-${{ steps.builder.outputs.platform-pair }}
+          cache-to: type=gha,scope=server-${{ steps.builder.outputs.platform-pair }},mode=max
 
       - name: Upload digest
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: ./.github/actions/upload-digest
         with:
-          name: rc-server-digests-${{ steps.prepare.outputs.platform-pair }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
+          digest: ${{ steps.build.outputs.digest }}
+          artifact-name: rc-server-digests-${{ steps.builder.outputs.platform-pair }}
 
   merge-server:
     name: Merge Server Manifest
     needs: [validate, build-server]
-    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: ${{ runner.temp }}/digests
-          pattern: rc-server-digests-*
-          merge-multiple: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - name: Login to GHCR
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create manifest list and push
-        working-directory: ${{ runner.temp }}/digests
-        env:
-          IMAGE: ghcr.io/open-noodle/gallery-server
-          RC_TAG: ${{ inputs.rc_tag }}
-        run: |
-          sources=$(printf "${IMAGE}@sha256:%s " *)
-          docker buildx imagetools create -t "${IMAGE}:${RC_TAG}" ${sources}
+    # Only the RC tag — no release/vN/latest.
+    uses: ./.github/workflows/merge-manifest.yml
+    with:
+      image: ghcr.io/open-noodle/gallery-server
+      tags: ${{ inputs.rc_tag }}
+      digest-pattern: rc-server-digests-*
 
   build-ml:
     name: Build ML (${{ matrix.platform }})
@@ -207,26 +169,17 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - name: Login to GHCR
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      - name: Set up builder
+        id: builder
+        uses: ./.github/actions/docker-builder
         with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          platform: ${{ matrix.platform }}
 
       - name: Apply branding
         uses: ./.github/actions/apply-branding
         with:
           version: ${{ inputs.fork_version }}
-
-      - name: Prepare platform pair
-        id: prepare
-        env:
-          PLATFORM: ${{ matrix.platform }}
-        run: echo "platform-pair=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push by digest
         id: build
@@ -242,57 +195,28 @@ jobs:
             BUILD_SOURCE_REF=${{ github.ref_name }}
             BUILD_SOURCE_COMMIT=${{ github.sha }}
           outputs: type=image,"name=ghcr.io/open-noodle/gallery-ml",push-by-digest=true,name-resolution=short,push=true
-          cache-from: type=gha,scope=rc-ml-cpu-${{ steps.prepare.outputs.platform-pair }}
-          cache-to: type=gha,scope=rc-ml-cpu-${{ steps.prepare.outputs.platform-pair }},mode=max
-
-      - name: Export digest
-        run: | # zizmor: ignore[template-injection]
-          mkdir -p "${{ runner.temp }}/digests"
-          digest="${{ steps.build.outputs.digest }}"
-          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+          cache-from: type=gha,scope=rc-ml-cpu-${{ steps.builder.outputs.platform-pair }}
+          cache-to: type=gha,scope=rc-ml-cpu-${{ steps.builder.outputs.platform-pair }},mode=max
 
       - name: Upload digest
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: ./.github/actions/upload-digest
         with:
-          name: rc-ml-digests-${{ steps.prepare.outputs.platform-pair }}
-          path: ${{ runner.temp }}/digests/*
-          if-no-files-found: error
-          retention-days: 1
+          digest: ${{ steps.build.outputs.digest }}
+          artifact-name: rc-ml-digests-${{ steps.builder.outputs.platform-pair }}
 
   merge-ml:
     name: Merge ML Manifest
     needs: [validate, build-ml]
     if: ${{ inputs.build_ml }}
-    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          path: ${{ runner.temp }}/digests
-          pattern: rc-ml-digests-*
-          merge-multiple: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
-
-      - name: Login to GHCR
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create manifest list and push
-        working-directory: ${{ runner.temp }}/digests
-        env:
-          IMAGE: ghcr.io/open-noodle/gallery-ml
-          RC_TAG: ${{ inputs.rc_tag }}
-        run: |
-          sources=$(printf "${IMAGE}@sha256:%s " *)
-          docker buildx imagetools create -t "${IMAGE}:${RC_TAG}" ${sources}
+    # Only the RC tag — no ML release/latest/vN tags are moved.
+    uses: ./.github/workflows/merge-manifest.yml
+    with:
+      image: ghcr.io/open-noodle/gallery-ml
+      tags: ${{ inputs.rc_tag }}
+      digest-pattern: rc-ml-digests-*
 
   summary:
     name: RC Ready

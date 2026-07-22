@@ -5,9 +5,6 @@ inputs:
   version:
     description: 'Fork version to stamp (e.g. v4.8.0). Falls back to git describe if not set.'
     required: false
-  build_number:
-    description: 'Mobile build number (versionCode). Falls back to 1 if not set.'
-    required: false
 
 runs:
   using: composite
@@ -35,7 +32,6 @@ runs:
       shell: bash
       env:
         FORK_VERSION: ${{ inputs.version }}
-        BUILD_NUMBER: ${{ inputs.build_number }}
       run: |
         if [[ "$RUNNER_OS" == "macOS" ]]; then
           export PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH"

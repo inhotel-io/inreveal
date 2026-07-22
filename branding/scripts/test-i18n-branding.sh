@@ -46,31 +46,22 @@ cp "$REPO"/i18n/*.json "$TMP/i18n/"
 REPO_ROOT="$TMP" patch_i18n >/dev/null
 
 fails=0
-eq() { # <lang> <key> <expected> <description>
+
+# Every assertion resolves its key as a DOT-PATH (issue #672 — overrides that
+# live under .admin.*). A plain top-level key is just a one-segment dot-path, so
+# `val_at` covers both shapes and there is no second, `.[$k]`-based helper set.
+val_at() { # <lang> <dotpath>  — prints the resolved value, or empty if undefined
+  jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$TMP/i18n/$1.json"
+}
+eq() { # <lang> <dotpath> <expected> <description>
   local got
-  got=$(jq -r --arg k "$2" '.[$k] // " ABSENT"' "$TMP/i18n/$1.json")
+  got=$(val_at "$1" "$2")
   if [[ "$got" == "$3" ]]; then
     echo "  ok:   $4"
   else
-    echo "  FAIL: $4 — ${1}.json[$2] = '$got' (expected '$3')"
+    echo "  FAIL: $4 — ${1}.json[$2] = '${got:- ABSENT}' (expected '$3')"
     fails=$((fails + 1))
   fi
-}
-absent() { # <lang> <key> <description>  — key must be deleted (falls back to en)
-  local got
-  got=$(jq -r --arg k "$2" 'has($k)' "$TMP/i18n/$1.json")
-  if [[ "$got" == "false" ]]; then
-    echo "  ok:   $3"
-  else
-    echo "  FAIL: $3 — ${1}.json still defines '$2' = '$(jq -r --arg k "$2" '.[$k]' "$TMP/i18n/$1.json")'"
-    fails=$((fails + 1))
-  fi
-}
-
-# Dot-path variants for nested keys (issue #672 — overrides that live under
-# .admin.*). `getpath(split("."))` resolves a dotted path into the locale object.
-val_at() { # <lang> <dotpath>  — prints the resolved value, or empty if undefined
-  jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$TMP/i18n/$1.json"
 }
 branded_at() { # <lang> <dotpath> <description>  — present, carries $NAME, no $UPSTREAM_NAME
   local got
@@ -110,10 +101,10 @@ eq fr "$KEY" "Soutenir Noodle Gallery" 'fr buy button is branded French'
 eq de purchase_panel_info_2 "$(jq -r '.purchase_panel_info_2' "$REPO/branding/i18n/overrides-de.json")" 'de purchase panel is branded German'
 
 echo "Locales without an override fall back to branded English:"
-absent es "$KEY" 'es buy button dropped -> falls back to en override'
-absent it "$KEY" 'it buy button dropped -> falls back to en override'
-absent nl "$KEY" 'nl buy button dropped -> falls back to en override'
-absent de welcome_to_immich 'de non-panel brand key dropped -> falls back to en override'
+absent_at es "$KEY" 'es buy button dropped -> falls back to en override'
+absent_at it "$KEY" 'it buy button dropped -> falls back to en override'
+absent_at nl "$KEY" 'nl buy button dropped -> falls back to en override'
+absent_at de welcome_to_immich 'de non-panel brand key dropped -> falls back to en override'
 
 # Issue #672: nine admin.* descriptions were overridden as TOP-LEVEL keys, so the
 # top-level shallow merge ('.[0] * .[1]') added dead top-level keys while the real

@@ -33,9 +33,6 @@ on:
           - ios
   workflow_call:
     inputs:
-      ref:
-        required: false
-        type: string
       environment:
         description: 'Target environment'
         required: true
@@ -106,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
           token: ${{ github.token }}
           fetch-depth: 0
@@ -177,17 +174,12 @@ jobs:
 
       - name: Generate platform APIs
         working-directory: ./mobile
+        # Same commands as `mise //mobile:codegen:pigeon`, inlined because this
+        # workflow has no mise toolchain. Globbing pigeon/ means the list can no
+        # longer drift out of sync with the real host-API set.
         run: |
-          dart run pigeon --input pigeon/native_sync_api.dart
-          dart run pigeon --input pigeon/local_image_api.dart
-          dart run pigeon --input pigeon/remote_image_api.dart
-          dart run pigeon --input pigeon/background_worker_api.dart
-          dart run pigeon --input pigeon/background_worker_lock_api.dart
-          dart run pigeon --input pigeon/connectivity_api.dart
-          dart run pigeon --input pigeon/network_api.dart
-          dart run pigeon --input pigeon/permission_api.dart
-          dart run pigeon --input pigeon/view_intent_api.dart
-          dart format lib/platform/native_sync_api.g.dart lib/platform/local_image_api.g.dart lib/platform/remote_image_api.g.dart lib/platform/background_worker_api.g.dart lib/platform/background_worker_lock_api.g.dart lib/platform/connectivity_api.g.dart lib/platform/network_api.g.dart lib/platform/permission_api.g.dart lib/platform/view_intent_api.g.dart
+          ls pigeon/*.dart | xargs -n1 -P4 -I{} dart run pigeon --input {}
+          dart format lib/platform/
 
       - name: Compute build metadata
         id: build-meta
@@ -359,7 +351,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
           fetch-tags: true
 
@@ -393,17 +385,12 @@ jobs:
 
       - name: Generate platform APIs
         working-directory: ./mobile
+        # Same commands as `mise //mobile:codegen:pigeon`, inlined because this
+        # workflow has no mise toolchain. Globbing pigeon/ means the list can no
+        # longer drift out of sync with the real host-API set.
         run: |
-          dart run pigeon --input pigeon/native_sync_api.dart
-          dart run pigeon --input pigeon/local_image_api.dart
-          dart run pigeon --input pigeon/remote_image_api.dart
-          dart run pigeon --input pigeon/background_worker_api.dart
-          dart run pigeon --input pigeon/background_worker_lock_api.dart
-          dart run pigeon --input pigeon/connectivity_api.dart
-          dart run pigeon --input pigeon/network_api.dart
-          dart run pigeon --input pigeon/permission_api.dart
-          dart run pigeon --input pigeon/view_intent_api.dart
-          dart format lib/platform/native_sync_api.g.dart lib/platform/local_image_api.g.dart lib/platform/remote_image_api.g.dart lib/platform/background_worker_api.g.dart lib/platform/background_worker_lock_api.g.dart lib/platform/connectivity_api.g.dart lib/platform/network_api.g.dart lib/platform/permission_api.g.dart lib/platform/view_intent_api.g.dart
+          ls pigeon/*.dart | xargs -n1 -P4 -I{} dart run pigeon --input {}
+          dart format lib/platform/
 
       - name: Setup Ruby
         uses: ruby/setup-ruby@c515ec17f69368147deb311832da000dd229d338 # v1.297.0

@@ -5,8 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TMP_ROOT=""
 CHECK_WORKTREE=""
-INITIAL_STATUS="$(git -C "$REPO_ROOT" status --short)"
 
+# Every check below runs with cwd inside the disposable worktree, and every
+# branding script resolves its own REPO_ROOT from ${BASH_SOURCE[0]} — so the
+# active checkout is structurally out of reach and only needs tearing down.
 cleanup() {
   local status=$?
   set +e
@@ -16,17 +18,6 @@ cleanup() {
   fi
   if [[ -n "$TMP_ROOT" ]]; then
     rm -rf "$TMP_ROOT"
-  fi
-
-  local final_status
-  final_status="$(git -C "$REPO_ROOT" status --short)"
-  if [[ "$final_status" != "$INITIAL_STATUS" ]]; then
-    echo "ERROR: gallery-branding-check active worktree status changed" >&2
-    echo "Before:" >&2
-    printf '%s\n' "$INITIAL_STATUS" >&2
-    echo "After:" >&2
-    printf '%s\n' "$final_status" >&2
-    exit 1
   fi
 
   exit "$status"
@@ -47,7 +38,8 @@ git -C "$REPO_ROOT" worktree add --quiet --detach "$CHECK_WORKTREE" HEAD
 cd "$CHECK_WORKTREE"
 
 echo "--- Checking branding action dependencies ---"
-ruby .github/actions/apply-branding/dependencies_test.rb
+grep -q 'packages+=(imagemagick)' .github/actions/apply-branding/action.yml ||
+  { echo "ERROR: apply-branding no longer installs imagemagick (verify-mobile-assets.sh needs identify)" >&2; exit 1; }
 
 echo "--- Checking email branding transform ---"
 branding/scripts/test-email-branding.sh

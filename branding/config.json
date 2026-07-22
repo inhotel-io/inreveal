@@ -2,7 +2,6 @@
   "name": "Noodle Gallery",
   "name_short": "Gallery",
   "name_slug": "noodle-gallery",
-  "name_snake": "noodle_gallery",
   "description": "Self-hosted photo and video management solution",
 
   "repository": {
@@ -14,11 +13,7 @@
   },
 
   "upstream": {
-    "name": "Immich",
-    "version": "3.0.3",
-    "url": "https://github.com/immich-app/immich",
-    "docs_url": "https://docs.immich.app",
-    "discord_url": "https://discord.immich.app"
+    "version": "3.0.3"
   },
 
   "mobile": {
@@ -29,7 +24,6 @@
     "_comment_oauth_callback": "The redirect URI the mobile app SENDS. Kept on the legacy app.immich scheme so existing IdP configs keep working; the branded scheme is registered and accepted everywhere, so flipping this to de.opennoodle.gallery:///oauth-callback is a one-line change once admins have had a release to register it.",
     "oauth_callback": "app.immich:///oauth-callback",
     "shared_group": "group.de.opennoodle.gallery.share",
-    "download_dir": "DCIM/NoodleGallery",
     "background_task_prefix": "de.opennoodle.gallery.background",
     "apple_team_id": "77MWNP37MV",
     "app_store_url": "https://apps.apple.com/us/app/noodle-gallery/id6761776289",
@@ -47,15 +41,12 @@
   },
 
   "cli": {
-    "bin_name": "noodle-gallery",
-    "config_dir_name": "noodle-gallery"
+    "bin_name": "noodle-gallery"
   },
 
   "docs": {
-    "title": "Noodle Gallery",
     "url": "https://docs.noodle.gallery"
   },
 
-  "upstream_name": "Immich",
-  "upstream_name_lower": "immich"
+  "upstream_name": "Immich"
 }

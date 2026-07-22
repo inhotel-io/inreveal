@@ -1,0 +1,30 @@
+name: Upload Build Digest
+description: Records the digest of an image pushed by digest and uploads it for the manifest-merge job
+
+inputs:
+  digest:
+    description: 'The sha256:... digest from docker/build-push-action outputs.digest.'
+    required: true
+  artifact-name:
+    description: 'Digest artifact name. The matching merge job globs on its prefix.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Export digest
+      shell: bash
+      env:
+        DIGEST: ${{ inputs.digest }}
+        DIGEST_DIR: ${{ runner.temp }}/digests
+      run: |
+        mkdir -p "$DIGEST_DIR"
+        touch "$DIGEST_DIR/${DIGEST#sha256:}"
+
+    - name: Upload digest
+      uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/digests/*
+        if-no-files-found: error
+        retention-days: 1

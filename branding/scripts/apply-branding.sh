@@ -59,6 +59,19 @@ else
   FORK_VERSION="${FORK_VERSION#v}"
 fi
 
+# ImageMagick dispatcher. IM6 ships `convert`, IM7 ships `magick` (with a
+# deprecated `convert` shim). Every raster resize below goes through this.
+im() {
+  if command -v convert &>/dev/null; then
+    convert "$@"
+  elif command -v magick &>/dev/null; then
+    magick "$@"
+  else
+    echo "  ERROR: ImageMagick convert or magick is required to resize brand assets" >&2
+    return 1
+  fi
+}
+
 #
 # --- i18n ---
 #
@@ -371,20 +384,23 @@ patch_assets() {
     fi
   }
 
+  # Only the trees that are BUILT after branding runs get an overlay: web/static
+  # and mobile/. design/ and docs/static/img are already committed pre-branded and
+  # nothing rebuilds them post-branding (docs deploy has no branding step), so
+  # copying into them here was inert.
+
   # Favicons
   copy_if_exists "$assets/favicon.ico" \
-    "$REPO_ROOT/web/static/favicon.ico" \
-    "$REPO_ROOT/docs/static/img/favicon.ico"
+    "$REPO_ROOT/web/static/favicon.ico"
 
   copy_if_exists "$assets/favicon.png" \
     "$REPO_ROOT/web/static/favicon.png" \
-    "$REPO_ROOT/web/static/apple-icon-180.png" \
-    "$REPO_ROOT/docs/static/img/favicon.png"
+    "$REPO_ROOT/web/static/apple-icon-180.png"
 
-  # Sized favicons (generated from favicon.png if convert is available)
-  if command -v convert &>/dev/null && [[ -f "$assets/favicon.png" ]]; then
+  # Sized favicons (generated from favicon.png when ImageMagick is available)
+  if { command -v magick || command -v convert; } &>/dev/null && [[ -f "$assets/favicon.png" ]]; then
     for size in 16 32 48 96 144; do
-      convert "$assets/favicon.png" -resize "${size}x${size}" \
+      im "$assets/favicon.png" -resize "${size}x${size}" \
         "$REPO_ROOT/web/static/favicon-${size}.png"
     done
     echo "  Generated sized favicons"
@@ -395,42 +411,14 @@ patch_assets() {
     "$REPO_ROOT/web/static/manifest-icon-192.maskable.png" \
     "$REPO_ROOT/web/static/manifest-icon-512.maskable.png"
 
-  # Logo variants for web, docs, design, mobile
-  copy_if_exists "$assets/logo-inline-light.svg" \
-    "$REPO_ROOT/design/gallery-logo-inline-light.svg" \
-    "$REPO_ROOT/docs/static/img/immich-logo-inline-light.svg" \
-    "$REPO_ROOT/mobile/assets/immich-logo-inline-light.svg"
-
-  copy_if_exists "$assets/logo-inline-light.png" \
-    "$REPO_ROOT/design/gallery-logo-inline-light.png" \
-    "$REPO_ROOT/docs/static/img/immich-logo-inline-light.png" \
-    "$REPO_ROOT/mobile/assets/immich-logo-inline-light.png"
-
-  copy_if_exists "$assets/logo-inline-dark.svg" \
-    "$REPO_ROOT/design/gallery-logo-inline-dark.svg" \
-    "$REPO_ROOT/docs/static/img/immich-logo-inline-dark.svg" \
-    "$REPO_ROOT/mobile/assets/immich-logo-inline-dark.svg"
-
-  copy_if_exists "$assets/logo-inline-dark.png" \
-    "$REPO_ROOT/design/gallery-logo-inline-dark.png" \
-    "$REPO_ROOT/docs/static/img/immich-logo-inline-dark.png" \
-    "$REPO_ROOT/mobile/assets/immich-logo-inline-dark.png"
-
-  copy_if_exists "$assets/logo-stacked-light.svg" \
-    "$REPO_ROOT/design/gallery-logo-stacked-light.svg" \
-    "$REPO_ROOT/docs/static/img/immich-logo-stacked-light.svg"
-
-  copy_if_exists "$assets/logo-stacked-light.png" \
-    "$REPO_ROOT/design/gallery-logo-stacked-light.png" \
-    "$REPO_ROOT/docs/static/img/immich-logo-stacked-light.png"
-
-  copy_if_exists "$assets/logo-stacked-dark.svg" \
-    "$REPO_ROOT/design/gallery-logo-stacked-dark.svg" \
-    "$REPO_ROOT/docs/static/img/immich-logo-stacked-dark.svg"
-
-  copy_if_exists "$assets/logo-stacked-dark.png" \
-    "$REPO_ROOT/design/gallery-logo-stacked-dark.png" \
-    "$REPO_ROOT/docs/static/img/immich-logo-stacked-dark.png"
+  # Mobile inline logo variants (the stacked variants only ever fed design/ and
+  # docs/static/img, so they have no build-time destination left).
+  for variant in light dark; do
+    for ext in svg png; do
+      copy_if_exists "$assets/logo-inline-${variant}.${ext}" \
+        "$REPO_ROOT/mobile/assets/immich-logo-inline-${variant}.${ext}"
+    done
+  done
 
   # Mobile logo assets
   #
@@ -457,8 +445,7 @@ patch_assets() {
     "$REPO_ROOT/mobile/assets/immich-logo-w-bg.png"
 
   copy_if_exists "$assets/app-icon.png" \
-    "$REPO_ROOT/mobile/assets/immich-logo-w-bg-android.png" \
-    "$REPO_ROOT/docs/static/img/color-logo.png"
+    "$REPO_ROOT/mobile/assets/immich-logo-w-bg-android.png"
 
   copy_if_exists "$assets/splash.png" \
     "$REPO_ROOT/mobile/assets/immich-splash.png"
@@ -475,14 +462,7 @@ patch_assets() {
     local dest="$1"
     local size="$2"
     if [[ -f "$android12_splash_src" ]]; then
-      if command -v convert &>/dev/null; then
-        convert "$android12_splash_src" -resize "${size}x${size}" "$dest"
-      elif command -v magick &>/dev/null; then
-        magick "$android12_splash_src" -resize "${size}x${size}" "$dest"
-      else
-        echo "  ERROR: ImageMagick convert or magick is required to resize Android 12 splash assets"
-        return 1
-      fi
+      im "$android12_splash_src" -resize "${size}x${size}" "$dest"
       echo "  $android12_splash_src -> $dest (${size}x${size})"
     fi
   }
@@ -560,10 +540,6 @@ patch_assets() {
     copy_if_exists "$ios_launchbg_src/background.png" "$ios_launchbg_dest/background.png"
     copy_if_exists "$ios_launchbg_src/darkbackground.png" "$ios_launchbg_dest/darkbackground.png"
   fi
-
-  # Docs assets
-  copy_if_exists "$assets/logo-mark.svg" \
-    "$REPO_ROOT/docs/static/img/immich-logo.svg"
 }
 
 #
@@ -839,8 +815,7 @@ patch_versions() {
     "$REPO_ROOT/web/package.json" \
     "$REPO_ROOT/packages/cli/package.json" \
     "$REPO_ROOT/packages/sdk/package.json" \
-    "$REPO_ROOT/e2e/package.json" \
-    "$REPO_ROOT/i18n/package.json"; do
+    "$REPO_ROOT/e2e/package.json"; do
     if [[ -f "$pkg" ]]; then
       local tmp
       tmp=$(mktemp)
