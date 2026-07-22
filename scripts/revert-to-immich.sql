@@ -120,7 +120,7 @@ DROP TABLE IF EXISTS "shared_space_person" CASCADE;
 DROP TABLE IF EXISTS "shared_space_face_match_backfill_target" CASCADE;
 DROP TABLE IF EXISTS "shared_space_library_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_album_asset_audit" CASCADE;
-DROP TABLE IF EXISTS "person_face_suggestion" CASCADE;
+DROP TABLE IF EXISTS "face_person_verdict" CASCADE;
 DROP TABLE IF EXISTS "shared_space_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_audit" CASCADE;
@@ -242,9 +242,10 @@ DELETE FROM "migration_overrides"
    'index_asset_face_personId_idx',
    'index_face_identity_representativeFaceId_idx',
    'index_person_identityId_idx',
-   'index_person_face_suggestion_personId_assetFaceId_uq',
-   'index_person_face_suggestion_spacePersonId_assetFaceId_uq',
-   'index_person_face_suggestion_spacePersonId_status_distance_idx',
+   'index_face_person_verdict_personId_assetFaceId_uq',
+   'index_face_person_verdict_spacePersonId_assetFaceId_uq',
+   'index_face_person_verdict_spacePersonId_status_distance_idx',
+   'index_face_person_verdict_identityId_assetFaceId_idx',
    'index_person_ownerId_identityId_key',
    'index_shared_space_person_identityId_spaceId_idx',
    'index_shared_space_person_space_name_idx',
@@ -255,7 +256,7 @@ DELETE FROM "migration_overrides"
    'trigger_face_identity_updatedAt',
    'trigger_library_after_insert',
    'trigger_library_user_delete_after_audit',
-   'trigger_person_face_suggestion_updatedAt',
+   'trigger_face_person_verdict_updatedAt',
    'trigger_shared_space_face_match_backfill_target_updatedAt',
    'trigger_shared_space_asset_delete_audit',
    'trigger_shared_space_asset_updatedAt',
@@ -386,14 +387,9 @@ DELETE FROM "kysely_migrations"
    '1778500000000-AddSpacePersonRepresentativeFaceSource',
    '1778600000000-SortSpacePeopleByNameIndex',
    '1778700000000-AddSharedSpaceFaceMatchBackfillTarget',
-   '1778800000000-AddPersonFaceSuggestion',
    '1778800000000-ReconcileFaceIdentityIndexOverrides',
    '1778800000000-TrimSpacePersonNameIndex',
-   '1778900000000-AddPersonFaceSuggestion',
    '1779000000000-AddSharedSpaceAlbumUserTables',
-   '1779000000000-AddSpacePersonFaceSuggestion',
-   '1779000000000-AddSpacePersonFaceSuggestion',
-   '1779100000000-AddFaceSuggestionIntentStatuses',
    '1779100000000-AddSharedSpaceAlbumCreateSideTriggers',
    '1779200000000-AddSharedSpaceAlbumDeleteSideTriggers',
    '1779300000000-FixUserHasAlbumPathSoftDeleted',
@@ -412,11 +408,10 @@ DELETE FROM "kysely_migrations"
    '1783628194057-DisablePostgresJit',
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
    '1784000000000-FixFaceRepairScanInFlightIndexOverride',
-   '1784050000000-AddSpacePersonFaceSuggestion',
-   '1784100000000-AddFaceSuggestionIntentStatuses',
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
    '1785000000000-AddFaceRepairLock',
    '1786000000000-FaceRepairLockPersonNullable',
+   '1787000000000-AddFacePersonVerdict',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
@@ -467,7 +462,10 @@ BEGIN
       OR "name" LIKE '%SortSpacePeopleByNameIndex%'
       OR "name" LIKE '%ReconcileFaceIdentityIndexOverrides%'
       OR "name" LIKE '%TrimSpacePersonNameIndex%'
-      OR "name" LIKE '%AddPersonFaceSuggestion%';
+      OR "name" LIKE '%AddPersonFaceSuggestion%'
+      OR "name" LIKE '%AddSpacePersonFaceSuggestion%'
+      OR "name" LIKE '%AddFaceSuggestionIntentStatuses%'
+      OR "name" LIKE '%AddFacePersonVerdict%';
   IF fork_rows_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery row(s) still present in kysely_migrations after cleanup — aborting.', fork_rows_left;
   END IF;
@@ -492,7 +490,7 @@ BEGIN
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
        'storage_migration_log', 'asset_duplicate_checksum',
-       'person_face_suggestion'
+       'face_person_verdict'
      );
   IF fork_tables_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery table(s) still present after cleanup — aborting.', fork_tables_left;

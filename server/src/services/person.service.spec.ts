@@ -6614,7 +6614,7 @@ describe(PersonService.name, () => {
       await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(mocks.personFaceSuggestion.markConfirmed).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.claimPending).not.toHaveBeenCalled();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
     });
 
@@ -6628,11 +6628,11 @@ describe(PersonService.name, () => {
       mocks.person.reassignFace.mockResolvedValue(1);
       mocks.person.getById.mockResolvedValue(person);
       mocks.person.getRandomFace.mockResolvedValue(face); // drives createNewFeaturePhoto
-      mocks.personFaceSuggestion.markConfirmed.mockResolvedValue(1); // a pending row existed
+      mocks.personFaceSuggestion.claimPending.mockResolvedValue(1); // a pending row existed
 
       await sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id);
 
-      expect(mocks.personFaceSuggestion.markConfirmed).toHaveBeenCalledWith(person.id, face.id);
+      expect(mocks.personFaceSuggestion.claimPending).toHaveBeenCalledWith(person.id, face.id);
       expect(mocks.person.reassignFace).toHaveBeenCalledWith(face.id, person.id);
       expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
         assetFaceId: face.id,
@@ -6648,7 +6648,7 @@ describe(PersonService.name, () => {
     it('is idempotent when the row is already confirmed/rejected/ignored but person+face still exist → 200, no reassign', async () => {
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
       mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
-      mocks.personFaceSuggestion.markConfirmed.mockResolvedValue(0); // already confirmed/rejected/ignored
+      mocks.personFaceSuggestion.claimPending.mockResolvedValue(0); // already confirmed/rejected/ignored
 
       await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
@@ -6660,7 +6660,7 @@ describe(PersonService.name, () => {
       await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(mocks.personFaceSuggestion.markConfirmed).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.claimPending).not.toHaveBeenCalled();
     });
   });
 

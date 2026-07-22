@@ -34,6 +34,7 @@ import { DownloadRepository } from 'src/repositories/download.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairLockRepository } from 'src/repositories/face-repair-lock.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
@@ -49,7 +50,6 @@ import { MetadataRepository } from 'src/repositories/metadata.repository';
 import { NotificationRepository } from 'src/repositories/notification.repository';
 import { OcrRepository } from 'src/repositories/ocr.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
-import { PersonFaceSuggestionRepository } from 'src/repositories/person-face-suggestion.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
@@ -557,7 +557,7 @@ const newRealRepository = <T>(key: ClassConstructor<T>, db: Kysely<DB>): T => {
     case NotificationRepository:
     case OcrRepository:
     case PartnerRepository:
-    case PersonFaceSuggestionRepository:
+    case FacePersonVerdictRepository:
     case PersonRepository:
     case SearchRepository:
     case SessionRepository:
@@ -635,7 +635,7 @@ const newMockRepository = <T>(key: ClassConstructor<T>) => {
     case NotificationRepository:
     case OcrRepository:
     case PartnerRepository:
-    case PersonFaceSuggestionRepository:
+    case FacePersonVerdictRepository:
     case PersonRepository:
     case SessionRepository:
     case SyncRepository:

@@ -18,6 +18,7 @@ import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairLockRepository } from 'src/repositories/face-repair-lock.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
@@ -36,7 +37,6 @@ import { NotificationRepository } from 'src/repositories/notification.repository
 import { OAuthRepository } from 'src/repositories/oauth.repository';
 import { OcrRepository } from 'src/repositories/ocr.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
-import { PersonFaceSuggestionRepository } from 'src/repositories/person-face-suggestion.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
@@ -102,7 +102,7 @@ export const repositories = [
   OAuthRepository,
   OcrRepository,
   PartnerRepository,
-  PersonFaceSuggestionRepository,
+  FacePersonVerdictRepository,
   PersonRepository,
   PluginRepository,
   ProcessRepository,

@@ -7303,7 +7303,7 @@ describe(SharedSpaceService.name, () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(mocks.personFaceSuggestion.hasPendingForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.markConfirmedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.claimPendingForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
     });
@@ -7317,7 +7317,7 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.sharedSpace.getPersonById).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.hasPendingForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.markConfirmedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.claimPendingForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
     });
@@ -7333,7 +7333,7 @@ describe(SharedSpaceService.name, () => {
       ).rejects.toThrow(new BadRequestException('Person not found'));
       expect(mocks.personFaceSuggestion.hasPendingForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.markConfirmedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.claimPendingForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
     });
@@ -7355,14 +7355,14 @@ describe(SharedSpaceService.name, () => {
         },
       );
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.markConfirmedForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.personFaceSuggestion.claimPendingForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
     });
 
     it('ensures identity, marks confirmed, replaces identity link, then resolves other pending rows', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.personFaceSuggestion.markConfirmedForSpacePerson.mockResolvedValue(1);
+      mocks.personFaceSuggestion.claimPendingForSpacePerson.mockResolvedValue(1);
 
       await sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1');
 
@@ -7376,7 +7376,7 @@ describe(SharedSpaceService.name, () => {
         },
       );
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
-      expect(mocks.personFaceSuggestion.markConfirmedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
+      expect(mocks.personFaceSuggestion.claimPendingForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
       expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
         assetFaceId: 'face-1',
         identityId: 'space-identity-1',
@@ -7384,7 +7384,7 @@ describe(SharedSpaceService.name, () => {
       });
       expect(mocks.personFaceSuggestion.resolveAssignedFace).toHaveBeenCalledWith('face-1');
 
-      expect(mocks.personFaceSuggestion.markConfirmedForSpacePerson.mock.invocationCallOrder[0]).toBeLessThan(
+      expect(mocks.personFaceSuggestion.claimPendingForSpacePerson.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.faceIdentity.replaceFaceIdentity.mock.invocationCallOrder[0],
       );
       expect(mocks.faceIdentity.replaceFaceIdentity.mock.invocationCallOrder[0]).toBeLessThan(
@@ -7394,13 +7394,13 @@ describe(SharedSpaceService.name, () => {
 
     it('is idempotent when the row vanishes between guard and mark', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Owner }));
-      mocks.personFaceSuggestion.markConfirmedForSpacePerson.mockResolvedValue(0);
+      mocks.personFaceSuggestion.claimPendingForSpacePerson.mockResolvedValue(0);
 
       await expect(
         sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
       ).resolves.toBeUndefined();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
-      expect(mocks.personFaceSuggestion.markConfirmedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
+      expect(mocks.personFaceSuggestion.claimPendingForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.personFaceSuggestion.resolveAssignedFace).not.toHaveBeenCalled();
     });

@@ -247,7 +247,7 @@ export class PersonService extends BaseService {
         }
 
         await this.personRepository.reassignFace(face.id, personId);
-        await this.personFaceSuggestionRepository.resolveAssignedFace(face.id);
+        await this.facePersonVerdictRepository.resolveAssignedFace(face.id);
         await this.replaceFaceIdentity(personId, face.id, 'manual');
       }
 
@@ -267,7 +267,7 @@ export class PersonService extends BaseService {
     const person = await this.findOrFail(personId);
 
     await this.personRepository.reassignFace(face.id, personId);
-    await this.personFaceSuggestionRepository.resolveAssignedFace(face.id);
+    await this.facePersonVerdictRepository.resolveAssignedFace(face.id);
     await this.replaceFaceIdentity(personId, face.id, 'manual');
     if (person.faceAssetId === null) {
       await this.createNewFeaturePhoto([person.id]);
@@ -370,7 +370,7 @@ export class PersonService extends BaseService {
     const { machineLearning } = await this.getConfig({ withCache: true });
     const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
 
-    const { total, items } = await this.personFaceSuggestionRepository.getPendingForPerson(id, {
+    const { total, items } = await this.facePersonVerdictRepository.getPendingForPerson(id, {
       maxDistance,
       suggestionMaxDistance,
       page: dto.page,
@@ -398,19 +398,22 @@ export class PersonService extends BaseService {
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
     await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
 
-    const confirmed = await this.personFaceSuggestionRepository.markConfirmed(personId, assetFaceId);
-    if (confirmed === 0) {
-      // Idempotent: the row was already confirmed/rejected/ignored (double-submit, or a concurrent
-      // scan/auto-assign resolved it) while person+face still exist. A CASCADE-deleted
-      // person/face never reaches here — the requireAccess checks above already threw 400
-      // (owner-only precedence; edges 9/10 — the client treats that 400 as benign-advance).
+    // Claim the queue row first so a double-submit resolves exactly once. There is deliberately no
+    // 'confirmed' status to write: the durable positive verdict is the face's manual identity link, which
+    // reassignFacesById writes below via replaceFaceIdentity(..., 'manual'). That link is what keeps the
+    // Face Cleanup scan from re-flagging this face and asking an admin to undo the confirmation.
+    const claimed = await this.facePersonVerdictRepository.claimPending(personId, assetFaceId);
+    if (claimed === 0) {
+      // Idempotent: the row was already resolved (double-submit, or a concurrent scan/auto-assign) while
+      // person+face still exist. A CASCADE-deleted person/face never reaches here — the requireAccess
+      // checks above already threw 400 (owner-only precedence; edges 9/10 — the client treats that 400 as
+      // benign-advance).
       return;
     }
 
-    // Delegates assign + replaceFaceIdentity('manual') + createNewFeaturePhoto, and (Task 5)
-    // its embedded resolveAssignedFace deletes every OTHER person's still-pending row for
-    // this now-assigned face (edge 12). This person's row is already 'confirmed' above, so
-    // the pending-only delete leaves it intact.
+    // Delegates assign + replaceFaceIdentity('manual') + createNewFeaturePhoto, and its embedded
+    // resolveAssignedFace drains every OTHER target's still-pending row for this now-assigned face
+    // (edge 12).
     await this.reassignFacesById(auth, personId, { id: assetFaceId });
   }
 
@@ -421,14 +424,14 @@ export class PersonService extends BaseService {
     // assigns the face. Consequence: reject on a CASCADE-deleted face (person still exists)
     // → markRejected affects 0 rows → benign 200; that asymmetry is by-design, not a gap.
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
-    await this.personFaceSuggestionRepository.markRejected(personId, assetFaceId);
+    await this.facePersonVerdictRepository.markRejected(personId, assetFaceId);
     // Face stays unassigned; the Phase-1 conditional upsertPending never resurrects a
     // 'rejected' row, so a later scan will not re-suggest it for this person.
   }
 
   async ignoreFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
-    await this.personFaceSuggestionRepository.markIgnored(personId, assetFaceId);
+    await this.facePersonVerdictRepository.markIgnored(personId, assetFaceId);
     // Face stays unassigned; ignored rows suppress future suggestions without rejecting the match.
   }
 
@@ -868,7 +871,7 @@ export class PersonService extends BaseService {
     }
 
     const rows = [...bestByFace].map(([assetFaceId, distance]) => ({ personId: id, assetFaceId, distance }));
-    await this.personFaceSuggestionRepository.upsertPending(rows);
+    await this.facePersonVerdictRepository.upsertPending(rows);
     return JobStatus.Success;
   }
 
@@ -950,7 +953,7 @@ export class PersonService extends BaseService {
       assetFaceId,
       distance,
     }));
-    await this.personFaceSuggestionRepository.upsertPendingForSpacePerson(rows);
+    await this.facePersonVerdictRepository.upsertPendingForSpacePerson(rows);
     return JobStatus.Success;
   }
 

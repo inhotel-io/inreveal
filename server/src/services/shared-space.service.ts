@@ -1281,7 +1281,7 @@ export class SharedSpaceService extends BaseService {
     await this.requireSpacePersonInSpace(spaceId, personId);
 
     const distanceConfig = await this.getFaceSuggestionDistanceConfig();
-    const result = await this.personFaceSuggestionRepository.getPendingForSpacePerson(spaceId, personId, {
+    const result = await this.facePersonVerdictRepository.getPendingForSpacePerson(spaceId, personId, {
       ...distanceConfig,
       page: dto.page,
       size: dto.size,
@@ -1313,7 +1313,7 @@ export class SharedSpaceService extends BaseService {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     const person = await this.requireSpacePersonInSpace(spaceId, personId);
     const distanceConfig = await this.getFaceSuggestionDistanceConfig();
-    const isPending = await this.personFaceSuggestionRepository.hasPendingForSpacePerson(
+    const isPending = await this.facePersonVerdictRepository.hasPendingForSpacePerson(
       spaceId,
       person.id,
       assetFaceId,
@@ -1324,13 +1324,15 @@ export class SharedSpaceService extends BaseService {
     }
 
     const identity = await this.faceIdentityRepository.ensureSpacePersonIdentity(person.id);
-    const updated = await this.personFaceSuggestionRepository.markConfirmedForSpacePerson(person.id, assetFaceId);
-    if (updated === 0) {
+    // Claim the queue row first so a double-submit resolves exactly once. No 'confirmed' status is written:
+    // the durable positive verdict is the manual identity link set immediately below.
+    const claimed = await this.facePersonVerdictRepository.claimPendingForSpacePerson(person.id, assetFaceId);
+    if (claimed === 0) {
       return;
     }
 
     await this.faceIdentityRepository.replaceFaceIdentity({ assetFaceId, identityId: identity.id, source: 'manual' });
-    await this.personFaceSuggestionRepository.resolveAssignedFace(assetFaceId);
+    await this.facePersonVerdictRepository.resolveAssignedFace(assetFaceId);
   }
 
   private async resolveSpacePersonFaceSuggestion(
@@ -1343,7 +1345,7 @@ export class SharedSpaceService extends BaseService {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     const person = await this.requireSpacePersonInSpace(spaceId, personId);
     const distanceConfig = await this.getFaceSuggestionDistanceConfig();
-    const isPending = await this.personFaceSuggestionRepository.hasPendingForSpacePerson(
+    const isPending = await this.facePersonVerdictRepository.hasPendingForSpacePerson(
       spaceId,
       person.id,
       assetFaceId,
@@ -1354,8 +1356,8 @@ export class SharedSpaceService extends BaseService {
     }
 
     await (action === 'rejected'
-      ? this.personFaceSuggestionRepository.markRejectedForSpacePerson(person.id, assetFaceId)
-      : this.personFaceSuggestionRepository.markIgnoredForSpacePerson(person.id, assetFaceId));
+      ? this.facePersonVerdictRepository.markRejectedForSpacePerson(person.id, assetFaceId)
+      : this.facePersonVerdictRepository.markIgnoredForSpacePerson(person.id, assetFaceId));
   }
 
   async rejectSpacePersonFaceSuggestion(
@@ -1874,7 +1876,7 @@ export class SharedSpaceService extends BaseService {
 
   private async resolveMovedSpacePersonFaces(faceIds: Array<{ assetFaceId: string }>): Promise<void> {
     for (const { assetFaceId } of faceIds) {
-      await this.personFaceSuggestionRepository.resolveAssignedFace(assetFaceId);
+      await this.facePersonVerdictRepository.resolveAssignedFace(assetFaceId);
     }
   }
 

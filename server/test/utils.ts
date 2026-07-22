@@ -36,6 +36,7 @@ import { DuplicateRepository } from 'src/repositories/duplicate.repository';
 import { EmailRepository } from 'src/repositories/email.repository';
 import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairLockRepository } from 'src/repositories/face-repair-lock.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
@@ -54,7 +55,6 @@ import { NotificationRepository } from 'src/repositories/notification.repository
 import { OAuthRepository } from 'src/repositories/oauth.repository';
 import { OcrRepository } from 'src/repositories/ocr.repository';
 import { PartnerRepository } from 'src/repositories/partner.repository';
-import { PersonFaceSuggestionRepository } from 'src/repositories/person-face-suggestion.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { PluginRepository } from 'src/repositories/plugin.repository';
 import { ProcessRepository } from 'src/repositories/process.repository';
@@ -267,7 +267,7 @@ export type ServiceOverrides = {
   ocr: OcrRepository;
   oauth: OAuthRepository;
   partner: PartnerRepository;
-  personFaceSuggestion: PersonFaceSuggestionRepository;
+  personFaceSuggestion: FacePersonVerdictRepository;
   person: PersonRepository;
   plugin: PluginRepository;
   process: ProcessRepository;
@@ -366,7 +366,7 @@ export const getMocks = () => {
     ocr: automock(OcrRepository, { strict: false }),
     oauth: automock(OAuthRepository, { args: [loggerMock] }),
     partner: automock(PartnerRepository, { strict: false }),
-    personFaceSuggestion: automock(PersonFaceSuggestionRepository, { strict: false }),
+    personFaceSuggestion: automock(FacePersonVerdictRepository, { strict: false }),
     person: automock(PersonRepository, { strict: false }),
     plugin: automock(PluginRepository, { strict: true, args: [databaseMock, loggerMock] }),
     process: automock(ProcessRepository),
@@ -445,7 +445,7 @@ export const newTestService = <T extends BaseService>(
     overrides.oauth || (mocks.oauth as As<OAuthRepository>),
     overrides.ocr || (mocks.ocr as As<OcrRepository>),
     overrides.partner || (mocks.partner as As<PartnerRepository>),
-    overrides.personFaceSuggestion || (mocks.personFaceSuggestion as As<PersonFaceSuggestionRepository>),
+    overrides.personFaceSuggestion || (mocks.personFaceSuggestion as As<FacePersonVerdictRepository>),
     overrides.person || (mocks.person as As<PersonRepository>),
     overrides.plugin || (mocks.plugin as As<PluginRepository>),
     overrides.process || (mocks.process as As<ProcessRepository>),
