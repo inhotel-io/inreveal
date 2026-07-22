@@ -42,6 +42,7 @@ import {
 import { up as upAlbumSoftDelete } from 'src/schema/migrations-gallery/1782050000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger';
 import { up as upAlbumSpaceAssetSyncAndAudit } from 'src/schema/migrations-gallery/1783100000000-AddAlbumSpaceAssetSyncAndAudit';
 import { up as upMemberJoinGrantCreateId } from 'src/schema/migrations-gallery/1783700000000-FixSharedSpaceMemberJoinGrantCreateId';
+import { up as upRepairDrift } from 'src/schema/migrations-gallery/1784800000000-RepairSharedSpaceAlbumGrantDrift';
 
 describe('1782050000000-AddAlbumSoftDeleteSharedSpaceAlbumTrigger override parity', () => {
   beforeEach(() => {
@@ -154,5 +155,71 @@ describe('1783100000000-AddAlbumSpaceAssetSyncAndAudit override parity', () => {
     expect(executedTriggerDdl).toContain('REFERENCING OLD TABLE AS "old"');
     expect(executedTriggerDdl).toContain('FOR EACH STATEMENT');
     expect(executedTriggerDdl).not.toContain('WHEN (');
+  });
+});
+
+// The repair migration re-asserts all three objects for v5.2.0-rc.0 installs whose admin acted on
+// the (wrong-way) drift advice. Because it writes migration_overrides rows, its DDL must match
+// functions.ts byte-for-byte too — otherwise the repair would itself introduce fresh drift.
+describe('1784800000000-RepairSharedSpaceAlbumGrantDrift override parity', () => {
+  beforeEach(() => {
+    capturedSql.length = 0;
+  });
+
+  it('re-asserts every object with DDL byte-identical to functions.ts', async () => {
+    await upRepairDrift({} as any);
+
+    const memberFn = findSql('the member-join CREATE FUNCTION', (s) =>
+      s.startsWith('CREATE OR REPLACE FUNCTION shared_space_member_after_insert_album()'),
+    );
+    expect(memberFn).toBe(shared_space_member_after_insert_album.expression);
+    expect(
+      parseOverrideValue(
+        findSql('the member-join override upsert', (s) =>
+          s.includes(`VALUES ('function_shared_space_member_after_insert_album'`),
+        ),
+      ).sql,
+    ).toBe(shared_space_member_after_insert_album.expression);
+
+    const auditFn = findSql('the delete-audit CREATE FUNCTION', (s) =>
+      s.startsWith('CREATE OR REPLACE FUNCTION album_space_asset_delete_audit()'),
+    );
+    expect(auditFn).toBe(album_space_asset_delete_audit.expression);
+    expect(
+      parseOverrideValue(
+        findSql('the delete-audit function override upsert', (s) =>
+          s.includes(`VALUES ('function_album_space_asset_delete_audit'`),
+        ),
+      ).sql,
+    ).toBe(album_space_asset_delete_audit.expression);
+
+    // The trigger is recreated too (a CASCADE drop takes it with the function).
+    const auditTrigger = findSql('the delete-audit CREATE TRIGGER', (s) =>
+      s.startsWith('CREATE OR REPLACE TRIGGER "album_space_asset_delete_audit"'),
+    );
+    expect(
+      parseOverrideValue(
+        findSql('the delete-audit trigger override upsert', (s) =>
+          s.includes(`VALUES ('trigger_album_space_asset_delete_audit'`),
+        ),
+      ).sql,
+    ).toBe(auditTrigger);
+  });
+
+  // Every statement must be safe to run against a database that is already correct.
+  it('is idempotent — only CREATE OR REPLACE and override upserts, never a DROP', async () => {
+    await upRepairDrift({} as any);
+
+    expect(capturedSql.length).toBeGreaterThan(0);
+    for (const statement of capturedSql) {
+      expect(statement).not.toMatch(/\bDROP\b/);
+      expect(statement).toMatch(/^(CREATE OR REPLACE|INSERT INTO "migration_overrides")/);
+    }
+    // Override writes must upsert, not blind-insert: a healthy DB already has these rows.
+    const overrideWrites = capturedSql.filter((s) => s.startsWith('INSERT INTO "migration_overrides"'));
+    expect(overrideWrites).toHaveLength(3);
+    for (const write of overrideWrites) {
+      expect(write).toContain('ON CONFLICT ("name") DO UPDATE SET "value" = EXCLUDED."value"');
+    }
   });
 });
