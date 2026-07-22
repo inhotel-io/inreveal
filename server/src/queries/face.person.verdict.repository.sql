@@ -136,6 +136,14 @@ set
   "actorId" = $10,
   "updatedAt" = now()
 
+-- FacePersonVerdictRepository.removeVerdicts
+delete from "face_person_verdict"
+where
+  "id" in ($1)
+  and "status" in ($2, $3)
+returning
+  "id"
+
 -- FacePersonVerdictRepository.getNegativeVerdictTokens
 select
   "assetFaceId",

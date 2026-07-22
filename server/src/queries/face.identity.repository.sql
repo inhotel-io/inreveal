@@ -1602,23 +1602,33 @@ set
 returning
   *
 
--- FaceIdentityRepository.replaceFaceIdentity
-insert into
-  "face_identity_face" (
-    "assetFaceId",
-    "identityId",
-    "source",
-    "confidence"
-  )
-values
-  ($1, $2, $3, $4)
-on conflict ("assetFaceId") do update
+-- FaceIdentityRepository.getManualLinkedFaceIds
+select
+  "assetFaceId"
+from
+  "face_identity_face"
+where
+  "assetFaceId" in $1
+  and "source" = $2
+
+-- FaceIdentityRepository.getPersonVerdictTokens
+select
+  "id",
+  "identityId"
+from
+  "person"
+where
+  "id" in ($1)
+
+-- FaceIdentityRepository.demoteManualFaceLinks
+update "face_identity_face"
 set
-  "identityId" = $5,
-  "source" = $6,
-  "confidence" = $7
+  "source" = $1
+where
+  "assetFaceId" in ($2)
+  and "source" = $3
 returning
-  *
+  "assetFaceId"
 
 -- FaceIdentityRepository.linkPersonFaces
 insert into

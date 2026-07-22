@@ -666,81 +666,80 @@ describe(FaceRepairAdminController.name, () => {
       const { status } = await request(ctx.getHttpServer())
         .post('/admin/face-repair/resolutions/remove')
         .set('Authorization', 'Bearer token')
-        .send({ declineIds: [uuid1] });
+        .send({ verdictIds: [uuid1] });
       expect(status).toBe(403);
       expect(service.removeResolutions).not.toHaveBeenCalled();
     });
 
-    it('should delegate to service.removeResolutions (declineIds)', async () => {
+    it('should delegate to service.removeResolutions (verdictIds)', async () => {
       service.removeResolutions.mockResolvedValue({ removed: 1 });
       const { status, body } = await request(ctx.getHttpServer())
         .post('/admin/face-repair/resolutions/remove')
         .set('Authorization', 'Bearer token')
-        .send({ declineIds: [uuid1] });
+        .send({ verdictIds: [uuid1] });
       expect(status).toBe(201);
-      expect(service.removeResolutions).toHaveBeenCalledWith({ declineIds: [uuid1] });
+      expect(service.removeResolutions).toHaveBeenCalledWith({ verdictIds: [uuid1] });
       expect(body).toEqual({ removed: 1 });
     });
 
-    it('should delegate to service.removeResolutions (lockIds)', async () => {
+    it('should delegate to service.removeResolutions (clusterMuteIds)', async () => {
       service.removeResolutions.mockResolvedValue({ removed: 1 });
       const { status } = await request(ctx.getHttpServer())
         .post('/admin/face-repair/resolutions/remove')
         .set('Authorization', 'Bearer token')
-        .send({ lockIds: [uuid1] });
+        .send({ clusterMuteIds: [uuid1] });
       expect(status).toBe(201);
-      expect(service.removeResolutions).toHaveBeenCalledWith({ lockIds: [uuid1] });
+      expect(service.removeResolutions).toHaveBeenCalledWith({ clusterMuteIds: [uuid1] });
     });
 
-    it('should delegate to service.removeResolutions (faces natural key)', async () => {
-      service.removeResolutions.mockResolvedValue({ removed: 1 });
+    it('rejects the retired natural-key form with 400', async () => {
+      // Verdicts are undone by row id only; the (assetFaceId, suspectedOwnerId) pair is no longer a key
+      // clients can address, because a verdict may be keyed by identity instead.
       const { status } = await request(ctx.getHttpServer())
         .post('/admin/face-repair/resolutions/remove')
         .set('Authorization', 'Bearer token')
         .send({ faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }] });
-      expect(status).toBe(201);
-      expect(service.removeResolutions).toHaveBeenCalledWith({
-        faces: [{ assetFaceId: uuid1, suspectedOwnerId: uuid2 }],
-      });
+      expect(status).toBe(400);
+      expect(service.removeResolutions).not.toHaveBeenCalled();
     });
 
-    it('accepts a v7 declineId (regression guard: face_repair_decline.id is uuid v7) (C2)', async () => {
+    it('accepts a v7 verdictId (regression guard: face_person_verdict.id is uuid v7) (C2)', async () => {
       // Regression: z.uuidv4() rejects v7 ids — this exact bug broke decline "Undo" before. z.uuid() must accept them.
       const uuidV7 = '01890000-0000-7000-8000-000000000001';
       service.removeResolutions.mockResolvedValue({ removed: 1 });
       const { status } = await request(ctx.getHttpServer())
         .post('/admin/face-repair/resolutions/remove')
         .set('Authorization', 'Bearer token')
-        .send({ declineIds: [uuidV7] });
+        .send({ verdictIds: [uuidV7] });
       expect(status).toBe(201);
-      expect(service.removeResolutions).toHaveBeenCalledWith({ declineIds: [uuidV7] });
+      expect(service.removeResolutions).toHaveBeenCalledWith({ verdictIds: [uuidV7] });
     });
 
-    it('accepts a v7 lockId (regression guard: face_repair_lock.id is uuid v7) (C2)', async () => {
+    it('accepts a v7 clusterMuteId (regression guard: ids are uuid v7) (C2)', async () => {
       const uuidV7 = '01890000-0000-7000-8000-000000000002';
       service.removeResolutions.mockResolvedValue({ removed: 1 });
       const { status } = await request(ctx.getHttpServer())
         .post('/admin/face-repair/resolutions/remove')
         .set('Authorization', 'Bearer token')
-        .send({ lockIds: [uuidV7] });
+        .send({ clusterMuteIds: [uuidV7] });
       expect(status).toBe(201);
-      expect(service.removeResolutions).toHaveBeenCalledWith({ lockIds: [uuidV7] });
+      expect(service.removeResolutions).toHaveBeenCalledWith({ clusterMuteIds: [uuidV7] });
     });
 
-    it('rejects a malformed body (non-uuid declineId) with 400 (C2)', async () => {
+    it('rejects a malformed body (non-uuid verdictId) with 400 (C2)', async () => {
       const { status } = await request(ctx.getHttpServer())
         .post('/admin/face-repair/resolutions/remove')
         .set('Authorization', 'Bearer token')
-        .send({ declineIds: ['not-a-uuid'] });
+        .send({ verdictIds: ['not-a-uuid'] });
       expect(status).toBe(400);
       expect(service.removeResolutions).not.toHaveBeenCalled();
     });
 
-    it('rejects an empty declineIds array with 400 (C2)', async () => {
+    it('rejects an empty verdictIds array with 400 (C2)', async () => {
       const { status } = await request(ctx.getHttpServer())
         .post('/admin/face-repair/resolutions/remove')
         .set('Authorization', 'Bearer token')
-        .send({ declineIds: [] });
+        .send({ verdictIds: [] });
       expect(status).toBe(400);
       expect(service.removeResolutions).not.toHaveBeenCalled();
     });

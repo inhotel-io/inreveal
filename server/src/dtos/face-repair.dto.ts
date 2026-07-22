@@ -194,24 +194,25 @@ export const FaceRepairDeclineRemovedSchema = z
   .meta({ id: 'FaceRepairDeclineRemovedDto' });
 export class FaceRepairDeclineRemovedDto extends createZodDto(FaceRepairDeclineRemovedSchema) {}
 
-// Slice 7 (unified resolutions manage page): the union of every soft-decline AND lock, each tagged `kind` so
-// the web page can render two grouped, undoable lists. Reuses DeclineItemSchema's field set — a lock row
-// carries the same shape with `type: null` and `suspectedOwner*` always null (locks are owner-agnostic; see
-// face_repair_lock's comment), while `personId`/`personName`/`personThumbnailFaceId` carry the person the
-// lock was reviewed against.
+// A negative verdict row for the resolutions manage page — "this face is not that person", from either
+// engine. `source` says which one recorded it ('cleanup' = an admin's "keep here", 'suggestion' = a user's
+// reject/ignore) and `actorName` who did. Exactly one of the person / space-person target is set, and either
+// may be null if the target row was deleted after the verdict was recorded (the verdict survives via its
+// identity key). Human PLACEMENTS are deliberately absent — see FaceRepairService.listResolutions.
 const ResolutionItemSchema = z.object({
-  // Plain string, NOT z.enum: see the anonymous-enum-renumbering note on DeclineItemSchema.type above. Value
-  // is always 'decline' | 'lock'; the web reads it via a local cast.
-  kind: z.string(),
   id: z.string(),
-  type: z.string().nullable(),
-  assetFaceId: z.string().nullable(),
-  suspectedOwnerId: z.string().nullable(),
-  suspectedOwnerName: z.string().nullable(),
-  suspectedOwnerThumbnailFaceId: z.string().nullable(),
+  assetFaceId: z.string(),
+  // Plain strings, NOT z.enum: see the anonymous-enum-renumbering note on DeclineItemSchema.type above.
+  status: z.string(),
+  source: z.string(),
   personId: z.string().nullable(),
   personName: z.string().nullable(),
   personThumbnailFaceId: z.string().nullable(),
+  spacePersonId: z.string().nullable(),
+  spacePersonName: z.string().nullable(),
+  spaceName: z.string().nullable(),
+  actorId: z.string().nullable(),
+  actorName: z.string().nullable(),
   createdAt: z.string().meta({ format: 'date-time' }),
 });
 export const FaceRepairResolutionsListSchema = z
@@ -221,16 +222,15 @@ export class FaceRepairResolutionsListDto extends createZodDto(FaceRepairResolut
 
 export const FaceRepairResolutionsRemoveRequestSchema = z
   .object({
-    // z.uuid() (version-agnostic), NOT z.uuidv4(): both face_repair_decline.id and face_repair_lock.id are
-    // UUID **v7** (@PrimaryGeneratedUuidV7Column). See the identical note on FaceRepairDeclineRemoveRequestSchema
-    // above — z.uuidv4() rejecting v7 ids is the exact regression that broke decline "Undo" before.
-    declineIds: z.array(z.uuid()).min(1).optional(),
-    lockIds: z.array(z.uuid()).min(1).optional(),
-    // Remove a decline by its natural key (assetFaceId/suspectedOwnerId are v4 entity ids) — reused by the
-    // review page's in-place undo, which knows the pairing but not the row id. Locks have no equivalent
-    // natural-key removal here (see FaceRepairLockRepository.removeLocks's comment); lock undo is by lockIds.
-    faces: z.array(FaceDeclineSchema).min(1).optional(),
+    // z.uuid() (version-agnostic), NOT z.uuidv4(): these are UUID **v7** row ids
+    // (@PrimaryGeneratedUuidV7Column). z.uuidv4() rejecting v7 ids is the exact regression that broke
+    // decline "Undo" before.
+    verdictIds: z.array(z.uuid()).min(1).optional(),
+    clusterMuteIds: z.array(z.uuid()).min(1).optional(),
   })
+  // Strict: a client still sending the retired `declineIds`/`lockIds`/`faces` shape must get a 400 rather
+  // than have its keys stripped and silently perform a no-op undo.
+  .strict()
   .meta({ id: 'FaceRepairResolutionsRemoveRequestDto' });
 export class FaceRepairResolutionsRemoveRequestDto extends createZodDto(FaceRepairResolutionsRemoveRequestSchema) {}
 

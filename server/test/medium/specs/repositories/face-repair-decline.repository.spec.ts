@@ -48,89 +48,81 @@ describe(FaceRepairDeclineRepository.name, () => {
 
   afterEach(() => db.deleteFrom('face_repair_decline').execute());
 
-  it('creates face + person declines and loads them into maps', async () => {
-    const { faceId, personP, personQ, declinedBy } = await seedFaceAndPersons(db);
-
-    await sut.createDeclines({ faces: [{ assetFaceId: faceId, suspectedOwnerId: personQ }], declinedBy });
-    await sut.createDeclines({ persons: [{ personId: personP, suspectedOwnerIds: [personQ] }], declinedBy });
-
-    const maps = await sut.getDeclineMaps();
-    expect(maps.declinedFaceOwners.get(faceId)).toEqual(new Set([personQ]));
-    expect(maps.dismissedPersons.get(personP)).toEqual(new Set([personQ]));
-  });
-
-  it('is idempotent on (assetFaceId, suspectedOwnerId)', async () => {
-    const { faceId, personQ, declinedBy } = await seedFaceAndPersons(db);
-
-    const first = await sut.createDeclines({ faces: [{ assetFaceId: faceId, suspectedOwnerId: personQ }], declinedBy });
-    const second = await sut.createDeclines({
-      faces: [{ assetFaceId: faceId, suspectedOwnerId: personQ }],
-      declinedBy,
-    });
-    expect(first).toBe(1);
-    expect(second).toBe(0);
-  });
-
-  it('cascades: deleting the face removes its decline rows', async () => {
-    const { faceId, personQ, declinedBy } = await seedFaceAndPersons(db);
-    await sut.createDeclines({ faces: [{ assetFaceId: faceId, suspectedOwnerId: personQ }], declinedBy });
-    await db.deleteFrom('asset_face').where('id', '=', faceId).execute();
-    const maps = await sut.getDeclineMaps();
-    expect(maps.declinedFaceOwners.has(faceId)).toBe(false);
-  });
-
-  it('lists and removes declines by id', async () => {
+  // This table now records ONLY the console-local cluster mute ("stop showing me this whole person"). The
+  // face-level "this face is not that person" fact moved to the shared `face_person_verdict` layer so the
+  // suggestion engine can see it too — see face-person-verdict.repository.spec.ts.
+  it('creates a cluster mute and loads it into the mute map', async () => {
     const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
-    await sut.createDeclines({ persons: [{ personId: personP, suspectedOwnerIds: [personQ] }], declinedBy });
-    const list = await sut.listDeclines();
-    const target = list.find((d) => d.personId === personP)!;
-    expect(target.type).toBe('person');
-    const removed = await sut.removeDeclines({ ids: [target.id] });
-    expect(removed).toBe(1);
-  });
 
-  it('removes a face decline by its natural key (assetFaceId, suspectedOwnerId)', async () => {
-    const { faceId, personQ, declinedBy } = await seedFaceAndPersons(db);
-    await sut.createDeclines({ faces: [{ assetFaceId: faceId, suspectedOwnerId: personQ }], declinedBy });
-
-    // Undo path used by the review screen: it knows the face/owner pair, not the row id.
-    const removed = await sut.removeDeclines({ faces: [{ assetFaceId: faceId, suspectedOwnerId: personQ }] });
-    expect(removed).toBe(1);
-
-    const maps = await sut.getDeclineMaps();
-    expect(maps.declinedFaceOwners.has(faceId)).toBe(false);
-  });
-
-  it('removeDeclines with neither ids nor faces is a no-op', async () => {
-    const removed = await sut.removeDeclines({});
-    expect(removed).toBe(0);
-  });
-
-  it('person re-dismiss replaces the stored fingerprint (one row per person, last-write-wins)', async () => {
-    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
-    // Seed a third person to use as the expanded fingerprint
-    const { ctx } = newMediumService(BaseService, {
-      database: db,
-      real: [FaceRepairDeclineRepository, PersonRepository],
-      mock: [LoggingRepository],
-    });
-    const { user } = await ctx.newUser();
-    const { person: personR } = await ctx.newPerson({ ownerId: user.id });
-
-    // First dismiss: P suspected toward [Q]
-    await sut.createDeclines({ persons: [{ personId: personP, suspectedOwnerIds: [personQ] }], declinedBy });
-    // Second dismiss: P suspected toward [Q, R] — should replace, not duplicate
-    await sut.createDeclines({
-      persons: [{ personId: personP, suspectedOwnerIds: [personQ, personR.id] }],
+    await sut.createClusterMutes({
+      persons: [{ personId: personP, suspectedOwnerIds: [personQ] }],
       declinedBy,
     });
 
-    const maps = await sut.getDeclineMaps();
-    // Exactly one row for personP — latest fingerprint wins
-    expect(maps.dismissedPersons.get(personP)).toEqual(new Set([personQ, personR.id]));
-    // Confirm no duplicate rows exist for personP
-    const list = await sut.listDeclines();
-    const personPRows = list.filter((d) => d.personId === personP);
-    expect(personPRows).toHaveLength(1);
+    const mutes = await sut.getClusterMuteMap([personP]);
+    expect(mutes.get(personP)).toEqual(new Set([personQ]));
+  });
+
+  it('returns an empty map for an empty scope rather than reading the whole table', async () => {
+    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
+    await sut.createClusterMutes({
+      persons: [{ personId: personP, suspectedOwnerIds: [personQ] }],
+      declinedBy,
+    });
+
+    expect(await sut.getClusterMuteMap([])).toEqual(new Map());
+  });
+
+  it('scopes the mute map to the persons asked for', async () => {
+    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
+    const other = await seedFaceAndPersons(db);
+    await sut.createClusterMutes({
+      persons: [
+        { personId: personP, suspectedOwnerIds: [personQ] },
+        { personId: other.personP, suspectedOwnerIds: [other.personQ] },
+      ],
+      declinedBy,
+    });
+
+    const mutes = await sut.getClusterMuteMap([personP]);
+    expect([...mutes.keys()]).toEqual([personP]);
+  });
+
+  it('re-muting a person replaces the stored fingerprint (one row per person, last-write-wins)', async () => {
+    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
+
+    await sut.createClusterMutes({ persons: [{ personId: personP, suspectedOwnerIds: [personQ] }], declinedBy });
+    await sut.createClusterMutes({ persons: [{ personId: personP, suspectedOwnerIds: [] }], declinedBy });
+
+    const rows = await db.selectFrom('face_repair_decline').selectAll().where('personId', '=', personP).execute();
+    expect(rows).toHaveLength(1);
+
+    const mutes = await sut.getClusterMuteMap([personP]);
+    expect(mutes.get(personP)).toEqual(new Set());
+  });
+
+  it('lists and removes cluster mutes by id', async () => {
+    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
+    await sut.createClusterMutes({ persons: [{ personId: personP, suspectedOwnerIds: [personQ] }], declinedBy });
+
+    const listed = await sut.listDeclines();
+    expect(listed).toHaveLength(1);
+    expect(listed[0].personId).toBe(personP);
+
+    expect(await sut.removeClusterMutes({ ids: [listed[0].id] })).toBe(1);
+    expect(await sut.listDeclines()).toEqual([]);
+  });
+
+  it('removeClusterMutes with no ids is a no-op', async () => {
+    expect(await sut.removeClusterMutes({})).toBe(0);
+  });
+
+  it('cascades: deleting the person removes its cluster mute', async () => {
+    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
+    await sut.createClusterMutes({ persons: [{ personId: personP, suspectedOwnerIds: [personQ] }], declinedBy });
+
+    await db.deleteFrom('person').where('id', '=', personP).execute();
+
+    expect(await sut.listDeclines()).toEqual([]);
   });
 });

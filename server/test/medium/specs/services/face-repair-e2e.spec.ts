@@ -4,6 +4,7 @@ import { AccessRepository } from 'src/repositories/access.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -59,6 +60,7 @@ const setupRepair = (db: Kysely<DB>) => {
     real: [
       FaceRepairRepository,
       FaceRepairDeclineRepository,
+      FacePersonVerdictRepository,
       SearchRepository,
       PersonRepository,
       FaceIdentityRepository,
