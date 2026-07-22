@@ -4,9 +4,9 @@ import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
-import { PersonFaceSuggestionRepository } from 'src/repositories/person-face-suggestion.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
@@ -33,7 +33,7 @@ const setup = (db?: Kysely<DB>) => {
       DatabaseRepository,
       SystemMetadataRepository,
       SearchRepository,
-      PersonFaceSuggestionRepository,
+      FacePersonVerdictRepository,
       StackRepository,
     ],
     mock: [LoggingRepository, JobRepository],
@@ -219,14 +219,14 @@ describe('SharedSpaceService linked-library face identity repair', () => {
       ])
       .execute();
     await ctx.database
-      .insertInto('person_face_suggestion')
+      .insertInto('face_person_verdict')
       .values({ spacePersonId: target.id, assetFaceId: sourceFace.id, distance: 0.7 })
       .execute();
 
     await sut.mergeSpacePeople(auth, space.id, target.id, { ids: [source.id] });
 
     const rows = await ctx.database
-      .selectFrom('person_face_suggestion')
+      .selectFrom('face_person_verdict')
       .selectAll()
       .where('assetFaceId', '=', sourceFace.id)
       .where('status', '=', 'pending')

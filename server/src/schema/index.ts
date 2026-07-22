@@ -52,6 +52,7 @@ import { AssetOcrTable } from 'src/schema/tables/asset-ocr.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { FaceIdentityFaceTable } from 'src/schema/tables/face-identity-face.table';
 import { FaceIdentityTable } from 'src/schema/tables/face-identity.table';
+import { FacePersonVerdictTable } from 'src/schema/tables/face-person-verdict.table';
 import { FaceRepairDeclineTable } from 'src/schema/tables/face-repair-decline.table';
 import { FaceRepairLockTable } from 'src/schema/tables/face-repair-lock.table';
 import { FaceRepairScanFlaggedFaceTable } from 'src/schema/tables/face-repair-scan-flagged-face.table';
@@ -74,7 +75,6 @@ import { OcrSearchTable } from 'src/schema/tables/ocr-search.table';
 import { PartnerAuditTable } from 'src/schema/tables/partner-audit.table';
 import { PartnerTable } from 'src/schema/tables/partner.table';
 import { PersonAuditTable } from 'src/schema/tables/person-audit.table';
-import { PersonFaceSuggestionTable } from 'src/schema/tables/person-face-suggestion.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { PluginMethodTable } from 'src/schema/tables/plugin-method.table';
 import { PluginTable } from 'src/schema/tables/plugin.table';
@@ -177,7 +177,7 @@ export class ImmichDatabase {
     PartnerTable,
     PersonTable,
     PersonAuditTable,
-    PersonFaceSuggestionTable,
+    FacePersonVerdictTable,
     SessionTable,
     SharedLinkAssetTable,
     SharedLinkTable,
@@ -325,7 +325,7 @@ export interface DB {
 
   person: PersonTable;
   person_audit: PersonAuditTable;
-  person_face_suggestion: PersonFaceSuggestionTable;
+  face_person_verdict: FacePersonVerdictTable;
 
   session: SessionTable;
   session_sync_checkpoint: SessionSyncCheckpointTable;

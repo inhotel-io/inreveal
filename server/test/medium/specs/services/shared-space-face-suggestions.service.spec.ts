@@ -3,9 +3,9 @@ import { Kysely } from 'kysely';
 import { AssetVisibility, SharedSpaceRole, SystemMetadataKey } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
-import { PersonFaceSuggestionRepository } from 'src/repositories/person-face-suggestion.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
@@ -25,7 +25,7 @@ const setup = (db?: Kysely<DB>) =>
     database: db || defaultDatabase,
     real: [
       SharedSpaceRepository,
-      PersonFaceSuggestionRepository,
+      FacePersonVerdictRepository,
       FaceIdentityRepository,
       ConfigRepository,
       SystemMetadataRepository,
@@ -70,7 +70,7 @@ const createSuggestionFixture = async (
     .returningAll()
     .executeTakeFirstOrThrow();
   await ctx.database
-    .insertInto('person_face_suggestion')
+    .insertInto('face_person_verdict')
     .values({ spacePersonId: spacePerson.id, assetFaceId: assetFace.id, distance: 0.6 })
     .execute();
 
@@ -114,7 +114,7 @@ describe('SharedSpaceService space face suggestions', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
 
     const row = await ctx.database
-      .selectFrom('person_face_suggestion')
+      .selectFrom('face_person_verdict')
       .select(['status'])
       .where('spacePersonId', '=', fx.spacePerson.id)
       .where('assetFaceId', '=', fx.assetFace.id)
@@ -175,7 +175,7 @@ describe('SharedSpaceService space face suggestions', () => {
     const fx = await createSuggestionFixture(ctx);
     const { person } = await ctx.newPerson({ ownerId: fx.assetOwner.id, name: 'Personal Alice' });
     await ctx.database
-      .insertInto('person_face_suggestion')
+      .insertInto('face_person_verdict')
       .values({ personId: person.id, assetFaceId: fx.assetFace.id, distance: 0.61 })
       .execute();
     const otherSpacePerson = await ctx.database
@@ -184,14 +184,14 @@ describe('SharedSpaceService space face suggestions', () => {
       .returningAll()
       .executeTakeFirstOrThrow();
     await ctx.database
-      .insertInto('person_face_suggestion')
+      .insertInto('face_person_verdict')
       .values({ spacePersonId: otherSpacePerson.id, assetFaceId: fx.assetFace.id, distance: 0.62 })
       .execute();
 
     await sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id);
 
     const rows = await ctx.database
-      .selectFrom('person_face_suggestion')
+      .selectFrom('face_person_verdict')
       .select(['personId', 'spacePersonId', 'status'])
       .where('assetFaceId', '=', fx.assetFace.id)
       .execute();
@@ -215,7 +215,7 @@ describe('SharedSpaceService space face suggestions', () => {
       .returningAll()
       .executeTakeFirstOrThrow();
     await ctx.database
-      .insertInto('person_face_suggestion')
+      .insertInto('face_person_verdict')
       .values({ spacePersonId: otherSpacePerson.id, assetFaceId: fx.assetFace.id, distance: 0.62 })
       .execute();
 
@@ -233,7 +233,7 @@ describe('SharedSpaceService space face suggestions', () => {
       .executeTakeFirstOrThrow();
     expect(link).toEqual({ identityId: spacePerson.identityId!, source: 'manual' });
     const rows = await ctx.database
-      .selectFrom('person_face_suggestion')
+      .selectFrom('face_person_verdict')
       .select(['spacePersonId', 'status'])
       .where('assetFaceId', '=', fx.assetFace.id)
       .execute();
@@ -262,7 +262,7 @@ describe('SharedSpaceService space face suggestions', () => {
       .where('id', '=', fx.spacePerson.id)
       .executeTakeFirstOrThrow();
     const row = await ctx.database
-      .selectFrom('person_face_suggestion')
+      .selectFrom('face_person_verdict')
       .select('status')
       .where('spacePersonId', '=', fx.spacePerson.id)
       .where('assetFaceId', '=', fx.assetFace.id)
@@ -278,7 +278,7 @@ describe('SharedSpaceService space face suggestions', () => {
     await sut.dismissSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id);
 
     const row = await ctx.database
-      .selectFrom('person_face_suggestion')
+      .selectFrom('face_person_verdict')
       .select('status')
       .where('spacePersonId', '=', fx.spacePerson.id)
       .where('assetFaceId', '=', fx.assetFace.id)
