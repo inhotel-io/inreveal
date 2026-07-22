@@ -157,6 +157,7 @@ describe('/server', () => {
           'video_moments',
           'trip_anniversary',
           'themed',
+          'person_throwback',
         ],
       });
     });
