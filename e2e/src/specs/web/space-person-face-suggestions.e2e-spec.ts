@@ -102,7 +102,7 @@ test.describe('Space person face suggestions (web)', () => {
         candidateAsset.id,
       ]);
       await db.query(
-        `INSERT INTO person_face_suggestion ("spacePersonId", "assetFaceId", distance) VALUES ($1, $2, $3)`,
+        `INSERT INTO face_person_verdict ("spacePersonId", "assetFaceId", distance) VALUES ($1, $2, $3)`,
         [spacePersonId, face.rows[0].id, distance],
       );
     }
