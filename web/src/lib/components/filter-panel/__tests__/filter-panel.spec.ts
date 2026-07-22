@@ -1,9 +1,22 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
-import type { FilterSection } from '../filter-panel';
+import type { FilterSection, FilterSuggestionsResponse } from '../filter-panel';
 import { createFilterState } from '../filter-panel';
 import FilterPanel from '../filter-panel.svelte';
+
+function suggestionsWith(overrides: Partial<FilterSuggestionsResponse> = {}): FilterSuggestionsResponse {
+  return {
+    countries: [],
+    cameraMakes: [],
+    tags: [],
+    people: [],
+    ratings: [],
+    mediaTypes: [],
+    hasUnnamedPeople: false,
+    ...overrides,
+  };
+}
 
 beforeAll(async () => {
   register('en-US', () => import('$i18n/en.json'));
@@ -135,8 +148,8 @@ describe('FilterPanel', () => {
       props: {
         config: {
           sections: ['location'],
+          suggestionsProvider: () => Promise.resolve(suggestionsWith({ countries: ['Germany'] })),
           providers: {
-            locations: () => Promise.resolve([{ value: 'Germany', type: 'country' as const }]),
             cities: () => Promise.resolve([]),
           },
         },
@@ -366,7 +379,7 @@ describe('FilterPanel', () => {
     it('should show generic empty text for people section when no people', async () => {
       render(FilterPanel, {
         props: {
-          config: { sections: ['people'], providers: { people: () => Promise.resolve([]) } },
+          config: { sections: ['people'], suggestionsProvider: () => Promise.resolve(suggestionsWith()) },
           timeBuckets: [],
         },
       });
@@ -378,7 +391,7 @@ describe('FilterPanel', () => {
     it('should show generic empty text for location section when no locations', async () => {
       render(FilterPanel, {
         props: {
-          config: { sections: ['location'], providers: { locations: () => Promise.resolve([]) } },
+          config: { sections: ['location'], suggestionsProvider: () => Promise.resolve(suggestionsWith()) },
           timeBuckets: [],
         },
       });
@@ -390,7 +403,7 @@ describe('FilterPanel', () => {
     it('should show generic empty text for camera section when no cameras', async () => {
       render(FilterPanel, {
         props: {
-          config: { sections: ['camera'], providers: { cameras: () => Promise.resolve([]) } },
+          config: { sections: ['camera'], suggestionsProvider: () => Promise.resolve(suggestionsWith()) },
           timeBuckets: [],
         },
       });

@@ -22,8 +22,9 @@
   } from '@mdi/js';
   import { t, type Translations } from 'svelte-i18n';
   import type { FilterState } from './filter-panel';
+  import { getMonthLabels } from './temporal-utils';
 
-  const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MONTH_LABELS = getMonthLabels();
   const DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
     timeZone: 'UTC',
     month: 'short',

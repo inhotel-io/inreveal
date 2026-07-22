@@ -99,7 +99,6 @@ export type Sections = {
 };
 
 export interface Provider<T = unknown> {
-  key: keyof Sections;
   topN: number;
   minQueryLength: number;
   run(query: string, mode: SearchMode, signal: AbortSignal): Promise<ProviderStatus<T>>;
@@ -141,6 +140,11 @@ const ALBUMS_TOP_N = 5;
 // Slice size for the spaces section. Same rationale as ALBUMS_TOP_N — pin the
 // buildProviders `topN` and the runSpaces slice to a single source of truth.
 const SPACES_TOP_N = 5;
+// Slice sizes for the two synchronous catalogs. Navigation and commands never go through the async
+// provider fan-out (they are filtered inline from setQuery), so they are plain constants rather than
+// entries in `providers`.
+const NAVIGATION_TOP_N = 5;
+const COMMANDS_TOP_N = 5;
 // Per-provider fetch timeout. Smart search on CPU-only ML (e.g. Mac mini M1) can
 // take 6–8s for text encode; 15s gives cold-cache runs headroom without stranding
 // a stuck fetch indefinitely.
@@ -152,10 +156,6 @@ const PROVIDER_TIMEOUT_MS = 15_000;
 const idle = Object.freeze({ status: 'idle' as const });
 const tagCacheTooLarge = Object.freeze({ status: 'error' as const, message: 'tag_cache_too_large' });
 
-function getPersonRoute(person: Pick<PersonResponseDto, 'id' | 'primaryProfile'>): string {
-  return getGlobalPersonHref(person);
-}
-
 // Entity-section keys dispatched by runBatch per scope. Navigation is intentionally
 // absent — it flows through the synchronous `runNavigationProvider` off the debounce
 // path. Under a prefix scope, only the matching keys dispatch; all other entity
@@ -165,7 +165,7 @@ function getPersonRoute(person: Pick<PersonResponseDto, 'id' | 'primaryProfile'>
 // union, which would otherwise force an awkward cast.
 // Commands, like navigation, use a distinct `ProviderStatus<CommandItem>` generic
 // and are intentionally also excluded from this key set.
-type EntitySectionKey = 'photos' | 'people' | 'places' | 'tags' | 'albums' | 'spaces';
+export type EntitySectionKey = 'photos' | 'people' | 'places' | 'tags' | 'albums' | 'spaces';
 const ENTITY_KEYS_BY_SCOPE: Record<Scope, ReadonlyArray<EntitySectionKey>> = {
   all: ['photos', 'people', 'places', 'tags', 'albums', 'spaces'],
   people: ['people'],
@@ -270,6 +270,65 @@ function hasSerializableFilters(filters: FilterState | undefined): boolean {
   );
 }
 
+/**
+ * Rank an in-memory catalog (albums, spaces) for the palette.
+ *
+ * Bare prefix (`query === ''`): the `topN` most recent by `getRecency`, `total` = catalog size.
+ * Otherwise, case-insensitive scoring — name starts with the query → 2, merely contains it → 1,
+ * no match → dropped — ties broken alphabetically by name, sliced to `topN`. `total` reports the
+ * full pre-slice match count so the palette can render a "+N more" affordance.
+ */
+function scoreCatalog<T>(
+  items: readonly T[],
+  getName: (item: T) => string,
+  getRecency: (item: T) => string,
+  query: string,
+  topN: number,
+): ProviderStatus<EntityItem> {
+  if (query === '') {
+    const sorted = [...items].sort((a, b) => getRecency(b).localeCompare(getRecency(a)));
+    const top = sorted.slice(0, topN);
+    return top.length === 0
+      ? { status: 'empty' }
+      : { status: 'ok', items: top as unknown as EntityItem[], total: sorted.length };
+  }
+
+  const matches: Array<{ item: T; score: number }> = [];
+  for (const item of items) {
+    const name = getName(item).toLowerCase();
+    if (name.includes(query)) {
+      matches.push({ item, score: name.startsWith(query) ? 2 : 1 });
+    }
+  }
+  matches.sort((a, b) => b.score - a.score || getName(a.item).localeCompare(getName(b.item)));
+
+  return matches.length === 0
+    ? { status: 'empty' }
+    : {
+        status: 'ok',
+        items: matches.slice(0, topN).map((match) => match.item) as unknown as EntityItem[],
+        total: matches.length,
+      };
+}
+
+/**
+ * Item-kind prefix (as used in `activeItemId`, e.g. `photo:<id>`) → the section holding that kind.
+ * `KIND_BY_SECTION` is derived from it so the two can never drift.
+ */
+const SECTION_BY_KIND: Partial<Record<string, keyof Sections>> = {
+  photo: 'photos',
+  person: 'people',
+  place: 'places',
+  tag: 'tags',
+  album: 'albums',
+  space: 'spaces',
+  nav: 'navigation',
+  command: 'commands',
+};
+const KIND_BY_SECTION = Object.fromEntries(
+  Object.entries(SECTION_BY_KIND).map(([kind, section]) => [section, kind]),
+) as Record<keyof Sections, string>;
+
 export class GlobalSearchManager {
   isOpen = $state(false);
   presentation = $state<SearchPresentation>('modal');
@@ -353,7 +412,7 @@ export class GlobalSearchManager {
   pendingConfirmId: string | null = $state(null);
   private confirmTimer: ReturnType<typeof setTimeout> | null = null;
 
-  protected providers: Record<keyof Sections, Provider>;
+  protected providers: Record<EntitySectionKey, Provider>;
   protected debounceTimer: ReturnType<typeof setTimeout> | null = null;
   protected batchController: AbortController | null = null;
   protected photosController: AbortController | null = null;
@@ -407,20 +466,16 @@ export class GlobalSearchManager {
   private peoplePromise: Promise<void> | undefined;
 
   /**
-   * Locale-keyed memo cache for navigation item search strings.
-   * Keys: locale code (e.g. 'en'). Values: Map<navItemId, searchableString> where
-   * searchableString is `${label} ${description}`. Rebuilt on locale change.
+   * Memo cache of navigation-item search strings — `Map<navItemId, `${label} ${description}`>`.
+   * Dropped wholesale by the locale subscription in the constructor, so the next lookup rebuilds
+   * in the new language.
    */
   // SvelteMap used per the svelte/prefer-svelte-reactivity lint rule. This is a
   // non-reactive memoization cache — the reactivity machinery isn't needed here, but
   // using the Svelte-aware type keeps the rule happy and has negligible overhead.
-  private navigationSearchCache: SvelteMap<string, SvelteMap<string, string>> = new SvelteMap();
-  /**
-   * Locale-keyed memo cache for command item search strings. Mirrors
-   * `navigationSearchCache` — rebuilt on locale change, invalidated via the
-   * locale subscribe in the constructor.
-   */
-  private commandSearchCache: SvelteMap<string, SvelteMap<string, string>> = new SvelteMap();
+  private navigationSearchCache: SvelteMap<string, string> | undefined;
+  /** Same, for command items. */
+  private commandSearchCache: SvelteMap<string, string> | undefined;
   private localeUnsubscribe?: () => void;
 
   constructor() {
@@ -437,8 +492,8 @@ export class GlobalSearchManager {
       // The unsubscribe handle is stored on `this.localeUnsubscribe` for test isolation.
       // In production it is never called — the singleton lives for the tab's lifetime.
       this.localeUnsubscribe = i18nLocale.subscribe(() => {
-        this.navigationSearchCache.clear();
-        this.commandSearchCache.clear();
+        this.navigationSearchCache = undefined;
+        this.commandSearchCache = undefined;
       });
     }
   }
@@ -453,50 +508,35 @@ export class GlobalSearchManager {
   }
 
   /**
-   * Build or fetch the memoized search-string table for the current locale. Called
-   * synchronously from runNavigationProvider. O(1) cache hit; O(NAVIGATION_ITEMS.length)
-   * rebuild on locale change or first call.
+   * Build the search-string table for a catalog. O(items.length); only runs on a cache miss, i.e.
+   * the first lookup after construction or after a locale change.
    */
-  private getNavigationSearchStrings(): SvelteMap<string, string> {
-    const currentLocale = (get(i18nLocale) ?? 'en') as string;
-    const cached = this.navigationSearchCache.get(currentLocale);
-    if (cached) {
-      return cached;
-    }
+  private buildSearchStrings(
+    items: ReadonlyArray<{ id: string; labelKey: string; descriptionKey: string }>,
+  ): SvelteMap<string, string> {
     const translate = get(t);
     const table = new SvelteMap<string, string>();
-    for (const item of NAVIGATION_ITEMS) {
-      // labelKey/descriptionKey are typed `string` on NavigationItem but every value is a
+    for (const item of items) {
+      // labelKey/descriptionKey are typed `string` on the item types but every value is a
       // valid i18n key generated at build time — cast to Translations to satisfy the
       // Gallery-augmented MessageFormatter signature.
       const label = translate(item.labelKey as Translations);
       const description = translate(item.descriptionKey as Translations);
       table.set(item.id, `${label} ${description}`);
     }
-    this.navigationSearchCache.set(currentLocale, table);
     return table;
   }
 
-  /**
-   * Build or fetch the memoized search-string table for command items in the
-   * current locale. Mirrors `getNavigationSearchStrings` — O(1) cache hit,
-   * O(COMMAND_ITEMS.length) rebuild on locale change or first call.
-   */
+  /** Memoized navigation search strings. Called synchronously from runNavigationProvider. */
+  private getNavigationSearchStrings(): SvelteMap<string, string> {
+    this.navigationSearchCache ??= this.buildSearchStrings(NAVIGATION_ITEMS);
+    return this.navigationSearchCache;
+  }
+
+  /** Memoized command search strings. Mirrors `getNavigationSearchStrings`. */
   private getCommandSearchStrings(): SvelteMap<string, string> {
-    const currentLocale = (get(i18nLocale) ?? 'en') as string;
-    const cached = this.commandSearchCache.get(currentLocale);
-    if (cached) {
-      return cached;
-    }
-    const translate = get(t);
-    const table = new SvelteMap<string, string>();
-    for (const item of COMMAND_ITEMS) {
-      const label = translate(item.labelKey as Translations);
-      const description = translate(item.descriptionKey as Translations);
-      table.set(item.id, `${label} ${description}`);
-    }
-    this.commandSearchCache.set(currentLocale, table);
-    return table;
+    this.commandSearchCache ??= this.buildSearchStrings(COMMAND_ITEMS);
+    return this.commandSearchCache;
   }
 
   /**
@@ -542,9 +582,6 @@ export class GlobalSearchManager {
     const eligibleCmd: CommandItem[] = [];
     for (const item of COMMAND_ITEMS) {
       if (item.adminOnly && !isAdmin) {
-        continue;
-      }
-      if (item.featureFlag && !flags?.[item.featureFlag]) {
         continue;
       }
       if (item.isAvailable) {
@@ -612,7 +649,7 @@ export class GlobalSearchManager {
 
   /**
    * Synchronously filter NAVIGATION_ITEMS for a payload under a given scope. Thin wrapper
-   * around `filterNavAndCommands` that slices the navigation array to `providers.navigation.topN`.
+   * around `filterNavAndCommands` that slices the navigation array to `NAVIGATION_TOP_N`.
    * Runs on every keystroke off the main path — bypasses the 150 ms debounce.
    */
   private runNavigationProvider(payload: string, scope: Scope): ProviderStatus<NavigationItem> {
@@ -626,13 +663,12 @@ export class GlobalSearchManager {
     if (scope === 'nav' && payload === '') {
       return { status: 'ok', items: navigation, total: navigation.length };
     }
-    const topN = this.providers.navigation.topN;
-    return { status: 'ok', items: navigation.slice(0, topN), total: navigation.length };
+    return { status: 'ok', items: navigation.slice(0, NAVIGATION_TOP_N), total: navigation.length };
   }
 
   /**
    * Synchronously filter COMMAND_ITEMS for a payload under a given scope. Thin wrapper
-   * around `filterNavAndCommands` that slices to `providers.commands.topN` and omits
+   * around `filterNavAndCommands` that slices to `COMMANDS_TOP_N` and omits
    * any command that has already been promoted to the top-result slot so the row does
    * not render in both places (same dedup the component applies for nav).
    */
@@ -652,8 +688,7 @@ export class GlobalSearchManager {
     if (scope === 'nav' && payload === '') {
       return { status: 'ok', items: filtered, total: filtered.length };
     }
-    const topN = this.providers.commands.topN;
-    return { status: 'ok', items: filtered.slice(0, topN), total: filtered.length };
+    return { status: 'ok', items: filtered.slice(0, COMMANDS_TOP_N), total: filtered.length };
   }
 
   open(presentation: SearchPresentation = 'modal') {
@@ -845,9 +880,10 @@ export class GlobalSearchManager {
   }
 
   /**
-   * Resolve an album id through the SDK, write a fresh RECENT entry, and navigate.
-   * All guards live here so every Enter-on-row path — fresh result, RECENT, almost-
-   * exact nav promotion — routes through a single handler with uniform semantics.
+   * Resolve a collection id through the SDK, write a fresh RECENT entry, and navigate. Shared by
+   * `activateAlbum` and `activateSpace` so every Enter-on-row path — fresh result, RECENT,
+   * almost-exact nav promotion — routes through a single handler with uniform semantics; only the
+   * SDK call, the recent entry, the route and the toast differ.
    *
    * Guards:
    *  - Double-Enter: a second call for the same key is a no-op while the first is
@@ -865,8 +901,19 @@ export class GlobalSearchManager {
    *  - Pending affordance: the 200 ms `pendingActivation` flag is cleared in
    *    `finally` regardless of which branch settled the activation.
    */
-  async activateAlbum(id: string) {
-    const key = `album:${id}`;
+  private async activateCollection<T>({
+    key,
+    fetch,
+    buildEntry,
+    route,
+    unavailableToastKey,
+  }: {
+    key: string;
+    fetch: (signal: AbortSignal) => Promise<T>;
+    buildEntry: (data: T) => RecentEntry;
+    route: string;
+    unavailableToastKey: Translations;
+  }): Promise<void> {
     if (this.activationInFlight.has(key)) {
       return;
     }
@@ -877,19 +924,12 @@ export class GlobalSearchManager {
     }, 200);
 
     try {
-      const album = await getAlbumInfo({ id }, { signal: this.closeSignal });
+      const data = await fetch(this.closeSignal);
       if (this.closeSignal.aborted) {
         return;
       }
-      addEntry({
-        kind: 'album',
-        id: key,
-        albumId: id,
-        label: album.albumName,
-        thumbnailAssetId: album.albumThumbnailAssetId,
-        lastUsed: Date.now(),
-      });
-      void goto(Route.viewAlbum({ id }));
+      addEntry(buildEntry(data));
+      void goto(route);
       // Dismiss the palette after handing off to the router. goto is fire-and-forget
       // so navigation and palette close happen in parallel — matches v1's activate()
       // pattern for other kinds (photo/person/place/tag/nav all close post-navigate).
@@ -903,7 +943,7 @@ export class GlobalSearchManager {
       const status = (error as { status?: number } | null)?.status;
       if (status === 400 || status === 404 || status === 403) {
         removeEntry(key);
-        toastManager.warning(get(t)('cmdk_toast_album_unavailable'));
+        toastManager.warning(get(t)(unavailableToastKey));
         return;
       }
       throw error;
@@ -916,73 +956,42 @@ export class GlobalSearchManager {
     }
   }
 
-  /**
-   * Resolve a space id through the SDK, write a fresh RECENT entry, and navigate.
-   * Mirrors `activateAlbum` — same guard set, just swapped for the space-shaped
-   * SDK call, route helper, and recent entry. The design doc explicitly defers
-   * factoring the two into a generic helper until a future YAGNI follow-up.
-   *
-   * Guards:
-   *  - Double-Enter: a second call for the same key is a no-op while the first is
-   *    still resolving. Cleared in `finally` so retry after settlement works.
-   *  - Escape-during-resolve: activation binds to `closeSignal`, so `close()` aborts
-   *    the fetch and the post-await `aborted` check short-circuits the navigate.
-   *  - Batch rotation does NOT affect activation. The per-keystroke
-   *    `batchController` owns the fan-out providers; activation survives typing.
-   *  - 400 / 404 / 403: treat as "stale cache" — toast + purge the RECENT (no-op
-   *    if absent) so the next open does not re-show a dead row. Gallery's server
-   *    `requireAccess` middleware returns 400 (BadRequestException) for both
-   *    "row missing" and "no access", so 400 sits alongside the canonical 404/403.
-   *  - 401 and other statuses propagate unchanged to the global SDK auth
-   *    interceptor (redirect-to-login lives there, not here).
-   *  - Pending affordance: the 200 ms `pendingActivation` flag is cleared in
-   *    `finally` regardless of which branch settled the activation.
-   */
+  /** Album flavour of {@link activateCollection}. */
+  async activateAlbum(id: string) {
+    const key = `album:${id}`;
+    return this.activateCollection({
+      key,
+      fetch: (signal) => getAlbumInfo({ id }, { signal }),
+      buildEntry: (album) => ({
+        kind: 'album',
+        id: key,
+        albumId: id,
+        label: album.albumName,
+        thumbnailAssetId: album.albumThumbnailAssetId,
+        lastUsed: Date.now(),
+      }),
+      route: Route.viewAlbum({ id }),
+      unavailableToastKey: 'cmdk_toast_album_unavailable',
+    });
+  }
+
+  /** Space flavour of {@link activateCollection}. */
   async activateSpace(id: string) {
     const key = `space:${id}`;
-    if (this.activationInFlight.has(key)) {
-      return;
-    }
-    this.activationInFlight.add(key);
-
-    const pendingTimer = setTimeout(() => {
-      this.pendingActivation = key;
-    }, 200);
-
-    try {
-      const space = await getSpace({ id }, { signal: this.closeSignal });
-      if (this.closeSignal.aborted) {
-        return;
-      }
-      addEntry({
+    return this.activateCollection({
+      key,
+      fetch: (signal) => getSpace({ id }, { signal }),
+      buildEntry: (space) => ({
         kind: 'space',
         id: key,
         spaceId: id,
         label: space.name,
         colorHex: space.color ?? null,
         lastUsed: Date.now(),
-      });
-      void goto(Route.viewSpace({ id }));
-      // See activateAlbum for rationale — close after goto, happy path only.
-      this.close();
-    } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return;
-      }
-      const status = (error as { status?: number } | null)?.status;
-      if (status === 400 || status === 404 || status === 403) {
-        removeEntry(key);
-        toastManager.warning(get(t)('cmdk_toast_space_unavailable'));
-        return;
-      }
-      throw error;
-    } finally {
-      clearTimeout(pendingTimer);
-      this.activationInFlight.delete(key);
-      if (this.pendingActivation === key) {
-        this.pendingActivation = null;
-      }
-    }
+      }),
+      route: Route.viewSpace({ id }),
+      unavailableToastKey: 'cmdk_toast_space_unavailable',
+    });
   }
 
   /**
@@ -1221,35 +1230,8 @@ export class GlobalSearchManager {
   }
 
   private sectionForKind(kind: string): ProviderStatus<unknown> | null {
-    switch (kind) {
-      case 'photo': {
-        return this.sections.photos;
-      }
-      case 'person': {
-        return this.sections.people;
-      }
-      case 'place': {
-        return this.sections.places;
-      }
-      case 'tag': {
-        return this.sections.tags;
-      }
-      case 'album': {
-        return this.sections.albums;
-      }
-      case 'space': {
-        return this.sections.spaces;
-      }
-      case 'nav': {
-        return this.sections.navigation;
-      }
-      case 'command': {
-        return this.sections.commands;
-      }
-      default: {
-        return null;
-      }
-    }
+    const section = SECTION_BY_KIND[kind];
+    return section === undefined ? null : this.sections[section];
   }
 
   reconcileCursor() {
@@ -1263,16 +1245,6 @@ export class GlobalSearchManager {
     // priority so the highlight lands on a row the user's active prefix actually
     // surfaces (e.g. under `@` the cursor never jumps to an unrelated photo).
     const order = RECONCILE_ORDER_BY_SCOPE[this.scope];
-    const kindOf: Record<keyof Sections, string> = {
-      photos: 'photo',
-      people: 'person',
-      places: 'place',
-      tags: 'tag',
-      albums: 'album',
-      spaces: 'space',
-      navigation: 'nav',
-      commands: 'command',
-    };
     for (const key of order) {
       const s = this.sections[key];
       if (s.status === 'ok' && s.items.length > 0) {
@@ -1280,7 +1252,7 @@ export class GlobalSearchManager {
         if (first.id !== undefined) {
           // Navigation item IDs are already fully-qualified (`nav:<category>:<slug>`).
           // Other entity IDs are just the raw entity id and need the kind prefix.
-          this.activeItemId = key === 'navigation' ? first.id : `${kindOf[key]}:${first.id}`;
+          this.activeItemId = key === 'navigation' ? first.id : `${KIND_BY_SECTION[key]}:${first.id}`;
           return;
         }
         if (key === 'places' && first.latitude !== undefined && first.longitude !== undefined) {
@@ -1519,12 +1491,12 @@ export class GlobalSearchManager {
     const rewrittenToken = getActiveTypedSearchToken(parsedAfterRewrite, caret);
     const selectedChoice = selectedChoiceFromLiveChoice(choice, rewrittenToken);
     if (selectedChoice && rewrittenToken) {
-      const tokenKey = getTypedSearchTokenIdentity(
-        selectedChoice.key,
-        rewrittenToken.start,
-        rewrittenToken.end,
-        rewrittenToken.raw,
-      );
+      const tokenKey = getTypedSearchTokenIdentity({
+        key: selectedChoice.key,
+        start: rewrittenToken.start,
+        end: rewrittenToken.end,
+        raw: rewrittenToken.raw,
+      });
       this.selectedTypedSearchChoices.set(tokenKey, selectedChoice);
     }
     this.resetLiveTypedSearchSuggestions();
@@ -1721,7 +1693,7 @@ export class GlobalSearchManager {
             lastUsed: now,
           });
         }
-        void goto(getPersonRoute(p));
+        void goto(getGlobalPersonHref(p));
         break;
       }
       case 'place': {
@@ -2132,16 +2104,12 @@ export class GlobalSearchManager {
       return null;
     }
     const isAdmin = (authManager.authenticated ? authManager.user : undefined)?.isAdmin ?? false;
-    const flags = featureFlagsManager.valueOrUndefined;
     const translate = get(t);
     const ctx = commandContextManager.getContext();
     const cmdSearch = this.getCommandSearchStrings();
     let best: { item: CommandItem; score: number } | null = null;
     for (const item of COMMAND_ITEMS) {
       if (item.adminOnly && !isAdmin) {
-        continue;
-      }
-      if (item.featureFlag && !flags?.[item.featureFlag]) {
         continue;
       }
       if (item.isAvailable) {
@@ -2442,18 +2410,10 @@ export class GlobalSearchManager {
    * `buildProviders()` — runBatch dispatches the albums key to that provider, which
    * delegates here, so this is the sole writer for the albums section.
    *
-   * Scoring rules (all case-insensitive, query is trimmed):
-   *   - name.startsWith(query) → score 2
-   *   - name.includes(query)    → score 1
-   *   - else                    → filtered out
-   * Ties break alphabetically by `albumName`. Slice to top 5; `total` reports the
-   * full pre-slice match count so the palette can render a "+N more" affordance.
-   *
-   * Bare-prefix branch: `rawQuery === ''` dispatches from runBatch when the user
-   * types a bare `/`. Returns the top `ALBUMS_TOP_N` sorted by `endDate ?? ''`
-   * desc. AlbumNameDto has no `updatedAt`; `endDate` — the most recent photo in
-   * the album — is the closest activity proxy. The minQueryLength gate now lives
-   * upstream in runBatch, so no `query.length < 2` early-return here.
+   * Ranking lives in `scoreCatalog`. Bare `/` (empty query) sorts by `endDate ?? ''` —
+   * AlbumNameDto has no `updatedAt`, and the most recent photo in the album is the closest
+   * activity proxy we have; albums without one sink to the bottom. The minQueryLength gate lives
+   * upstream in runBatch, so there is no `query.length < 2` early-return here.
    */
   async runAlbums(rawQuery: string): Promise<void> {
     const query = rawQuery.trim().toLowerCase();
@@ -2464,38 +2424,13 @@ export class GlobalSearchManager {
       return;
     }
 
-    if (query === '') {
-      // Bare `/`: top N by `endDate ?? ''` desc. Albums without an endDate sink to
-      // the bottom — the DTO has no updatedAt so endDate is the best proxy we have.
-      const sorted = [...this.albumsCache].sort((a, b) => (b.endDate ?? '').localeCompare(a.endDate ?? ''));
-      const top = sorted.slice(0, ALBUMS_TOP_N);
-      this.sections.albums =
-        top.length === 0
-          ? { status: 'empty' }
-          : { status: 'ok', items: top as unknown as EntityItem[], total: sorted.length };
-      return;
-    }
-
-    type Scored = { album: AlbumNameDto; score: number };
-    const matches: Scored[] = [];
-    for (const album of this.albumsCache) {
-      const name = album.albumName.toLowerCase();
-      if (name.includes(query)) {
-        matches.push({ album, score: name.startsWith(query) ? 2 : 1 });
-      }
-    }
-    matches.sort((a, b) => b.score - a.score || a.album.albumName.localeCompare(b.album.albumName));
-
-    if (matches.length === 0) {
-      this.sections.albums = { status: 'empty' };
-      return;
-    }
-
-    this.sections.albums = {
-      status: 'ok',
-      items: matches.slice(0, ALBUMS_TOP_N).map((m) => m.album) as unknown as EntityItem[],
-      total: matches.length,
-    };
+    this.sections.albums = scoreCatalog(
+      this.albumsCache,
+      (album) => album.albumName,
+      (album) => album.endDate ?? '',
+      query,
+      ALBUMS_TOP_N,
+    );
   }
 
   /**
@@ -2506,18 +2441,9 @@ export class GlobalSearchManager {
    * the spaces key through that provider, so this is the sole writer for the
    * spaces section.
    *
-   * Scoring rules (all case-insensitive, query is trimmed):
-   *   - name.startsWith(query) → score 2
-   *   - name.includes(query)    → score 1
-   *   - else                    → filtered out
-   * Ties break alphabetically by `name`. Slice to top 5; `total` reports the full
-   * pre-slice match count so the palette can render a "+N more" affordance.
-   *
-   * Bare-prefix branch: `rawQuery === ''` dispatches from runBatch when the user
-   * types a bare `/`. Returns the top `SPACES_TOP_N` sorted by
-   * `(lastActivityAt ?? createdAt)` desc — falls back to creation date when the
-   * space has never been touched. The minQueryLength gate now lives upstream in
-   * runBatch, so no `query.length < 2` early-return here.
+   * Ranking lives in `scoreCatalog`. Bare `/` (empty query) sorts by
+   * `(lastActivityAt ?? createdAt)` desc — falling back to the creation date so a space that has
+   * never been touched still ranks meaningfully.
    */
   async runSpaces(rawQuery: string): Promise<void> {
     const query = rawQuery.trim().toLowerCase();
@@ -2528,40 +2454,13 @@ export class GlobalSearchManager {
       return;
     }
 
-    if (query === '') {
-      // Bare `/`: top N by `(lastActivityAt ?? createdAt)` desc. Spaces with no
-      // activity fall back to their creation date so first-time visitors still
-      // see something meaningful.
-      const recency = (s: SharedSpaceResponseDto): string => s.lastActivityAt ?? s.createdAt;
-      const sorted = [...this.spacesCache].sort((a, b) => recency(b).localeCompare(recency(a)));
-      const top = sorted.slice(0, SPACES_TOP_N);
-      this.sections.spaces =
-        top.length === 0
-          ? { status: 'empty' }
-          : { status: 'ok', items: top as unknown as EntityItem[], total: sorted.length };
-      return;
-    }
-
-    type Scored = { space: SharedSpaceResponseDto; score: number };
-    const matches: Scored[] = [];
-    for (const space of this.spacesCache) {
-      const name = space.name.toLowerCase();
-      if (name.includes(query)) {
-        matches.push({ space, score: name.startsWith(query) ? 2 : 1 });
-      }
-    }
-    matches.sort((a, b) => b.score - a.score || a.space.name.localeCompare(b.space.name));
-
-    if (matches.length === 0) {
-      this.sections.spaces = { status: 'empty' };
-      return;
-    }
-
-    this.sections.spaces = {
-      status: 'ok',
-      items: matches.slice(0, SPACES_TOP_N).map((m) => m.space) as unknown as EntityItem[],
-      total: matches.length,
-    };
+    this.sections.spaces = scoreCatalog(
+      this.spacesCache,
+      (space) => space.name,
+      (space) => space.lastActivityAt ?? space.createdAt,
+      query,
+      SPACES_TOP_N,
+    );
   }
 
   private async runTagsProvider(query: string, signal: AbortSignal): Promise<ProviderStatus<TagResponseDto>> {
@@ -2601,9 +2500,8 @@ export class GlobalSearchManager {
     return matches.length === 0 ? { status: 'empty' } : { status: 'ok', items: matches, total: matches.length };
   }
 
-  protected buildProviders(): Record<keyof Sections, Provider> {
+  protected buildProviders(): Record<EntitySectionKey, Provider> {
     const photos: Provider = {
-      key: 'photos',
       topN: 5,
       minQueryLength: 1,
       run: async (query, mode, signal) => {
@@ -2640,7 +2538,6 @@ export class GlobalSearchManager {
     };
 
     const people: Provider = {
-      key: 'people',
       topN: 5,
       minQueryLength: 2,
       run: async (query, _mode, signal) => {
@@ -2678,7 +2575,6 @@ export class GlobalSearchManager {
     };
 
     const places: Provider = {
-      key: 'places',
       topN: 3,
       minQueryLength: 2,
       run: async (query, _mode, signal) => {
@@ -2697,34 +2593,9 @@ export class GlobalSearchManager {
     };
 
     const tags: Provider = {
-      key: 'tags',
       topN: 5,
       minQueryLength: 2,
       run: (query, _mode, signal) => this.runTagsProvider(query, signal),
-    };
-
-    // Navigation provider is a stub. Task 10 wires runNavigationProvider into setQuery
-    // directly (synchronous, bypassing the 150ms debounce). runBatch iterates only the
-    // entity + albums + spaces keys — navigation is explicitly excluded — so this stub
-    // is never invoked at runtime. It exists to satisfy the `Record<keyof Sections,
-    // Provider>` contract. Regression test in Task 12 pins this.
-    const navigationStub: Provider<NavigationItem> = {
-      key: 'navigation',
-      topN: 5,
-      minQueryLength: 2,
-      run: () => Promise.resolve({ status: 'empty' as const }),
-    };
-
-    // Commands, like navigation, do NOT dispatch through the runBatch async pipeline.
-    // `runCommandsProvider` is called synchronously from setQuery alongside
-    // `runNavigationProvider`. This entry's `run` is never invoked at runtime — it
-    // exists only to satisfy the `Record<keyof Sections, Provider>` contract and to
-    // publish the shared `topN` constant that `runCommandsProvider` reads.
-    const commandsStub: Provider<CommandItem> = {
-      key: 'commands',
-      topN: 5,
-      minQueryLength: 0,
-      run: () => Promise.resolve({ status: 'empty' as const }),
     };
 
     // Albums provider dispatches to `runAlbums`, which filters the in-memory catalog
@@ -2734,7 +2605,6 @@ export class GlobalSearchManager {
     // so runBatch's subsequent `this.sections[key] = result` assignment is a no-op
     // self-assignment.
     const albums: Provider = {
-      key: 'albums',
       topN: ALBUMS_TOP_N,
       minQueryLength: 2,
       run: async (query) => {
@@ -2747,7 +2617,6 @@ export class GlobalSearchManager {
     // runBatch iterates the spaces key, calls `run()`, which delegates to
     // `runSpaces()` and returns the section state that method wrote.
     const spaces: Provider = {
-      key: 'spaces',
       topN: SPACES_TOP_N,
       minQueryLength: 2,
       run: async (query) => {
@@ -2756,7 +2625,7 @@ export class GlobalSearchManager {
       },
     };
 
-    return { photos, people, places, tags, albums, spaces, navigation: navigationStub, commands: commandsStub };
+    return { photos, people, places, tags, albums, spaces };
   }
 }
 

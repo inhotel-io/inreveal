@@ -21,18 +21,24 @@
   const previewKey = $derived(activeItem?.kind ?? 'none');
 </script>
 
+<!-- Shown with no selection, and for nav items and commands — neither has anything richer than the
+     row itself to show, and rendering the placeholder keeps the pane at the same width instead of
+     flashing a blank frame as the user cursors over them.
+     `h-full` is safe here: nothing tall fights for height, so the pane's flex-stretched size is the
+     logo's target and the logo stays vertically centred. -->
+{#snippet emptyPane()}
+  <div class="flex h-full min-h-[360px] flex-col items-center justify-center gap-3 px-8 text-center">
+    <Logo variant="icon" size="giant" class="opacity-10" />
+    <span class="text-sm text-gray-500 opacity-50 dark:text-gray-400">
+      {$t('cmdk_nothing_to_preview')}
+    </span>
+  </div>
+{/snippet}
+
 {#key previewKey}
   <div in:fade={{ duration: 120 }}>
     {#if activeItem === null}
-      <!-- Empty state still needs to fill the pane so the logo is centered vertically.
-           Using `h-full` here is safe because there's no tall content fighting for
-           height — the pane's flex-stretched size is the logo's target. -->
-      <div class="flex h-full min-h-[360px] flex-col items-center justify-center gap-3 px-8 text-center">
-        <Logo variant="icon" size="giant" class="opacity-10" />
-        <span class="text-sm text-gray-500 opacity-50 dark:text-gray-400">
-          {$t('cmdk_nothing_to_preview')}
-        </span>
-      </div>
+      {@render emptyPane()}
     {:else if activeItem.kind === 'photo'}
       <PhotoPreview photo={activeItem.data as never} />
     {:else if activeItem.kind === 'person'}
@@ -45,27 +51,8 @@
       <AlbumPreview item={activeItem.data as never} />
     {:else if activeItem.kind === 'space'}
       <SpacePreview item={activeItem.data as never} />
-    {:else if activeItem.kind === 'nav'}
-      <!-- Nav items have nothing richer than the row itself to show. Render the same
-           empty-state placeholder so the pane stays the same width and doesn't
-           flash a blank frame when the user cursors over a `>` nav result. -->
-      <div class="flex h-full min-h-[360px] flex-col items-center justify-center gap-3 px-8 text-center">
-        <Logo variant="icon" size="giant" class="opacity-10" />
-        <span class="text-sm text-gray-500 opacity-50 dark:text-gray-400">
-          {$t('cmdk_nothing_to_preview')}
-        </span>
-      </div>
-    {:else if activeItem.kind === 'command'}
-      <!-- Commands are verbs, not destinations — there's nothing richer than the row
-           itself to show. Render the same empty-state placeholder so the pane stays
-           the same width and doesn't flash a blank frame when the user cursors over
-           a command result. -->
-      <div class="flex h-full min-h-[360px] flex-col items-center justify-center gap-3 px-8 text-center">
-        <Logo variant="icon" size="giant" class="opacity-10" />
-        <span class="text-sm text-gray-500 opacity-50 dark:text-gray-400">
-          {$t('cmdk_nothing_to_preview')}
-        </span>
-      </div>
+    {:else if activeItem.kind === 'nav' || activeItem.kind === 'command'}
+      {@render emptyPane()}
     {/if}
   </div>
 {/key}

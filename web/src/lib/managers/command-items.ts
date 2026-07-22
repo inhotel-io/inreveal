@@ -7,7 +7,6 @@ import {
   removeSpace,
   removeUserFromAlbum,
   runQueueCommandLegacy,
-  type ServerFeaturesDto,
 } from '@immich/sdk';
 import { modalManager, themeManager, toastManager } from '@immich/ui';
 import {
@@ -83,8 +82,6 @@ export interface CommandItem {
   handler: (ctx?: CommandContext) => void | Promise<unknown>;
   /** Reserved for v1.3.1 admin verbs. Not used by any v1.3.0 item. */
   adminOnly?: boolean;
-  /** Reserved for future feature-flag gating. Not used in v1.3.0. */
-  featureFlag?: keyof ServerFeaturesDto;
   /** Sync predicate gating appearance. Omit for always-available commands. Throwing excludes. */
   isAvailable?: (ctx: CommandContext) => boolean;
   /** Requires inline two-step Enter confirmation. */

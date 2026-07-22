@@ -1394,6 +1394,18 @@ describe('global-search root', () => {
     expect(getEntries()).toEqual([]);
   });
 
+  it('omits the per-row X button in the dropdown variant', async () => {
+    // Both variants render the same hoisted `paletteList` snippet; the remove affordance is one of
+    // the two places they still differ (the other is group spacing), so pin it here.
+    addEntry({ kind: 'query', id: 'query:beach', text: 'beach', lastUsed: 1 });
+    const m = new GlobalSearchManager();
+    m.open('dropdown');
+    render(GlobalSearch, { props: { manager: m, variant: 'dropdown' } });
+
+    await screen.findByText('beach');
+    expect(screen.queryByRole('button', { name: /cmdk_remove_from_recents|remove from recents/i })).toBeNull();
+  });
+
   it('Enter on a highlighted photo row calls manager.activate("photo", item)', async () => {
     const m = new GlobalSearchManager();
     installPhotoStub(m, [{ id: 'a1', originalFileName: 'x.jpg' }]);

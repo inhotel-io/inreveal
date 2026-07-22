@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { Icon } from '@immich/ui';
-  import { mdiMagnify } from '@mdi/js';
   import { SvelteMap } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
   import type { PersonOption } from './filter-panel';
+  import MultiSelectFilter from './multi-select-filter.svelte';
 
   interface Props {
     people: PersonOption[];
@@ -14,9 +13,6 @@
   }
 
   let { people, selectedIds, selectedNames, onSelectionChange, emptyText }: Props = $props();
-
-  let searchQuery = $state('');
-  let showAll = $state(false);
 
   const INITIAL_SHOW_COUNT = 5;
 
@@ -37,20 +33,9 @@
           id,
           name: selectedNames?.get(id) ?? cached?.name ?? id,
           thumbnailUrl: cached?.thumbnailUrl,
-          isOrphaned: true,
-        } as PersonOption & { isOrphaned: boolean };
+        } satisfies PersonOption;
       }),
   );
-
-  let filteredPeople = $derived(
-    searchQuery.trim() ? people.filter((p) => p.name.toLowerCase().includes(searchQuery.trim().toLowerCase())) : people,
-  );
-
-  let visiblePeople = $derived(
-    searchQuery.trim() || showAll ? filteredPeople : filteredPeople.slice(0, INITIAL_SHOW_COUNT),
-  );
-
-  let remainingCount = $derived(filteredPeople.length - INITIAL_SHOW_COUNT);
 
   function getInitial(name: string): string {
     return name.charAt(0).toUpperCase();
@@ -82,144 +67,49 @@
   }
 </script>
 
-<div data-testid="people-filter">
-  {#if people.length === 0 && orphanedPeople.length === 0}
-    <p class="text-sm text-gray-400 dark:text-gray-500" data-testid="people-empty">
-      {emptyText ?? $t('spaces_no_people')}
-    </p>
-  {:else}
-    <!-- Search input -->
-    <div class="relative mb-2">
-      <div class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500">
-        <Icon icon={mdiMagnify} size="14" />
-      </div>
-      <input
-        type="text"
-        class="immich-form-input h-8 w-full rounded-lg pl-7 pr-2 text-sm"
-        placeholder={$t('filter_search_people')}
-        bind:value={searchQuery}
-        oninput={() => {
-          showAll = false;
+<MultiSelectFilter
+  testId="people"
+  options={people}
+  orphaned={orphanedPeople}
+  {selectedIds}
+  onToggle={togglePerson}
+  searchPlaceholder={$t('filter_search_people')}
+  emptyText={emptyText ?? $t('spaces_no_people')}
+  initialShowCount={INITIAL_SHOW_COUNT}
+>
+  {#snippet leading(person, isOrphaned)}
+    {#if person.thumbnailUrl}
+      <img
+        src={person.thumbnailUrl}
+        alt={person.name}
+        class="h-5 w-5 flex-shrink-0 rounded-full object-cover"
+        onerror={(e) => {
+          const img = e.currentTarget as HTMLImageElement;
+          img.style.display = 'none';
+          img.nextElementSibling?.removeAttribute('style');
         }}
-        data-testid="people-search-input"
       />
-    </div>
-
-    <!-- Orphaned people (selected but no longer in suggestions) -->
-    {#each orphanedPeople as person (person.id)}
-      <button
-        type="button"
-        class="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-sm opacity-50 hover:bg-subtle"
-        onclick={() => togglePerson(person.id)}
-        aria-pressed="true"
-        data-testid="people-item-{person.id}"
+      <div
+        class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white"
+        style="display: none; background: {getAvatarGradient(person.name)}"
       >
-        <!-- Checkbox (always checked for orphaned) -->
-        <div
-          class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded bg-immich-primary dark:bg-immich-dark-primary"
-        >
-          <svg viewBox="0 0 24 24" class="h-3 w-3 text-white dark:text-black">
-            <path fill="currentColor" d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />
-          </svg>
-        </div>
-
-        <!-- Avatar -->
-        {#if person.thumbnailUrl}
-          <img
-            src={person.thumbnailUrl}
-            alt={person.name}
-            class="h-5 w-5 flex-shrink-0 rounded-full object-cover"
-            onerror={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              img.style.display = 'none';
-              img.nextElementSibling?.removeAttribute('style');
-            }}
-          />
-          <div
-            class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white"
-            style="display: none; background: {getAvatarGradient(person.name)}"
-          >
-            {getInitial(person.name)}
-          </div>
-        {:else}
-          <div
-            class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-300 text-[9px] font-semibold text-white dark:bg-gray-600"
-          >
-            {getInitial(person.name)}
-          </div>
-        {/if}
-
-        <!-- Label -->
-        <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left font-medium">{person.name}</span>
-      </button>
-    {/each}
-
-    <!-- People list -->
-    {#each visiblePeople as person (person.id)}
-      {@const isActive = selectedIds.includes(person.id)}
-      <button
-        type="button"
-        class="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-subtle {isActive
-          ? 'font-medium'
-          : 'text-gray-500 dark:text-gray-300'}"
-        onclick={() => togglePerson(person.id)}
-        data-testid="people-item-{person.id}"
+        {getInitial(person.name)}
+      </div>
+    {:else if isOrphaned}
+      <!-- A person narrowed out of the suggestions has no cached thumbnail to fall back on, so the
+           avatar stays neutral rather than inventing a gradient identity for a dimmed row. -->
+      <div
+        class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-gray-300 text-[9px] font-semibold text-white dark:bg-gray-600"
       >
-        <!-- Checkbox -->
-        <div
-          class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded {isActive
-            ? 'bg-immich-primary dark:bg-immich-dark-primary'
-            : 'border border-gray-300 dark:border-gray-600'}"
-        >
-          {#if isActive}
-            <svg viewBox="0 0 24 24" class="h-3 w-3 text-white dark:text-black">
-              <path fill="currentColor" d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" />
-            </svg>
-          {/if}
-        </div>
-
-        <!-- Avatar -->
-        {#if person.thumbnailUrl}
-          <img
-            src={person.thumbnailUrl}
-            alt={person.name}
-            class="h-5 w-5 flex-shrink-0 rounded-full object-cover"
-            onerror={(e) => {
-              const img = e.currentTarget as HTMLImageElement;
-              img.style.display = 'none';
-              img.nextElementSibling?.removeAttribute('style');
-            }}
-          />
-          <div
-            class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white"
-            style="display: none; background: {getAvatarGradient(person.name)}"
-          >
-            {getInitial(person.name)}
-          </div>
-        {:else}
-          <div
-            class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white"
-            style="background: {getAvatarGradient(person.name)}"
-          >
-            {getInitial(person.name)}
-          </div>
-        {/if}
-
-        <!-- Label -->
-        <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{person.name}</span>
-      </button>
-    {/each}
-
-    <!-- Show more link -->
-    {#if !showAll && remainingCount > 0 && !searchQuery.trim()}
-      <button
-        type="button"
-        class="py-1 text-xs font-medium text-immich-primary dark:text-immich-dark-primary"
-        onclick={() => (showAll = true)}
-        data-testid="people-show-more"
+        {getInitial(person.name)}
+      </div>
+    {:else}
+      <div
+        class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[9px] font-semibold text-white"
+        style="background: {getAvatarGradient(person.name)}"
       >
-        {$t('filter_show_more', { values: { count: remainingCount } })}
-      </button>
+        {getInitial(person.name)}
+      </div>
     {/if}
-  {/if}
-</div>
+  {/snippet}
+</MultiSelectFilter>

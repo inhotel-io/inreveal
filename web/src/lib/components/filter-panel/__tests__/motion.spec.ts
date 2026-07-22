@@ -1,12 +1,10 @@
 import { quintOut } from 'svelte/easing';
 import { describe, expect, it } from 'vitest';
-import { PANEL_DURATION_MS, SECTION_DURATION_MS, SETTLE_EASE, slideMotion } from '../motion';
+import { SECTION_DURATION_MS, slideMotion } from '../motion';
 
 describe('motion tokens', () => {
-  it('exposes the agreed durations and settle easing', () => {
-    expect(PANEL_DURATION_MS).toBe(420);
+  it('exposes the agreed section duration', () => {
     expect(SECTION_DURATION_MS).toBe(300);
-    expect(SETTLE_EASE).toBe('cubic-bezier(0.22, 1, 0.36, 1)');
   });
 });
 

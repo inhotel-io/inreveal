@@ -54,6 +54,9 @@
   // both directions via $effect. The rule's preferred pattern doesn't fit this case.
   let inputValue = $state('');
   const showDropdownPanel = $derived(manager.isOpen && manager.presentation === 'dropdown');
+  // The palette body (`paletteList`) is shared by the modal and the dropdown; the dropdown packs its
+  // groups a little tighter, so the promoted/top-of-list groups take their bottom margin from here.
+  const topGroupMargin = $derived(variant === 'dropdown' ? 'mb-2' : 'mb-4');
   const closedDropdownSearchState = $derived.by(() =>
     variant === 'dropdown' ? getSearchablePageState(page.url) : null,
   );
@@ -594,6 +597,331 @@
   }
 </script>
 
+{#snippet paletteList()}
+  {#if manager.typedSearchIssues.length > 0}
+    <Command.Group class="mb-4" data-typed-search-issues>
+      <Command.GroupHeading
+        class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+      >
+        {$t('cmdk_typed_search_issues_heading')}
+      </Command.GroupHeading>
+      <div class="space-y-1 px-3">
+        {#each manager.typedSearchIssues as issue (`${issue.raw}:${issue.code}`)}
+          <div
+            class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200"
+          >
+            {issue.message}
+          </div>
+        {/each}
+      </div>
+    </Command.Group>
+  {/if}
+  {#if manager.typedSearchChoices.length > 0}
+    <Command.Group class="mb-4" data-typed-search-choices>
+      <Command.GroupHeading
+        class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+      >
+        {$t('cmdk_typed_search_choices_heading')}
+      </Command.GroupHeading>
+      <div class="space-y-1 px-3">
+        {#each manager.typedSearchChoices as choice (`${choice.tokenRaw}:${choice.key}:${choice.id ?? choice.field ?? choice.label}`)}
+          <button
+            type="button"
+            class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-primary/10"
+            onclick={() => manager.selectTypedSearchChoice(choice)}
+          >
+            <span>{choice.label}</span>
+          </button>
+        {/each}
+      </div>
+    </Command.Group>
+  {/if}
+  <LiveTypedFilterSection
+    status={manager.liveTypedSearchStatus}
+    onSelect={(choice) => manager.selectLiveTypedSearchChoice(choice)}
+  />
+  {#if inputValue.trim() === ''}
+    {#if recentEntries.length > 0}
+      <Command.Group>
+        <Command.GroupHeading
+          class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+        >
+          {$t('cmdk_recent_heading')}
+        </Command.GroupHeading>
+        <Command.GroupItems>
+          {#each recentEntries as entry (entry.id)}
+            <Command.Item
+              value={entry.id}
+              onSelect={() => manager.activateRecent(entry)}
+              class={variant === 'modal' ? 'group relative' : 'group'}
+            >
+              <RecentRow {entry} />
+              {#if variant === 'modal'}
+                <!-- Per-row remove affordance. Hidden by default, surfaced on
+                     hover OR when the row is keyboard-selected (data-selected
+                     from bits-ui) so both input modes have a visible target.
+                     stopPropagation is load-bearing: without it, the surrounding
+                     Command.Item treats the click as a selection and triggers
+                     activateRecent, which would navigate before the removal UI
+                     update could render. -->
+                <button
+                  type="button"
+                  aria-label={$t('cmdk_remove_from_recents')}
+                  class="absolute end-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-gray-500 opacity-0 transition-opacity duration-[80ms] ease-out hover:bg-black/10 hover:text-gray-900 group-hover:opacity-100 group-data-[selected]:opacity-100 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    manager.removeRecent(entry.id);
+                  }}
+                >
+                  <Icon icon={mdiClose} size="1em" aria-hidden />
+                </button>
+              {/if}
+            </Command.Item>
+          {/each}
+        </Command.GroupItems>
+      </Command.Group>
+    {:else if quickLinks.length > 0}
+      <Command.Group class={topGroupMargin}>
+        <Command.GroupHeading
+          class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+        >
+          {$t('cmdk_quick_links')}
+        </Command.GroupHeading>
+        <Command.GroupItems>
+          {#each quickLinks as item (item.id)}
+            <Command.Item value={item.id} onSelect={() => manager.activate('nav', item)} class="group">
+              <NavigationRow {item} />
+            </Command.Item>
+          {/each}
+        </Command.GroupItems>
+      </Command.Group>
+    {:else}
+      <div class="p-6 text-center text-[13px] font-normal text-gray-500 dark:text-gray-400">
+        {$t('cmdk_helper')}
+      </div>
+    {/if}
+  {:else if manager.scope === 'all'}
+    {#if manager.topSearchMatch}
+      <Command.Group class={topGroupMargin} data-cmdk-top-result-search data-testid="cmdk-top-result">
+        <Command.GroupHeading
+          class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+        >
+          {$t('cmdk_top_result')}
+        </Command.GroupHeading>
+        <div class="px-1">
+          <button
+            type="button"
+            onclick={() => manager.topSearchMatch && void manager.activateSearch(manager.topSearchMatch.rawQuery)}
+            class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start {manager.activeItemId ===
+            manager.topSearchMatch.id
+              ? 'bg-primary/10'
+              : ''}"
+          >
+            <Icon icon={mdiMagnify} />
+            <span>{$t('cmdk_top_search_label', { values: { query: manager.topSearchMatch.query } })}</span>
+          </button>
+        </div>
+      </Command.Group>
+    {/if}
+    {#if manager.topCommandMatch}
+      <Command.Group class={topGroupMargin} data-cmdk-top-result-commands data-testid="cmdk-top-result">
+        <Command.GroupHeading
+          class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+        >
+          {$t('cmdk_top_result')}
+        </Command.GroupHeading>
+        <Command.GroupItems>
+          <Command.Item
+            value={manager.topCommandMatch.id}
+            onSelect={() => manager.topCommandMatch && manager.activate('command', manager.topCommandMatch)}
+            class="group"
+          >
+            <CommandRow
+              item={manager.topCommandMatch}
+              pending={manager.topCommandMatch.id === manager.pendingConfirmId}
+            />
+          </Command.Item>
+        </Command.GroupItems>
+      </Command.Group>
+    {:else if manager.topNavigationMatch}
+      <Command.Group class={topGroupMargin} data-cmdk-top-result-navigation data-testid="cmdk-top-result">
+        <Command.GroupHeading
+          class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
+        >
+          {$t('cmdk_top_result')}
+        </Command.GroupHeading>
+        <Command.GroupItems>
+          <Command.Item
+            value={manager.topNavigationMatch.id}
+            onSelect={() => manager.topNavigationMatch && manager.activate('nav', manager.topNavigationMatch)}
+            class="group"
+          >
+            <NavigationRow item={manager.topNavigationMatch} />
+          </Command.Item>
+        </Command.GroupItems>
+      </Command.Group>
+    {/if}
+    {#if manager.topCommandMatch}
+      <GlobalSearchCommandsSection
+        status={manager.sections.commands}
+        onActivate={(item) => manager.activate('command', item)}
+      />
+    {/if}
+    <GlobalSearchSection
+      heading={$t('cmdk_photos_heading')}
+      status={manager.sections.photos}
+      idPrefix="photo"
+      onActivate={(item) => manager.activate('photo', item)}
+      onSeeAll={manager.mode === 'smart' ? undefined : () => void manager.activateSearch(manager.query)}
+      seeAllAlways={manager.mode !== 'smart'}
+      seeAllLabel={$t('cmdk_see_all_results')}
+    >
+      {#snippet renderRow(item)}
+        <PhotoRow item={item as never} />
+      {/snippet}
+    </GlobalSearchSection>
+    <!-- Albums + Spaces sit between Photos and People per the v1.1 plan's
+           declared section sequence. Headings use `cmdk_section_albums` /
+           `cmdk_section_spaces` (Task 24). `isPending` wiring reads
+           `manager.pendingActivation` so the row spinner affordance appears for
+           the exact key being activated. -->
+    <GlobalSearchSection
+      heading={$t('cmdk_section_albums')}
+      status={manager.sections.albums}
+      idPrefix="album"
+      onActivate={(item) => void manager.activateAlbum((item as { id: string }).id)}
+    >
+      {#snippet renderRow(item)}
+        <AlbumRow
+          item={item as never}
+          isPending={manager.pendingActivation === `album:${(item as { id: string }).id}`}
+        />
+      {/snippet}
+    </GlobalSearchSection>
+    <GlobalSearchSection
+      heading={$t('cmdk_section_spaces')}
+      status={manager.sections.spaces}
+      idPrefix="space"
+      onActivate={(item) => void manager.activateSpace((item as { id: string }).id)}
+    >
+      {#snippet renderRow(item)}
+        <SpaceRow
+          item={item as never}
+          isPending={manager.pendingActivation === `space:${(item as { id: string }).id}`}
+        />
+      {/snippet}
+    </GlobalSearchSection>
+    <GlobalSearchSection
+      heading={$t('cmdk_people_heading')}
+      status={manager.sections.people}
+      idPrefix="person"
+      onActivate={(item) => manager.activate('person', item)}
+    >
+      {#snippet renderRow(item)}
+        <PersonRow item={item as never} />
+      {/snippet}
+    </GlobalSearchSection>
+    <GlobalSearchSection
+      heading={$t('cmdk_places_heading')}
+      status={manager.sections.places}
+      idPrefix="place"
+      onActivate={(item) => manager.activate('place', item)}
+    >
+      {#snippet renderRow(item)}
+        <PlaceRow item={item as never} />
+      {/snippet}
+    </GlobalSearchSection>
+    <GlobalSearchSection
+      heading={$t('cmdk_tags_heading')}
+      status={manager.sections.tags}
+      idPrefix="tag"
+      onActivate={(item) => manager.activate('tag', item)}
+    >
+      {#snippet renderRow(item)}
+        <TagRow item={item as never} />
+      {/snippet}
+    </GlobalSearchSection>
+    {#if !manager.topCommandMatch}
+      <GlobalSearchCommandsSection
+        status={manager.sections.commands}
+        onActivate={(item) => manager.activate('command', item)}
+      />
+    {/if}
+    <GlobalSearchNavigationSections
+      status={dedupedNavigationStatus}
+      onActivate={(item) => manager.activate('nav', item)}
+    />
+  {:else if manager.scope === 'people'}
+    <!-- Scope `@` — only the People section. Other sections force-idled in
+         runBatch so they wouldn't render anyway, but gating the render
+         branch keeps the DOM free of other sections' headings and gives
+         a11y a single contiguous result set. -->
+    <GlobalSearchSection
+      heading={$t('cmdk_people_heading')}
+      status={manager.sections.people}
+      idPrefix="person"
+      onActivate={(item) => manager.activate('person', item)}
+    >
+      {#snippet renderRow(item)}
+        <PersonRow item={item as never} />
+      {/snippet}
+    </GlobalSearchSection>
+  {:else if manager.scope === 'tags'}
+    <!-- Scope `#` — only the Tags section. -->
+    <GlobalSearchSection
+      heading={$t('cmdk_tags_heading')}
+      status={manager.sections.tags}
+      idPrefix="tag"
+      onActivate={(item) => manager.activate('tag', item)}
+    >
+      {#snippet renderRow(item)}
+        <TagRow item={item as never} />
+      {/snippet}
+    </GlobalSearchSection>
+  {:else if manager.scope === 'collections'}
+    <!-- Scope `/` — Albums + Spaces. Matches the `ENTITY_KEYS_BY_SCOPE.collections`
+         tuple order so the cursor-reconcile order stays aligned with DOM order. -->
+    <GlobalSearchSection
+      heading={$t('cmdk_section_albums')}
+      status={manager.sections.albums}
+      idPrefix="album"
+      onActivate={(item) => void manager.activateAlbum((item as { id: string }).id)}
+    >
+      {#snippet renderRow(item)}
+        <AlbumRow
+          item={item as never}
+          isPending={manager.pendingActivation === `album:${(item as { id: string }).id}`}
+        />
+      {/snippet}
+    </GlobalSearchSection>
+    <GlobalSearchSection
+      heading={$t('cmdk_section_spaces')}
+      status={manager.sections.spaces}
+      idPrefix="space"
+      onActivate={(item) => void manager.activateSpace((item as { id: string }).id)}
+    >
+      {#snippet renderRow(item)}
+        <SpaceRow
+          item={item as never}
+          isPending={manager.pendingActivation === `space:${(item as { id: string }).id}`}
+        />
+      {/snippet}
+    </GlobalSearchSection>
+  {:else if manager.scope === 'nav'}
+    <!-- Scope `>` — only NavigationSections. The navigation provider runs
+         synchronously in setQuery (no debounce); under `>` it surfaces the
+         whole catalog for bare `>` or filtered matches for `>foo`. -->
+    <GlobalSearchCommandsSection
+      status={manager.sections.commands}
+      onActivate={(item) => manager.activate('command', item)}
+    />
+    <GlobalSearchNavigationSections
+      status={manager.sections.navigation}
+      onActivate={(item) => manager.activate('nav', item)}
+    />
+  {/if}
+{/snippet}
+
 {#if variant === 'dropdown'}
   <div
     class="relative min-w-0 flex-1"
@@ -688,290 +1016,7 @@
               ? 'pt-1'
               : 'pt-2'}"
           >
-            {#if manager.typedSearchIssues.length > 0}
-              <Command.Group class="mb-4" data-typed-search-issues>
-                <Command.GroupHeading
-                  class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                >
-                  {$t('cmdk_typed_search_issues_heading')}
-                </Command.GroupHeading>
-                <div class="space-y-1 px-3">
-                  {#each manager.typedSearchIssues as issue (`${issue.raw}:${issue.code}`)}
-                    <div
-                      class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200"
-                    >
-                      {issue.message}
-                    </div>
-                  {/each}
-                </div>
-              </Command.Group>
-            {/if}
-            {#if manager.typedSearchChoices.length > 0}
-              <Command.Group class="mb-4" data-typed-search-choices>
-                <Command.GroupHeading
-                  class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                >
-                  {$t('cmdk_typed_search_choices_heading')}
-                </Command.GroupHeading>
-                <div class="space-y-1 px-3">
-                  {#each manager.typedSearchChoices as choice (`${choice.tokenRaw}:${choice.key}:${choice.id ?? choice.field ?? choice.label}`)}
-                    <button
-                      type="button"
-                      class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-primary/10"
-                      onclick={() => manager.selectTypedSearchChoice(choice)}
-                    >
-                      <span>{choice.label}</span>
-                    </button>
-                  {/each}
-                </div>
-              </Command.Group>
-            {/if}
-            <LiveTypedFilterSection
-              status={manager.liveTypedSearchStatus}
-              onSelect={(choice) => manager.selectLiveTypedSearchChoice(choice)}
-            />
-            {#if inputValue.trim() === ''}
-              {#if recentEntries.length > 0}
-                <Command.Group>
-                  <Command.GroupHeading
-                    class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                  >
-                    {$t('cmdk_recent_heading')}
-                  </Command.GroupHeading>
-                  <Command.GroupItems>
-                    {#each recentEntries as entry (entry.id)}
-                      <Command.Item value={entry.id} onSelect={() => manager.activateRecent(entry)} class="group">
-                        <RecentRow {entry} />
-                      </Command.Item>
-                    {/each}
-                  </Command.GroupItems>
-                </Command.Group>
-              {:else if quickLinks.length > 0}
-                <Command.Group class="mb-2">
-                  <Command.GroupHeading
-                    class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                  >
-                    {$t('cmdk_quick_links')}
-                  </Command.GroupHeading>
-                  <Command.GroupItems>
-                    {#each quickLinks as item (item.id)}
-                      <Command.Item value={item.id} onSelect={() => manager.activate('nav', item)} class="group">
-                        <NavigationRow {item} />
-                      </Command.Item>
-                    {/each}
-                  </Command.GroupItems>
-                </Command.Group>
-              {:else}
-                <div class="p-6 text-center text-[13px] font-normal text-gray-500 dark:text-gray-400">
-                  {$t('cmdk_helper')}
-                </div>
-              {/if}
-            {:else if manager.scope === 'all'}
-              {#if manager.topSearchMatch}
-                <Command.Group class="mb-2" data-cmdk-top-result-search data-testid="cmdk-top-result">
-                  <Command.GroupHeading
-                    class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                  >
-                    {$t('cmdk_top_result')}
-                  </Command.GroupHeading>
-                  <div class="px-1">
-                    <button
-                      type="button"
-                      onclick={() =>
-                        manager.topSearchMatch && void manager.activateSearch(manager.topSearchMatch.rawQuery)}
-                      class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start {manager.activeItemId ===
-                      manager.topSearchMatch.id
-                        ? 'bg-primary/10'
-                        : ''}"
-                    >
-                      <Icon icon={mdiMagnify} />
-                      <span>{$t('cmdk_top_search_label', { values: { query: manager.topSearchMatch.query } })}</span>
-                    </button>
-                  </div>
-                </Command.Group>
-              {/if}
-              {#if manager.topCommandMatch}
-                <Command.Group class="mb-2" data-cmdk-top-result-commands data-testid="cmdk-top-result">
-                  <Command.GroupHeading
-                    class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                  >
-                    {$t('cmdk_top_result')}
-                  </Command.GroupHeading>
-                  <Command.GroupItems>
-                    <Command.Item
-                      value={manager.topCommandMatch.id}
-                      onSelect={() => manager.topCommandMatch && manager.activate('command', manager.topCommandMatch)}
-                      class="group"
-                    >
-                      <CommandRow
-                        item={manager.topCommandMatch}
-                        pending={manager.topCommandMatch.id === manager.pendingConfirmId}
-                      />
-                    </Command.Item>
-                  </Command.GroupItems>
-                </Command.Group>
-              {:else if manager.topNavigationMatch}
-                <Command.Group class="mb-2" data-cmdk-top-result-navigation data-testid="cmdk-top-result">
-                  <Command.GroupHeading
-                    class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                  >
-                    {$t('cmdk_top_result')}
-                  </Command.GroupHeading>
-                  <Command.GroupItems>
-                    <Command.Item
-                      value={manager.topNavigationMatch.id}
-                      onSelect={() => manager.topNavigationMatch && manager.activate('nav', manager.topNavigationMatch)}
-                      class="group"
-                    >
-                      <NavigationRow item={manager.topNavigationMatch} />
-                    </Command.Item>
-                  </Command.GroupItems>
-                </Command.Group>
-              {/if}
-              {#if manager.topCommandMatch}
-                <GlobalSearchCommandsSection
-                  status={manager.sections.commands}
-                  onActivate={(item) => manager.activate('command', item)}
-                />
-              {/if}
-              <GlobalSearchSection
-                heading={$t('cmdk_photos_heading')}
-                status={manager.sections.photos}
-                idPrefix="photo"
-                onActivate={(item) => manager.activate('photo', item)}
-                onSeeAll={manager.mode === 'smart' ? undefined : () => void manager.activateSearch(manager.query)}
-                seeAllAlways={manager.mode !== 'smart'}
-                seeAllLabel={$t('cmdk_see_all_results')}
-              >
-                {#snippet renderRow(item)}
-                  <PhotoRow item={item as never} />
-                {/snippet}
-              </GlobalSearchSection>
-              <GlobalSearchSection
-                heading={$t('cmdk_section_albums')}
-                status={manager.sections.albums}
-                idPrefix="album"
-                onActivate={(item) => void manager.activateAlbum((item as { id: string }).id)}
-              >
-                {#snippet renderRow(item)}
-                  <AlbumRow
-                    item={item as never}
-                    isPending={manager.pendingActivation === `album:${(item as { id: string }).id}`}
-                  />
-                {/snippet}
-              </GlobalSearchSection>
-              <GlobalSearchSection
-                heading={$t('cmdk_section_spaces')}
-                status={manager.sections.spaces}
-                idPrefix="space"
-                onActivate={(item) => void manager.activateSpace((item as { id: string }).id)}
-              >
-                {#snippet renderRow(item)}
-                  <SpaceRow
-                    item={item as never}
-                    isPending={manager.pendingActivation === `space:${(item as { id: string }).id}`}
-                  />
-                {/snippet}
-              </GlobalSearchSection>
-              <GlobalSearchSection
-                heading={$t('cmdk_people_heading')}
-                status={manager.sections.people}
-                idPrefix="person"
-                onActivate={(item) => manager.activate('person', item)}
-              >
-                {#snippet renderRow(item)}
-                  <PersonRow item={item as never} />
-                {/snippet}
-              </GlobalSearchSection>
-              <GlobalSearchSection
-                heading={$t('cmdk_places_heading')}
-                status={manager.sections.places}
-                idPrefix="place"
-                onActivate={(item) => manager.activate('place', item)}
-              >
-                {#snippet renderRow(item)}
-                  <PlaceRow item={item as never} />
-                {/snippet}
-              </GlobalSearchSection>
-              <GlobalSearchSection
-                heading={$t('cmdk_tags_heading')}
-                status={manager.sections.tags}
-                idPrefix="tag"
-                onActivate={(item) => manager.activate('tag', item)}
-              >
-                {#snippet renderRow(item)}
-                  <TagRow item={item as never} />
-                {/snippet}
-              </GlobalSearchSection>
-              {#if !manager.topCommandMatch}
-                <GlobalSearchCommandsSection
-                  status={manager.sections.commands}
-                  onActivate={(item) => manager.activate('command', item)}
-                />
-              {/if}
-              <GlobalSearchNavigationSections
-                status={dedupedNavigationStatus}
-                onActivate={(item) => manager.activate('nav', item)}
-              />
-            {:else if manager.scope === 'people'}
-              <GlobalSearchSection
-                heading={$t('cmdk_people_heading')}
-                status={manager.sections.people}
-                idPrefix="person"
-                onActivate={(item) => manager.activate('person', item)}
-              >
-                {#snippet renderRow(item)}
-                  <PersonRow item={item as never} />
-                {/snippet}
-              </GlobalSearchSection>
-            {:else if manager.scope === 'tags'}
-              <GlobalSearchSection
-                heading={$t('cmdk_tags_heading')}
-                status={manager.sections.tags}
-                idPrefix="tag"
-                onActivate={(item) => manager.activate('tag', item)}
-              >
-                {#snippet renderRow(item)}
-                  <TagRow item={item as never} />
-                {/snippet}
-              </GlobalSearchSection>
-            {:else if manager.scope === 'collections'}
-              <GlobalSearchSection
-                heading={$t('cmdk_section_albums')}
-                status={manager.sections.albums}
-                idPrefix="album"
-                onActivate={(item) => void manager.activateAlbum((item as { id: string }).id)}
-              >
-                {#snippet renderRow(item)}
-                  <AlbumRow
-                    item={item as never}
-                    isPending={manager.pendingActivation === `album:${(item as { id: string }).id}`}
-                  />
-                {/snippet}
-              </GlobalSearchSection>
-              <GlobalSearchSection
-                heading={$t('cmdk_section_spaces')}
-                status={manager.sections.spaces}
-                idPrefix="space"
-                onActivate={(item) => void manager.activateSpace((item as { id: string }).id)}
-              >
-                {#snippet renderRow(item)}
-                  <SpaceRow
-                    item={item as never}
-                    isPending={manager.pendingActivation === `space:${(item as { id: string }).id}`}
-                  />
-                {/snippet}
-              </GlobalSearchSection>
-            {:else if manager.scope === 'nav'}
-              <GlobalSearchCommandsSection
-                status={manager.sections.commands}
-                onActivate={(item) => manager.activate('command', item)}
-              />
-              <GlobalSearchNavigationSections
-                status={manager.sections.navigation}
-                onActivate={(item) => manager.activate('nav', item)}
-              />
-            {/if}
+            {@render paletteList()}
           </Command.List>
           <div aria-live="polite" aria-atomic="true" class="sr-only">{manager.announcementText}</div>
         </div>
@@ -1075,328 +1120,7 @@
             <Command.List
               class="flex-1 overflow-y-auto pb-2 {manager.typedSearchDisplayTokens.length > 0 ? 'pt-1' : 'pt-2'}"
             >
-              {#if manager.typedSearchIssues.length > 0}
-                <Command.Group class="mb-4" data-typed-search-issues>
-                  <Command.GroupHeading
-                    class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                  >
-                    {$t('cmdk_typed_search_issues_heading')}
-                  </Command.GroupHeading>
-                  <div class="space-y-1 px-3">
-                    {#each manager.typedSearchIssues as issue (`${issue.raw}:${issue.code}`)}
-                      <div
-                        class="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200"
-                      >
-                        {issue.message}
-                      </div>
-                    {/each}
-                  </div>
-                </Command.Group>
-              {/if}
-              {#if manager.typedSearchChoices.length > 0}
-                <Command.Group class="mb-4" data-typed-search-choices>
-                  <Command.GroupHeading
-                    class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                  >
-                    {$t('cmdk_typed_search_choices_heading')}
-                  </Command.GroupHeading>
-                  <div class="space-y-1 px-3">
-                    {#each manager.typedSearchChoices as choice (`${choice.tokenRaw}:${choice.key}:${choice.id ?? choice.field ?? choice.label}`)}
-                      <button
-                        type="button"
-                        class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-primary/10"
-                        onclick={() => manager.selectTypedSearchChoice(choice)}
-                      >
-                        <span>{choice.label}</span>
-                      </button>
-                    {/each}
-                  </div>
-                </Command.Group>
-              {/if}
-              <LiveTypedFilterSection
-                status={manager.liveTypedSearchStatus}
-                onSelect={(choice) => manager.selectLiveTypedSearchChoice(choice)}
-              />
-              {#if inputValue.trim() === ''}
-                {#if recentEntries.length > 0}
-                  <Command.Group>
-                    <Command.GroupHeading
-                      class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                    >
-                      {$t('cmdk_recent_heading')}
-                    </Command.GroupHeading>
-                    <Command.GroupItems>
-                      {#each recentEntries as entry (entry.id)}
-                        <Command.Item
-                          value={entry.id}
-                          onSelect={() => manager.activateRecent(entry)}
-                          class="group relative"
-                        >
-                          <RecentRow {entry} />
-                          <!-- Per-row remove affordance. Hidden by default, surfaced on
-                             hover OR when the row is keyboard-selected (data-selected
-                             from bits-ui) so both input modes have a visible target.
-                             stopPropagation is load-bearing: without it, the surrounding
-                             Command.Item treats the click as a selection and triggers
-                             activateRecent, which would navigate before the removal UI
-                             update could render. -->
-                          <button
-                            type="button"
-                            aria-label={$t('cmdk_remove_from_recents')}
-                            class="absolute end-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-gray-500 opacity-0 transition-opacity duration-[80ms] ease-out hover:bg-black/10 hover:text-gray-900 group-hover:opacity-100 group-data-[selected]:opacity-100 dark:text-gray-400 dark:hover:bg-white/10 dark:hover:text-gray-100"
-                            onclick={(e) => {
-                              e.stopPropagation();
-                              manager.removeRecent(entry.id);
-                            }}
-                          >
-                            <Icon icon={mdiClose} size="1em" aria-hidden />
-                          </button>
-                        </Command.Item>
-                      {/each}
-                    </Command.GroupItems>
-                  </Command.Group>
-                {:else if quickLinks.length > 0}
-                  <Command.Group class="mb-4">
-                    <Command.GroupHeading
-                      class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                    >
-                      {$t('cmdk_quick_links')}
-                    </Command.GroupHeading>
-                    <Command.GroupItems>
-                      {#each quickLinks as item (item.id)}
-                        <Command.Item value={item.id} onSelect={() => manager.activate('nav', item)} class="group">
-                          <NavigationRow {item} />
-                        </Command.Item>
-                      {/each}
-                    </Command.GroupItems>
-                  </Command.Group>
-                {:else}
-                  <div class="p-6 text-center text-[13px] font-normal text-gray-500 dark:text-gray-400">
-                    {$t('cmdk_helper')}
-                  </div>
-                {/if}
-              {:else if manager.scope === 'all'}
-                {#if manager.topSearchMatch}
-                  <Command.Group class="mb-4" data-cmdk-top-result-search data-testid="cmdk-top-result">
-                    <Command.GroupHeading
-                      class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                    >
-                      {$t('cmdk_top_result')}
-                    </Command.GroupHeading>
-                    <div class="px-1">
-                      <button
-                        type="button"
-                        onclick={() =>
-                          manager.topSearchMatch && void manager.activateSearch(manager.topSearchMatch.rawQuery)}
-                        class="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-start {manager.activeItemId ===
-                        manager.topSearchMatch.id
-                          ? 'bg-primary/10'
-                          : ''}"
-                      >
-                        <Icon icon={mdiMagnify} />
-                        <span>{$t('cmdk_top_search_label', { values: { query: manager.topSearchMatch.query } })}</span>
-                      </button>
-                    </div>
-                  </Command.Group>
-                {/if}
-                {#if manager.topCommandMatch}
-                  <Command.Group class="mb-4" data-cmdk-top-result-commands data-testid="cmdk-top-result">
-                    <Command.GroupHeading
-                      class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                    >
-                      {$t('cmdk_top_result')}
-                    </Command.GroupHeading>
-                    <Command.GroupItems>
-                      <Command.Item
-                        value={manager.topCommandMatch.id}
-                        onSelect={() => manager.topCommandMatch && manager.activate('command', manager.topCommandMatch)}
-                        class="group"
-                      >
-                        <CommandRow
-                          item={manager.topCommandMatch}
-                          pending={manager.topCommandMatch.id === manager.pendingConfirmId}
-                        />
-                      </Command.Item>
-                    </Command.GroupItems>
-                  </Command.Group>
-                {:else if manager.topNavigationMatch}
-                  <Command.Group class="mb-4" data-cmdk-top-result-navigation data-testid="cmdk-top-result">
-                    <Command.GroupHeading
-                      class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                    >
-                      {$t('cmdk_top_result')}
-                    </Command.GroupHeading>
-                    <Command.GroupItems>
-                      <Command.Item
-                        value={manager.topNavigationMatch.id}
-                        onSelect={() =>
-                          manager.topNavigationMatch && manager.activate('nav', manager.topNavigationMatch)}
-                        class="group"
-                      >
-                        <NavigationRow item={manager.topNavigationMatch} />
-                      </Command.Item>
-                    </Command.GroupItems>
-                  </Command.Group>
-                {/if}
-                {#if manager.topCommandMatch}
-                  <GlobalSearchCommandsSection
-                    status={manager.sections.commands}
-                    onActivate={(item) => manager.activate('command', item)}
-                  />
-                {/if}
-                <GlobalSearchSection
-                  heading={$t('cmdk_photos_heading')}
-                  status={manager.sections.photos}
-                  idPrefix="photo"
-                  onActivate={(item) => manager.activate('photo', item)}
-                  onSeeAll={manager.mode === 'smart' ? undefined : () => void manager.activateSearch(manager.query)}
-                  seeAllAlways={manager.mode !== 'smart'}
-                  seeAllLabel={$t('cmdk_see_all_results')}
-                >
-                  {#snippet renderRow(item)}
-                    <PhotoRow item={item as never} />
-                  {/snippet}
-                </GlobalSearchSection>
-                <!-- Albums + Spaces sit between Photos and People per the v1.1 plan's
-                     declared section sequence. Headings use `cmdk_section_albums` /
-                     `cmdk_section_spaces` (Task 24). `isPending` wiring reads
-                     `manager.pendingActivation` so the row spinner affordance appears for
-                     the exact key being activated. -->
-                <GlobalSearchSection
-                  heading={$t('cmdk_section_albums')}
-                  status={manager.sections.albums}
-                  idPrefix="album"
-                  onActivate={(item) => void manager.activateAlbum((item as { id: string }).id)}
-                >
-                  {#snippet renderRow(item)}
-                    <AlbumRow
-                      item={item as never}
-                      isPending={manager.pendingActivation === `album:${(item as { id: string }).id}`}
-                    />
-                  {/snippet}
-                </GlobalSearchSection>
-                <GlobalSearchSection
-                  heading={$t('cmdk_section_spaces')}
-                  status={manager.sections.spaces}
-                  idPrefix="space"
-                  onActivate={(item) => void manager.activateSpace((item as { id: string }).id)}
-                >
-                  {#snippet renderRow(item)}
-                    <SpaceRow
-                      item={item as never}
-                      isPending={manager.pendingActivation === `space:${(item as { id: string }).id}`}
-                    />
-                  {/snippet}
-                </GlobalSearchSection>
-                <GlobalSearchSection
-                  heading={$t('cmdk_people_heading')}
-                  status={manager.sections.people}
-                  idPrefix="person"
-                  onActivate={(item) => manager.activate('person', item)}
-                >
-                  {#snippet renderRow(item)}
-                    <PersonRow item={item as never} />
-                  {/snippet}
-                </GlobalSearchSection>
-                <GlobalSearchSection
-                  heading={$t('cmdk_places_heading')}
-                  status={manager.sections.places}
-                  idPrefix="place"
-                  onActivate={(item) => manager.activate('place', item)}
-                >
-                  {#snippet renderRow(item)}
-                    <PlaceRow item={item as never} />
-                  {/snippet}
-                </GlobalSearchSection>
-                <GlobalSearchSection
-                  heading={$t('cmdk_tags_heading')}
-                  status={manager.sections.tags}
-                  idPrefix="tag"
-                  onActivate={(item) => manager.activate('tag', item)}
-                >
-                  {#snippet renderRow(item)}
-                    <TagRow item={item as never} />
-                  {/snippet}
-                </GlobalSearchSection>
-                {#if !manager.topCommandMatch}
-                  <GlobalSearchCommandsSection
-                    status={manager.sections.commands}
-                    onActivate={(item) => manager.activate('command', item)}
-                  />
-                {/if}
-                <GlobalSearchNavigationSections
-                  status={dedupedNavigationStatus}
-                  onActivate={(item) => manager.activate('nav', item)}
-                />
-              {:else if manager.scope === 'people'}
-                <!-- Scope `@` — only the People section. Other sections force-idled in
-                   runBatch so they wouldn't render anyway, but gating the render
-                   branch keeps the DOM free of other sections' headings and gives
-                   a11y a single contiguous result set. -->
-                <GlobalSearchSection
-                  heading={$t('cmdk_people_heading')}
-                  status={manager.sections.people}
-                  idPrefix="person"
-                  onActivate={(item) => manager.activate('person', item)}
-                >
-                  {#snippet renderRow(item)}
-                    <PersonRow item={item as never} />
-                  {/snippet}
-                </GlobalSearchSection>
-              {:else if manager.scope === 'tags'}
-                <!-- Scope `#` — only the Tags section. -->
-                <GlobalSearchSection
-                  heading={$t('cmdk_tags_heading')}
-                  status={manager.sections.tags}
-                  idPrefix="tag"
-                  onActivate={(item) => manager.activate('tag', item)}
-                >
-                  {#snippet renderRow(item)}
-                    <TagRow item={item as never} />
-                  {/snippet}
-                </GlobalSearchSection>
-              {:else if manager.scope === 'collections'}
-                <!-- Scope `/` — Albums + Spaces. Matches the `ENTITY_KEYS_BY_SCOPE.collections`
-                   tuple order so the cursor-reconcile order stays aligned with DOM order. -->
-                <GlobalSearchSection
-                  heading={$t('cmdk_section_albums')}
-                  status={manager.sections.albums}
-                  idPrefix="album"
-                  onActivate={(item) => void manager.activateAlbum((item as { id: string }).id)}
-                >
-                  {#snippet renderRow(item)}
-                    <AlbumRow
-                      item={item as never}
-                      isPending={manager.pendingActivation === `album:${(item as { id: string }).id}`}
-                    />
-                  {/snippet}
-                </GlobalSearchSection>
-                <GlobalSearchSection
-                  heading={$t('cmdk_section_spaces')}
-                  status={manager.sections.spaces}
-                  idPrefix="space"
-                  onActivate={(item) => void manager.activateSpace((item as { id: string }).id)}
-                >
-                  {#snippet renderRow(item)}
-                    <SpaceRow
-                      item={item as never}
-                      isPending={manager.pendingActivation === `space:${(item as { id: string }).id}`}
-                    />
-                  {/snippet}
-                </GlobalSearchSection>
-              {:else if manager.scope === 'nav'}
-                <!-- Scope `>` — only NavigationSections. The navigation provider runs
-                   synchronously in setQuery (no debounce); under `>` it surfaces the
-                   whole catalog for bare `>` or filtered matches for `>foo`. -->
-                <GlobalSearchCommandsSection
-                  status={manager.sections.commands}
-                  onActivate={(item) => manager.activate('command', item)}
-                />
-                <GlobalSearchNavigationSections
-                  status={manager.sections.navigation}
-                  onActivate={(item) => manager.activate('nav', item)}
-                />
-              {/if}
+              {@render paletteList()}
             </Command.List>
           </div>
           {#if showPreview}

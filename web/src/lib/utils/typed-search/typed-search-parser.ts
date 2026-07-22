@@ -146,22 +146,8 @@ type TypedSearchTokenIdentityParts = {
   raw: string;
 };
 
-export function getTypedSearchTokenIdentity(token: TypedSearchTokenIdentityParts): TypedSearchTokenIdentity;
-export function getTypedSearchTokenIdentity(
-  key: TypedSearchFilterKey,
-  start: number,
-  end: number,
-  raw: string,
-): TypedSearchTokenIdentity;
-export function getTypedSearchTokenIdentity(
-  ...args: [TypedSearchTokenIdentityParts] | [TypedSearchFilterKey, number, number, string]
-): TypedSearchTokenIdentity {
-  if (args.length === 1) {
-    const [token] = args;
-    return `${token.key}:${token.start}:${token.end}:${token.raw}`;
-  }
-  const [key, start, end, raw] = args;
-  return `${key}:${start}:${end}:${raw}`;
+export function getTypedSearchTokenIdentity(token: TypedSearchTokenIdentityParts): TypedSearchTokenIdentity {
+  return `${token.key}:${token.start}:${token.end}:${token.raw}`;
 }
 
 export function parseTypedSearch(raw: string, options: TypedSearchParseOptions = {}): TypedSearchParseResult {

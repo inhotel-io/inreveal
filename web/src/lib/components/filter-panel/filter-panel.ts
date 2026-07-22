@@ -49,16 +49,6 @@ export interface PersonOption {
   thumbnailUrl?: string;
 }
 
-export interface LocationOption {
-  value: string;
-  type: 'country' | 'city';
-}
-
-export interface CameraOption {
-  value: string;
-  type: 'make' | 'model';
-}
-
 export interface TagOption {
   id: string;
   name: string;
@@ -78,15 +68,12 @@ export interface FilterSuggestionsResponse {
 
 export interface FilterPanelConfig {
   sections: FilterSection[];
+  /** Single source for every section's options — one call per filter change, narrowed by the rest. */
   suggestionsProvider?: (filters: FilterState) => Promise<FilterSuggestionsResponse>;
+  /** Cascading lookups: only fetched once their parent (country / make) has been picked. */
   providers?: {
-    people?: (context?: FilterContext) => Promise<PersonOption[]>;
-    allPeople?: () => Promise<PersonOption[]>;
-    locations?: (context?: FilterContext) => Promise<LocationOption[]>;
     cities?: (country: string, context?: FilterContext) => Promise<string[]>;
-    cameras?: (context?: FilterContext) => Promise<CameraOption[]>;
     cameraModels?: (make: string, context?: FilterContext) => Promise<string[]>;
-    tags?: (context?: FilterContext) => Promise<TagOption[]>;
   };
 }
 

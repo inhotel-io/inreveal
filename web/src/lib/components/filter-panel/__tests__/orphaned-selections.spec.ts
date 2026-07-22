@@ -1,8 +1,21 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import type { FilterPanelConfig } from '../filter-panel';
+import type { FilterPanelConfig, FilterSuggestionsResponse } from '../filter-panel';
 import { createFilterState } from '../filter-panel';
 import FilterPanel from '../filter-panel.svelte';
 import PeopleFilter from '../people-filter.svelte';
+
+function suggestions(overrides: Partial<FilterSuggestionsResponse> = {}): FilterSuggestionsResponse {
+  return {
+    countries: [],
+    cameraMakes: [],
+    tags: [],
+    people: [],
+    ratings: [],
+    mediaTypes: [],
+    hasUnnamedPeople: false,
+    ...overrides,
+  };
+}
 
 describe('Orphaned selections', () => {
   beforeEach(() => {
@@ -21,12 +34,14 @@ describe('Orphaned selections', () => {
 
     const config: FilterPanelConfig = {
       sections: ['people'],
-      providers: {
-        people: vi.fn().mockResolvedValue([
-          { id: 'p1', name: 'Alice' },
-          { id: 'p2', name: 'Bob' },
-        ]),
-      },
+      suggestionsProvider: vi.fn().mockResolvedValue(
+        suggestions({
+          people: [
+            { id: 'p1', name: 'Alice' },
+            { id: 'p2', name: 'Bob' },
+          ],
+        }),
+      ),
     };
 
     render(FilterPanel, {
@@ -79,12 +94,14 @@ describe('Orphaned selections', () => {
 
     const config: FilterPanelConfig = {
       sections: ['people'],
-      providers: {
-        people: vi.fn().mockResolvedValue([
-          { id: 'p1', name: 'Alice' },
-          { id: 'p2', name: 'Bob' },
-        ]),
-      },
+      suggestionsProvider: vi.fn().mockResolvedValue(
+        suggestions({
+          people: [
+            { id: 'p1', name: 'Alice' },
+            { id: 'p2', name: 'Bob' },
+          ],
+        }),
+      ),
     };
 
     render(FilterPanel, {
@@ -112,12 +129,7 @@ describe('Orphaned selections', () => {
 
     const config: FilterPanelConfig = {
       sections: ['location'],
-      providers: {
-        locations: vi.fn().mockResolvedValue([
-          { value: 'Germany', type: 'country' as const },
-          { value: 'France', type: 'country' as const },
-        ]),
-      },
+      suggestionsProvider: vi.fn().mockResolvedValue(suggestions({ countries: ['Germany', 'France'] })),
     };
 
     render(FilterPanel, {
@@ -143,12 +155,7 @@ describe('Orphaned selections', () => {
 
     const config: FilterPanelConfig = {
       sections: ['camera'],
-      providers: {
-        cameras: vi.fn().mockResolvedValue([
-          { value: 'Canon', type: 'make' as const },
-          { value: 'Sony', type: 'make' as const },
-        ]),
-      },
+      suggestionsProvider: vi.fn().mockResolvedValue(suggestions({ cameraMakes: ['Canon', 'Sony'] })),
     };
 
     render(FilterPanel, {
@@ -182,9 +189,7 @@ describe('Empty section collapse', () => {
   it('should show (0) text and collapse content when section has no items', async () => {
     const config: FilterPanelConfig = {
       sections: ['timeline', 'people'],
-      providers: {
-        people: vi.fn().mockResolvedValue([]),
-      },
+      suggestionsProvider: vi.fn().mockResolvedValue(suggestions()),
     };
 
     // Empty section collapse only activates when a temporal filter is applied
@@ -209,17 +214,15 @@ describe('Empty section collapse', () => {
 
   it('should show section content when items exist after re-fetch', async () => {
     // Start empty, then temporal re-fetch returns data
-    const peopleFn = vi
+    const suggestionsProvider = vi
       .fn()
-      .mockResolvedValueOnce([]) // initial load (no temporal)
-      .mockResolvedValueOnce([]) // first re-fetch (temporal applied, still empty)
-      .mockResolvedValueOnce([{ id: 'p1', name: 'Alice' }]); // second re-fetch (temporal cleared, has data)
+      .mockResolvedValueOnce(suggestions()) // initial load (no temporal)
+      .mockResolvedValueOnce(suggestions()) // first re-fetch (temporal applied, still empty)
+      .mockResolvedValueOnce(suggestions({ people: [{ id: 'p1', name: 'Alice' }] })); // temporal cleared, has data
 
     const config: FilterPanelConfig = {
       sections: ['timeline', 'people'],
-      providers: {
-        people: peopleFn,
-      },
+      suggestionsProvider,
     };
 
     // Start with temporal filter so count is passed
@@ -245,16 +248,14 @@ describe('Empty section collapse', () => {
   });
 
   it('should collapse section when it goes from populated to empty', async () => {
-    const peopleFn = vi
+    const suggestionsProvider = vi
       .fn()
-      .mockResolvedValueOnce([{ id: 'p1', name: 'Alice' }]) // initially populated
-      .mockResolvedValueOnce([]); // after re-fetch, empty
+      .mockResolvedValueOnce(suggestions({ people: [{ id: 'p1', name: 'Alice' }] })) // initially populated
+      .mockResolvedValueOnce(suggestions()); // after re-fetch, empty
 
     const config: FilterPanelConfig = {
       sections: ['timeline', 'people'],
-      providers: {
-        people: peopleFn,
-      },
+      suggestionsProvider,
     };
 
     render(FilterPanel, {
@@ -303,8 +304,8 @@ describe('Cascade child auto-clear', () => {
 
     const config: FilterPanelConfig = {
       sections: ['camera'],
+      suggestionsProvider: vi.fn().mockResolvedValue(suggestions({ cameraMakes: ['Fujifilm'] })),
       providers: {
-        cameras: vi.fn().mockResolvedValue([{ value: 'Fujifilm', type: 'make' as const }]),
         cameraModels: modelsFn,
       },
     };
@@ -341,8 +342,8 @@ describe('Cascade child auto-clear', () => {
 
     const config: FilterPanelConfig = {
       sections: ['location'],
+      suggestionsProvider: vi.fn().mockResolvedValue(suggestions({ countries: ['Germany'] })),
       providers: {
-        locations: vi.fn().mockResolvedValue([{ value: 'Germany', type: 'country' as const }]),
         cities: citiesFn,
       },
     };

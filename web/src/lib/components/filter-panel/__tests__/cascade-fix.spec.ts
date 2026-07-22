@@ -1,5 +1,31 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import type { FilterPanelConfig, FilterSuggestionsResponse } from '../filter-panel';
 import FilterPanel from '../filter-panel.svelte';
+
+function suggestions(overrides: Partial<FilterSuggestionsResponse> = {}): FilterSuggestionsResponse {
+  return {
+    countries: [],
+    cameraMakes: [],
+    tags: [],
+    people: [],
+    ratings: [],
+    mediaTypes: [],
+    hasUnnamedPeople: false,
+    ...overrides,
+  };
+}
+
+function createConfig(
+  sections: FilterPanelConfig['sections'],
+  response: FilterSuggestionsResponse,
+  providers?: FilterPanelConfig['providers'],
+): FilterPanelConfig {
+  return {
+    sections,
+    suggestionsProvider: vi.fn().mockResolvedValue(response),
+    providers,
+  };
+}
 
 describe('Cascade callbacks pass parent value', () => {
   beforeEach(() => {
@@ -11,17 +37,7 @@ describe('Cascade callbacks pass parent value', () => {
 
     render(FilterPanel, {
       props: {
-        config: {
-          sections: ['location'],
-          providers: {
-            locations: () =>
-              Promise.resolve([
-                { value: 'Germany', type: 'country' as const },
-                { value: 'France', type: 'country' as const },
-              ]),
-            cities: citiesFn,
-          },
-        },
+        config: createConfig(['location'], suggestions({ countries: ['Germany', 'France'] }), { cities: citiesFn }),
         timeBuckets: [],
       },
     });
@@ -44,17 +60,9 @@ describe('Cascade callbacks pass parent value', () => {
 
     render(FilterPanel, {
       props: {
-        config: {
-          sections: ['camera'],
-          providers: {
-            cameras: () =>
-              Promise.resolve([
-                { value: 'Fujifilm', type: 'make' as const },
-                { value: 'Sony', type: 'make' as const },
-              ]),
-            cameraModels: modelsFn,
-          },
-        },
+        config: createConfig(['camera'], suggestions({ cameraMakes: ['Fujifilm', 'Sony'] }), {
+          cameraModels: modelsFn,
+        }),
         timeBuckets: [],
       },
     });
@@ -75,12 +83,7 @@ describe('Cascade callbacks pass parent value', () => {
   it('should not call cities provider when no cities provider is configured', async () => {
     render(FilterPanel, {
       props: {
-        config: {
-          sections: ['location'],
-          providers: {
-            locations: () => Promise.resolve([{ value: 'Germany', type: 'country' as const }]),
-          },
-        },
+        config: createConfig(['location'], suggestions({ countries: ['Germany'] })),
         timeBuckets: [],
       },
     });
@@ -96,12 +99,7 @@ describe('Cascade callbacks pass parent value', () => {
   it('should not call cameraModels provider when no cameraModels provider is configured', async () => {
     render(FilterPanel, {
       props: {
-        config: {
-          sections: ['camera'],
-          providers: {
-            cameras: () => Promise.resolve([{ value: 'Fujifilm', type: 'make' as const }]),
-          },
-        },
+        config: createConfig(['camera'], suggestions({ cameraMakes: ['Fujifilm'] })),
         timeBuckets: [],
       },
     });
@@ -119,17 +117,7 @@ describe('Cascade callbacks pass parent value', () => {
 
     render(FilterPanel, {
       props: {
-        config: {
-          sections: ['location'],
-          providers: {
-            locations: () =>
-              Promise.resolve([
-                { value: 'Germany', type: 'country' as const },
-                { value: 'France', type: 'country' as const },
-              ]),
-            cities: citiesFn,
-          },
-        },
+        config: createConfig(['location'], suggestions({ countries: ['Germany', 'France'] }), { cities: citiesFn }),
         timeBuckets: [],
       },
     });

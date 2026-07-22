@@ -83,16 +83,15 @@
   let countries = $state<string[]>([]);
   let cameraMakes = $state<string[]>([]);
   let tags = $state<TagOption[]>([]);
-  let availableRatings = $state<number[] | undefined>();
-  let availableMediaTypes = $state<string[] | undefined>();
 
   let filterContext = $derived(buildFilterContext(filters));
   let locationFilterContext = $derived(buildFilterContext(filters, ['country', 'city']));
   let cameraFilterContext = $derived(buildFilterContext(filters, ['make', 'model']));
 
-  // Unified suggestions re-fetch: replaces mount effects + temporal re-fetch when suggestionsProvider is set
+  // Unified suggestions re-fetch: one provider call per filter change, debounced by change kind.
   let prevFilters: FilterState | undefined = $state();
   let unifiedAbortController: AbortController | undefined = $state();
+  let isRefetching = $state(false);
 
   $effect(() => {
     if (!config.suggestionsProvider) {
@@ -154,11 +153,10 @@
           countries = result.countries;
           cameraMakes = result.cameraMakes;
           tags = result.tags;
-          // Note: availableRatings and availableMediaTypes are intentionally NOT set from
-          // suggestionsProvider. Hiding rating stars and media type buttons based on the
-          // current result set is too aggressive — it breaks existing E2E tests and confuses
-          // users who expect these fixed options to always be visible. The core value of
-          // interdependent filtering is in people/countries/cameras/tags narrowing.
+          // Note: `result.ratings` / `result.mediaTypes` are deliberately ignored. Hiding rating
+          // stars and media-type buttons based on the current result set is too aggressive — it
+          // breaks E2E tests and confuses users who expect these fixed options to always be
+          // visible. Interdependent filtering earns its keep on people/countries/cameras/tags.
           hasUnnamedPeople = result.hasUnnamedPeople;
         })
         .catch((error: unknown) => {
@@ -180,146 +178,9 @@
     };
   });
 
-  let prevTakenAfter: string | undefined = $state();
-  let prevTakenBefore: string | undefined = $state();
-  let abortController: AbortController | undefined = $state();
-  let isRefetching = $state(false);
-
-  // Debounced re-fetch when temporal filter changes.
-  // We track temporal fields directly instead of
-  // filterContext to avoid re-triggering when non-temporal filters change.
-  $effect(() => {
-    if (config.suggestionsProvider) {
-      return;
-    }
-
-    // Track only temporal fields — this is what determines re-fetch
-    const dateAfter = filters.dateAfter;
-    const dateBefore = filters.dateBefore;
-    const year = filters.selectedYear;
-    const month = filters.selectedMonth;
-    // Build context from tracked values (not from filterContext which would track all of filters)
-    const currentContext = buildFilterContext({
-      dateAfter,
-      dateBefore,
-      selectedYear: year,
-      selectedMonth: month,
-    } as FilterState);
-    const currentTakenAfter = currentContext?.takenAfter;
-    const currentTakenBefore = currentContext?.takenBefore;
-
-    // Read prev values without tracking to avoid re-trigger loops
-    const prevAfter = untrack(() => prevTakenAfter);
-    const prevBefore = untrack(() => prevTakenBefore);
-
-    // Skip initial load (both undefined)
-    if (
-      prevAfter === undefined &&
-      prevBefore === undefined &&
-      currentTakenAfter === undefined &&
-      currentTakenBefore === undefined
-    ) {
-      return;
-    }
-
-    // Skip if context hasn't actually changed
-    if (prevAfter === currentTakenAfter && prevBefore === currentTakenBefore) {
-      return;
-    }
-
-    const isClear = (prevAfter !== undefined || prevBefore !== undefined) && currentContext === undefined;
-    const delay = isClear ? 0 : 200;
-
-    const sections = config.sections;
-
-    const timeout = setTimeout(() => {
-      // Abort previous in-flight requests
-      abortController?.abort();
-      const controller = new AbortController();
-      abortController = controller;
-      isRefetching = true;
-
-      const promises: Promise<void>[] = [];
-
-      if (providers.people && sections.includes('people')) {
-        promises.push(
-          providers
-            .people(currentContext)
-            .then((result) => {
-              if (!controller.signal.aborted) {
-                people = result;
-              }
-            })
-            .catch((error: unknown) => {
-              console.error('Failed to re-fetch people:', error);
-            }),
-        );
-      }
-
-      if (providers.locations && sections.includes('location')) {
-        promises.push(
-          providers
-            .locations(currentContext)
-            .then((result) => {
-              if (!controller.signal.aborted) {
-                countries = result.filter((l) => l.type === 'country').map((l) => l.value);
-              }
-            })
-            .catch((error: unknown) => {
-              console.error('Failed to re-fetch locations:', error);
-            }),
-        );
-      }
-
-      if (providers.cameras && sections.includes('camera')) {
-        promises.push(
-          providers
-            .cameras(currentContext)
-            .then((result) => {
-              if (!controller.signal.aborted) {
-                cameraMakes = result.filter((c) => c.type === 'make').map((c) => c.value);
-              }
-            })
-            .catch((error: unknown) => {
-              console.error('Failed to re-fetch cameras:', error);
-            }),
-        );
-      }
-
-      if (providers.tags && sections.includes('tags')) {
-        promises.push(
-          providers
-            .tags(currentContext)
-            .then((result) => {
-              if (!controller.signal.aborted) {
-                tags = result;
-              }
-            })
-            .catch((error: unknown) => {
-              console.error('Failed to re-fetch tags:', error);
-            }),
-        );
-      }
-
-      void Promise.allSettled(promises).then(() => {
-        if (!controller.signal.aborted) {
-          isRefetching = false;
-        }
-      });
-    }, delay);
-
-    prevTakenAfter = currentTakenAfter;
-    prevTakenBefore = currentTakenBefore;
-
-    return () => {
-      clearTimeout(timeout);
-    };
-  });
-
   // Cleanup on unmount
   $effect(() => {
     return () => {
-      abortController?.abort();
       unifiedAbortController?.abort();
     };
   });
@@ -509,56 +370,6 @@
       } catch {
         /* localStorage unavailable */
       }
-    }
-  });
-
-  // Fetch data on mount via $effect
-  $effect(() => {
-    if (config.suggestionsProvider) {
-      return;
-    }
-    if (providers.people && config.sections.includes('people')) {
-      void providers.people().then((result) => {
-        people = result;
-        if (result.length === 0 && providers.allPeople) {
-          void providers.allPeople().then((all) => {
-            hasUnnamedPeople = all.length > 0;
-          });
-        }
-      });
-    }
-  });
-
-  $effect(() => {
-    if (config.suggestionsProvider) {
-      return;
-    }
-    if (providers.locations && config.sections.includes('location')) {
-      void providers.locations().then((result) => {
-        countries = result.filter((l) => l.type === 'country').map((l) => l.value);
-      });
-    }
-  });
-
-  $effect(() => {
-    if (config.suggestionsProvider) {
-      return;
-    }
-    if (providers.cameras && config.sections.includes('camera')) {
-      void providers.cameras().then((result) => {
-        cameraMakes = result.filter((c) => c.type === 'make').map((c) => c.value);
-      });
-    }
-  });
-
-  $effect(() => {
-    if (config.suggestionsProvider) {
-      return;
-    }
-    if (providers.tags && config.sections.includes('tags')) {
-      void providers.tags().then((result) => {
-        tags = result;
-      });
     }
   });
 
@@ -822,17 +633,9 @@
                     onSelectionChange={handleTagsChange}
                   />
                 {:else if section === 'rating'}
-                  <RatingFilter
-                    selectedRating={filters.rating}
-                    {availableRatings}
-                    onRatingChange={handleRatingChange}
-                  />
+                  <RatingFilter selectedRating={filters.rating} onRatingChange={handleRatingChange} />
                 {:else if section === 'media'}
-                  <MediaTypeFilter
-                    selected={filters.mediaType}
-                    {availableMediaTypes}
-                    onTypeChange={handleMediaTypeChange}
-                  />
+                  <MediaTypeFilter selected={filters.mediaType} onTypeChange={handleMediaTypeChange} />
                 {:else if section === 'favorites'}
                   <FavoritesFilter
                     selected={filters.isFavorite}

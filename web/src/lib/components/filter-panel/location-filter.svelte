@@ -279,6 +279,43 @@
   }
 </script>
 
+<!-- One radio row — a country, or an indented city under it. `selected` fills the dot, `emphasis`
+     bolds the label (greyed otherwise), `orphaned` marks a selection that fell out of the
+     suggestions: dimmed and explicitly pressed. -->
+{#snippet radioRow(row: {
+  testId: string;
+  label: string;
+  selected: boolean;
+  emphasis: boolean;
+  onclick: () => void;
+  pressed?: boolean;
+  orphaned?: boolean;
+  indented?: boolean;
+})}
+  <button
+    type="button"
+    class="-mx-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-subtle {row.indented
+      ? 'ml-5 w-[calc(100%-1.25rem+1rem)]'
+      : 'w-[calc(100%+1rem)]'} {row.emphasis ? 'font-medium' : 'text-gray-500 dark:text-gray-300'} {row.orphaned
+      ? 'opacity-50'
+      : ''}"
+    onclick={row.onclick}
+    aria-pressed={row.pressed || row.orphaned ? 'true' : undefined}
+    data-testid={row.testId}
+  >
+    <div
+      class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 {row.selected
+        ? 'border-immich-primary bg-immich-primary dark:border-immich-dark-primary dark:bg-immich-dark-primary'
+        : 'border-gray-300 dark:border-gray-600'}"
+    >
+      {#if row.selected}
+        <div class="h-1.5 w-1.5 rounded-full bg-white dark:bg-black"></div>
+      {/if}
+    </div>
+    <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{row.label}</span>
+  </button>
+{/snippet}
+
 <div data-testid="location-filter">
   {#if countries.length === 0 && !orphanedCountry}
     <p class="text-sm text-gray-400 dark:text-gray-500" data-testid="location-empty">
@@ -304,43 +341,25 @@
 
     <!-- Orphaned country (selected but no longer in suggestions) -->
     {#if orphanedCountry}
-      {@const isCountrySelected = true}
-      <button
-        type="button"
-        class="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium opacity-50 hover:bg-subtle"
-        onclick={() => handleCountryClick(orphanedCountry!)}
-        aria-pressed="true"
-        data-testid="location-country-{orphanedCountry}"
-      >
-        <div
-          class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 {isCountrySelected &&
-          !selectedCity
-            ? 'border-immich-primary bg-immich-primary dark:border-immich-dark-primary dark:bg-immich-dark-primary'
-            : 'border-gray-300 dark:border-gray-600'}"
-        >
-          {#if isCountrySelected && !selectedCity}
-            <div class="h-1.5 w-1.5 rounded-full bg-white dark:bg-black"></div>
-          {/if}
-        </div>
-        <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{orphanedCountry}</span>
-      </button>
+      {@render radioRow({
+        testId: `location-country-${orphanedCountry}`,
+        label: orphanedCountry,
+        selected: !selectedCity,
+        emphasis: true,
+        orphaned: true,
+        onclick: () => handleCountryClick(orphanedCountry!),
+      })}
     {/if}
 
     {#if selectedCity && !selectedCountry && !cityOnlySelectionHasVisibleRow}
-      <button
-        type="button"
-        class="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium hover:bg-subtle"
-        onclick={() => onSelectionChange(undefined, undefined)}
-        aria-pressed="true"
-        data-testid="location-city-{selectedCity}"
-      >
-        <div
-          class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 border-immich-primary bg-immich-primary dark:border-immich-dark-primary dark:bg-immich-dark-primary"
-        >
-          <div class="h-1.5 w-1.5 rounded-full bg-white dark:bg-black"></div>
-        </div>
-        <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{selectedCity}</span>
-      </button>
+      {@render radioRow({
+        testId: `location-city-${selectedCity}`,
+        label: selectedCity,
+        selected: true,
+        emphasis: true,
+        pressed: true,
+        onclick: () => onSelectionChange(undefined, undefined),
+      })}
     {/if}
 
     <!-- Empty search results -->
@@ -353,57 +372,26 @@
     {#each visibleCountries as country (country)}
       {@const isCountrySelected = selectedCountry === country}
       {@const visibleCities = getVisibleCities(country)}
-      <!-- Country row -->
-      <button
-        type="button"
-        class="-mx-2 flex w-[calc(100%+1rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-subtle {isCountrySelected
-          ? 'font-medium'
-          : 'text-gray-500 dark:text-gray-300'}"
-        onclick={() => handleCountryClick(country)}
-        data-testid="location-country-{country}"
-      >
-        <!-- Radio indicator -->
-        <div
-          class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 {isCountrySelected &&
-          !selectedCity
-            ? 'border-immich-primary bg-immich-primary dark:border-immich-dark-primary dark:bg-immich-dark-primary'
-            : 'border-gray-300 dark:border-gray-600'}"
-        >
-          {#if isCountrySelected && !selectedCity}
-            <div class="h-1.5 w-1.5 rounded-full bg-white dark:bg-black"></div>
-          {/if}
-        </div>
-
-        <!-- Label -->
-        <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{country}</span>
-      </button>
+      {@render radioRow({
+        testId: `location-country-${country}`,
+        label: country,
+        selected: isCountrySelected && !selectedCity,
+        emphasis: isCountrySelected,
+        onclick: () => handleCountryClick(country),
+      })}
 
       <!-- Cities (indented when country is expanded) -->
       {#if (expandedCountry === country || (normalizedSearchQuery && visibleCities.length > 0)) && !loadingCitiesByCountry[country]}
         {#each visibleCities as city (city)}
           {@const isCitySelected = selectedCity === city && (!selectedCountry || selectedCountry === country)}
-          <button
-            type="button"
-            class="-mx-2 ml-5 flex w-[calc(100%-1.25rem+1rem)] items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-subtle {isCitySelected
-              ? 'font-medium'
-              : 'text-gray-500 dark:text-gray-300'}"
-            onclick={() => handleCityClick(city, country)}
-            data-testid="location-city-{city}"
-          >
-            <!-- Radio indicator -->
-            <div
-              class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 {isCitySelected
-                ? 'border-immich-primary bg-immich-primary dark:border-immich-dark-primary dark:bg-immich-dark-primary'
-                : 'border-gray-300 dark:border-gray-600'}"
-            >
-              {#if isCitySelected}
-                <div class="h-1.5 w-1.5 rounded-full bg-white dark:bg-black"></div>
-              {/if}
-            </div>
-
-            <!-- Label -->
-            <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{city}</span>
-          </button>
+          {@render radioRow({
+            testId: `location-city-${city}`,
+            label: city,
+            selected: isCitySelected,
+            emphasis: isCitySelected,
+            indented: true,
+            onclick: () => handleCityClick(city, country),
+          })}
         {/each}
         {#if !expandedCityLists[country] && getRemainingCityCount(country) > 0}
           <button

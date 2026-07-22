@@ -23,28 +23,28 @@ describe('ImportManager', () => {
   });
 
   describe('step navigation', () => {
-    it('starts at Source step', () => {
-      expect(manager.currentStep).toBe(ImportStep.Source);
+    it('starts at Files step', () => {
+      expect(manager.currentStep).toBe(ImportStep.Files);
     });
 
     it('nextStep advances to the next step', () => {
       manager.nextStep();
-      expect(manager.currentStep).toBe(ImportStep.Files);
-      manager.nextStep();
       expect(manager.currentStep).toBe(ImportStep.Scan);
+      manager.nextStep();
+      expect(manager.currentStep).toBe(ImportStep.Review);
     });
 
     it('previousStep goes back', () => {
       manager.nextStep();
       manager.nextStep();
-      expect(manager.currentStep).toBe(ImportStep.Scan);
+      expect(manager.currentStep).toBe(ImportStep.Review);
       manager.previousStep();
-      expect(manager.currentStep).toBe(ImportStep.Files);
+      expect(manager.currentStep).toBe(ImportStep.Scan);
     });
 
-    it("doesn't go back past Source", () => {
+    it("doesn't go back past Files", () => {
       manager.previousStep();
-      expect(manager.currentStep).toBe(ImportStep.Source);
+      expect(manager.currentStep).toBe(ImportStep.Files);
     });
 
     it("doesn't go past Import", () => {
@@ -54,12 +54,12 @@ describe('ImportManager', () => {
       expect(manager.currentStep).toBe(ImportStep.Import);
     });
 
-    it('reset returns to Source', () => {
+    it('reset returns to Files', () => {
       manager.nextStep();
       manager.nextStep();
       manager.addFiles([makeFile('a.zip', 100)]);
       manager.reset();
-      expect(manager.currentStep).toBe(ImportStep.Source);
+      expect(manager.currentStep).toBe(ImportStep.Files);
       expect(manager.selectedFiles).toHaveLength(0);
     });
   });
@@ -150,42 +150,9 @@ describe('ImportManager', () => {
       expect(manager.options.importDescriptions).toBe(true);
       expect(manager.options.skipDuplicates).toBe(true);
     });
-
-    it('setOption toggles a single option', () => {
-      manager.setOption('importFavorites', false);
-      expect(manager.options.importFavorites).toBe(false);
-      // Others unchanged
-      expect(manager.options.importArchived).toBe(true);
-    });
-
-    it('setOption can update multiple options independently', () => {
-      manager.setOption('importArchived', false);
-      manager.setOption('skipDuplicates', false);
-      expect(manager.options.importArchived).toBe(false);
-      expect(manager.options.skipDuplicates).toBe(false);
-      expect(manager.options.importFavorites).toBe(true);
-    });
   });
 
   describe('import progress tracking', () => {
-    it('tracks imported count', () => {
-      manager.trackImported();
-      manager.trackImported();
-      expect(manager.importProgress.imported).toBe(2);
-    });
-
-    it('tracks skipped count', () => {
-      manager.trackSkipped();
-      expect(manager.importProgress.skipped).toBe(1);
-    });
-
-    it('tracks errors with file and message', () => {
-      manager.trackError('photo.jpg', 'Upload failed');
-      expect(manager.importProgress.errors).toBe(1);
-      expect(manager.importProgress.errorLog).toHaveLength(1);
-      expect(manager.importProgress.errorLog[0]).toEqual({ file: 'photo.jpg', error: 'Upload failed' });
-    });
-
     it('starts with all zeros', () => {
       expect(manager.importProgress.imported).toBe(0);
       expect(manager.importProgress.skipped).toBe(0);
@@ -223,14 +190,14 @@ describe('ImportManager', () => {
         stats: { totalMedia: 0, withLocation: 0, withDate: 0, favorites: 0, archived: 0, dateRange: undefined },
       };
       manager.toggleAlbum('Test');
-      manager.setOption('importFavorites', false);
-      manager.trackImported();
-      manager.trackError('f.jpg', 'err');
+      manager.options.importFavorites = false;
+      manager.importProgress.imported++;
+      manager.importProgress.errorLog.push({ file: 'f.jpg', error: 'err' });
       manager.togglePause();
 
       manager.reset();
 
-      expect(manager.currentStep).toBe(ImportStep.Source);
+      expect(manager.currentStep).toBe(ImportStep.Files);
       expect(manager.selectedFiles).toHaveLength(0);
       expect(manager.scanResult).toBeUndefined();
       expect(manager.selectedAlbums.size).toBe(0);

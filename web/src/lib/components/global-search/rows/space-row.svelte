@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { UserAvatarColor, type SharedSpaceResponseDto } from '@immich/sdk';
+  import { getSpaceGradientClass } from '$lib/utils/space-colors';
+  import { type SharedSpaceResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiAccountMultipleOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
@@ -10,22 +11,7 @@
   }
   let { item, isPending }: Props = $props();
 
-  const gradientClasses: Record<string, string> = {
-    [UserAvatarColor.Primary]: 'from-immich-primary/60 to-immich-primary',
-    [UserAvatarColor.Pink]: 'from-pink-300 to-pink-500',
-    [UserAvatarColor.Red]: 'from-red-400 to-red-600',
-    [UserAvatarColor.Yellow]: 'from-yellow-300 to-yellow-500',
-    [UserAvatarColor.Blue]: 'from-blue-400 to-blue-600',
-    [UserAvatarColor.Green]: 'from-green-400 to-green-700',
-    [UserAvatarColor.Purple]: 'from-purple-400 to-purple-700',
-    [UserAvatarColor.Orange]: 'from-orange-400 to-orange-600',
-    [UserAvatarColor.Gray]: 'from-gray-400 to-gray-600',
-    [UserAvatarColor.Amber]: 'from-amber-400 to-amber-600',
-  };
-
-  const gradientClass = $derived(
-    gradientClasses[item.color ?? UserAvatarColor.Primary] ?? gradientClasses[UserAvatarColor.Primary],
-  );
+  const gradientClass = $derived(getSpaceGradientClass(item.color));
   const memberCount = $derived(item.memberCount ?? 0);
 </script>
 

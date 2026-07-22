@@ -4,11 +4,10 @@
 
   interface Props {
     selectedRating?: number;
-    availableRatings?: number[];
     onRatingChange: (rating?: number) => void;
   }
 
-  let { selectedRating, availableRatings, onRatingChange }: Props = $props();
+  let { selectedRating, onRatingChange }: Props = $props();
 
   function handleStarClick(star: number) {
     if (selectedRating === star) {
@@ -24,10 +23,9 @@
 <div class="flex gap-1" data-testid="rating-filter">
   {#each visibleStars as star (star)}
     {@const filled = selectedRating !== undefined && star <= selectedRating}
-    {@const isOrphaned = availableRatings !== undefined && !availableRatings.includes(star)}
     <button
       type="button"
-      class="flex items-center justify-center p-0.5 {isOrphaned ? 'opacity-50' : ''}"
+      class="flex items-center justify-center p-0.5"
       onclick={() => handleStarClick(star)}
       data-testid="rating-star-{star}"
     >

@@ -30,6 +30,7 @@ import {
   GlobalSearchManager,
   RECONCILE_ORDER_BY_SCOPE,
   type EntityItem,
+  type EntitySectionKey,
   type Provider,
   type ProviderStatus,
   type SearchMode,
@@ -387,18 +388,11 @@ describe('GlobalSearchManager (skeleton)', () => {
     expect(manager.isOpen).toBe(false);
   });
 
-  it('providers is an instance-bound record with one entry per Sections key', () => {
+  it('providers is an instance-bound record with one entry per async entity section', () => {
+    // Navigation and commands are filtered synchronously from setQuery, so they are deliberately
+    // absent here — only the sections that fan out through runBatch get a provider.
     const providers = (manager as unknown as { providers: Record<string, unknown> }).providers;
-    expect(Object.keys(providers).sort()).toEqual([
-      'albums',
-      'commands',
-      'navigation',
-      'people',
-      'photos',
-      'places',
-      'spaces',
-      'tags',
-    ]);
+    expect(Object.keys(providers).sort()).toEqual(['albums', 'people', 'photos', 'places', 'spaces', 'tags']);
   });
 
   describe('searchQueryType sanity check', () => {
@@ -449,8 +443,7 @@ describe('setQuery', () => {
     installFakeAbortTimeout();
     manager = new GlobalSearchManager();
     calls = [];
-    const makeStub = (key: keyof Sections, minLen: number): Provider => ({
-      key,
+    const makeStub = (key: EntitySectionKey, minLen: number): Provider => ({
       topN: 5,
       minQueryLength: minLen,
       run: async (query, mode, signal) => {
@@ -461,15 +454,13 @@ describe('setQuery', () => {
         });
       },
     });
-    (manager as unknown as { providers: Record<keyof Sections, Provider> }).providers = {
+    (manager as unknown as { providers: Record<EntitySectionKey, Provider> }).providers = {
       photos: makeStub('photos', 1),
       people: makeStub('people', 2),
       places: makeStub('places', 2),
       tags: makeStub('tags', 2),
       albums: makeStub('albums', 2),
       spaces: makeStub('spaces', 2),
-      navigation: makeStub('navigation', 2),
-      commands: makeStub('commands', 2),
     };
   });
 
@@ -506,7 +497,7 @@ describe('setQuery', () => {
   });
 
   it('new keystroke aborts previous batch silently', async () => {
-    const providers = (manager as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (manager as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = (_q: string, _m: SearchMode, signal: AbortSignal) =>
       new Promise<ProviderStatus>((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(Object.assign(new Error('x'), { name: 'AbortError' })));
@@ -519,7 +510,7 @@ describe('setQuery', () => {
   });
 
   it('5 s timeout marks section as timeout when provider never resolves', async () => {
-    const providers = (manager as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (manager as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = (_q: string, _m: SearchMode, signal: AbortSignal) =>
       new Promise<ProviderStatus>((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(Object.assign(new Error('x'), { name: 'AbortError' })));
@@ -531,7 +522,7 @@ describe('setQuery', () => {
   });
 
   it('close() aborts in-flight batch silently', async () => {
-    const providers = (manager as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (manager as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = (_q: string, _m: SearchMode, signal: AbortSignal) =>
       new Promise<ProviderStatus>((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(Object.assign(new Error('x'), { name: 'AbortError' })));
@@ -543,7 +534,7 @@ describe('setQuery', () => {
   });
 
   it('synchronous throw from a provider does not crash runBatch', async () => {
-    const providers = (manager as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (manager as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = () => {
       throw new Error('sync boom');
     };
@@ -817,7 +808,7 @@ describe('setMode', () => {
     let photosCalls = 0;
     let peopleCalls = 0;
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = () => {
       photosCalls++;
       return Promise.resolve({ status: 'ok' as const, items: [], total: 0 });
@@ -838,7 +829,7 @@ describe('setMode', () => {
 
   it('setMode during pending debounce restarts timer with new mode', async () => {
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     const photosRun = vi.fn().mockResolvedValue({ status: 'ok', items: [], total: 0 } as ProviderStatus);
     providers.photos.run = photosRun;
     m.setQuery('beach');
@@ -857,7 +848,7 @@ describe('setMode', () => {
 
   it('setMode with empty query is a no-op for providers', async () => {
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     const photosRun = vi.fn();
     providers.photos.run = photosRun;
     m.setMode('metadata');
@@ -889,7 +880,7 @@ describe('cursor identity', () => {
 
   it('preserves activeItemId when a later section populates above it', async () => {
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.people.run = () =>
       Promise.resolve({ status: 'ok' as const, items: [{ id: 'p1', name: 'Alice' }], total: 1 });
     providers.photos.run = () =>
@@ -905,7 +896,7 @@ describe('cursor identity', () => {
 
   it('falls back to first top-section row when tracked id disappears', async () => {
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = () =>
       Promise.resolve({ status: 'ok' as const, items: [{ id: 'a1' }, { id: 'a2' }], total: 2 });
     m.setQuery('beach');
@@ -943,7 +934,7 @@ describe('Enter race', () => {
 
   it('getActiveItem captures the currently-highlighted item by reference', async () => {
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = () => Promise.resolve({ status: 'ok' as const, items: [{ id: 'a1' }], total: 1 });
     m.setQuery('beach');
     await vi.advanceTimersByTimeAsync(200);
@@ -983,7 +974,7 @@ describe('ML health retroactive promotion', () => {
 
   it('sets mlHealthy=false when photos times out in smart mode', async () => {
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = (_q: string, _mode: SearchMode, signal: AbortSignal) =>
       new Promise<ProviderStatus>((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(Object.assign(new Error('x'), { name: 'AbortError' })));
@@ -997,7 +988,7 @@ describe('ML health retroactive promotion', () => {
   it('does NOT promote banner in non-smart mode', async () => {
     localStorage.setItem('searchQueryType', 'metadata');
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     providers.photos.run = (_q: string, _mode: SearchMode, signal: AbortSignal) =>
       new Promise<ProviderStatus>((_resolve, reject) => {
         signal.addEventListener('abort', () => reject(Object.assign(new Error('x'), { name: 'AbortError' })));
@@ -1489,7 +1480,7 @@ describe('activate("command")', () => {
 
     it('dispatches live providers with the plain query while preserving raw top-search commit text', async () => {
       const manager = new GlobalSearchManager();
-      const providers = (manager as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+      const providers = (manager as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
       const photosRun = vi.fn().mockResolvedValue({ status: 'empty' as const });
       providers.photos.run = photosRun;
 
@@ -3899,49 +3890,6 @@ describe('commands provider', () => {
       realCmd!.handler = originalHandler;
     }
   });
-
-  it('defensive gating: fabricated featureFlag command is filtered when flag is off', async () => {
-    const flaggedCmd: CommandItem = {
-      id: 'cmd:test-flagged',
-      labelKey: 'test_flagged_label',
-      descriptionKey: 'test_flagged_description',
-      icon: '',
-      handler: () => undefined,
-      // 'map' is one of the flags the test harness already exposes via mockFlags.
-      featureFlag: 'map',
-    };
-    commandItemsMut.push(flaggedCmd);
-    try {
-      // Flag off: fabricated command must NOT appear.
-      mockFlags.valueOrUndefined = { search: true, map: false, trash: true };
-      const off = new GlobalSearchManager();
-      off.open();
-      off.setQuery('>');
-      await flushMicrotasks();
-      const offSection = off.sections.commands;
-      expect(offSection.status).toBe('ok');
-      if (offSection.status === 'ok') {
-        expect(offSection.items.some((c) => c.id === flaggedCmd.id)).toBe(false);
-      }
-
-      // Flag on: fabricated command MUST appear.
-      mockFlags.valueOrUndefined = { search: true, map: true, trash: true };
-      const on = new GlobalSearchManager();
-      on.open();
-      on.setQuery('>');
-      await flushMicrotasks();
-      const onSection = on.sections.commands;
-      expect(onSection.status).toBe('ok');
-      if (onSection.status === 'ok') {
-        expect(onSection.items.some((c) => c.id === flaggedCmd.id)).toBe(true);
-      }
-    } finally {
-      const idx = commandItemsMut.findIndex((c) => c.id === flaggedCmd.id);
-      if (idx !== -1) {
-        commandItemsMut.splice(idx, 1);
-      }
-    }
-  });
 });
 
 describe('setQuery synchronous navigation', () => {
@@ -4151,7 +4099,7 @@ describe('SWR loading rules', () => {
   it('stale-batch providers do not deadlock batchInFlight after a new batch supersedes', async () => {
     let resolveStalePhotos!: () => void;
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     const originalPhotosRun = providers.photos.run;
     let invocationCount = 0;
     providers.photos.run = vi.fn((query, mode, signal) => {
@@ -5091,19 +5039,6 @@ describe('runBatch dispatches albums and spaces providers', () => {
     expect(runAlbums).toHaveBeenCalledWith('hawaii');
     expect(runSpaces).toHaveBeenCalledWith('hawaii');
   });
-
-  it('runBatch still excludes navigation from the async dispatch tuple', async () => {
-    // Regression pin: nav flows through a synchronous filter inside setQuery
-    // (runNavigationProvider), not the async batch. If runBatch ever iterates
-    // 'navigation', the stub provider's run() would fire — assert it does not.
-    const sut = new GlobalSearchManager();
-    sut.open();
-    const providers = (sut as unknown as { providers: Record<keyof Sections, Provider> }).providers;
-    const navRun = vi.spyOn(providers.navigation, 'run');
-    sut.setQuery('hawaii');
-    await vi.advanceTimersByTimeAsync(200);
-    expect(navRun).not.toHaveBeenCalled();
-  });
 });
 
 describe('activation state', () => {
@@ -5714,7 +5649,7 @@ describe('prefix scoping — runBatch gating', () => {
 
   it('scope nav: ENTITY_KEYS_BY_SCOPE.nav === [] — no entity providers invoked', async () => {
     const m = new GlobalSearchManager();
-    const providers = (m as unknown as { providers: Record<keyof Sections, Provider> }).providers;
+    const providers = (m as unknown as { providers: Record<EntitySectionKey, Provider> }).providers;
     const providerRuns = new Map<string, ReturnType<typeof vi.fn>>();
     for (const key of ['photos', 'people', 'places', 'tags', 'albums', 'spaces'] as const) {
       const run = vi.fn().mockResolvedValue({ status: 'empty' });

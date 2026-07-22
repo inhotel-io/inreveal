@@ -10,7 +10,14 @@ export interface MonthData {
   count: number;
 }
 
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/**
+ * Short month names, index 0 = January. Defaults to `en-US` to match the other fixed-format date
+ * strings in the filter UI; pass a locale to localise.
+ */
+export function getMonthLabels(locale = 'en-US'): string[] {
+  const format = new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' });
+  return Array.from({ length: 12 }, (_, index) => format.format(new Date(Date.UTC(2000, index, 1))));
+}
 
 export function aggregateYears(buckets: Array<{ timeBucket: string; count: number }>): YearData[] {
   const yearMap = new Map<number, number>();
@@ -28,7 +35,11 @@ export function aggregateYears(buckets: Array<{ timeBucket: string; count: numbe
     }));
 }
 
-export function getMonthsForYear(buckets: Array<{ timeBucket: string; count: number }>, year: number): MonthData[] {
+export function getMonthsForYear(
+  buckets: Array<{ timeBucket: string; count: number }>,
+  year: number,
+  locale?: string,
+): MonthData[] {
   const monthMap = new Map<number, number>();
   for (const b of buckets) {
     const d = new Date(b.timeBucket);
@@ -37,7 +48,7 @@ export function getMonthsForYear(buckets: Array<{ timeBucket: string; count: num
       monthMap.set(month, (monthMap.get(month) ?? 0) + b.count);
     }
   }
-  return MONTH_LABELS.map((label, i) => ({
+  return getMonthLabels(locale).map((label, i) => ({
     month: i + 1,
     label,
     count: monthMap.get(i + 1) ?? 0,

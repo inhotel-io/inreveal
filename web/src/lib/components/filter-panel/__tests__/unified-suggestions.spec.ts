@@ -127,7 +127,7 @@ describe('Unified suggestionsProvider', () => {
     });
   });
 
-  it('should show all ratings when availableRatings is undefined (backward compat)', async () => {
+  it('should show all ratings when no suggestions have loaded', async () => {
     const config: FilterPanelConfig = {
       sections: ['rating'],
       providers: {},
@@ -139,24 +139,6 @@ describe('Unified suggestionsProvider', () => {
     for (const star of [1, 2, 3, 4, 5]) {
       expect(screen.getByTestId(`rating-star-${star}`)).toBeTruthy();
     }
-  });
-
-  it('should fall back to providers-based behavior when suggestionsProvider is not set', async () => {
-    const peopleProvider = vi.fn().mockResolvedValue([{ id: 'p1', name: 'Alice' }]);
-    const config: FilterPanelConfig = {
-      sections: ['people'],
-      providers: {
-        people: peopleProvider,
-      },
-    };
-    render(FilterPanel, { props: { config, timeBuckets } });
-
-    await vi.advanceTimersByTimeAsync(0);
-
-    await waitFor(() => {
-      expect(peopleProvider).toHaveBeenCalledTimes(1);
-      expect(screen.getByText('Alice')).toBeTruthy();
-    });
   });
 
   it('should work with suggestionsProvider and no providers', async () => {

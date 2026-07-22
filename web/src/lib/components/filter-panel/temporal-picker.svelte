@@ -1,9 +1,9 @@
 <script lang="ts">
   import { t } from 'svelte-i18n';
   import { get } from 'svelte/store';
-  import { aggregateYears, getMonthsForYear } from './temporal-utils';
+  import { aggregateYears, getMonthLabels, getMonthsForYear } from './temporal-utils';
 
-  const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MONTH_LABELS = getMonthLabels();
   const CUSTOM_RANGE_ERROR_ID = 'custom-date-range-error';
 
   interface Props {

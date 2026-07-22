@@ -3,11 +3,10 @@ import type { TakeoutAlbum } from '$lib/utils/google-takeout-parser';
 import type { ScanProgress, ScanResult } from '$lib/utils/google-takeout-scanner';
 
 export enum ImportStep {
-  Source = 0,
-  Files = 1,
-  Scan = 2,
-  Review = 3,
-  Import = 4,
+  Files = 0,
+  Scan = 1,
+  Review = 2,
+  Import = 3,
 }
 
 export interface ImportOptions {
@@ -51,7 +50,7 @@ function defaultProgress(): ImportProgress {
 }
 
 export class ImportManager {
-  currentStep = $state<ImportStep>(ImportStep.Source);
+  currentStep = $state<ImportStep>(ImportStep.Files);
   selectedFiles = $state<File[]>([]);
   scanResult = $state<ScanResult | undefined>(undefined);
   scanProgress = $state<ScanProgress | undefined>(undefined);
@@ -70,13 +69,13 @@ export class ImportManager {
   }
 
   previousStep() {
-    if (this.currentStep > ImportStep.Source) {
+    if (this.currentStep > ImportStep.Files) {
       this.currentStep--;
     }
   }
 
   reset() {
-    this.currentStep = ImportStep.Source;
+    this.currentStep = ImportStep.Files;
     this.selectedFiles = [];
     this.scanResult = undefined;
     this.scanProgress = undefined;
@@ -118,26 +117,6 @@ export class ImportManager {
 
   deselectAllAlbums() {
     this.selectedAlbums = new SvelteSet();
-  }
-
-  setOption<K extends keyof ImportOptions>(key: K, value: ImportOptions[K]) {
-    this.options = { ...this.options, [key]: value };
-  }
-
-  trackImported() {
-    this.importProgress = { ...this.importProgress, imported: this.importProgress.imported + 1 };
-  }
-
-  trackSkipped() {
-    this.importProgress = { ...this.importProgress, skipped: this.importProgress.skipped + 1 };
-  }
-
-  trackError(file: string, error: string) {
-    this.importProgress = {
-      ...this.importProgress,
-      errors: this.importProgress.errors + 1,
-      errorLog: [...this.importProgress.errorLog, { file, error }],
-    };
   }
 
   togglePause() {

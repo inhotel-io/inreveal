@@ -1,37 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import type { FilterContext, FilterPanelConfig, FilterSuggestionsResponse } from '../filter-panel';
+import type { FilterPanelConfig, FilterSuggestionsResponse } from '../filter-panel';
 import FilterPanel from '../filter-panel.svelte';
-
-function createConfig(overrides: Partial<NonNullable<FilterPanelConfig['providers']>> = {}): FilterPanelConfig {
-  return {
-    sections: ['timeline', 'people', 'location', 'camera', 'tags'],
-    providers: {
-      people: vi.fn().mockResolvedValue([
-        { id: 'p1', name: 'Alice' },
-        { id: 'p2', name: 'Bob' },
-      ]),
-      locations: vi.fn().mockResolvedValue([
-        { value: 'Germany', type: 'country' as const },
-        { value: 'France', type: 'country' as const },
-      ]),
-      cameras: vi.fn().mockResolvedValue([
-        { value: 'Canon', type: 'make' as const },
-        { value: 'Sony', type: 'make' as const },
-      ]),
-      tags: vi.fn().mockResolvedValue([
-        { id: 't1', name: 'Vacation' },
-        { id: 't2', name: 'Family' },
-      ]),
-      ...overrides,
-    },
-  };
-}
-
-const timeBuckets = [
-  { timeBucket: '2023-06-01', count: 100 },
-  { timeBucket: '2023-08-01', count: 200 },
-  { timeBucket: '2024-03-01', count: 50 },
-];
 
 const defaultSuggestions: FilterSuggestionsResponse = {
   countries: ['Germany', 'France'],
@@ -49,6 +18,20 @@ const defaultSuggestions: FilterSuggestionsResponse = {
   hasUnnamedPeople: false,
 };
 
+function createConfig(overrides: Partial<FilterPanelConfig> = {}): FilterPanelConfig {
+  return {
+    sections: ['timeline', 'people', 'location', 'camera', 'tags'],
+    suggestionsProvider: vi.fn().mockResolvedValue(defaultSuggestions),
+    ...overrides,
+  };
+}
+
+const timeBuckets = [
+  { timeBucket: '2023-06-01', count: 100 },
+  { timeBucket: '2023-08-01', count: 200 },
+  { timeBucket: '2024-03-01', count: 50 },
+];
+
 describe('Contextual re-fetch on temporal change', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -59,7 +42,7 @@ describe('Contextual re-fetch on temporal change', () => {
     vi.useRealTimers();
   });
 
-  it('should re-fetch providers with temporal context when a year is selected', async () => {
+  it('should re-fetch suggestions with the selected year', async () => {
     const config = createConfig();
     render(FilterPanel, {
       props: { config, timeBuckets },
@@ -67,9 +50,7 @@ describe('Contextual re-fetch on temporal change', () => {
 
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(config.providers!.people).toHaveBeenCalledTimes(1);
-    expect(config.providers!.locations).toHaveBeenCalledTimes(1);
-    expect(config.providers!.cameras).toHaveBeenCalledTimes(1);
+    expect(config.suggestionsProvider).toHaveBeenCalledTimes(1);
 
     // Click year to select 2023
     await fireEvent.click(screen.getByTestId('year-btn-2023'));
@@ -77,64 +58,11 @@ describe('Contextual re-fetch on temporal change', () => {
     // Advance past debounce
     await vi.advanceTimersByTimeAsync(250);
 
-    const expectedContext: FilterContext = {
-      takenAfter: '2023-01-01T00:00:00.000Z',
-      takenBefore: '2024-01-01T00:00:00.000Z',
-    };
-
     await waitFor(() => {
-      expect(config.providers!.people).toHaveBeenCalledTimes(2);
-      expect(config.providers!.people).toHaveBeenLastCalledWith(expectedContext);
-      expect(config.providers!.locations).toHaveBeenLastCalledWith(expectedContext);
-      expect(config.providers!.cameras).toHaveBeenLastCalledWith(expectedContext);
-      expect(config.providers!.tags).toHaveBeenCalledTimes(2);
-      expect(config.providers!.tags).toHaveBeenLastCalledWith(expectedContext);
-    });
-  });
-
-  it('should re-fetch tags with temporal context when a year is selected', async () => {
-    const config = createConfig();
-    render(FilterPanel, {
-      props: { config, timeBuckets },
-    });
-
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(config.providers!.tags).toHaveBeenCalledTimes(1);
-
-    // Click year to select 2023
-    await fireEvent.click(screen.getByTestId('year-btn-2023'));
-
-    // Advance past debounce
-    await vi.advanceTimersByTimeAsync(250);
-
-    const expectedContext: FilterContext = {
-      takenAfter: '2023-01-01T00:00:00.000Z',
-      takenBefore: '2024-01-01T00:00:00.000Z',
-    };
-
-    await waitFor(() => {
-      expect(config.providers!.tags).toHaveBeenCalledTimes(2);
-      expect(config.providers!.tags).toHaveBeenLastCalledWith(expectedContext);
-    });
-  });
-
-  it('should re-fetch with full-year bounds when only year is selected', async () => {
-    const config = createConfig();
-    render(FilterPanel, {
-      props: { config, timeBuckets },
-    });
-
-    await vi.advanceTimersByTimeAsync(0);
-
-    await fireEvent.click(screen.getByTestId('year-btn-2024'));
-    await vi.advanceTimersByTimeAsync(250);
-
-    await waitFor(() => {
-      expect(config.providers!.people).toHaveBeenLastCalledWith({
-        takenAfter: '2024-01-01T00:00:00.000Z',
-        takenBefore: '2025-01-01T00:00:00.000Z',
-      });
+      expect(config.suggestionsProvider).toHaveBeenCalledTimes(2);
+      expect(config.suggestionsProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({ selectedYear: 2023, selectedMonth: undefined }),
+      );
     });
   });
 
@@ -146,7 +74,7 @@ describe('Contextual re-fetch on temporal change', () => {
 
     await vi.advanceTimersByTimeAsync(0);
 
-    const initialCalls = (config.providers!.people as ReturnType<typeof vi.fn>).mock.calls.length;
+    const initialCalls = (config.suggestionsProvider as ReturnType<typeof vi.fn>).mock.calls.length;
 
     // Click year — this triggers a 200ms debounce for the year context
     await fireEvent.click(screen.getByTestId('year-btn-2023'));
@@ -161,13 +89,13 @@ describe('Contextual re-fetch on temporal change', () => {
     await vi.advanceTimersByTimeAsync(250);
 
     await waitFor(() => {
-      const finalCalls = (config.providers!.people as ReturnType<typeof vi.fn>).mock.calls.length;
+      const finalCalls = (config.suggestionsProvider as ReturnType<typeof vi.fn>).mock.calls.length;
       // Year triggers 1 re-fetch, month triggers another → exactly 2 extra
       expect(finalCalls - initialCalls).toBe(2);
     });
   });
 
-  it('should NOT trigger re-fetch when non-temporal filters change', async () => {
+  it('should NOT re-fetch while no filter changes', async () => {
     const config = createConfig();
     render(FilterPanel, {
       props: {
@@ -178,15 +106,15 @@ describe('Contextual re-fetch on temporal change', () => {
 
     await vi.advanceTimersByTimeAsync(0);
 
-    const initialCalls = (config.providers!.people as ReturnType<typeof vi.fn>).mock.calls.length;
+    const initialCalls = (config.suggestionsProvider as ReturnType<typeof vi.fn>).mock.calls.length;
 
-    // Advance time — no temporal change happens, so no re-fetch
+    // Advance time — nothing changed, so no re-fetch
     await vi.advanceTimersByTimeAsync(500);
 
-    expect((config.providers!.people as ReturnType<typeof vi.fn>).mock.calls.length).toBe(initialCalls);
+    expect((config.suggestionsProvider as ReturnType<typeof vi.fn>).mock.calls.length).toBe(initialCalls);
   });
 
-  it('should bypass debounce on clear (immediate re-fetch with no context)', async () => {
+  it('should bypass debounce on clear (immediate re-fetch with no temporal filter)', async () => {
     const config = createConfig();
     render(FilterPanel, {
       props: { config, timeBuckets },
@@ -198,7 +126,7 @@ describe('Contextual re-fetch on temporal change', () => {
     await fireEvent.click(screen.getByTestId('year-btn-2023'));
     await vi.advanceTimersByTimeAsync(250);
 
-    const callsAfterYear = (config.providers!.people as ReturnType<typeof vi.fn>).mock.calls.length;
+    const callsAfterYear = (config.suggestionsProvider as ReturnType<typeof vi.fn>).mock.calls.length;
 
     // Click "All" breadcrumb to clear temporal filter
     await fireEvent.click(screen.getByTestId('temporal-breadcrumb-all'));
@@ -207,19 +135,21 @@ describe('Contextual re-fetch on temporal change', () => {
     await vi.advanceTimersByTimeAsync(1);
 
     await waitFor(() => {
-      const finalCalls = (config.providers!.people as ReturnType<typeof vi.fn>).mock.calls.length;
+      const finalCalls = (config.suggestionsProvider as ReturnType<typeof vi.fn>).mock.calls.length;
       expect(finalCalls).toBeGreaterThan(callsAfterYear);
-      expect(config.providers!.people).toHaveBeenLastCalledWith(undefined);
+      expect(config.suggestionsProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({ selectedYear: undefined, dateAfter: undefined, dateBefore: undefined }),
+      );
     });
   });
 
   it('should keep stale data on fetch error', async () => {
-    const peopleFn = vi
+    const suggestionsProvider = vi
       .fn()
-      .mockResolvedValueOnce([{ id: 'p1', name: 'Alice' }])
+      .mockResolvedValueOnce({ ...defaultSuggestions, people: [{ id: 'p1', name: 'Alice' }] })
       .mockRejectedValueOnce(new Error('Network error'));
 
-    const config = createConfig({ people: peopleFn });
+    const config = createConfig({ suggestionsProvider });
     render(FilterPanel, {
       props: { config, timeBuckets },
     });
@@ -241,7 +171,7 @@ describe('Contextual re-fetch on temporal change', () => {
     expect(screen.getByTestId('people-item-p1')).toBeTruthy();
   });
 
-  it('should produce correct UTC ISO strings for month temporal ranges', async () => {
+  it('should pass the selected month through to the suggestions provider', async () => {
     const config = createConfig();
     render(FilterPanel, {
       props: { config, timeBuckets },
@@ -258,10 +188,9 @@ describe('Contextual re-fetch on temporal change', () => {
     await vi.advanceTimersByTimeAsync(250);
 
     await waitFor(() => {
-      expect(config.providers!.people).toHaveBeenLastCalledWith({
-        takenAfter: '2023-08-01T00:00:00.000Z',
-        takenBefore: '2023-09-01T00:00:00.000Z',
-      });
+      expect(config.suggestionsProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({ selectedYear: 2023, selectedMonth: 8 }),
+      );
     });
   });
 
@@ -327,9 +256,9 @@ describe('Contextual re-fetch on temporal change', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('month-grid')).toBeNull();
       expect(screen.getByTestId('year-grid')).toBeTruthy();
-      expect(config.providers!.people).toHaveBeenLastCalledWith({
-        takenAfter: '2024-01-01T00:00:00.000Z',
-      });
+      expect(config.suggestionsProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({ dateAfter: '2024-01-01', selectedYear: undefined, selectedMonth: undefined }),
+      );
     });
   });
 
@@ -352,9 +281,9 @@ describe('Contextual re-fetch on temporal change', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('month-grid')).toBeNull();
       expect(screen.getByTestId('year-grid')).toBeTruthy();
-      expect(config.providers!.people).toHaveBeenLastCalledWith({
-        takenBefore: '2025-01-01T00:00:00.000Z',
-      });
+      expect(config.suggestionsProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({ dateBefore: '2024-12-31', selectedYear: undefined, selectedMonth: undefined }),
+      );
     });
   });
 
@@ -375,10 +304,9 @@ describe('Contextual re-fetch on temporal change', () => {
     await waitFor(() => {
       expect(screen.getByTestId('custom-date-from-input')).toHaveValue('');
       expect(screen.getByTestId('custom-date-to-input')).toHaveValue('');
-      expect(config.providers!.people).toHaveBeenLastCalledWith({
-        takenAfter: '2023-01-01T00:00:00.000Z',
-        takenBefore: '2024-01-01T00:00:00.000Z',
-      });
+      expect(config.suggestionsProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({ dateAfter: undefined, dateBefore: undefined, selectedYear: 2023 }),
+      );
     });
   });
 
@@ -407,17 +335,21 @@ describe('Contextual re-fetch on temporal change', () => {
     await waitFor(() => {
       expect(screen.getByTestId('custom-date-from-input')).toHaveValue('');
       expect(screen.getByTestId('custom-date-to-input')).toHaveValue('');
-      expect(config.providers!.people).toHaveBeenLastCalledWith({
-        takenAfter: '2023-08-01T00:00:00.000Z',
-        takenBefore: '2023-09-01T00:00:00.000Z',
-      });
+      expect(config.suggestionsProvider).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          dateAfter: undefined,
+          dateBefore: undefined,
+          selectedYear: 2023,
+          selectedMonth: 8,
+        }),
+      );
     });
   });
 
   it('should pass custom from date context to dependent city and camera model providers', async () => {
     const cities = vi.fn().mockResolvedValue(['Berlin']);
     const cameraModels = vi.fn().mockResolvedValue(['EOS R5']);
-    const config = createConfig({ cities, cameraModels });
+    const config = createConfig({ providers: { cities, cameraModels } });
     render(FilterPanel, {
       props: { config, timeBuckets },
     });

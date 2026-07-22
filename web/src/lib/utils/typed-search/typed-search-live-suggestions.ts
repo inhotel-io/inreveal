@@ -180,13 +180,59 @@ export async function resolveLiveTypedSearchSuggestions(
   return { status: 'idle' };
 }
 
-async function resolvePersonLiveSuggestions(
+/**
+ * Shared shape of every live-suggestion resolver: fetch candidates, keep the ones whose label
+ * contains the typed value, cap the list, map to choices. `getLabel` returning `undefined` drops the
+ * candidate outright (unnamed people, non-string API entries). AbortErrors propagate — a superseded
+ * request must not settle the status — everything else becomes an `error` status.
+ */
+async function runLiveSuggestion<TCandidate>(options: {
+  key: LiveTypedSearchKey;
+  value: string;
+  errorMessage: string;
+  fetchCandidates: () => Promise<TCandidate[]>;
+  getLabel: (candidate: TCandidate) => string | undefined;
+  toChoice: (candidate: TCandidate) => LiveTypedSearchChoice;
+}): Promise<LiveTypedSearchStatus> {
+  const { key, value, errorMessage, fetchCandidates, getLabel, toChoice } = options;
+
+  try {
+    const candidates = await fetchCandidates();
+    const normalizedValue = value.trim().toLowerCase();
+    const items = candidates
+      .filter((candidate) => {
+        const label = getLabel(candidate);
+        return label !== undefined && (!normalizedValue || label.toLowerCase().includes(normalizedValue));
+      })
+      .slice(0, LIVE_RESULT_LIMIT)
+      .map((candidate) => toChoice(candidate));
+
+    return items.length === 0 ? { status: 'empty', key } : { status: 'ok', key, items, total: items.length };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+
+    return { status: 'error', key, message: error instanceof Error ? error.message : errorMessage };
+  }
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function resolvePersonLiveSuggestions(
   context: LiveTypedSearchContext,
   token: TypedSearchTokenSpan,
 ): Promise<LiveTypedSearchStatus> {
-  try {
-    const value = token.value.trim();
-    const people = await (async () => {
+  const value = token.value.trim();
+  const scope = context.spaceId ? 'space' : 'global';
+
+  return runLiveSuggestion<LiveTypedSearchPersonPreview>({
+    key: 'person',
+    value,
+    errorMessage: 'Unable to load people',
+    fetchCandidates: async () => {
       if (context.spaceId) {
         const response = await getFilterSuggestions({ spaceId: context.spaceId }, { signal: context.signal });
         return response.people;
@@ -198,86 +244,44 @@ async function resolvePersonLiveSuggestions(
 
       const response = await getFilterSuggestions({ withSharedSpaces: true }, { signal: context.signal });
       return response.people;
-    })();
-    const normalizedValue = value.toLowerCase();
-    const scope = context.spaceId ? 'space' : 'global';
-    const matches = people
-      .filter((person) => getPersonLabel(person))
-      .filter((person) => !normalizedValue || getPersonLabel(person).toLowerCase().includes(normalizedValue))
-      .slice(0, LIVE_RESULT_LIMIT)
-      .map((person) => personChoice(token, person, scope));
-
-    return matches.length === 0
-      ? { status: 'empty', key: 'person' }
-      : { status: 'ok', key: 'person', items: matches, total: matches.length };
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw error;
-    }
-
-    return {
-      status: 'error',
-      key: 'person',
-      message: error instanceof Error ? error.message : 'Unable to load people',
-    };
-  }
+    },
+    getLabel: (person) => getPersonLabel(person) || undefined,
+    toChoice: (person) => personChoice(token, person, scope),
+  });
 }
 
-async function resolveTagLiveSuggestions(
+function resolveTagLiveSuggestions(
   context: LiveTypedSearchContext,
   token: TypedSearchTokenSpan,
 ): Promise<LiveTypedSearchStatus> {
-  try {
-    const value = token.value.trim().toLowerCase();
-    const response = await getFilterSuggestions(liveSuggestionScope(context), { signal: context.signal });
-    const matches = response.tags
-      .filter((tag) => !value || tagLabel(tag).toLowerCase().includes(value))
-      .slice(0, LIVE_RESULT_LIMIT)
-      .map((tag) => tagChoice(token, tag));
-
-    return matches.length === 0
-      ? { status: 'empty', key: 'tag' }
-      : { status: 'ok', key: 'tag', items: matches, total: matches.length };
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw error;
-    }
-
-    return {
-      status: 'error',
-      key: 'tag',
-      message: error instanceof Error ? error.message : 'Unable to load tags',
-    };
-  }
+  return runLiveSuggestion<TagSuggestion>({
+    key: 'tag',
+    value: token.value,
+    errorMessage: 'Unable to load tags',
+    fetchCandidates: async () => {
+      const response = await getFilterSuggestions(liveSuggestionScope(context), { signal: context.signal });
+      return response.tags;
+    },
+    getLabel: (tag) => tagLabel(tag),
+    toChoice: (tag) => tagChoice(token, tag),
+  });
 }
 
-async function resolveCountryLiveSuggestions(
+function resolveCountryLiveSuggestions(
   context: LiveTypedSearchContext,
   token: TypedSearchTokenSpan,
 ): Promise<LiveTypedSearchStatus> {
-  try {
-    const value = token.value.trim().toLowerCase();
-    const response = await getFilterSuggestions(liveSuggestionScope(context), { signal: context.signal });
-    const matches = response.countries
-      .filter((country): country is string => typeof country === 'string')
-      .filter((country) => !value || country.toLowerCase().includes(value))
-      .slice(0, LIVE_RESULT_LIMIT)
-      .map((country) => stringChoice(token, 'country', country));
-
-    return matches.length === 0
-      ? { status: 'empty', key: 'country' }
-      : { status: 'ok', key: 'country', items: matches, total: matches.length };
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw error;
-    }
-
-    return {
-      status: 'error',
-      key: 'country',
-      message: error instanceof Error ? error.message : 'Unable to load countries',
-    };
-  }
+  return runLiveSuggestion<string>({
+    key: 'country',
+    value: token.value,
+    errorMessage: 'Unable to load countries',
+    fetchCandidates: async () => {
+      const response = await getFilterSuggestions(liveSuggestionScope(context), { signal: context.signal });
+      return response.countries;
+    },
+    getLabel: asString,
+    toChoice: (country) => stringChoice(token, 'country', country),
+  });
 }
 
 function canonicalExactMatch(candidates: string[], value: string) {
@@ -298,40 +302,30 @@ async function getCanonicalCountryForCity(context: LiveTypedSearchContext) {
   );
 }
 
-async function resolveCityLiveSuggestions(
+function resolveCityLiveSuggestions(
   context: LiveTypedSearchContext,
   token: TypedSearchTokenSpan,
 ): Promise<LiveTypedSearchStatus> {
-  const value = token.value.trim();
-  try {
-    const country = await getCanonicalCountryForCity(context);
-    const cities = await getSearchSuggestions(
-      {
-        $type: SearchSuggestionType.City,
-        ...(country ? { country } : {}),
-        ...liveSuggestionScope(context),
-      },
-      { signal: context.signal },
-    );
-    const normalizedValue = value.toLowerCase();
-    const matches = cities
-      .filter((city): city is string => typeof city === 'string')
-      .filter((city) => !normalizedValue || city.toLowerCase().includes(normalizedValue))
-      .slice(0, LIVE_RESULT_LIMIT)
-      .map((city) => stringChoice(token, 'city', city, country));
+  // The canonical country is resolved inside the fetch so its failures land on the same error path,
+  // and captured for the choice's secondary label.
+  let country: string | undefined;
 
-    return matches.length === 0
-      ? { status: 'empty', key: 'city' }
-      : { status: 'ok', key: 'city', items: matches, total: matches.length };
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw error;
-    }
-
-    return {
-      status: 'error',
-      key: 'city',
-      message: error instanceof Error ? error.message : 'Unable to load cities',
-    };
-  }
+  return runLiveSuggestion<string>({
+    key: 'city',
+    value: token.value,
+    errorMessage: 'Unable to load cities',
+    fetchCandidates: async () => {
+      country = await getCanonicalCountryForCity(context);
+      return getSearchSuggestions(
+        {
+          $type: SearchSuggestionType.City,
+          ...(country ? { country } : {}),
+          ...liveSuggestionScope(context),
+        },
+        { signal: context.signal },
+      );
+    },
+    getLabel: asString,
+    toChoice: (city) => stringChoice(token, 'city', city, country),
+  });
 }
