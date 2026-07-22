@@ -33,8 +33,8 @@ getDormantPeople(
 
 Query shape — `person` → `asset_face` → `asset`:
 
-| Side   | Predicates                                                                                     |
-| ------ | ---------------------------------------------------------------------------------------------- |
+| Side   | Predicates                                                                                      |
+| ------ | ----------------------------------------------------------------------------------------------- |
 | person | `ownerId = :ownerId`, `type = 'person'`, `name != ''`, `isHidden = false`                       |
 | face   | `deletedAt is null`, `isVisible = true`                                                         |
 | asset  | `ownerId = :ownerId`, `visibility = Timeline`, `deletedAt is null`, Preview `asset_file` EXISTS |

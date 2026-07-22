@@ -21,12 +21,12 @@ against the file:
 Add, placed alphabetically among their neighbours (the file is sorted;
 `prettier-plugin-sort-json` enforces it):
 
-| Key                                                      | Value                                                                                    |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `admin` › `memory_type_person_throwback_setting`         | `Person throwback`                                                                       |
+| Key                                                          | Value                                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `admin` › `memory_type_person_throwback_setting`             | `Person throwback`                                                                         |
 | `admin` › `memory_type_person_throwback_setting_description` | `Resurface a warm chapter with someone who has not appeared in photos for a year or more.` |
-| `memory_type_person_throwback`                           | `Times with someone`                                                                     |
-| `memory_type_person_throwback_description`               | `Occasionally resurface photos of a person you have not photographed in a long while.`   |
+| `memory_type_person_throwback`                               | `Times with someone`                                                                       |
+| `memory_type_person_throwback_description`                   | `Occasionally resurface photos of a person you have not photographed in a long while.`     |
 
 Only `en.json`. Do not touch other locales — they are translated downstream. Note `i18n/` is shared
 by web **and** mobile; adding keys is safe, renaming is not.

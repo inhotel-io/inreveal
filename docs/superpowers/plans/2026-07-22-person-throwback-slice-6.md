@@ -19,17 +19,17 @@ the target, so a "dormant" person's assets must be older than that.
 
 All of spec §4.4, one `it()` each:
 
-| #   | Scenario                                                | Expect                                                            |
-| --- | ------------------------------------------------------- | ----------------------------------------------------------------- |
-| 1   | dormant named person, dense chapter, type enabled       | memory created with `ruleId: 'person_throwback'`, correct assets   |
-| 2   | same but `person.type = 'pet'`                          | **no** memory                                                      |
-| 3   | same but `isHidden = true`                              | no memory                                                          |
-| 4   | same but `name = ''`                                    | no memory                                                          |
-| 5   | recent photos exist but are `Archived`                  | **still** dormant → memory created                                 |
-| 5b  | chapter assets have no `Preview` asset_file             | excluded from dormancy count and chapter                           |
-| 5c  | a face on a chapter asset is soft-deleted or invisible  | that asset does not count toward the chapter                       |
-| 6   | user has the type toggled off                           | no memory                                                          |
-| 7   | rule already fired for that person                      | **no second memory; a different dormant person is used instead**   |
+| #   | Scenario                                               | Expect                                                           |
+| --- | ------------------------------------------------------ | ---------------------------------------------------------------- |
+| 1   | dormant named person, dense chapter, type enabled      | memory created with `ruleId: 'person_throwback'`, correct assets |
+| 2   | same but `person.type = 'pet'`                         | **no** memory                                                    |
+| 3   | same but `isHidden = true`                             | no memory                                                        |
+| 4   | same but `name = ''`                                   | no memory                                                        |
+| 5   | recent photos exist but are `Archived`                 | **still** dormant → memory created                               |
+| 5b  | chapter assets have no `Preview` asset_file            | excluded from dormancy count and chapter                         |
+| 5c  | a face on a chapter asset is soft-deleted or invisible | that asset does not count toward the chapter                     |
+| 6   | user has the type toggled off                          | no memory                                                        |
+| 7   | rule already fired for that person                     | **no second memory; a different dormant person is used instead** |
 
 **Row 7 is the most important test in this slice.** It is the only coverage of D8 (the rule returns
 up to 5 candidates so the engine can skip an already-fired `dedupeKey` and reach a fresh person).

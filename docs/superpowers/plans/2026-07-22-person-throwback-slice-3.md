@@ -24,35 +24,39 @@ const ruleWith = (people: DormantPerson[], counts: MemoryPersonDayCount[], asset
     getMemoryPersonDailyCounts: vi.fn().mockResolvedValue(counts),
     getMemoryAssetsForPersonWindow: vi.fn().mockResolvedValue(assets),
   };
-  return { rule: new PersonThrowbackMemoryRule(personRepository as never, assetRepository as never), personRepository, assetRepository };
+  return {
+    rule: new PersonThrowbackMemoryRule(personRepository as never, assetRepository as never),
+    personRepository,
+    assetRepository,
+  };
 };
 ```
 
 All 20 cases from spec §4.2, one `it()` each, phrased as behaviour. **Write rows 2, 18, 19 and 3
 first** — they are the four the spec was revised to cover.
 
-| Row | Test                                                                                                                                                                       |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `target.day !== 13` (use the 12th and the 14th) → `[]`, and **`getDormantPeople` not called**                                                                                |
-| 2   | empty pool → `[]`, and **`getMemoryPersonDailyCounts` NOT called**. Asserting only `[]` passes without the guard — assert the absent call                                    |
+| Row | Test                                                                                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `target.day !== 13` (use the 12th and the 14th) → `[]`, and **`getDormantPeople` not called**                                                                                                                                                                                  |
+| 2   | empty pool → `[]`, and **`getMemoryPersonDailyCounts` NOT called**. Asserting only `[]` passes without the guard — assert the absent call                                                                                                                                      |
 | 3   | "Anna", 23-asset chapter across Aug 2019, target 2026-08-13 → one candidate; pin `title` `'Times with Anna'`, `subtitle` `'23 photos · August 2019'`, `dedupeKey` `'person_throwback:p1'`, `ruleId`, and **`score === 186`** (`110 + min(23,30)*3 + max(0,10-7)` = `110+69+7`) |
-| 4   | `lastSeenAt` exactly at the cutoff → excluded. Assert via the **query argument**: `lastSeenBefore` equals `target.startOf('day').minus({months:12})`                         |
-| 5   | last seen one day before the cutoff → included                                                                                                                              |
-| 6   | densest chapter has 5 assets → excluded (`MIN_CHAPTER_ASSETS`)                                                                                                               |
-| 7   | any run reaching step 3 → `getDormantPeople` called with `minAssets: 10`, `limit: 10`, and the exact `lastSeenBefore`                                                        |
-| 8   | 7 qualifying people → exactly 5 candidates, score descending                                                                                                                |
-| 9   | two identical scores → ordered by `personId` ascending                                                                                                                      |
-| 10  | chapter spanning a month boundary (e.g. 2019-07-29 → 2019-08-04, heavier in August) → subtitle month/year come from `medianTime`, not from `chapter.from`                    |
-| 11  | single-day chapter of 8 assets → included (no distinct-day minimum)                                                                                                         |
-| 12  | chapter dated 4 years back → `recencyBonus` contributes 6                                                                                                                   |
-| 13  | equal chapters, one 2 years back and one 8 years back → the 2-years-back one scores higher                                                                                  |
-| 14  | window returns 20 assets → `assetIds.length === 8`, evenly spaced by time, chronological                                                                                    |
-| 15  | every candidate → `visibleForDays === 7`, and `dedupeKey` contains **no** year                                                                                              |
-| 16  | every pooled candidate fails the chapter bar → `[]`, and `getMemoryAssetsForPersonWindow` never called                                                                       |
-| 17  | window returns 20 assets but `chapter.count` is 23 → candidate kept; subtitle still says `23 photos`                                                                        |
-| 18  | window returns **4** assets (< `MIN_CHAPTER_ASSETS`) → candidate **dropped**                                                                                                |
-| 19  | window returns **zero** assets → candidate dropped, no zero-asset memory                                                                                                    |
-| 20  | one candidate's window query rejects → that candidate dropped, the others still returned                                                                                    |
+| 4   | `lastSeenAt` exactly at the cutoff → excluded. Assert via the **query argument**: `lastSeenBefore` equals `target.startOf('day').minus({months:12})`                                                                                                                           |
+| 5   | last seen one day before the cutoff → included                                                                                                                                                                                                                                 |
+| 6   | densest chapter has 5 assets → excluded (`MIN_CHAPTER_ASSETS`)                                                                                                                                                                                                                 |
+| 7   | any run reaching step 3 → `getDormantPeople` called with `minAssets: 10`, `limit: 10`, and the exact `lastSeenBefore`                                                                                                                                                          |
+| 8   | 7 qualifying people → exactly 5 candidates, score descending                                                                                                                                                                                                                   |
+| 9   | two identical scores → ordered by `personId` ascending                                                                                                                                                                                                                         |
+| 10  | chapter spanning a month boundary (e.g. 2019-07-29 → 2019-08-04, heavier in August) → subtitle month/year come from `medianTime`, not from `chapter.from`                                                                                                                      |
+| 11  | single-day chapter of 8 assets → included (no distinct-day minimum)                                                                                                                                                                                                            |
+| 12  | chapter dated 4 years back → `recencyBonus` contributes 6                                                                                                                                                                                                                      |
+| 13  | equal chapters, one 2 years back and one 8 years back → the 2-years-back one scores higher                                                                                                                                                                                     |
+| 14  | window returns 20 assets → `assetIds.length === 8`, evenly spaced by time, chronological                                                                                                                                                                                       |
+| 15  | every candidate → `visibleForDays === 7`, and `dedupeKey` contains **no** year                                                                                                                                                                                                 |
+| 16  | every pooled candidate fails the chapter bar → `[]`, and `getMemoryAssetsForPersonWindow` never called                                                                                                                                                                         |
+| 17  | window returns 20 assets but `chapter.count` is 23 → candidate kept; subtitle still says `23 photos`                                                                                                                                                                           |
+| 18  | window returns **4** assets (< `MIN_CHAPTER_ASSETS`) → candidate **dropped**                                                                                                                                                                                                   |
+| 19  | window returns **zero** assets → candidate dropped, no zero-asset memory                                                                                                                                                                                                       |
+| 20  | one candidate's window query rejects → that candidate dropped, the others still returned                                                                                                                                                                                       |
 
 For rows 17–20 the window mock must vary per candidate — use
 `vi.fn().mockResolvedValueOnce(...).mockResolvedValueOnce(...)` or a `mockImplementation` keyed on
