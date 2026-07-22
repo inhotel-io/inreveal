@@ -13,7 +13,6 @@ part of openapi.api;
 class SharedSpacePersonResponseDto {
   /// Returns a new [SharedSpacePersonResponseDto] instance.
   SharedSpacePersonResponseDto({
-    this.alias = const Optional.absent(),
     required this.assetCount,
     this.birthDate = const Optional.absent(),
     required this.createdAt,
@@ -24,13 +23,9 @@ class SharedSpacePersonResponseDto {
     this.representativeFaceId = const Optional.absent(),
     required this.representativeFaceSource,
     required this.spaceId,
-    required this.thumbnailPath,
     this.type = const Optional.absent(),
     required this.updatedAt,
   });
-
-  /// User-specific alias for this person
-  Optional<String?> alias;
 
   /// Number of unique assets with this person
   num assetCount;
@@ -62,9 +57,6 @@ class SharedSpacePersonResponseDto {
   /// Space ID
   String spaceId;
 
-  /// Thumbnail path
-  String thumbnailPath;
-
   /// Person type (person or pet)
   ///
   /// Please note: This property should have been non-nullable! Since the specification file
@@ -79,7 +71,6 @@ class SharedSpacePersonResponseDto {
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is SharedSpacePersonResponseDto &&
-    other.alias == alias &&
     other.assetCount == assetCount &&
     other.birthDate == birthDate &&
     other.createdAt == createdAt &&
@@ -90,14 +81,12 @@ class SharedSpacePersonResponseDto {
     other.representativeFaceId == representativeFaceId &&
     other.representativeFaceSource == representativeFaceSource &&
     other.spaceId == spaceId &&
-    other.thumbnailPath == thumbnailPath &&
     other.type == type &&
     other.updatedAt == updatedAt;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (alias == null ? 0 : alias!.hashCode) +
     (assetCount.hashCode) +
     (birthDate == null ? 0 : birthDate!.hashCode) +
     (createdAt.hashCode) +
@@ -108,19 +97,14 @@ class SharedSpacePersonResponseDto {
     (representativeFaceId == null ? 0 : representativeFaceId!.hashCode) +
     (representativeFaceSource.hashCode) +
     (spaceId.hashCode) +
-    (thumbnailPath.hashCode) +
     (type == null ? 0 : type!.hashCode) +
     (updatedAt.hashCode);
 
   @override
-  String toString() => 'SharedSpacePersonResponseDto[alias=$alias, assetCount=$assetCount, birthDate=$birthDate, createdAt=$createdAt, faceCount=$faceCount, id=$id, isHidden=$isHidden, name=$name, representativeFaceId=$representativeFaceId, representativeFaceSource=$representativeFaceSource, spaceId=$spaceId, thumbnailPath=$thumbnailPath, type=$type, updatedAt=$updatedAt]';
+  String toString() => 'SharedSpacePersonResponseDto[assetCount=$assetCount, birthDate=$birthDate, createdAt=$createdAt, faceCount=$faceCount, id=$id, isHidden=$isHidden, name=$name, representativeFaceId=$representativeFaceId, representativeFaceSource=$representativeFaceSource, spaceId=$spaceId, type=$type, updatedAt=$updatedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.alias.isPresent) {
-      final value = this.alias.value;
-      json[r'alias'] = value;
-    }
       json[r'assetCount'] = this.assetCount;
     if (this.birthDate.isPresent) {
       final value = this.birthDate.value;
@@ -137,7 +121,6 @@ class SharedSpacePersonResponseDto {
     }
       json[r'representativeFaceSource'] = this.representativeFaceSource;
       json[r'spaceId'] = this.spaceId;
-      json[r'thumbnailPath'] = this.thumbnailPath;
     if (this.type.isPresent) {
       final value = this.type.value;
       json[r'type'] = value;
@@ -155,7 +138,6 @@ class SharedSpacePersonResponseDto {
       final json = value.cast<String, dynamic>();
 
       return SharedSpacePersonResponseDto(
-        alias: json.containsKey(r'alias') ? Optional.present(mapValueOfType<String>(json, r'alias')) : const Optional.absent(),
         assetCount: num.parse('${json[r'assetCount']}'),
         birthDate: json.containsKey(r'birthDate') ? Optional.present(mapDateTime(json, r'birthDate', r'')) : const Optional.absent(),
         createdAt: mapValueOfType<String>(json, r'createdAt')!,
@@ -166,7 +148,6 @@ class SharedSpacePersonResponseDto {
         representativeFaceId: json.containsKey(r'representativeFaceId') ? Optional.present(mapValueOfType<String>(json, r'representativeFaceId')) : const Optional.absent(),
         representativeFaceSource: SharedSpacePersonResponseDtoRepresentativeFaceSourceEnum.fromJson(json[r'representativeFaceSource'])!,
         spaceId: mapValueOfType<String>(json, r'spaceId')!,
-        thumbnailPath: mapValueOfType<String>(json, r'thumbnailPath')!,
         type: json.containsKey(r'type') ? Optional.present(mapValueOfType<String>(json, r'type')) : const Optional.absent(),
         updatedAt: mapValueOfType<String>(json, r'updatedAt')!,
       );
@@ -224,7 +205,6 @@ class SharedSpacePersonResponseDto {
     'name',
     'representativeFaceSource',
     'spaceId',
-    'thumbnailPath',
     'updatedAt',
   };
 }

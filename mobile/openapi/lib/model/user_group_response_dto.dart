@@ -18,7 +18,6 @@ class UserGroupResponseDto {
     required this.id,
     this.members = const [],
     required this.name,
-    required this.origin,
   });
 
   /// Group color
@@ -36,17 +35,13 @@ class UserGroupResponseDto {
   /// Group name
   String name;
 
-  /// Group origin (manual or oidc)
-  String origin;
-
   @override
   bool operator ==(Object other) => identical(this, other) || other is UserGroupResponseDto &&
     other.color == color &&
     other.createdAt == createdAt &&
     other.id == id &&
     _deepEquality.equals(other.members, members) &&
-    other.name == name &&
-    other.origin == origin;
+    other.name == name;
 
   @override
   int get hashCode =>
@@ -55,11 +50,10 @@ class UserGroupResponseDto {
     (createdAt.hashCode) +
     (id.hashCode) +
     (members.hashCode) +
-    (name.hashCode) +
-    (origin.hashCode);
+    (name.hashCode);
 
   @override
-  String toString() => 'UserGroupResponseDto[color=$color, createdAt=$createdAt, id=$id, members=$members, name=$name, origin=$origin]';
+  String toString() => 'UserGroupResponseDto[color=$color, createdAt=$createdAt, id=$id, members=$members, name=$name]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -71,7 +65,6 @@ class UserGroupResponseDto {
       json[r'id'] = this.id;
       json[r'members'] = this.members;
       json[r'name'] = this.name;
-      json[r'origin'] = this.origin;
     return json;
   }
 
@@ -89,7 +82,6 @@ class UserGroupResponseDto {
         id: mapValueOfType<String>(json, r'id')!,
         members: UserGroupMemberResponseDto.listFromJson(json[r'members']),
         name: mapValueOfType<String>(json, r'name')!,
-        origin: mapValueOfType<String>(json, r'origin')!,
       );
     }
     return null;
@@ -141,7 +133,6 @@ class UserGroupResponseDto {
     'id',
     'members',
     'name',
-    'origin',
   };
 }
 

@@ -34,13 +34,10 @@ where
 
 -- UserGroupRepository.getMembers
 select
-  "user_group_member"."groupId",
   "user_group_member"."userId",
-  "user_group_member"."addedAt",
   "user"."name",
   "user"."email",
   "user"."profileImagePath",
-  "user"."profileChangedAt",
   "user"."avatarColor"
 from
   "user_group_member"

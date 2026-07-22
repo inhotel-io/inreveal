@@ -2856,13 +2856,7 @@ export type SharedSpaceMemberUpdateDto = {
     /** Member role */
     role: SharedSpaceRole;
 };
-export type SharedSpaceMemberMetadataContributionDto = {
-    /** Disable person metadata contribution for this member */
-    sharePersonMetadata: false;
-};
 export type SharedSpacePersonResponseDto = {
-    /** User-specific alias for this person */
-    alias?: string | null;
     /** Number of unique assets with this person */
     assetCount: number;
     /** Person date of birth */
@@ -2883,8 +2877,6 @@ export type SharedSpacePersonResponseDto = {
     representativeFaceSource: RepresentativeFaceSource;
     /** Space ID */
     spaceId: string;
-    /** Thumbnail path */
-    thumbnailPath: string;
     /** Person type (person or pet) */
     "type"?: string;
     /** Last update date */
@@ -2907,10 +2899,6 @@ export type SharedSpacePersonUpdateDto = {
     name?: string;
     /** Representative face ID */
     representativeFaceId?: string | null;
-};
-export type SharedSpacePersonAliasDto = {
-    /** Alias name for this person */
-    alias: string;
 };
 export type SharedSpacePersonMergeDto = {
     /** Acknowledgement that this merge will combine two people belonging to another user, which cannot be undone. Required to commit such a merge. */
@@ -2936,6 +2924,42 @@ export type StackCreateDto = {
 export type StackUpdateDto = {
     /** Primary asset ID */
     primaryAssetId?: string;
+};
+export type StorageMigrationFileCountsDto = {
+    /** Number of encoded video files */
+    encodedVideos: number;
+    /** Number of full-size files */
+    fullsize: number;
+    /** Number of original files */
+    originals: number;
+    /** Number of person thumbnail files */
+    personThumbnails: number;
+    /** Number of preview files */
+    previews: number;
+    /** Number of profile image files */
+    profileImages: number;
+    /** Number of sidecar files */
+    sidecars: number;
+    /** Number of thumbnail files */
+    thumbnails: number;
+    /** Total number of files */
+    total: number;
+};
+export type StorageMigrationEstimateResponseDto = {
+    /** Migration direction */
+    direction: StorageMigrationDirection;
+    /** Approximate size of the original files that would be migrated, in bytes */
+    estimatedSizeBytes: number;
+    /** Number of files that would be migrated, by type */
+    fileCounts: StorageMigrationFileCountsDto;
+};
+export type StorageMigrationRollbackResponseDto = {
+    /** Number of entries that could not be rolled back */
+    failed: number;
+    /** Number of entries that were rolled back */
+    rolledBack: number;
+    /** Total number of entries in the batch */
+    total: number;
 };
 export type StorageMigrationFileTypesDto = {
     /** Include encoded video files */
@@ -2964,6 +2988,26 @@ export type StorageMigrationStartDto = {
     direction: StorageMigrationDirection;
     /** File types to migrate */
     fileTypes: StorageMigrationFileTypesDto;
+};
+export type StorageMigrationStartResponseDto = {
+    /** Batch ID of the started migration, used to roll it back */
+    batchId: string;
+};
+export type StorageMigrationStatusResponseDto = {
+    /** Number of active jobs */
+    active: number;
+    /** Number of completed jobs */
+    completed: number;
+    /** Number of delayed jobs */
+    delayed: number;
+    /** Number of failed jobs */
+    failed: number;
+    /** Whether a migration is currently running */
+    isActive: boolean;
+    /** Number of paused jobs */
+    paused: number;
+    /** Number of waiting jobs */
+    waiting: number;
 };
 export type SyncAckDeleteDto = {
     /** Sync entity types to delete acks for */
@@ -3514,8 +3558,6 @@ export type UserGroupResponseDto = {
     members: UserGroupMemberResponseDto[];
     /** Group name */
     name: string;
-    /** Group origin (manual or oidc) */
-    origin: string;
 };
 export type UserGroupCreateDto = {
     /** Group color */
@@ -5599,15 +5641,6 @@ export function validateAccessToken(opts?: Oazapfts.RequestOpts) {
         status: 200;
         data: ValidateAccessTokenResponseDto;
     }>("/auth/validateToken", {
-        ...opts,
-        method: "POST"
-    }));
-}
-/**
- * Scan all libraries for classification
- */
-export function scanClassification(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText("/classification/scan", {
         ...opts,
         method: "POST"
     }));
@@ -7833,23 +7866,6 @@ export function updateMember({ id, userId, sharedSpaceMemberUpdateDto }: {
     })));
 }
 /**
- * Disable member person metadata contribution
- */
-export function updateMemberMetadataContribution({ id, userId, sharedSpaceMemberMetadataContributionDto }: {
-    id: string;
-    userId: string;
-    sharedSpaceMemberMetadataContributionDto: SharedSpaceMemberMetadataContributionDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: SharedSpaceMemberResponseDto;
-    }>(`/shared-spaces/${encodeURIComponent(id)}/members/${encodeURIComponent(userId)}/metadata-contribution`, oazapfts.json({
-        ...opts,
-        method: "PATCH",
-        body: sharedSpaceMemberMetadataContributionDto
-    })));
-}
-/**
  * Get people in a shared space
  */
 export function getSpacePeople({ id, limit, name, named, offset, takenAfter, takenBefore, withHidden }: {
@@ -7875,17 +7891,6 @@ export function getSpacePeople({ id, limit, name, named, offset, takenAfter, tak
         withHidden
     }))}`, {
         ...opts
-    }));
-}
-/**
- * Deduplicate people in a shared space
- */
-export function deduplicateSpacePeople({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/deduplicate`, {
-        ...opts,
-        method: "POST"
     }));
 }
 /**
@@ -7985,32 +7990,6 @@ export function updateSpacePerson({ id, personId, sharedSpacePersonUpdateDto }: 
         ...opts,
         method: "PUT",
         body: sharedSpacePersonUpdateDto
-    })));
-}
-/**
- * Delete a person alias in a shared space
- */
-export function deleteSpacePersonAlias({ id, personId }: {
-    id: string;
-    personId: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/alias`, {
-        ...opts,
-        method: "DELETE"
-    }));
-}
-/**
- * Set a person alias in a shared space
- */
-export function setSpacePersonAlias({ id, personId, sharedSpacePersonAliasDto }: {
-    id: string;
-    personId: string;
-    sharedSpacePersonAliasDto: SharedSpacePersonAliasDto;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/alias`, oazapfts.json({
-        ...opts,
-        method: "PUT",
-        body: sharedSpacePersonAliasDto
     })));
 }
 /**
@@ -8231,7 +8210,10 @@ export function removeAssetFromStack({ assetId, id }: {
 export function getEstimate({ direction }: {
     direction: StorageMigrationDirection;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/storage-migration/estimate${QS.query(QS.explode({
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: StorageMigrationEstimateResponseDto;
+    }>(`/storage-migration/estimate${QS.query(QS.explode({
         direction
     }))}`, {
         ...opts
@@ -8243,7 +8225,10 @@ export function getEstimate({ direction }: {
 export function rollback({ batchId }: {
     batchId: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/storage-migration/rollback/${encodeURIComponent(batchId)}`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: StorageMigrationRollbackResponseDto;
+    }>(`/storage-migration/rollback/${encodeURIComponent(batchId)}`, {
         ...opts,
         method: "POST"
     }));
@@ -8254,7 +8239,10 @@ export function rollback({ batchId }: {
 export function start({ storageMigrationStartDto }: {
     storageMigrationStartDto: StorageMigrationStartDto;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText("/storage-migration/start", oazapfts.json({
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: StorageMigrationStartResponseDto;
+    }>("/storage-migration/start", oazapfts.json({
         ...opts,
         method: "POST",
         body: storageMigrationStartDto
@@ -8264,7 +8252,10 @@ export function start({ storageMigrationStartDto }: {
  * Get storage migration status
  */
 export function getStatus(opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText("/storage-migration/status", {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: StorageMigrationStatusResponseDto;
+    }>("/storage-migration/status", {
         ...opts
     }));
 }
@@ -8863,19 +8854,6 @@ export function removeGroup({ id }: {
     return oazapfts.ok(oazapfts.fetchText(`/user-groups/${encodeURIComponent(id)}`, {
         ...opts,
         method: "DELETE"
-    }));
-}
-/**
- * Get a user group
- */
-export function getGroup({ id }: {
-    id: string;
-}, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchJson<{
-        status: 200;
-        data: UserGroupResponseDto;
-    }>(`/user-groups/${encodeURIComponent(id)}`, {
-        ...opts
     }));
 }
 /**

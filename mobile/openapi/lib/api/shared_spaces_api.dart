@@ -239,56 +239,6 @@ class SharedSpacesApi {
     return null;
   }
 
-  /// Deduplicate people in a shared space
-  ///
-  /// Queue a background job to find and merge duplicate people in a shared space.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  Future<Response> deduplicateSpacePeopleWithHttpInfo(String id, { Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/shared-spaces/{id}/people/deduplicate'
-      .replaceAll('{id}', id);
-
-    // ignore: prefer_final_locals
-    Object? postBody;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>[];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'POST',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// Deduplicate people in a shared space
-  ///
-  /// Queue a background job to find and merge duplicate people in a shared space.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  Future<void> deduplicateSpacePeople(String id, { Future<void>? abortTrigger, }) async {
-    final response = await deduplicateSpacePeopleWithHttpInfo(id, abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-  }
-
   /// Delete a person from a shared space
   ///
   /// Permanently delete a person and their face assignments from a shared space.
@@ -339,61 +289,6 @@ class SharedSpacesApi {
   /// * [String] personId (required):
   Future<void> deleteSpacePerson(String id, String personId, { Future<void>? abortTrigger, }) async {
     final response = await deleteSpacePersonWithHttpInfo(id, personId, abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-  }
-
-  /// Delete a person alias in a shared space
-  ///
-  /// Remove a user-specific alias for a person in a shared space.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] personId (required):
-  Future<Response> deleteSpacePersonAliasWithHttpInfo(String id, String personId, { Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/shared-spaces/{id}/people/{personId}/alias'
-      .replaceAll('{id}', id)
-      .replaceAll('{personId}', personId);
-
-    // ignore: prefer_final_locals
-    Object? postBody;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>[];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'DELETE',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// Delete a person alias in a shared space
-  ///
-  /// Remove a user-specific alias for a person in a shared space.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] personId (required):
-  Future<void> deleteSpacePersonAlias(String id, String personId, { Future<void>? abortTrigger, }) async {
-    final response = await deleteSpacePersonAliasWithHttpInfo(id, personId, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
@@ -1967,65 +1862,6 @@ class SharedSpacesApi {
     }
   }
 
-  /// Set a person alias in a shared space
-  ///
-  /// Set a user-specific alias for a person in a shared space.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] personId (required):
-  ///
-  /// * [SharedSpacePersonAliasDto] sharedSpacePersonAliasDto (required):
-  Future<Response> setSpacePersonAliasWithHttpInfo(String id, String personId, SharedSpacePersonAliasDto sharedSpacePersonAliasDto, { Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/shared-spaces/{id}/people/{personId}/alias'
-      .replaceAll('{id}', id)
-      .replaceAll('{personId}', personId);
-
-    // ignore: prefer_final_locals
-    Object? postBody = sharedSpacePersonAliasDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'PUT',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// Set a person alias in a shared space
-  ///
-  /// Set a user-specific alias for a person in a shared space.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] personId (required):
-  ///
-  /// * [SharedSpacePersonAliasDto] sharedSpacePersonAliasDto (required):
-  Future<void> setSpacePersonAlias(String id, String personId, SharedSpacePersonAliasDto sharedSpacePersonAliasDto, { Future<void>? abortTrigger, }) async {
-    final response = await setSpacePersonAliasWithHttpInfo(id, personId, sharedSpacePersonAliasDto, abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-  }
-
   /// Unlink an album from a shared space
   ///
   /// Remove an album link. Album assets will no longer appear in the space.
@@ -2190,73 +2026,6 @@ class SharedSpacesApi {
   /// * [SharedSpaceMemberUpdateDto] sharedSpaceMemberUpdateDto (required):
   Future<SharedSpaceMemberResponseDto?> updateMember(String id, String userId, SharedSpaceMemberUpdateDto sharedSpaceMemberUpdateDto, { Future<void>? abortTrigger, }) async {
     final response = await updateMemberWithHttpInfo(id, userId, sharedSpaceMemberUpdateDto, abortTrigger: abortTrigger,);
-    if (response.statusCode >= HttpStatus.badRequest) {
-      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
-    }
-    // When a remote server returns no body with a status of 204, we shall not decode it.
-    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
-    // FormatException when trying to decode an empty string.
-    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
-      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'SharedSpaceMemberResponseDto',) as SharedSpaceMemberResponseDto;
-    
-    }
-    return null;
-  }
-
-  /// Disable member person metadata contribution
-  ///
-  /// Disable person metadata contribution for another member. Members must re-enable it themselves.
-  ///
-  /// Note: This method returns the HTTP [Response].
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] userId (required):
-  ///
-  /// * [SharedSpaceMemberMetadataContributionDto] sharedSpaceMemberMetadataContributionDto (required):
-  Future<Response> updateMemberMetadataContributionWithHttpInfo(String id, String userId, SharedSpaceMemberMetadataContributionDto sharedSpaceMemberMetadataContributionDto, { Future<void>? abortTrigger, }) async {
-    // ignore: prefer_const_declarations
-    final apiPath = r'/shared-spaces/{id}/members/{userId}/metadata-contribution'
-      .replaceAll('{id}', id)
-      .replaceAll('{userId}', userId);
-
-    // ignore: prefer_final_locals
-    Object? postBody = sharedSpaceMemberMetadataContributionDto;
-
-    final queryParams = <QueryParam>[];
-    final headerParams = <String, String>{};
-    final formParams = <String, String>{};
-
-    const contentTypes = <String>['application/json'];
-
-
-    return apiClient.invokeAPI(
-      apiPath,
-      'PATCH',
-      queryParams,
-      postBody,
-      headerParams,
-      formParams,
-      contentTypes.isEmpty ? null : contentTypes.first,
-      abortTrigger: abortTrigger,
-    );
-  }
-
-  /// Disable member person metadata contribution
-  ///
-  /// Disable person metadata contribution for another member. Members must re-enable it themselves.
-  ///
-  /// Parameters:
-  ///
-  /// * [String] id (required):
-  ///
-  /// * [String] userId (required):
-  ///
-  /// * [SharedSpaceMemberMetadataContributionDto] sharedSpaceMemberMetadataContributionDto (required):
-  Future<SharedSpaceMemberResponseDto?> updateMemberMetadataContribution(String id, String userId, SharedSpaceMemberMetadataContributionDto sharedSpaceMemberMetadataContributionDto, { Future<void>? abortTrigger, }) async {
-    final response = await updateMemberMetadataContributionWithHttpInfo(id, userId, sharedSpaceMemberMetadataContributionDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

@@ -5821,39 +5821,6 @@
         "x-immich-state": "Stable"
       }
     },
-    "/classification/scan": {
-      "post": {
-        "operationId": "scanClassification",
-        "parameters": [],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          },
-          {
-            "api_key": []
-          }
-        ],
-        "summary": "Scan all libraries for classification",
-        "tags": [
-          "Classification"
-        ],
-        "x-immich-admin-only": true,
-        "x-immich-history": [
-          {
-            "version": "v1",
-            "state": "Added"
-          }
-        ]
-      }
-    },
     "/download/archive": {
       "post": {
         "description": "Download a ZIP archive containing the specified assets. The assets must have been previously requested via the \"getDownloadInfo\" endpoint.",
@@ -15599,83 +15566,6 @@
         "x-immich-state": "Beta"
       }
     },
-    "/shared-spaces/{id}/members/{userId}/metadata-contribution": {
-      "patch": {
-        "description": "Disable person metadata contribution for another member. Members must re-enable it themselves.",
-        "operationId": "updateMemberMetadataContribution",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "userId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SharedSpaceMemberMetadataContributionDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SharedSpaceMemberResponseDto"
-                }
-              }
-            },
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          },
-          {
-            "api_key": []
-          }
-        ],
-        "summary": "Disable member person metadata contribution",
-        "tags": [
-          "Shared Spaces"
-        ],
-        "x-immich-history": [
-          {
-            "version": "v1",
-            "state": "Added"
-          },
-          {
-            "version": "v1",
-            "state": "Beta"
-          }
-        ],
-        "x-immich-permission": "sharedSpaceMember.update",
-        "x-immich-state": "Beta"
-      }
-    },
     "/shared-spaces/{id}/people": {
       "get": {
         "description": "Retrieve all people detected in a shared space.",
@@ -15804,56 +15694,6 @@
           }
         ],
         "x-immich-permission": "sharedSpace.read",
-        "x-immich-state": "Beta"
-      }
-    },
-    "/shared-spaces/{id}/people/deduplicate": {
-      "post": {
-        "description": "Queue a background job to find and merge duplicate people in a shared space.",
-        "operationId": "deduplicateSpacePeople",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          },
-          {
-            "api_key": []
-          }
-        ],
-        "summary": "Deduplicate people in a shared space",
-        "tags": [
-          "Shared Spaces"
-        ],
-        "x-immich-history": [
-          {
-            "version": "v1",
-            "state": "Added"
-          },
-          {
-            "version": "v1",
-            "state": "Beta"
-          }
-        ],
-        "x-immich-permission": "sharedSpace.update",
         "x-immich-state": "Beta"
       }
     },
@@ -16310,134 +16150,6 @@
           }
         ],
         "x-immich-permission": "sharedSpace.update",
-        "x-immich-state": "Beta"
-      }
-    },
-    "/shared-spaces/{id}/people/{personId}/alias": {
-      "delete": {
-        "description": "Remove a user-specific alias for a person in a shared space.",
-        "operationId": "deleteSpacePersonAlias",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "personId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          },
-          {
-            "api_key": []
-          }
-        ],
-        "summary": "Delete a person alias in a shared space",
-        "tags": [
-          "Shared Spaces"
-        ],
-        "x-immich-history": [
-          {
-            "version": "v1",
-            "state": "Added"
-          },
-          {
-            "version": "v1",
-            "state": "Beta"
-          }
-        ],
-        "x-immich-permission": "sharedSpace.read",
-        "x-immich-state": "Beta"
-      },
-      "put": {
-        "description": "Set a user-specific alias for a person in a shared space.",
-        "operationId": "setSpacePersonAlias",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            }
-          },
-          {
-            "name": "personId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SharedSpacePersonAliasDto"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "204": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          },
-          {
-            "api_key": []
-          }
-        ],
-        "summary": "Set a person alias in a shared space",
-        "tags": [
-          "Shared Spaces"
-        ],
-        "x-immich-history": [
-          {
-            "version": "v1",
-            "state": "Added"
-          },
-          {
-            "version": "v1",
-            "state": "Beta"
-          }
-        ],
-        "x-immich-permission": "sharedSpace.read",
         "x-immich-state": "Beta"
       }
     },
@@ -17456,6 +17168,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageMigrationEstimateResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -17508,6 +17227,13 @@
         ],
         "responses": {
           "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageMigrationRollbackResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -17558,6 +17284,13 @@
         },
         "responses": {
           "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageMigrationStartResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -17598,6 +17331,13 @@
         "parameters": [],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageMigrationStatusResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -20336,61 +20076,6 @@
         "x-immich-permission": "userGroup.delete",
         "x-immich-state": "Beta"
       },
-      "get": {
-        "description": "Retrieve details of a specific user group.",
-        "operationId": "getGroup",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserGroupResponseDto"
-                }
-              }
-            },
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          },
-          {
-            "cookie": []
-          },
-          {
-            "api_key": []
-          }
-        ],
-        "summary": "Get a user group",
-        "tags": [
-          "User Groups"
-        ],
-        "x-immich-history": [
-          {
-            "version": "v1",
-            "state": "Added"
-          },
-          {
-            "version": "v1",
-            "state": "Beta"
-          }
-        ],
-        "x-immich-permission": "userGroup.read",
-        "x-immich-state": "Beta"
-      },
       "patch": {
         "description": "Update the name or color of a user group.",
         "operationId": "updateGroup",
@@ -22098,10 +21783,6 @@
     {
       "name": "Workflows",
       "description": "A workflow is a set of actions that run whenever a triggering event occurs. Workflows also can include filters to further limit execution."
-    },
-    {
-      "name": "Classification",
-      "description": "Endpoints for managing auto-classification categories that automatically tag and archive photos based on CLIP similarity."
     }
   ],
   "servers": [
@@ -30363,21 +30044,6 @@
         ],
         "type": "object"
       },
-      "SharedSpaceMemberMetadataContributionDto": {
-        "properties": {
-          "sharePersonMetadata": {
-            "description": "Disable person metadata contribution for this member",
-            "enum": [
-              false
-            ],
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "sharePersonMetadata"
-        ],
-        "type": "object"
-      },
       "SharedSpaceMemberPreferencesDto": {
         "properties": {
           "sharePersonMetadata": {
@@ -30511,20 +30177,6 @@
         ],
         "type": "object"
       },
-      "SharedSpacePersonAliasDto": {
-        "properties": {
-          "alias": {
-            "description": "Alias name for this person",
-            "maxLength": 100,
-            "minLength": 1,
-            "type": "string"
-          }
-        },
-        "required": [
-          "alias"
-        ],
-        "type": "object"
-      },
       "SharedSpacePersonMergeDto": {
         "properties": {
           "confirmCrossOwner": {
@@ -30549,11 +30201,6 @@
       },
       "SharedSpacePersonResponseDto": {
         "properties": {
-          "alias": {
-            "description": "User-specific alias for this person",
-            "nullable": true,
-            "type": "string"
-          },
           "assetCount": {
             "description": "Number of unique assets with this person",
             "type": "number"
@@ -30601,10 +30248,6 @@
             "description": "Space ID",
             "type": "string"
           },
-          "thumbnailPath": {
-            "description": "Thumbnail path",
-            "type": "string"
-          },
           "type": {
             "description": "Person type (person or pet)",
             "type": "string"
@@ -30623,7 +30266,6 @@
           "name",
           "representativeFaceSource",
           "spaceId",
-          "thumbnailPath",
           "updatedAt"
         ],
         "type": "object"
@@ -31652,6 +31294,100 @@
         ],
         "type": "string"
       },
+      "StorageMigrationEstimateResponseDto": {
+        "properties": {
+          "direction": {
+            "$ref": "#/components/schemas/StorageMigrationDirection",
+            "description": "Migration direction"
+          },
+          "estimatedSizeBytes": {
+            "description": "Approximate size of the original files that would be migrated, in bytes",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "fileCounts": {
+            "$ref": "#/components/schemas/StorageMigrationFileCountsDto",
+            "description": "Number of files that would be migrated, by type"
+          }
+        },
+        "required": [
+          "direction",
+          "estimatedSizeBytes",
+          "fileCounts"
+        ],
+        "type": "object"
+      },
+      "StorageMigrationFileCountsDto": {
+        "properties": {
+          "encodedVideos": {
+            "description": "Number of encoded video files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "fullsize": {
+            "description": "Number of full-size files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "originals": {
+            "description": "Number of original files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "personThumbnails": {
+            "description": "Number of person thumbnail files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "previews": {
+            "description": "Number of preview files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "profileImages": {
+            "description": "Number of profile image files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "sidecars": {
+            "description": "Number of sidecar files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "thumbnails": {
+            "description": "Number of thumbnail files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total number of files",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "encodedVideos",
+          "fullsize",
+          "originals",
+          "personThumbnails",
+          "previews",
+          "profileImages",
+          "sidecars",
+          "thumbnails",
+          "total"
+        ],
+        "type": "object"
+      },
       "StorageMigrationFileTypesDto": {
         "properties": {
           "encodedVideos": {
@@ -31697,6 +31433,34 @@
         },
         "type": "object"
       },
+      "StorageMigrationRollbackResponseDto": {
+        "properties": {
+          "failed": {
+            "description": "Number of entries that could not be rolled back",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "rolledBack": {
+            "description": "Number of entries that were rolled back",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "total": {
+            "description": "Total number of entries in the batch",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "failed",
+          "rolledBack",
+          "total"
+        ],
+        "type": "object"
+      },
       "StorageMigrationStartDto": {
         "properties": {
           "concurrency": {
@@ -31723,6 +31487,74 @@
         "required": [
           "direction",
           "fileTypes"
+        ],
+        "type": "object"
+      },
+      "StorageMigrationStartResponseDto": {
+        "properties": {
+          "batchId": {
+            "description": "Batch ID of the started migration, used to roll it back",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batchId"
+        ],
+        "type": "object"
+      },
+      "StorageMigrationStatusResponseDto": {
+        "properties": {
+          "active": {
+            "description": "Number of active jobs",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "completed": {
+            "description": "Number of completed jobs",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "delayed": {
+            "description": "Number of delayed jobs",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "failed": {
+            "description": "Number of failed jobs",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "isActive": {
+            "description": "Whether a migration is currently running",
+            "type": "boolean"
+          },
+          "paused": {
+            "description": "Number of paused jobs",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          },
+          "waiting": {
+            "description": "Number of waiting jobs",
+            "maximum": 9007199254740991,
+            "minimum": -9007199254740991,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active",
+          "completed",
+          "delayed",
+          "failed",
+          "isActive",
+          "paused",
+          "waiting"
         ],
         "type": "object"
       },
@@ -36221,18 +36053,13 @@
           "name": {
             "description": "Group name",
             "type": "string"
-          },
-          "origin": {
-            "description": "Group origin (manual or oidc)",
-            "type": "string"
           }
         },
         "required": [
           "createdAt",
           "id",
           "members",
-          "name",
-          "origin"
+          "name"
         ],
         "type": "object"
       },

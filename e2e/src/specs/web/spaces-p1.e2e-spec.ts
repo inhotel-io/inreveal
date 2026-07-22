@@ -113,8 +113,10 @@ test.describe('Spaces P1 — Collage, Hero, Sort', () => {
       await page.goto('/spaces');
 
       // Click sort button and select Name
-      await page.locator('[data-testid="sort-button"]').click();
-      await page.locator('[data-testid="sort-option-Name"]').click();
+      // The sort control is the shared Dropdown: the trigger shows the current selection
+      // ("Last activity" by default) and the menu options are plain buttons with visible labels.
+      await page.getByRole('button', { name: 'Last activity' }).click();
+      await page.getByRole('button', { name: 'Name' }).click();
 
       // Verify first card is Alpha
       const cards = page.locator('[data-testid="space-name"]');
@@ -137,8 +139,8 @@ test.describe('Spaces P1 — Collage, Hero, Sort', () => {
       await utils.setAuthCookies(context, admin.accessToken);
       await page.goto('/spaces');
 
-      await page.locator('[data-testid="sort-button"]').click();
-      await page.locator('[data-testid="sort-option-AssetCount"]').click();
+      await page.getByRole('button', { name: 'Last activity' }).click();
+      await page.getByRole('button', { name: 'Asset count' }).click();
 
       const cards = page.locator('[data-testid="space-name"]');
       await expect(cards.first()).toHaveText('Many Photos');

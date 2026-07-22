@@ -395,10 +395,9 @@ test.describe('Spaces — Albums tab controls (search / sort / group / view / cr
     await expect(page.getByTestId('space-album-card')).toHaveCount(3);
 
     // Open the sort menu and pick "Title" (AlbumSortBy.Title = 'Title').
-    await page.getByTestId('space-albums-sort-btn').click();
-    await expect(page.getByTestId('space-albums-sort-menu')).toBeVisible();
-    await page.getByTestId('space-albums-sort-option-Title').click();
-    await expect(page.getByTestId('space-albums-sort-menu')).not.toBeVisible();
+    // Shared Dropdown: trigger shows the current selection, options are labelled buttons.
+    await page.getByRole('button', { name: 'Most recent photo' }).click();
+    await page.getByRole('button', { name: 'Title' }).click();
 
     // After sorting by Title ascending the first card should be Alpha Album.
     const links = page.getByTestId('space-album-card-link');
@@ -420,10 +419,9 @@ test.describe('Spaces — Albums tab controls (search / sort / group / view / cr
     await expect(page.getByTestId('space-album-card')).toHaveCount(3);
 
     // Open group menu and pick Year (SpaceAlbumGroupBy.Year = 'Year').
-    await page.getByTestId('space-albums-group-btn').click();
-    await expect(page.getByTestId('space-albums-group-menu')).toBeVisible();
-    await page.getByTestId('space-albums-group-option-Year').click();
-    await expect(page.getByTestId('space-albums-group-menu')).not.toBeVisible();
+    // The trigger shares its label with the matching option, so target the option with .last().
+    await page.getByRole('button', { name: 'No grouping' }).click();
+    await page.getByRole('button', { name: 'Group by year' }).last().click();
 
     // At least one group header should be rendered (all albums were just created, so same year).
     const groupHeaders = page.locator('[data-testid^="space-album-group-"]');
@@ -442,8 +440,8 @@ test.describe('Spaces — Albums tab controls (search / sort / group / view / cr
     await expect(page.getByTestId('space-album-card')).toHaveCount(3);
 
     // Reset grouping to None so subsequent tests are not affected.
-    await page.getByTestId('space-albums-group-btn').click();
-    await page.getByTestId('space-albums-group-option-None').click();
+    await page.getByRole('button', { name: 'Group by year' }).first().click();
+    await page.getByRole('button', { name: 'No grouping' }).last().click();
   });
 
   // 4. View toggle switches to list rows linking to the space album route.
@@ -512,8 +510,8 @@ test.describe('Spaces — Albums tab controls (search / sort / group / view / cr
 
     // Read-only controls must be visible.
     await expect(page.getByTestId('space-albums-search')).toBeVisible();
-    await expect(page.getByTestId('space-albums-sort-btn')).toBeVisible();
-    await expect(page.getByTestId('space-albums-group-btn')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Most recent photo' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'No grouping' })).toBeVisible();
     // The view-toggle container is always rendered.
     await expect(page.getByTestId('space-albums-view-toggle')).toBeVisible();
 

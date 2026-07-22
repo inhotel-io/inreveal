@@ -737,8 +737,6 @@ class ApiClient {
           return SharedSpaceLinkedLibraryDto.fromJson(value);
         case 'SharedSpaceMemberCreateDto':
           return SharedSpaceMemberCreateDto.fromJson(value);
-        case 'SharedSpaceMemberMetadataContributionDto':
-          return SharedSpaceMemberMetadataContributionDto.fromJson(value);
         case 'SharedSpaceMemberPreferencesDto':
           return SharedSpaceMemberPreferencesDto.fromJson(value);
         case 'SharedSpaceMemberResponseDto':
@@ -749,8 +747,6 @@ class ApiClient {
           return SharedSpaceMemberUpdateDto.fromJson(value);
         case 'SharedSpacePeopleStatisticsResponseDto':
           return SharedSpacePeopleStatisticsResponseDto.fromJson(value);
-        case 'SharedSpacePersonAliasDto':
-          return SharedSpacePersonAliasDto.fromJson(value);
         case 'SharedSpacePersonMergeDto':
           return SharedSpacePersonMergeDto.fromJson(value);
         case 'SharedSpacePersonResponseDto':
@@ -789,10 +785,20 @@ class ApiClient {
           return StorageFolderTypeTransformer().decode(value);
         case 'StorageMigrationDirection':
           return StorageMigrationDirectionTypeTransformer().decode(value);
+        case 'StorageMigrationEstimateResponseDto':
+          return StorageMigrationEstimateResponseDto.fromJson(value);
+        case 'StorageMigrationFileCountsDto':
+          return StorageMigrationFileCountsDto.fromJson(value);
         case 'StorageMigrationFileTypesDto':
           return StorageMigrationFileTypesDto.fromJson(value);
+        case 'StorageMigrationRollbackResponseDto':
+          return StorageMigrationRollbackResponseDto.fromJson(value);
         case 'StorageMigrationStartDto':
           return StorageMigrationStartDto.fromJson(value);
+        case 'StorageMigrationStartResponseDto':
+          return StorageMigrationStartResponseDto.fromJson(value);
+        case 'StorageMigrationStatusResponseDto':
+          return StorageMigrationStatusResponseDto.fromJson(value);
         case 'SyncAckDeleteDto':
           return SyncAckDeleteDto.fromJson(value);
         case 'SyncAckDto':

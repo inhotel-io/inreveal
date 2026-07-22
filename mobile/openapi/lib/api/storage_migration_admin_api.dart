@@ -62,11 +62,19 @@ class StorageMigrationAdminApi {
   ///
   /// * [StorageMigrationDirection] direction (required):
   ///   Migration direction
-  Future<void> getEstimate(StorageMigrationDirection direction, { Future<void>? abortTrigger, }) async {
+  Future<StorageMigrationEstimateResponseDto?> getEstimate(StorageMigrationDirection direction, { Future<void>? abortTrigger, }) async {
     final response = await getEstimateWithHttpInfo(direction, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'StorageMigrationEstimateResponseDto',) as StorageMigrationEstimateResponseDto;
+    
+    }
+    return null;
   }
 
   /// Get storage migration status
@@ -103,11 +111,19 @@ class StorageMigrationAdminApi {
   /// Get storage migration status
   ///
   /// Retrieve the current status of the storage migration queue, including active and pending job counts.
-  Future<void> getStatus({ Future<void>? abortTrigger, }) async {
+  Future<StorageMigrationStatusResponseDto?> getStatus({ Future<void>? abortTrigger, }) async {
     final response = await getStatusWithHttpInfo(abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'StorageMigrationStatusResponseDto',) as StorageMigrationStatusResponseDto;
+    
+    }
+    return null;
   }
 
   /// Rollback a storage migration batch
@@ -155,11 +171,19 @@ class StorageMigrationAdminApi {
   ///
   /// * [String] batchId (required):
   ///   Batch ID
-  Future<void> rollback(String batchId, { Future<void>? abortTrigger, }) async {
+  Future<StorageMigrationRollbackResponseDto?> rollback(String batchId, { Future<void>? abortTrigger, }) async {
     final response = await rollbackWithHttpInfo(batchId, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'StorageMigrationRollbackResponseDto',) as StorageMigrationRollbackResponseDto;
+    
+    }
+    return null;
   }
 
   /// Start storage migration
@@ -204,10 +228,18 @@ class StorageMigrationAdminApi {
   /// Parameters:
   ///
   /// * [StorageMigrationStartDto] storageMigrationStartDto (required):
-  Future<void> start(StorageMigrationStartDto storageMigrationStartDto, { Future<void>? abortTrigger, }) async {
+  Future<StorageMigrationStartResponseDto?> start(StorageMigrationStartDto storageMigrationStartDto, { Future<void>? abortTrigger, }) async {
     final response = await startWithHttpInfo(storageMigrationStartDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'StorageMigrationStartResponseDto',) as StorageMigrationStartResponseDto;
+    
+    }
+    return null;
   }
 }

@@ -141,7 +141,6 @@ Class | Method | HTTP request | Description
 *AuthenticationApi* | [**unlockAuthSession**](doc//AuthenticationApi.md#unlockauthsession) | **POST** /auth/session/unlock | Unlock auth session
 *AuthenticationApi* | [**validateAccessToken**](doc//AuthenticationApi.md#validateaccesstoken) | **POST** /auth/validateToken | Validate access token
 *AuthenticationAdminApi* | [**unlinkAllOAuthAccountsAdmin**](doc//AuthenticationAdminApi.md#unlinkalloauthaccountsadmin) | **POST** /admin/auth/unlink-all | Unlink all OAuth accounts
-*ClassificationApi* | [**scanClassification**](doc//ClassificationApi.md#scanclassification) | **POST** /classification/scan | Scan all libraries for classification
 *DatabaseBackupsAdminApi* | [**deleteDatabaseBackup**](doc//DatabaseBackupsAdminApi.md#deletedatabasebackup) | **DELETE** /admin/database-backups | Delete database backup
 *DatabaseBackupsAdminApi* | [**downloadDatabaseBackup**](doc//DatabaseBackupsAdminApi.md#downloaddatabasebackup) | **GET** /admin/database-backups/{filename} | Download database backup
 *DatabaseBackupsAdminApi* | [**listDatabaseBackups**](doc//DatabaseBackupsAdminApi.md#listdatabasebackups) | **GET** /admin/database-backups | List database backups
@@ -294,9 +293,7 @@ Class | Method | HTTP request | Description
 *SharedSpacesApi* | [**addMember**](doc//SharedSpacesApi.md#addmember) | **POST** /shared-spaces/{id}/members | Add a member to a shared space
 *SharedSpacesApi* | [**bulkAddAssets**](doc//SharedSpacesApi.md#bulkaddassets) | **POST** /shared-spaces/{id}/assets/bulk-add | Add all user assets to a shared space
 *SharedSpacesApi* | [**createSpace**](doc//SharedSpacesApi.md#createspace) | **POST** /shared-spaces | Create a shared space
-*SharedSpacesApi* | [**deduplicateSpacePeople**](doc//SharedSpacesApi.md#deduplicatespacepeople) | **POST** /shared-spaces/{id}/people/deduplicate | Deduplicate people in a shared space
 *SharedSpacesApi* | [**deleteSpacePerson**](doc//SharedSpacesApi.md#deletespaceperson) | **DELETE** /shared-spaces/{id}/people/{personId} | Delete a person from a shared space
-*SharedSpacesApi* | [**deleteSpacePersonAlias**](doc//SharedSpacesApi.md#deletespacepersonalias) | **DELETE** /shared-spaces/{id}/people/{personId}/alias | Delete a person alias in a shared space
 *SharedSpacesApi* | [**getAllSpaces**](doc//SharedSpacesApi.md#getallspaces) | **GET** /shared-spaces | Get all shared spaces
 *SharedSpacesApi* | [**getMembers**](doc//SharedSpacesApi.md#getmembers) | **GET** /shared-spaces/{id}/members | Get members of a shared space
 *SharedSpacesApi* | [**getSharedSpaceAlbums**](doc//SharedSpacesApi.md#getsharedspacealbums) | **GET** /shared-spaces/{id}/albums | List albums linked to a shared space
@@ -320,11 +317,9 @@ Class | Method | HTTP request | Description
 *SharedSpacesApi* | [**removeAssets**](doc//SharedSpacesApi.md#removeassets) | **DELETE** /shared-spaces/{id}/assets | Remove assets from a shared space
 *SharedSpacesApi* | [**removeMember**](doc//SharedSpacesApi.md#removemember) | **DELETE** /shared-spaces/{id}/members/{userId} | Remove a member from a shared space
 *SharedSpacesApi* | [**removeSpace**](doc//SharedSpacesApi.md#removespace) | **DELETE** /shared-spaces/{id} | Delete a shared space
-*SharedSpacesApi* | [**setSpacePersonAlias**](doc//SharedSpacesApi.md#setspacepersonalias) | **PUT** /shared-spaces/{id}/people/{personId}/alias | Set a person alias in a shared space
 *SharedSpacesApi* | [**unlinkAlbum**](doc//SharedSpacesApi.md#unlinkalbum) | **DELETE** /shared-spaces/{id}/albums/{albumId} | Unlink an album from a shared space
 *SharedSpacesApi* | [**unlinkLibrary**](doc//SharedSpacesApi.md#unlinklibrary) | **DELETE** /shared-spaces/{id}/libraries/{libraryId} | Unlink a library from a shared space
 *SharedSpacesApi* | [**updateMember**](doc//SharedSpacesApi.md#updatemember) | **PATCH** /shared-spaces/{id}/members/{userId} | Update a member in a shared space
-*SharedSpacesApi* | [**updateMemberMetadataContribution**](doc//SharedSpacesApi.md#updatemembermetadatacontribution) | **PATCH** /shared-spaces/{id}/members/{userId}/metadata-contribution | Disable member person metadata contribution
 *SharedSpacesApi* | [**updateMemberPreferences**](doc//SharedSpacesApi.md#updatememberpreferences) | **PATCH** /shared-spaces/{id}/members/me/preferences | Update current member preferences
 *SharedSpacesApi* | [**updateMemberTimeline**](doc//SharedSpacesApi.md#updatemembertimeline) | **PATCH** /shared-spaces/{id}/members/me/timeline | Update timeline visibility for current member
 *SharedSpacesApi* | [**updateSharedSpaceAlbum**](doc//SharedSpacesApi.md#updatesharedspacealbum) | **PATCH** /shared-spaces/{id}/albums/{albumId} | Update a space-album link (showInTimeline)
@@ -371,7 +366,6 @@ Class | Method | HTTP request | Description
 *TrashApi* | [**restoreTrash**](doc//TrashApi.md#restoretrash) | **POST** /trash/restore | Restore trash
 *UserGroupsApi* | [**createGroup**](doc//UserGroupsApi.md#creategroup) | **POST** /user-groups | Create a user group
 *UserGroupsApi* | [**getAllGroups**](doc//UserGroupsApi.md#getallgroups) | **GET** /user-groups | Get all user groups
-*UserGroupsApi* | [**getGroup**](doc//UserGroupsApi.md#getgroup) | **GET** /user-groups/{id} | Get a user group
 *UserGroupsApi* | [**removeGroup**](doc//UserGroupsApi.md#removegroup) | **DELETE** /user-groups/{id} | Delete a user group
 *UserGroupsApi* | [**setMembers**](doc//UserGroupsApi.md#setmembers) | **PUT** /user-groups/{id}/members | Set group members
 *UserGroupsApi* | [**updateGroup**](doc//UserGroupsApi.md#updategroup) | **PATCH** /user-groups/{id} | Update a user group
@@ -693,13 +687,11 @@ Class | Method | HTTP request | Description
  - [SharedSpaceLinkedAlbumDto](doc//SharedSpaceLinkedAlbumDto.md)
  - [SharedSpaceLinkedLibraryDto](doc//SharedSpaceLinkedLibraryDto.md)
  - [SharedSpaceMemberCreateDto](doc//SharedSpaceMemberCreateDto.md)
- - [SharedSpaceMemberMetadataContributionDto](doc//SharedSpaceMemberMetadataContributionDto.md)
  - [SharedSpaceMemberPreferencesDto](doc//SharedSpaceMemberPreferencesDto.md)
  - [SharedSpaceMemberResponseDto](doc//SharedSpaceMemberResponseDto.md)
  - [SharedSpaceMemberTimelineDto](doc//SharedSpaceMemberTimelineDto.md)
  - [SharedSpaceMemberUpdateDto](doc//SharedSpaceMemberUpdateDto.md)
  - [SharedSpacePeopleStatisticsResponseDto](doc//SharedSpacePeopleStatisticsResponseDto.md)
- - [SharedSpacePersonAliasDto](doc//SharedSpacePersonAliasDto.md)
  - [SharedSpacePersonMergeDto](doc//SharedSpacePersonMergeDto.md)
  - [SharedSpacePersonResponseDto](doc//SharedSpacePersonResponseDto.md)
  - [SharedSpacePersonUpdateDto](doc//SharedSpacePersonUpdateDto.md)
@@ -719,8 +711,13 @@ Class | Method | HTTP request | Description
  - [StatisticsSearchDto](doc//StatisticsSearchDto.md)
  - [StorageFolder](doc//StorageFolder.md)
  - [StorageMigrationDirection](doc//StorageMigrationDirection.md)
+ - [StorageMigrationEstimateResponseDto](doc//StorageMigrationEstimateResponseDto.md)
+ - [StorageMigrationFileCountsDto](doc//StorageMigrationFileCountsDto.md)
  - [StorageMigrationFileTypesDto](doc//StorageMigrationFileTypesDto.md)
+ - [StorageMigrationRollbackResponseDto](doc//StorageMigrationRollbackResponseDto.md)
  - [StorageMigrationStartDto](doc//StorageMigrationStartDto.md)
+ - [StorageMigrationStartResponseDto](doc//StorageMigrationStartResponseDto.md)
+ - [StorageMigrationStatusResponseDto](doc//StorageMigrationStatusResponseDto.md)
  - [SyncAckDeleteDto](doc//SyncAckDeleteDto.md)
  - [SyncAckDto](doc//SyncAckDto.md)
  - [SyncAckSetDto](doc//SyncAckSetDto.md)
