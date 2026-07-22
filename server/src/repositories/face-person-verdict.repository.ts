@@ -57,6 +57,23 @@ export class FacePersonVerdictRepository {
       .execute();
   }
 
+  // Bulk drain of pending queue rows for a set of faces. The cleanup console calls this after a resolve so a
+  // moved/detached/confirmed face leaves no stale suggestion behind — leak 3: without it the never-reappear
+  // guarantee was held only by the read path's `af.personId IS NULL` filter, and would break the moment such
+  // a face was later unassigned (e.g. a reset). Negative-verdict rows are left intact.
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async drainPendingForFaces(assetFaceIds: string[]): Promise<number> {
+    if (assetFaceIds.length === 0) {
+      return 0;
+    }
+    const result = await this.db
+      .deleteFrom('face_person_verdict')
+      .where('assetFaceId', 'in', assetFaceIds)
+      .where('status', '=', 'pending')
+      .executeTakeFirst();
+    return Number(result.numDeletedRows ?? 0n);
+  }
+
   @GenerateSql({ params: [[{ spacePersonId: DummyValue.UUID, assetFaceId: DummyValue.UUID, distance: 0.6 }]] })
   async upsertPendingForSpacePerson(
     rows: Array<{ spacePersonId: string; assetFaceId: string; distance: number }>,

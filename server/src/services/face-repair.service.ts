@@ -309,6 +309,12 @@ export class FaceRepairService extends BaseService {
       }
     }
 
+    // Leak 3, batch path: a moved face is now assigned elsewhere, so any outstanding suggestion for it is
+    // void. Drain at the write path (resolveFaces does the same for the interactive console).
+    if (movedFaceIds.length > 0) {
+      await this.facePersonVerdictRepository.drainPendingForFaces(movedFaceIds);
+    }
+
     return { moved, skipped, movedFaceIds };
   }
 
@@ -1007,6 +1013,15 @@ export class FaceRepairService extends BaseService {
     // flagged faces included. moveToPerson destinations only ever gain faces from this call, so there is no
     // destination to additionally drain.
     const settledFaceIds = new Set([...moveFaceIds, ...stay, ...lock, ...detach, ...unknown]);
+
+    // Leak 3: a terminally-resolved face must leave no stale pending suggestion behind. A moved face is now
+    // assigned elsewhere, a detached face is tombstoned, a confirmed/kept face is settled — in every case an
+    // outstanding "is this <face> <person>?" suggestion is void. Drain them at the write path rather than
+    // relying on the suggestion read's `personId IS NULL` filter, which would let the row resurface if the
+    // face were later unassigned.
+    if (settledFaceIds.size > 0) {
+      await this.facePersonVerdictRepository.drainPendingForFaces([...settledFaceIds]);
+    }
     // Compare against `resolvable` (the decline/lock-filtered pending set the review page shows), NOT the raw
     // `flaggedIds`: a face declined or locked in a PRIOR resolve is already settled and is filtered out of the
     // review UI, so the admin can never re-submit it here — measuring the drain against the raw snapshot would

@@ -20,6 +20,12 @@ where
   "assetFaceId" = $1
   and "status" = $2
 
+-- FacePersonVerdictRepository.drainPendingForFaces
+delete from "face_person_verdict"
+where
+  "assetFaceId" in ($1)
+  and "status" = $2
+
 -- FacePersonVerdictRepository.upsertPendingForSpacePerson
 insert into
   "face_person_verdict" ("spacePersonId", "assetFaceId", "distance")
