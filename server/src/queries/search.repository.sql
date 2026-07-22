@@ -897,6 +897,7 @@ with
     where
       "asset"."ownerId" = any ($2::uuid[])
       and "asset"."deletedAt" is null
+      and "asset_face"."deletedAt" is null
     order by
       "distance"
     limit
@@ -975,6 +976,7 @@ with
       )
       and "asset"."visibility" in ($6, $7)
       and "asset"."deletedAt" is null
+      and "asset_face"."deletedAt" is null
       and "asset_face"."personId" is null
     order by
       "distance"
