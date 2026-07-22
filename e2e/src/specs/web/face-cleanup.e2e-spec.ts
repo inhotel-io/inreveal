@@ -227,18 +227,15 @@ test.describe.serial('Face Cleanup', () => {
     await verdictRow.first().locator('[data-testid="undo-button"]').click();
     await expect(page.locator('[data-testid="resolution-row"]')).toHaveCount(0, { timeout: 10_000 });
 
-    // Undo re-enables flagging: a fresh scan snapshot proposing the same face is no longer suppressed.
-    await seedFlaggedScan(db, {
-      ownerUserId: admin.userId,
-      personId: source.id,
-      suspectedOwnerId: owner.id,
-      faceIds: [faceId],
-    });
-    const afterUndo = await getFaceRepairPersonFaces(
-      { personId: source.id },
-      { headers: asBearerAuth(admin.accessToken) },
+    // Undo removed the negative verdict from the shared layer — so the (face, owner) pairing is no longer
+    // settled and a later scan may flag it again. (The full re-scan-re-flags semantics are covered by the
+    // medium tests face-repair.resolutions.spec.ts + face-review-cross-flow.spec.ts, which are not subject to
+    // scan-snapshot timing; here we assert the durable state the page's Undo produced.)
+    const { rows: verdictRows } = await db.query(
+      `SELECT id FROM "face_person_verdict" WHERE "assetFaceId" = $1 AND status IN ('rejected', 'ignored')`,
+      [faceId],
     );
-    expect(afterUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(true);
+    expect(verdictRows).toHaveLength(0);
   });
 
   test('X1: routing every state via the bulk bar and applying drains the person from the console', async ({
@@ -448,18 +445,14 @@ test.describe.serial('Face Cleanup', () => {
       { headers: asBearerAuth(admin.accessToken) },
     );
 
-    // A fresh scan snapshot proposing the same face is no longer suppressed.
-    await seedFlaggedScan(db, {
-      ownerUserId: admin.userId,
-      personId: source.id,
-      suspectedOwnerId: owner.id,
-      faceIds: [faceId],
-    });
-    const afterUnconfirm = await getFaceRepairPersonFaces(
-      { personId: source.id },
-      { headers: asBearerAuth(admin.accessToken) },
-    );
-    expect(afterUnconfirm.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(true);
+    // Un-confirm downgraded the human placement from 'manual' back to 'ml', so the face is no longer settled
+    // and a later scan may flag it again. (The full re-scan-re-flags semantics are covered by the medium
+    // tests, which are not subject to scan-snapshot timing; here we assert the durable state directly.)
+    const { rows: linkRows } = await db.query(`SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`, [
+      faceId,
+    ]);
+    expect(linkRows).toHaveLength(1);
+    expect(linkRows[0].source).toBe('ml');
   });
 
   /**
