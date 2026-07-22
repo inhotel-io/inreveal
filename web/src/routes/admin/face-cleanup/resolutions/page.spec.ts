@@ -5,8 +5,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Page from './+page.svelte';
 
-// Slice 7 (unified resolutions manage page): replaces the declines-only manage page. Lists soft-declines AND
-// locks, each tagged `kind`, grouped into two undoable sections (Declines / Locks).
+// Unified resolutions manage page: NEGATIVE verdicts only ("this face is not that person"), from BOTH
+// engines, with a source filter. Human placements are not listed here (undone in context on the review page).
 vi.mock('@immich/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@immich/sdk')>();
   return {
@@ -81,31 +81,35 @@ vi.mock('$lib/components/layouts/AdminPageLayout.svelte', async () => {
 
 // ---- fixtures ----
 
-const DECLINE_ROW = {
-  kind: 'decline',
-  id: 'decline-1',
-  type: 'face',
+const CLEANUP_ROW = {
+  id: 'verdict-1',
   assetFaceId: 'face-1',
-  suspectedOwnerId: 'owner-1',
-  suspectedOwnerName: 'Berta',
-  suspectedOwnerThumbnailFaceId: null,
+  status: 'rejected',
+  source: 'cleanup',
   personId: 'person-1',
-  personName: 'Jula',
+  personName: 'Berta',
   personThumbnailFaceId: null,
+  spacePersonId: null,
+  spacePersonName: null,
+  spaceName: null,
+  actorId: 'admin-1',
+  actorName: 'Admin',
   createdAt: '2026-07-01T00:00:00.000Z',
 };
 
-const LOCK_ROW = {
-  kind: 'lock',
-  id: 'lock-1',
-  type: null,
+const SUGGESTION_ROW = {
+  id: 'verdict-2',
   assetFaceId: 'face-2',
-  suspectedOwnerId: null,
-  suspectedOwnerName: null,
-  suspectedOwnerThumbnailFaceId: null,
+  status: 'ignored',
+  source: 'suggestion',
   personId: 'person-2',
   personName: 'Armin',
   personThumbnailFaceId: null,
+  spacePersonId: null,
+  spacePersonName: null,
+  spaceName: null,
+  actorId: 'user-1',
+  actorName: 'Jula',
   createdAt: '2026-07-02T00:00:00.000Z',
 };
 
@@ -113,7 +117,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
-      resolutions: [DECLINE_ROW, LOCK_ROW],
+      resolutions: [CLEANUP_ROW, SUGGESTION_ROW],
     } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
     vi.mocked(removeFaceRepairResolutions).mockResolvedValue({ removed: 1 });
   });
@@ -122,75 +126,54 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     vi.useRealTimers();
   });
 
-  it('renders the decline row under the Declines section and the lock row under the Locks section', async () => {
-    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('declines-section')).toBeInTheDocument();
-      expect(screen.getByTestId('locks-section')).toBeInTheDocument();
-    });
-
-    const declinesSection = screen.getByTestId('declines-section');
-    const locksSection = screen.getByTestId('locks-section');
-
-    const declineRows = within(declinesSection).getAllByTestId('resolution-row');
-    expect(declineRows).toHaveLength(1);
-    expect(declineRows[0]).toHaveAttribute('data-kind', 'decline');
-    expect(within(declineRows[0]).getByText('Jula')).toBeInTheDocument();
-    expect(within(declineRows[0]).getByText('Berta')).toBeInTheDocument();
-
-    const lockRows = within(locksSection).getAllByTestId('resolution-row');
-    expect(lockRows).toHaveLength(1);
-    expect(lockRows[0]).toHaveAttribute('data-kind', 'lock');
-    expect(within(lockRows[0]).getByText('admin.face_cleanup_resolutions_locked_to')).toBeInTheDocument();
-  });
-
-  it('colors the Declines heading green and the Locks heading violet, matching the review-page state chips', async () => {
-    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
-
-    await waitFor(() => expect(screen.getByTestId('declines-section')).toBeInTheDocument());
-
-    const declineSwatch = screen.getByTestId('declines-section').querySelector('span');
-    const lockSwatch = screen.getByTestId('locks-section').querySelector('span');
-
-    expect(declineSwatch).toHaveStyle({ background: '#16a34a' });
-    expect(lockSwatch).toHaveStyle({ background: '#7c3aed' });
-  });
-
-  it('undoing a decline row posts removeFaceRepairResolutions with declineIds and refreshes the list', async () => {
+  it('lists verdicts from both engines with their source and target', async () => {
     render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
 
     await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
 
-    const declineRow = within(screen.getByTestId('declines-section')).getByTestId('resolution-row');
-    await fireEvent.click(within(declineRow).getByTestId('undo-button'));
+    const rows = screen.getAllByTestId('resolution-row');
+    expect(rows.map((r) => r.dataset.source).sort()).toEqual(['cleanup', 'suggestion']);
+    // Every row renders a "not <target>" label (both rows here).
+    expect(screen.getAllByText('admin.face_cleanup_resolutions_not_person')).toHaveLength(2);
+    // No locks section survives.
+    expect(screen.queryByTestId('locks-section')).not.toBeInTheDocument();
+  });
+
+  it('filters by source', async () => {
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
+
+    const cleanupFilter = screen.getAllByTestId('source-filter-option').find((el) => el.dataset.value === 'cleanup')!;
+    await fireEvent.click(cleanupFilter);
+
+    await waitFor(() => {
+      const rows = screen.getAllByTestId('resolution-row');
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toHaveAttribute('data-source', 'cleanup');
+    });
+  });
+
+  it('undoing a row posts removeFaceRepairResolutions with verdictIds and refreshes', async () => {
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
+
+    const firstRow = screen.getAllByTestId('resolution-row')[0];
+    await fireEvent.click(within(firstRow).getByTestId('undo-button'));
 
     await waitFor(() => {
       expect(removeFaceRepairResolutions).toHaveBeenCalledWith({
-        faceRepairResolutionsRemoveRequestDto: { declineIds: ['decline-1'] },
+        faceRepairResolutionsRemoveRequestDto: {
+          verdictIds: [firstRow.dataset.source === 'cleanup' ? 'verdict-1' : 'verdict-2'],
+        },
       });
       expect(toastManager.success).toHaveBeenCalled();
-      // refreshes the list after undo
       expect(getFaceRepairResolutions).toHaveBeenCalledTimes(2);
     });
   });
 
-  it('undoing a lock row posts removeFaceRepairResolutions with lockIds', async () => {
-    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
-
-    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
-
-    const lockRow = within(screen.getByTestId('locks-section')).getByTestId('resolution-row');
-    await fireEvent.click(within(lockRow).getByTestId('undo-button'));
-
-    await waitFor(() => {
-      expect(removeFaceRepairResolutions).toHaveBeenCalledWith({
-        faceRepairResolutionsRemoveRequestDto: { lockIds: ['lock-1'] },
-      });
-    });
-  });
-
-  it('shows the empty state when there are no resolutions', async () => {
+  it('shows the empty state when there are no verdicts', async () => {
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({ resolutions: [] } as unknown as Awaited<
       ReturnType<typeof getFaceRepairResolutions>
     >);
@@ -200,6 +183,6 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     await waitFor(() => {
       expect(screen.getByText('admin.face_cleanup_resolutions_empty')).toBeInTheDocument();
     });
-    expect(screen.queryByTestId('declines-section')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument();
   });
 });

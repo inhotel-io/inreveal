@@ -13,26 +13,30 @@ part of openapi.api;
 class FaceRepairResolutionsListDtoResolutionsInner {
   /// Returns a new [FaceRepairResolutionsListDtoResolutionsInner] instance.
   FaceRepairResolutionsListDtoResolutionsInner({
+    required this.actorId,
+    required this.actorName,
     required this.assetFaceId,
     required this.createdAt,
     required this.id,
-    required this.kind,
     required this.personId,
     required this.personName,
     required this.personThumbnailFaceId,
-    required this.suspectedOwnerId,
-    required this.suspectedOwnerName,
-    required this.suspectedOwnerThumbnailFaceId,
-    required this.type,
+    required this.source_,
+    required this.spaceName,
+    required this.spacePersonId,
+    required this.spacePersonName,
+    required this.status,
   });
 
-  String? assetFaceId;
+  String? actorId;
+
+  String? actorName;
+
+  String assetFaceId;
 
   DateTime createdAt;
 
   String id;
-
-  String kind;
 
   String? personId;
 
@@ -40,56 +44,67 @@ class FaceRepairResolutionsListDtoResolutionsInner {
 
   String? personThumbnailFaceId;
 
-  String? suspectedOwnerId;
+  String source_;
 
-  String? suspectedOwnerName;
+  String? spaceName;
 
-  String? suspectedOwnerThumbnailFaceId;
+  String? spacePersonId;
 
-  String? type;
+  String? spacePersonName;
+
+  String status;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairResolutionsListDtoResolutionsInner &&
+    other.actorId == actorId &&
+    other.actorName == actorName &&
     other.assetFaceId == assetFaceId &&
     other.createdAt == createdAt &&
     other.id == id &&
-    other.kind == kind &&
     other.personId == personId &&
     other.personName == personName &&
     other.personThumbnailFaceId == personThumbnailFaceId &&
-    other.suspectedOwnerId == suspectedOwnerId &&
-    other.suspectedOwnerName == suspectedOwnerName &&
-    other.suspectedOwnerThumbnailFaceId == suspectedOwnerThumbnailFaceId &&
-    other.type == type;
+    other.source_ == source_ &&
+    other.spaceName == spaceName &&
+    other.spacePersonId == spacePersonId &&
+    other.spacePersonName == spacePersonName &&
+    other.status == status;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (assetFaceId == null ? 0 : assetFaceId!.hashCode) +
+    (actorId == null ? 0 : actorId!.hashCode) +
+    (actorName == null ? 0 : actorName!.hashCode) +
+    (assetFaceId.hashCode) +
     (createdAt.hashCode) +
     (id.hashCode) +
-    (kind.hashCode) +
     (personId == null ? 0 : personId!.hashCode) +
     (personName == null ? 0 : personName!.hashCode) +
     (personThumbnailFaceId == null ? 0 : personThumbnailFaceId!.hashCode) +
-    (suspectedOwnerId == null ? 0 : suspectedOwnerId!.hashCode) +
-    (suspectedOwnerName == null ? 0 : suspectedOwnerName!.hashCode) +
-    (suspectedOwnerThumbnailFaceId == null ? 0 : suspectedOwnerThumbnailFaceId!.hashCode) +
-    (type == null ? 0 : type!.hashCode);
+    (source_.hashCode) +
+    (spaceName == null ? 0 : spaceName!.hashCode) +
+    (spacePersonId == null ? 0 : spacePersonId!.hashCode) +
+    (spacePersonName == null ? 0 : spacePersonName!.hashCode) +
+    (status.hashCode);
 
   @override
-  String toString() => 'FaceRepairResolutionsListDtoResolutionsInner[assetFaceId=$assetFaceId, createdAt=$createdAt, id=$id, kind=$kind, personId=$personId, personName=$personName, personThumbnailFaceId=$personThumbnailFaceId, suspectedOwnerId=$suspectedOwnerId, suspectedOwnerName=$suspectedOwnerName, suspectedOwnerThumbnailFaceId=$suspectedOwnerThumbnailFaceId, type=$type]';
+  String toString() => 'FaceRepairResolutionsListDtoResolutionsInner[actorId=$actorId, actorName=$actorName, assetFaceId=$assetFaceId, createdAt=$createdAt, id=$id, personId=$personId, personName=$personName, personThumbnailFaceId=$personThumbnailFaceId, source_=$source_, spaceName=$spaceName, spacePersonId=$spacePersonId, spacePersonName=$spacePersonName, status=$status]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.assetFaceId != null) {
-      json[r'assetFaceId'] = this.assetFaceId;
+    if (this.actorId != null) {
+      json[r'actorId'] = this.actorId;
     } else {
-    //  json[r'assetFaceId'] = null;
+    //  json[r'actorId'] = null;
     }
+    if (this.actorName != null) {
+      json[r'actorName'] = this.actorName;
+    } else {
+    //  json[r'actorName'] = null;
+    }
+      json[r'assetFaceId'] = this.assetFaceId;
       json[r'createdAt'] = this.createdAt.toUtc().toIso8601String();
       json[r'id'] = this.id;
-      json[r'kind'] = this.kind;
     if (this.personId != null) {
       json[r'personId'] = this.personId;
     } else {
@@ -105,26 +120,23 @@ class FaceRepairResolutionsListDtoResolutionsInner {
     } else {
     //  json[r'personThumbnailFaceId'] = null;
     }
-    if (this.suspectedOwnerId != null) {
-      json[r'suspectedOwnerId'] = this.suspectedOwnerId;
+      json[r'source'] = this.source_;
+    if (this.spaceName != null) {
+      json[r'spaceName'] = this.spaceName;
     } else {
-    //  json[r'suspectedOwnerId'] = null;
+    //  json[r'spaceName'] = null;
     }
-    if (this.suspectedOwnerName != null) {
-      json[r'suspectedOwnerName'] = this.suspectedOwnerName;
+    if (this.spacePersonId != null) {
+      json[r'spacePersonId'] = this.spacePersonId;
     } else {
-    //  json[r'suspectedOwnerName'] = null;
+    //  json[r'spacePersonId'] = null;
     }
-    if (this.suspectedOwnerThumbnailFaceId != null) {
-      json[r'suspectedOwnerThumbnailFaceId'] = this.suspectedOwnerThumbnailFaceId;
+    if (this.spacePersonName != null) {
+      json[r'spacePersonName'] = this.spacePersonName;
     } else {
-    //  json[r'suspectedOwnerThumbnailFaceId'] = null;
+    //  json[r'spacePersonName'] = null;
     }
-    if (this.type != null) {
-      json[r'type'] = this.type;
-    } else {
-    //  json[r'type'] = null;
-    }
+      json[r'status'] = this.status;
     return json;
   }
 
@@ -137,17 +149,19 @@ class FaceRepairResolutionsListDtoResolutionsInner {
       final json = value.cast<String, dynamic>();
 
       return FaceRepairResolutionsListDtoResolutionsInner(
-        assetFaceId: mapValueOfType<String>(json, r'assetFaceId'),
+        actorId: mapValueOfType<String>(json, r'actorId'),
+        actorName: mapValueOfType<String>(json, r'actorName'),
+        assetFaceId: mapValueOfType<String>(json, r'assetFaceId')!,
         createdAt: mapDateTime(json, r'createdAt', r'')!,
         id: mapValueOfType<String>(json, r'id')!,
-        kind: mapValueOfType<String>(json, r'kind')!,
         personId: mapValueOfType<String>(json, r'personId'),
         personName: mapValueOfType<String>(json, r'personName'),
         personThumbnailFaceId: mapValueOfType<String>(json, r'personThumbnailFaceId'),
-        suspectedOwnerId: mapValueOfType<String>(json, r'suspectedOwnerId'),
-        suspectedOwnerName: mapValueOfType<String>(json, r'suspectedOwnerName'),
-        suspectedOwnerThumbnailFaceId: mapValueOfType<String>(json, r'suspectedOwnerThumbnailFaceId'),
-        type: mapValueOfType<String>(json, r'type'),
+        source_: mapValueOfType<String>(json, r'source')!,
+        spaceName: mapValueOfType<String>(json, r'spaceName'),
+        spacePersonId: mapValueOfType<String>(json, r'spacePersonId'),
+        spacePersonName: mapValueOfType<String>(json, r'spacePersonName'),
+        status: mapValueOfType<String>(json, r'status')!,
       );
     }
     return null;
@@ -195,17 +209,19 @@ class FaceRepairResolutionsListDtoResolutionsInner {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
+    'actorId',
+    'actorName',
     'assetFaceId',
     'createdAt',
     'id',
-    'kind',
     'personId',
     'personName',
     'personThumbnailFaceId',
-    'suspectedOwnerId',
-    'suspectedOwnerName',
-    'suspectedOwnerThumbnailFaceId',
-    'type',
+    'source',
+    'spaceName',
+    'spacePersonId',
+    'spacePersonName',
+    'status',
   };
 }
 

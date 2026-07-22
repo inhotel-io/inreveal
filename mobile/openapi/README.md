@@ -188,6 +188,7 @@ Class | Method | HTTP request | Description
 *FacesApi* | [**resolveFaces**](doc//FacesApi.md#resolvefaces) | **POST** /admin/face-repair/resolve | Resolve reviewed faces
 *FacesApi* | [**runFaceRepair**](doc//FacesApi.md#runfacerepair) | **POST** /admin/face-repair | Run face re-attribution repair
 *FacesApi* | [**triggerScan**](doc//FacesApi.md#triggerscan) | **POST** /admin/face-repair/scan | Trigger a face-repair scan
+*FacesApi* | [**unconfirmFaceRepairFaces**](doc//FacesApi.md#unconfirmfacerepairfaces) | **POST** /admin/face-repair/unconfirm | Un-confirm human-placed faces so a re-scan may flag them again
 *GalleryMapApi* | [**getFilteredMapMarkers**](doc//GalleryMapApi.md#getfilteredmapmarkers) | **GET** /gallery/map/markers | Get filtered map markers
 *JobsApi* | [**createJob**](doc//JobsApi.md#createjob) | **POST** /jobs | Create a manual job
 *JobsApi* | [**getQueuesLegacy**](doc//JobsApi.md#getqueueslegacy) | **GET** /jobs | Retrieve queue counts and status
@@ -581,6 +582,7 @@ Class | Method | HTTP request | Description
  - [FaceRepairScanTriggerRequestDto](doc//FaceRepairScanTriggerRequestDto.md)
  - [FaceRepairScanTriggerRequestDtoParams](doc//FaceRepairScanTriggerRequestDtoParams.md)
  - [FaceRepairScanTriggerResponseDto](doc//FaceRepairScanTriggerResponseDto.md)
+ - [FaceRepairUnconfirmRequestDto](doc//FaceRepairUnconfirmRequestDto.md)
  - [FacialRecognitionConfig](doc//FacialRecognitionConfig.md)
  - [FilterSuggestionsPersonDto](doc//FilterSuggestionsPersonDto.md)
  - [FilterSuggestionsResponseDto](doc//FilterSuggestionsResponseDto.md)

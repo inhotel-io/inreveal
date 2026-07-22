@@ -174,26 +174,24 @@ export type FaceRepairOwnerPersonCreatedResponseDto = {
 };
 export type FaceRepairResolutionsListDto = {
     resolutions: {
-        assetFaceId: string | null;
+        actorId: string | null;
+        actorName: string | null;
+        assetFaceId: string;
         createdAt: string;
         id: string;
-        kind: string;
         personId: string | null;
         personName: string | null;
         personThumbnailFaceId: string | null;
-        suspectedOwnerId: string | null;
-        suspectedOwnerName: string | null;
-        suspectedOwnerThumbnailFaceId: string | null;
-        "type": string | null;
+        source: string;
+        spaceName: string | null;
+        spacePersonId: string | null;
+        spacePersonName: string | null;
+        status: string;
     }[];
 };
 export type FaceRepairResolutionsRemoveRequestDto = {
-    declineIds?: string[];
-    faces?: {
-        assetFaceId: string;
-        suspectedOwnerId: string;
-    }[];
-    lockIds?: string[];
+    clusterMuteIds?: string[];
+    verdictIds?: string[];
 };
 export type FaceRepairResolutionsRemovedDto = {
     removed: number;
@@ -258,6 +256,9 @@ export type FaceRepairClusterFacesResponseDto = {
     }[];
     hasMore: boolean;
     total: number;
+};
+export type FaceRepairUnconfirmRequestDto = {
+    assetFaceIds: string[];
 };
 export type IntegrityReportResponseDto = {
     items: {
@@ -4751,6 +4752,21 @@ export function getFaceRepairClusterFaces({ personId, faceRepairClusterFacesRequ
         ...opts,
         method: "POST",
         body: faceRepairClusterFacesRequestDto
+    })));
+}
+/**
+ * Un-confirm human-placed faces so a re-scan may flag them again
+ */
+export function unconfirmFaceRepairFaces({ faceRepairUnconfirmRequestDto }: {
+    faceRepairUnconfirmRequestDto: FaceRepairUnconfirmRequestDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 201;
+        data: FaceRepairResolutionsRemovedDto;
+    }>("/admin/face-repair/unconfirm", oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: faceRepairUnconfirmRequestDto
     })));
 }
 /**

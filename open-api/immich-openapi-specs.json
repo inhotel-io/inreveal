@@ -1253,6 +1253,56 @@
         ]
       }
     },
+    "/admin/face-repair/unconfirm": {
+      "post": {
+        "operationId": "unconfirmFaceRepairFaces",
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaceRepairUnconfirmRequestDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairResolutionsRemovedDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Un-confirm human-placed faces so a re-scan may flag them again",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
     "/admin/integrity/report": {
       "get": {
         "description": "Get all flagged items by integrity report type",
@@ -26718,8 +26768,15 @@
           "resolutions": {
             "items": {
               "properties": {
-                "assetFaceId": {
+                "actorId": {
                   "nullable": true,
+                  "type": "string"
+                },
+                "actorName": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "assetFaceId": {
                   "type": "string"
                 },
                 "createdAt": {
@@ -26727,9 +26784,6 @@
                   "type": "string"
                 },
                 "id": {
-                  "type": "string"
-                },
-                "kind": {
                   "type": "string"
                 },
                 "personId": {
@@ -26744,34 +26798,38 @@
                   "nullable": true,
                   "type": "string"
                 },
-                "suspectedOwnerId": {
+                "source": {
+                  "type": "string"
+                },
+                "spaceName": {
                   "nullable": true,
                   "type": "string"
                 },
-                "suspectedOwnerName": {
+                "spacePersonId": {
                   "nullable": true,
                   "type": "string"
                 },
-                "suspectedOwnerThumbnailFaceId": {
+                "spacePersonName": {
                   "nullable": true,
                   "type": "string"
                 },
-                "type": {
-                  "nullable": true,
+                "status": {
                   "type": "string"
                 }
               },
               "required": [
-                "kind",
                 "id",
-                "type",
                 "assetFaceId",
-                "suspectedOwnerId",
-                "suspectedOwnerName",
-                "suspectedOwnerThumbnailFaceId",
+                "status",
+                "source",
                 "personId",
                 "personName",
                 "personThumbnailFaceId",
+                "spacePersonId",
+                "spacePersonName",
+                "spaceName",
+                "actorId",
+                "actorName",
                 "createdAt"
               ],
               "type": "object"
@@ -26785,8 +26843,9 @@
         "type": "object"
       },
       "FaceRepairResolutionsRemoveRequestDto": {
+        "additionalProperties": false,
         "properties": {
-          "declineIds": {
+          "clusterMuteIds": {
             "items": {
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -26795,30 +26854,7 @@
             "minItems": 1,
             "type": "array"
           },
-          "faces": {
-            "items": {
-              "properties": {
-                "assetFaceId": {
-                  "format": "uuid",
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "type": "string"
-                },
-                "suspectedOwnerId": {
-                  "format": "uuid",
-                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "assetFaceId",
-                "suspectedOwnerId"
-              ],
-              "type": "object"
-            },
-            "minItems": 1,
-            "type": "array"
-          },
-          "lockIds": {
+          "verdictIds": {
             "items": {
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
@@ -27187,6 +27223,23 @@
         },
         "required": [
           "scanId"
+        ],
+        "type": "object"
+      },
+      "FaceRepairUnconfirmRequestDto": {
+        "properties": {
+          "assetFaceIds": {
+            "items": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "assetFaceIds"
         ],
         "type": "object"
       },
