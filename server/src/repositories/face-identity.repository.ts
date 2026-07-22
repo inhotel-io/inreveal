@@ -2645,7 +2645,16 @@ export class FaceIdentityRepository {
     const identity = await this.ensurePersonIdentity(personId);
     await this.db
       .updateTable('face_identity_face')
-      .set({ identityId: identity.id, source: 'backfill' })
+      .set({
+        identityId: identity.id,
+        // Realigning WHICH human a face is linked to is this method's job; erasing the fact that a HUMAN
+        // placed it is not. `source='manual'` is the durable record that a person confirmed a face — it is
+        // what both the Face Cleanup scan and the face-suggestion scan use to exclude a face from ever being
+        // re-proposed. A blanket `source: 'backfill'` here silently downgraded that record whenever a link
+        // drifted from its person's identity (most commonly right after a people merge), re-exposing
+        // human-confirmed faces to both queues. Preserve 'manual'; realign everything else as before.
+        source: sql<FaceIdentityFaceSource>`CASE WHEN "face_identity_face"."source" = 'manual' THEN 'manual' ELSE 'backfill' END`,
+      })
       .where('assetFaceId', 'in', assetFaceIds)
       .execute();
   }

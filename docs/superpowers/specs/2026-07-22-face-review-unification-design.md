@@ -493,10 +493,27 @@ manual link durability:
 | Re-affirm on a face whose person has no identity yet   | `ensurePersonIdentity` creates one; link is manual   |
 | Re-affirm on a face linked to a **different** identity | Link is replaced (this is the move case, not #9)     |
 
+### OUTCOME (recorded 2026-07-22): assumption was FALSE, now fixed
+
+The probe failed on two of four scenarios. `realignFacesToPersonIdentity`
+(`face-identity.repository.ts:2642`) wrote `.set({ identityId, source: 'backfill' })` **unconditionally**,
+so any face whose link identity drifted from its person's identity had its `source` rewritten — `'manual'`
+included. Drift is not exotic: it is the normal state immediately after a people merge, so
+**every human-confirmed face was one backfill pass away from silently losing its verdict.**
+
+Fix applied in this slice: the realign now preserves `'manual'` and realigns everything else as before
+(`CASE WHEN source = 'manual' THEN 'manual' ELSE 'backfill' END`). Realigning _which_ human a face links to
+is that method's job; erasing the fact that _a_ human placed it is not. All four probes pass, and the
+114-test `face-identity.repository.spec.ts` plus `face-repair.merge-consistency.spec.ts` suites stay green.
+
+The fallback (identity-keyed lock table with auto-lapse) is therefore **not needed**; Slices 2-9 proceed as
+written. Note this defect existed on #770 alone — a lock survived the merge, but the identity link behind
+it did not.
+
 ### Done gate
 
-Three medium tests green **or** a written STOP in this document. **If any fails:** retiring
-`face_repair_lock` is invalid — fall back to keeping the table but re-keyed to `identityId` with
+Four medium tests green **or** a written STOP in this document. **If any had proved unfixable:** retiring
+`face_repair_lock` would be invalid — fall back to keeping the table but re-keyed to `identityId` with
 auto-lapse when the face's current identity link no longer matches (the option-C fallback from the design
 conversation). Slices 2–9 are otherwise unaffected; only Slice 5's lock deletion changes.
 
