@@ -3,6 +3,7 @@ import { JobName } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
@@ -33,7 +34,14 @@ const axisEmbedding = (axis: 'first' | 'second') => {
 const setup = (db?: Kysely<DB>) => {
   return newMediumService(FaceRepairService, {
     database: db || defaultDatabase,
-    real: [FaceRepairRepository, SearchRepository, PersonRepository, FaceRepairDeclineRepository],
+    real: [
+      FaceRepairRepository,
+      SearchRepository,
+      PersonRepository,
+      FaceRepairDeclineRepository,
+      FacePersonVerdictRepository,
+      FaceIdentityRepository,
+    ],
     mock: [LoggingRepository],
   });
 };
@@ -464,6 +472,7 @@ const setupRepair = (db?: Kysely<DB>) => {
       PersonRepository,
       FaceIdentityRepository,
       FaceRepairDeclineRepository,
+      FacePersonVerdictRepository,
       DatabaseRepository,
     ],
     mock: [LoggingRepository, JobRepository],
@@ -833,6 +842,7 @@ const setupRunRepair = (db?: Kysely<DB>) => {
       ConfigRepository,
       SystemMetadataRepository,
       FaceRepairDeclineRepository,
+      FacePersonVerdictRepository,
       DatabaseRepository,
     ],
     mock: [LoggingRepository, JobRepository],
@@ -1209,6 +1219,8 @@ const setupDecline = (db?: Kysely<DB>) => {
       SearchRepository,
       PersonRepository,
       FaceRepairDeclineRepository,
+      FacePersonVerdictRepository,
+      FaceIdentityRepository,
     ],
     mock: [LoggingRepository, JobRepository],
   });
@@ -1224,6 +1236,7 @@ describe('FaceRepairService decline filter', () => {
     const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
     jobMock.isActive.mockResolvedValue(false);
     const declineRepo = ctx.get(FaceRepairDeclineRepository);
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
     const { user } = await ctx.newUser();
 
     // Karina-main: 10 first-axis faces — the suspected owner
@@ -1256,9 +1269,9 @@ describe('FaceRepairService decline filter', () => {
       (f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId),
     )!;
     expect(declinedFace).toBeDefined();
-    await declineRepo.createDeclines({
-      faces: [{ assetFaceId: declinedFace.assetFaceId, suspectedOwnerId: declinedFace.suspectedOwnerId }],
-      declinedBy: null,
+    await verdictRepo.markRejected(declinedFace.suspectedOwnerId, declinedFace.assetFaceId, {
+      source: 'cleanup',
+      actorId: null,
     });
 
     // Re-plan: declined face must not appear in toRepair or reviewOnlyFaces
@@ -1278,6 +1291,7 @@ describe('FaceRepairService decline filter', () => {
     jobMock.isActive.mockResolvedValue(false);
     jobMock.queue.mockResolvedValue();
     const declineRepo = ctx.get(FaceRepairDeclineRepository);
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
     const { user } = await ctx.newUser();
 
     // Karina-main: 10 first-axis faces
@@ -1315,10 +1329,9 @@ describe('FaceRepairService decline filter', () => {
       (f) => f.currentPersonId === alexia.id && leakedFaceIds.includes(f.assetFaceId),
     );
     expect(leakedToRepair.length).toBeGreaterThan(0);
-    await declineRepo.createDeclines({
-      faces: leakedToRepair.map((f) => ({ assetFaceId: f.assetFaceId, suspectedOwnerId: f.suspectedOwnerId })),
-      declinedBy: null,
-    });
+    for (const face of leakedToRepair) {
+      await verdictRepo.markRejected(face.suspectedOwnerId, face.assetFaceId, { source: 'cleanup', actorId: null });
+    }
 
     // resolveFaces, requesting the exact leaked-face -> karina moves the client would have built from the
     // pre-decline flagged snapshot — the post-scan declines must be filtered from the snapshot, moving 0.
@@ -1360,6 +1373,7 @@ describe('FaceRepairService decline filter', () => {
   it('dismissed person is absent from getPersonFlaggedFaces when its suspected set matches the fingerprint', async () => {
     const { sut, ctx } = setupDecline();
     const declineRepo = ctx.get(FaceRepairDeclineRepository);
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
     const { user } = await ctx.newUser();
 
     // Karina-main: 10 first-axis faces
@@ -1387,7 +1401,7 @@ describe('FaceRepairService decline filter', () => {
     }
 
     // Dismiss Alexia with Karina as the fingerprint
-    await declineRepo.createDeclines({
+    await declineRepo.createClusterMutes({
       persons: [{ personId: alexia.id, suspectedOwnerIds: [karina.id] }],
       declinedBy: null,
     });
@@ -1410,6 +1424,7 @@ describe('FaceRepairService decline filter', () => {
       const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
       jobMock.isActive.mockResolvedValue(false);
       const declineRepo = ctx.get(FaceRepairDeclineRepository);
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
       const { user } = await ctx.newUser();
 
       // Karina-main: 10 first-axis faces (the reference/suspected-owner cluster — never itself flagged).
@@ -1444,28 +1459,28 @@ describe('FaceRepairService decline filter', () => {
       const [declinedFace, lockedFace, untouchedFace] = leaked;
 
       // INSIDE the flagged set: decline one leaked face toward its suspected owner, lock another.
-      await declineRepo.createDeclines({
-        faces: [{ assetFaceId: declinedFace.assetFaceId, suspectedOwnerId: declinedFace.suspectedOwnerId }],
-        declinedBy: null,
+      await verdictRepo.markRejected(declinedFace.suspectedOwnerId, declinedFace.assetFaceId, {
+        source: 'cleanup',
+        actorId: null,
       });
-      await ctx.database
-        .insertInto('face_repair_lock')
-        .values({ assetFaceId: lockedFace.assetFaceId, personId: alexia.id, createdBy: null })
-        .execute();
+      const alexiaIdentity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(alexia.id);
+      await ctx
+        .get(FaceIdentityRepository)
+        .replaceFaceIdentity({ assetFaceId: lockedFace.assetFaceId, identityId: alexiaIdentity.id, source: 'manual' });
 
       // OUTSIDE the flagged set entirely: a lock on one of karina's OWN faces (never a candidate — her faces
       // always vote for herself) and a person-level dismiss for a brand-new person with no faces at all.
-      await ctx.database
-        .insertInto('face_repair_lock')
-        .values({ assetFaceId: karinaFaceIds[0], personId: karina.id, createdBy: null })
-        .execute();
+      const karinaIdentity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(karina.id);
+      await ctx
+        .get(FaceIdentityRepository)
+        .replaceFaceIdentity({ assetFaceId: karinaFaceIds[0], identityId: karinaIdentity.id, source: 'manual' });
       const { person: unrelated } = await ctx.newPerson({ ownerId: user.id });
-      await declineRepo.createDeclines({
+      await declineRepo.createClusterMutes({
         persons: [{ personId: unrelated.id, suspectedOwnerIds: [karina.id] }],
         declinedBy: null,
       });
 
-      const spy = vi.spyOn(declineRepo, 'getDeclineMaps');
+      const spy = vi.spyOn(ctx.get(FaceIdentityRepository), 'getManualLinkedFaceIds');
 
       const plan = await sut.buildRepairPlan({ ownerId: user.id, ...planParams });
       const flaggedIds = new Set([...plan.toRepair, ...plan.reviewOnlyFaces].map((f) => f.assetFaceId));
@@ -1477,13 +1492,11 @@ describe('FaceRepairService decline filter', () => {
       expect(flaggedIds.has(declinedFace.assetFaceId)).toBe(false);
       expect(flaggedIds.has(lockedFace.assetFaceId)).toBe(false);
 
-      // The scoped-load contract itself: buildRepairPlan's decline/lock read must be bounded to exactly the
-      // faces/persons it just flagged.
+      // The scoped-load contract itself: buildRepairPlan's verdict reads must be bounded to exactly the
+      // faces it just flagged — never an unscoped scan of an ever-growing table.
       expect(spy).toHaveBeenCalledTimes(1);
-      const [scope] = spy.mock.calls[0]!;
-      expect(scope).toBeDefined();
-      expect(new Set(scope!.assetFaceIds)).toEqual(new Set(leakedFaceIds));
-      expect(scope!.personIds).toEqual([alexia.id]);
+      const [scopedFaceIds] = spy.mock.calls[0]!;
+      expect(new Set(scopedFaceIds)).toEqual(new Set(leakedFaceIds));
     },
   );
 });

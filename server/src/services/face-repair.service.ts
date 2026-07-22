@@ -10,7 +10,8 @@ import { JobOf } from 'src/types';
 import {
   FlagParams,
   ReattributionTally,
-  applyDeclineFilters,
+  VerdictMaps,
+  applyVerdictFilters,
   classifyFlaggedPerson,
   decideReattribution,
   findOverlappingIds,
@@ -106,6 +107,30 @@ export { RepairReport } from 'src/services/face-repair.summary';
 
 @Injectable()
 export class FaceRepairService extends BaseService {
+  // Assemble the shared exclusion inputs for a bounded set of flagged faces. Every source is scoped to the
+  // ids this scan actually produced — never an unscoped table read.
+  //
+  // This is the join point of the two face features: the suggestion side's negative verdicts and the
+  // human-placement record are consulted here, so a face a user confirmed or rejected is never re-proposed
+  // to an admin, and vice versa.
+  private async buildVerdictMaps(scope: {
+    assetFaceIds: string[];
+    personIds: string[];
+    suspectedOwnerIds: string[];
+  }): Promise<VerdictMaps> {
+    const uniqueFaceIds = [...new Set(scope.assetFaceIds)];
+    const uniqueOwnerIds = [...new Set(scope.suspectedOwnerIds)];
+
+    const [manualLinkedFaceIds, negativeFaceTargets, ownerTokens, mutedPersons] = await Promise.all([
+      this.faceIdentityRepository.getManualLinkedFaceIds(uniqueFaceIds),
+      this.facePersonVerdictRepository.getNegativeVerdictTokens(uniqueFaceIds),
+      this.faceIdentityRepository.getPersonVerdictTokens(uniqueOwnerIds),
+      this.faceRepairDeclineRepository.getClusterMuteMap(scope.personIds),
+    ]);
+
+    return { manualLinkedFaceIds, negativeFaceTargets, ownerTokens, mutedPersons };
+  }
+
   async buildRepairPlan(
     options: {
       ownerId?: string;
@@ -154,11 +179,12 @@ export class FaceRepairService extends BaseService {
     // whole purpose is to drop that very face.
     const flaggedFaceIds = [...flaggedByPerson.values()].flat().map((f) => f.assetFaceId);
     const flaggedPersonIds = [...flaggedByPerson.keys()];
-    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
+    const verdictMaps = await this.buildVerdictMaps({
       assetFaceIds: flaggedFaceIds,
       personIds: flaggedPersonIds,
+      suspectedOwnerIds: [...flaggedByPerson.values()].flat().map((f) => f.suspectedOwnerId),
     });
-    applyDeclineFilters(flaggedByPerson, declineMaps);
+    applyVerdictFilters(flaggedByPerson, verdictMaps);
 
     const reviewOnlyPersonIds = new Set<string>();
     for (const [personId, eligible] of eligibleByPerson) {
@@ -563,9 +589,10 @@ export class FaceRepairService extends BaseService {
       return { personId, flaggedFaces: [] };
     }
     const stored = await this.faceRepairScanRepository.getScanFlaggedFaces(latest.id, personId);
-    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
+    const verdictMaps = await this.buildVerdictMaps({
       personIds: [personId],
       assetFaceIds: stored.map((s) => s.assetFaceId),
+      suspectedOwnerIds: stored.map((s) => s.suspectedOwnerId),
     });
     const byPerson = new Map([
       [
@@ -577,7 +604,7 @@ export class FaceRepairService extends BaseService {
         })),
       ],
     ]);
-    applyDeclineFilters(byPerson, declineMaps);
+    applyVerdictFilters(byPerson, verdictMaps);
     const flaggedFaces = (byPerson.get(personId) ?? []).map((f) => ({
       assetFaceId: f.assetFaceId,
       suspectedOwnerId: f.suspectedOwnerId,
@@ -586,14 +613,12 @@ export class FaceRepairService extends BaseService {
   }
 
   async createDeclines(input: {
-    faces?: { assetFaceId: string; suspectedOwnerId: string }[];
     persons?: { personId: string; suspectedOwnerIds: string[] }[];
     declinedBy: string;
   }): Promise<{ created: number }> {
-    const created = await this.faceRepairDeclineRepository.createDeclines(input);
-    // Drain the dismissed persons from the latest scan snapshot so a dashboard reload no longer resurfaces
-    // them (mirrors resolveFaces's unconditional drop-on-resolution). Scoped to the `persons` branch only:
-    // the `faces` branch is reached solely from resolveFaces, which already drains its own person.
+    const created = await this.faceRepairDeclineRepository.createClusterMutes(input);
+    // Drain the muted persons from the latest scan snapshot so a dashboard reload no longer resurfaces them
+    // (mirrors resolveFaces's unconditional drop-on-resolution).
     if (input.persons?.length) {
       await this.faceRepairScanRepository.removePersonsFromLatestScan(input.persons.map((p) => p.personId));
     }
@@ -605,61 +630,44 @@ export class FaceRepairService extends BaseService {
     return { declines: rows };
   }
 
-  async removeDeclines(input: {
-    ids?: string[];
-    faces?: { assetFaceId: string; suspectedOwnerId: string }[];
-  }): Promise<{ removed: number }> {
-    const removed = await this.faceRepairDeclineRepository.removeDeclines(input);
+  async removeDeclines(input: { ids?: string[] }): Promise<{ removed: number }> {
+    const removed = await this.faceRepairDeclineRepository.removeClusterMutes(input);
     return { removed };
   }
 
   // Slice 7 (unified resolutions manage page): the union of every soft-decline AND lock, each tagged `kind` so
-  // the web page can render two grouped, undoable lists (declines green, locks violet). Locks have no
-  // suspectedOwner concept (they're owner-agnostic — see face_repair_lock's comment) so those fields are
-  // always null on a lock row; `personId`/`personName`/`personThumbnailFaceId` carry the person the lock was
-  // reviewed against, mirroring the decline row's own person fields.
+  // The resolutions manage page lists NEGATIVE verdicts only, from both engines — an admin's "keep here"
+  // and a user's "that isn't Anna" are the same fact and are equally undoable here. Human PLACEMENTS are not
+  // listed: the record is `face_identity_face.source='manual'`, which every ordinary face-editor reassignment
+  // also writes, so a global list of them would be unbounded and meaningless. Un-confirming a placement is
+  // offered per-person on the cleanup review page instead, where the set is bounded and the admin is actually
+  // asking "why did this face disappear from my queue?".
   async listResolutions() {
-    const [declines, locks] = await Promise.all([
-      this.faceRepairDeclineRepository.listDeclines(),
-      this.faceRepairLockRepository.listLocks(),
-    ]);
-    const resolutions = [
-      ...declines.map((row) => ({ kind: 'decline' as const, ...row })),
-      ...locks.map((row) => ({
-        kind: 'lock' as const,
-        id: row.id,
-        type: null,
-        assetFaceId: row.assetFaceId,
-        suspectedOwnerId: null,
-        suspectedOwnerName: null,
-        suspectedOwnerThumbnailFaceId: null,
-        personId: row.personId,
-        personName: row.personName,
-        personThumbnailFaceId: row.personThumbnailFaceId,
-        createdAt: row.createdAt,
-      })),
-    ];
+    const resolutions = await this.facePersonVerdictRepository.listNegativeVerdicts();
     return { resolutions };
   }
 
-  // Undo for the resolutions manage page. `declineIds`/`lockIds` are the server-generated row ids (uuid v7);
-  // `faces` is the decline natural key (assetFaceId, suspectedOwnerId) — reused from removeDeclines for the
-  // review page's in-place undo, which knows the pairing but not the row id. A lock has no equivalent natural
-  // key surfaced here (its uniqueness is on assetFaceId alone, with no per-request pairing to disambiguate),
-  // so lock undo is always by row id. Removing a lock re-enables flagging: the face drops out of
-  // getLockedFaceIds() and the next scan can suspect it again.
-  async removeResolutions(input: {
-    declineIds?: string[];
-    lockIds?: string[];
-    faces?: { assetFaceId: string; suspectedOwnerId: string }[];
-  }): Promise<{ removed: number }> {
-    const declineRemoved =
-      (input.declineIds?.length ?? 0) > 0 || (input.faces?.length ?? 0) > 0
-        ? await this.faceRepairDeclineRepository.removeDeclines({ ids: input.declineIds, faces: input.faces })
-        : 0;
-    const lockRemoved =
-      (input.lockIds?.length ?? 0) > 0 ? await this.faceRepairLockRepository.removeLocks({ ids: input.lockIds }) : 0;
-    return { removed: declineRemoved + lockRemoved };
+  async removeResolutions(input: { verdictIds?: string[]; clusterMuteIds?: string[] }): Promise<{ removed: number }> {
+    const [verdictRemoved, muteRemoved] = await Promise.all([
+      (input.verdictIds?.length ?? 0) > 0
+        ? this.facePersonVerdictRepository.removeVerdicts(input.verdictIds!)
+        : Promise.resolve(0),
+      (input.clusterMuteIds?.length ?? 0) > 0
+        ? this.faceRepairDeclineRepository.removeClusterMutes({ ids: input.clusterMuteIds })
+        : Promise.resolve(0),
+    ]);
+    return { removed: verdictRemoved + muteRemoved };
+  }
+
+  // Un-confirm a human placement so the next scan may flag the face again: downgrade its identity link from
+  // 'manual' back to 'ml'. The link itself (which identity the face belongs to) is untouched — only the claim
+  // that a human put it there.
+  async unconfirmFaces(assetFaceIds: string[]): Promise<{ removed: number }> {
+    if (assetFaceIds.length === 0) {
+      return { removed: 0 };
+    }
+    const removed = await this.faceIdentityRepository.demoteManualFaceLinks(assetFaceIds);
+    return { removed };
   }
 
   // Slice 1 of the full per-face resolution (docs/plans/2026-07-10-face-cleanup-full-resolution-design.md):
@@ -751,9 +759,10 @@ export class FaceRepairService extends BaseService {
     // needs the decline-filtered view below, to silently skip rather than re-apply a declined pairing.
     const flaggedIds = new Set(stored.map((face) => face.assetFaceId));
     const snapshotOwnerByFace = new Map(stored.map((face) => [face.assetFaceId, face.suspectedOwnerId]));
-    const declineMaps = await this.faceRepairDeclineRepository.getDeclineMaps({
+    const verdictMaps = await this.buildVerdictMaps({
       personIds: [personId],
       assetFaceIds: stored.map((face) => face.assetFaceId),
+      suspectedOwnerIds: stored.map((face) => face.suspectedOwnerId),
     });
     const byPerson = new Map<string, FlaggedFace[]>([
       [
@@ -765,7 +774,7 @@ export class FaceRepairService extends BaseService {
         })),
       ],
     ]);
-    applyDeclineFilters(byPerson, declineMaps);
+    applyVerdictFilters(byPerson, verdictMaps);
     const resolvable = new Set((byPerson.get(personId) ?? []).map((face) => face.assetFaceId));
 
     // stay/lock/detach/unknown (E15) act only on this person's raw flagged snapshot.
@@ -786,9 +795,12 @@ export class FaceRepairService extends BaseService {
         // is locked (owner-agnostic confirm), or it was declined toward THIS SAME destination. A face declined
         // toward a different owner is a NEW pairing — the admin deliberately picked another destination — and
         // must be honored. (Keying the skip on "declined at all" silently swallowed such deliberate moves.)
-        const declinedTowardDestination =
-          declineMaps.declinedFaceOwners.get(assetFaceId)?.has(group.destinationPersonId) ?? false;
-        const locked = declineMaps.lockedFaceIds?.has(assetFaceId) ?? false;
+        const destinationTokens = verdictMaps.ownerTokens?.get(group.destinationPersonId) ?? [
+          `person:${group.destinationPersonId}`,
+        ];
+        const negatives = verdictMaps.negativeFaceTargets.get(assetFaceId);
+        const declinedTowardDestination = destinationTokens.some((token) => negatives?.has(token) ?? false);
+        const locked = verdictMaps.manualLinkedFaceIds?.has(assetFaceId) ?? false;
         if (isFlagged && (locked || declinedTowardDestination)) {
           preSkipped++;
         } else {
@@ -819,26 +831,14 @@ export class FaceRepairService extends BaseService {
       perPerson: [],
     });
 
-    // Move-and-lock (temporal-consistency hardening, Slice 3, E5-E10/E13): a moveToPerson group with
-    // `lock: true` durably, owner-agnostically locks the faces it moved to its own destination — never a face
-    // requested in the same group that turned out to be stale (M8: moved off `personId` before this call, so
-    // it's absent from `movedFaceIds`) — an orphan lock on an untouched face would be meaningless. Bypasses
-    // the flagged-snapshot membership check entirely (M7): unlike the standalone `lock` bucket above, a
-    // move-lock is tied to the move itself, not to a pre-existing suspected-owner pairing. `insertLocks` is
-    // idempotent via the plain unique index on assetFaceId, so re-issuing an identical move-lock request never
-    // inserts a second row (E13) — and since the face is already on its destination the second time, it also
-    // won't be in `movedFaceIds` again, so insertLocks is not even called for it.
+    // Move-and-lock: nothing extra to persist. `reattributeFaces` already writes the moved faces'
+    // `face_identity_face` link with `source='manual'`, and that link IS the lock — owner-agnostic, keyed by
+    // identity so it survives a merge, and replaced (never duplicated) if a human moves the face again. The
+    // dedicated lock table this used to write was a second, weaker record of the same fact.
     const movedSet = new Set(result.movedFaceIds);
-    let moveLocked = 0;
-    for (const group of moveToPerson) {
-      if (!group.lock) {
-        continue;
-      }
-      const toLock = group.faceIds.filter((id) => movedSet.has(id));
-      if (toLock.length > 0) {
-        moveLocked += await this.faceRepairLockRepository.insertLocks(toLock, group.destinationPersonId, resolvedBy);
-      }
-    }
+    const moveLocked = moveToPerson
+      .filter((group) => group.lock)
+      .reduce((total, group) => total + group.faceIds.filter((id) => movedSet.has(id)).length, 0);
 
     // Soft-stay (M4, state 3): write a durable decline against each stayed face's OWN stored suspected owner
     // (never one shared owner — a mixed cluster can point faces at different owners). `createDeclines` is
@@ -861,10 +861,21 @@ export class FaceRepairService extends BaseService {
       const declineFaces = stay
         .map((assetFaceId) => ({ assetFaceId, suspectedOwnerId: snapshotOwnerByFace.get(assetFaceId)! }))
         .filter((face) => liveOwnerIds.has(face.suspectedOwnerId));
-      declined =
-        declineFaces.length > 0
-          ? await this.faceRepairDeclineRepository.createDeclines({ faces: declineFaces, declinedBy: resolvedBy })
-          : 0;
+      // "Keep here" states a fact about a (face, human) pairing, so it goes in the shared verdict layer where
+      // the suggestion engine can see it too: if this face is later unassigned, it must not be proposed as
+      // that same person.
+      const ownerTokens = await this.faceIdentityRepository.getPersonVerdictTokens([...liveOwnerIds]);
+      for (const face of declineFaces) {
+        const identityId = ownerTokens
+          .get(face.suspectedOwnerId)
+          ?.find((token) => token.startsWith('identity:'))
+          ?.slice('identity:'.length);
+        declined += await this.facePersonVerdictRepository.markRejected(face.suspectedOwnerId, face.assetFaceId, {
+          identityId: identityId ?? null,
+          source: 'cleanup',
+          actorId: resolvedBy,
+        });
+      }
     }
 
     // Confirm/lock (Slice 3, state 4): durably, owner-agnostically lock each `lock`-bucket face to this
@@ -872,8 +883,20 @@ export class FaceRepairService extends BaseService {
     // already-locked face (even one whose flaggedIds membership above passed via a stale/declined snapshot row)
     // is a silent no-op, never a unique-violation. Summed with `moveLocked` (temporal-consistency hardening,
     // Slice 3): a single resolve can both stand-alone-lock some faces AND move-and-lock others.
-    const locked =
-      (lock.length > 0 ? await this.faceRepairLockRepository.insertLocks(lock, personId, resolvedBy) : 0) + moveLocked;
+    // Confirm/lock (state 4): re-affirm the face's CURRENT placement as a human one. The face already sits on
+    // `personId`; marking its identity link `source='manual'` records that a human confirmed it there, which
+    // is exactly what stops every future scan from suspecting it toward any owner — the age-gap case. Same
+    // record a move writes, so there is one notion of "settled", not two.
+    let locked = moveLocked;
+    if (lock.length > 0) {
+      const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId);
+      await this.faceIdentityRepository.replaceFaceIdentities({
+        assetFaceIds: lock,
+        identityId: identity.id,
+        source: 'manual',
+      });
+      locked += lock.length;
+    }
 
     // Detach (Slice 5, state 5, "Not a face"): unassign each detached face from this person AND strip its
     // identity link, atomically — wrapped in one transaction so a crash between the two writes can never leave
@@ -937,14 +960,14 @@ export class FaceRepairService extends BaseService {
         });
         unknownParked = parked.moved;
         unknownSkipped = parked.skipped;
-        await (parked.movedFaceIds.length > 0
-          ? // Lock to the NEW cluster, not to the reviewed person: the lock is owner-agnostic (unique on
-            // assetFaceId), and its `personId` is the audit trail of where the face actually came to rest.
-            this.faceRepairLockRepository.insertLocks(parked.movedFaceIds, cluster.id, resolvedBy)
-          : // Every requested face turned out stale (moved off this person between the snapshot read and the
-            // write), so executeRepair moved nothing and the cluster we just created would linger as an empty,
-            // nameless person on the People page.
-            this.personRepository.delete([cluster.id]));
+        // The reattribution onto the new cluster already wrote each moved face's identity link with
+        // source='manual', which is the settled record — no separate lock write is needed.
+        if (parked.movedFaceIds.length === 0) {
+          // Every requested face turned out stale (moved off this person between the snapshot read and the
+          // write), so executeRepair moved nothing and the cluster we just created would linger as an empty,
+          // nameless person on the People page.
+          await this.personRepository.delete([cluster.id]);
+        }
       } catch (error) {
         // The cluster is created BEFORE the faces are moved into it, so any failure in between (a dropped
         // connection mid-reattribution, a lock insert that blows up) would otherwise strand a nameless, faceless
