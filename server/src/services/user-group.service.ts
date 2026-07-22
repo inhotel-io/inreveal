@@ -33,12 +33,6 @@ export class UserGroupService extends BaseService {
     return results;
   }
 
-  async get(auth: AuthDto, id: string): Promise<UserGroupResponseDto> {
-    const group = await this.requireOwnership(auth, id);
-    const members = await this.userGroupRepository.getMembers(id);
-    return this.mapGroup(group, members);
-  }
-
   async update(auth: AuthDto, id: string, dto: UserGroupUpdateDto): Promise<UserGroupResponseDto> {
     await this.requireOwnership(auth, id);
 
@@ -76,7 +70,7 @@ export class UserGroupService extends BaseService {
   }
 
   private mapGroup(
-    group: { id: string; name: string; color: string | null; origin: string; createdAt: Date },
+    group: { id: string; name: string; color: string | null; createdAt: Date },
     members: Array<{
       userId: string;
       name: string;
@@ -89,7 +83,6 @@ export class UserGroupService extends BaseService {
       id: group.id,
       name: group.name,
       color: (group.color as UserAvatarColor) ?? null,
-      origin: group.origin,
       createdAt: group.createdAt.toISOString(),
       members: members.map((m) => this.mapMember(m)),
     };

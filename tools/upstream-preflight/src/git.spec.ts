@@ -3,7 +3,6 @@ import { createTempRepo } from '../test/fixtures';
 import {
   cherryEquivalent,
   collectGitRange,
-  commitSubjects,
   currentBranch,
   getGitPath,
   getMergeBase,
@@ -136,9 +135,11 @@ describe('git range collection', () => {
     const two = repo.commit('fix: two (#2)');
 
     expect(
-      listCommits(repo.path, `${base}..HEAD`).map((commit) => commit.sha),
-    ).toEqual([one, two]);
-    expect(commitSubjects(repo.path, `${base}..HEAD`)).toEqual([
+      listCommits(repo.path, `${base}..HEAD`).map((commit) => ({
+        sha: commit.sha,
+        subject: commit.subject,
+      })),
+    ).toEqual([
       { sha: one, subject: 'feat: one (#1)' },
       { sha: two, subject: 'fix: two (#2)' },
     ]);

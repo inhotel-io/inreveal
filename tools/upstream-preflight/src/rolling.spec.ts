@@ -765,11 +765,6 @@ describe('rolling fork sync', () => {
       'make ci-invariants-check',
       'make fork-patches-check',
     ]);
-    expect(defaultForkSyncChecks('01')).toEqual([
-      'make fork-ownership-coverage-check',
-      'make ci-invariants-check',
-      'make fork-patches-check',
-    ]);
   });
 
   it('runs default fork-sync checks when no injected check runner is provided', () => {
@@ -802,11 +797,11 @@ describe('rolling fork sync', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(commands).toEqual(defaultForkSyncChecks('01'));
+    expect(commands).toEqual(defaultForkSyncChecks());
     expect(readRollingState(repo.path, outputDir).checkHistory).toContainEqual(
       expect.objectContaining({
         phase: 'fork-sync',
-        commands: defaultForkSyncChecks('01'),
+        commands: defaultForkSyncChecks(),
         ok: true,
       }),
     );
@@ -844,7 +839,7 @@ describe('rolling fork sync', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(checkCwds).toEqual(defaultForkSyncChecks('01').map(() => repo.path));
+    expect(checkCwds).toEqual(defaultForkSyncChecks().map(() => repo.path));
   });
 
   it('no-ops when no fork commits are pending', () => {

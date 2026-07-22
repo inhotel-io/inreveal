@@ -15,7 +15,6 @@ metadata:
 features:
   shared-spaces:
     title: Shared Spaces
-    aliases: [mobile-shared-space-drift-sync]
     risk: high
     domains: [server, web, mobile, database, e2e]
     owned_paths: [server/src/services/shared-space.service.ts]
@@ -33,7 +32,6 @@ features:
 checks:
   mobile-drift-rebase-check:
     command: make mobile-drift-rebase-check
-    phase: preflight-and-post-batch
     cost: cheap
 ci_invariants:
   - id: no-push-o-matic
@@ -45,7 +43,6 @@ patches:
     package: '@immich/ui'
     version_source: pnpm-workspace.yaml
     expected_patch: patches/@immich__ui@0.79.0.patch
-    required_check: mobile-drift-rebase-check
 risk_patterns:
   - id: breaking-refactor
     risk: high
@@ -66,9 +63,6 @@ describe('parseManifest', () => {
   it('loads all manifest sections', () => {
     const manifest = parseManifest(validManifest);
 
-    expect(manifest.features['shared-spaces'].aliases).toEqual([
-      'mobile-shared-space-drift-sync',
-    ]);
     expect(
       manifest.features['shared-spaces'].mobile?.drift_versions?.owned,
     ).toEqual([23, 24]);
@@ -112,17 +106,6 @@ describe('parseManifest', () => {
     ).toThrow('Invalid domain for feature shared-spaces: api');
   });
 
-  it('rejects duplicate aliases', () => {
-    expect(() =>
-      parseManifest(
-        validManifest.replace(
-          'aliases: [mobile-shared-space-drift-sync]',
-          'aliases: [shared-spaces]',
-        ),
-      ),
-    ).toThrow('Duplicate feature alias: shared-spaces');
-  });
-
   it('supports explicit, defaulted, and missing check cost metadata', () => {
     const manifest = parseManifest(`
 version: 1
@@ -141,15 +124,12 @@ features:
 checks:
   cheap-check:
     command: make cheap-check
-    phase: post-batch
     cost: cheap
   expensive-check:
     command: make expensive-check
-    phase: post-batch
     cost: expensive
   default-check:
     command: make default-check
-    phase: post-batch
 `);
 
     expect(manifest.checks?.['cheap-check'].cost).toBe('cheap');

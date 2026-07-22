@@ -26,7 +26,6 @@ describe('renderPreflightMarkdown', () => {
       upstreamShortStat: '852 files changed',
       forkShortStat: '2040 files changed',
       classifiedCommits: [commit],
-      incomingCommits: [commit],
       forkFileCount: 2040,
       upstreamFileCount: 852,
       overlapFiles: [

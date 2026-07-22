@@ -32,7 +32,6 @@ export type Manifest = {
 
 export type FeatureEntry = {
   title: string;
-  aliases?: string[];
   risk: RiskLevel;
   domains: Domain[];
   owned_paths?: string[];
@@ -59,7 +58,6 @@ export type FeatureEntry = {
 
 export type CheckEntry = {
   command: string;
-  phase: 'preflight' | 'post-batch' | 'preflight-and-post-batch' | 'final';
   cost?: 'cheap' | 'expensive';
   required_for_risk?: RiskLevel[];
   required_for_domains?: Domain[];
@@ -78,7 +76,6 @@ export type PackagePatch = {
   package: string;
   version_source: string;
   expected_patch: string;
-  required_check: string;
 };
 
 export type RiskPattern = {

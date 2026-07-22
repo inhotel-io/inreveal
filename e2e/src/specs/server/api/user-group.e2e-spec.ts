@@ -40,7 +40,6 @@ describe('/user-groups', () => {
         expect.objectContaining({
           id: expect.any(String),
           name: 'Family A',
-          origin: 'manual',
           members: [],
         }),
       );
@@ -79,29 +78,7 @@ describe('/user-groups', () => {
       expect(body).toEqual(errorDto.unauthorized);
     });
 
-    it('should list only groups owned by the current user', async () => {
-      const { body: user1Groups } = await request(app)
-        .get('/user-groups')
-        .set('Authorization', `Bearer ${user1.accessToken}`);
-
-      const { body: user2Groups } = await request(app)
-        .get('/user-groups')
-        .set('Authorization', `Bearer ${user2.accessToken}`);
-
-      expect(user1Groups.length).toBeGreaterThanOrEqual(2);
-      expect(user2Groups).toEqual([]);
-    });
-  });
-
-  describe('GET /user-groups/:id', () => {
-    it('should require authentication', async () => {
-      const { status, body } = await request(app).get('/user-groups/fd69a48e-5579-4bfc-b1ca-dc5e4e74c724');
-
-      expect(status).toBe(401);
-      expect(body).toEqual(errorDto.unauthorized);
-    });
-
-    it('should get a group with members', async () => {
+    it('should include members in the listed groups', async () => {
       const { body: group } = await request(app)
         .post('/user-groups')
         .set('Authorization', `Bearer ${user1.accessToken}`)
@@ -113,34 +90,27 @@ describe('/user-groups', () => {
         .send({ userIds: [user2.userId] });
 
       const { status, body } = await request(app)
-        .get(`/user-groups/${group.id}`)
+        .get('/user-groups')
         .set('Authorization', `Bearer ${user1.accessToken}`);
 
       expect(status).toBe(200);
-      expect(body.name).toBe('Get Test');
-      expect(body.members).toHaveLength(1);
-      expect(body.members[0].userId).toBe(user2.userId);
+      const created = body.find((candidate: { id: string }) => candidate.id === group.id);
+      expect(created.name).toBe('Get Test');
+      expect(created.members).toHaveLength(1);
+      expect(created.members[0].userId).toBe(user2.userId);
     });
 
-    it('should return 404 for non-existent group', async () => {
-      const { status } = await request(app)
-        .get('/user-groups/fd69a48e-5579-4bfc-b1ca-dc5e4e74c724')
+    it('should list only groups owned by the current user', async () => {
+      const { body: user1Groups } = await request(app)
+        .get('/user-groups')
         .set('Authorization', `Bearer ${user1.accessToken}`);
 
-      expect(status).toBe(404);
-    });
-
-    it('should return 403 for non-owner', async () => {
-      const { body: group } = await request(app)
-        .post('/user-groups')
-        .set('Authorization', `Bearer ${user1.accessToken}`)
-        .send({ name: 'Ownership Test' });
-
-      const { status } = await request(app)
-        .get(`/user-groups/${group.id}`)
+      const { body: user2Groups } = await request(app)
+        .get('/user-groups')
         .set('Authorization', `Bearer ${user2.accessToken}`);
 
-      expect(status).toBe(403);
+      expect(user1Groups.length).toBeGreaterThanOrEqual(2);
+      expect(user2Groups).toEqual([]);
     });
   });
 
@@ -219,11 +189,11 @@ describe('/user-groups', () => {
 
       expect(status).toBe(204);
 
-      const { status: getStatus } = await request(app)
-        .get(`/user-groups/${group.id}`)
+      const { body: groups } = await request(app)
+        .get('/user-groups')
         .set('Authorization', `Bearer ${user1.accessToken}`);
 
-      expect(getStatus).toBe(404);
+      expect(groups.map((candidate: { id: string }) => candidate.id)).not.toContain(group.id);
     });
 
     it('should return 403 for non-owner', async () => {

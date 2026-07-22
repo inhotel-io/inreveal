@@ -28,18 +28,6 @@ fork_surface:
 features:
   shared-spaces:
     title: Shared Spaces And Space Identity
-    aliases:
-      - mobile-spaces
-      - mobile-shared-space-drift-sync
-      - space-library-linking
-      - bulk-add-to-spaces
-      - space-activity-logging
-      - collapsible-space-hero
-      - space-person-dedup
-      - duplicate-space-membership-sync
-      - library-user-denormalization
-      - global-face-identities
-      - representative-face-source
     risk: high
     domains: [server, web, mobile, database, e2e]
     owned_paths:
@@ -94,14 +82,6 @@ features:
 
   storage-and-media:
     title: Storage Migration, Direct S3 Delivery, Import, And Media Edits
-    aliases:
-      - storage-migration
-      - direct-s3-media-delivery
-      - google-photos-import
-      - google-takeout-zip-on-demand
-      - image-editing
-      - checksum-tombstone
-      - switch-back-to-immich
     risk: high
     domains: [server, web, database, ci, e2e]
     owned_paths:
@@ -139,17 +119,6 @@ features:
 
   search-map-and-ui:
     title: Search, Filters, Maps, Command Palette, Memories, And Support UI
-    aliases:
-      - support-ui
-      - global-search-command-palette
-      - gallery-map-shared-photos
-      - filter-panel
-      - smart-search-main-timeline
-      - space-search-sorting
-      - dynamic-filter-suggestions
-      - typed-search-filters
-      - rule-based-memories
-      - historic-memories
     risk: high
     domains: [server, web, mobile, e2e]
     owned_paths:
@@ -187,13 +156,6 @@ features:
 
   ml-classification-and-observability:
     title: ML, Classification, Duplicates, Config Caching, And Metrics
-    aliases:
-      - pet-detection
-      - auto-classification
-      - video-duplicate-detection
-      - clip-relevance-threshold
-      - system-config-caching
-      - prometheus-metrics
     risk: high
     domains: [server, ml, database]
     owned_paths:
@@ -226,15 +188,6 @@ features:
 
   mobile-app-and-branding:
     title: Mobile App, Branding, Deep Links, And Release Signing
-    aliases:
-      - mobile-photos-filter-sheet
-      - mobile-map-markers
-      - mobile-bottom-nav-design
-      - mobile-deeplink-oauth-branding
-      - mobile-ios-purpose-strings
-      - mobile-release-signing
-      - open-in-app-deeplink
-      - branding
     risk: high
     domains: [mobile, web, ci, config]
     owned_paths:
@@ -262,17 +215,6 @@ features:
 
   release-ci-and-infrastructure:
     title: Release, CI, Infrastructure Detachment, Schema Functions, And Logging
-    aliases:
-      - user-groups
-      - infrastructure-detachment
-      - release-version-publishing
-      - rc-build-workflow
-      - split-mobile-server-release
-      - environment-tagged-user-agent
-      - fork-migration-compatibility
-      - schema-functions
-      - structured-json-logging
-      - upstream-rebase-tooling
     risk: high
     domains: [ci, server, web, mobile, docs, config, database]
     owned_paths:
@@ -372,32 +314,26 @@ features:
 checks:
   e2e-rebase-smoke:
     command: make e2e-rebase-smoke
-    phase: post-batch
     cost: expensive
     required_for_risk: [high]
   mobile-drift-rebase-check:
     command: make mobile-drift-rebase-check
-    phase: preflight-and-post-batch
     cost: cheap
     required_for_domains: [mobile, database]
   ci-invariants-check:
     command: make ci-invariants-check
-    phase: preflight-and-post-batch
     cost: cheap
     required_for_domains: [ci]
   fork-patches-check:
     command: make fork-patches-check
-    phase: preflight-and-post-batch
     cost: cheap
     required_for_domains: [web, ci]
   storage-migration-tests:
     command: make storage-migration-tests
-    phase: post-batch
     cost: expensive
     required_for_domains: [server, database]
   storage-migration-e2e:
     command: make storage-migration-e2e
-    phase: post-batch
     cost: expensive
     required_for_domains: [e2e]
 
@@ -427,7 +363,6 @@ patches:
     package: '@immich/ui'
     version_source: pnpm-workspace.yaml
     expected_patch: patches/@immich__ui@0.81.1.patch
-    required_check: fork-patches-check
 
 risk_patterns:
   - id: breaking-refactor

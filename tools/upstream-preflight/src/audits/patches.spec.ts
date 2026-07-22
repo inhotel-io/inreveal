@@ -6,7 +6,6 @@ const patch = {
   package: '@immich/ui',
   version_source: 'pnpm-workspace.yaml',
   expected_patch: 'patches/@immich__ui@0.79.0.patch',
-  required_check: 'fork-patches-check',
 };
 
 describe('checkPackagePatchText', () => {

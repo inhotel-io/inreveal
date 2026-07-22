@@ -383,7 +383,6 @@ export type UserGroup = {
   id: string;
   name: string;
   color: string | null;
-  origin: string;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;

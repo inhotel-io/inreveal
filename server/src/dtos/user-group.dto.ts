@@ -37,7 +37,6 @@ const UserGroupResponseSchema = z
     id: z.string().describe('Group ID'),
     name: z.string().describe('Group name'),
     color: UserAvatarColorSchema.nullable().optional().describe('Group color'),
-    origin: z.string().describe('Group origin (manual or oidc)'),
     createdAt: z.string().describe('Creation date'),
     members: z.array(UserGroupMemberResponseSchema).describe('Members'),
   })

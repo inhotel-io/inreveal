@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
 import micromatch from 'micromatch';
 import { isAncestor, listChangedFiles, revParse } from './git';
 import { defaultManifestPath, loadManifest } from './manifest';
@@ -13,15 +14,13 @@ import type {
 
 const micromatchOptions = { dot: true };
 
-export function manifestCoverageGlobs(manifest: Manifest): string[] {
-  const coverage = manifestCoverageGroups(manifest);
-
-  return [
-    ...coverage.explicit,
-    ...coverage.broadOptional,
-    ...coverage.narrowOptional,
-  ].sort();
-}
+const coverageArgsConfig = {
+  options: {
+    'expected-head': { type: 'string' },
+    'strict-broad-coverage': { type: 'boolean' },
+  },
+  allowPositionals: true,
+} as const;
 
 export function classifyCoverage(
   files: string[],
@@ -125,11 +124,9 @@ export type ValidateManifestForkHeadOptions = {
 
 export function validateManifestForkHead(
   manifest: Manifest,
-  options: ValidateManifestForkHeadOptions | string | undefined,
+  options: ValidateManifestForkHeadOptions = {},
 ): ManifestHeadValidation {
-  const expectedHead =
-    typeof options === 'string' ? options : options?.expectedHead;
-  const repoPath = typeof options === 'string' ? undefined : options?.repoPath;
+  const { expectedHead, repoPath } = options;
 
   if (!expectedHead) {
     return manifestHeadValidation();
@@ -268,33 +265,27 @@ function resolveCliPath(inputPath: string) {
 }
 
 function parseCoverageArgs(argv: string[]) {
+  // `pnpm run coverage -- files.txt` forwards the separator verbatim.
   const args = argv[0] === '--' ? argv.slice(1) : argv;
-  const positional: string[] = [];
-  let expectedHead: string | undefined;
-  let strictBroadCoverage = false;
 
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index];
-    if (arg === '--expected-head') {
-      if (!args[index + 1]) {
-        throw new Error('--expected-head requires a commit SHA');
-      }
-      expectedHead = args[index + 1];
-      index++;
-      continue;
+  let parsed: ReturnType<typeof parseArgs<typeof coverageArgsConfig>>;
+  try {
+    parsed = parseArgs({ ...coverageArgsConfig, args });
+  } catch (error) {
+    if (
+      (error as NodeJS.ErrnoException).code ===
+      'ERR_PARSE_ARGS_INVALID_OPTION_VALUE'
+    ) {
+      throw new Error('--expected-head requires a commit SHA');
     }
-    if (arg === '--strict-broad-coverage') {
-      strictBroadCoverage = true;
-      continue;
-    }
-    positional.push(arg);
+    throw error;
   }
 
   return {
-    fileListPath: positional[0],
-    manifestPath: positional[1] ?? defaultManifestPath,
-    expectedHead,
-    strictBroadCoverage,
+    fileListPath: parsed.positionals[0],
+    manifestPath: parsed.positionals[1] ?? defaultManifestPath,
+    expectedHead: parsed.values['expected-head'],
+    strictBroadCoverage: parsed.values['strict-broad-coverage'] ?? false,
   };
 }
 

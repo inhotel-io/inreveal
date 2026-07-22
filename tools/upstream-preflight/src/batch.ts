@@ -1,6 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { getGitPath, isAncestor, revParse } from './git';
+import {
+  assertBoolean,
+  assertFullSha,
+  assertNumber,
+  assertRecord,
+  assertRisk,
+  assertString,
+  assertStringArray,
+} from './asserts';
+import {
+  errorMessage,
+  getGitPath,
+  isAncestor,
+  revParse,
+  shortSha,
+} from './git';
 import type {
   Batch,
   BatchPlan,
@@ -11,7 +26,7 @@ import type {
 } from './types';
 
 const riskRank: Record<RiskLevel, number> = { low: 0, medium: 1, high: 2 };
-const fullShaPattern = /^[0-9a-f]{40}$/i;
+const invalidPlan = 'persisted batch plan';
 
 export type BatchAuditScopeInput = {
   batch?: string;
@@ -408,8 +423,8 @@ function validateBatchPlanShape(
   value: unknown,
   source: string,
 ): asserts value is BatchPlan {
-  assertRecord(value, source);
-  assertRecord(value.metadata, `${source}: metadata`);
+  assertRecord(value, invalidPlan, source);
+  assertRecord(value.metadata, invalidPlan, `${source}: metadata`);
   const metadata = value.metadata;
 
   for (const key of [
@@ -421,17 +436,23 @@ function validateBatchPlanShape(
     'forkHead',
     'manifestForkBaseline',
   ]) {
-    assertString(metadata[key], `${source}: metadata.${key}`);
+    assertString(metadata[key], invalidPlan, `${source}: metadata.${key}`);
   }
-  assertNumber(metadata.softCap, `${source}: metadata.softCap`);
-  assertFullSha(metadata.mergeBase as string, `${source}: metadata.mergeBase`);
+  assertNumber(metadata.softCap, invalidPlan, `${source}: metadata.softCap`);
   assertFullSha(
-    metadata.upstreamHead as string,
+    metadata.mergeBase,
+    invalidPlan,
+    `${source}: metadata.mergeBase`,
+  );
+  assertFullSha(
+    metadata.upstreamHead,
+    invalidPlan,
     `${source}: metadata.upstreamHead`,
   );
-  assertFullSha(metadata.forkHead as string, `${source}: metadata.forkHead`);
+  assertFullSha(metadata.forkHead, invalidPlan, `${source}: metadata.forkHead`);
   assertFullSha(
-    metadata.manifestForkBaseline as string,
+    metadata.manifestForkBaseline,
+    invalidPlan,
     `${source}: metadata.manifestForkBaseline`,
   );
 
@@ -443,16 +464,28 @@ function validateBatchPlanShape(
 
   for (const [batchIndex, batch] of value.batches.entries()) {
     const label = `${source}: batches[${batchIndex}]`;
-    assertRecord(batch, label);
-    assertString(batch.id, `${label}.id`);
-    assertString(batch.tipSha, `${label}.tipSha`);
-    assertFullSha(batch.tipSha, `${label}.tipSha`);
-    assertRisk(batch.risk, `${label}.risk`);
-    assertStringArray(batch.why, `${label}.why`);
-    assertStringArray(batch.requiredChecks, `${label}.requiredChecks`);
-    assertStringArray(batch.postBatchChecks, `${label}.postBatchChecks`);
-    assertStringArray(batch.checkpointChecks, `${label}.checkpointChecks`);
-    assertBoolean(batch.checkpoint, `${label}.checkpoint`);
+    assertRecord(batch, invalidPlan, label);
+    assertString(batch.id, invalidPlan, `${label}.id`);
+    assertString(batch.tipSha, invalidPlan, `${label}.tipSha`);
+    assertFullSha(batch.tipSha, invalidPlan, `${label}.tipSha`);
+    assertRisk(batch.risk, invalidPlan, `${label}.risk`);
+    assertStringArray(batch.why, invalidPlan, `${label}.why`);
+    assertStringArray(
+      batch.requiredChecks,
+      invalidPlan,
+      `${label}.requiredChecks`,
+    );
+    assertStringArray(
+      batch.postBatchChecks,
+      invalidPlan,
+      `${label}.postBatchChecks`,
+    );
+    assertStringArray(
+      batch.checkpointChecks,
+      invalidPlan,
+      `${label}.checkpointChecks`,
+    );
+    assertBoolean(batch.checkpoint, invalidPlan, `${label}.checkpoint`);
 
     if (!Array.isArray(batch.commits) || batch.commits.length === 0) {
       throw new Error(
@@ -462,70 +495,11 @@ function validateBatchPlanShape(
 
     for (const [commitIndex, commit] of batch.commits.entries()) {
       const commitLabel = `${label}.commits[${commitIndex}]`;
-      assertRecord(commit, commitLabel);
-      assertString(commit.sha, `${commitLabel}.sha`);
-      assertFullSha(commit.sha, `${commitLabel}.sha`);
-      assertStringArray(commit.files, `${commitLabel}.files`);
+      assertRecord(commit, invalidPlan, commitLabel);
+      assertString(commit.sha, invalidPlan, `${commitLabel}.sha`);
+      assertFullSha(commit.sha, invalidPlan, `${commitLabel}.sha`);
+      assertStringArray(commit.files, invalidPlan, `${commitLabel}.files`);
     }
-  }
-}
-
-function assertRecord(
-  value: unknown,
-  label: string,
-): asserts value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(
-      `Invalid persisted batch plan ${label}: object is required`,
-    );
-  }
-}
-
-function assertString(value: unknown, label: string): asserts value is string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`Invalid persisted batch plan ${label} is required`);
-  }
-}
-
-function assertNumber(value: unknown, label: string): asserts value is number {
-  if (typeof value !== 'number' || Number.isNaN(value)) {
-    throw new Error(`Invalid persisted batch plan ${label} is required`);
-  }
-}
-
-function assertBoolean(
-  value: unknown,
-  label: string,
-): asserts value is boolean {
-  if (typeof value !== 'boolean') {
-    throw new Error(`Invalid persisted batch plan ${label} is required`);
-  }
-}
-
-function assertStringArray(
-  value: unknown,
-  label: string,
-): asserts value is string[] {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-    throw new Error(
-      `Invalid persisted batch plan ${label} must be an array of strings`,
-    );
-  }
-}
-
-function assertRisk(value: unknown, label: string): asserts value is RiskLevel {
-  if (value !== 'low' && value !== 'medium' && value !== 'high') {
-    throw new Error(
-      `Invalid persisted batch plan ${label} must be low, medium, or high`,
-    );
-  }
-}
-
-function assertFullSha(value: string, label: string) {
-  if (!fullShaPattern.test(value)) {
-    throw new Error(
-      `Invalid persisted batch plan ${label} must be a full 40-character SHA`,
-    );
   }
 }
 
@@ -595,12 +569,4 @@ function persistedBatchPlanDir(repoPath: string, outputDir?: string): string {
 
   const gitPath = getGitPath(repoPath, 'upstream-preflight');
   return path.isAbsolute(gitPath) ? gitPath : path.resolve(repoPath, gitPath);
-}
-
-function shortSha(sha: string): string {
-  return sha.slice(0, 9);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

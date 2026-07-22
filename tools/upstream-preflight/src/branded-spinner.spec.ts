@@ -56,19 +56,6 @@ const IMPORT_RE =
 
 type SpinnerSource = 'fork-local' | 'generic' | 'other' | 'none';
 
-function collectSvelteFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...collectSvelteFiles(full));
-    } else if (entry.isFile() && entry.name.endsWith('.svelte')) {
-      out.push(full);
-    }
-  }
-  return out;
-}
-
 function classifySpecifier(specifier: string): SpinnerSource {
   if (specifier.endsWith(FORK_LOCAL_SPECIFIER)) {
     return 'fork-local';
@@ -113,25 +100,6 @@ describe('branded LoadingSpinner swap', () => {
         offenders.push(
           `${rel}: imports LoadingSpinner from ${source} instead of the fork-local component`,
         );
-      }
-    }
-
-    expect(offenders).toEqual([]);
-  });
-
-  it('no file in the swapped set imports the generic @immich/ui LoadingSpinner', () => {
-    const swappedSetAbs = new Set(
-      SWAPPED_SET.map((rel) => path.join(WEB_SRC, rel)),
-    );
-    const offenders: string[] = [];
-
-    for (const file of collectSvelteFiles(WEB_SRC)) {
-      if (!swappedSetAbs.has(file)) {
-        continue;
-      }
-      const content = fs.readFileSync(file, 'utf8');
-      if (findLoadingSpinnerImport(content) === 'generic') {
-        offenders.push(path.relative(WEB_SRC, file));
       }
     }
 

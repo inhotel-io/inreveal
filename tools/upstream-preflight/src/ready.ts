@@ -26,14 +26,8 @@ export type ReadinessEvaluationInput = {
   reportPaths?: string[];
 };
 
-const currentForkBlockerAuditTitles = new Set([
-  'Fork-Owned File Survival',
-  'Fork Extension Symbol Survival',
-  'Gallery Migration Count',
-  'Gallery Migration Filename Survival',
-  'Gallery Migration Manifest Coverage',
-]);
-
+// Post-rebase audits whose failures are tracked as planned resolutions instead
+// of hard blockers. Every other failing post-rebase audit blocks readiness.
 const plannedResolutionAuditTitles = new Set([
   'Mobile Drift Migration Check',
   'Migration Timestamp Collision Check',
@@ -72,13 +66,12 @@ export function evaluateReadiness(
 
   for (const audit of input.postRebaseAuditResults ?? []) {
     if (audit.ok) continue;
-    if (currentForkBlockerAuditTitles.has(audit.title)) {
-      appendAudit(errors, audit);
-    } else if (plannedResolutionAuditTitles.has(audit.title)) {
-      appendAudit(plannedResolutions, audit);
-    } else {
-      appendAudit(errors, audit);
-    }
+    appendAudit(
+      plannedResolutionAuditTitles.has(audit.title)
+        ? plannedResolutions
+        : errors,
+      audit,
+    );
   }
 
   for (const audit of input.planningResults ?? []) {

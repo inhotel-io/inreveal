@@ -46,16 +46,7 @@ export class UserGroupRepository {
         join.onRef('user.id', '=', 'user_group_member.userId').on('user.deletedAt', 'is', null),
       )
       .where('user_group_member.groupId', '=', groupId)
-      .select([
-        'user_group_member.groupId',
-        'user_group_member.userId',
-        'user_group_member.addedAt',
-        'user.name',
-        'user.email',
-        'user.profileImagePath',
-        'user.profileChangedAt',
-        'user.avatarColor',
-      ])
+      .select(['user_group_member.userId', 'user.name', 'user.email', 'user.profileImagePath', 'user.avatarColor'])
       .execute();
   }
 

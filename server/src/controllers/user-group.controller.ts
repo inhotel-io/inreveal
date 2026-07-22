@@ -41,17 +41,6 @@ export class UserGroupController {
     return this.service.getAll(auth);
   }
 
-  @Get(':id')
-  @Authenticated({ permission: Permission.UserGroupRead })
-  @Endpoint({
-    summary: 'Get a user group',
-    description: 'Retrieve details of a specific user group.',
-    history: new HistoryBuilder().added('v1').beta('v1'),
-  })
-  getGroup(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<UserGroupResponseDto> {
-    return this.service.get(auth, id);
-  }
-
   @Patch(':id')
   @Authenticated({ permission: Permission.UserGroupUpdate })
   @Endpoint({

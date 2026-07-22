@@ -25,7 +25,6 @@ export type ForkSurfaceSignalInput = {
   forkFiles: string[];
   overlapFiles: string[];
   broadOnlyRecentFiles: CoverageClassification[];
-  sampleLimit?: number;
 };
 
 export function collectExtensionHotspots(
@@ -106,7 +105,6 @@ export function collectFeatureOverlaps(
 export function collectForkSurfaceSignals(
   input: ForkSurfaceSignalInput,
 ): ForkSurfaceSignals {
-  const sampleLimit = input.sampleLimit ?? 20;
   const preferredGlobs = Object.values(
     input.manifest.fork_surface?.preferred_namespaces ?? {},
   ).flat();
@@ -120,7 +118,6 @@ export function collectForkSurfaceSignals(
       extractionCandidates: group([]),
       broadOnlyRecentFiles: group(
         input.broadOnlyRecentFiles.map((classification) => classification.file),
-        sampleLimit,
       ),
     };
   }
@@ -145,13 +142,12 @@ export function collectForkSurfaceSignals(
 
   return {
     configured: true,
-    preferredNamespaceFiles: group(preferredFiles, sampleLimit),
-    outsidePreferredNamespaceFiles: group(outsideFiles, sampleLimit),
-    adapterHookFiles: group(adapterHookFiles, sampleLimit),
-    extractionCandidates: group(extractionCandidates, sampleLimit),
+    preferredNamespaceFiles: group(preferredFiles),
+    outsidePreferredNamespaceFiles: group(outsideFiles),
+    adapterHookFiles: group(adapterHookFiles),
+    extractionCandidates: group(extractionCandidates),
     broadOnlyRecentFiles: group(
       input.broadOnlyRecentFiles.map((classification) => classification.file),
-      sampleLimit,
     ),
   };
 }
@@ -168,7 +164,9 @@ function featureSignalGlobs(feature: Manifest['features'][string]): string[] {
   ];
 }
 
-function group(files: string[], sampleLimit = 20): ForkSurfaceGroup {
+const sampleLimit = 20;
+
+function group(files: string[]): ForkSurfaceGroup {
   const sorted = [...new Set(files)].sort();
   return {
     count: sorted.length,

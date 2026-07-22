@@ -8,7 +8,6 @@ const makeGroup = (overrides: Record<string, unknown> = {}) => ({
   id: newUuid(),
   name: 'Family A',
   color: null as string | null,
-  origin: 'manual',
   createdById: newUuid(),
   createdAt: newDate(),
   updatedAt: newDate(),
@@ -18,13 +17,10 @@ const makeGroup = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const makeMember = (overrides: Record<string, unknown> = {}) => ({
-  groupId: newUuid(),
   userId: newUuid(),
-  addedAt: newDate(),
   name: 'Test User',
   email: 'test@example.com',
   profileImagePath: '',
-  profileChangedAt: newDate(),
   avatarColor: null,
   ...overrides,
 });
@@ -80,7 +76,7 @@ describe(UserGroupService.name, () => {
     it('should return groups with members for the current user', async () => {
       const auth = factory.auth();
       const group = makeGroup({ createdById: auth.user.id });
-      const member = makeMember({ groupId: group.id });
+      const member = makeMember();
 
       mocks.userGroup.getAllByUserId.mockResolvedValue([group]);
       mocks.userGroup.getMembers.mockResolvedValue([member]);
@@ -103,34 +99,14 @@ describe(UserGroupService.name, () => {
     });
   });
 
-  describe('get', () => {
-    it('should return group with members when user is owner', async () => {
-      const auth = factory.auth();
-      const group = makeGroup({ createdById: auth.user.id });
-      mocks.userGroup.getById.mockResolvedValue(group);
-      mocks.userGroup.getMembers.mockResolvedValue([]);
-
-      const result = await sut.get(auth, group.id);
-      expect(result.id).toBe(group.id);
-    });
-
+  describe('update', () => {
     it('should throw NotFoundException when group not found', async () => {
       const auth = factory.auth();
       mocks.userGroup.getById.mockResolvedValue(void 0);
 
-      await expect(sut.get(auth, newUuid())).rejects.toBeInstanceOf(NotFoundException);
+      await expect(sut.update(auth, newUuid(), { name: 'New Name' })).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('should throw ForbiddenException when user is not the owner', async () => {
-      const auth = factory.auth();
-      const group = makeGroup({ createdById: newUuid() });
-      mocks.userGroup.getById.mockResolvedValue(group);
-
-      await expect(sut.get(auth, group.id)).rejects.toThrow('Not the owner of this group');
-    });
-  });
-
-  describe('update', () => {
     it('should throw ForbiddenException when user is not the owner', async () => {
       const auth = factory.auth();
       const group = makeGroup({ createdById: newUuid() });
@@ -201,7 +177,7 @@ describe(UserGroupService.name, () => {
       const auth = factory.auth();
       const group = makeGroup({ createdById: auth.user.id });
       const userId = newUuid();
-      const member = makeMember({ groupId: group.id, userId });
+      const member = makeMember({ userId });
 
       mocks.userGroup.getById.mockResolvedValue(group);
       mocks.userGroup.setMembers.mockResolvedValue();
@@ -232,7 +208,7 @@ describe(UserGroupService.name, () => {
       const auth = factory.auth();
       const group = makeGroup({ createdById: auth.user.id });
       const userId = newUuid();
-      const member = makeMember({ groupId: group.id, userId });
+      const member = makeMember({ userId });
 
       mocks.userGroup.getById.mockResolvedValue(group);
       mocks.userGroup.setMembers.mockResolvedValue();

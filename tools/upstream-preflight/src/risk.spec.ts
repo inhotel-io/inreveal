@@ -23,12 +23,10 @@ const manifest: Manifest = {
   checks: {
     'e2e-rebase-smoke': {
       command: 'make e2e-rebase-smoke',
-      phase: 'post-batch',
       required_for_risk: ['high'],
     },
     'storage-migration-tests': {
       command: 'make test-server',
-      phase: 'post-batch',
       required_for_domains: ['server'],
     },
   },

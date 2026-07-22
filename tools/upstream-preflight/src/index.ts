@@ -26,7 +26,13 @@ import {
   findUncoveredFiles,
   validateManifestForkHead,
 } from './coverage';
-import { collectGitRange, getGitPath, getMergeBase, revParse } from './git';
+import {
+  collectGitRange,
+  errorMessage,
+  getGitPath,
+  getMergeBase,
+  revParse,
+} from './git';
 import { defaultManifestPath, loadManifest } from './manifest';
 import {
   evaluateReadiness,
@@ -129,6 +135,74 @@ function buildPreflightContext(manifestPath: string) {
   };
 }
 
+type BatchAuditOptions = {
+  manifest: string;
+  batch?: string;
+  planDir?: string;
+};
+
+/**
+ * Resolves the audit scope for the batch-scoped audit commands. With a batch id
+ * (flag or `BATCH` env) the scope comes from the persisted batch plan; without
+ * one it falls back to the full preflight context, which is returned so callers
+ * that also need ownership data do not rebuild it.
+ */
+function resolveBatchAuditInput(
+  options: BatchAuditOptions,
+  settings: { root?: string; validatePlan?: boolean } = {},
+) {
+  const batch = options.batch ?? process.env.BATCH;
+
+  if (!batch) {
+    const context = buildPreflightContext(options.manifest);
+    return {
+      batch,
+      context,
+      manifest: () => context.manifest,
+      auditScope: {
+        batch: undefined as string | undefined,
+        upstreamTouchedFiles: context.upstreamRange.files,
+      },
+    };
+  }
+
+  const root = settings.root ?? process.cwd();
+  const planDir = options.planDir ? resolveCliPath(options.planDir) : undefined;
+
+  if (!settings.validatePlan) {
+    const manifest = loadManifest(resolveCliPath(options.manifest));
+    return {
+      batch,
+      context: undefined,
+      manifest: () => manifest,
+      auditScope: readPersistedBatchAuditScope(root, planDir, batch),
+    };
+  }
+
+  // Staleness is validated before anything else so a stale plan fails fast,
+  // without paying for (or failing on) manifest loading and classification.
+  const batchPlan = readPersistedBatchPlan(root, planDir);
+  validatePersistedBatchPlan(batchPlan, root);
+  const upstreamTouchedFiles = [
+    ...new Set(
+      batchPlan.batches.flatMap((planBatch) =>
+        planBatch.commits.flatMap((commit) => commit.files),
+      ),
+    ),
+  ].sort();
+
+  return {
+    batch,
+    context: undefined,
+    manifest: () => loadManifest(resolveCliPath(options.manifest)),
+    auditScope: selectBatchAuditScope({
+      batch,
+      batchPlan,
+      upstreamTouchedFiles,
+    }),
+  };
+}
+
 function collectDomainOverlaps(overlapFiles: string[]) {
   const byDomain = new Map<string, string[]>();
   for (const file of overlapFiles) {
@@ -184,7 +258,6 @@ function renderPreflightForContext(
     upstreamShortStat: context.upstreamRange.shortStat,
     forkShortStat: context.forkRange.shortStat,
     classifiedCommits: context.classifiedCommits,
-    incomingCommits: context.classifiedCommits,
     forkFileCount: context.forkRange.files.length,
     upstreamFileCount: context.upstreamRange.files.length,
     overlapFiles: context.overlapFiles,
@@ -440,29 +513,10 @@ program
   .option('--manifest <path>', 'ownership manifest path', defaultManifestPath)
   .option('--batch <id>', 'upstream batch id')
   .option('--plan-dir <path>', 'persisted batch plan directory')
-  .action((options: { manifest: string; batch?: string; planDir?: string }) => {
-    const batch = options.batch ?? process.env.BATCH;
-    const auditInput = batch
-      ? {
-          manifest: loadManifest(resolveCliPath(options.manifest)),
-          auditScope: readPersistedBatchAuditScope(
-            process.cwd(),
-            options.planDir ? resolveCliPath(options.planDir) : undefined,
-            batch,
-          ),
-        }
-      : (() => {
-          const context = buildPreflightContext(options.manifest);
-          return {
-            manifest: context.manifest,
-            auditScope: {
-              batch: undefined,
-              upstreamTouchedFiles: context.upstreamRange.files,
-            },
-          };
-        })();
+  .action((options: BatchAuditOptions) => {
+    const auditInput = resolveBatchAuditInput(options);
     const result = runMobileDriftAudit(
-      auditInput.manifest,
+      auditInput.manifest(),
       auditInput.auditScope.upstreamTouchedFiles,
       repoRoot(),
     );
@@ -506,34 +560,11 @@ program
   .option('--manifest <path>', 'ownership manifest path', defaultManifestPath)
   .option('--batch <id>', 'upstream batch id')
   .option('--plan-dir <path>', 'persisted batch plan directory')
-  .action((options: { manifest: string; batch?: string; planDir?: string }) => {
-    const batch = options.batch ?? process.env.BATCH;
-    const context = batch ? undefined : buildPreflightContext(options.manifest);
-    const auditScope = batch
-      ? (() => {
-          const root = repoRoot();
-          const batchPlan = readPersistedBatchPlan(
-            root,
-            options.planDir ? resolveCliPath(options.planDir) : undefined,
-          );
-          validatePersistedBatchPlan(batchPlan, root);
-          const upstreamTouchedFiles = [
-            ...new Set(
-              batchPlan.batches.flatMap((planBatch) =>
-                planBatch.commits.flatMap((commit) => commit.files),
-              ),
-            ),
-          ].sort();
-          return selectBatchAuditScope({
-            batch,
-            batchPlan,
-            upstreamTouchedFiles,
-          });
-        })()
-      : {
-          batch: undefined,
-          upstreamTouchedFiles: context!.upstreamRange.files,
-        };
+  .action((options: BatchAuditOptions) => {
+    const { batch, context, auditScope } = resolveBatchAuditInput(options, {
+      root: repoRoot(),
+      validatePlan: true,
+    });
     const ownershipContext = context ?? buildPreflightContext(options.manifest);
     const results = runRebaseConfidenceAudits({
       upstreamTouchedFiles: auditScope.upstreamTouchedFiles,
@@ -559,63 +590,30 @@ program
   .option('--batch <id>', 'upstream batch id')
   .option('--plan-dir <path>', 'persisted batch plan directory')
   .option('--output-dir <path>', 'post-rebase audit output directory')
-  .action(
-    (options: {
-      manifest: string;
-      batch?: string;
-      planDir?: string;
-      outputDir?: string;
-    }) => {
-      const batch = options.batch ?? process.env.BATCH;
-      const auditInput = batch
-        ? {
-            manifest: loadManifest(resolveCliPath(options.manifest)),
-            auditScope: readPersistedBatchAuditScope(
-              process.cwd(),
-              options.planDir ? resolveCliPath(options.planDir) : undefined,
-              batch,
-            ),
-          }
-        : (() => {
-            const context = buildPreflightContext(options.manifest);
-            return {
-              manifest: context.manifest,
-              auditScope: {
-                batch: undefined,
-                upstreamTouchedFiles: context.upstreamRange.files,
-              },
-            };
-          })();
-      const results = runPostRebaseAudits(
-        auditInput.manifest,
-        auditInput.auditScope.upstreamTouchedFiles,
-        repoRoot(),
-      );
-      for (const result of results) {
-        console.log(`${result.ok ? 'OK' : 'ISSUE'}: ${result.title}`);
-        for (const detail of result.details) console.log(`- ${detail}`);
-      }
-      if (batch || options.outputDir) {
-        const outputDir = options.outputDir
-          ? resolveCliPath(options.outputDir)
-          : path.join(
-              getGitPath(process.cwd(), 'upstream-preflight'),
-              'batches',
-            );
-        const { markdownPath } = writePostRebaseAuditReport(outputDir, {
-          date: new Date().toISOString().slice(0, 10),
-          batch: auditInput.auditScope.batch,
-          results,
-          upstreamTouchedFiles: auditInput.auditScope.upstreamTouchedFiles,
-        });
-        console.log(`Wrote post-rebase audit report: ${markdownPath}`);
-      }
-      process.exitCode = results.every((result) => result.ok) ? 0 : 1;
-    },
-  );
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+  .action((options: BatchAuditOptions & { outputDir?: string }) => {
+    const { batch, auditScope, manifest } = resolveBatchAuditInput(options);
+    const results = runPostRebaseAudits(
+      manifest(),
+      auditScope.upstreamTouchedFiles,
+      repoRoot(),
+    );
+    for (const result of results) {
+      console.log(`${result.ok ? 'OK' : 'ISSUE'}: ${result.title}`);
+      for (const detail of result.details) console.log(`- ${detail}`);
+    }
+    if (batch || options.outputDir) {
+      const outputDir = options.outputDir
+        ? resolveCliPath(options.outputDir)
+        : path.join(getGitPath(process.cwd(), 'upstream-preflight'), 'batches');
+      const { markdownPath } = writePostRebaseAuditReport(outputDir, {
+        date: new Date().toISOString().slice(0, 10),
+        batch: auditScope.batch,
+        results,
+        upstreamTouchedFiles: auditScope.upstreamTouchedFiles,
+      });
+      console.log(`Wrote post-rebase audit report: ${markdownPath}`);
+    }
+    process.exitCode = results.every((result) => result.ok) ? 0 : 1;
+  });
 
 program.parse(process.argv);

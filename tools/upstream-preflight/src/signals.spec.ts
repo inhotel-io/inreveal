@@ -107,7 +107,6 @@ describe('collectForkSurfaceSignals', () => {
           narrowOptionalGlobs: [],
         },
       ],
-      sampleLimit: 2,
     });
 
     expect(signals.configured).toBe(true);
@@ -120,6 +119,7 @@ describe('collectForkSurfaceSignals', () => {
       sample: [
         'server/src/services/search.service.ts',
         'server/src/services/timeline.service.ts',
+        'web/src/routes/(user)/photos/+page.svelte',
       ],
     });
     expect(signals.adapterHookFiles).toEqual({

@@ -16,12 +16,6 @@ const validDomains = new Set<Domain>([
   'ml',
   'config',
 ]);
-const validCheckPhases = new Set<CheckEntry['phase']>([
-  'preflight',
-  'post-batch',
-  'preflight-and-post-batch',
-  'final',
-]);
 const validCheckCosts = new Set<NonNullable<CheckEntry['cost']>>([
   'cheap',
   'expensive',
@@ -76,7 +70,7 @@ export function parseManifest(source: string): Manifest {
   validateFeatures(features, checkIds);
 
   validateCiInvariants(root.ci_invariants);
-  validatePatches(root.patches, checkIds);
+  validatePatches(root.patches);
   validateRiskPatterns(root.risk_patterns);
   validateForkSurface(root.fork_surface);
   optionalStringArray(root.coverage_ignore, 'coverage_ignore');
@@ -88,10 +82,6 @@ function validateChecks(checks: Record<string, unknown> | undefined) {
   for (const [id, rawCheck] of Object.entries(checks ?? {})) {
     const check = assertRecord(rawCheck, `Check ${id} must be an object`);
     assertString(check.command, `Check ${id} must define command`);
-    const phase = assertString(check.phase, `Check ${id} must define phase`);
-    if (!validCheckPhases.has(phase as CheckEntry['phase'])) {
-      throw new Error(`Invalid phase for check ${id}: ${phase}`);
-    }
     if (check.cost === undefined) {
       check.cost = 'expensive';
     }
@@ -110,8 +100,6 @@ function validateFeatures(
   features: Record<string, unknown>,
   checkIds: Set<string>,
 ) {
-  const aliases = new Set(Object.keys(features));
-
   for (const [id, rawFeature] of Object.entries(features)) {
     const feature = assertRecord(rawFeature, `Feature ${id} must be an object`);
     assertString(feature.title, `Feature ${id} must define title`);
@@ -132,16 +120,6 @@ function validateFeatures(
       feature.generated_artifacts,
       `Feature ${id} generated_artifacts`,
     );
-
-    for (const alias of optionalStringArray(
-      feature.aliases,
-      `Feature ${id} aliases`,
-    ) ?? []) {
-      if (aliases.has(alias)) {
-        throw new Error(`Duplicate feature alias: ${alias}`);
-      }
-      aliases.add(alias);
-    }
 
     optionalStringArray(
       feature.required_checks,
@@ -265,8 +243,7 @@ function validateCiInvariants(value: unknown) {
   }
 }
 
-function validatePatches(value: unknown, checkIds: Set<string>) {
-  void checkIds;
+function validatePatches(value: unknown) {
   if (value === undefined) {
     return;
   }
@@ -284,10 +261,6 @@ function validatePatches(value: unknown, checkIds: Set<string>) {
     assertString(
       patch.expected_patch,
       `Patch ${id} must define expected_patch`,
-    );
-    assertString(
-      patch.required_check,
-      `Patch ${id} must define required_check`,
     );
   }
 }

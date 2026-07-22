@@ -9,13 +9,19 @@ export type GitRange = {
   shortStat: string;
 };
 
-export type CommitSubject = { sha: string; subject: string };
-
 export type CherryEquivalentResult = {
   equivalent: string[];
   missing: string[];
   raw: string[];
 };
+
+export function shortSha(sha: string): string {
+  return sha.slice(0, 9);
+}
+
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export function runGit(cwd: string, args: string[]): string {
   return execFileSync('git', args, {
@@ -109,10 +115,6 @@ export function listCommits(cwd: string, range: string): GitCommit[] {
   return collectGitRange(cwd, range).commits;
 }
 
-export function commitSubjects(cwd: string, range: string): CommitSubject[] {
-  return listCommits(cwd, range).map(({ sha, subject }) => ({ sha, subject }));
-}
-
 export function cherryEquivalent(
   cwd: string,
   upstream: string,
@@ -156,7 +158,7 @@ export function collectGitRange(cwd: string, range: string): GitRange {
       .filter(Boolean)
       .sort();
 
-    return { sha, shortSha: sha.slice(0, 9), subject, files };
+    return { sha, shortSha: shortSha(sha), subject, files };
   });
 
   const files = runGit(cwd, ['diff', '--name-only', range])

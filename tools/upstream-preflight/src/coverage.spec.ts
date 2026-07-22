@@ -3,11 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTempRepo } from '../test/fixtures';
+import { defaultManifestPath } from './manifest';
 import {
   classifyCoverage,
   findBroadOptionalOnlyFiles,
   findUncoveredFiles,
-  manifestCoverageGlobs,
   runCoverageCli,
   validateManifestForkHead,
 } from './coverage';
@@ -66,7 +66,6 @@ const manifest: Manifest = {
       package: '@immich/ui',
       version_source: 'pnpm-workspace.yaml',
       expected_patch: 'patches/@immich__ui@0.79.0.patch',
-      required_check: 'mobile-drift-rebase-check',
     },
   ],
   coverage_ignore: ['docs/superpowers/**'],
@@ -108,10 +107,15 @@ describe('fork ownership coverage', () => {
     ).toEqual(['web/src/routes/(user)/photos/+page.svelte']);
   });
 
-  it('includes explicit expected migrations in coverage globs', () => {
-    expect(manifestCoverageGlobs(manifest)).toContain(
-      'server/src/schema/migrations-gallery/1772230000000-CreateStorageMigrationLogTable.ts',
-    );
+  it('treats explicit expected migrations as covered', () => {
+    expect(
+      findUncoveredFiles(
+        [
+          'server/src/schema/migrations-gallery/1772230000000-CreateStorageMigrationLogTable.ts',
+        ],
+        manifest,
+      ),
+    ).toEqual([]);
   });
 
   it('matches dotfiles under owned directories', () => {
@@ -400,6 +404,52 @@ describe('manifest baseline validation', () => {
 });
 
 describe('coverage CLI', () => {
+  it('requires a fork file list positional', () => {
+    expect(() => runCoverageCli([])).toThrow(
+      'Usage: tsx src/coverage.ts <fork-file-list> [manifest-path] [--expected-head <sha>] [--strict-broad-coverage]',
+    );
+  });
+
+  it('defaults the manifest path when only a file list is given', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gallery-coverage-'));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    fs.mkdirSync(path.join(tempDir, 'docs/fork'), { recursive: true });
+    writeFileList(tempDir, ['server/src/services/shared-space.service.ts']);
+    writeManifestYaml(tempDir, baselineForkHead, {
+      ownedPaths: ['server/src/services/shared-space.service.ts'],
+    });
+    fs.renameSync(
+      path.join(tempDir, 'ownership.yml'),
+      path.join(tempDir, defaultManifestPath),
+    );
+
+    runCliIn(tempDir, ['files.txt']);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(log).toHaveBeenCalledWith('Ownership manifest covers 1 fork files');
+  });
+
+  it('accepts flags before positionals', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gallery-coverage-'));
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    writeFileList(tempDir, ['server/src/services/shared-space.service.ts']);
+    writeManifestYaml(tempDir, baselineForkHead, {
+      ownedPaths: ['server/src/services/shared-space.service.ts'],
+    });
+
+    runCliIn(tempDir, [
+      '--strict-broad-coverage',
+      '--expected-head',
+      baselineForkHead,
+      'files.txt',
+      'ownership.yml',
+    ]);
+
+    expect(process.exitCode).toBeUndefined();
+    expect(log).toHaveBeenCalledWith('Ownership manifest covers 1 fork files');
+  });
+
   it('accepts pnpm run argument separator before file arguments', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gallery-coverage-'));
     const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);

@@ -24,7 +24,6 @@ export type PreflightReportInput = {
   upstreamShortStat: string;
   forkShortStat: string;
   classifiedCommits: ClassifiedCommit[];
-  incomingCommits: ClassifiedCommit[];
   forkFileCount: number;
   upstreamFileCount: number;
   overlapFiles: string[];
@@ -67,7 +66,7 @@ export function renderPreflightMarkdown(input: PreflightReportInput): string {
         `| \`${hotspot.path}\` | ${hotspot.hits} | ${hotspot.features.join(', ')} |`,
     )
     .join('\n');
-  const incomingRows = input.incomingCommits
+  const incomingRows = input.classifiedCommits
     .map(
       (commit) =>
         `| \`${commit.shortSha}\` | ${commit.subject} | ${commit.domains.join(', ') || '-'} | ${commit.risk.toUpperCase()} |`,
@@ -106,7 +105,7 @@ export function renderPreflightMarkdown(input: PreflightReportInput): string {
 
 - **Merge base**: \`${input.mergeBase}\`
 - **Incoming upstream files**: ${input.upstreamFileCount}
-- **Incoming upstream commits**: ${input.incomingCommits.length}
+- **Incoming upstream commits**: ${input.classifiedCommits.length}
 - **Fork delta files**: ${input.forkFileCount}
 - **Direct overlap files**: ${input.overlapFiles.length}
 - **Incoming upstream diff**: ${input.upstreamShortStat || 'no changes'}

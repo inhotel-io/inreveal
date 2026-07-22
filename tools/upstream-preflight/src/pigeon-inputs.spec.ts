@@ -6,15 +6,15 @@ import YAML from 'yaml';
 // Repo-invariant guard for Slice 21 (finding LOW#23).
 //
 // `.github/workflows/gallery-build-mobile.yml` has a "Generate platform APIs" step
-// (once in the Android build job, once in the iOS build job) that hardcodes a list of
-// `dart run pigeon --input pigeon/<file>.dart` invocations. That list drifted out of
-// sync with `mobile/pigeon/*.dart`: upstream added `permission_api.dart` and
-// `view_intent_api.dart`, but the workflow's pigeon `--input` list was never updated,
-// so those two host APIs are silently never regenerated in CI.
+// (once in the Android build job, once in the iOS build job) that regenerates the
+// pigeon host APIs. It used to hardcode one `dart run pigeon --input pigeon/<file>.dart`
+// line per host API, and that list drifted out of sync with `mobile/pigeon/*.dart`
+// (upstream added `permission_api.dart` and `view_intent_api.dart`, which were then
+// silently never regenerated in CI).
 //
-// This guard fails the *next* rebase or pigeon-file addition/removal if the workflow's
-// pigeon `--input` list (in any "Generate platform APIs" step) diverges from the real
-// `mobile/pigeon/*.dart` file set.
+// The step now globs `pigeon/*.dart` instead, so the drift is structurally impossible.
+// This guard keeps it that way: it fails if a step goes back to enumerating inputs
+// (an enumerated list must still cover every `mobile/pigeon/*.dart` file exactly).
 
 const REPO_ROOT = path.resolve(process.cwd(), '../..');
 const PIGEON_DIR = path.join(REPO_ROOT, 'mobile/pigeon');
@@ -24,6 +24,7 @@ const WORKFLOW_PATH = path.join(
 );
 
 const PIGEON_INPUT_LINE = /dart run pigeon --input pigeon\/([\w-]+\.dart)/g;
+const PIGEON_GLOB = /pigeon\/\*\.dart/;
 
 interface WorkflowStep {
   name?: string;
@@ -64,7 +65,7 @@ function findGeneratePlatformApiSteps(
   return found;
 }
 
-describe('gallery-build-mobile.yml pigeon --input list', () => {
+describe('gallery-build-mobile.yml pigeon inputs', () => {
   const pigeonFiles = listPigeonFiles();
   const workflow = YAML.parse(
     fs.readFileSync(WORKFLOW_PATH, 'utf8'),
@@ -76,16 +77,19 @@ describe('gallery-build-mobile.yml pigeon --input list', () => {
   });
 
   it.each(steps.map(({ job }, index) => [index, job] as const))(
-    'step #%d (job "%s") pigeon --input list matches mobile/pigeon/*.dart',
+    'step #%d (job "%s") covers every mobile/pigeon/*.dart',
     (index) => {
       const { job, step } = steps[index];
       const run = step.run ?? '';
       const inputs = parsePigeonInputs(run);
 
-      expect(
-        inputs.length,
-        `job "${job}": no "dart run pigeon --input ..." lines found`,
-      ).toBeGreaterThan(0);
+      if (inputs.length === 0) {
+        expect(
+          PIGEON_GLOB.test(run),
+          `job "${job}": neither a pigeon/*.dart glob nor "dart run pigeon --input ..." lines found`,
+        ).toBe(true);
+        return;
+      }
 
       const inputSet = new Set(inputs);
       const missing = [...pigeonFiles].filter((file) => !inputSet.has(file));

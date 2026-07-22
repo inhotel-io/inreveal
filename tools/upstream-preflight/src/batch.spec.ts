@@ -964,17 +964,14 @@ function checkCatalog(): Record<string, CheckEntry> {
   return {
     'cheap-check': {
       command: 'make cheap-check',
-      phase: 'post-batch',
       cost: 'cheap',
     },
     'expensive-check': {
       command: 'make expensive-check',
-      phase: 'post-batch',
       cost: 'expensive',
     },
     'mobile-drift-rebase-check': {
       command: 'make mobile-drift-rebase-check',
-      phase: 'preflight-and-post-batch',
       cost: 'cheap',
     },
   };

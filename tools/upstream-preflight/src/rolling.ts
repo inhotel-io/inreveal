@@ -2,6 +2,14 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  assertFullSha,
+  assertIsoTimestamp,
+  assertRecord,
+  assertShaArray,
+  assertString,
+  assertStringArray,
+} from './asserts';
+import {
   readPersistedBatchPlan,
   selectNextBatch,
   validatePersistedBatchPlan,
@@ -9,6 +17,7 @@ import {
 import {
   cherryEquivalent,
   currentBranch,
+  errorMessage,
   getGitPath,
   hasGitOperationInProgress,
   isAncestor,
@@ -16,9 +25,10 @@ import {
   listCommits,
   revParse,
   runGit,
+  shortSha,
 } from './git';
 
-const fullShaPattern = /^[0-9a-f]{40}$/;
+const invalidState = 'rolling state';
 
 export type RollingState = {
   version: 1;
@@ -531,7 +541,7 @@ function finishRollingForkSync(
         ...(lastCompletedBatch ? { batch: lastCompletedBatch } : {}),
       })
     : runCommandList(
-        defaultForkSyncChecks(lastCompletedBatch),
+        defaultForkSyncChecks(),
         options.repoPath,
         options.shellRunner,
       );
@@ -585,7 +595,7 @@ export function validateRollingState(
   value: unknown,
   source: string,
 ): RollingState {
-  assertRecord(value, source);
+  assertRecord(value, invalidState, source);
   if (value.version !== 1) {
     throw new Error(`Invalid rolling state ${source}: version must be 1`);
   }
@@ -596,19 +606,23 @@ export function validateRollingState(
   }
 
   for (const key of ['branch', 'upstreamRef', 'forkRef', 'startedAt']) {
-    assertString(value[key], source, key);
+    assertString(value[key], invalidState, `${source}: ${key}`);
   }
   for (const key of [
     'upstreamTargetHead',
     'startedForkHead',
     'integratedForkHead',
   ]) {
-    assertFullSha(value[key], source, key);
+    assertFullSha(value[key], invalidState, `${source}: ${key}`);
   }
-  assertIsoTimestamp(value.startedAt, source, 'startedAt');
+  assertIsoTimestamp(value.startedAt, invalidState, `${source}: startedAt`);
 
   if (value.lastForkSyncAt !== undefined) {
-    assertIsoTimestamp(value.lastForkSyncAt, source, 'lastForkSyncAt');
+    assertIsoTimestamp(
+      value.lastForkSyncAt,
+      invalidState,
+      `${source}: lastForkSyncAt`,
+    );
   }
   if (value.activeForkSync !== undefined) {
     validateActiveForkSync(value.activeForkSync, source);
@@ -624,21 +638,25 @@ export function validateRollingState(
 }
 
 function validateActiveForkSync(value: unknown, source: string): void {
-  assertRecord(value, `${source}: activeForkSync`);
+  assertRecord(value, invalidState, `${source}: activeForkSync`);
   if (value.status !== 'checks-failed') {
     throw new Error(
       `Invalid rolling state ${source}: activeForkSync.status must be checks-failed`,
     );
   }
   for (const key of ['from', 'to', 'preSyncHead']) {
-    assertFullSha(value[key], source, `activeForkSync.${key}`);
+    assertFullSha(value[key], invalidState, `${source}: activeForkSync.${key}`);
   }
-  assertShaArray(value.commits, source, 'activeForkSync.commits');
+  assertShaArray(
+    value.commits,
+    invalidState,
+    `${source}: activeForkSync.commits`,
+  );
   if (value.lastCompletedBatch !== undefined) {
     assertString(
       value.lastCompletedBatch,
-      source,
-      'activeForkSync.lastCompletedBatch',
+      invalidState,
+      `${source}: activeForkSync.lastCompletedBatch`,
     );
   }
 }
@@ -652,20 +670,24 @@ function validateAppendHistory(value: unknown, source: string): void {
 
   value.forEach((entry, index) => {
     const prefix = `appendHistory[${index}]`;
-    assertRecord(entry, `${source}: ${prefix}`);
-    assertIsoTimestamp(entry.at, source, `${prefix}.at`);
+    assertRecord(entry, invalidState, `${source}: ${prefix}`);
+    assertIsoTimestamp(entry.at, invalidState, `${source}: ${prefix}.at`);
     for (const key of ['from', 'to']) {
-      assertFullSha(entry[key], source, `${prefix}.${key}`);
+      assertFullSha(entry[key], invalidState, `${source}: ${prefix}.${key}`);
     }
-    assertShaArray(entry.commits, source, `${prefix}.commits`);
+    assertShaArray(entry.commits, invalidState, `${source}: ${prefix}.commits`);
     if (entry.lastCompletedBatch !== undefined) {
       assertString(
         entry.lastCompletedBatch,
-        source,
-        `${prefix}.lastCompletedBatch`,
+        invalidState,
+        `${source}: ${prefix}.lastCompletedBatch`,
       );
     }
-    assertStringArray(entry.checks, source, `${prefix}.checks`);
+    assertStringArray(
+      entry.checks,
+      invalidState,
+      `${source}: ${prefix}.checks`,
+    );
   });
 }
 
@@ -678,78 +700,24 @@ function validateCheckHistory(value: unknown, source: string): void {
 
   value.forEach((entry, index) => {
     const prefix = `checkHistory[${index}]`;
-    assertRecord(entry, `${source}: ${prefix}`);
-    assertIsoTimestamp(entry.at, source, `${prefix}.at`);
+    assertRecord(entry, invalidState, `${source}: ${prefix}`);
+    assertIsoTimestamp(entry.at, invalidState, `${source}: ${prefix}.at`);
     if (entry.phase !== 'fork-sync' && entry.phase !== 'final') {
       throw new Error(
         `Invalid rolling state ${source}: ${prefix}.phase must be fork-sync or final`,
       );
     }
-    assertStringArray(entry.commands, source, `${prefix}.commands`);
+    assertStringArray(
+      entry.commands,
+      invalidState,
+      `${source}: ${prefix}.commands`,
+    );
     if (typeof entry.ok !== 'boolean') {
       throw new Error(
         `Invalid rolling state ${source}: ${prefix}.ok must be a boolean`,
       );
     }
   });
-}
-
-function assertRecord(
-  value: unknown,
-  source: string,
-): asserts value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`Invalid rolling state ${source}: object is required`);
-  }
-}
-
-function assertString(
-  value: unknown,
-  source: string,
-  key: string,
-): asserts value is string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`Invalid rolling state ${source}: ${key} is required`);
-  }
-}
-
-function assertFullSha(value: unknown, source: string, key: string): void {
-  if (typeof value !== 'string' || !fullShaPattern.test(value)) {
-    throw new Error(
-      `Invalid rolling state ${source}: ${key} must be a full 40-character SHA`,
-    );
-  }
-}
-
-function assertIsoTimestamp(value: unknown, source: string, key: string): void {
-  assertString(value, source, key);
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed) || new Date(parsed).toISOString() !== value) {
-    throw new Error(
-      `Invalid rolling state ${source}: ${key} must be an ISO timestamp`,
-    );
-  }
-}
-
-function assertShaArray(value: unknown, source: string, key: string): void {
-  if (!Array.isArray(value)) {
-    throw new Error(
-      `Invalid rolling state ${source}: ${key} must be an array of SHAs`,
-    );
-  }
-  value.forEach((item) => assertFullSha(item, source, `${key}[]`));
-}
-
-function assertStringArray(value: unknown, source: string, key: string): void {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
-    throw new Error(
-      `Invalid rolling state ${source}: ${key} must be an array of strings`,
-    );
-  }
-}
-
-function shortSha(sha: string): string {
-  return sha.slice(0, 9);
 }
 
 function defaultFetchFork(repoPath: string, forkRef: string): void {
@@ -759,7 +727,7 @@ function defaultFetchFork(repoPath: string, forkRef: string): void {
   }
 }
 
-export function defaultForkSyncChecks(_batch?: string): string[] {
+export function defaultForkSyncChecks(): string[] {
   return [
     'make fork-ownership-coverage-check',
     'make ci-invariants-check',
@@ -1008,8 +976,4 @@ function lastCompletedBatchId(
   }
 
   return selection.plan.batches[selection.completedBatchCount - 1]?.id;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
