@@ -4,7 +4,8 @@
 > [memory types roadmap](./2026-07-15-memory-types-roadmap.md), reframed (§2 D1).
 > Stacked on **PR #812** (`feat/memory-types-tier3`).
 > Branch: `feat/memory-person-throwback`.
-> Approach: **test-driven, behavior-driven, full edge-case coverage.**
+> Approach: **test-driven, behavior-driven, full edge-case coverage** — see §4.0 for what that
+> requires of the implementer.
 > Created 2026-07-22.
 > Status: **spec — not yet implemented.**
 
@@ -13,9 +14,9 @@
 **Goal:** add one `MemoryRule` that resurfaces a warm chapter with a person who has not
 appeared in the user's photos for a year or more.
 
-| Key                | Memory                                       | Trigger day | Window |
-| ------------------ | -------------------------------------------- | ----------- | ------ |
-| `person_throwback` | "Times with Anna" · "8 photos · August 2019" | **26**      | 7 d    |
+| Key                | Memory                                        | Trigger day | Window |
+| ------------------ | --------------------------------------------- | ----------- | ------ |
+| `person_throwback` | "Times with Anna" · "23 photos · August 2019" | **13**      | 7 d    |
 
 **Non-goals (this batch):**
 
@@ -171,16 +172,17 @@ export interface DayCount {
 }
 
 export interface Chapter {
-  from: Date;      // first day of the winning window
-  to: Date;        // last day of the winning window
-  count: number;   // assets inside it
-  dayCount: number;// distinct days inside it
+  from: Date; // first day of the winning window
+  to: Date; // last day of the winning window
+  count: number; // assets inside it, summed from the daily counts
 }
 
 /**
  * Widest-count window of at most `maxSpanDays` consecutive calendar days.
- * `days` must be sorted ascending. Ties resolve to the MOST RECENT window.
- * Returns null for empty input.
+ * Sorts `days` ascending defensively — the query already orders them, but the
+ * two-pointer sweep silently returns garbage on unsorted input rather than
+ * failing, so the contract is enforced here rather than assumed.
+ * Ties resolve to the MOST RECENT window. Returns null for empty input.
  */
 export const densestChapter = (days: DayCount[], maxSpanDays: number): Chapter | null;
 ```
@@ -192,7 +194,7 @@ Two-pointer sweep: for each right index, advance `left` while
 ### 3.5 The rule
 
 ```ts
-export const TRIGGER_DAY = 26;
+export const TRIGGER_DAY = 13;
 export const DORMANCY_MONTHS = 12;
 export const MIN_TOTAL_ASSETS = 10;
 export const MIN_CHAPTER_ASSETS = 6;
@@ -201,38 +203,60 @@ export const MAX_CANDIDATES = 5;
 export const ASSET_CAP = 8;
 export const VISIBLE_FOR_DAYS = 7;
 export const SCORE_BASE = 110;
+export const MAX_COUNT_BONUS = 30;
 ```
+
+**Trigger day 13 — chosen by window occupancy, not by free trigger slots (§5.1).** It is also
+`≤ 28`, so it never hits the Luxon month-length clamp that bit Tier 3.
 
 Flow:
 
-1. Return `[]` unless `target.day === TRIGGER_DAY`. Day 26 is free (1, 8, 15, 20, 22 are taken) and
-   is `≤ 28`, so it never hits the Luxon month-length clamp that bit Tier 3.
+1. Return `[]` unless `target.day === TRIGGER_DAY`. No repository call before this check.
 2. `lastSeenBefore = target.startOf('day').minus({ months: DORMANCY_MONTHS })`. Dormant means
    `lastSeenAt < lastSeenBefore`, **strictly** — a person last seen exactly at the cutoff is not yet
-   dormant. (`minus({months: 12})` from day 26 always lands on day 26; no clamping.)
+   dormant. (`minus({months: 12})` from day 13 always lands on day 13; no clamping.)
 3. `getDormantPeople(ownerId, { lastSeenBefore, minAssets: MIN_TOTAL_ASSETS, limit: CANDIDATE_POOL })`.
    Pool of 10 > the 5 returned, so chapter-density ranking has room to reorder the SQL's
    total-count ordering.
-4. `getMemoryPersonDailyCounts(ownerId, ids, { takenBefore: lastSeenBefore })`.
-5. Per person: `densestChapter(days, CHAPTER_MAX_SPAN_DAYS)`; drop if `null` or
+4. **If the pool is empty, return `[]` immediately.** Calling step 5 with an empty id list would
+   emit `IN ()`, which is not valid SQL. This short-circuit is load-bearing, not an optimisation.
+5. `getMemoryPersonDailyCounts(ownerId, ids, { takenBefore: lastSeenBefore })`.
+6. Per person: `densestChapter(days, CHAPTER_MAX_SPAN_DAYS)`; drop if `null` or
    `count < MIN_CHAPTER_ASSETS`. No distinct-day minimum — a wedding is one day and is a fine memory.
-6. Score, sort desc (tie-break `personId` asc), take `MAX_CANDIDATES`.
-7. For each survivor, `getMemoryAssetsForPersonWindow` → `sampleAssetsByTime(assets, ASSET_CAP)`,
-   `memoryAt = medianTime(assets)` (both existing `curation.util.ts` helpers).
+7. Score, sort desc (tie-break `personId` asc), take `MAX_CANDIDATES`.
+8. For each survivor, `getMemoryAssetsForPersonWindow`, then **re-check
+   `assets.length >= MIN_CHAPTER_ASSETS` and drop the candidate if it fails.** `chapter.count` came
+   from step 5 and the assets arrive in a later, separate query; anything deleted or archived in
+   between would otherwise produce a memory with too few assets — or none at all.
+9. `assetIds = sampleAssetsByTime(assets, ASSET_CAP)` and `memoryAt = medianTime(assets)` — both over
+   the **full** window set, not the sampled 8 (matching `people_together`).
 
 ```
-score = SCORE_BASE + min(chapter.count, 20) + recencyBonus(chapterYear, target.year)
+score = SCORE_BASE + min(chapter.count, MAX_COUNT_BONUS) * 3 + recencyBonus(chapterYear, target.year)
 ```
 
-`chapterYear` is the year of `medianTime`. Score band rationale:
+`chapter.count` here is the **full** chapter total from step 6, not `assetIds.length`.
+`chapterYear` is the year of `memoryAt`.
 
-| Rule                                    | Base    | Relation                                                        |
-| --------------------------------------- | ------- | --------------------------------------------------------------- |
-| `birthday` / `trip_anniversary`         | 300/260 | **Above us** — date-anchored; miss the day and they wait a year |
-| `person_throwback`                      | **110** | rare (once ever per person), highly personal                    |
-| `on_this_day_place` / `people_together` | 100     | just below                                                      |
-| `season_recap` / `month_recap`          | 90 / 80 | generic recaps                                                  |
-| `themed` / `video_moments`              | 70 / 60 | generic recaps                                                  |
+Score bands compared by **achievable range**, not base — comparing bases is misleading, because the
+count multipliers differ by 3× between rules:
+
+| Rule                | Formula                            | Typical (15 assets, 2 yrs back) | Max       |
+| ------------------- | ---------------------------------- | ------------------------------- | --------- |
+| `birthday`          | `300 + years*10 + n`               | ~330                            | ~370      |
+| `trip_anniversary`  | `260 + days*4 + min(n,20) + bonus` | ~300                            | ~318      |
+| `person_throwback`  | `110 + min(n,30)*3 + bonus`        | **163**                         | **210**   |
+| `people_together`   | `100 + n*3 + bonus`                | 153                             | unbounded |
+| `on_this_day_place` | `100 + min(n,30)*3 + bonus`        | 153                             | 200       |
+| `season_recap`      | `90 + min(n,40) + bonus`           | 113                             | 140       |
+| `month_recap`       | `80 + min(n,30) + bonus`           | 103                             | 120       |
+| `themed`            | `70 + min(n,25) + bonus`           | 93                              | 105       |
+| `video_moments`     | `60 + …`                           | ~80                             | ~95       |
+
+Deliberately mirrors `people_together`'s shape — same ×3 multiplier, +10 base for being rarer (once
+ever per person), but **capped** at 30 where `people_together` is uncapped. So it edges out the
+other person-centric rule in the typical case without ever running away. It stays well below the
+date-anchored `birthday` / `trip_anniversary`, which must fire on their day or wait a year.
 
 Candidate shape:
 
@@ -241,12 +265,14 @@ Candidate shape:
   ruleId: 'person_throwback',
   dedupeKey: `person_throwback:${person.id}`,   // once ever, per D8's pool
   title: `Times with ${person.name}`,
-  subtitle: `${count} photos · ${monthName(month)} ${year}`,
+  // `chapter.count` — the full chapter total (e.g. "23 photos"), NOT assetIds.length (≤ 8).
+  // The memory shows 8 of them; the subtitle describes the chapter. Matches `people_together`.
+  subtitle: `${chapter.count} photos · ${monthName(memoryAt.month)} ${memoryAt.year}`,
   score,
   assetIds,
   memoryAt,
   visibleForDays: VISIBLE_FOR_DAYS,
-  context: { personId, chapterFrom, chapterTo, count },
+  context: { personId, chapterFrom, chapterTo, count: chapter.count },
 }
 ```
 
@@ -264,42 +290,69 @@ one `i18n/` directory, and only `en.json` needs the new keys.
 
 ## 4. Behaviour spec (tests)
 
+### 4.0 How these tests get written
+
+Every row in §4.1–§4.4 is written **before** the code that satisfies it, and is **observed
+failing** before that code exists. A row that has never been seen red has not been shown to test
+anything — most of the Tier-3 defects were found exactly this way.
+
+Two rules specific to this spec:
+
+- **Assert the failure mode, not just the return value.** Row 4.2 #2 is the worked example: `[]` is
+  the right answer both with and without the step-4 short-circuit, so the row asserts the _absent
+  second query_ instead. Several rows here are like that — read the Expect column literally.
+- **Never assert a SQL-side filter against a mocked repository.** It only tests the mock. Arguments
+  go in §4.2 row 7, behaviour goes in §4.4.
+
+Each row is one `it(...)`, phrased as behaviour ("returns nothing when the person is a pet"), not as
+implementation ("calls getDormantPeople with type filter").
+
 ### 4.1 `chapter.util.spec.ts` — pure
 
 | #   | Given                                        | Expect                                                                |
 | --- | -------------------------------------------- | --------------------------------------------------------------------- |
 | 1   | empty input                                  | `null`                                                                |
-| 2   | one day, 3 assets                            | window of that day, `count 3`, `dayCount 1`                           |
+| 2   | one day, 3 assets                            | window of that day, `count 3`                                         |
 | 3   | all days inside the span                     | whole set                                                             |
 | 4   | two clusters, second denser                  | the second                                                            |
 | 5   | two clusters, **equally dense**              | the **more recent** one (D4 tie rule)                                 |
 | 6   | days exactly `maxSpanDays - 1` apart         | both included — the window covers exactly `maxSpanDays` calendar days |
 | 7   | days exactly `maxSpanDays` apart             | split into separate windows                                           |
 | 8   | dense window at the very start of the series | found (no off-by-one at `left = 0`)                                   |
+| 9   | input in **descending** order                | same result as ascending — the defensive sort holds the contract      |
 
 ### 4.2 `person-throwback.rule.spec.ts`
 
-| #   | Given                                                | Expect                                                                                                                                                                          |
-| --- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `target.day !== 26`                                  | `[]`, **no repository call**                                                                                                                                                    |
-| 2   | no dormant people                                    | `[]`                                                                                                                                                                            |
-| 3   | dormant person, rich chapter                         | one candidate, exact title/subtitle/score/assetIds                                                                                                                              |
-| 4   | last seen **exactly** at the cutoff                  | not dormant → excluded (strict `<`)                                                                                                                                             |
-| 5   | last seen one day before the cutoff                  | dormant → included                                                                                                                                                              |
-| 6   | chapter has 5 assets (`< MIN_CHAPTER_ASSETS`)        | excluded                                                                                                                                                                        |
-| 7   | person has 9 assets total (`< MIN_TOTAL_ASSETS`)     | excluded — asserted at the **query argument**                                                                                                                                   |
-| 8   | 7 qualifying people                                  | exactly `MAX_CANDIDATES` (5) returned, score desc                                                                                                                               |
-| 9   | two people with identical scores                     | ordered by `personId` asc (deterministic)                                                                                                                                       |
-| 10  | chapter spans a month boundary                       | subtitle uses the **median** asset's month/year                                                                                                                                 |
-| 11  | single-day chapter of 8 assets                       | included (no distinct-day minimum)                                                                                                                                              |
-| 12  | chapter year is 4 years back                         | `recencyBonus` = 6 in the score (D6)                                                                                                                                            |
-| 13  | equal chapters, one dated 2 yrs back, one 8 yrs back | the **2-years-back** chapter scores higher (D6). Note the bonus keys off the _chapter year_, not the dormancy gap — a recently-dormant person can still have an ancient chapter |
-| 14  | assets exceed `ASSET_CAP`                            | 8 ids, evenly spaced by time                                                                                                                                                    |
-| 15  | every candidate                                      | `visibleForDays === 7`, `dedupeKey` has **no** year                                                                                                                             |
+| #   | Given                                                                                    | Expect                                                                                                                                                                                                                               |
+| --- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `target.day !== 13`                                                                      | `[]`, **no repository call**                                                                                                                                                                                                         |
+| 2   | no dormant people                                                                        | `[]`, and `getMemoryPersonDailyCounts` is **never called** — the step-4 short-circuit. Asserting only `[]` would pass without the guard and let `IN ()` reach the DB                                                                 |
+| 3   | dormant person, rich chapter                                                             | one candidate, exact title/subtitle/score/assetIds                                                                                                                                                                                   |
+| 4   | last seen **exactly** at the cutoff                                                      | not dormant → excluded (strict `<`)                                                                                                                                                                                                  |
+| 5   | last seen one day before the cutoff                                                      | dormant → included                                                                                                                                                                                                                   |
+| 6   | chapter has 5 assets (`< MIN_CHAPTER_ASSETS`)                                            | excluded                                                                                                                                                                                                                             |
+| 7   | any run reaching step 3                                                                  | `getDormantPeople` receives `minAssets: 10`, `limit: 10`, and `lastSeenBefore` exactly 12 months before `target.startOf('day')` — the four SQL-side filters are asserted **at the query argument** here, and their behaviour in §4.4 |
+| 8   | 7 qualifying people                                                                      | exactly `MAX_CANDIDATES` (5) returned, score desc                                                                                                                                                                                    |
+| 9   | two people with identical scores                                                         | ordered by `personId` asc (deterministic)                                                                                                                                                                                            |
+| 10  | chapter spans a month boundary                                                           | subtitle uses the **median** asset's month/year                                                                                                                                                                                      |
+| 11  | single-day chapter of 8 assets                                                           | included (no distinct-day minimum)                                                                                                                                                                                                   |
+| 12  | chapter year is 4 years back                                                             | `recencyBonus` = 6 in the score (D6)                                                                                                                                                                                                 |
+| 13  | equal chapters, one dated 2 yrs back, one 8 yrs back                                     | the **2-years-back** chapter scores higher (D6). Note the bonus keys off the _chapter year_, not the dormancy gap — a recently-dormant person can still have an ancient chapter                                                      |
+| 14  | assets exceed `ASSET_CAP`                                                                | 8 ids, evenly spaced by time                                                                                                                                                                                                         |
+| 15  | every candidate                                                                          | `visibleForDays === 7`, `dedupeKey` has **no** year                                                                                                                                                                                  |
+| 16  | every pooled candidate fails the chapter bar                                             | `[]` — not a crash, and no window query issued                                                                                                                                                                                       |
+| 17  | window query returns fewer assets than `chapter.count` but still `>= MIN_CHAPTER_ASSETS` | candidate kept; `subtitle` still reports `chapter.count`                                                                                                                                                                             |
+| 18  | window query returns **4** assets (read skew, `< MIN_CHAPTER_ASSETS`)                    | candidate **dropped** — step 8's re-check. Without it the memory is created with 4 assets                                                                                                                                            |
+| 19  | window query returns **zero** assets                                                     | candidate dropped, no zero-asset memory created                                                                                                                                                                                      |
+| 20  | one candidate's window query rejects                                                     | that candidate is dropped; the others still return (one bad person must not void the whole rule)                                                                                                                                     |
 
-Pet, hidden-person and unnamed-person exclusion (D7) live in SQL, so they are asserted in the
-**medium** test (§4.4), not here — a unit test against a mocked repository would only be asserting
-the mock.
+Rows 18–19 cover the read skew between the step-5 daily-counts query and the step-8 asset query.
+They are the only defence against a memory with too few — or zero — assets, since `chapter.count`
+and `assetIds` come from two different reads.
+
+Pet, hidden-person and unnamed-person exclusion (D7) live in SQL. Their **arguments** are asserted
+in row 7; their **behaviour** is asserted in the medium test (§4.4). Neither is asserted against a
+mocked repository here, which would only be testing the mock.
 
 ### 4.3 Registry / metadata / preferences specs
 
@@ -324,13 +377,48 @@ Scenario 7 is the Tier-3 regression guard and is the single most important row i
 
 ## 5. Risks
 
-| Risk                                                                                | Mitigation                                                                                                            |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Resurfacing a deceased or estranged person                                          | D1 (no gap claim), D3 (dilution), D5/D6 (never rank by dormancy), D7 (no pets); per-user toggle; §8 follow-up         |
-| Rule goes permanently dry after firing once per person                              | D8 multi-candidate pool; medium test §4.4 #7                                                                          |
-| Heavy subject (thousands of photos) makes the density query expensive               | D9 — density runs on daily counts; asset fetch is window-bounded                                                      |
-| Slot starvation of the 1-day rules                                                  | Trigger day 26 fires monthly, `visibleForDays: 7`, and the engine's existing multi-day one-slot cap applies unchanged |
-| `defaultEnabled: true` ships it to every user on upgrade with no per-person opt-out | Accepted (D10). §8 follow-up is the durable answer.                                                                   |
+| Risk                                                                                | Mitigation                                                                                                    |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Resurfacing a deceased or estranged person                                          | D1 (no gap claim), D3 (dilution), D5/D6 (never rank by dormancy), D7 (no pets); per-user toggle; §8 follow-up |
+| Rule goes permanently dry after firing once per person                              | D8 multi-candidate pool; medium test §4.4 #7                                                                  |
+| Heavy subject (thousands of photos) makes the density query expensive               | D9 — density runs on daily counts; asset fetch is window-bounded                                              |
+| Rule never evaluates because lingering memories hold both slots                     | Trigger day chosen by occupancy analysis — §5.1                                                               |
+| `defaultEnabled: true` ships it to every user on upgrade with no per-person opt-out | Accepted (D10). §8 follow-up is the durable answer.                                                           |
+
+### 5.1 Trigger-day occupancy — why 13, not 26
+
+`RULE_DAILY_LIMIT` is 2, and `createRuleMemories` returns **early** when `remainingSlots === 0`
+(`memory.service.ts:130`) — before any rule evaluates. The slot count comes from
+`memoryRepository.search(ownerId, { type: Rule, for: target })`, which matches
+`showAt <= target AND hideAt >= target` (`memory.repository.ts:42-50`) — every memory **still
+visible** that day, not just ones created that day.
+
+So a trigger day must be free of _windows_, not merely free of _triggers_. Monthly occupancy of the
+multi-day rules (`on_this_day_place`, `recent_trip`, `birthday` are 1-day and don't linger):
+
+```
+day:  1    5    10   15   20   25   31
+      |----|----|----|----|----|----|
+month_recap          [1–7]
+season_recap         [1–10]   (Mar/Jun/Sep/Dec only)
+video_moments             [8–12]
+favorites_throwback                 [15–21]
+people_together                          [20–26]
+themed                                     [22–26]
+person_throwback              [13–19]  ← proposed
+```
+
+**Day 26 — the original choice — is the worst day of the month:** it is the exact intersection of
+`people_together` (20–26) and `themed` (22–26). Whenever both fired, `remainingSlots === 0` and the
+rule would never have evaluated at all. Days free of all scheduled windows are **13, 14, 27–31**.
+
+Day 13 with a 7-day window (13–19) also leaves every later trigger with a free slot — verified per
+day: day 15 `favorites_throwback` sees 1 free (ours only), day 20 `people_together` sees 1 free
+(ours ended on 19), day 22 `themed` sees 1 free. Day 27 is worse: its window spills to the 1st–2nd
+of the next month and competes with `month_recap` and `season_recap` on day 1.
+
+Sporadic date-anchored rules (`trip_anniversary`, 3–7 days, any day) can still occupy one slot on
+day 13. With two slots that leaves one, which is the same exposure every other rule carries.
 
 ## 6. Verification
 
@@ -355,6 +443,14 @@ or endpoint changes, so **no** OpenAPI regeneration and **no** Dart client regen
 3. **Adjacent, not in scope:** `getMemoryAssetsForPerson`'s `DISTINCT ON (asset.id) ORDER BY
 asset.id … LIMIT 60` means the shipped `birthday` rule samples an arbitrary 60 assets by UUID for
    anyone with more than 60 photos, skewing its per-year distribution. Worth its own issue.
+4. **Known cost:** step 8 runs a window query for all 5 candidates, but the engine's multi-day
+   one-slot cap inserts at most one of them — so 4 of the 5 are wasted work. That is the price of
+   D8: the engine only skips already-fired keys _after_ the rule returns, so the alternatives are
+   returning fewer candidates (and going permanently dry) or teaching the rule to pre-filter with
+   its own `hasRuleMemory` calls (5 queries saved, 5 queries added, plus engine coupling). Once a
+   month, per user, on bounded windows — accepted deliberately.
+5. Total query cost on the trigger day: `1 + 1 + 5 = 7`, all bounded. On every other day of the
+   month: **0** — step 1 returns before touching a repository.
 
 ## 8. Follow-up PR (not this branch)
 
