@@ -92,11 +92,28 @@ describe('1783700000000-FixSharedSpaceMemberJoinGrantCreateId override parity', 
   });
 });
 
+// Locate a statement by content rather than index — these migrations also emit columns, tables
+// and indexes whose ordering is not what these tests pin. Throws with the searched-for label
+// instead of letting a miss surface as `expect(undefined).toBe(<300 chars of DDL>)`.
+const findSql = (label: string, predicate: (statement: string) => boolean): string => {
+  const found = capturedSql.find((element) => predicate(element));
+  if (found === undefined) {
+    throw new Error(`no captured statement matched ${label} (captured ${capturedSql.length} statements)`);
+  }
+  return found;
+};
+
+const parseOverrideValue = (statement: string): { type: string; name: string; sql: string } =>
+  JSON.parse(statement.match(/'(\{.+\})'::jsonb/s)![1]) as { type: string; name: string; sql: string };
+
 // This migration created album_space_asset_delete_audit (function + statement AFTER DELETE
-// trigger) but nothing was ever registered in functions.ts / on AlbumSpaceAssetTable, so
-// schema-check reported FunctionDrop + two OverrideDrops on every DB that ran it. The generated
-// `DROP FUNCTION` can't even execute (the trigger depends on it, and no DROP TRIGGER is emitted);
-// forcing it with CASCADE would silently break #764's sync delete stream.
+// trigger) but nothing was ever registered in functions.ts / on AlbumSpaceAssetTable, so every DB
+// that ran it reported FunctionDrop + two OverrideDrops. The two tools differ in how dangerous
+// their suggested remediation is: `schema-check` (and the boot warning) pass
+// `triggers: { ignoreExtra: true }`, so they emit no DROP TRIGGER and the bare `DROP FUNCTION`
+// fails outright on the trigger dependency; `migrations:generate` passes no such option, emits
+// DROP TRIGGER *before* DROP FUNCTION, and would therefore execute cleanly — silently removing
+// #764's sync delete stream.
 describe('1783100000000-AddAlbumSpaceAssetSyncAndAudit override parity', () => {
   beforeEach(() => {
     capturedSql.length = 0;
@@ -105,19 +122,37 @@ describe('1783100000000-AddAlbumSpaceAssetSyncAndAudit override parity', () => {
   it('executes and overrides the delete-audit function with DDL byte-identical to functions.ts', async () => {
     await upAlbumSpaceAssetSyncAndAudit({} as any);
 
-    // Located by content rather than index — this migration also emits the sync columns, the
-    // audit table and four indexes, and that ordering is not what this test is pinning.
-    const executedFunctionDdl = capturedSql.find((s) =>
+    const executedFunctionDdl = findSql('the delete-audit CREATE FUNCTION', (s) =>
       s.startsWith('CREATE OR REPLACE FUNCTION album_space_asset_delete_audit()'),
     );
     expect(executedFunctionDdl).toBe(album_space_asset_delete_audit.expression);
 
-    const functionOverrideInsert = capturedSql.find((s) =>
+    const functionOverrideInsert = findSql('the delete-audit function override row', (s) =>
       s.includes(`VALUES ('function_album_space_asset_delete_audit'`),
-    )!;
-    const overrideValue = JSON.parse(
-      functionOverrideInsert.match(/VALUES \('function_album_space_asset_delete_audit', '(.+)'::jsonb\)/s)![1],
-    ) as { type: string; name: string; sql: string };
-    expect(overrideValue.sql).toBe(album_space_asset_delete_audit.expression);
+    );
+    expect(parseOverrideValue(functionOverrideInsert).sql).toBe(album_space_asset_delete_audit.expression);
+  });
+
+  // The trigger half. functions.ts has no counterpart to compare against (a trigger is declared by
+  // the @AfterDeleteTrigger decorator on AlbumSpaceAssetTable, and importing src/schema under this
+  // file's `kysely` mock blows up), so this pins the migration's two strings to each other and
+  // trigger-override-parity.spec.ts pins the decorator's generated DDL to the same text. Together
+  // they close the loop: decorator === executed DDL === override row.
+  it('stores a trigger override row byte-identical to the trigger it executes', async () => {
+    await upAlbumSpaceAssetSyncAndAudit({} as any);
+
+    const executedTriggerDdl = findSql('the delete-audit CREATE TRIGGER', (s) =>
+      s.startsWith('CREATE OR REPLACE TRIGGER "album_space_asset_delete_audit"'),
+    );
+    const triggerOverrideInsert = findSql('the delete-audit trigger override row', (s) =>
+      s.includes(`VALUES ('trigger_album_space_asset_delete_audit'`),
+    );
+
+    expect(parseOverrideValue(triggerOverrideInsert).sql).toBe(executedTriggerDdl);
+    // Guards the shape the decorator has to reproduce: statement scope, an OLD transition table,
+    // and NO `WHEN` guard (FK cascades run at trigger depth > 1 and must still be tombstoned).
+    expect(executedTriggerDdl).toContain('REFERENCING OLD TABLE AS "old"');
+    expect(executedTriggerDdl).toContain('FOR EACH STATEMENT');
+    expect(executedTriggerDdl).not.toContain('WHEN (');
   });
 });
