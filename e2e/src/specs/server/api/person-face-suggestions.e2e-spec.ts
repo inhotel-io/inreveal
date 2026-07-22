@@ -6,7 +6,7 @@
 //
 // Seed strategy
 // -------------
-// - person_face_suggestion rows are seeded via raw SQL (the background job that
+// - face_person_verdict rows are seeded via raw SQL (the background job that
 //   would normally create them is not triggered in the e2e stack).
 // - Unassigned asset_face rows are seeded via a minimal INSERT (personId = NULL).
 // - The system config machineLearning.facialRecognition.suggestionMaxDistance is
@@ -30,14 +30,14 @@ async function insertUnassignedFace(db: Awaited<ReturnType<(typeof utils)['conne
   return result.rows[0].id;
 }
 
-/** Insert a pending person_face_suggestion row. */
+/** Insert a pending face_person_verdict row. */
 async function insertSuggestion(
   db: Awaited<ReturnType<(typeof utils)['connectDatabase']>>,
   personId: string,
   assetFaceId: string,
   distance: number,
 ) {
-  await db.query(`INSERT INTO person_face_suggestion ("personId", "assetFaceId", distance) VALUES ($1, $2, $3)`, [
+  await db.query(`INSERT INTO face_person_verdict ("personId", "assetFaceId", distance) VALUES ($1, $2, $3)`, [
     personId,
     assetFaceId,
     distance,
