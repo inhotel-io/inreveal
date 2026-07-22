@@ -139,12 +139,44 @@ describe('duplicate utils', () => {
       const asset1 = createAsset('asset-1', 1000, { make: 'Canon' });
       const asset2 = createAsset('asset-2', 1000, { make: 'Nikon' });
 
-      // Both have same file size (1000) and same EXIF count (2: fileSizeInByte + make)
-      // Should return the last one in the sorted array
-      const result = suggestDuplicate([asset1, asset2]);
-      // Since they're equal, the last one after sorting should be returned
-      expect(result).toBeDefined();
-      expect(['asset-1', 'asset-2']).toContain(result?.id);
+      // Both have same file size (1000) and same EXIF count (2: fileSizeInByte + make).
+      // Fully tied candidates resolve to the *last* one in input order.
+      expect(suggestDuplicate([asset1, asset2])?.id).toBe('asset-2');
+      expect(suggestDuplicate([asset2, asset1])?.id).toBe('asset-1');
+    });
+
+    it('should return the last fully tied asset even when better-tied candidates appear earlier', () => {
+      const first = createAsset('first', 1000, { make: 'Canon' });
+      const middle = createAsset('middle', 500, { make: 'Nikon', model: 'D850', city: 'Berlin' });
+      const last = createAsset('last', 1000, { make: 'Sony' });
+
+      expect(suggestDuplicate([first, middle, last])?.id).toBe('last');
+    });
+
+    it('should return the last asset when no asset has exifInfo at all', () => {
+      const asset1 = createAsset('asset-1');
+      const asset2 = createAsset('asset-2');
+      asset1.exifInfo = undefined;
+      asset2.exifInfo = undefined;
+
+      expect(suggestDuplicate([asset1, asset2])?.id).toBe('asset-2');
+    });
+
+    it('should pick the highest EXIF count among the largest files only', () => {
+      const smallRichExif = createAsset('small-rich', 1000, {
+        make: 'Canon',
+        model: 'EOS 5D',
+        city: 'New York',
+        state: 'NY',
+        country: 'USA',
+      });
+      const largePoorExif = createAsset('large-poor', 5000);
+      const largeRicherExif = createAsset('large-richer', 5000, { make: 'Nikon' });
+      const largePoorExifAgain = createAsset('large-poor-again', 5000);
+
+      expect(suggestDuplicate([smallRichExif, largePoorExif, largeRicherExif, largePoorExifAgain])?.id).toBe(
+        'large-richer',
+      );
     });
 
     it('should prioritize file size over EXIF count', () => {

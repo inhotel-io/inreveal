@@ -23,6 +23,16 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+/** Readback helper: does this space have any person assignment for the given asset face? */
+async function isFaceAssignedInSpace(
+  sut: SharedSpaceRepository,
+  assetFaceId: string,
+  spaceId: string,
+): Promise<boolean> {
+  const assignments = await sut.getPersonFaceAssignmentsForSpace(assetFaceId, spaceId);
+  return assignments.length > 0;
+}
+
 /** Helper: create an asset face and its face_search embedding in one call. Returns the face ID string. */
 async function createFaceWithEmbedding(
   ctx: ReturnType<typeof setup>['ctx'],
@@ -240,8 +250,8 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       });
       await sut.addPersonFaces([{ personId: spacePerson.id, assetFaceId: faceId }]);
 
-      // Second run: isPersonFaceAssigned should prevent duplicate
-      const isAssigned = await sut.isPersonFaceAssigned(faceId, space.id);
+      // Second run: the existing assignment should prevent a duplicate
+      const isAssigned = await isFaceAssignedInSpace(sut, faceId, space.id);
       expect(isAssigned).toBe(true);
 
       // Even if we try to add again, onConflict doNothing prevents duplicates
@@ -314,7 +324,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       await sut.addPersonFaces([{ personId: spacePerson.id, assetFaceId: faceId }]);
 
       // Verify assigned
-      expect(await sut.isPersonFaceAssigned(faceId, space.id)).toBe(true);
+      expect(await isFaceAssignedInSpace(sut, faceId, space.id)).toBe(true);
 
       // Hard-delete asset_face row (simulating force-detection reset)
       // face_search has ON DELETE CASCADE from asset_face
@@ -1141,7 +1151,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
   // ==========================================
 
   describe('filtering and phantom photos', () => {
-    it('should correctly identify assigned faces via isPersonFaceAssigned', async () => {
+    it('should correctly identify assigned faces via getPersonFaceAssignmentsForSpace', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
       const { space } = await ctx.newSharedSpace({ createdById: user.id });
@@ -1159,8 +1169,8 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       });
       await sut.addPersonFaces([{ personId: sp.id, assetFaceId: face1 }]);
 
-      expect(await sut.isPersonFaceAssigned(face1, space.id)).toBe(true);
-      expect(await sut.isPersonFaceAssigned(face2, space.id)).toBe(false);
+      expect(await isFaceAssignedInSpace(sut, face1, space.id)).toBe(true);
+      expect(await isFaceAssignedInSpace(sut, face2, space.id)).toBe(false);
     });
 
     it('should not have phantom assignments after reassignPersonFacesSafe', async () => {
@@ -1204,7 +1214,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       expect(sp1After!.faceCount).toBe(0);
 
       // face1 is now assigned to SP2's space, not SP1
-      expect(await sut.isPersonFaceAssigned(face1, space.id)).toBe(true);
+      expect(await isFaceAssignedInSpace(sut, face1, space.id)).toBe(true);
     });
 
     it('should clean up orphaned persons after all faces removed', async () => {
@@ -1318,7 +1328,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       expect(faceRow!.personId).toBe(sp2.id);
 
       // face1 is still assigned in the space
-      expect(await sut.isPersonFaceAssigned(face1, space.id)).toBe(true);
+      expect(await isFaceAssignedInSpace(sut, face1, space.id)).toBe(true);
 
       // SP1 has 0 faces after recount
       await sut.recountPersons([sp1.id, sp2.id]);
@@ -1361,7 +1371,7 @@ describe('SharedSpaceRepository - face matching pipeline', () => {
       await ctx.database.updateTable('asset_face').set({ personId: personP2.id }).where('id', '=', face1).execute();
 
       // Space assignment is unchanged
-      expect(await sut.isPersonFaceAssigned(face1, space.id)).toBe(true);
+      expect(await isFaceAssignedInSpace(sut, face1, space.id)).toBe(true);
 
       // findSpacePersonByLinkedPersonId: P1 no longer linked (no faces with P1)
       const byP1 = await sut.findSpacePersonByLinkedPersonId(space.id, personP1.id);

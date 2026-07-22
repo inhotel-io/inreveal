@@ -32,12 +32,6 @@ const SharedSpacePersonUpdateSchema = z
   })
   .meta({ id: 'SharedSpacePersonUpdateDto' });
 
-const SharedSpacePersonAliasSchema = z
-  .object({
-    alias: z.string().trim().min(1).max(100).describe('Alias name for this person'),
-  })
-  .meta({ id: 'SharedSpacePersonAliasDto' });
-
 const SpaceRepresentativeFaceUpdateSchema = z
   .object({
     assetFaceId: z.uuidv4().nullable().describe('Asset face ID used as the space representative face'),
@@ -63,14 +57,12 @@ const SharedSpacePersonResponseSchema = z
     id: z.string().describe('Person ID'),
     spaceId: z.string().describe('Space ID'),
     name: z.string().describe('Person name'),
-    thumbnailPath: z.string().describe('Thumbnail path'),
     isHidden: z.boolean().describe('Is hidden'),
     birthDate: z.string().nullable().optional().describe('Person date of birth').meta({ format: 'date' }),
     representativeFaceId: z.string().nullable().optional().describe('Representative face ID'),
     representativeFaceSource: z.enum(['auto', 'manual']).describe('Representative face source'),
     faceCount: z.number().describe('Number of faces assigned to this person'),
     assetCount: z.number().describe('Number of unique assets with this person'),
-    alias: z.string().nullable().optional().describe('User-specific alias for this person'),
     createdAt: z.string().describe('Creation date'),
     updatedAt: z.string().describe('Last update date'),
     type: z.string().optional().describe('Person type (person or pet)'),
@@ -87,7 +79,6 @@ const SharedSpacePeopleStatisticsResponseSchema = z
 
 export class SpacePeopleQueryDto extends createZodDto(SpacePeopleQuerySchema) {}
 export class SharedSpacePersonUpdateDto extends createZodDto(SharedSpacePersonUpdateSchema) {}
-export class SharedSpacePersonAliasDto extends createZodDto(SharedSpacePersonAliasSchema) {}
 export class SpaceRepresentativeFaceUpdateDto extends createZodDto(SpaceRepresentativeFaceUpdateSchema) {}
 export class SharedSpacePersonMergeDto extends createZodDto(SharedSpacePersonMergeSchema) {}
 export class SharedSpacePersonResponseDto extends createZodDto(SharedSpacePersonResponseSchema) {}

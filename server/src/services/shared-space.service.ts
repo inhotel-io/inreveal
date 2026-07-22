@@ -14,7 +14,6 @@ import {
 } from 'src/dtos/person.dto';
 import {
   SharedSpacePeopleStatisticsResponseDto,
-  SharedSpacePersonAliasDto,
   SharedSpacePersonMergeDto,
   SharedSpacePersonResponseDto,
   SharedSpacePersonUpdateDto,
@@ -32,7 +31,6 @@ import {
   SharedSpaceLinkedAlbumDto,
   SharedSpaceLinkedLibraryDto,
   SharedSpaceMemberCreateDto,
-  SharedSpaceMemberMetadataContributionDto,
   SharedSpaceMemberPreferencesDto,
   SharedSpaceMemberResponseDto,
   SharedSpaceMemberTimelineDto,
@@ -113,6 +111,43 @@ type SharedSpaceIdentityReconciliationClaim = ReconciliationClaim & {
 export class SharedSpaceService extends BaseService {
   private sharedSpaceFaceMatchBatchSize = 1000;
 
+  /** Admin-only detail on the libraries linked into a space; `undefined` for everyone else. */
+  private async resolveLinkedLibraries(
+    auth: AuthDto,
+    spaceId: string,
+  ): Promise<SharedSpaceLinkedLibraryDto[] | undefined> {
+    if (!auth.user.isAdmin) {
+      return undefined;
+    }
+
+    const linkedLibraries: SharedSpaceLinkedLibraryDto[] = [];
+    for (const link of await this.sharedSpaceRepository.getLinkedLibraries(spaceId)) {
+      const library = await this.libraryRepository.get(link.libraryId);
+      if (library) {
+        linkedLibraries.push({
+          libraryId: link.libraryId,
+          libraryName: library.name,
+          addedById: link.addedById,
+          createdAt: (link.createdAt as unknown as Date).toISOString(),
+        });
+      }
+    }
+    return linkedLibraries;
+  }
+
+  /** Split the cover-tile assets into the parallel id / base64-thumbhash arrays the DTO carries. */
+  private mapRecentAssets(recentAssets: { id: string; thumbhash: Buffer | null }[]) {
+    const recentAssetIds: string[] = [];
+    const recentAssetThumbhashes: string[] = [];
+    for (const asset of recentAssets) {
+      if (asset.thumbhash) {
+        recentAssetIds.push(asset.id);
+        recentAssetThumbhashes.push(Buffer.from(asset.thumbhash).toString('base64'));
+      }
+    }
+    return { recentAssetIds, recentAssetThumbhashes };
+  }
+
   async create(auth: AuthDto, dto: SharedSpaceCreateDto): Promise<SharedSpaceResponseDto> {
     const space = await this.sharedSpaceRepository.create({
       name: dto.name,
@@ -155,31 +190,8 @@ export class SharedSpaceService extends BaseService {
         newAssetCount = assetCount;
       }
 
-      let linkedLibraries: SharedSpaceLinkedLibraryDto[] | undefined;
-      if (auth.user.isAdmin) {
-        const links = await this.sharedSpaceRepository.getLinkedLibraries(space.id);
-        linkedLibraries = [];
-        for (const link of links) {
-          const library = await this.libraryRepository.get(link.libraryId);
-          if (library) {
-            linkedLibraries.push({
-              libraryId: link.libraryId,
-              libraryName: library.name,
-              addedById: link.addedById,
-              createdAt: (link.createdAt as unknown as Date).toISOString(),
-            });
-          }
-        }
-      }
-
-      const recentAssetIds: string[] = [];
-      const recentAssetThumbhashes: string[] = [];
-      for (const asset of recentAssets) {
-        if (asset.thumbhash) {
-          recentAssetIds.push(asset.id);
-          recentAssetThumbhashes.push(Buffer.from(asset.thumbhash).toString('base64'));
-        }
-      }
+      const linkedLibraries = await this.resolveLinkedLibraries(auth, space.id);
+      const { recentAssetIds, recentAssetThumbhashes } = this.mapRecentAssets(recentAssets);
 
       results.push({
         ...this.mapSpace(space),
@@ -228,31 +240,8 @@ export class SharedSpaceService extends BaseService {
       hasPets = await this.sharedSpaceRepository.hasPetsBySpaceId(id);
     }
 
-    let linkedLibraries: SharedSpaceLinkedLibraryDto[] | undefined;
-    if (auth.user.isAdmin) {
-      const links = await this.sharedSpaceRepository.getLinkedLibraries(space.id);
-      linkedLibraries = [];
-      for (const link of links) {
-        const library = await this.libraryRepository.get(link.libraryId);
-        if (library) {
-          linkedLibraries.push({
-            libraryId: link.libraryId,
-            libraryName: library.name,
-            addedById: link.addedById,
-            createdAt: (link.createdAt as unknown as Date).toISOString(),
-          });
-        }
-      }
-    }
-
-    const recentAssetIds: string[] = [];
-    const recentAssetThumbhashes: string[] = [];
-    for (const asset of recentAssets) {
-      if (asset.thumbhash) {
-        recentAssetIds.push(asset.id);
-        recentAssetThumbhashes.push(Buffer.from(asset.thumbhash).toString('base64'));
-      }
-    }
+    const linkedLibraries = await this.resolveLinkedLibraries(auth, space.id);
+    const { recentAssetIds, recentAssetThumbhashes } = this.mapRecentAssets(recentAssets);
 
     return {
       ...this.mapSpace(space),
@@ -292,30 +281,19 @@ export class SharedSpaceService extends BaseService {
 
     const existing = await this.sharedSpaceRepository.getById(id);
 
-    // Build update payload with only defined fields — Kysely's .set() with all-undefined
-    // values produces an empty SET clause and a SQL syntax error.
-    const updatePayload: Parameters<typeof this.sharedSpaceRepository.update>[1] = {};
-    if (dto.name !== undefined) {
-      updatePayload.name = dto.name;
-    }
-    if (dto.description !== undefined) {
-      updatePayload.description = dto.description;
-    }
-    if (dto.thumbnailAssetId !== undefined) {
-      updatePayload.thumbnailAssetId = dto.thumbnailAssetId;
-    }
-    if (thumbnailCropY !== undefined) {
-      updatePayload.thumbnailCropY = thumbnailCropY;
-    }
-    if (dto.color !== undefined) {
-      updatePayload.color = dto.color;
-    }
-    if (dto.faceRecognitionEnabled !== undefined) {
-      updatePayload.faceRecognitionEnabled = dto.faceRecognitionEnabled;
-    }
-    if (dto.petsEnabled !== undefined) {
-      updatePayload.petsEnabled = dto.petsEnabled;
-    }
+    // Only the defined fields — Kysely's .set() with all-undefined values produces an empty SET
+    // clause and a SQL syntax error.
+    const updatePayload = Object.fromEntries(
+      Object.entries({
+        name: dto.name,
+        description: dto.description,
+        thumbnailAssetId: dto.thumbnailAssetId,
+        thumbnailCropY,
+        color: dto.color,
+        faceRecognitionEnabled: dto.faceRecognitionEnabled,
+        petsEnabled: dto.petsEnabled,
+      }).filter(([, value]) => value !== undefined),
+    ) as Parameters<typeof this.sharedSpaceRepository.update>[1];
 
     const space =
       Object.keys(updatePayload).length > 0 && existing
@@ -531,36 +509,6 @@ export class SharedSpaceService extends BaseService {
     }
 
     const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
-    if (!member) {
-      throw new BadRequestException('Member not found');
-    }
-
-    return this.mapMember(member);
-  }
-
-  async updateMemberMetadataContribution(
-    auth: AuthDto,
-    spaceId: string,
-    userId: string,
-    dto: SharedSpaceMemberMetadataContributionDto,
-  ): Promise<SharedSpaceMemberResponseDto> {
-    if (dto.sharePersonMetadata !== false) {
-      throw new BadRequestException('Cannot enable person metadata contribution for another member');
-    }
-
-    if (!auth.user.isAdmin) {
-      await this.requireRole(auth, spaceId, SharedSpaceRole.Owner);
-    }
-
-    const target = await this.sharedSpaceRepository.getMember(spaceId, userId);
-    if (!target) {
-      throw new BadRequestException('Member not found');
-    }
-
-    await this.sharedSpaceRepository.updateMember(spaceId, userId, { sharePersonMetadata: false });
-    await this.queueSpacePersonMetadataBackfill();
-
-    const member = await this.sharedSpaceRepository.getMember(spaceId, userId);
     if (!member) {
       throw new BadRequestException('Member not found');
     }
@@ -911,38 +859,29 @@ export class SharedSpaceService extends BaseService {
     const albumNameRows = albumIds.length > 0 ? await this.sharedSpaceRepository.getAlbumNamesByIds(albumIds) : [];
     const albumNames = new Map(albumNameRows.map((a) => [a.id, a.albumName]));
 
-    return activities
-      .filter((a) => {
-        // Drop album link/unlink activities whose album no longer exists — e.g. an abandoned create-flow
-        // album that was auto-deleted on navigate-away. Otherwise it lingers with a stale/empty name for
-        // an album that's gone. Albums that still exist (incl. unlinked ones) keep their history.
-        if (a.type === SharedSpaceActivityType.AlbumLink || a.type === SharedSpaceActivityType.AlbumUnlink) {
-          const albumId = (a.data as Record<string, unknown>)?.albumId;
-          return typeof albumId === 'string' && albumNames.has(albumId);
-        }
-        return true;
-      })
-      .map((a) => {
-        const data = this.redactActivityData(a.type as SharedSpaceActivityType, a.data as Record<string, unknown>);
-        if (
-          (a.type === SharedSpaceActivityType.AlbumLink || a.type === SharedSpaceActivityType.AlbumUnlink) &&
-          typeof data.albumId === 'string' &&
-          albumNames.has(data.albumId)
-        ) {
-          data.albumName = albumNames.get(data.albumId);
-        }
-        return {
-          id: a.id,
-          type: a.type,
-          data,
-          createdAt: (a.createdAt as unknown as Date).toISOString(),
-          userId: a.userId,
-          userName: a.name,
-          userEmail: a.email,
-          userProfileImagePath: a.profileImagePath,
-          userAvatarColor: a.avatarColor,
-        };
-      });
+    // NB: no post-SQL filter for link/unlink activities whose album is gone — the repository already
+    // excludes them IN SQL, and re-filtering here would shrink pages and desync pagination (#752 F4).
+    return activities.map((a) => {
+      const data = this.redactActivityData(a.type as SharedSpaceActivityType, a.data as Record<string, unknown>);
+      if (
+        (a.type === SharedSpaceActivityType.AlbumLink || a.type === SharedSpaceActivityType.AlbumUnlink) &&
+        typeof data.albumId === 'string' &&
+        albumNames.has(data.albumId)
+      ) {
+        data.albumName = albumNames.get(data.albumId);
+      }
+      return {
+        id: a.id,
+        type: a.type,
+        data,
+        createdAt: (a.createdAt as unknown as Date).toISOString(),
+        userId: a.userId,
+        userName: a.name,
+        userEmail: a.email,
+        userProfileImagePath: a.profileImagePath,
+        userAvatarColor: a.avatarColor,
+      };
+    });
   }
 
   async removeAssets(auth: AuthDto, spaceId: string, dto: SharedSpaceAssetRemoveDto): Promise<string[]> {
@@ -1153,11 +1092,7 @@ export class SharedSpaceService extends BaseService {
       minimumFaceCount: machineLearning.facialRecognition.minFaces,
     });
 
-    const aliases =
-      persons.length > 0 ? await this.sharedSpaceRepository.getAliasesBySpaceAndUser(spaceId, auth.user.id) : [];
-    const aliasMap = new Map(aliases.map((a) => [a.personId, a.alias]));
-
-    return persons.map((person) => this.mapSpacePerson(person, aliasMap.get(person.id) ?? null));
+    return persons.map((person) => this.mapSpacePerson(person));
   }
 
   async getSpacePeopleStatistics(
@@ -1269,8 +1204,7 @@ export class SharedSpaceService extends BaseService {
         representativeFaceSource: 'auto',
         representativeFaceId,
       });
-      const alias = await this.sharedSpaceRepository.getAlias(person.id, auth.user.id);
-      return this.mapSpacePerson(updated, alias?.alias ?? null);
+      return this.mapSpacePerson(updated);
     }
 
     const face = await this.sharedSpaceRepository.getSpaceRepresentativeFaceForUpdate({
@@ -1292,8 +1226,7 @@ export class SharedSpaceService extends BaseService {
         assetFaceId: face.id,
       });
     }
-    const alias = await this.sharedSpaceRepository.getAlias(person.id, auth.user.id);
-    return this.mapSpacePerson(updated, alias?.alias ?? null);
+    return this.mapSpacePerson(updated);
   }
 
   async getSpacePerson(auth: AuthDto, spaceId: string, personId: string): Promise<SharedSpacePersonResponseDto> {
@@ -1309,9 +1242,7 @@ export class SharedSpaceService extends BaseService {
       throw new BadRequestException('Person not found');
     }
 
-    const alias = await this.sharedSpaceRepository.getAlias(personId, auth.user.id);
-
-    return this.mapSpacePerson(person, alias?.alias ?? null);
+    return this.mapSpacePerson(person);
   }
 
   async getSpacePersonStatistics(
@@ -1463,26 +1394,21 @@ export class SharedSpaceService extends BaseService {
       sharedPersonUpdates.nameSourceUpdatedAt = new Date();
     }
 
-    const hasSharedPersonUpdates = Object.values(sharedPersonUpdates).some((value) => value !== undefined);
-    if (hasSharedPersonUpdates) {
-      await this.sharedSpaceRepository.updatePerson(personId, sharedPersonUpdates);
+    if (dto.birthDate !== undefined) {
+      sharedPersonUpdates.birthDate = dto.birthDate;
+      sharedPersonUpdates.birthDateSource = 'manual';
+      sharedPersonUpdates.birthDateSourceProfileType = 'space-person';
+      sharedPersonUpdates.birthDateSourceProfileId = personId;
+      sharedPersonUpdates.birthDateSourceUpdatedAt = new Date();
     }
 
-    if (dto.birthDate !== undefined) {
-      await this.sharedSpaceRepository.updatePerson(personId, {
-        birthDate: dto.birthDate,
-        birthDateSource: 'manual',
-        birthDateSourceProfileType: 'space-person',
-        birthDateSourceProfileId: personId,
-        birthDateSourceUpdatedAt: new Date(),
-      });
+    if (Object.values(sharedPersonUpdates).some((value) => value !== undefined)) {
+      await this.sharedSpaceRepository.updatePerson(personId, sharedPersonUpdates);
     }
 
     if (person.identityId && (dto.name !== undefined || dto.birthDate !== undefined || dto.isHidden !== undefined)) {
       await this.queueSpacePersonMetadataBackfill(person.identityId);
     }
-
-    const alias = await this.sharedSpaceRepository.getAlias(personId, auth.user.id);
 
     const enriched = await this.sharedSpaceRepository.getPersonById(personId);
     if (!enriched) {
@@ -1496,7 +1422,7 @@ export class SharedSpaceService extends BaseService {
       data: { personId, personName: enriched.name ?? '' },
     });
 
-    return this.mapSpacePerson(enriched, alias?.alias ?? null);
+    return this.mapSpacePerson(enriched);
   }
 
   async deleteSpacePerson(auth: AuthDto, spaceId: string, personId: string): Promise<void> {
@@ -1517,15 +1443,6 @@ export class SharedSpaceService extends BaseService {
       userId: auth.user.id,
       type: SharedSpaceActivityType.PersonDelete,
       data: { personId, personName: person.name || '' },
-    });
-  }
-
-  async deduplicateSpacePeople(auth: AuthDto, spaceId: string): Promise<void> {
-    await this.requireRole(auth, spaceId, SharedSpaceRole.Owner);
-
-    await this.jobRepository.queue({
-      name: JobName.SharedSpacePersonDedup,
-      data: { spaceId },
     });
   }
 
@@ -1718,31 +1635,6 @@ export class SharedSpaceService extends BaseService {
       type: SharedSpaceActivityType.PersonMerge,
       data: { personName: target.name ?? '', count: dto.ids.length },
     });
-  }
-
-  async setSpacePersonAlias(
-    auth: AuthDto,
-    spaceId: string,
-    personId: string,
-    dto: SharedSpacePersonAliasDto,
-  ): Promise<void> {
-    await this.requireMembership(auth, spaceId);
-
-    const person = await this.sharedSpaceRepository.getPersonById(personId);
-    if (!person || person.spaceId !== spaceId) {
-      throw new BadRequestException('Person not found');
-    }
-
-    await this.sharedSpaceRepository.upsertAlias({
-      personId,
-      userId: auth.user.id,
-      alias: dto.alias,
-    });
-  }
-
-  async deleteSpacePersonAlias(auth: AuthDto, spaceId: string, personId: string): Promise<void> {
-    await this.requireMembership(auth, spaceId);
-    await this.sharedSpaceRepository.deleteAlias(personId, auth.user.id);
   }
 
   async getSpacePersonAssets(auth: AuthDto, spaceId: string, personId: string): Promise<string[]> {
@@ -2030,15 +1922,23 @@ export class SharedSpaceService extends BaseService {
     return JobStatus.Success;
   }
 
-  @OnJob({ name: JobName.SharedSpaceLibraryFaceSync, queue: QueueName.FacialRecognition })
-  async handleSharedSpaceLibraryFaceSync(job: JobOf<JobName.SharedSpaceLibraryFaceSync>): Promise<JobStatus> {
-    const space = await this.sharedSpaceRepository.getById(job.spaceId);
+  /**
+   * Page a newly-linked source (library or album) and project every asset's faces into the space.
+   * `isStillLinked` is re-checked before each batch so a concurrent unlink stops the sync instead of
+   * projecting faces for content the space no longer has access to; `fetchBatch` pages the source.
+   */
+  private async syncLinkedSourceFaces(input: {
+    spaceId: string;
+    sourceDescription: string;
+    isStillLinked: () => Promise<boolean>;
+    fetchBatch: (limit: number, offset: number) => Promise<{ id: string }[]>;
+  }): Promise<JobStatus> {
+    const space = await this.sharedSpaceRepository.getById(input.spaceId);
     if (!space || !space.faceRecognitionEnabled) {
       return JobStatus.Skipped;
     }
 
-    const linkExists = await this.sharedSpaceRepository.hasLibraryLink(job.spaceId, job.libraryId);
-    if (!linkExists) {
+    if (!(await input.isStillLinked())) {
       return JobStatus.Skipped;
     }
 
@@ -2047,20 +1947,18 @@ export class SharedSpaceService extends BaseService {
     let affectedAny = false;
 
     while (true) {
-      // Re-check link each batch to handle concurrent unlink
-      const stillLinked = await this.sharedSpaceRepository.hasLibraryLink(job.spaceId, job.libraryId);
-      if (!stillLinked) {
-        this.logger.log(`Library ${job.libraryId} was unlinked from space ${job.spaceId} during sync, stopping`);
+      if (!(await input.isStillLinked())) {
+        this.logger.log(`${input.sourceDescription} was unlinked from space ${input.spaceId} during sync, stopping`);
         break;
       }
 
-      const assets = await this.assetRepository.getByLibraryIdWithFaces(job.libraryId, batchSize, offset);
+      const assets = await input.fetchBatch(batchSize, offset);
       if (assets.length === 0) {
         break;
       }
 
       for (const asset of assets) {
-        const affectedPersonIds = await this.processSpaceFaceMatch(job.spaceId, asset.id);
+        const affectedPersonIds = await this.processSpaceFaceMatch(input.spaceId, asset.id);
         affectedAny ||= affectedPersonIds.length > 0;
       }
 
@@ -2068,66 +1966,37 @@ export class SharedSpaceService extends BaseService {
     }
 
     if (affectedAny) {
-      await this.queueSpaceIdentityReconciliation({ spaceId: job.spaceId });
+      await this.queueSpaceIdentityReconciliation({ spaceId: input.spaceId });
     }
 
-    // Queue dedup pass after library sync completes
+    // Queue a dedup pass once the sync completes.
     await this.jobRepository.queue({
       name: JobName.SharedSpacePersonDedup,
-      data: { spaceId: job.spaceId },
+      data: { spaceId: input.spaceId },
     });
 
     return JobStatus.Success;
   }
 
+  @OnJob({ name: JobName.SharedSpaceLibraryFaceSync, queue: QueueName.FacialRecognition })
+  async handleSharedSpaceLibraryFaceSync(job: JobOf<JobName.SharedSpaceLibraryFaceSync>): Promise<JobStatus> {
+    return this.syncLinkedSourceFaces({
+      spaceId: job.spaceId,
+      sourceDescription: `Library ${job.libraryId}`,
+      isStillLinked: () => this.sharedSpaceRepository.hasLibraryLink(job.spaceId, job.libraryId),
+      fetchBatch: (limit, offset) => this.assetRepository.getByLibraryIdWithFaces(job.libraryId, limit, offset),
+    });
+  }
+
   @OnJob({ name: JobName.SharedSpaceAlbumFaceSync, queue: QueueName.FacialRecognition })
   async handleSharedSpaceAlbumFaceSync(job: JobOf<JobName.SharedSpaceAlbumFaceSync>): Promise<JobStatus> {
-    const space = await this.sharedSpaceRepository.getById(job.spaceId);
-    if (!space || !space.faceRecognitionEnabled) {
-      return JobStatus.Skipped;
-    }
-
-    const linkExists = await this.sharedSpaceRepository.hasAlbumLink(job.spaceId, job.albumId);
-    if (!linkExists) {
-      return JobStatus.Skipped;
-    }
-
-    const batchSize = 1000;
-    let offset = 0;
-    let affectedAny = false;
-
-    while (true) {
-      // Re-check link each batch to handle concurrent unlink
-      const stillLinked = await this.sharedSpaceRepository.hasAlbumLink(job.spaceId, job.albumId);
-      if (!stillLinked) {
-        this.logger.log(`Album ${job.albumId} was unlinked from space ${job.spaceId} during sync, stopping`);
-        break;
-      }
-
-      const assets = await this.assetRepository.getByAlbumIdWithFaces(job.albumId, job.spaceId, batchSize, offset);
-      if (assets.length === 0) {
-        break;
-      }
-
-      for (const asset of assets) {
-        const affectedPersonIds = await this.processSpaceFaceMatch(job.spaceId, asset.id);
-        affectedAny ||= affectedPersonIds.length > 0;
-      }
-
-      offset += assets.length;
-    }
-
-    if (affectedAny) {
-      await this.queueSpaceIdentityReconciliation({ spaceId: job.spaceId });
-    }
-
-    // Queue dedup pass after album sync completes
-    await this.jobRepository.queue({
-      name: JobName.SharedSpacePersonDedup,
-      data: { spaceId: job.spaceId },
+    return this.syncLinkedSourceFaces({
+      spaceId: job.spaceId,
+      sourceDescription: `Album ${job.albumId}`,
+      isStillLinked: () => this.sharedSpaceRepository.hasAlbumLink(job.spaceId, job.albumId),
+      fetchBatch: (limit, offset) =>
+        this.assetRepository.getByAlbumIdWithFaces(job.albumId, job.spaceId, limit, offset),
     });
-
-    return JobStatus.Success;
   }
 
   @OnJob({ name: JobName.SharedSpaceFaceMatchAll, queue: QueueName.FacialRecognition })
@@ -2724,21 +2593,6 @@ export class SharedSpaceService extends BaseService {
     return [...affectedPersonIds];
   }
 
-  private async findOrCreateSpacePersonForFace(input: {
-    spaceId: string;
-    faceId: string;
-    personId: string;
-    identityId: string;
-    type: string;
-  }): Promise<SpacePersonMatchResult> {
-    const spacePerson = await this.findOrCreateCompatibleSpacePersonForIdentity(input);
-    if (!spacePerson) {
-      throw new Error(`Identity ${input.identityId} is already attached to a different space person type`);
-    }
-
-    return spacePerson;
-  }
-
   private async findOrCreateCompatibleSpacePersonForIdentity(input: {
     spaceId: string;
     faceId: string;
@@ -3102,19 +2956,17 @@ export class SharedSpaceService extends BaseService {
     };
   }
 
-  private mapSpacePerson(person: SharedSpacePerson, alias: string | null): SharedSpacePersonResponseDto {
+  private mapSpacePerson(person: SharedSpacePerson): SharedSpacePersonResponseDto {
     return {
       id: person.id,
       spaceId: person.spaceId,
       name: person.name || '',
-      thumbnailPath: '',
       isHidden: person.isHidden,
       birthDate: asDateString(person.birthDate),
       representativeFaceId: person.representativeFaceId,
       representativeFaceSource: person.representativeFaceSource ?? 'auto',
       faceCount: person.faceCount,
       assetCount: person.assetCount,
-      alias,
       createdAt: (person.createdAt as unknown as Date).toISOString(),
       updatedAt: (person.updatedAt as unknown as Date).toISOString(),
       type: person.type,
@@ -3202,8 +3054,17 @@ export class SharedSpaceService extends BaseService {
     }
   }
 
-  @OnEvent({ name: 'AlbumDelete' })
-  async onAlbumDelete({ albumId }: ArgOf<'AlbumDelete'>): Promise<void> {
+  /**
+   * Shared body for the two album mutations that can strand a space person face: album deletion and
+   * album asset removal. Both resolve the album's face-enabled spaces, ask `findOrphans` which of
+   * that space's assets no longer have ANY space path, sweep their projections, and fall back to the
+   * durable per-space reconcile (C2) on failure. They differ only in the orphan query.
+   */
+  private async sweepAlbumOrphanedSpaceFaces(
+    albumId: string,
+    failureDescription: string,
+    findOrphans: (spaceId: string) => Promise<string[]>,
+  ): Promise<void> {
     let faceEnabledSpaceIds: string[];
     try {
       const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
@@ -3215,7 +3076,7 @@ export class SharedSpaceService extends BaseService {
     try {
       let anyOrphanWork = false;
       for (const spaceId of faceEnabledSpaceIds) {
-        const orphaned = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
+        const orphaned = await findOrphans(spaceId);
         if (orphaned.length === 0) {
           continue;
         }
@@ -3227,9 +3088,16 @@ export class SharedSpaceService extends BaseService {
         await this.queueSpacePersonMetadataBackfill();
       }
     } catch (error) {
-      this.logger.error(`Failed to sync space people after deleting album ${albumId}: ${error}`);
+      this.logger.error(`Failed to sync space people after ${failureDescription}: ${error}`);
       await this.enqueueSpaceFaceProjectionReconcile(faceEnabledSpaceIds);
     }
+  }
+
+  @OnEvent({ name: 'AlbumDelete' })
+  async onAlbumDelete({ albumId }: ArgOf<'AlbumDelete'>): Promise<void> {
+    await this.sweepAlbumOrphanedSpaceFaces(albumId, `deleting album ${albumId}`, (spaceId) =>
+      this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId),
+    );
   }
 
   @OnEvent({ name: 'AlbumAssetsRemove' })
@@ -3237,31 +3105,8 @@ export class SharedSpaceService extends BaseService {
     if (assetIds.length === 0) {
       return;
     }
-    let faceEnabledSpaceIds: string[];
-    try {
-      const spaces = await this.sharedSpaceRepository.getSpacesLinkedToAlbum(albumId);
-      faceEnabledSpaceIds = spaces.filter((space) => space.faceRecognitionEnabled).map((space) => space.spaceId);
-    } catch (error) {
-      this.logger.error(`Failed to resolve spaces for album ${albumId} face-people sync: ${error}`);
-      return;
-    }
-    try {
-      let anyOrphanWork = false;
-      for (const spaceId of faceEnabledSpaceIds) {
-        const orphaned = await this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(spaceId, assetIds);
-        if (orphaned.length === 0) {
-          continue;
-        }
-        await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphaned);
-        await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
-        anyOrphanWork = true;
-      }
-      if (anyOrphanWork) {
-        await this.queueSpacePersonMetadataBackfill();
-      }
-    } catch (error) {
-      this.logger.error(`Failed to sync space people after removing assets from album ${albumId}: ${error}`);
-      await this.enqueueSpaceFaceProjectionReconcile(faceEnabledSpaceIds);
-    }
+    await this.sweepAlbumOrphanedSpaceFaces(albumId, `removing assets from album ${albumId}`, (spaceId) =>
+      this.sharedSpaceRepository.getAssetIdsWithoutOtherSpacePath(spaceId, assetIds),
+    );
   }
 }

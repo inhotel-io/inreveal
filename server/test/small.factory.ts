@@ -15,7 +15,6 @@ import {
   SharedSpaceLibrary,
   SharedSpaceMember,
   SharedSpacePerson,
-  SharedSpacePersonAlias,
   SharedSpacePersonFace,
   Tag,
   User,
@@ -468,13 +467,6 @@ const sharedSpacePersonFaceFactory = (data: Partial<SharedSpacePersonFace> = {})
   ...data,
 });
 
-const sharedSpacePersonAliasFactory = (data: Partial<SharedSpacePersonAlias> = {}): SharedSpacePersonAlias => ({
-  personId: newUuid(),
-  userId: newUuid(),
-  alias: 'Alias Name',
-  ...data,
-});
-
 const sharedSpaceLibraryFactory = (data: Partial<SharedSpaceLibrary> = {}): SharedSpaceLibrary => ({
   spaceId: newUuid(),
   libraryId: newUuid(),
@@ -490,7 +482,6 @@ const userGroupFactory = (data: Partial<UserGroup> = {}): UserGroup => ({
   id: newUuid(),
   name: 'Test Group',
   color: null,
-  origin: 'manual',
   createdById: newUuid(),
   createdAt: newDate(),
   updatedAt: newDate(),
@@ -548,7 +539,6 @@ export const factory = {
   sharedSpaceActivity: sharedSpaceActivityFactory,
   sharedSpacePerson: sharedSpacePersonFactory,
   sharedSpacePersonFace: sharedSpacePersonFaceFactory,
-  sharedSpacePersonAlias: sharedSpacePersonAliasFactory,
   sharedSpaceLibrary: sharedSpaceLibraryFactory,
   userGroup: userGroupFactory,
   userGroupMember: userGroupMemberFactory,

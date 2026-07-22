@@ -262,8 +262,12 @@ describe('space-album scope guard: every library scoping arm has album coverage'
 //     predicate (map / memory / view use the tighter Timeline-only gate).
 //   - *_SYNC_COLUMNS: the query streams a LINK table (libraryId/albumId/spaceId
 //     metadata) not asset rows; asset visibility lives in the asset-stream classes.
+//   - directAssetArm / libraryAssetArm / linkedAlbumAssetArm / contributedAssetArm /
+//     albumPathAssetArm / assetScopeSql / spaceFacePathBranches: shared-space.repository's
+//     scope-arm builders. Unlike the path-only helpers above, these DO carry the visibility
+//     gate (it is applied once, inside the builder), so routing through one IS the gate.
 const VIS_GATE_MARKER =
-  /spaceVisibilityGate|spaceVisibleAssetVisibilities|visibleSpaceAssetVisibilities|peopleAssetVisibilities|visibilityFilter|AssetVisibility\.(Timeline|Archive)|SHARED_SPACE_LIBRARY_SYNC_COLUMNS|SHARED_SPACE_ALBUM_SYNC_COLUMNS/;
+  /spaceVisibilityGate|spaceVisibleAssetVisibilities|visibleSpaceAssetVisibilities|peopleAssetVisibilities|visibilityFilter|AssetVisibility\.(Timeline|Archive)|SHARED_SPACE_LIBRARY_SYNC_COLUMNS|SHARED_SPACE_ALBUM_SYNC_COLUMNS|directAssetArm|libraryAssetArm|linkedAlbumAssetArm|contributedAssetArm|albumPathAssetArm|assetScopeSql|spaceFacePathBranches/;
 
 // Lines that reference a space marker but are NOT an asset-read scoping arm.
 const VIS_BENIGN_LINE = [
@@ -304,6 +308,19 @@ const VIS_ALLOWLIST: Record<string, string> = {
     'anti-join membership check for removals; no asset data',
   'shared-space.repository.ts::getAlbumAssetIdsWithoutOtherSpacePath':
     'anti-join membership check for removals; no asset data',
+  // The four anti-join arms above were extracted into these two builders; same rationale.
+  'shared-space.repository.ts::otherSpacePathBranches':
+    'builds the anti-join membership arms for removals; no asset data',
+  'shared-space.repository.ts::otherLinkedAlbums':
+    'sub-builder of otherSpacePathBranches (other live linked albums); no asset data',
+
+  // — Link/space id lookups that lost their (incidental) in-window gate when the scope arms were
+  //   factored into shared builders. None of them return asset rows.
+  'shared-space.repository.ts::getMemberSpaceIdsLinkingAlbum':
+    'returns the spaceIds that link an album and have the user as a member; no asset content',
+  'shared-space.repository.ts::hasAlbumLink': 'boolean link-existence check; no asset data',
+  'shared-space.repository.ts::getSpaceIdsForAsset':
+    'returns face-recognition-enabled spaceIds an asset reaches, for face-match fan-out; the per-asset visibility gate is applied by the projection reads (getAssetIdsInSpacePage / getPersonAssetIds)',
 
   // — Remove-path direct-membership check (#751 / S5): reads shared_space_asset to find which of the
   //   selected assets are DIRECT space members, so stack-atomic removal only ever expands from — and

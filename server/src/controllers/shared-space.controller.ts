@@ -26,7 +26,6 @@ import {
 } from 'src/dtos/person.dto';
 import {
   SharedSpacePeopleStatisticsResponseDto,
-  SharedSpacePersonAliasDto,
   SharedSpacePersonMergeDto,
   SharedSpacePersonResponseDto,
   SharedSpacePersonUpdateDto,
@@ -46,7 +45,6 @@ import {
   SharedSpaceLibraryParamDto,
   SharedSpaceLinkedAlbumDto,
   SharedSpaceMemberCreateDto,
-  SharedSpaceMemberMetadataContributionDto,
   SharedSpaceMemberParamDto,
   SharedSpaceMemberPreferencesDto,
   SharedSpaceMemberResponseDto,
@@ -217,21 +215,6 @@ export class SharedSpaceController {
     return this.service.updateMember(auth, id, userId, dto);
   }
 
-  @Patch(':id/members/:userId/metadata-contribution')
-  @Authenticated({ permission: Permission.SharedSpaceMemberUpdate })
-  @Endpoint({
-    summary: 'Disable member person metadata contribution',
-    description: 'Disable person metadata contribution for another member. Members must re-enable it themselves.',
-    history: new HistoryBuilder().added('v1').beta('v1'),
-  })
-  updateMemberMetadataContribution(
-    @Auth() auth: AuthDto,
-    @Param() { id, userId }: SharedSpaceMemberParamDto,
-    @Body() dto: SharedSpaceMemberMetadataContributionDto,
-  ): Promise<SharedSpaceMemberResponseDto> {
-    return this.service.updateMemberMetadataContribution(auth, id, userId, dto);
-  }
-
   @Delete(':id/members/:userId')
   @Authenticated({ permission: Permission.SharedSpaceMemberDelete })
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -372,18 +355,6 @@ export class SharedSpaceController {
     return this.service.getSpacePeopleFaceStatistics(auth, id, query);
   }
 
-  @Post(':id/people/deduplicate')
-  @Authenticated({ permission: Permission.SharedSpaceUpdate })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @Endpoint({
-    summary: 'Deduplicate people in a shared space',
-    description: 'Queue a background job to find and merge duplicate people in a shared space.',
-    history: new HistoryBuilder().added('v1').beta('v1'),
-  })
-  deduplicateSpacePeople(@Auth() auth: AuthDto, @Param() { id }: UUIDParamDto): Promise<void> {
-    return this.service.deduplicateSpacePeople(auth, id);
-  }
-
   @Get(':id/people/:personId/statistics')
   @Authenticated({ permission: Permission.SharedSpaceRead })
   @Endpoint({
@@ -517,34 +488,6 @@ export class SharedSpaceController {
     @Body() dto: SharedSpacePersonMergeDto,
   ): Promise<void> {
     return this.service.mergeSpacePeople(auth, id, personId, dto);
-  }
-
-  @Put(':id/people/:personId/alias')
-  @Authenticated({ permission: Permission.SharedSpaceRead })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @Endpoint({
-    summary: 'Set a person alias in a shared space',
-    description: 'Set a user-specific alias for a person in a shared space.',
-    history: new HistoryBuilder().added('v1').beta('v1'),
-  })
-  setSpacePersonAlias(
-    @Auth() auth: AuthDto,
-    @Param() { id, personId }: SharedSpacePersonParamDto,
-    @Body() dto: SharedSpacePersonAliasDto,
-  ): Promise<void> {
-    return this.service.setSpacePersonAlias(auth, id, personId, dto);
-  }
-
-  @Delete(':id/people/:personId/alias')
-  @Authenticated({ permission: Permission.SharedSpaceRead })
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @Endpoint({
-    summary: 'Delete a person alias in a shared space',
-    description: 'Remove a user-specific alias for a person in a shared space.',
-    history: new HistoryBuilder().added('v1').beta('v1'),
-  })
-  deleteSpacePersonAlias(@Auth() auth: AuthDto, @Param() { id, personId }: SharedSpacePersonParamDto): Promise<void> {
-    return this.service.deleteSpacePersonAlias(auth, id, personId);
   }
 
   @Get(':id/people/:personId/assets')

@@ -846,12 +846,10 @@ describe('SharedSpaceService — space access lifecycle via album branch', () =>
     const { result: emptyAlbum } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'EmptyLinkedAlbum' });
     await ctx.get(SharedSpaceRepository).addAlbum({ spaceId: space.id, albumId: emptyAlbum.id, addedById: owner.id });
 
-    // getLinkedAlbums (via SharedSpaceRepository, same DB) should return the link with assetCount=0
+    // getLinkedAlbums (via SharedSpaceRepository, same DB) should return the link
     const linkedAlbums = await ctx.get(SharedSpaceRepository).getLinkedAlbums(space.id);
     const link = linkedAlbums.find((l) => l.id === emptyAlbum.id);
     expect(link).toBeDefined();
-    const assetCount = await ctx.get(SharedSpaceRepository).getAlbumAssetCount(emptyAlbum.id);
-    expect(assetCount).toBe(0);
 
     // Space timeline should have no assets
     const viewerAuth = factory.auth({ user: { id: viewer.id, email: viewer.email } });

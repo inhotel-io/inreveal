@@ -117,12 +117,6 @@ const SharedSpaceMemberPreferencesSchema = z
   })
   .meta({ id: 'SharedSpaceMemberPreferencesDto' });
 
-const SharedSpaceMemberMetadataContributionSchema = z
-  .object({
-    sharePersonMetadata: z.literal(false).describe('Disable person metadata contribution for this member'),
-  })
-  .meta({ id: 'SharedSpaceMemberMetadataContributionDto' });
-
 const SharedSpaceLibraryLinkSchema = z
   .object({
     libraryId: z.uuidv4().describe('Library ID'),
@@ -226,9 +220,6 @@ export class SharedSpaceLinkedLibraryDto extends createZodDto(SharedSpaceLinkedL
 export class SharedSpaceResponseDto extends createZodDto(SharedSpaceResponseSchema) {}
 export class SharedSpaceMemberTimelineDto extends createZodDto(SharedSpaceMemberTimelineSchema) {}
 export class SharedSpaceMemberPreferencesDto extends createZodDto(SharedSpaceMemberPreferencesSchema) {}
-export class SharedSpaceMemberMetadataContributionDto extends createZodDto(
-  SharedSpaceMemberMetadataContributionSchema,
-) {}
 export class SharedSpaceLibraryLinkDto extends createZodDto(SharedSpaceLibraryLinkSchema) {}
 export class SharedSpaceAlbumLinkUpdateDto extends createZodDto(SharedSpaceAlbumLinkUpdateSchema) {}
 export class SharedSpaceAlbumParamDto extends createZodDto(SharedSpaceAlbumParamSchema) {}

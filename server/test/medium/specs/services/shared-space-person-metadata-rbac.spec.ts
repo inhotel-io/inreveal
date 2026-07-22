@@ -97,6 +97,20 @@ const createRecognizedFace = async (
 const authFor = (user: { id: string; name: string; email: string; isAdmin?: boolean }) =>
   factory.auth({ user: { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin } });
 
+/**
+ * Turn OFF a member's person-metadata contribution. The owner-facing endpoint that used to do this
+ * was removed (no client ever called it); the flag itself is still read by the inheritance engine,
+ * so these tests set it directly.
+ */
+const disableMetadataContribution = async (ctx: ReturnType<typeof setup>['ctx'], spaceId: string, userId: string) => {
+  await ctx.database
+    .updateTable('shared_space_member')
+    .set({ sharePersonMetadata: false })
+    .where('spaceId', '=', spaceId)
+    .where('userId', '=', userId)
+    .execute();
+};
+
 const getOnlySpacePerson = async (ctx: ReturnType<typeof setup>['ctx'], spaceId: string) => {
   return ctx.database
     .selectFrom('shared_space_person')
@@ -971,7 +985,6 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
     const visible = await sut.getSpacePerson(viewerAuth, space.id, spacePerson.id);
     expect(visible.name).toBe('');
     expect(visible.birthDate).toBeNull();
-    expect(visible.thumbnailPath).toBe('');
 
     const nonMemberAuth = factory.auth({ user: { id: nonMember.id, name: nonMember.name, email: nonMember.email } });
     await expect(sut.getSpacePerson(nonMemberAuth, space.id, spacePerson.id)).rejects.toThrow('Not a member');
@@ -1033,8 +1046,7 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
       birthDate: '2000-01-02',
     });
 
-    const ownerAuth = factory.auth({ user: { id: owner.id, name: owner.name, email: owner.email } });
-    await sut.updateMemberMetadataContribution(ownerAuth, space.id, source.id, { sharePersonMetadata: false });
+    await disableMetadataContribution(ctx, space.id, source.id);
     const spacePerson = await ctx.database
       .insertInto('shared_space_person')
       .values({ spaceId: space.id, identityId: face.identity.id, name: '', type: 'person' })
@@ -1076,7 +1088,7 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
     expect(inherited.name).toBe('Revoked Source');
     expect(asDateString(inherited.birthDate)).toBe('1988-08-08');
 
-    await sut.updateMemberMetadataContribution(authFor(owner), space.id, source.id, { sharePersonMetadata: false });
+    await disableMetadataContribution(ctx, space.id, source.id);
     await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
 
     const updated = await ctx.database
@@ -1116,7 +1128,7 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
       name: 'Manual Space Label',
       birthDate: '2001-01-01',
     });
-    await sut.updateMemberMetadataContribution(authFor(owner), space.id, source.id, { sharePersonMetadata: false });
+    await disableMetadataContribution(ctx, space.id, source.id);
     await sut.backfillSpacePersonMetadata({ identityId: face.identity.id, limit: 1000 });
 
     const updated = await ctx.database
@@ -1259,24 +1271,5 @@ describe('SharedSpaceService shared-space person metadata RBAC', () => {
     expect(updated.birthDate).toBeNull();
     expect(updated.nameSource).toBe('none');
     expect(updated.birthDateSource).toBe('none');
-  });
-
-  it('lets owners disable but not enable another member metadata contribution', async () => {
-    const { ctx, sut } = setup();
-    const { user: owner } = await ctx.newUser();
-    const { user: member } = await ctx.newUser();
-    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
-    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
-
-    const auth = factory.auth({ user: { id: owner.id, name: owner.name, email: owner.email } });
-    const disabled = await sut.updateMemberMetadataContribution(auth, space.id, member.id, {
-      sharePersonMetadata: false,
-    });
-    expect(disabled.sharePersonMetadata).toBe(false);
-
-    await expect(
-      sut.updateMemberMetadataContribution(auth, space.id, member.id, { sharePersonMetadata: true } as never),
-    ).rejects.toThrow('Cannot enable person metadata contribution');
   });
 });

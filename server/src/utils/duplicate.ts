@@ -11,6 +11,10 @@ export const getExifCount = (asset: AssetResponseDto): number => {
   return Object.values(asset.exifInfo ?? {}).filter(Boolean).length;
 };
 
+/** Ranks two duplicate candidates: larger file size wins, EXIF count breaks the tie. */
+const compareCandidates = (a: AssetResponseDto, b: AssetResponseDto): number =>
+  (a.exifInfo?.fileSizeInByte ?? 0) - (b.exifInfo?.fileSizeInByte ?? 0) || getExifCount(a) - getExifCount(b);
+
 /**
  * Suggests the best duplicate asset to keep from a list of duplicates.
  * This is a direct port of the client logic from web/src/lib/utils/duplicate-utils.ts
@@ -23,28 +27,14 @@ export const getExifCount = (asset: AssetResponseDto): number => {
  * @returns The best asset to keep, or undefined if empty list
  */
 export const suggestDuplicate = (assets: AssetResponseDto[]): AssetResponseDto | undefined => {
-  if (assets.length === 0) {
-    return undefined;
+  let best: AssetResponseDto | undefined;
+  for (const asset of assets) {
+    // `>= 0` keeps the *last* of fully tied candidates, matching the original sort-and-take-last.
+    if (!best || compareCandidates(asset, best) >= 0) {
+      best = asset;
+    }
   }
-
-  // Sort by file size ascending (smallest first)
-  let duplicateAssets = [...assets].toSorted(
-    (a, b) => (a.exifInfo?.fileSizeInByte ?? 0) - (b.exifInfo?.fileSizeInByte ?? 0),
-  );
-
-  // Get the largest file size (last element after sorting)
-  const largestFileSize = duplicateAssets.at(-1)?.exifInfo?.fileSizeInByte ?? 0;
-
-  // Filter to keep only assets with the largest file size
-  duplicateAssets = duplicateAssets.filter((asset) => (asset.exifInfo?.fileSizeInByte ?? 0) === largestFileSize);
-
-  // If there are multiple assets with the same file size, sort by EXIF count
-  if (duplicateAssets.length >= 2) {
-    duplicateAssets = duplicateAssets.toSorted((a, b) => getExifCount(a) - getExifCount(b));
-  }
-
-  // Return the last asset (highest EXIF count among highest file size)
-  return duplicateAssets.at(-1);
+  return best;
 };
 
 /**

@@ -335,6 +335,27 @@ export function spaceAssetPathBranches(
   ];
 }
 
+/**
+ * The three access-path arms for a query rooted at `asset_face ⋈ asset` — the shape every
+ * shared-space FACE query has (representative-face validation + selection, person asset ids,
+ * identity evidence). Identical to {@link spaceAssetPathBranches} except the asset-id correlation
+ * is `asset_face.assetId` rather than `asset.id`, which is the correlation those queries need.
+ *
+ * Usage: `.where((eb) => eb.or(spaceFacePathBranches(eb, { spaceIdRef: 'shared_space_person.spaceId' })))`
+ */
+export function spaceFacePathBranches(
+  eb: ExpressionBuilder<DB, keyof DB>,
+  scope: SpaceScope,
+  options?: { requireShowInTimeline?: boolean },
+): [Expression<SqlBool>, Expression<SqlBool>, Expression<SqlBool>] {
+  return spaceAssetPathBranches(eb, {
+    correlateAssetId: 'asset_face.assetId',
+    correlateLibraryId: 'asset.libraryId',
+    scope,
+    requireShowInTimeline: options?.requireShowInTimeline,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Raw-SQL family — for the sites that author queries with `sql``` tagged
 // templates (face-identity.repository.ts, shared-space.repository.ts stats).

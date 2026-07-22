@@ -601,8 +601,8 @@ describe(SharedSpaceRepository.name, () => {
 
       await sut.bulkAddUserAssets(space1.id, user.id);
 
-      const space1Assets = await sut.getAssetIdsInSpace(space1.id);
-      const space2Assets = await sut.getAssetIdsInSpace(space2.id);
+      const space1Assets = await sut.getAssetIdsInSpacePage(space1.id);
+      const space2Assets = await sut.getAssetIdsInSpacePage(space2.id);
       expect(space1Assets).toHaveLength(1);
       expect(space2Assets).toHaveLength(0);
     });
@@ -618,7 +618,7 @@ describe(SharedSpaceRepository.name, () => {
       await ctx.newAsset({ ownerId: user.id });
       await sut.bulkAddUserAssets(space1.id, user.id);
 
-      const space2Assets = await sut.getAssetIdsInSpace(space2.id);
+      const space2Assets = await sut.getAssetIdsInSpacePage(space2.id);
       expect(space2Assets).toHaveLength(1);
     });
   });
@@ -4463,5 +4463,286 @@ describe('getPersonAssetIds — visibility scoping', () => {
 
     const after = await sut.getPersonAssetIds(spacePerson.id);
     expect(after.map((r) => r.assetId)).not.toContain(asset.id);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Characterization: the four "space asset scope" arms — direct pool, linked
+// library, linked album (album_asset) and cross-owner contribution
+// (album_space_asset) — as consumed by the count / recency / membership
+// surfaces. Pins WHICH surfaces union WHICH arms so the shared arm-builders stay
+// behavior-preserving (some surfaces deliberately omit the contribution arm).
+// ---------------------------------------------------------------------------
+const buildScope = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  sut: ReturnType<typeof setup>['sut'],
+  options?: { showInTimeline?: boolean },
+) => {
+  const { user: owner } = await ctx.newUser();
+  const { user: contributor } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+
+  // Arm 1 — directly added to the space pool.
+  const { asset: direct } = await ctx.newAsset({
+    ownerId: owner.id,
+    visibility: AssetVisibility.Timeline,
+    thumbhash: Buffer.from('direct'),
+    createdAt: new Date('2025-01-01T00:00:00.000Z'),
+    fileCreatedAt: new Date('2025-01-01T00:00:00.000Z'),
+  });
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: direct.id, addedById: owner.id });
+
+  // Arm 2 — in a library linked to the space.
+  const { library } = await ctx.newLibrary({ ownerId: owner.id });
+  await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: owner.id });
+  const { asset: viaLibrary } = await ctx.newAsset({
+    ownerId: owner.id,
+    libraryId: library.id,
+    visibility: AssetVisibility.Timeline,
+    thumbhash: Buffer.from('library'),
+    createdAt: new Date('2025-01-02T00:00:00.000Z'),
+    fileCreatedAt: new Date('2025-01-02T00:00:00.000Z'),
+  });
+
+  // Arms 3 + 4 — the album owner's own contents, and a cross-owner contribution
+  // into that same linked album.
+  const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ScopeArmsAlbum' });
+  await sut.addAlbum({
+    spaceId: space.id,
+    albumId: album.id,
+    addedById: owner.id,
+    showInTimeline: options?.showInTimeline ?? true,
+  });
+  const { asset: viaAlbum } = await ctx.newAsset({
+    ownerId: owner.id,
+    visibility: AssetVisibility.Timeline,
+    thumbhash: Buffer.from('album'),
+    createdAt: new Date('2025-01-03T00:00:00.000Z'),
+    fileCreatedAt: new Date('2025-01-03T00:00:00.000Z'),
+  });
+  await ctx.newAlbumAsset({ albumId: album.id, assetId: viaAlbum.id });
+  const { asset: contributed } = await ctx.newAsset({
+    ownerId: contributor.id,
+    visibility: AssetVisibility.Timeline,
+    thumbhash: Buffer.from('contrib'),
+    createdAt: new Date('2025-01-04T00:00:00.000Z'),
+    fileCreatedAt: new Date('2025-01-04T00:00:00.000Z'),
+  });
+  await ctx.newAlbumSpaceAsset({
+    albumId: album.id,
+    assetId: contributed.id,
+    spaceId: space.id,
+    addedById: contributor.id,
+  });
+
+  // Reachable through no arm at all.
+  const { asset: outsider } = await ctx.newAsset({
+    ownerId: owner.id,
+    visibility: AssetVisibility.Timeline,
+    thumbhash: Buffer.from('outside'),
+  });
+
+  return { owner, contributor, space, album, direct, viaLibrary, viaAlbum, contributed, outsider };
+};
+
+describe('space asset scope arms (characterization)', () => {
+  it('getAssetCount unions all four arms', async () => {
+    const { ctx, sut } = setup();
+    const { space } = await buildScope(ctx, sut);
+
+    expect(await sut.getAssetCount(space.id)).toBe(4);
+  });
+
+  it('getAssetCount drops both album arms when the link is off-timeline', async () => {
+    const { ctx, sut } = setup();
+    const { space } = await buildScope(ctx, sut, { showInTimeline: false });
+
+    expect(await sut.getAssetCount(space.id)).toBe(2);
+  });
+
+  it('getAssetIdsInSpacePage returns exactly the four in-scope assets', async () => {
+    const { ctx, sut } = setup();
+    const { space, direct, viaLibrary, viaAlbum, contributed, outsider } = await buildScope(ctx, sut);
+
+    const page = await sut.getAssetIdsInSpacePage(space.id, { limit: 100 });
+    const ids = page.map((r) => r.assetId);
+
+    expect(ids.toSorted()).toEqual([direct.id, viaLibrary.id, viaAlbum.id, contributed.id].toSorted());
+    expect(ids).not.toContain(outsider.id);
+  });
+
+  it('getRecentAssets unions all four arms', async () => {
+    const { ctx, sut } = setup();
+    const { space, direct, viaLibrary, viaAlbum, contributed } = await buildScope(ctx, sut);
+
+    const recent = await sut.getRecentAssets(space.id, 10);
+    const ids = recent.map((r) => r.id);
+
+    expect(ids.toSorted()).toEqual([direct.id, viaLibrary.id, viaAlbum.id, contributed.id].toSorted());
+  });
+
+  it('isAssetInSpace is true for every arm and false for an unreachable asset', async () => {
+    const { ctx, sut } = setup();
+    const { space, direct, viaLibrary, viaAlbum, contributed, outsider } = await buildScope(ctx, sut);
+
+    expect(await sut.isAssetInSpace(space.id, direct.id)).toBe(true);
+    expect(await sut.isAssetInSpace(space.id, viaLibrary.id)).toBe(true);
+    expect(await sut.isAssetInSpace(space.id, viaAlbum.id)).toBe(true);
+    expect(await sut.isAssetInSpace(space.id, contributed.id)).toBe(true);
+    expect(await sut.isAssetInSpace(space.id, outsider.id)).toBe(false);
+  });
+
+  it('getNewAssetCount deliberately omits the contribution arm', async () => {
+    const { ctx, sut } = setup();
+    const { space } = await buildScope(ctx, sut);
+
+    expect(await sut.getNewAssetCount(space.id, new Date('2024-01-01T00:00:00.000Z'))).toBe(3);
+  });
+
+  it('getLastContributor deliberately omits the contribution arm (album asset owner wins)', async () => {
+    const { ctx, sut } = setup();
+    const { space, owner } = await buildScope(ctx, sut);
+
+    // The direct arm's ts is `shared_space_asset.addedAt` (insert time, i.e. now), so the direct
+    // add is always the most recent — and it is attributed to `addedById`, the space owner.
+    const contributor = await sut.getLastContributor(space.id, new Date('2024-01-01T00:00:00.000Z'));
+    expect(contributor?.id).toBe(owner.id);
+  });
+
+  it('getLastAssetAddedAt unions all four arms', async () => {
+    const { ctx, sut } = setup();
+    const { space } = await buildScope(ctx, sut);
+
+    const lastAddedAt = await sut.getLastAssetAddedAt(space.id);
+
+    // The direct arm reports its `addedAt` (now) which dominates the seeded 2025 createdAt values.
+    expect(lastAddedAt).toBeDefined();
+    expect(lastAddedAt!.getTime()).toBeGreaterThan(new Date('2025-01-04T00:00:00.000Z').getTime());
+  });
+
+  it('getContributionCounts attributes each arm to whoever performed the action', async () => {
+    const { ctx, sut } = setup();
+    const { space, owner, contributor } = await buildScope(ctx, sut);
+
+    const counts = await sut.getContributionCounts(space.id);
+
+    expect(Number(counts.find((c) => c.addedById === owner.id)?.count ?? 0)).toBe(3);
+    expect(Number(counts.find((c) => c.addedById === contributor.id)?.count ?? 0)).toBe(1);
+  });
+
+  it('every arm is gated by the shareable visibility set', async () => {
+    const { ctx, sut } = setup();
+    const { space, direct, viaLibrary, viaAlbum, contributed } = await buildScope(ctx, sut);
+
+    for (const asset of [direct, viaLibrary, viaAlbum, contributed]) {
+      await defaultDatabase
+        .updateTable('asset')
+        .set({ visibility: AssetVisibility.Hidden })
+        .where('id', '=', asset.id)
+        .execute();
+    }
+
+    expect(await sut.getAssetCount(space.id)).toBe(0);
+    expect(await sut.getRecentAssets(space.id, 10)).toHaveLength(0);
+    expect(await sut.getAssetIdsInSpacePage(space.id, { limit: 100 })).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Characterization: the representative-face validity pair. Both queries walk the
+// same per-face space path (direct / library / linked album); the only difference
+// is that the "is valid" form pins one face id and the "first valid" form orders.
+// ---------------------------------------------------------------------------
+const seedPerson = async (ctx: ReturnType<typeof setup>['ctx'], sut: ReturnType<typeof setup>['sut']) => {
+  const { user } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: user.id });
+  const person = await sut.createPerson({ spaceId: space.id, name: '', representativeFaceId: null, type: 'person' });
+  return { user, space, person };
+};
+
+describe('representative face validity (characterization)', () => {
+  it('accepts a face on a directly-added asset and rejects one with no space path', async () => {
+    const { ctx, sut } = setup();
+    const { user, space, person } = await seedPerson(ctx, sut);
+
+    const { asset: inSpace } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: inSpace.id });
+    const { assetFace: goodFace } = await ctx.newAssetFace({ assetId: inSpace.id });
+
+    const { asset: outside } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+    const { assetFace: orphanFace } = await ctx.newAssetFace({ assetId: outside.id });
+
+    await sut.addPersonFaces(
+      [
+        { personId: person.id, assetFaceId: goodFace.id },
+        { personId: person.id, assetFaceId: orphanFace.id },
+      ],
+      { skipRecount: true },
+    );
+
+    expect(await sut.isSpacePersonRepresentativeFaceValid(person.id, goodFace.id)).toBe(true);
+    expect(await sut.isSpacePersonRepresentativeFaceValid(person.id, orphanFace.id)).toBe(false);
+    expect(await sut.getFirstValidRepresentativeFaceForPerson(person.id)).toBe(goodFace.id);
+  });
+
+  it('accepts a face reached through a linked library or a linked album', async () => {
+    const { ctx, sut } = setup();
+    const { user, space, person } = await seedPerson(ctx, sut);
+
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+    const { asset: libraryAsset } = await ctx.newAsset({
+      ownerId: user.id,
+      libraryId: library.id,
+      visibility: AssetVisibility.Timeline,
+    });
+    const { assetFace: libraryFace } = await ctx.newAssetFace({ assetId: libraryAsset.id });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: user.id, albumName: 'RepFaceAlbum' });
+    await sut.addAlbum({ spaceId: space.id, albumId: album.id, addedById: user.id, showInTimeline: false });
+    const { asset: albumAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+    await ctx.newAlbumAsset({ albumId: album.id, assetId: albumAsset.id });
+    const { assetFace: albumFace } = await ctx.newAssetFace({ assetId: albumAsset.id });
+
+    await sut.addPersonFaces(
+      [
+        { personId: person.id, assetFaceId: libraryFace.id },
+        { personId: person.id, assetFaceId: albumFace.id },
+      ],
+      { skipRecount: true },
+    );
+
+    // NB: the album arm here is NOT gated on showInTimeline.
+    expect(await sut.isSpacePersonRepresentativeFaceValid(person.id, libraryFace.id)).toBe(true);
+    expect(await sut.isSpacePersonRepresentativeFaceValid(person.id, albumFace.id)).toBe(true);
+  });
+
+  it('rejects a face whose asset left the shareable visibility set', async () => {
+    const { ctx, sut } = setup();
+    const { user, space, person } = await seedPerson(ctx, sut);
+
+    const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id });
+    const { assetFace } = await ctx.newAssetFace({ assetId: asset.id });
+    await sut.addPersonFaces([{ personId: person.id, assetFaceId: assetFace.id }], { skipRecount: true });
+
+    expect(await sut.isSpacePersonRepresentativeFaceValid(person.id, assetFace.id)).toBe(true);
+
+    await defaultDatabase
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Hidden })
+      .where('id', '=', asset.id)
+      .execute();
+
+    expect(await sut.isSpacePersonRepresentativeFaceValid(person.id, assetFace.id)).toBe(false);
+    expect(await sut.getFirstValidRepresentativeFaceForPerson(person.id)).toBeNull();
+  });
+
+  it('returns null / false when the person has no faces at all', async () => {
+    const { ctx, sut } = setup();
+    const { person } = await seedPerson(ctx, sut);
+
+    expect(await sut.getFirstValidRepresentativeFaceForPerson(person.id)).toBeNull();
+    expect(await sut.isSpacePersonRepresentativeFaceValid(person.id, person.id)).toBe(false);
   });
 });
