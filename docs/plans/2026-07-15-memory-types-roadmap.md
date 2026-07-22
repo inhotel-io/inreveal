@@ -62,19 +62,19 @@ Spec (#5): [`2026-07-16-memory-types-tier2-people-together-spec.md`](./2026-07-1
 
 ### 🟠 Tier 3 — Medium (planned)
 
-| #   | Idea                     | Surfaces                                           | Effort | Impact         | Notes                                                     |
-| --- | ------------------------ | -------------------------------------------------- | ------ | -------------- | --------------------------------------------------------- |
-| 9   | Someone you haven't seen | A person whose most-recent photo is > N months old | 🟠     | High but risky | Sensitivity risk (deceased people); needs a careful frame |
-| 10  | Your pet [name]          | Leverages Gallery's pet detection                  | 🟠     | High           | Fork differentiator; needs a look at how pets are stored  |
-| 11  | Video moments            | Memorable videos, not just stills                  | 🟠     | Medium         | **Shipped** — `video_moments`                             |
+| #   | Idea                     | Surfaces                                           | Effort | Impact         | Notes                                                                              |
+| --- | ------------------------ | -------------------------------------------------- | ------ | -------------- | ---------------------------------------------------------------------------------- |
+| 9   | Someone you haven't seen | A person whose most-recent photo is > N months old | 🟠     | High but risky | **Shipped** — `person_throwback` (reframed: gap is a silent selector, never shown) |
+| 10  | Your pet [name]          | Leverages Gallery's pet detection                  | 🟠     | High           | Fork differentiator; needs a look at how pets are stored                           |
+| 11  | Video moments            | Memorable videos, not just stills                  | 🟠     | Medium         | **Shipped** — `video_moments`                                                      |
 
 ### 🔴 Tier 4 — Hard (north star)
 
-| #   | Idea                     | Surfaces                                                    | Effort | Impact    | Notes                                                           |
-| --- | ------------------------ | ----------------------------------------------------------- | ------ | --------- | --------------------------------------------------------------- |
-| 12  | Semantic themes (CLIP)   | "Time in nature", "City lights" with no tag, via embeddings | 🔴     | Very high | The real Apple/Google magic; keep the rule interface plug-ready |
-| 13  | "Best of" aesthetic rank | Auto-picks your most beautiful shots                        | 🔴     | High      | Needs an aesthetic-scoring model (none today)                   |
-| 14  | Named trip stories       | Full trip recap with map + day-by-day route                 | 🔴     | High      | A feature, not a rule                                           |
+| #   | Idea                     | Surfaces                                                    | Effort | Impact    | Notes                                                                                                                                                                                                                                           |
+| --- | ------------------------ | ----------------------------------------------------------- | ------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 12  | Semantic themes (CLIP)   | "Time in nature", "City lights" with no tag, via embeddings | 🔴     | Very high | The real Apple/Google magic; keep the rule interface plug-ready. Note: `themed` (PR #812) already rides smart-search CLIP embeddings — the remaining work here is vocabulary breadth and `themeMaxDistance` calibration, not new infrastructure |
+| 13  | "Best of" aesthetic rank | Auto-picks your most beautiful shots                        | 🔴     | High      | Needs an aesthetic-scoring model (none today)                                                                                                                                                                                                   |
+| 14  | Named trip stories       | Full trip recap with map + day-by-day route                 | 🔴     | High      | A feature, not a rule                                                                                                                                                                                                                           |
 
 ## Sequencing
 

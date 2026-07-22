@@ -73,19 +73,20 @@ A user receives a memory type only when it is **both** globally available **and*
 
 The built-in types each have a stable key used in configuration:
 
-| Type key              | Setting label           | Controls                                                                |
-| --------------------- | ----------------------- | ----------------------------------------------------------------------- |
-| `on_this_day`         | On this day             | "N years ago" photo memories                                            |
-| `birthday`            | Birthdays               | Birthday rule memories for named people                                 |
-| `recent_trip`         | Recent trips            | Recent trip rule memories                                               |
-| `month_recap`         | This month              | A past year's photos from this calendar month, shown early in the month |
-| `favorites_throwback` | Favorite moments        | Your favorite photos from this calendar month in a past year            |
-| `on_this_day_place`   | On this day, in a place | A past year's on-this-day photos when they cluster in one place         |
-| `season_recap`        | Season recap            | A past meteorological season, shown when the new season begins          |
-| `people_together`     | People together         | Two people or pets often photographed together in a past year           |
-| `video_moments`       | Video moments           | Videos you filmed in this month of a past year                          |
-| `trip_anniversary`    | Trip anniversaries      | A past trip resurfaced on the anniversary of the day it began           |
-| `themed`              | Themes                  | Photo themes like sunsets, food, and beach days, found automatically    |
+| Type key              | Setting label           | Controls                                                                           |
+| --------------------- | ----------------------- | ---------------------------------------------------------------------------------- |
+| `on_this_day`         | On this day             | "N years ago" photo memories                                                       |
+| `birthday`            | Birthdays               | Birthday rule memories for named people                                            |
+| `recent_trip`         | Recent trips            | Recent trip rule memories                                                          |
+| `month_recap`         | This month              | A past year's photos from this calendar month, shown early in the month            |
+| `favorites_throwback` | Favorite moments        | Your favorite photos from this calendar month in a past year                       |
+| `on_this_day_place`   | On this day, in a place | A past year's on-this-day photos when they cluster in one place                    |
+| `season_recap`        | Season recap            | A past meteorological season, shown when the new season begins                     |
+| `people_together`     | People together         | Two people or pets often photographed together in a past year                      |
+| `video_moments`       | Video moments           | Videos you filmed in this month of a past year                                     |
+| `trip_anniversary`    | Trip anniversaries      | A past trip resurfaced on the anniversary of the day it began                      |
+| `themed`              | Themes                  | Photo themes like sunsets, food, and beach days, found automatically               |
+| `person_throwback`    | Times with someone      | A warm chapter with someone who has not appeared in your photos for a year or more |
 
 All default to **on**.
 

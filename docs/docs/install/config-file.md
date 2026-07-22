@@ -329,6 +329,7 @@ The `memories` section configures generated memory retention and which memory ty
   - `video_moments` — videos filmed in this calendar month in a past year
   - `trip_anniversary` — a past trip resurfaced on the anniversary of the day it began
   - `themed` — photo themes like sunsets, food, and beach days, found automatically via smart search
+  - `person_throwback` — a warm chapter with someone who has not appeared in your photos for a year or more
 
 For example, to disable recent trips globally and leave the rest on:
 
