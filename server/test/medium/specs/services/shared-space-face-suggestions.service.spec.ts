@@ -190,12 +190,22 @@ describe('SharedSpaceService space face suggestions', () => {
 
     await sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id);
 
+    // Confirm drains EVERY pending suggestion for this now-assigned face — the confirming space person's
+    // own row included. There is no surviving 'confirmed' row: the positive verdict is the manual identity
+    // link written on the space person's identity, not a status here.
     const rows = await ctx.database
       .selectFrom('face_person_verdict')
       .select(['personId', 'spacePersonId', 'status'])
       .where('assetFaceId', '=', fx.assetFace.id)
       .execute();
-    expect(rows).toEqual([expect.objectContaining({ spacePersonId: fx.spacePerson.id, status: 'confirmed' })]);
+    expect(rows).toEqual([]);
+
+    const link = await ctx.database
+      .selectFrom('face_identity_face')
+      .select('source')
+      .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirstOrThrow();
+    expect(link.source).toBe('manual');
   });
 
   it('confirm overwrites an existing face identity link (edge 32)', async () => {
@@ -237,7 +247,7 @@ describe('SharedSpaceService space face suggestions', () => {
       .select(['spacePersonId', 'status'])
       .where('assetFaceId', '=', fx.assetFace.id)
       .execute();
-    expect(rows).toEqual([expect.objectContaining({ spacePersonId: fx.spacePerson.id, status: 'confirmed' })]);
+    expect(rows).toEqual([]);
   });
 
   it('confirm and dismiss no-op stale unshared candidates (edge 21)', async () => {

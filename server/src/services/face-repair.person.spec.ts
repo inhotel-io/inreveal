@@ -11,8 +11,6 @@ describe(FaceRepairService.name, () => {
   });
 
   describe('getPersonFlaggedFaces', () => {
-    const noDeclines = { declinedFaceOwners: new Map(), dismissedPersons: new Map() };
-
     it("reads the latest scan's stored flagged faces (no recompute / no KNN)", async () => {
       const planSpy = vi.spyOn(sut, 'buildRepairPlan');
       mocks.faceRepairScan.getLatestScan.mockResolvedValue({ id: 'scan-1' } as any);
@@ -20,7 +18,10 @@ describe(FaceRepairService.name, () => {
         { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
         { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
       ]);
-      mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue(noDeclines as any);
+      mocks.faceRepairDecline.getClusterMuteMap.mockResolvedValue(new Map());
+      mocks.faceIdentity.getManualLinkedFaceIds.mockResolvedValue(new Set());
+      mocks.facePersonVerdict.getNegativeVerdictTokens.mockResolvedValue(new Map());
+      mocks.faceIdentity.getPersonVerdictTokens.mockResolvedValue(new Map());
 
       const result = await sut.getPersonFlaggedFaces('p1');
 
@@ -42,10 +43,11 @@ describe(FaceRepairService.name, () => {
         { assetFaceId: 'f1', suspectedOwnerId: 'q1' },
         { assetFaceId: 'f2', suspectedOwnerId: 'q2' },
       ]);
-      mocks.faceRepairDecline.getDeclineMaps.mockResolvedValue({
-        declinedFaceOwners: new Map([['f1', new Set(['q1'])]]),
-        dismissedPersons: new Map(),
-      } as any);
+      mocks.faceRepairDecline.getClusterMuteMap.mockResolvedValue(new Map());
+      mocks.faceIdentity.getManualLinkedFaceIds.mockResolvedValue(new Set());
+      mocks.faceIdentity.getPersonVerdictTokens.mockResolvedValue(new Map());
+      // A user rejected f1 for q1 — the cleanup queue must honour that verdict.
+      mocks.facePersonVerdict.getNegativeVerdictTokens.mockResolvedValue(new Map([['f1', new Set(['person:q1'])]]));
 
       const result = await sut.getPersonFlaggedFaces('p1');
       expect(result.flaggedFaces).toEqual([{ assetFaceId: 'f2', suspectedOwnerId: 'q2' }]);

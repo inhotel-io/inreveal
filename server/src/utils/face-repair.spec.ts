@@ -3,7 +3,7 @@ import {
   ClassifyPersonInput,
   ReattributionNeighbor,
   ReattributionTally,
-  applyDeclineFilters,
+  applyVerdictFilters,
   classifyFlaggedPerson,
   decideReattribution,
   findOverlappingIds,
@@ -259,48 +259,48 @@ describe('isSubset', () => {
   });
 });
 
-describe('applyDeclineFilters', () => {
+describe('applyVerdictFilters', () => {
   it('drops a face declined toward its current suspected owner', () => {
     const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'Q')]]]);
-    applyDeclineFilters(flagged, {
-      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
-      dismissedPersons: new Map(),
+    applyVerdictFilters(flagged, {
+      negativeFaceTargets: new Map([['face1', new Set(['person:Q'])]]),
+      mutedPersons: new Map(),
     });
     expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
   });
 
   it('keeps a declined face if a DIFFERENT owner is now suspected (evidence changed)', () => {
     const flagged = new Map([['P', [f('face1', 'P', 'R')]]]);
-    applyDeclineFilters(flagged, {
-      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
-      dismissedPersons: new Map(),
+    applyVerdictFilters(flagged, {
+      negativeFaceTargets: new Map([['face1', new Set(['person:Q'])]]),
+      mutedPersons: new Map(),
     });
     expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face1']);
   });
 
   it('drops a whole dismissed person when its suspected set is a subset of the fingerprint', () => {
     const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'Q')]]]);
-    applyDeclineFilters(flagged, {
-      declinedFaceOwners: new Map(),
-      dismissedPersons: new Map([['P', new Set(['Q', 'R'])]]),
+    applyVerdictFilters(flagged, {
+      negativeFaceTargets: new Map(),
+      mutedPersons: new Map([['P', new Set(['Q', 'R'])]]),
     });
     expect(flagged.get('P')).toEqual([]);
   });
 
   it('re-surfaces a dismissed person when a NEW suspected owner appears', () => {
     const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'S')]]]);
-    applyDeclineFilters(flagged, {
-      declinedFaceOwners: new Map(),
-      dismissedPersons: new Map([['P', new Set(['Q'])]]),
+    applyVerdictFilters(flagged, {
+      negativeFaceTargets: new Map(),
+      mutedPersons: new Map([['P', new Set(['Q'])]]),
     });
     expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face1', 'face2']);
   });
 
   it('applies face-level before person-level (a re-flagged new-owner face keeps the person)', () => {
     const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face2', 'P', 'S')]]]);
-    applyDeclineFilters(flagged, {
-      declinedFaceOwners: new Map([['face1', new Set(['Q'])]]),
-      dismissedPersons: new Map([['P', new Set(['Q'])]]),
+    applyVerdictFilters(flagged, {
+      negativeFaceTargets: new Map([['face1', new Set(['person:Q'])]]),
+      mutedPersons: new Map([['P', new Set(['Q'])]]),
     });
     // face1 dropped (declined); face2 toward NEW owner S keeps the person on the board
     expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
@@ -310,17 +310,17 @@ describe('applyDeclineFilters', () => {
   // decline map — unlike a decline, which only mutes one specific (face, suspectedOwner) pairing.
   it('drops a locked face regardless of its suspected owner, whether or not it is also declined', () => {
     const flagged = new Map([['P', [f('face1', 'P', 'Q'), f('face1', 'P', 'R'), f('face2', 'P', 'Q')]]]);
-    applyDeclineFilters(flagged, {
-      declinedFaceOwners: new Map(),
-      dismissedPersons: new Map(),
-      lockedFaceIds: new Set(['face1']),
+    applyVerdictFilters(flagged, {
+      negativeFaceTargets: new Map(),
+      mutedPersons: new Map(),
+      manualLinkedFaceIds: new Set(['face1']),
     });
     expect(flagged.get('P')!.map((x) => x.assetFaceId)).toEqual(['face2']);
   });
 
   // U1 (temporal-consistency hardening design, Slice 4, E12): a regression lock proving the scoped-load
   // change (Step 2 scopes buildRepairPlan's getDeclineMaps read to the flagged set) cannot change what gets
-  // dropped — applyDeclineFilters itself is agnostic to how its maps were populated, so feeding it a full
+  // dropped — applyVerdictFilters itself is agnostic to how its maps were populated, so feeding it a full
   // (unscoped) DeclineMaps or one pre-filtered down to only the flagged set's own ids must produce identical
   // results, as long as the scope actually covers every id the flagged set touches.
   it('produces identical drops whether fed full (unscoped) maps or maps scoped to the flagged set', () => {
@@ -334,33 +334,33 @@ describe('applyDeclineFilters', () => {
     // are entirely OUTSIDE it — the kind of unrelated row an unscoped read pulls in that a scoped read, built
     // from the flagged set's own face/person ids, would never fetch.
     const fullMaps = {
-      declinedFaceOwners: new Map([
-        ['face1', new Set(['Q'])],
-        ['face5', new Set(['Z'])],
+      negativeFaceTargets: new Map([
+        ['face1', new Set(['person:Q'])],
+        ['face5', new Set(['person:Z'])],
       ]),
-      dismissedPersons: new Map([
+      mutedPersons: new Map([
         ['S', new Set(['T'])],
         ['X', new Set(['Z'])],
       ]),
-      lockedFaceIds: new Set(['face2', 'face6']),
+      manualLinkedFaceIds: new Set(['face2', 'face6']),
     };
 
     // A scoped read only ever returns rows for the flagged assetFaceIds/personIds — simulate that by
     // filtering fullMaps down to exactly the flagged set's own ids, mirroring what a real scoped
-    // getDeclineMaps({ assetFaceIds, personIds }) call returns.
+    // buildVerdictMaps({ assetFaceIds, personIds, suspectedOwnerIds }) call returns.
     const flaggedFaceIds = new Set(['face1', 'face2', 'face3', 'face4']);
     const flaggedPersonIds = new Set(['P', 'S']);
     const scopedMaps = {
-      declinedFaceOwners: new Map([...fullMaps.declinedFaceOwners].filter(([faceId]) => flaggedFaceIds.has(faceId))),
-      dismissedPersons: new Map([...fullMaps.dismissedPersons].filter(([personId]) => flaggedPersonIds.has(personId))),
-      lockedFaceIds: new Set([...fullMaps.lockedFaceIds].filter((id) => flaggedFaceIds.has(id))),
+      negativeFaceTargets: new Map([...fullMaps.negativeFaceTargets].filter(([faceId]) => flaggedFaceIds.has(faceId))),
+      mutedPersons: new Map([...fullMaps.mutedPersons].filter(([personId]) => flaggedPersonIds.has(personId))),
+      manualLinkedFaceIds: new Set([...fullMaps.manualLinkedFaceIds].filter((id) => flaggedFaceIds.has(id))),
     };
 
     const withFull = buildFlagged();
-    applyDeclineFilters(withFull, fullMaps);
+    applyVerdictFilters(withFull, fullMaps);
 
     const withScoped = buildFlagged();
-    applyDeclineFilters(withScoped, scopedMaps);
+    applyVerdictFilters(withScoped, scopedMaps);
 
     const asPlainObject = (m: Map<string, { assetFaceId: string }[]>) =>
       Object.fromEntries([...m].map(([id, faces]) => [id, faces.map((x) => x.assetFaceId)]));

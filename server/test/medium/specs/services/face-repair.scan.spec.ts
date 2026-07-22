@@ -1,5 +1,7 @@
 import { Kysely } from 'kysely';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairScanRepository, RepairScanParams } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
@@ -42,6 +44,8 @@ const setup = () =>
       FaceRepairRepository,
       FaceRepairScanRepository,
       FaceRepairDeclineRepository,
+      FacePersonVerdictRepository,
+      FaceIdentityRepository,
       SearchRepository,
       PersonRepository,
       ConfigRepository,

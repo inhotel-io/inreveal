@@ -1,10 +1,38 @@
-export interface DeclineMaps {
-  declinedFaceOwners: Map<string, Set<string>>; // assetFaceId -> Set<suspectedOwnerId>
-  dismissedPersons: Map<string, Set<string>>; // personId -> Set<suspectedOwnerId>
-  // Slice 3 (Confirm/lock): faces locked via the Face Cleanup console. Owner-agnostic — unlike
-  // declinedFaceOwners, a locked face is dropped no matter which owner is suspected. Optional so existing
-  // callers/tests that only care about declines don't need to thread an empty set through.
-  lockedFaceIds?: Set<string>;
+// A verdict target is addressed by one or more opaque tokens. A verdict recorded against an identity and a
+// suspicion aimed at a person of that identity must match, which a bare id comparison cannot express — hence
+// tokens rather than ids. Keep the prefixes stable: they are compared across engines.
+export interface VerdictTarget {
+  personId?: string | null;
+  spacePersonId?: string | null;
+  identityId?: string | null;
+}
+
+export function targetTokens(target: VerdictTarget): string[] {
+  const tokens: string[] = [];
+  if (target.identityId) {
+    tokens.push(`identity:${target.identityId}`);
+  }
+  if (target.personId) {
+    tokens.push(`person:${target.personId}`);
+  }
+  if (target.spacePersonId) {
+    tokens.push(`space-person:${target.spacePersonId}`);
+  }
+  return tokens;
+}
+
+export interface VerdictMaps {
+  // Faces a human has already placed (face_identity_face.source='manual'). Owner-agnostic: a placed face is
+  // dropped no matter which owner is suspected — this is what makes the age-gap childhood-photo case stop
+  // re-flagging, and what stops a user's confirmed suggestion from being re-proposed to an admin.
+  manualLinkedFaceIds?: Set<string>;
+  // assetFaceId -> the target tokens a human has said this face does NOT belong to.
+  negativeFaceTargets: Map<string, Set<string>>;
+  // suspectedOwnerId -> that owner's tokens. Absent entries fall back to the bare person token, which is
+  // what a caller that has no identity information should produce.
+  ownerTokens?: Map<string, string[]>;
+  // currentPersonId -> the suspected-owner fingerprint the console muted this cluster against.
+  mutedPersons: Map<string, Set<string>>;
 }
 
 export interface ReattributionNeighbor {
@@ -133,20 +161,36 @@ interface FlaggedLike {
   suspectedOwnerId: string;
 }
 
-// Mutates flaggedByPerson in place. (0) lock: drop any face locked via "Confirm/lock", regardless of its
-// suspected owner (owner-agnostic — the age-gap childhood-photo case). (1) face-level: drop any face declined
-// toward its current suspected owner. (2) person-level: if the person was dismissed and its REMAINING
-// suspected-owner set is a subset of the stored fingerprint (no new evidence), drop the whole person. Lock and
-// face-level both run before person-level so a face re-flagged toward a new owner keeps its person surfaced.
-export function applyDeclineFilters<T extends FlaggedLike>(flaggedByPerson: Map<string, T[]>, maps: DeclineMaps): void {
-  const lockedFaceIds = maps?.lockedFaceIds ?? new Set<string>();
+// Is this (face, suspected owner) pairing already settled by a human? The single decision both face engines
+// consult, kept pure so it is testable without a database.
+//
+//   - a human placement drops the face for EVERY suspected owner;
+//   - a negative verdict drops it only for the owner it was recorded against, so a face kept away from Bob
+//     can still be flagged toward Carol. Getting that scope wrong silently destroys the console's semantics.
+export function isSettledForOwner(
+  face: { assetFaceId: string; suspectedOwnerId: string },
+  maps: Pick<VerdictMaps, 'manualLinkedFaceIds' | 'negativeFaceTargets' | 'ownerTokens'>,
+): boolean {
+  if (maps.manualLinkedFaceIds?.has(face.assetFaceId)) {
+    return true;
+  }
+  const negatives = maps.negativeFaceTargets.get(face.assetFaceId);
+  if (!negatives || negatives.size === 0) {
+    return false;
+  }
+  const tokens = maps.ownerTokens?.get(face.suspectedOwnerId) ?? [`person:${face.suspectedOwnerId}`];
+  return tokens.some((token) => negatives.has(token));
+}
+
+// Mutates flaggedByPerson in place. (0)+(1) drop every face already settled for its suspected owner — a human
+// placement (owner-agnostic) or a negative verdict aimed at that owner. (2) person-level: if the cluster was
+// muted and its REMAINING suspected-owner set is a subset of the stored fingerprint (no new evidence), drop
+// the whole person. Per-face filtering runs before the person-level mute so a face re-flagged toward a NEW
+// owner keeps its person surfaced.
+export function applyVerdictFilters<T extends FlaggedLike>(flaggedByPerson: Map<string, T[]>, maps: VerdictMaps): void {
   for (const [personId, faces] of flaggedByPerson) {
-    const kept = faces.filter(
-      (face) =>
-        !lockedFaceIds.has(face.assetFaceId) &&
-        !maps.declinedFaceOwners.get(face.assetFaceId)?.has(face.suspectedOwnerId),
-    );
-    const fingerprint = maps.dismissedPersons.get(personId);
+    const kept = faces.filter((face) => !isSettledForOwner(face, maps));
+    const fingerprint = maps.mutedPersons.get(personId);
     if (fingerprint && kept.length > 0) {
       const currentOwners = new Set(kept.map((face) => face.suspectedOwnerId));
       if (isSubset(currentOwners, fingerprint)) {

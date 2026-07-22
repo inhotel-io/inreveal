@@ -7,6 +7,22 @@ import { DB } from 'src/schema';
 import { FacePersonVerdictSource } from 'src/schema/tables/face-person-verdict.table';
 import { spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
 
+export interface NegativeVerdictListRow {
+  id: string;
+  assetFaceId: string;
+  status: string;
+  source: string;
+  createdAt: string;
+  personId: string | null;
+  personName: string | null;
+  personThumbnailFaceId: string | null;
+  spacePersonId: string | null;
+  spacePersonName: string | null;
+  spaceName: string | null;
+  actorId: string | null;
+  actorName: string | null;
+}
+
 @Injectable()
 export class FacePersonVerdictRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
@@ -202,6 +218,55 @@ export class FacePersonVerdictRepository {
   // The shared negative-verdict read, identity-first with target fallback. Both engines call this: the
   // suggestion scan before proposing a face, the cleanup filter before flagging one. Returns
   // assetFaceId -> Set<targetToken> so the caller can match against whichever token(s) its target carries.
+  // Every negative verdict, newest first, for the admin resolutions page. Joined for display against both
+  // possible targets plus the actor, and tagged with the engine that recorded it so the page can separate an
+  // admin's "keep here" from a user's "that isn't Anna".
+  async listNegativeVerdicts(): Promise<NegativeVerdictListRow[]> {
+    const rows = await this.db
+      .selectFrom('face_person_verdict as fpv')
+      .leftJoin('person', 'person.id', 'fpv.personId')
+      .leftJoin('shared_space_person as ssp', 'ssp.id', 'fpv.spacePersonId')
+      .leftJoin('shared_space', 'shared_space.id', 'ssp.spaceId')
+      .leftJoin('user as actor', 'actor.id', 'fpv.actorId')
+      .select([
+        'fpv.id as id',
+        'fpv.assetFaceId as assetFaceId',
+        'fpv.status as status',
+        'fpv.source as source',
+        'fpv.createdAt as createdAt',
+        'fpv.personId as personId',
+        'person.name as personName',
+        'person.faceAssetId as personThumbnailFaceId',
+        'fpv.spacePersonId as spacePersonId',
+        'ssp.name as spacePersonName',
+        'shared_space.name as spaceName',
+        'fpv.actorId as actorId',
+        'actor.name as actorName',
+      ])
+      .where('fpv.status', 'in', ['rejected', 'ignored'])
+      .orderBy('fpv.createdAt', 'desc')
+      .execute();
+
+    return rows.map((row) => ({
+      ...row,
+      createdAt: row.createdAt as unknown as string,
+    }));
+  }
+
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async removeVerdicts(ids: string[]): Promise<number> {
+    if (ids.length === 0) {
+      return 0;
+    }
+    const rows = await this.db
+      .deleteFrom('face_person_verdict')
+      .where('id', 'in', ids)
+      .where('status', 'in', ['rejected', 'ignored'])
+      .returning('id')
+      .execute();
+    return rows.length;
+  }
+
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async getNegativeVerdictTokens(assetFaceIds: string[]): Promise<Map<string, Set<string>>> {
     const map = new Map<string, Set<string>>();

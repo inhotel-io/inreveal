@@ -4016,7 +4016,7 @@ describe(PersonService.name, () => {
 
       await expect(sut.handlePersonSuggestionScan({ id: 'person-1' })).resolves.toBe(JobStatus.Skipped);
       expect(mocks.person.getById).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.upsertPending).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.upsertPending).not.toHaveBeenCalled();
     });
 
     it('skips an unnamed / hidden / pet / missing person (edge 5, 7, 16)', async () => {
@@ -4052,7 +4052,7 @@ describe(PersonService.name, () => {
       } as any);
       await expect(sut.handlePersonSuggestionScan({ id: 'p' })).resolves.toBe(JobStatus.Skipped);
 
-      expect(mocks.personFaceSuggestion.upsertPending).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.upsertPending).not.toHaveBeenCalled();
     });
 
     it('no-ops when the person has zero assigned-face embeddings (edge 15)', async () => {
@@ -4068,7 +4068,7 @@ describe(PersonService.name, () => {
 
       await expect(sut.handlePersonSuggestionScan({ id: 'p' })).resolves.toBe(JobStatus.Skipped);
       expect(mocks.search.searchFaces).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.upsertPending).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.upsertPending).not.toHaveBeenCalled();
     });
 
     it('keeps only the open band (maxDistance, suggestionMaxDistance], min distance per face, then upserts', async () => {
@@ -4097,7 +4097,7 @@ describe(PersonService.name, () => {
       expect(mocks.search.searchFaces).toHaveBeenCalledWith(
         expect.objectContaining({ userIds: ['u'], hasPerson: false, maxDistance: 0.8 }),
       );
-      const rows = mocks.personFaceSuggestion.upsertPending.mock.calls[0][0];
+      const rows = mocks.facePersonVerdict.upsertPending.mock.calls[0][0];
       expect(rows).toEqual(
         expect.arrayContaining([
           { personId: 'p', assetFaceId: 'f-band', distance: 0.6 },
@@ -4144,7 +4144,7 @@ describe(PersonService.name, () => {
       // The scan unconditionally calls the conditional upsert; the WHERE status='pending'
       // guard in the repository is the single source of the never-resurrect guarantee.
       // The job must not pre-filter resolved rows — it delegates to upsertPending.
-      expect(mocks.personFaceSuggestion.upsertPending).toHaveBeenCalledWith([
+      expect(mocks.facePersonVerdict.upsertPending).toHaveBeenCalledWith([
         { personId: 'p', assetFaceId: 'f-dismissed', distance: 0.7 },
       ]);
     });
@@ -4213,7 +4213,7 @@ describe(PersonService.name, () => {
 
       await expect(sut.handleSpacePersonSuggestionScan({ id: 'space-person-1' })).resolves.toBe(JobStatus.Skipped);
       expect(mocks.sharedSpace.getSpacePersonAssignedFaceEmbeddings).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.upsertPendingForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.upsertPendingForSpacePerson).not.toHaveBeenCalled();
     });
 
     it('skips missing, unnamed, whitespace, hidden, pet, or disabled-space people', async () => {
@@ -4239,7 +4239,7 @@ describe(PersonService.name, () => {
       }
 
       expect(mocks.sharedSpace.getSpacePersonAssignedFaceEmbeddings).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.upsertPendingForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.upsertPendingForSpacePerson).not.toHaveBeenCalled();
     });
 
     it('skips when the space person has zero linked face embeddings', async () => {
@@ -4256,7 +4256,7 @@ describe(PersonService.name, () => {
 
       await expect(sut.handleSpacePersonSuggestionScan({ id: 'sp' })).resolves.toBe(JobStatus.Skipped);
       expect(mocks.search.searchFaces).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.upsertPendingForSpacePerson).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.upsertPendingForSpacePerson).not.toHaveBeenCalled();
     });
 
     it('keeps only the open band, takes min distance per candidate, and upserts by spacePersonId', async () => {
@@ -4290,7 +4290,7 @@ describe(PersonService.name, () => {
           numResults: 100,
         }),
       );
-      expect(mocks.personFaceSuggestion.upsertPendingForSpacePerson).toHaveBeenCalledWith([
+      expect(mocks.facePersonVerdict.upsertPendingForSpacePerson).toHaveBeenCalledWith([
         { spacePersonId: 'sp', assetFaceId: 'candidate', distance: 0.6 },
       ]);
     });
@@ -4318,7 +4318,7 @@ describe(PersonService.name, () => {
         'assigned-face',
         'candidate',
       ]);
-      expect(mocks.personFaceSuggestion.upsertPendingForSpacePerson).toHaveBeenCalledWith([
+      expect(mocks.facePersonVerdict.upsertPendingForSpacePerson).toHaveBeenCalledWith([
         { spacePersonId: 'sp', assetFaceId: 'candidate', distance: 0.7 },
       ]);
     });
@@ -6082,7 +6082,7 @@ describe(PersonService.name, () => {
         data: [{ personId: person.id, assetId: face.assetId }],
       });
 
-      expect(mocks.personFaceSuggestion.resolveAssignedFace).toHaveBeenCalledWith(face.id);
+      expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith(face.id);
     });
   });
 
@@ -6136,7 +6136,7 @@ describe(PersonService.name, () => {
 
       await sut.reassignFacesById(AuthFactory.create(), person.id, { id: face.id });
 
-      expect(mocks.personFaceSuggestion.resolveAssignedFace).toHaveBeenCalledWith(face.id);
+      expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith(face.id);
     });
   });
 
@@ -6537,13 +6537,13 @@ describe(PersonService.name, () => {
       await expect(
         sut.getFaceSuggestions(AuthFactory.create(), 'person-1', { page: 1, size: 50 }),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(mocks.personFaceSuggestion.getPendingForPerson).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.getPendingForPerson).not.toHaveBeenCalled();
     });
 
     it('returns total + mapped items for the owner', async () => {
       mocks.systemMetadata.get.mockResolvedValue(enabled);
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
-      mocks.personFaceSuggestion.getPendingForPerson.mockResolvedValue({
+      mocks.facePersonVerdict.getPendingForPerson.mockResolvedValue({
         total: 1,
         items: [
           {
@@ -6563,7 +6563,7 @@ describe(PersonService.name, () => {
 
       const res = await sut.getFaceSuggestions(AuthFactory.create(), 'person-1', { page: 1, size: 50 });
 
-      expect(mocks.personFaceSuggestion.getPendingForPerson).toHaveBeenCalledWith('person-1', {
+      expect(mocks.facePersonVerdict.getPendingForPerson).toHaveBeenCalledWith('person-1', {
         maxDistance: 0.5,
         suggestionMaxDistance: 0.8,
         page: 1,
@@ -6593,11 +6593,11 @@ describe(PersonService.name, () => {
         machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
       });
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
-      mocks.personFaceSuggestion.getPendingForPerson.mockResolvedValue({ total: 0, items: [] });
+      mocks.facePersonVerdict.getPendingForPerson.mockResolvedValue({ total: 0, items: [] });
 
       const res = await sut.getFaceSuggestions(AuthFactory.create(), 'person-1', { page: 1, size: 50 });
 
-      expect(mocks.personFaceSuggestion.getPendingForPerson).toHaveBeenCalledWith('person-1', {
+      expect(mocks.facePersonVerdict.getPendingForPerson).toHaveBeenCalledWith('person-1', {
         maxDistance: 0.5,
         suggestionMaxDistance: 0,
         page: 1,
@@ -6614,7 +6614,7 @@ describe(PersonService.name, () => {
       await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(mocks.personFaceSuggestion.claimPending).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.claimPending).not.toHaveBeenCalled();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
     });
 
@@ -6628,11 +6628,11 @@ describe(PersonService.name, () => {
       mocks.person.reassignFace.mockResolvedValue(1);
       mocks.person.getById.mockResolvedValue(person);
       mocks.person.getRandomFace.mockResolvedValue(face); // drives createNewFeaturePhoto
-      mocks.personFaceSuggestion.claimPending.mockResolvedValue(1); // a pending row existed
+      mocks.facePersonVerdict.claimPending.mockResolvedValue(1); // a pending row existed
 
       await sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id);
 
-      expect(mocks.personFaceSuggestion.claimPending).toHaveBeenCalledWith(person.id, face.id);
+      expect(mocks.facePersonVerdict.claimPending).toHaveBeenCalledWith(person.id, face.id);
       expect(mocks.person.reassignFace).toHaveBeenCalledWith(face.id, person.id);
       expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
         assetFaceId: face.id,
@@ -6642,13 +6642,13 @@ describe(PersonService.name, () => {
       expect(mocks.person.update).toHaveBeenCalledWith(
         expect.objectContaining({ id: person.id, faceAssetId: face.id }),
       );
-      expect(mocks.personFaceSuggestion.resolveAssignedFace).toHaveBeenCalledWith(face.id);
+      expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith(face.id);
     });
 
     it('is idempotent when the row is already confirmed/rejected/ignored but person+face still exist → 200, no reassign', async () => {
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
       mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
-      mocks.personFaceSuggestion.claimPending.mockResolvedValue(0); // already confirmed/rejected/ignored
+      mocks.facePersonVerdict.claimPending.mockResolvedValue(0); // already confirmed/rejected/ignored
 
       await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
@@ -6660,7 +6660,7 @@ describe(PersonService.name, () => {
       await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(mocks.personFaceSuggestion.claimPending).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.claimPending).not.toHaveBeenCalled();
     });
   });
 
@@ -6674,56 +6674,56 @@ describe(PersonService.name, () => {
       await expect(sut.ignoreFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(mocks.personFaceSuggestion.markRejected).not.toHaveBeenCalled();
-      expect(mocks.personFaceSuggestion.markIgnored).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.markRejected).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.markIgnored).not.toHaveBeenCalled();
     });
 
     it('reject flips the row to rejected and never assigns or reassigns the face', async () => {
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
-      mocks.personFaceSuggestion.markRejected.mockResolvedValue(1);
+      mocks.facePersonVerdict.markRejected.mockResolvedValue(1);
 
       await expect(sut.rejectFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
 
-      expect(mocks.personFaceSuggestion.markRejected).toHaveBeenCalledWith('person-1', 'face-1');
-      expect(mocks.personFaceSuggestion.markIgnored).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1');
+      expect(mocks.facePersonVerdict.markIgnored).not.toHaveBeenCalled();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
       expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
     });
 
     it('ignore flips the row to ignored and never assigns or reassigns the face', async () => {
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
-      mocks.personFaceSuggestion.markIgnored.mockResolvedValue(1);
+      mocks.facePersonVerdict.markIgnored.mockResolvedValue(1);
 
       await expect(sut.ignoreFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
 
-      expect(mocks.personFaceSuggestion.markIgnored).toHaveBeenCalledWith('person-1', 'face-1');
-      expect(mocks.personFaceSuggestion.markRejected).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.markIgnored).toHaveBeenCalledWith('person-1', 'face-1');
+      expect(mocks.facePersonVerdict.markRejected).not.toHaveBeenCalled();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
       expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
     });
 
     it('reject and ignore no-op stale or already-resolved rows and never assigns or reassigns the face', async () => {
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
-      mocks.personFaceSuggestion.markRejected.mockResolvedValue(0);
-      mocks.personFaceSuggestion.markIgnored.mockResolvedValue(0);
+      mocks.facePersonVerdict.markRejected.mockResolvedValue(0);
+      mocks.facePersonVerdict.markIgnored.mockResolvedValue(0);
 
       await expect(sut.rejectFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
       await expect(sut.ignoreFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
 
-      expect(mocks.personFaceSuggestion.markRejected).toHaveBeenCalledWith('person-1', 'face-1');
-      expect(mocks.personFaceSuggestion.markIgnored).toHaveBeenCalledWith('person-1', 'face-1');
+      expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1');
+      expect(mocks.facePersonVerdict.markIgnored).toHaveBeenCalledWith('person-1', 'face-1');
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
       expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
     });
 
     it('dismiss remains a compatibility wrapper around reject', async () => {
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
-      mocks.personFaceSuggestion.markRejected.mockResolvedValue(1);
+      mocks.facePersonVerdict.markRejected.mockResolvedValue(1);
 
       await expect(sut.dismissFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
 
-      expect(mocks.personFaceSuggestion.markRejected).toHaveBeenCalledWith('person-1', 'face-1');
-      expect(mocks.personFaceSuggestion.markIgnored).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1');
+      expect(mocks.facePersonVerdict.markIgnored).not.toHaveBeenCalled();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
       expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
     });

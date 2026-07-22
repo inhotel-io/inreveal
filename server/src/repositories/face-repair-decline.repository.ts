@@ -1,13 +1,8 @@
-import { Insertable, Kysely, sql } from 'kysely';
+import { Insertable, Kysely } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DB } from 'src/schema';
 import { FaceRepairDeclineTable } from 'src/schema/tables/face-repair-decline.table';
-import { DeclineMaps } from 'src/utils/face-repair';
 
-export interface FaceDeclineInput {
-  assetFaceId: string;
-  suspectedOwnerId: string;
-}
 export interface PersonDeclineInput {
   personId: string;
   suspectedOwnerIds: string[];
@@ -33,19 +28,7 @@ export class FaceRepairDeclineRepository {
   // unique index — re-declining the same face/owner is a no-op. Person rows are last-write-wins: the dashboard
   // always sends the person's current full suspected-owner set, so re-dismissing replaces the stored fingerprint.
   // Returns the number of rows actually inserted.
-  async createDeclines(input: {
-    faces?: FaceDeclineInput[];
-    persons?: PersonDeclineInput[];
-    declinedBy: string | null;
-  }): Promise<number> {
-    const faceRows = (input.faces ?? []).map((f) => ({
-      type: 'face' as const,
-      assetFaceId: f.assetFaceId,
-      suspectedOwnerId: f.suspectedOwnerId,
-      personId: null,
-      suspectedOwnerIds: null,
-      declinedBy: input.declinedBy,
-    }));
+  async createClusterMutes(input: { persons?: PersonDeclineInput[]; declinedBy: string | null }): Promise<number> {
     const personRows = (input.persons ?? []).map((p) => ({
       type: 'person' as const,
       assetFaceId: null,
@@ -54,20 +37,11 @@ export class FaceRepairDeclineRepository {
       suspectedOwnerIds: p.suspectedOwnerIds as unknown as Insertable<FaceRepairDeclineTable>['suspectedOwnerIds'],
       declinedBy: input.declinedBy,
     }));
-    if (faceRows.length === 0 && personRows.length === 0) {
+    if (personRows.length === 0) {
       return 0;
     }
     return this.db.transaction().execute(async (trx) => {
       let created = 0;
-      if (faceRows.length > 0) {
-        const inserted = await trx
-          .insertInto('face_repair_decline')
-          .values(faceRows)
-          .onConflict((oc) => oc.columns(['assetFaceId', 'suspectedOwnerId']).doNothing())
-          .returning('id')
-          .execute();
-        created += inserted.length;
-      }
       if (personRows.length > 0) {
         const personIds = (input.persons ?? []).map((p) => p.personId);
         // last-write-wins: a re-dismiss replaces the person's stored suspected-owner fingerprint
@@ -83,61 +57,34 @@ export class FaceRepairDeclineRepository {
     });
   }
 
-  // Load declines into the two lookup maps the planner consults, plus (Slice 3) every locked face id. The
-  // full-library scan loads everything (no scope). The review/apply read paths, which know exactly which
-  // persons and faces are in play, pass a scope so the load stays bounded as `type='face'` rows accumulate over
-  // the instance's lifetime — a scoped read only fetches the declines/locks that can affect the faces/persons
-  // being planned.
-  async getDeclineMaps(scope?: { personIds?: string[]; assetFaceIds?: string[] }): Promise<DeclineMaps> {
-    const faceIds = scope?.assetFaceIds ?? [];
-    const personIds = scope?.personIds ?? [];
+  // Cluster mutes only. Face-level "this face is not that person" verdicts moved to the shared
+  // `face_person_verdict` layer so BOTH face features can see them; this table now records only the
+  // console-local "stop showing me this whole cluster" fingerprint, which is a UI queue concern rather than
+  // a fact about a face. Scoped to the persons in play — never an unscoped read.
+  async getClusterMuteMap(personIds: string[]): Promise<Map<string, Set<string>>> {
+    const mutedPersons = new Map<string, Set<string>>();
+    if (personIds.length === 0) {
+      return mutedPersons;
+    }
     const rows = await this.db
       .selectFrom('face_repair_decline')
-      .select(['type', 'assetFaceId', 'suspectedOwnerId', 'personId', 'suspectedOwnerIds'])
-      .$if(scope !== undefined, (qb) =>
-        qb.where((eb) => {
-          const conditions = [];
-          if (faceIds.length > 0) {
-            conditions.push(eb.and([eb('type', '=', 'face'), eb('assetFaceId', 'in', faceIds)]));
-          }
-          if (personIds.length > 0) {
-            conditions.push(eb.and([eb('type', '=', 'person'), eb('personId', 'in', personIds)]));
-          }
-          // Empty scope → match nothing (never load the whole table on an unscoped-looking read).
-          return conditions.length > 0 ? eb.or(conditions) : sql<boolean>`false`;
-        }),
-      )
+      .select(['personId', 'suspectedOwnerIds'])
+      .where('type', '=', 'person')
+      .where('personId', 'in', personIds)
       .execute();
-    const declinedFaceOwners = new Map<string, Set<string>>();
-    const dismissedPersons = new Map<string, Set<string>>();
     for (const row of rows) {
-      if (row.type === 'face' && row.assetFaceId && row.suspectedOwnerId) {
-        const set = declinedFaceOwners.get(row.assetFaceId) ?? new Set<string>();
-        set.add(row.suspectedOwnerId);
-        declinedFaceOwners.set(row.assetFaceId, set);
-      } else if (row.type === 'person' && row.personId) {
-        dismissedPersons.set(row.personId, new Set(row.suspectedOwnerIds as unknown as string[]));
+      if (row.personId) {
+        mutedPersons.set(row.personId, new Set(row.suspectedOwnerIds as unknown as string[]));
       }
     }
-
-    // Locks are keyed by assetFaceId alone (owner-agnostic) — scope them the same bounded way, but on
-    // assetFaceId only (a lock has no suspectedOwnerId/personId scoping concept).
-    const lockRows = await this.db
-      .selectFrom('face_repair_lock')
-      .select(['assetFaceId'])
-      .$if(scope !== undefined, (qb) =>
-        faceIds.length > 0 ? qb.where('assetFaceId', 'in', faceIds) : qb.where(sql<boolean>`false`),
-      )
-      .execute();
-    const lockedFaceIds = new Set(lockRows.map((row) => row.assetFaceId));
-
-    return { declinedFaceOwners, dismissedPersons, lockedFaceIds };
+    return mutedPersons;
   }
 
   async listDeclines(): Promise<DeclineListRow[]> {
     const rows = await this.db
       .selectFrom('face_repair_decline')
       .select(['id', 'type', 'assetFaceId', 'suspectedOwnerId', 'personId', 'createdAt'])
+      .where('type', '=', 'person')
       .orderBy('createdAt', 'desc')
       .execute();
     if (rows.length === 0) {
@@ -170,29 +117,17 @@ export class FaceRepairDeclineRepository {
   // Remove declines by row id and/or by face natural key. The declined-page "Undo" sends ids; the review
   // screen's in-place undecline sends faces (it knows the (assetFaceId, suspectedOwnerId) pair but not the
   // server-generated row id). Returns the total number of rows removed.
-  async removeDeclines(input: { ids?: string[]; faces?: FaceDeclineInput[] }): Promise<number> {
+  async removeClusterMutes(input: { ids?: string[] }): Promise<number> {
     const ids = input.ids ?? [];
-    const faces = input.faces ?? [];
-    if (ids.length === 0 && faces.length === 0) {
+    if (ids.length === 0) {
       return 0;
     }
-    return this.db.transaction().execute(async (trx) => {
-      let removed = 0;
-      if (ids.length > 0) {
-        const rows = await trx.deleteFrom('face_repair_decline').where('id', 'in', ids).returning('id').execute();
-        removed += rows.length;
-      }
-      for (const face of faces) {
-        const rows = await trx
-          .deleteFrom('face_repair_decline')
-          .where('type', '=', 'face')
-          .where('assetFaceId', '=', face.assetFaceId)
-          .where('suspectedOwnerId', '=', face.suspectedOwnerId)
-          .returning('id')
-          .execute();
-        removed += rows.length;
-      }
-      return removed;
-    });
+    const rows = await this.db
+      .deleteFrom('face_repair_decline')
+      .where('id', 'in', ids)
+      .where('type', '=', 'person')
+      .returning('id')
+      .execute();
+    return rows.length;
   }
 }

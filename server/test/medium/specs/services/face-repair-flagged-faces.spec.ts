@@ -2,6 +2,7 @@ import { Kysely } from 'kysely';
 import { SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { FaceRepairScanRepository, RepairScanParams } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
@@ -49,6 +50,7 @@ const setup = () => {
       FaceRepairRepository,
       FaceRepairScanRepository,
       FaceRepairDeclineRepository,
+      FacePersonVerdictRepository,
       FaceIdentityRepository,
       SearchRepository,
       PersonRepository,
@@ -181,7 +183,8 @@ describe('FaceRepairService.getPersonFlaggedFaces (scan-backed)', () => {
       { assetFaceId: f2, personId: person.id, suspectedOwnerId: owner.id },
     ]);
 
-    await sut.createDeclines({ faces: [{ assetFaceId: f1, suspectedOwnerId: owner.id }], declinedBy: user.id });
+    // A face-level "keep here" is now a shared verdict, visible to both face engines.
+    await ctx.get(FacePersonVerdictRepository).markRejected(owner.id, f1, { source: 'cleanup', actorId: user.id });
 
     const result = await sut.getPersonFlaggedFaces(person.id);
     expect(result.flaggedFaces.map((f) => f.assetFaceId)).toEqual([f2]);

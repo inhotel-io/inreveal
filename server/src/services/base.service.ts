@@ -33,7 +33,6 @@ import { EventRepository } from 'src/repositories/event.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
-import { FaceRepairLockRepository } from 'src/repositories/face-repair-lock.repository';
 import { FaceRepairScanRepository } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { IntegrityRepository } from 'src/repositories/integrity.repository';
@@ -120,7 +119,6 @@ export const BASE_SERVICE_DEPENDENCIES = [
   FaceRepairRepository,
   FaceRepairScanRepository,
   FaceRepairDeclineRepository,
-  FaceRepairLockRepository,
   IntegrityRepository,
   JobRepository,
   LibraryRepository,
@@ -191,7 +189,6 @@ export class BaseService {
     protected faceRepairRepository: FaceRepairRepository,
     protected faceRepairScanRepository: FaceRepairScanRepository,
     protected faceRepairDeclineRepository: FaceRepairDeclineRepository,
-    protected faceRepairLockRepository: FaceRepairLockRepository,
     protected integrityRepository: IntegrityRepository,
     protected jobRepository: JobRepository,
     protected libraryRepository: LibraryRepository,
@@ -278,7 +275,6 @@ export class BaseService {
       ctx.faceRepairRepository,
       ctx.faceRepairScanRepository,
       ctx.faceRepairDeclineRepository,
-      ctx.faceRepairLockRepository,
       ctx.integrityRepository,
       ctx.jobRepository,
       ctx.libraryRepository,

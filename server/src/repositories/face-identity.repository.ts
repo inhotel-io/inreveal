@@ -11,6 +11,7 @@ import { FaceIdentityFaceSource, FaceIdentityFaceTable } from 'src/schema/tables
 import { FaceIdentityTable } from 'src/schema/tables/face-identity.table';
 import { anyUuid, retryOnDeadlock } from 'src/utils/database';
 import { asDateString, asDateTimeString } from 'src/utils/date';
+import { targetTokens } from 'src/utils/face-repair';
 import { spaceAlbumAssetExistsSql, spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
 
 export type FaceIdentity = Selectable<FaceIdentityTable>;
@@ -2271,6 +2272,57 @@ export class FaceIdentityRepository {
   @GenerateSql({
     params: [{ assetFaceId: DummyValue.UUID, identityId: DummyValue.UUID, source: 'manual' }],
   })
+  // The positive verdict read, scoped to a bounded set of faces. `source='manual'` is the durable record
+  // that a human placed a face on a person — written by every human reassignment, keyed by identity so it
+  // survives merges, and replaced (never accumulated) by the next human reassignment. Both face engines
+  // exclude these faces from their queues.
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async getManualLinkedFaceIds(assetFaceIds: string[]): Promise<Set<string>> {
+    if (assetFaceIds.length === 0) {
+      return new Set();
+    }
+    const rows = await this.db
+      .selectFrom('face_identity_face')
+      .select('assetFaceId')
+      .where('assetFaceId', 'in', assetFaceIds)
+      .where('source', '=', 'manual')
+      .execute();
+    return new Set(rows.map((row) => row.assetFaceId));
+  }
+
+  // personId -> the verdict tokens that person answers to. A negative verdict recorded against the person's
+  // IDENTITY has to match a suspicion aimed at the person itself, which is what the identity token provides;
+  // the person token remains so verdicts written before the person had an identity keep matching.
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async getPersonVerdictTokens(personIds: string[]): Promise<Map<string, string[]>> {
+    const map = new Map<string, string[]>();
+    if (personIds.length === 0) {
+      return map;
+    }
+    const rows = await this.db.selectFrom('person').select(['id', 'identityId']).where('id', 'in', personIds).execute();
+    for (const row of rows) {
+      map.set(row.id, targetTokens({ personId: row.id, identityId: row.identityId }));
+    }
+    return map;
+  }
+
+  // Un-confirm: downgrade a human placement back to a machine one so future scans may flag the face again.
+  // The identity link itself is untouched — only the claim that a human put the face there.
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async demoteManualFaceLinks(assetFaceIds: string[]): Promise<number> {
+    if (assetFaceIds.length === 0) {
+      return 0;
+    }
+    const rows = await this.db
+      .updateTable('face_identity_face')
+      .set({ source: 'ml' })
+      .where('assetFaceId', 'in', assetFaceIds)
+      .where('source', '=', 'manual')
+      .returning('assetFaceId')
+      .execute();
+    return rows.length;
+  }
+
   async replaceFaceIdentity(input: LinkFaceInput): Promise<FaceIdentityFace> {
     return this.db
       .insertInto('face_identity_face')
