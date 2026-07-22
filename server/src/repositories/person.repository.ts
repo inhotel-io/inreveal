@@ -266,6 +266,16 @@ export class PersonRepository {
   }
 
   async unassignFaces({ sourceType }: UnassignFacesOptions): Promise<void> {
+    // "Reset all people" bulk-nulls personId across the whole library. It must also clear the human-placement
+    // record (face_identity_face.source='manual'); otherwise every previously-confirmed face keeps a stale
+    // manual link with no person behind it, and both face engines would treat those unassigned faces as
+    // settled forever — permanently excluding them from recognition and suggestions after a reset.
+    await this.db
+      .deleteFrom('face_identity_face')
+      .where('assetFaceId', 'in', (eb) =>
+        eb.selectFrom('asset_face').select('id').where('asset_face.sourceType', '=', sourceType),
+      )
+      .execute();
     await this.db
       .updateTable('asset_face')
       .set({ personId: null })

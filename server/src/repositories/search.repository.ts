@@ -1001,6 +1001,11 @@ export class SearchRepository {
                 .where((eb) => spaceVisibilityGate(eb)),
             )
             .where('asset.deletedAt', 'is', null)
+            // Exclude soft-deleted faces. The Face Cleanup "not a face" action tombstones a face by setting
+            // asset_face.deletedAt (personId is also nulled), and every recognition/suggestion candidate must
+            // honour that — otherwise the suggestion scan keeps proposing a crop an admin already declared not
+            // a face, and recognition can re-home it. Previously only asset.deletedAt was filtered here.
+            .where('asset_face.deletedAt', 'is', null)
             .$if(hasPerson === true, (qb) => qb.where('asset_face.personId', 'is not', null))
             .$if(hasPerson === false, (qb) => qb.where('asset_face.personId', 'is', null))
             .$if(!!minBirthDate, (qb) =>
