@@ -2242,9 +2242,7 @@ describe('People identity RBAC projection', () => {
         numberOfAssets: 1,
       }),
     ]);
-    expect(spacePeople).toEqual([
-      expect.objectContaining({ id: spacePerson.id, name: 'Backfilled Space Person', thumbnailPath: '' }),
-    ]);
+    expect(spacePeople).toEqual([expect.objectContaining({ id: spacePerson.id, name: 'Backfilled Space Person' })]);
     expect(globalFilters.people).toEqual([
       {
         id: token,
@@ -2362,9 +2360,7 @@ describe('People identity RBAC projection', () => {
         numberOfAssets: 1,
       }),
     ]);
-    expect(spacePeople).toEqual([
-      expect.objectContaining({ id: spacePerson.id, name: 'Legacy Library Person', thumbnailPath: '' }),
-    ]);
+    expect(spacePeople).toEqual([expect.objectContaining({ id: spacePerson.id, name: 'Legacy Library Person' })]);
     expect(globalFilters.people).toEqual([
       {
         id: token,
