@@ -1,6 +1,7 @@
 <script lang="ts">
   import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
   import { getAssetMediaUrl } from '$lib/utils';
+  import { spaceAccentClasses } from '$lib/utils/space-colors';
   import { formatTimeAgo } from '$lib/utils/timesince';
   import { UserAvatarColor, type SharedSpaceActivityResponseDto } from '@immich/sdk';
   import { Button } from '@immich/ui';
@@ -136,33 +137,9 @@
     return groups;
   });
 
-  const spaceColorMap: Record<string, string> = {
-    primary: 'bg-primary',
-    pink: 'bg-pink-400',
-    red: 'bg-red-500',
-    yellow: 'bg-yellow-500',
-    blue: 'bg-blue-500',
-    green: 'bg-green-600',
-    purple: 'bg-purple-600',
-    orange: 'bg-orange-600',
-    gray: 'bg-gray-600',
-    amber: 'bg-amber-600',
-  };
-
-  let dotColorClass = $derived(spaceColorMap[spaceColor] ?? 'bg-gray-400');
-  let borderColorMap: Record<string, string> = {
-    primary: 'border-primary',
-    pink: 'border-pink-400',
-    red: 'border-red-500',
-    yellow: 'border-yellow-500',
-    blue: 'border-blue-500',
-    green: 'border-green-600',
-    purple: 'border-purple-600',
-    orange: 'border-orange-600',
-    gray: 'border-gray-600',
-    amber: 'border-amber-600',
-  };
-  let borderClass = $derived(borderColorMap[spaceColor] ?? 'border-gray-400');
+  // Unknown/unset colours fall back to gray here rather than to the primary accent.
+  let dotColorClass = $derived(spaceAccentClasses[spaceColor]?.bg ?? 'bg-gray-400');
+  let borderClass = $derived(spaceAccentClasses[spaceColor]?.border ?? 'border-gray-400');
 </script>
 
 {#if activities.length === 0}

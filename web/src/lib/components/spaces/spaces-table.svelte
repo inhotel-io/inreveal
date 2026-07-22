@@ -1,7 +1,10 @@
 <script lang="ts">
+  import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
+  import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import RoleBadge from '$lib/components/spaces/role-badge.svelte';
   import SpaceCollage from '$lib/components/spaces/space-collage.svelte';
   import { Route } from '$lib/route';
+  import { getSpaceAccent, getSpaceGradientClass, type SpaceColor } from '$lib/utils/space-colors';
   import { formatTimeAgo } from '$lib/utils/timesince';
   import type { SharedSpaceResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
@@ -21,55 +24,10 @@
   const showPinnedSection = $derived(pinnedSpaces.length > 0);
 
   let hoveredId = $state<string | null>(null);
-  let openMenuId = $state<string | null>(null);
 
-  const gradientClasses: Record<string, string> = {
-    primary: 'from-immich-primary/60 to-immich-primary',
-    pink: 'from-pink-300 to-pink-500',
-    red: 'from-red-400 to-red-600',
-    yellow: 'from-yellow-300 to-yellow-500',
-    blue: 'from-blue-400 to-blue-600',
-    green: 'from-green-400 to-green-700',
-    purple: 'from-purple-400 to-purple-700',
-    orange: 'from-orange-400 to-orange-600',
-    gray: 'from-gray-400 to-gray-600',
-    amber: 'from-amber-400 to-amber-600',
-  };
+  const getColorBarClass = (color: SpaceColor) => getSpaceAccent(color).solidBg;
 
-  const colorBarClasses: Record<string, string> = {
-    primary: 'bg-immich-primary',
-    pink: 'bg-pink-400',
-    red: 'bg-red-500',
-    yellow: 'bg-yellow-500',
-    blue: 'bg-blue-500',
-    green: 'bg-green-600',
-    purple: 'bg-purple-600',
-    orange: 'bg-orange-600',
-    gray: 'bg-gray-600',
-    amber: 'bg-amber-600',
-  };
-
-  const newBadgeClasses: Record<string, string> = {
-    primary: 'bg-immich-primary text-white',
-    pink: 'bg-pink-400 text-white',
-    red: 'bg-red-500 text-white',
-    yellow: 'bg-yellow-500 text-white',
-    blue: 'bg-blue-500 text-white',
-    green: 'bg-green-600 text-white',
-    purple: 'bg-purple-600 text-white',
-    orange: 'bg-orange-600 text-white',
-    gray: 'bg-gray-600 text-white',
-    amber: 'bg-amber-600 text-white',
-  };
-
-  const getGradientClass = (color: string | null | undefined) =>
-    gradientClasses[color ?? 'primary'] ?? gradientClasses['primary'];
-
-  const getColorBarClass = (color: string | null | undefined) =>
-    colorBarClasses[color ?? 'primary'] ?? colorBarClasses['primary'];
-
-  const getNewBadgeClass = (color: string | null | undefined) =>
-    newBadgeClasses[color ?? 'primary'] ?? newBadgeClasses['primary'];
+  const getNewBadgeClass = (color: SpaceColor) => `${getSpaceAccent(color).solidBg} text-white`;
 
   const getCollageAssets = (space: SharedSpaceResponseDto) =>
     (space.recentAssetIds ?? []).map((id, i) => ({
@@ -120,7 +78,7 @@
 
 {#snippet spaceRow(space: SharedSpaceResponseDto)}
   {@const collageAssets = getCollageAssets(space)}
-  {@const gradientClass = getGradientClass(space.color)}
+  {@const gradientClass = getSpaceGradientClass(space.color)}
   {@const colorBarClass = getColorBarClass(space.color)}
   {@const newBadgeClass = getNewBadgeClass(space.color)}
   {@const currentRole = getCurrentUserRole(space)}
@@ -130,10 +88,7 @@
     class="border-b border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-900"
     data-testid="space-row"
     onmouseenter={() => (hoveredId = space.id)}
-    onmouseleave={() => {
-      hoveredId = null;
-      openMenuId = null;
-    }}
+    onmouseleave={() => (hoveredId = null)}
   >
     <!-- Color bar cell -->
     <td class="py-3 pr-3">
@@ -194,38 +149,24 @@
     <!-- Last activity cell -->
     <td class="relative w-32 py-3 text-right text-sm text-gray-500 dark:text-gray-400">
       {#if hoveredId === space.id}
-        <button
-          type="button"
-          class="absolute end-0 top-1/2 -translate-y-1/2 rounded p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
-          onclick={(e) => {
-            e.stopPropagation();
-            openMenuId = openMenuId === space.id ? null : space.id;
-          }}
+        <ButtonContextMenu
+          class="absolute end-0 top-1/2 -translate-y-1/2"
           data-testid="row-menu-button-{space.id}"
+          icon={mdiDotsVertical}
+          title={$t('more')}
+          color="secondary"
+          size="small"
+          align="top-right"
+          direction="left"
         >
-          <Icon icon={mdiDotsVertical} size="16" />
-        </button>
+          <MenuOption
+            icon={isPinned ? mdiPinOff : mdiPin}
+            text={isPinned ? $t('spaces_unpin') : $t('spaces_pin_to_top')}
+            onClick={() => onTogglePin(space.id)}
+          />
+        </ButtonContextMenu>
       {:else}
         {space.lastActivityAt ? formatTimeAgo(space.lastActivityAt) : '—'}
-      {/if}
-
-      {#if openMenuId === space.id}
-        <div
-          class="absolute end-0 top-full z-20 min-w-[140px] rounded-lg border bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900"
-        >
-          <button
-            type="button"
-            class="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-            onclick={(e) => {
-              e.stopPropagation();
-              onTogglePin(space.id);
-              openMenuId = null;
-            }}
-          >
-            <Icon icon={isPinned ? mdiPinOff : mdiPin} size="16" />
-            {isPinned ? $t('spaces_unpin') : $t('spaces_pin_to_top')}
-          </button>
-        </div>
       {/if}
     </td>
   </tr>

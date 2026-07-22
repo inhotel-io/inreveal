@@ -146,21 +146,7 @@
     </div>
 
     {#if sortMode === 'relevance'}
-      <div class="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3">
-        {#each results as asset (asset.id)}
-          <button
-            type="button"
-            class="aspect-square cursor-pointer overflow-hidden rounded"
-            onclick={() => openAsset(asset)}
-          >
-            <img
-              src="/api/assets/{asset.id}/thumbnail"
-              alt={asset.originalFileName}
-              class="h-full w-full object-cover"
-            />
-          </button>
-        {/each}
-      </div>
+      {@render assetGrid(results)}
     {:else}
       {#each dateGroups as group, i (group.key)}
         <h3
@@ -169,21 +155,7 @@
         >
           {group.label}
         </h3>
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3">
-          {#each group.assets as asset (asset.id)}
-            <button
-              type="button"
-              class="aspect-square cursor-pointer overflow-hidden rounded"
-              onclick={() => openAsset(asset)}
-            >
-              <img
-                src="/api/assets/{asset.id}/thumbnail"
-                alt={asset.originalFileName}
-                class="h-full w-full object-cover"
-              />
-            </button>
-          {/each}
-        </div>
+        {@render assetGrid(group.assets)}
       {/each}
     {/if}
 
@@ -196,6 +168,20 @@
     {/if}
   {/if}
 </section>
+
+{#snippet assetGrid(assets: AssetResponseDto[])}
+  <div class="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3">
+    {#each assets as asset (asset.id)}
+      <button
+        type="button"
+        class="aspect-square cursor-pointer overflow-hidden rounded"
+        onclick={() => openAsset(asset)}
+      >
+        <img src="/api/assets/{asset.id}/thumbnail" alt={asset.originalFileName} class="h-full w-full object-cover" />
+      </button>
+    {/each}
+  </div>
+{/snippet}
 
 <Portal target="body">
   {#if isViewerOpen && cursor}

@@ -31,6 +31,21 @@ List<Override> _overrides({required String spaceId, required List<SpaceAlbum> al
 void main() {
   const spaceId = 'space-1';
 
+  // The page's callbacks are required; tests that do not exercise a particular
+  // callback pass a no-op through this helper.
+  SpaceAlbumsPage page({
+    required bool canEdit,
+    void Function(String albumId)? onToggle,
+    void Function(String albumId)? onUnlink,
+    VoidCallback? onLink,
+  }) => SpaceAlbumsPage(
+    spaceId: spaceId,
+    canEdit: canEdit,
+    onToggle: onToggle ?? (_) {},
+    onUnlink: onUnlink ?? (_) {},
+    onLink: onLink ?? () {},
+  );
+
   late Drift db;
 
   setUpAll(() async {
@@ -55,7 +70,7 @@ void main() {
     var callCount = 0;
 
     await tester.pumpConsumerWidget(
-      SpaceAlbumsPage(spaceId: spaceId, canEdit: true, onLink: () => callCount++),
+      page(canEdit: true, onLink: () => callCount++),
       overrides: _overrides(
         spaceId: spaceId,
         albums: [
@@ -81,7 +96,7 @@ void main() {
     var callCount = 0;
 
     await tester.pumpConsumerWidget(
-      SpaceAlbumsPage(spaceId: spaceId, canEdit: true, onLink: () => callCount++),
+      page(canEdit: true, onLink: () => callCount++),
       overrides: _overrides(spaceId: spaceId, albums: const []), // empty — shows empty state
     );
 

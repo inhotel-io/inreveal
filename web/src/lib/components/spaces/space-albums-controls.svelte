@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dropdown from '$lib/elements/Dropdown.svelte';
   import { AlbumSortBy, AlbumViewMode, SortOrder } from '$lib/stores/preferences.store';
   import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
   import { type AlbumSortOptionMetadata, findSortOptionMetadata, sortOptionsMetadata } from '$lib/utils/album-utils';
@@ -14,7 +15,6 @@
   import {
     mdiArrowDownThin,
     mdiArrowUpThin,
-    mdiChevronDown,
     mdiFolderRemoveOutline,
     mdiFormatListBulletedSquare,
     mdiLinkVariantPlus,
@@ -35,9 +35,6 @@
 
   let { groupIds = [], searchQuery = $bindable(''), canManage = false, onCreate, onLink }: Props = $props();
 
-  let showSortMenu = $state(false);
-  let showGroupMenu = $state(false);
-
   const flipOrdering = (ordering: string) => {
     return ordering === SortOrder.Asc ? SortOrder.Desc : SortOrder.Asc;
   };
@@ -49,7 +46,6 @@
       $spaceAlbumViewSettings.sortBy = id;
       $spaceAlbumViewSettings.sortOrder = defaultOrder;
     }
-    showSortMenu = false;
   };
 
   const handleChangeGroupBy = ({ id, defaultOrder }: SpaceAlbumGroupOptionMetadata) => {
@@ -59,23 +55,12 @@
       $spaceAlbumViewSettings.groupBy = id;
       $spaceAlbumViewSettings.groupOrder = defaultOrder;
     }
-    showGroupMenu = false;
   };
 
   const handleToggleView = () => {
     $spaceAlbumViewSettings.view =
       $spaceAlbumViewSettings.view === AlbumViewMode.Cover ? AlbumViewMode.List : AlbumViewMode.Cover;
   };
-
-  function handleClickOutside(event: MouseEvent) {
-    const target = event.target as HTMLElement;
-    if (!target.closest('[data-testid="space-albums-sort-container"]')) {
-      showSortMenu = false;
-    }
-    if (!target.closest('[data-testid="space-albums-group-container"]')) {
-      showGroupMenu = false;
-    }
-  }
 
   let selectedSortOption = $derived(findSortOptionMetadata($spaceAlbumViewSettings.sortBy));
   let sortIcon = $derived($spaceAlbumViewSettings.sortOrder === SortOrder.Desc ? mdiArrowDownThin : mdiArrowUpThin);
@@ -100,8 +85,6 @@
   });
 </script>
 
-<svelte:window onclick={handleClickOutside} />
-
 <div class="flex items-center justify-between gap-2 px-4 py-2" data-testid="space-albums-view-toggle">
   <!-- Search Albums -->
   <input
@@ -114,75 +97,28 @@
   />
   <div class="flex items-center gap-1">
     <!-- Sort Albums -->
-    <div class="relative" data-testid="space-albums-sort-container">
-      <button
-        type="button"
-        title={$t('sort_albums_by')}
-        aria-label={$t('sort_albums_by')}
-        class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-        data-testid="space-albums-sort-btn"
-        onclick={() => (showSortMenu = !showSortMenu)}
-      >
-        <Icon icon={sortIcon} size="18" />
-        <span class="hidden sm:inline">{albumSortByNames[selectedSortOption.id as AlbumSortBy]}</span>
-        <Icon icon={mdiChevronDown} size="14" />
-      </button>
-
-      {#if showSortMenu}
-        <div
-          class="absolute top-full right-0 z-10 mt-1 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
-          data-testid="space-albums-sort-menu"
-        >
-          {#each sortOptionsMetadata as option (option.id)}
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-              class:font-semibold={$spaceAlbumViewSettings.sortBy === option.id}
-              onclick={() => handleChangeSortBy(option)}
-              data-testid="space-albums-sort-option-{option.id}"
-            >
-              {albumSortByNames[option.id as AlbumSortBy]}
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
+    <Dropdown
+      title={$t('sort_albums_by')}
+      position="bottom-right"
+      options={sortOptionsMetadata}
+      selectedOption={selectedSortOption}
+      onSelect={handleChangeSortBy}
+      render={({ id }) => ({ title: albumSortByNames[id as AlbumSortBy], icon: sortIcon })}
+    />
 
     <!-- Group Albums -->
-    <div class="relative" data-testid="space-albums-group-container">
-      <button
-        type="button"
-        title={$t('group_albums_by')}
-        aria-label={$t('group_albums_by')}
-        class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-        data-testid="space-albums-group-btn"
-        onclick={() => (showGroupMenu = !showGroupMenu)}
-      >
-        <Icon icon={mdiFolderRemoveOutline} size="18" />
-        <span class="hidden sm:inline">{spaceGroupByNames[selectedGroupOption.id]}</span>
-        <Icon icon={mdiChevronDown} size="14" />
-      </button>
-
-      {#if showGroupMenu}
-        <div
-          class="absolute top-full right-0 z-10 mt-1 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900"
-          data-testid="space-albums-group-menu"
-        >
-          {#each spaceGroupOptionsMetadata as option (option.id)}
-            <button
-              type="button"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-gray-800"
-              class:font-semibold={$spaceAlbumViewSettings.groupBy === option.id}
-              disabled={option.isDisabled()}
-              onclick={() => handleChangeGroupBy(option)}
-              data-testid="space-albums-group-option-{option.id}"
-            >
-              {spaceGroupByNames[option.id]}
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
+    <Dropdown
+      title={$t('group_albums_by')}
+      position="bottom-right"
+      options={spaceGroupOptionsMetadata}
+      selectedOption={selectedGroupOption}
+      onSelect={handleChangeGroupBy}
+      render={({ id, isDisabled }) => ({
+        title: spaceGroupByNames[id],
+        icon: mdiFolderRemoveOutline,
+        disabled: isDisabled(),
+      })}
+    />
 
     {#if isGrouped}
       <button

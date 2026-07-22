@@ -39,4 +39,14 @@ describe('SpaceNewAssetsDivider', () => {
     renderDivider({ newAssetCount: 5, lastViewedAt: '2026-03-08T10:00:00Z', spaceColor: 'primary' });
     expect(screen.getByTestId('new-assets-pill')).toBeInTheDocument();
   });
+
+  it('should paint the pill with the space color', () => {
+    renderDivider({ newAssetCount: 5, lastViewedAt: '2026-03-08T10:00:00Z', spaceColor: 'pink' });
+    expect(screen.getByTestId('new-assets-pill').className).toContain('bg-pink-500');
+  });
+
+  it('should fall back to the primary pill color for an unknown space color', () => {
+    renderDivider({ newAssetCount: 5, lastViewedAt: '2026-03-08T10:00:00Z', spaceColor: 'chartreuse' });
+    expect(screen.getByTestId('new-assets-pill').className).toContain('bg-immich-primary');
+  });
 });

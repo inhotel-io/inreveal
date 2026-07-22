@@ -24,26 +24,24 @@ RemoteAlbum _album({
   String? name,
   int assetCount = 0,
   AlbumUserRole? currentUserRole,
-}) =>
-    RemoteAlbum(
-      id: id,
-      name: name ?? 'Album $id',
-      ownerId: ownerId,
-      description: '',
-      createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-      isActivityEnabled: false,
-      order: AlbumAssetOrder.desc,
-      assetCount: assetCount,
-      ownerName: 'Test User',
-      isShared: false,
-      currentUserRole: currentUserRole,
-    );
+}) => RemoteAlbum(
+  id: id,
+  name: name ?? 'Album $id',
+  ownerId: ownerId,
+  description: '',
+  createdAt: DateTime(2026, 1, 1),
+  updatedAt: DateTime(2026, 1, 1),
+  isActivityEnabled: false,
+  order: AlbumAssetOrder.desc,
+  assetCount: assetCount,
+  ownerName: 'Test User',
+  isShared: false,
+  currentUserRole: currentUserRole,
+);
 
 const _currentUserId = 'user-me';
 
-UserDto _userDto(String id) =>
-    UserDto(id: id, email: '$id@example.com', name: id, profileChangedAt: DateTime(2024));
+UserDto _userDto(String id) => UserDto(id: id, email: '$id@example.com', name: id, profileChangedAt: DateTime(2024));
 
 class _StubRemoteAlbumNotifier extends RemoteAlbumNotifier {
   final List<RemoteAlbum> _albums;
@@ -78,9 +76,7 @@ List<Override> _overrides({required List<RemoteAlbum> albums}) {
 void main() {
   const spaceId = 'space-1';
 
-  testWidgets(
-      '2 candidates (1 already linked) → only 2 selectable rows; linked one absent',
-      (tester) async {
+  testWidgets('2 candidates (1 already linked) → only 2 selectable rows; linked one absent', (tester) async {
     final albums = [
       _album(id: 'a1', ownerId: _currentUserId, name: 'Hawaii'),
       _album(id: 'a2', ownerId: _currentUserId, name: 'Sunsets'),
@@ -88,10 +84,7 @@ void main() {
     ];
 
     await tester.pumpConsumerWidget(
-      const SpaceLinkAlbumPage(
-        spaceId: spaceId,
-        linkedAlbumIds: ['a3'],
-      ),
+      const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: ['a3']),
       overrides: _overrides(albums: albums),
     );
 
@@ -100,8 +93,7 @@ void main() {
     expect(find.byKey(const Key('link-album-row-a3')), findsNothing);
   });
 
-  testWidgets('search field filters rows by name (case-insensitive)',
-      (tester) async {
+  testWidgets('search field filters rows by name (case-insensitive)', (tester) async {
     final albums = [
       _album(id: 'a1', ownerId: _currentUserId, name: 'Hawaii Trip'),
       _album(id: 'a2', ownerId: _currentUserId, name: 'Sunsets'),
@@ -122,24 +114,40 @@ void main() {
     expect(find.byKey(const Key('link-album-row-a3')), findsOneWidget);
   });
 
-  testWidgets(
-      'selecting 2 rows enables "Link (2)" confirm action; tapping it calls onAlbumsPicked',
-      (tester) async {
+  testWidgets('selecting 2 rows enables "Link (2)" confirm action; tapping it returns the ids as the pop result', (
+    tester,
+  ) async {
     final albums = [
       _album(id: 'a1', ownerId: _currentUserId, name: 'Hawaii'),
       _album(id: 'a2', ownerId: _currentUserId, name: 'Sunsets'),
     ];
 
+    // The page hands the picked ids back through its pop result (the channel
+    // production uses), so push it on a Navigator and await that result.
     final List<String> picked = [];
 
     await tester.pumpConsumerWidget(
-      SpaceLinkAlbumPage(
-        spaceId: spaceId,
-        linkedAlbumIds: const [],
-        onAlbumsPicked: picked.addAll,
+      Builder(
+        builder: (context) => TextButton(
+          key: const Key('open-link-album-picker'),
+          onPressed: () async {
+            final result = await Navigator.of(context).push<List<String>>(
+              MaterialPageRoute(
+                builder: (_) => const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: []),
+              ),
+            );
+            if (result != null) {
+              picked.addAll(result);
+            }
+          },
+          child: const Text('open'),
+        ),
       ),
       overrides: _overrides(albums: albums),
     );
+
+    await tester.tap(find.byKey(const Key('open-link-album-picker')));
+    await tester.pumpAndSettle();
 
     // Confirm button should be present when nothing selected (disabled).
     expect(find.byKey(const Key('link-album-confirm')), findsOneWidget);
@@ -157,21 +165,14 @@ void main() {
 
     // Tap confirm.
     await tester.tap(find.byKey(const Key('link-album-confirm')));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(picked.toSet(), equals({'a1', 'a2'}));
   });
 
   testWidgets('empty candidates → empty state key present', (tester) async {
     // Viewer album only — not included as a candidate.
-    final albums = [
-      _album(
-        id: 'v1',
-        ownerId: 'other-user',
-        name: 'View Only',
-        currentUserRole: AlbumUserRole.viewer,
-      ),
-    ];
+    final albums = [_album(id: 'v1', ownerId: 'other-user', name: 'View Only', currentUserRole: AlbumUserRole.viewer)];
 
     await tester.pumpConsumerWidget(
       const SpaceLinkAlbumPage(spaceId: spaceId, linkedAlbumIds: []),
@@ -181,9 +182,7 @@ void main() {
     expect(find.byKey(const Key('link-album-empty')), findsOneWidget);
     expect(
       find.byWidgetPredicate(
-        (w) =>
-            w.key is ValueKey<String> &&
-            (w.key as ValueKey<String>).value.startsWith('link-album-row-'),
+        (w) => w.key is ValueKey<String> && (w.key as ValueKey<String>).value.startsWith('link-album-row-'),
       ),
       findsNothing,
     );

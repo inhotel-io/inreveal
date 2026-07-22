@@ -65,6 +65,21 @@ String _firstCardByPosition(WidgetTester tester, List<String> ids) {
 void main() {
   const spaceId = 'space-1';
 
+  // The page's callbacks are required; tests that do not exercise a particular
+  // callback pass a no-op through this helper.
+  SpaceAlbumsPage page({
+    required bool canEdit,
+    void Function(String albumId)? onToggle,
+    void Function(String albumId)? onUnlink,
+    VoidCallback? onLink,
+  }) => SpaceAlbumsPage(
+    spaceId: spaceId,
+    canEdit: canEdit,
+    onToggle: onToggle ?? (_) {},
+    onUnlink: onUnlink ?? (_) {},
+    onLink: onLink ?? () {},
+  );
+
   late Drift db;
 
   setUpAll(() async {
@@ -92,7 +107,7 @@ void main() {
     ];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -110,7 +125,7 @@ void main() {
     final albums = [_album(id: 'a1', name: 'Hawaii'), _album(id: 'a2', name: 'Sunsets')];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
+      page(canEdit: false),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -126,7 +141,7 @@ void main() {
 
   testWidgets('empty + editor: shows empty state', (tester) async {
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: const []),
     );
 
@@ -147,7 +162,7 @@ void main() {
     ];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -168,7 +183,7 @@ void main() {
     ];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -196,7 +211,7 @@ void main() {
     final albums = [_album(id: 'it1', name: 'Italy Summer'), _album(id: 'hawaii1', name: 'Hawaii')];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -220,7 +235,7 @@ void main() {
     final albums = [_album(id: 'it1', name: 'Italy Summer'), _album(id: 'hawaii1', name: 'Hawaii')];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -239,7 +254,7 @@ void main() {
 
   testWidgets('a genuinely empty space still shows the empty state, not the no-match state', (tester) async {
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: const []),
     );
 
@@ -260,7 +275,7 @@ void main() {
     ];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -286,7 +301,7 @@ void main() {
     ];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -316,7 +331,7 @@ void main() {
     await SettingsRepository.instance.write(SettingsKey.spaceAlbumsIsReverse, false);
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -335,7 +350,7 @@ void main() {
     final albums = [_album(id: 'a1', name: 'Hawaii'), _album(id: 'a2', name: 'Sunsets')];
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
+      page(canEdit: false),
       overrides: _overrides(spaceId: spaceId, albums: albums),
     );
 
@@ -357,7 +372,7 @@ void main() {
     controller.add([_album(id: 'it1', name: 'Italy Summer'), _album(id: 'hawaii1', name: 'Hawaii')]);
 
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      page(canEdit: true),
       overrides: [spaceAlbumsProvider(spaceId).overrideWith((_) => controller.stream)],
     );
 
@@ -391,7 +406,7 @@ void main() {
     // nothing". The fix sets `HitTestBehavior.opaque`; this fails on the
     // default (null) behavior.
     await tester.pumpConsumerWidget(
-      const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
+      page(canEdit: false),
       overrides: _overrides(
         spaceId: spaceId,
         albums: [_album(id: 'a1', name: 'Hawaii')],

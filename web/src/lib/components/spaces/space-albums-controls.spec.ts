@@ -1,4 +1,4 @@
-import { render, screen, within, fireEvent } from '@testing-library/svelte';
+import { screen, fireEvent } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { get } from 'svelte/store';
@@ -6,6 +6,7 @@ import SpaceAlbumsControls from '$lib/components/spaces/space-albums-controls.sv
 import SpaceAlbumsControlsWrapper from '$lib/components/spaces/space-albums-controls.test-wrapper.svelte';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+import { renderWithTooltips } from '$tests/helpers';
 
 // The persisted store's reset() re-uses its initial object by reference, and in-place field
 // writes (groupBy/collapsedGroups) can leak across tests. Set a fresh object each time.
@@ -40,12 +41,12 @@ beforeEach(() => {
 
 describe('SpaceAlbumsControls search input', () => {
   it('renders a search input with data-testid="space-albums-search"', () => {
-    render(SpaceAlbumsControls);
+    renderWithTooltips(SpaceAlbumsControls, {});
     expect(screen.getByTestId('space-albums-search')).toBeInTheDocument();
   });
 
   it('reflects the passed searchQuery prop value', () => {
-    render(SpaceAlbumsControls, { searchQuery: 'hello' });
+    renderWithTooltips(SpaceAlbumsControls, { searchQuery: 'hello' });
     const input = screen.getByTestId('space-albums-search') as HTMLInputElement;
     expect(input.value).toBe('hello');
   });
@@ -55,7 +56,7 @@ describe('SpaceAlbumsControls search input', () => {
     // The wrapper renders a <span data-testid="wrapper-search-query"> with the current state value.
     // If bind:value={searchQuery} were removed from the input, the span would stay empty
     // while the input shows the typed text — proving this test catches missing binding.
-    render(SpaceAlbumsControlsWrapper);
+    renderWithTooltips(SpaceAlbumsControlsWrapper, {});
     const input = screen.getByTestId('space-albums-search') as HTMLInputElement;
     const wrapperState = screen.getByTestId('wrapper-search-query');
 
@@ -65,103 +66,108 @@ describe('SpaceAlbumsControls search input', () => {
   });
 });
 
+// The sort/group menus are `$lib/elements/Dropdown.svelte`: the trigger is a button labelled with
+// the current selection, and the options are buttons labelled with their own name.
+const openMenu = (currentLabel: string) => userEvent.click(screen.getAllByRole('button', { name: currentLabel })[0]);
+const pickOption = (label: string) => userEvent.click(screen.getAllByRole('button', { name: label }).at(-1)!);
+
 describe('SpaceAlbumsControls sort dropdown', () => {
-  it('renders a sort dropdown trigger button', () => {
-    render(SpaceAlbumsControls);
-    expect(screen.getByTestId('space-albums-sort-btn')).toBeInTheDocument();
+  it('renders a sort dropdown trigger button labelled with the current sort', () => {
+    renderWithTooltips(SpaceAlbumsControls, {});
+    expect(screen.getByRole('button', { name: 'Most recent photo' })).toBeInTheDocument();
   });
 
   it('renders all six sort option labels when dropdown is opened', async () => {
-    render(SpaceAlbumsControls);
-    await userEvent.click(screen.getByTestId('space-albums-sort-btn'));
-    const menu = screen.getByTestId('space-albums-sort-menu');
-    expect(within(menu).getByText('Title')).toBeInTheDocument();
-    expect(within(menu).getByText('Number of items')).toBeInTheDocument();
-    expect(within(menu).getByText('Date modified')).toBeInTheDocument();
-    expect(within(menu).getByText('Date created')).toBeInTheDocument();
-    expect(within(menu).getByText('Most recent photo')).toBeInTheDocument();
-    expect(within(menu).getByText('Oldest photo')).toBeInTheDocument();
+    renderWithTooltips(SpaceAlbumsControls, {});
+    await openMenu('Most recent photo');
+    expect(screen.getByRole('button', { name: 'Title' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Number of items' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Date modified' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Date created' })).toBeInTheDocument();
+    // Trigger + option both carry the selected label.
+    expect(screen.getAllByRole('button', { name: 'Most recent photo' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Oldest photo' })).toBeInTheDocument();
   });
 
   it('writes AlbumSortBy.Title to the space store when "Title" is selected', async () => {
-    render(SpaceAlbumsControls);
-    await userEvent.click(screen.getByTestId('space-albums-sort-btn'));
-    await userEvent.click(screen.getByTestId('space-albums-sort-option-Title'));
+    renderWithTooltips(SpaceAlbumsControls, {});
+    await openMenu('Most recent photo');
+    await pickOption('Title');
     expect(get(spaceAlbumViewSettings).sortBy).toBe(AlbumSortBy.Title);
   });
 
   it('never writes to the global albumViewSettings (isolation)', async () => {
     const before = get(albumViewSettings);
-    render(SpaceAlbumsControls);
-    await userEvent.click(screen.getByTestId('space-albums-sort-btn'));
-    await userEvent.click(screen.getByTestId('space-albums-sort-option-Title'));
+    renderWithTooltips(SpaceAlbumsControls, {});
+    await openMenu('Most recent photo');
+    await pickOption('Title');
     expect(get(albumViewSettings)).toEqual(before);
   });
 
   it('toggles sort order when the same sort option is re-selected', async () => {
     // Pre-set sortBy to Title; defaultOrder for Title is Asc
     spaceAlbumViewSettings.update((s) => ({ ...s, sortBy: AlbumSortBy.Title, sortOrder: SortOrder.Asc }));
-    render(SpaceAlbumsControls);
-    await userEvent.click(screen.getByTestId('space-albums-sort-btn'));
-    await userEvent.click(screen.getByTestId('space-albums-sort-option-Title'));
+    renderWithTooltips(SpaceAlbumsControls, {});
+    await openMenu('Title');
+    await pickOption('Title');
     expect(get(spaceAlbumViewSettings).sortOrder).toBe(SortOrder.Desc);
   });
 });
 
 describe('SpaceAlbumsControls group dropdown', () => {
-  it('renders a group dropdown trigger button', () => {
-    render(SpaceAlbumsControls);
-    expect(screen.getByTestId('space-albums-group-btn')).toBeInTheDocument();
+  it('renders a group dropdown trigger button labelled with the current grouping', () => {
+    renderWithTooltips(SpaceAlbumsControls, {});
+    expect(screen.getByRole('button', { name: 'No grouping' })).toBeInTheDocument();
   });
 
   it('lists None / Year / Linked by / Owner when the dropdown is opened', async () => {
-    render(SpaceAlbumsControls);
-    await userEvent.click(screen.getByTestId('space-albums-group-btn'));
-    const menu = screen.getByTestId('space-albums-group-menu');
-    expect(within(menu).getByText('No grouping')).toBeInTheDocument();
-    expect(within(menu).getByText('Group by year')).toBeInTheDocument();
-    expect(within(menu).getByText('Group by who linked')).toBeInTheDocument();
-    expect(within(menu).getByText('Group by owner')).toBeInTheDocument();
+    renderWithTooltips(SpaceAlbumsControls, {});
+    await openMenu('No grouping');
+    // Trigger + option both carry the selected label.
+    expect(screen.getAllByRole('button', { name: 'No grouping' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Group by year' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Group by who linked' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Group by owner' })).toBeInTheDocument();
   });
 
   it('writes the selected groupBy to the space store', async () => {
-    render(SpaceAlbumsControls);
-    await userEvent.click(screen.getByTestId('space-albums-group-btn'));
-    await userEvent.click(screen.getByTestId('space-albums-group-option-Year'));
+    renderWithTooltips(SpaceAlbumsControls, {});
+    await openMenu('No grouping');
+    await pickOption('Group by year');
     expect(get(spaceAlbumViewSettings).groupBy).toBe(SpaceAlbumGroupBy.Year);
   });
 
   it('never writes to the global albumViewSettings (isolation)', async () => {
     const before = get(albumViewSettings);
-    render(SpaceAlbumsControls);
-    await userEvent.click(screen.getByTestId('space-albums-group-btn'));
-    await userEvent.click(screen.getByTestId('space-albums-group-option-Owner'));
+    renderWithTooltips(SpaceAlbumsControls, {});
+    await openMenu('No grouping');
+    await pickOption('Group by owner');
     expect(get(albumViewSettings)).toEqual(before);
   });
 
   it('disables the Year option when sortBy is DateCreated', async () => {
     spaceAlbumViewSettings.update((s) => ({ ...s, sortBy: AlbumSortBy.DateCreated }));
-    render(SpaceAlbumsControls);
-    await userEvent.click(screen.getByTestId('space-albums-group-btn'));
-    expect(screen.getByTestId('space-albums-group-option-Year')).toBeDisabled();
+    renderWithTooltips(SpaceAlbumsControls, {});
+    await openMenu('No grouping');
+    expect(screen.getByRole('button', { name: 'Group by year' })).toBeDisabled();
   });
 
   it('hides expand/collapse-all buttons when groupBy is None', () => {
-    render(SpaceAlbumsControls);
+    renderWithTooltips(SpaceAlbumsControls, {});
     expect(screen.queryByTestId('space-albums-expand-all')).not.toBeInTheDocument();
     expect(screen.queryByTestId('space-albums-collapse-all')).not.toBeInTheDocument();
   });
 
   it('shows expand/collapse-all buttons when a group is selected', () => {
     spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
-    render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
+    renderWithTooltips(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
     expect(screen.getByTestId('space-albums-expand-all')).toBeInTheDocument();
     expect(screen.getByTestId('space-albums-collapse-all')).toBeInTheDocument();
   });
 
   it('collapse-all collapses the provided group ids in the space store', async () => {
     spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
-    render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
+    renderWithTooltips(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
     await userEvent.click(screen.getByTestId('space-albums-collapse-all'));
     expect(get(spaceAlbumViewSettings).collapsedGroups.Year.sort()).toEqual(['2020', '2024']);
   });
@@ -172,7 +178,7 @@ describe('SpaceAlbumsControls group dropdown', () => {
       groupBy: SpaceAlbumGroupBy.Year,
       collapsedGroups: { Year: ['2024', '2020'] },
     }));
-    render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
+    renderWithTooltips(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
     await userEvent.click(screen.getByTestId('space-albums-expand-all'));
     expect(get(spaceAlbumViewSettings).collapsedGroups.Year).toEqual([]);
   });
@@ -182,7 +188,7 @@ describe('SpaceAlbumsControls create + link buttons', () => {
   it('shows Create + Link for editors and invokes the callbacks', async () => {
     const onCreate = vi.fn();
     const onLink = vi.fn();
-    render(SpaceAlbumsControls, { canManage: true, onCreate, onLink });
+    renderWithTooltips(SpaceAlbumsControls, { canManage: true, onCreate, onLink });
     await fireEvent.click(screen.getByTestId('create-album-button'));
     await fireEvent.click(screen.getByTestId('link-album-button'));
     expect(onCreate).toHaveBeenCalledOnce();
@@ -190,12 +196,12 @@ describe('SpaceAlbumsControls create + link buttons', () => {
   });
 
   it('hides Create + Link for viewers but keeps search/sort/group/view', () => {
-    render(SpaceAlbumsControls, { canManage: false });
+    renderWithTooltips(SpaceAlbumsControls, { canManage: false });
     expect(screen.queryByTestId('create-album-button')).not.toBeInTheDocument();
     expect(screen.queryByTestId('link-album-button')).not.toBeInTheDocument();
     expect(screen.getByTestId('space-albums-search')).toBeInTheDocument();
-    expect(screen.getByTestId('space-albums-sort-btn')).toBeInTheDocument();
-    expect(screen.getByTestId('space-albums-group-btn')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Most recent photo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'No grouping' })).toBeInTheDocument();
     expect(screen.getByTestId('space-albums-view-toggle')).toBeInTheDocument();
   });
 });

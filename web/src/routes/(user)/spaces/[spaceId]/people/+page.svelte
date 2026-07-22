@@ -209,21 +209,32 @@
     await goto($page.url, { keepFocus: true });
   }
 
-  async function refreshPeople() {
+  // Single loader for both the unfiltered refresh and the debounced search. `controller` is only
+  // supplied by the search path; results and errors from a superseded/aborted request are dropped.
+  async function loadPeople(controller?: AbortController) {
     const requestSpaceId = space.id;
     const requestSearchName = searchName.trim();
+    // Spread so the refresh path calls the SDK with a single argument, as it always has.
+    const requestOpts: [] | [{ signal: AbortSignal }] = controller ? [{ signal: controller.signal }] : [];
+    const isCurrentRequest = () =>
+      !controller?.signal.aborted &&
+      (controller === undefined || abortController === controller) &&
+      statisticsScopeMatches(requestSpaceId, requestSearchName);
+
     try {
       const [newPeople, newStatistics] = await Promise.all([
-        getSpacePeople(getPeopleQuery({ limit: PAGE_SIZE }, requestSearchName, requestSpaceId)),
-        getSpacePeopleStatistics(getStatisticsQuery(requestSearchName, requestSpaceId)).catch((error) => {
-          if (statisticsScopeMatches(requestSpaceId, requestSearchName)) {
-            handleError(error, $t('spaces_error_loading_people'));
-          }
-          return null;
-        }),
+        getSpacePeople(getPeopleQuery({ limit: PAGE_SIZE }, requestSearchName, requestSpaceId), ...requestOpts),
+        getSpacePeopleStatistics(getStatisticsQuery(requestSearchName, requestSpaceId), ...requestOpts).catch(
+          (error) => {
+            if (isCurrentRequest()) {
+              handleError(error, $t('spaces_error_loading_people'));
+            }
+            return null;
+          },
+        ),
       ]);
 
-      if (!statisticsScopeMatches(requestSpaceId, requestSearchName)) {
+      if (!isCurrentRequest()) {
         return;
       }
 
@@ -232,19 +243,19 @@
       statisticsSearchName = requestSearchName || null;
       hasMore = people.length >= PAGE_SIZE;
     } catch (error) {
-      if (statisticsScopeMatches(requestSpaceId, requestSearchName)) {
+      if (isCurrentRequest()) {
         handleError(error, $t('spaces_error_loading_people'));
       }
     }
   }
 
+  const refreshPeople = () => loadPeople();
+
   async function searchPeople(name?: string) {
     searchName = name ?? searchName;
     await updateSearchQueryParam();
 
-    const requestSpaceId = space.id;
-    const requestSearchName = searchName.trim();
-    if (!requestSearchName) {
+    if (!searchName.trim()) {
       cancelSearchRequest();
       await refreshPeople();
       return;
@@ -256,33 +267,7 @@
     searchTimeout = setTimeout(() => (showLoadingSpinner = true), timeBeforeShowLoadingSpinner);
 
     try {
-      const [newPeople, newStatistics] = await Promise.all([
-        getSpacePeople(getPeopleQuery({ limit: PAGE_SIZE }, requestSearchName, requestSpaceId), {
-          signal: controller.signal,
-        }),
-        getSpacePeopleStatistics(getStatisticsQuery(requestSearchName, requestSpaceId), {
-          signal: controller.signal,
-        }).catch((error) => {
-          if (!controller.signal.aborted && statisticsScopeMatches(requestSpaceId, requestSearchName)) {
-            handleError(error, $t('spaces_error_loading_people'));
-          }
-          return null;
-        }),
-      ]);
-
-      if (abortController !== controller || !statisticsScopeMatches(requestSpaceId, requestSearchName)) {
-        return;
-      }
-
-      people = newPeople;
-      peopleStatistics = newStatistics;
-      statisticsSearchName = requestSearchName || null;
-      hasMore = people.length >= PAGE_SIZE;
-    } catch (error) {
-      if (controller.signal.aborted || !statisticsScopeMatches(requestSpaceId, requestSearchName)) {
-        return;
-      }
-      handleError(error, $t('spaces_error_loading_people'));
+      await loadPeople(controller);
     } finally {
       if (abortController === controller) {
         abortController = null;

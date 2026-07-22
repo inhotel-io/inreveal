@@ -399,10 +399,10 @@ void main() {
 
       // members desc by default: present-but-null memberCount treated as 0,
       // sorting after the space with 3 members.
-      expect(
-        filterAndSortSpaces(items, '', SpaceSortMode.members, false).map((s) => s.id).toList(),
-        ['has-members', 'present-null'],
-      );
+      expect(filterAndSortSpaces(items, '', SpaceSortMode.members, false).map((s) => s.id).toList(), [
+        'has-members',
+        'present-null',
+      ]);
 
       // recentActivity: present-but-null lastActivityAt falls back to
       // updatedAt (not a crash on a null `.value`); hasMembers' real
@@ -413,8 +413,7 @@ void main() {
   });
 
   group('sort-mode enum shape', () {
-    test('SpaceAlbumSortMode carries storeIndex/label/defaultOrder and effectiveOrder', () {
-      expect(SpaceAlbumSortMode.name.storeIndex, 0);
+    test('SpaceAlbumSortMode carries label/defaultOrder and effectiveOrder', () {
       expect(SpaceAlbumSortMode.name.defaultOrder, SortOrder.asc);
       expect(SpaceAlbumSortMode.name.effectiveOrder(false), SortOrder.asc);
       expect(SpaceAlbumSortMode.name.effectiveOrder(true), SortOrder.desc);
@@ -422,22 +421,15 @@ void main() {
       expect(SpaceAlbumSortMode.photoCount.defaultOrder, SortOrder.desc);
       expect(SpaceAlbumSortMode.recentlyLinked.defaultOrder, SortOrder.desc);
       expect(SpaceAlbumSortMode.recentlyUpdated.defaultOrder, SortOrder.desc);
-
-      // storeIndex is stable/unique (persisted later — must not collide).
-      final indices = SpaceAlbumSortMode.values.map((m) => m.storeIndex).toSet();
-      expect(indices.length, SpaceAlbumSortMode.values.length);
     });
 
-    test('SpaceSortMode carries storeIndex/label/defaultOrder and effectiveOrder', () {
+    test('SpaceSortMode carries label/defaultOrder and effectiveOrder', () {
       expect(SpaceSortMode.name.defaultOrder, SortOrder.asc);
       expect(SpaceSortMode.recentActivity.defaultOrder, SortOrder.desc);
       expect(SpaceSortMode.dateCreated.defaultOrder, SortOrder.desc);
       expect(SpaceSortMode.members.defaultOrder, SortOrder.desc);
       expect(SpaceSortMode.photos.defaultOrder, SortOrder.desc);
       expect(SpaceSortMode.members.effectiveOrder(true), SortOrder.asc);
-
-      final indices = SpaceSortMode.values.map((m) => m.storeIndex).toSet();
-      expect(indices.length, SpaceSortMode.values.length);
     });
   });
 }

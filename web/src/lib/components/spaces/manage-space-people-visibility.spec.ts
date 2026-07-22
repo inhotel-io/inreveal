@@ -16,11 +16,9 @@ function makePerson(overrides: Partial<SharedSpacePersonResponseDto> = {}): Shar
   return {
     id: 'person-1',
     name: 'John Doe',
-    alias: null,
     assetCount: 5,
     faceCount: 10,
     isHidden: false,
-    thumbnailPath: '/thumb.jpg',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
     spaceId: 'space-1',
@@ -57,14 +55,6 @@ describe('ManageSpacePeopleVisibility', () => {
 
     expect(screen.getByTestId('visibility-person-p1')).toBeInTheDocument();
     expect(screen.getByTestId('visibility-person-p2')).toBeInTheDocument();
-  });
-
-  it('should show canonical name when alias is present', () => {
-    const people = [makePerson({ id: 'p1', name: 'Alice Johnson', alias: 'Mom' })];
-    renderComponent(people);
-
-    expect(screen.getByText('Alice Johnson')).toBeInTheDocument();
-    expect(screen.queryByText('Mom')).not.toBeInTheDocument();
   });
 
   it('should show hidden people with aria-pressed true', () => {

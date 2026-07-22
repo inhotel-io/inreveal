@@ -43,6 +43,29 @@ describe('SpaceActivityFeed', () => {
     expect(screen.getByTestId('activity-item-act-1')).toHaveTextContent('Pierre added 5 photos');
   });
 
+  it('should paint the low-impact dot with the space color', () => {
+    const activities = [makeActivity({ id: 'act-dot', type: 'space_rename', data: { oldName: 'A', newName: 'B' } })];
+    renderFeed({ activities, spaceColor: 'purple', onLoadMore: vi.fn(), hasMore: false });
+    const dot = screen.getByTestId('activity-item-act-dot').firstElementChild;
+    expect(dot?.className).toContain('bg-purple-600');
+  });
+
+  it('should paint the medium-impact left border with the space color', () => {
+    const activities = [makeActivity({ id: 'act-border', type: 'member_join', data: { role: 'editor' } })];
+    renderFeed({ activities, spaceColor: 'yellow', onLoadMore: vi.fn(), hasMore: false });
+    expect(screen.getByTestId('activity-item-act-border').className).toContain('border-yellow-500');
+  });
+
+  it('should fall back to gray for an unknown space color', () => {
+    const activities = [
+      makeActivity({ id: 'act-dot-x', type: 'space_rename', data: { oldName: 'A', newName: 'B' } }),
+      makeActivity({ id: 'act-border-x', type: 'member_join', data: { role: 'editor' } }),
+    ];
+    renderFeed({ activities, spaceColor: 'chartreuse', onLoadMore: vi.fn(), hasMore: false });
+    expect(screen.getByTestId('activity-item-act-dot-x').firstElementChild?.className).toContain('bg-gray-400');
+    expect(screen.getByTestId('activity-item-act-border-x').className).toContain('border-gray-400');
+  });
+
   it('should render member_join event', () => {
     const activities = [makeActivity({ id: 'act-2', type: 'member_join', data: { role: 'editor' } })];
     renderFeed({ activities, spaceColor: 'primary', onLoadMore: vi.fn(), hasMore: false });

@@ -1952,9 +1952,9 @@ class SpaceAlbumsRoute extends PageRouteInfo<SpaceAlbumsRouteArgs> {
     Key? key,
     required String spaceId,
     required bool canEdit,
-    void Function(String)? onToggle,
-    void Function(String)? onUnlink,
-    VoidCallback? onLink,
+    required void Function(String) onToggle,
+    required void Function(String) onUnlink,
+    required VoidCallback onLink,
     List<PageRouteInfo>? children,
   }) : super(
          SpaceAlbumsRoute.name,
@@ -1992,9 +1992,9 @@ class SpaceAlbumsRouteArgs {
     this.key,
     required this.spaceId,
     required this.canEdit,
-    this.onToggle,
-    this.onUnlink,
-    this.onLink,
+    required this.onToggle,
+    required this.onUnlink,
+    required this.onLink,
   });
 
   final Key? key;
@@ -2003,11 +2003,11 @@ class SpaceAlbumsRouteArgs {
 
   final bool canEdit;
 
-  final void Function(String)? onToggle;
+  final void Function(String) onToggle;
 
-  final void Function(String)? onUnlink;
+  final void Function(String) onUnlink;
 
-  final VoidCallback? onLink;
+  final VoidCallback onLink;
 
   @override
   String toString() {
@@ -2083,7 +2083,6 @@ class SpaceLinkAlbumRoute extends PageRouteInfo<SpaceLinkAlbumRouteArgs> {
     Key? key,
     required String spaceId,
     required List<String> linkedAlbumIds,
-    void Function(List<String>)? onAlbumsPicked,
     List<PageRouteInfo>? children,
   }) : super(
          SpaceLinkAlbumRoute.name,
@@ -2091,7 +2090,6 @@ class SpaceLinkAlbumRoute extends PageRouteInfo<SpaceLinkAlbumRouteArgs> {
            key: key,
            spaceId: spaceId,
            linkedAlbumIds: linkedAlbumIds,
-           onAlbumsPicked: onAlbumsPicked,
          ),
          initialChildren: children,
        );
@@ -2106,7 +2104,6 @@ class SpaceLinkAlbumRoute extends PageRouteInfo<SpaceLinkAlbumRouteArgs> {
         key: args.key,
         spaceId: args.spaceId,
         linkedAlbumIds: args.linkedAlbumIds,
-        onAlbumsPicked: args.onAlbumsPicked,
       );
     },
   );
@@ -2117,7 +2114,6 @@ class SpaceLinkAlbumRouteArgs {
     this.key,
     required this.spaceId,
     required this.linkedAlbumIds,
-    this.onAlbumsPicked,
   });
 
   final Key? key;
@@ -2126,11 +2122,9 @@ class SpaceLinkAlbumRouteArgs {
 
   final List<String> linkedAlbumIds;
 
-  final void Function(List<String>)? onAlbumsPicked;
-
   @override
   String toString() {
-    return 'SpaceLinkAlbumRouteArgs{key: $key, spaceId: $spaceId, linkedAlbumIds: $linkedAlbumIds, onAlbumsPicked: $onAlbumsPicked}';
+    return 'SpaceLinkAlbumRouteArgs{key: $key, spaceId: $spaceId, linkedAlbumIds: $linkedAlbumIds}';
   }
 
   @override

@@ -81,6 +81,21 @@ void _setTallLogicalSize(WidgetTester tester, {double dpr = 3.0}) {
 void main() {
   const spaceId = 'space-1';
 
+  // The page's callbacks are required; tests that do not exercise a particular
+  // callback pass a no-op through this helper.
+  SpaceAlbumsPage page({
+    required bool canEdit,
+    void Function(String albumId)? onToggle,
+    void Function(String albumId)? onUnlink,
+    VoidCallback? onLink,
+  }) => SpaceAlbumsPage(
+    spaceId: spaceId,
+    canEdit: canEdit,
+    onToggle: onToggle ?? (_) {},
+    onUnlink: onUnlink ?? (_) {},
+    onLink: onLink ?? () {},
+  );
+
   late Drift db;
 
   setUpAll(() async {
@@ -111,7 +126,7 @@ void main() {
       ];
 
       await tester.pumpConsumerWidget(
-        SpaceAlbumsPage(spaceId: spaceId, canEdit: true, onToggle: (id) => toggledId = id, onUnlink: (_) {}),
+        page(canEdit: true, onToggle: (id) => toggledId = id, onUnlink: (_) {}),
         overrides: _overrides(spaceId: spaceId, albums: albums),
       );
 
@@ -131,7 +146,7 @@ void main() {
       final albums = [_album(id: 'a1', name: 'Hawaii')];
 
       await tester.pumpConsumerWidget(
-        SpaceAlbumsPage(spaceId: spaceId, canEdit: false, onToggle: (id) => toggledId = id, onUnlink: (_) {}),
+        page(canEdit: false, onToggle: (id) => toggledId = id, onUnlink: (_) {}),
         overrides: _overrides(spaceId: spaceId, albums: albums),
       );
 
@@ -147,7 +162,7 @@ void main() {
       final albums = [_album(id: 'a1', name: 'Hawaii')];
 
       await tester.pumpConsumerWidget(
-        SpaceAlbumsPage(spaceId: spaceId, canEdit: true, onToggle: (_) {}, onUnlink: (id) => unlinkedId = id),
+        page(canEdit: true, onToggle: (_) {}, onUnlink: (id) => unlinkedId = id),
         overrides: _overrides(spaceId: spaceId, albums: albums),
       );
 
@@ -161,7 +176,7 @@ void main() {
 
     testWidgets('viewer (canEdit:false) — no ＋ Link action in app-bar', (tester) async {
       await tester.pumpConsumerWidget(
-        const SpaceAlbumsPage(spaceId: spaceId, canEdit: false),
+        page(canEdit: false),
         overrides: _overrides(
           spaceId: spaceId,
           albums: [_album(id: 'a1')],

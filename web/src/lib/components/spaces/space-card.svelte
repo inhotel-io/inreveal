@@ -1,8 +1,11 @@
 <script lang="ts">
+  import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
+  import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
   import SpaceCollage from '$lib/components/spaces/space-collage.svelte';
   import { Route } from '$lib/route';
-  import { UserAvatarColor, type SharedSpaceResponseDto } from '@immich/sdk';
+  import { getSpaceGradientClass } from '$lib/utils/space-colors';
+  import { type SharedSpaceResponseDto, type UserAvatarColor } from '@immich/sdk';
   import { mdiDotsVertical, mdiPin, mdiPinOff } from '@mdi/js';
   import { Icon } from '@immich/ui';
   import { t } from 'svelte-i18n';
@@ -17,24 +20,10 @@
   let { space, preload = false, isPinned = false, onTogglePin = () => {} }: Props = $props();
 
   let showMenu = $state(false);
-  let showDropdown = $state(false);
 
   const MAX_AVATARS = 4;
 
-  const gradientClasses: Record<string, string> = {
-    [UserAvatarColor.Primary]: 'from-immich-primary/60 to-immich-primary',
-    [UserAvatarColor.Pink]: 'from-pink-300 to-pink-500',
-    [UserAvatarColor.Red]: 'from-red-400 to-red-600',
-    [UserAvatarColor.Yellow]: 'from-yellow-300 to-yellow-500',
-    [UserAvatarColor.Blue]: 'from-blue-400 to-blue-600',
-    [UserAvatarColor.Green]: 'from-green-400 to-green-700',
-    [UserAvatarColor.Purple]: 'from-purple-400 to-purple-700',
-    [UserAvatarColor.Orange]: 'from-orange-400 to-orange-600',
-    [UserAvatarColor.Gray]: 'from-gray-400 to-gray-600',
-    [UserAvatarColor.Amber]: 'from-amber-400 to-amber-600',
-  };
-
-  let gradientClass = $derived(gradientClasses[space.color ?? 'primary'] ?? gradientClasses[UserAvatarColor.Primary]);
+  let gradientClass = $derived(getSpaceGradientClass(space.color));
 
   let collageAssets = $derived(
     (space.recentAssetIds ?? []).map((id, i) => ({
@@ -63,10 +52,7 @@
   class="group relative rounded-2xl border border-transparent p-5 hover:bg-gray-100 hover:border-gray-200 dark:hover:border-gray-800 dark:hover:bg-gray-900"
   data-testid="space-card"
   onmouseenter={() => (showMenu = true)}
-  onmouseleave={() => {
-    showMenu = false;
-    showDropdown = false;
-  }}
+  onmouseleave={() => (showMenu = false)}
 >
   <div class="relative">
     <SpaceCollage assets={collageAssets} {gradientClass} {preload} />
@@ -81,38 +67,29 @@
     {/if}
 
     {#if showMenu}
-      <button
-        type="button"
-        class="absolute top-2 end-2 z-20 rounded-full bg-white/80 p-1 shadow-sm hover:bg-white dark:bg-gray-800/80 dark:hover:bg-gray-800"
-        onclick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          showDropdown = !showDropdown;
-        }}
+      <!-- The whole card is an anchor, so swallow the click default here to stay put on menu use. -->
+      <ButtonContextMenu
+        class="absolute top-2 end-2 z-20"
         data-testid="space-menu-button"
+        onclick={(event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        icon={mdiDotsVertical}
+        title={$t('more')}
+        color="secondary"
+        variant="filled"
+        size="medium"
+        align="top-right"
+        direction="left"
+        buttonClass="icon-white-drop-shadow"
       >
-        <Icon icon={mdiDotsVertical} size="18" />
-      </button>
-    {/if}
-
-    {#if showDropdown}
-      <div
-        class="absolute top-10 end-2 z-30 min-w-[140px] rounded-lg border bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900"
-      >
-        <button
-          type="button"
-          class="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800"
-          onclick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onTogglePin(space.id);
-            showDropdown = false;
-          }}
-        >
-          <Icon icon={isPinned ? mdiPinOff : mdiPin} size="16" />
-          {isPinned ? $t('spaces_unpin') : $t('spaces_pin_to_top')}
-        </button>
-      </div>
+        <MenuOption
+          icon={isPinned ? mdiPinOff : mdiPin}
+          text={isPinned ? $t('spaces_unpin') : $t('spaces_pin_to_top')}
+          onClick={() => onTogglePin(space.id)}
+        />
+      </ButtonContextMenu>
     {/if}
 
     {#if hasActivity}

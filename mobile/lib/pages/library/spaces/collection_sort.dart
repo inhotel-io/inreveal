@@ -4,14 +4,13 @@ import 'package:openapi/api.dart';
 
 /// Sort modes for a space's linked-albums grid ([SpaceAlbumsPage]).
 enum SpaceAlbumSortMode {
-  name(0, 'name', SortOrder.asc),
-  photoCount(1, 'sort_photo_count', SortOrder.desc),
-  recentlyLinked(2, 'sort_recently_linked', SortOrder.desc),
-  recentlyUpdated(3, 'sort_recently_updated', SortOrder.desc);
+  name('name', SortOrder.asc),
+  photoCount('sort_photo_count', SortOrder.desc),
+  recentlyLinked('sort_recently_linked', SortOrder.desc),
+  recentlyUpdated('sort_recently_updated', SortOrder.desc);
 
-  const SpaceAlbumSortMode(this.storeIndex, this.label, this.defaultOrder);
+  const SpaceAlbumSortMode(this.label, this.defaultOrder);
 
-  final int storeIndex;
   final String label;
   final SortOrder defaultOrder;
 
@@ -20,15 +19,14 @@ enum SpaceAlbumSortMode {
 
 /// Sort modes for the Spaces grid ([SpacesPage]).
 enum SpaceSortMode {
-  name(0, 'name', SortOrder.asc),
-  recentActivity(1, 'sort_recent_activity', SortOrder.desc),
-  dateCreated(2, 'sort_date_created', SortOrder.desc),
-  members(3, 'sort_members', SortOrder.desc),
-  photos(4, 'sort_photos', SortOrder.desc);
+  name('name', SortOrder.asc),
+  recentActivity('sort_recent_activity', SortOrder.desc),
+  dateCreated('sort_date_created', SortOrder.desc),
+  members('sort_members', SortOrder.desc),
+  photos('sort_photos', SortOrder.desc);
 
-  const SpaceSortMode(this.storeIndex, this.label, this.defaultOrder);
+  const SpaceSortMode(this.label, this.defaultOrder);
 
-  final int storeIndex;
   final String label;
   final SortOrder defaultOrder;
 

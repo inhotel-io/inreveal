@@ -67,6 +67,13 @@ describe('RoleBadge', () => {
     expect(badge.className).toContain('text-blue-500');
   });
 
+  it('should use the darker text shade for the yellow outlined style', () => {
+    render(RoleBadge, { role: 'editor', spaceColor: 'yellow' });
+    const badge = screen.getByTestId('role-badge-editor');
+    expect(badge.className).toContain('border-yellow-500');
+    expect(badge.className).toContain('text-yellow-600');
+  });
+
   it('should fall back to primary when spaceColor is null', () => {
     render(RoleBadge, { role: 'owner', spaceColor: null });
     const badge = screen.getByTestId('role-badge-owner');

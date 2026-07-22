@@ -53,7 +53,6 @@ const spacePersonResponse = (overrides: Partial<SharedSpacePersonResponseDto>): 
   id: 'space-person-1',
   spaceId: 'space-1',
   name: 'Grandma',
-  thumbnailPath: '',
   isHidden: false,
   birthDate: null,
   representativeFaceSource: RepresentativeFaceSource.Auto,

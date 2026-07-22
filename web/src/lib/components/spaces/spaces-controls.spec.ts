@@ -156,4 +156,36 @@ describe('SpacesControls', () => {
     await user.click(getByTestId('view-toggle'));
     expect(get(spaceViewSettings).viewMode).toBe('card');
   });
+
+  // The sort menu is `$lib/elements/Dropdown.svelte`: the trigger is a button labelled with the
+  // current sort, the options are buttons labelled with their own name.
+  it('should label the sort trigger with the active sort option', () => {
+    const { getByRole } = render(SpacesControls, { props: { spaces: [makeSpace()], onSorted: vi.fn() } });
+    expect(getByRole('button', { name: 'last_activity' })).toBeDefined();
+  });
+
+  it('should write the picked sort option to the store and re-sort', async () => {
+    const user = userEvent.setup();
+    const onSorted = vi.fn();
+    const spaces = [makeSpace({ id: 's2', name: 'Beta' }), makeSpace({ id: 's1', name: 'Alpha' })];
+    const { getAllByRole, getByRole } = render(SpacesControls, { props: { spaces, onSorted } });
+
+    await user.click(getByRole('button', { name: 'last_activity' }));
+    await user.click(getAllByRole('button', { name: 'name' }).at(-1)!);
+
+    expect(get(spaceViewSettings).sortBy).toBe(SpaceSortBy.Name);
+    expect(get(spaceViewSettings).sortOrder).toBe('asc');
+    expect(onSorted).toHaveBeenLastCalledWith([expect.objectContaining({ name: 'Alpha' }), expect.anything()]);
+  });
+
+  it('should flip the sort order when the active sort option is picked again', async () => {
+    const user = userEvent.setup();
+    spaceViewSettings.update((s) => ({ ...s, sortBy: SpaceSortBy.Name, sortOrder: 'asc' }));
+    const { getAllByRole } = render(SpacesControls, { props: { spaces: [makeSpace()], onSorted: vi.fn() } });
+
+    await user.click(getAllByRole('button', { name: 'name' })[0]);
+    await user.click(getAllByRole('button', { name: 'name' }).at(-1)!);
+
+    expect(get(spaceViewSettings).sortOrder).toBe('desc');
+  });
 });

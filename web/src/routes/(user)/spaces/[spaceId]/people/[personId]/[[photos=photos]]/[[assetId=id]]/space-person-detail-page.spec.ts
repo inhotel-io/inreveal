@@ -130,12 +130,10 @@ function makePerson(overrides: Partial<SharedSpacePersonResponseDto> = {}): Shar
   return {
     id: 'person-1',
     name: 'Alice',
-    alias: null,
     assetCount: 5,
     faceCount: 10,
     isHidden: false,
     birthDate: null,
-    thumbnailPath: '/thumb.jpg',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-02T00:00:00.000Z',
     spaceId: 'space-1',

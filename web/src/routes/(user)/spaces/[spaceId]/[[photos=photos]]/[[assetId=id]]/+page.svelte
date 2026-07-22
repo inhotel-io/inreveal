@@ -45,6 +45,7 @@
   import { lang } from '$lib/stores/preferences.store';
   import { createUrl } from '$lib/utils';
   import { handleError } from '$lib/utils/handle-error';
+  import { getSpaceGradientClass } from '$lib/utils/space-colors';
   import {
     buildSearchablePageUrl,
     getSearchablePageFilterState,
@@ -80,7 +81,6 @@
     SharedSpaceRole,
     SearchSuggestionType,
     updateSpace,
-    UserAvatarColor,
     type SharedSpaceMemberResponseDto,
     type SharedSpaceResponseDto,
     type SmartSearchFacetsResponseDto,
@@ -141,7 +141,7 @@
 
   // Filter state
   const initialFilterState = getSearchablePageFilterState(page.url);
-  let filters = $state<FilterState>({
+  const initialFilters = (): FilterState => ({
     ...createFilterState(),
     dateAfter: undefined,
     dateBefore: undefined,
@@ -150,15 +150,8 @@
     ...initialFilterState,
     sortOrder: initialSearchState.sortOrder,
   });
-  let filtersBeforePanelChange: FilterState = {
-    ...createFilterState(),
-    dateAfter: undefined,
-    dateBefore: undefined,
-    selectedYear: undefined,
-    selectedMonth: undefined,
-    ...initialFilterState,
-    sortOrder: initialSearchState.sortOrder,
-  };
+  let filters = $state<FilterState>(initialFilters());
+  let filtersBeforePanelChange: FilterState = initialFilters();
   let timelineGrouping = $state<TimelineGrouping>('day');
   let temporalAnchor = $state<TimelineTemporalAnchor | undefined>();
   let personNames = new SvelteMap<string, string>();
@@ -465,7 +458,9 @@
     viewMode = 'view';
   };
 
-  const handleSetCoverFromSelection = async () => {
+  // `returnToView` is the only difference between the select-cover flow (which leaves cover-picking
+  // mode) and the selection-menu action (which stays where it is).
+  const setSelectedAssetAsCover = async (returnToView: boolean) => {
     const assets = assetMultiSelectManager.assets;
     if (assets.length !== 1) {
       return;
@@ -475,11 +470,15 @@
       await invalidateAll();
       toastManager.success($t('space_cover_updated'));
       assetMultiSelectManager.clear();
-      viewMode = 'view';
+      if (returnToView) {
+        viewMode = 'view';
+      }
     } catch (error) {
       handleError(error, $t('errors.unable_to_update_space_cover'));
     }
   };
+
+  const handleSetCoverFromSelection = () => setSelectedAssetAsCover(true);
 
   let skipNextLocalSpaceAddEventForSpaceId: string | null = null;
 
@@ -511,10 +510,6 @@
     }
   };
 
-  const handleAddAssets = async () => {
-    await addSelectedAssetsToCurrentSpace();
-  };
-
   registerSelectionContext({
     getAssets: () => assetMultiSelectManager.assets,
     clearSelection: () => assetMultiSelectManager.clear(),
@@ -538,20 +533,7 @@
     await invalidateAll();
   };
 
-  const handleSetAsCover = async () => {
-    const assets = assetMultiSelectManager.assets;
-    if (assets.length !== 1) {
-      return;
-    }
-    try {
-      await updateSpace({ id: space.id, sharedSpaceUpdateDto: { thumbnailAssetId: assets[0].id } });
-      await invalidateAll();
-      toastManager.success($t('space_cover_updated'));
-      assetMultiSelectManager.clear();
-    } catch (error) {
-      handleError(error, $t('errors.unable_to_update_space_cover'));
-    }
-  };
+  const handleSetAsCover = () => setSelectedAssetAsCover(false);
 
   const onSpaceAddAssets = async ({ spaceId }: { assetIds: string[]; spaceId: string }) => {
     if (spaceId !== space.id) {
@@ -563,12 +545,7 @@
     await applySpaceAddSuccess();
   };
 
-  const onSpaceRemoveAssets = async ({ assetIds }: { assetIds: string[]; spaceId: string }) => {
-    timelineManager.removeAssets(assetIds);
-    await refreshSpace();
-    // Also revalidate layout data so the shell's Photos tab count badge updates.
-    await invalidateAll();
-  };
+  const onSpaceRemoveAssets = ({ assetIds }: { assetIds: string[]; spaceId: string }) => handleRemoveAssets(assetIds);
 
   let committedSearchQuery = $state(initialSearchState.query);
   let lastHandledSearchState = $state(`${initialSearchState.query}:${initialSearchState.sortOrder}:${page.url.search}`);
@@ -707,20 +684,7 @@
     });
   });
 
-  const gradientClasses: Record<string, string> = {
-    [UserAvatarColor.Primary]: 'from-immich-primary/60 to-immich-primary',
-    [UserAvatarColor.Pink]: 'from-pink-300 to-pink-500',
-    [UserAvatarColor.Red]: 'from-red-400 to-red-600',
-    [UserAvatarColor.Yellow]: 'from-yellow-300 to-yellow-500',
-    [UserAvatarColor.Blue]: 'from-blue-400 to-blue-600',
-    [UserAvatarColor.Green]: 'from-green-400 to-green-700',
-    [UserAvatarColor.Purple]: 'from-purple-400 to-purple-700',
-    [UserAvatarColor.Orange]: 'from-orange-400 to-orange-600',
-    [UserAvatarColor.Gray]: 'from-gray-400 to-gray-600',
-    [UserAvatarColor.Amber]: 'from-amber-400 to-amber-600',
-  };
-
-  const spaceGradient = $derived(gradientClasses[space.color ?? 'primary'] ?? gradientClasses[UserAvatarColor.Primary]);
+  const spaceGradient = $derived(getSpaceGradientClass(space.color));
 
   $effect(() => {
     if (space?.id && space.id !== initializedSpaceId) {
@@ -928,7 +892,7 @@
           shape="round"
           color="secondary"
           aria-label={$t('add_to_space')}
-          onclick={handleAddAssets}
+          onclick={() => void addSelectedAssetsToCurrentSpace()}
           icon={mdiPlus}
           disabled={!assetMultiSelectManager.selectionActive ||
             assetMultiSelectManager.assets.length > MAX_SPACE_ASSETS_PER_REQUEST}

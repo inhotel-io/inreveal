@@ -215,13 +215,7 @@ export const buildSpaceAlbumGroups = (
     case SpaceAlbumGroupBy.Owner: {
       const UNASSIGNED_KEY = '__unassigned__';
 
-      // ownerId is not currently exposed on SharedSpaceLinkedAlbumDto (albumUsers was stripped
-      // in Slice 7 to prevent PII leakage). Group by ownerId when it becomes available;
-      // fall back to UNASSIGNED_KEY so the grouping is safe and crash-free today.
-      const groupedByOwner = groupBy(albums, (album) => {
-        const ownerId = (album as unknown as { ownerId?: string }).ownerId;
-        return ownerId ?? UNASSIGNED_KEY;
-      });
+      const groupedByOwner = groupBy(albums, (album) => album.ownerId ?? UNASSIGNED_KEY);
 
       const sortSign = order === SortOrder.Desc ? -1 : 1;
       const sortedByOwner = Object.entries(groupedByOwner).sort(([ownerIdA], [ownerIdB]) => {

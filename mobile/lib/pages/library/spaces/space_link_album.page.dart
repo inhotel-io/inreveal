@@ -18,9 +18,8 @@ import 'package:immich_mobile/utils/space_link_album_candidates.dart';
 ///
 /// Shows the albums the current user **owns or can edit** that are **not yet**
 /// linked to the space. The user selects one or more, then taps "Link (N)" to
-/// confirm. The page returns the selected ids via [onAlbumsPicked] and
-/// [context.maybePop(List<String>)] — it does NOT call the link API (that is
-/// B6's responsibility).
+/// confirm. The page returns the selected ids via `context.maybePop(List<String>)`
+/// — it does NOT call the link API (that is B6's responsibility).
 ///
 /// Searchable multi-select: checkbox + cover thumbnail + name + asset count.
 /// Empty state shown when no candidates are available.
@@ -29,18 +28,7 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
   final String spaceId;
   final List<String> linkedAlbumIds;
 
-  /// Called with the selected album ids when the user confirms.
-  /// No-op by default; B6 replaces with the PUT loop + sync-nudge.
-  final void Function(List<String> ids) onAlbumsPicked;
-
-  const SpaceLinkAlbumPage({
-    super.key,
-    required this.spaceId,
-    required this.linkedAlbumIds,
-    void Function(List<String> ids)? onAlbumsPicked,
-  }) : onAlbumsPicked = onAlbumsPicked ?? _noop;
-
-  static void _noop(List<String> _) {}
+  const SpaceLinkAlbumPage({super.key, required this.spaceId, required this.linkedAlbumIds});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -78,7 +66,7 @@ class SpaceLinkAlbumPage extends HookConsumerWidget {
 
     void confirm() {
       final ids = selectedIds.value.toList();
-      onAlbumsPicked(ids);
+      // The picked ids are returned to the caller through the pop result.
       // Use AutoRouter's maybePop when available (normal app), fall back to
       // Navigator for test environments that wrap with plain MaterialApp.
       try {

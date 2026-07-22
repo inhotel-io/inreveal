@@ -100,12 +100,9 @@ it('Owner groups by ownerId (resolved from ctx.members); missing ownerId → una
       { userId: 'her', name: 'Zoe' },
     ],
   };
-  // ownerId is not yet on SharedSpaceLinkedAlbumDto in the SDK; cast to simulate server-side value.
-  const withOwner = (album: SharedSpaceLinkedAlbumDto, ownerId: string) =>
-    Object.assign(album, { ownerId }) as SharedSpaceLinkedAlbumDto;
   const albums = [
-    withOwner(A({ id: 'mine' }), 'me'),
-    withOwner(A({ id: 'hers' }), 'her'),
+    A({ id: 'mine', ownerId: 'me' }),
+    A({ id: 'hers', ownerId: 'her' }),
     A({ id: 'noOwner' }), // no ownerId → unassigned
   ];
   const g = buildSpaceAlbumGroups(albums, { ...get(spaceAlbumViewSettings), groupBy: SpaceAlbumGroupBy.Owner }, ctx);

@@ -4,15 +4,13 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
-import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/pages/library/spaces/collection_sort.dart';
+import 'package:immich_mobile/presentation/widgets/common/collection_search_sort_bar.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/shared_space.provider.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
-import 'package:immich_mobile/widgets/common/collection_sort_button.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
-import 'package:immich_mobile/widgets/common/search_field.dart';
 import 'package:immich_mobile/widgets/spaces/space_card.dart';
 
 @RoutePage()
@@ -117,7 +115,14 @@ class SpacesPage extends HookConsumerWidget {
 
           return Column(
             children: [
-              _SearchAndSortBar(
+              CollectionSearchSortBar<SpaceSortMode>(
+                searchFieldKey: const Key('spaces-search-field'),
+                clearButtonKey: const Key('spaces-search-clear'),
+                resultCountKey: const Key('spaces-result-count'),
+                hintKey: 'spaces_search_hint',
+                countKey: 'spaces_result_count',
+                searchCountKey: 'spaces_page_search_result_count',
+                options: SpaceSortMode.values.map((mode) => (mode: mode, label: mode.label)).toList(),
                 controller: queryController,
                 hasQuery: query.value.isNotEmpty,
                 onClear: queryController.clear,
@@ -134,7 +139,11 @@ class SpacesPage extends HookConsumerWidget {
               ),
               Expanded(
                 child: filtered.isEmpty
-                    ? _NoMatch(key: const Key('spaces-no-match'), query: query.value)
+                    ? CollectionNoMatch(
+                        key: const Key('spaces-no-match'),
+                        messageKey: 'spaces_no_match',
+                        query: query.value,
+                      )
                     : RefreshIndicator(
                         onRefresh: () async => ref.invalidate(sharedSpacesProvider),
                         child: Padding(
@@ -180,109 +189,6 @@ class SpacesPage extends HookConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton(onPressed: createSpaceDialog, child: const Icon(Icons.add)),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Search + sort bar
-// ---------------------------------------------------------------------------
-
-class _SearchAndSortBar extends StatelessWidget {
-  const _SearchAndSortBar({
-    required this.controller,
-    required this.hasQuery,
-    required this.onClear,
-    required this.resultCount,
-    required this.totalCount,
-    required this.query,
-    required this.sortMode,
-    required this.isReverse,
-    required this.onSortChanged,
-  });
-
-  final TextEditingController controller;
-  final bool hasQuery;
-  final VoidCallback onClear;
-  final int resultCount;
-  final int totalCount;
-  final String query;
-  final SpaceSortMode sortMode;
-  final bool isReverse;
-  final void Function(SpaceSortMode mode, bool isReverse) onSortChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SearchField(
-            key: const Key('spaces-search-field'),
-            hintText: 'spaces_search_hint'.t(context: context),
-            controller: controller,
-            prefixIcon: const Icon(Icons.search_rounded),
-            suffixIcon: hasQuery
-                ? IconButton(
-                    key: const Key('spaces-search-clear'),
-                    icon: const Icon(Icons.clear_rounded),
-                    onPressed: onClear,
-                  )
-                : null,
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                query.isEmpty
-                    ? 'spaces_result_count'.t(context: context, args: {'count': resultCount.toString()})
-                    : 'spaces_page_search_result_count'.t(
-                        context: context,
-                        args: {'count': resultCount.toString(), 'total': totalCount.toString(), 'query': query},
-                      ),
-                key: const Key('spaces-result-count'),
-                style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceVariant),
-              ),
-              CollectionSortButton<SpaceSortMode>(
-                options: SpaceSortMode.values.map((mode) => (mode: mode, label: mode.label)).toList(),
-                current: sortMode,
-                isReverse: isReverse,
-                onChanged: onSortChanged,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// No-match state (source list non-empty, but the query matches nothing)
-// ---------------------------------------------------------------------------
-
-class _NoMatch extends StatelessWidget {
-  const _NoMatch({super.key, required this.query});
-
-  final String query;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.search_off_rounded, size: 64, color: context.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-          const SizedBox(height: 16),
-          Text(
-            'spaces_no_match'.t(context: context, args: {'query': query}),
-            textAlign: TextAlign.center,
-            style: context.textTheme.titleMedium?.copyWith(color: context.colorScheme.onSurfaceVariant),
-          ),
-        ],
-      ),
     );
   }
 }
