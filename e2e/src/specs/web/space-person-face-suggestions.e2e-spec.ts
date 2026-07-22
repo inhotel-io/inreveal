@@ -101,10 +101,11 @@ test.describe('Space person face suggestions (web)', () => {
       const face = await db.query<{ id: string }>(`INSERT INTO asset_face ("assetId") VALUES ($1) RETURNING id`, [
         candidateAsset.id,
       ]);
-      await db.query(
-        `INSERT INTO face_person_verdict ("spacePersonId", "assetFaceId", distance) VALUES ($1, $2, $3)`,
-        [spacePersonId, face.rows[0].id, distance],
-      );
+      await db.query(`INSERT INTO face_person_verdict ("spacePersonId", "assetFaceId", distance) VALUES ($1, $2, $3)`, [
+        spacePersonId,
+        face.rows[0].id,
+        distance,
+      ]);
     }
 
     if (options.candidateShared === false) {
