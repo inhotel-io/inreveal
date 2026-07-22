@@ -19,7 +19,6 @@ import {
   FaceRepairResolutionsListDto,
   FaceRepairResolutionsRemovedDto,
   FaceRepairResolutionsRemoveRequestDto,
-  FaceRepairUnconfirmRequestDto,
   FaceRepairResolveRequestDto,
   FaceRepairResolveResponseDto,
   FaceRepairResponseDto,
@@ -27,6 +26,7 @@ import {
   FaceRepairScanStatusDto,
   FaceRepairScanTriggerRequestDto,
   FaceRepairScanTriggerResponseDto,
+  FaceRepairUnconfirmRequestDto,
 } from 'src/dtos/face-repair.dto';
 import { ApiTag } from 'src/enum';
 import { Auth, Authenticated } from 'src/middleware/auth.guard';
