@@ -21,6 +21,7 @@
     'video_moments',
     'trip_anniversary',
     'themed',
+    'person_throwback',
   ];
 
   const disabled = $derived(featureFlagsManager.value.configFile);
