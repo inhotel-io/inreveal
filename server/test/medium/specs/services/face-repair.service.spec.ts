@@ -1235,7 +1235,6 @@ describe('FaceRepairService decline filter', () => {
     const { sut, ctx } = setupDecline();
     const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
     jobMock.isActive.mockResolvedValue(false);
-    const declineRepo = ctx.get(FaceRepairDeclineRepository);
     const verdictRepo = ctx.get(FacePersonVerdictRepository);
     const { user } = await ctx.newUser();
 
@@ -1290,7 +1289,6 @@ describe('FaceRepairService decline filter', () => {
     const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
     jobMock.isActive.mockResolvedValue(false);
     jobMock.queue.mockResolvedValue();
-    const declineRepo = ctx.get(FaceRepairDeclineRepository);
     const verdictRepo = ctx.get(FacePersonVerdictRepository);
     const { user } = await ctx.newUser();
 
@@ -1373,7 +1371,6 @@ describe('FaceRepairService decline filter', () => {
   it('dismissed person is absent from getPersonFlaggedFaces when its suspected set matches the fingerprint', async () => {
     const { sut, ctx } = setupDecline();
     const declineRepo = ctx.get(FaceRepairDeclineRepository);
-    const verdictRepo = ctx.get(FacePersonVerdictRepository);
     const { user } = await ctx.newUser();
 
     // Karina-main: 10 first-axis faces
