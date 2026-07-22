@@ -448,6 +448,48 @@ describe('FacePersonVerdictRepository', () => {
     });
   });
 
+  describe('drainPendingForFaces', () => {
+    it('deletes pending rows for the given faces across all targets, keeps verdicts, ignores other faces', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: fA } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const { assetFace: fB } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const { person: p1 } = await ctx.newPerson({ ownerId: user.id, name: 'P1' });
+      const { person: p2 } = await ctx.newPerson({ ownerId: user.id, name: 'P2' });
+
+      await sut.upsertPending([
+        { personId: p1.id, assetFaceId: fA.id, distance: 0.6 },
+        { personId: p2.id, assetFaceId: fA.id, distance: 0.62 },
+        { personId: p1.id, assetFaceId: fB.id, distance: 0.63 },
+      ]);
+      // A durable negative verdict on fA must survive the drain.
+      await sut.markRejected(p2.id, fA.id, { source: 'cleanup' });
+
+      const drained = await sut.drainPendingForFaces([fA.id]);
+      expect(drained).toBe(1); // only p1's still-pending fA row (p2's fA row is now 'rejected')
+
+      const rows = await defaultDatabase
+        .selectFrom('face_person_verdict')
+        .select(['assetFaceId', 'personId', 'status'])
+        .orderBy('status')
+        .execute();
+      // fA keeps its rejected verdict; fB's pending row is untouched.
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ assetFaceId: fA.id, personId: p2.id, status: 'rejected' }),
+          expect.objectContaining({ assetFaceId: fB.id, personId: p1.id, status: 'pending' }),
+        ]),
+      );
+      expect(rows.filter((r) => r.assetFaceId === fA.id && r.status === 'pending')).toEqual([]);
+    });
+
+    it('is a no-op for an empty list', async () => {
+      const { sut } = setup();
+      expect(await sut.drainPendingForFaces([])).toBe(0);
+    });
+  });
+
   describe('resolveAssignedFace', () => {
     let faceXId: string;
 
