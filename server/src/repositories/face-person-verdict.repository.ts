@@ -4,10 +4,11 @@ import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import { AssetVisibility } from 'src/enum';
 import { DB } from 'src/schema';
+import { FacePersonVerdictSource } from 'src/schema/tables/face-person-verdict.table';
 import { spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
 
 @Injectable()
-export class PersonFaceSuggestionRepository {
+export class FacePersonVerdictRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
   @GenerateSql({ params: [[{ personId: DummyValue.UUID, assetFaceId: DummyValue.UUID, distance: 0.6 }]] })
@@ -16,7 +17,7 @@ export class PersonFaceSuggestionRepository {
       return;
     }
     await this.db
-      .insertInto('person_face_suggestion')
+      .insertInto('face_person_verdict')
       .values(rows.map((r) => ({ personId: r.personId, assetFaceId: r.assetFaceId, distance: r.distance })))
       .onConflict((oc) =>
         oc
@@ -26,7 +27,7 @@ export class PersonFaceSuggestionRepository {
             distance: (eb) => eb.ref('excluded.distance'),
             updatedAt: sql`now()`,
           })
-          .where('person_face_suggestion.status', '=', 'pending'),
+          .where('face_person_verdict.status', '=', 'pending'),
       )
       .execute();
   }
@@ -34,7 +35,7 @@ export class PersonFaceSuggestionRepository {
   @GenerateSql({ params: [DummyValue.UUID] })
   async resolveAssignedFace(assetFaceId: string): Promise<void> {
     await this.db
-      .deleteFrom('person_face_suggestion')
+      .deleteFrom('face_person_verdict')
       .where('assetFaceId', '=', assetFaceId)
       .where('status', '=', 'pending')
       .execute();
@@ -48,7 +49,7 @@ export class PersonFaceSuggestionRepository {
       return;
     }
     await this.db
-      .insertInto('person_face_suggestion')
+      .insertInto('face_person_verdict')
       .values(rows.map((r) => ({ spacePersonId: r.spacePersonId, assetFaceId: r.assetFaceId, distance: r.distance })))
       .onConflict((oc) =>
         oc
@@ -58,83 +59,176 @@ export class PersonFaceSuggestionRepository {
             distance: (eb) => eb.ref('excluded.distance'),
             updatedAt: sql`now()`,
           })
-          .where('person_face_suggestion.status', '=', 'pending'),
+          .where('face_person_verdict.status', '=', 'pending'),
       )
       .execute();
   }
 
+  // Confirm has NO status of its own. The durable positive record is the face's manual identity link,
+  // written by the caller's reassignment; all this layer has to do is drain the queue for that face. Callers
+  // use `claimPending` first so a double-submit still reports "nothing to do" exactly once.
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async markConfirmed(personId: string, assetFaceId: string): Promise<number> {
+  async claimPending(personId: string, assetFaceId: string): Promise<number> {
     const result = await this.db
-      .updateTable('person_face_suggestion')
-      .set({ status: 'confirmed' })
+      .deleteFrom('face_person_verdict')
       .where('personId', '=', personId)
       .where('assetFaceId', '=', assetFaceId)
       .where('status', '=', 'pending')
       .executeTakeFirst();
-    return Number(result.numUpdatedRows ?? 0n);
+    return Number(result.numDeletedRows ?? 0n);
   }
 
-  private async markPersonalResolved(
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async claimPendingForSpacePerson(spacePersonId: string, assetFaceId: string): Promise<number> {
+    const result = await this.db
+      .deleteFrom('face_person_verdict')
+      .where('spacePersonId', '=', spacePersonId)
+      .where('assetFaceId', '=', assetFaceId)
+      .where('status', '=', 'pending')
+      .executeTakeFirst();
+    return Number(result.numDeletedRows ?? 0n);
+  }
+
+  // Negative verdicts are UPSERTED, not just flipped from a pending row: the cleanup console records
+  // "this face is not that person" for faces that never had a suggestion queued, so there is frequently no
+  // row to update. `identityId` is resolved by the caller and stored alongside the target so one verdict
+  // answers the question in personal scope and in every space.
+  private async recordPersonalVerdict(input: {
+    personId: string;
+    assetFaceId: string;
+    status: 'rejected' | 'ignored';
+    identityId?: string | null;
+    source?: FacePersonVerdictSource;
+    actorId?: string | null;
+  }): Promise<number> {
+    const result = await this.db
+      .insertInto('face_person_verdict')
+      .values({
+        personId: input.personId,
+        assetFaceId: input.assetFaceId,
+        identityId: input.identityId ?? null,
+        status: input.status,
+        source: input.source ?? 'suggestion',
+        actorId: input.actorId ?? null,
+        distance: null,
+      })
+      .onConflict((oc) =>
+        oc
+          .columns(['personId', 'assetFaceId'])
+          .where('personId', 'is not', null)
+          .doUpdateSet({
+            status: input.status,
+            identityId: input.identityId ?? null,
+            source: input.source ?? 'suggestion',
+            actorId: input.actorId ?? null,
+            updatedAt: sql`now()`,
+          }),
+      )
+      .executeTakeFirst();
+    return Number(result.numInsertedOrUpdatedRows ?? 0n);
+  }
+
+  @GenerateSql({ params: [{ personId: DummyValue.UUID, assetFaceId: DummyValue.UUID, status: 'rejected' }] })
+  async markRejected(
     personId: string,
     assetFaceId: string,
-    status: 'rejected' | 'ignored',
+    opts?: { identityId?: string | null; source?: FacePersonVerdictSource; actorId?: string | null },
   ): Promise<number> {
+    return this.recordPersonalVerdict({ personId, assetFaceId, status: 'rejected', ...opts });
+  }
+
+  @GenerateSql({ params: [{ personId: DummyValue.UUID, assetFaceId: DummyValue.UUID, status: 'ignored' }] })
+  async markIgnored(
+    personId: string,
+    assetFaceId: string,
+    opts?: { identityId?: string | null; source?: FacePersonVerdictSource; actorId?: string | null },
+  ): Promise<number> {
+    return this.recordPersonalVerdict({ personId, assetFaceId, status: 'ignored', ...opts });
+  }
+
+  private async recordSpacePersonVerdict(input: {
+    spacePersonId: string;
+    assetFaceId: string;
+    status: 'rejected' | 'ignored';
+    identityId?: string | null;
+    source?: FacePersonVerdictSource;
+    actorId?: string | null;
+  }): Promise<number> {
     const result = await this.db
-      .updateTable('person_face_suggestion')
-      .set({ status })
-      .where('personId', '=', personId)
-      .where('assetFaceId', '=', assetFaceId)
-      .where('status', '=', 'pending')
+      .insertInto('face_person_verdict')
+      .values({
+        spacePersonId: input.spacePersonId,
+        assetFaceId: input.assetFaceId,
+        identityId: input.identityId ?? null,
+        status: input.status,
+        source: input.source ?? 'suggestion',
+        actorId: input.actorId ?? null,
+        distance: null,
+      })
+      .onConflict((oc) =>
+        oc
+          .columns(['spacePersonId', 'assetFaceId'])
+          .where('spacePersonId', 'is not', null)
+          .doUpdateSet({
+            status: input.status,
+            identityId: input.identityId ?? null,
+            source: input.source ?? 'suggestion',
+            actorId: input.actorId ?? null,
+            updatedAt: sql`now()`,
+          }),
+      )
       .executeTakeFirst();
-    return Number(result.numUpdatedRows ?? 0n);
+    return Number(result.numInsertedOrUpdatedRows ?? 0n);
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async markRejected(personId: string, assetFaceId: string): Promise<number> {
-    return this.markPersonalResolved(personId, assetFaceId, 'rejected');
-  }
-
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async markIgnored(personId: string, assetFaceId: string): Promise<number> {
-    return this.markPersonalResolved(personId, assetFaceId, 'ignored');
-  }
-
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async markConfirmedForSpacePerson(spacePersonId: string, assetFaceId: string): Promise<number> {
-    const result = await this.db
-      .updateTable('person_face_suggestion')
-      .set({ status: 'confirmed' })
-      .where('spacePersonId', '=', spacePersonId)
-      .where('assetFaceId', '=', assetFaceId)
-      .where('status', '=', 'pending')
-      .executeTakeFirst();
-    return Number(result.numUpdatedRows ?? 0n);
-  }
-
-  private async markSpacePersonResolved(
+  @GenerateSql({ params: [{ spacePersonId: DummyValue.UUID, assetFaceId: DummyValue.UUID, status: 'rejected' }] })
+  async markRejectedForSpacePerson(
     spacePersonId: string,
     assetFaceId: string,
-    status: 'rejected' | 'ignored',
+    opts?: { identityId?: string | null; source?: FacePersonVerdictSource; actorId?: string | null },
   ): Promise<number> {
-    const result = await this.db
-      .updateTable('person_face_suggestion')
-      .set({ status })
-      .where('spacePersonId', '=', spacePersonId)
-      .where('assetFaceId', '=', assetFaceId)
-      .where('status', '=', 'pending')
-      .executeTakeFirst();
-    return Number(result.numUpdatedRows ?? 0n);
+    return this.recordSpacePersonVerdict({ spacePersonId, assetFaceId, status: 'rejected', ...opts });
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async markRejectedForSpacePerson(spacePersonId: string, assetFaceId: string): Promise<number> {
-    return this.markSpacePersonResolved(spacePersonId, assetFaceId, 'rejected');
+  @GenerateSql({ params: [{ spacePersonId: DummyValue.UUID, assetFaceId: DummyValue.UUID, status: 'ignored' }] })
+  async markIgnoredForSpacePerson(
+    spacePersonId: string,
+    assetFaceId: string,
+    opts?: { identityId?: string | null; source?: FacePersonVerdictSource; actorId?: string | null },
+  ): Promise<number> {
+    return this.recordSpacePersonVerdict({ spacePersonId, assetFaceId, status: 'ignored', ...opts });
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async markIgnoredForSpacePerson(spacePersonId: string, assetFaceId: string): Promise<number> {
-    return this.markSpacePersonResolved(spacePersonId, assetFaceId, 'ignored');
+  // The shared negative-verdict read, identity-first with target fallback. Both engines call this: the
+  // suggestion scan before proposing a face, the cleanup filter before flagging one. Returns
+  // assetFaceId -> Set<targetToken> so the caller can match against whichever token(s) its target carries.
+  @GenerateSql({ params: [[DummyValue.UUID]] })
+  async getNegativeVerdictTokens(assetFaceIds: string[]): Promise<Map<string, Set<string>>> {
+    const map = new Map<string, Set<string>>();
+    if (assetFaceIds.length === 0) {
+      return map;
+    }
+    const rows = await this.db
+      .selectFrom('face_person_verdict')
+      .select(['assetFaceId', 'personId', 'spacePersonId', 'identityId'])
+      .where('assetFaceId', 'in', assetFaceIds)
+      .where('status', 'in', ['rejected', 'ignored'])
+      .execute();
+
+    for (const row of rows) {
+      const tokens = map.get(row.assetFaceId) ?? new Set<string>();
+      if (row.identityId) {
+        tokens.add(`identity:${row.identityId}`);
+      }
+      if (row.personId) {
+        tokens.add(`person:${row.personId}`);
+      }
+      if (row.spacePersonId) {
+        tokens.add(`space-person:${row.spacePersonId}`);
+      }
+      map.set(row.assetFaceId, tokens);
+    }
+    return map;
   }
 
   @GenerateSql({
@@ -166,13 +260,13 @@ export class PersonFaceSuggestionRepository {
     // A concurrent resolveAssignedFace between them can make total > items.length. This is an
     // acceptable trade-off for a background review queue where stale counts cause no harm.
     const base = this.db
-      .selectFrom('person_face_suggestion as pfs')
-      .innerJoin('asset_face as af', 'af.id', 'pfs.assetFaceId')
+      .selectFrom('face_person_verdict as fpv')
+      .innerJoin('asset_face as af', 'af.id', 'fpv.assetFaceId')
       .innerJoin('asset', 'asset.id', 'af.assetId')
-      .where('pfs.personId', '=', personId)
-      .where('pfs.status', '=', 'pending')
-      .where('pfs.distance', '>', opts.maxDistance)
-      .where('pfs.distance', '<=', opts.suggestionMaxDistance)
+      .where('fpv.personId', '=', personId)
+      .where('fpv.status', '=', 'pending')
+      .where('fpv.distance', '>', opts.maxDistance)
+      .where('fpv.distance', '<=', opts.suggestionMaxDistance)
       .where('af.personId', 'is', null)
       .where('af.deletedAt', 'is', null);
 
@@ -180,8 +274,8 @@ export class PersonFaceSuggestionRepository {
 
     const items = await base
       .select([
-        'pfs.assetFaceId as assetFaceId',
-        'pfs.distance as distance',
+        'fpv.assetFaceId as assetFaceId',
+        'fpv.distance as distance',
         'af.assetId as assetId',
         'af.imageWidth as imageWidth',
         'af.imageHeight as imageHeight',
@@ -191,9 +285,13 @@ export class PersonFaceSuggestionRepository {
         'af.boundingBoxY2 as boundingBoxY2',
         'asset.fileCreatedAt as fileCreatedAt',
       ])
-      .orderBy('pfs.distance', 'asc')
+      .orderBy('fpv.distance', 'asc')
       .limit(opts.size)
       .offset((opts.page - 1) * opts.size)
+      // `distance` is nullable on the table (cleanup-sourced verdicts carry none), but the band filter
+      // above (`> maxDistance AND <= suggestionMaxDistance`) is never true for NULL, so every row that
+      // reaches here has one.
+      .$narrowType<{ distance: number }>()
       .execute();
 
     return { total: Number(totalRow.total), items };
@@ -227,13 +325,13 @@ export class PersonFaceSuggestionRepository {
     }
 
     const base = this.db
-      .selectFrom('person_face_suggestion as pfs')
-      .innerJoin('asset_face as af', 'af.id', 'pfs.assetFaceId')
+      .selectFrom('face_person_verdict as fpv')
+      .innerJoin('asset_face as af', 'af.id', 'fpv.assetFaceId')
       .innerJoin('asset', 'asset.id', 'af.assetId')
-      .where('pfs.spacePersonId', '=', spacePersonId)
-      .where('pfs.status', '=', 'pending')
-      .where('pfs.distance', '>', opts.maxDistance)
-      .where('pfs.distance', '<=', opts.suggestionMaxDistance)
+      .where('fpv.spacePersonId', '=', spacePersonId)
+      .where('fpv.status', '=', 'pending')
+      .where('fpv.distance', '>', opts.maxDistance)
+      .where('fpv.distance', '<=', opts.suggestionMaxDistance)
       .where('af.personId', 'is', null)
       .where('af.deletedAt', 'is', null)
       .where('af.isVisible', 'is', true)
@@ -259,8 +357,8 @@ export class PersonFaceSuggestionRepository {
 
     const items = await base
       .select([
-        'pfs.assetFaceId as assetFaceId',
-        'pfs.distance as distance',
+        'fpv.assetFaceId as assetFaceId',
+        'fpv.distance as distance',
         'af.assetId as assetId',
         'af.imageWidth as imageWidth',
         'af.imageHeight as imageHeight',
@@ -270,9 +368,13 @@ export class PersonFaceSuggestionRepository {
         'af.boundingBoxY2 as boundingBoxY2',
         'asset.fileCreatedAt as fileCreatedAt',
       ])
-      .orderBy('pfs.distance', 'asc')
+      .orderBy('fpv.distance', 'asc')
       .limit(opts.size)
       .offset((opts.page - 1) * opts.size)
+      // `distance` is nullable on the table (cleanup-sourced verdicts carry none), but the band filter
+      // above (`> maxDistance AND <= suggestionMaxDistance`) is never true for NULL, so every row that
+      // reaches here has one.
+      .$narrowType<{ distance: number }>()
       .execute();
 
     return { total: Number(totalRow.total), items };
@@ -292,17 +394,17 @@ export class PersonFaceSuggestionRepository {
     }
 
     const row = await this.db
-      .selectFrom('person_face_suggestion as pfs')
-      .innerJoin('shared_space_person', 'shared_space_person.id', 'pfs.spacePersonId')
+      .selectFrom('face_person_verdict as fpv')
+      .innerJoin('shared_space_person', 'shared_space_person.id', 'fpv.spacePersonId')
       .innerJoin('shared_space', 'shared_space.id', 'shared_space_person.spaceId')
-      .innerJoin('asset_face as af', 'af.id', 'pfs.assetFaceId')
+      .innerJoin('asset_face as af', 'af.id', 'fpv.assetFaceId')
       .innerJoin('asset', 'asset.id', 'af.assetId')
-      .select('pfs.assetFaceId')
-      .where('pfs.spacePersonId', '=', spacePersonId)
-      .where('pfs.assetFaceId', '=', assetFaceId)
-      .where('pfs.status', '=', 'pending')
-      .where('pfs.distance', '>', opts.maxDistance)
-      .where('pfs.distance', '<=', opts.suggestionMaxDistance)
+      .select('fpv.assetFaceId')
+      .where('fpv.spacePersonId', '=', spacePersonId)
+      .where('fpv.assetFaceId', '=', assetFaceId)
+      .where('fpv.status', '=', 'pending')
+      .where('fpv.distance', '>', opts.maxDistance)
+      .where('fpv.distance', '<=', opts.suggestionMaxDistance)
       .where('shared_space_person.spaceId', '=', spaceId)
       .where(sql`BTRIM("shared_space_person"."name")`, '<>', '')
       .where('shared_space_person.isHidden', 'is', false)
