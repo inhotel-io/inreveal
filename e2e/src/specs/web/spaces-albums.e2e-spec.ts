@@ -420,8 +420,10 @@ test.describe('Spaces — Albums tab controls (search / sort / group / view / cr
 
     // Open group menu and pick Year (SpaceAlbumGroupBy.Year = 'Year').
     // The trigger shares its label with the matching option, so target the option with .last().
+    // The Dropdown menu flies in over the album grid; force the option click so Playwright's
+    // stability wait doesn't hang on the transition (the option is the resolved, enabled button).
     await page.getByRole('button', { name: 'No grouping' }).click();
-    await page.getByRole('button', { name: 'Group by year' }).last().click();
+    await page.getByRole('button', { name: 'Group by year' }).last().click({ force: true });
 
     // At least one group header should be rendered (all albums were just created, so same year).
     const groupHeaders = page.locator('[data-testid^="space-album-group-"]');
@@ -441,7 +443,7 @@ test.describe('Spaces — Albums tab controls (search / sort / group / view / cr
 
     // Reset grouping to None so subsequent tests are not affected.
     await page.getByRole('button', { name: 'Group by year' }).first().click();
-    await page.getByRole('button', { name: 'No grouping' }).last().click();
+    await page.getByRole('button', { name: 'No grouping' }).last().click({ force: true });
   });
 
   // 4. View toggle switches to list rows linking to the space album route.
