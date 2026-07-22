@@ -69,30 +69,29 @@ export class PetDetectionService extends BaseService {
       );
 
       const thumbnailJobs: JobItem[] = [];
-      const speciesCache = new Map<string, string>();
+      // Caching `hasFaceAsset` alongside the id saves a re-read per detection: the only way it flips
+      // within this loop is the update below, which we already know about.
+      const speciesCache = new Map<string, { id: string; hasFaceAsset: boolean }>();
 
       for (const pet of pets) {
-        let personId = speciesCache.get(pet.label);
+        let person = speciesCache.get(pet.label);
 
-        if (!personId) {
-          const existing = await this.personRepository.getByOwnerAndSpecies(asset.ownerId, pet.label);
-          if (existing) {
-            personId = existing.id;
-          } else {
-            const person = await this.personRepository.create({
+        if (!person) {
+          const existing =
+            (await this.personRepository.getByOwnerAndSpecies(asset.ownerId, pet.label)) ??
+            (await this.personRepository.create({
               ownerId: asset.ownerId,
               name: pet.label,
               type: 'pet',
               species: pet.label,
-            });
-            personId = person.id;
-          }
-          speciesCache.set(pet.label, personId);
+            }));
+          person = { id: existing.id, hasFaceAsset: !!existing.faceAssetId };
+          speciesCache.set(pet.label, person);
         }
 
         const faceId = await this.personRepository.createAssetFace({
           assetId: id,
-          personId,
+          personId: person.id,
           imageHeight,
           imageWidth,
           boundingBoxX1: pet.boundingBox.x1,
@@ -101,10 +100,10 @@ export class PetDetectionService extends BaseService {
           boundingBoxY2: pet.boundingBox.y2,
         });
 
-        const person = await this.personRepository.getById(personId);
-        if (person && !person.faceAssetId) {
-          await this.personRepository.update({ id: personId, faceAssetId: faceId });
-          thumbnailJobs.push({ name: JobName.PersonGenerateThumbnail, data: { id: personId } });
+        if (!person.hasFaceAsset) {
+          await this.personRepository.update({ id: person.id, faceAssetId: faceId });
+          person.hasFaceAsset = true;
+          thumbnailJobs.push({ name: JobName.PersonGenerateThumbnail, data: { id: person.id } });
         }
       }
 

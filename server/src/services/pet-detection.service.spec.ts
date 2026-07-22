@@ -263,7 +263,6 @@ describe(PetDetectionService.name, () => {
       mocks.person.getByOwnerAndSpecies.mockResolvedValue(void 0);
       mocks.person.create.mockResolvedValue(makePerson());
       mocks.person.createAssetFace.mockResolvedValue('face-id');
-      mocks.person.getById.mockResolvedValue(makePerson());
       mocks.person.update.mockResolvedValue({} as any);
 
       expect(await sut.handlePetDetection({ id: asset.id })).toEqual(JobStatus.Success);
@@ -302,7 +301,6 @@ describe(PetDetectionService.name, () => {
       });
       mocks.person.getByOwnerAndSpecies.mockResolvedValue(makePerson({ id: 'existing-cat', faceAssetId: 'old-face' }));
       mocks.person.createAssetFace.mockResolvedValue('face-id');
-      mocks.person.getById.mockResolvedValue(makePerson({ id: 'existing-cat', faceAssetId: 'old-face' }));
 
       expect(await sut.handlePetDetection({ id: asset.id })).toEqual(JobStatus.Success);
 
@@ -323,7 +321,6 @@ describe(PetDetectionService.name, () => {
       });
       mocks.person.getByOwnerAndSpecies.mockResolvedValue(makePerson({ id: 'existing-cat', faceAssetId: null }));
       mocks.person.createAssetFace.mockResolvedValue('new-face-id');
-      mocks.person.getById.mockResolvedValue(makePerson({ id: 'existing-cat', faceAssetId: null }));
       mocks.person.update.mockResolvedValue({} as any);
 
       expect(await sut.handlePetDetection({ id: asset.id })).toEqual(JobStatus.Success);
@@ -352,7 +349,6 @@ describe(PetDetectionService.name, () => {
       mocks.person.getByOwnerAndSpecies.mockResolvedValue(void 0);
       mocks.person.create.mockResolvedValue(makePerson());
       mocks.person.createAssetFace.mockResolvedValue('face-id');
-      mocks.person.getById.mockResolvedValue(makePerson());
       mocks.person.update.mockResolvedValue({} as any);
 
       expect(await sut.handlePetDetection({ id: asset.id })).toEqual(JobStatus.Success);
@@ -360,6 +356,31 @@ describe(PetDetectionService.name, () => {
       expect(mocks.person.create).toHaveBeenCalledTimes(1);
       expect(mocks.person.createAssetFace).toHaveBeenCalledTimes(2);
       expect(mocks.person.getByOwnerAndSpecies).toHaveBeenCalledTimes(1);
+    });
+
+    it('should set the face asset only once when the same species is detected twice in one photo', async () => {
+      const asset = AssetFactory.create();
+      mocks.systemMetadata.get.mockResolvedValue(enabledConfig);
+      mocks.machineLearning.detectPets.mockResolvedValue({
+        imageHeight: 100,
+        imageWidth: 200,
+        pets: [
+          { boundingBox: { x1: 10, y1: 20, x2: 30, y2: 40 }, score: 0.9, label: 'dog' },
+          { boundingBox: { x1: 50, y1: 60, x2: 70, y2: 80 }, score: 0.8, label: 'dog' },
+        ],
+      });
+      mocks.person.getByOwnerAndSpecies.mockResolvedValue(void 0);
+      mocks.person.create.mockResolvedValue(makePerson());
+      mocks.person.createAssetFace.mockResolvedValueOnce('face-1').mockResolvedValueOnce('face-2');
+      mocks.person.update.mockResolvedValue({} as any);
+
+      expect(await sut.handlePetDetection({ id: asset.id })).toEqual(JobStatus.Success);
+
+      expect(mocks.person.update).toHaveBeenCalledTimes(1);
+      expect(mocks.person.update).toHaveBeenCalledWith({ id: 'person-id', faceAssetId: 'face-1' });
+      expect(mocks.job.queueAll).toHaveBeenCalledWith([
+        { name: JobName.PersonGenerateThumbnail, data: { id: 'person-id' } },
+      ]);
     });
 
     it('should create separate persons for different species', async () => {
@@ -378,9 +399,6 @@ describe(PetDetectionService.name, () => {
         .mockResolvedValueOnce(makePerson({ id: 'dog-person' }))
         .mockResolvedValueOnce(makePerson({ id: 'cat-person', name: 'cat', species: 'cat' }));
       mocks.person.createAssetFace.mockResolvedValueOnce('face-1').mockResolvedValueOnce('face-2');
-      mocks.person.getById
-        .mockResolvedValueOnce(makePerson({ id: 'dog-person' }))
-        .mockResolvedValueOnce(makePerson({ id: 'cat-person' }));
       mocks.person.update.mockResolvedValue({} as any);
 
       expect(await sut.handlePetDetection({ id: asset.id })).toEqual(JobStatus.Success);
@@ -401,7 +419,6 @@ describe(PetDetectionService.name, () => {
       mocks.person.getByOwnerAndSpecies.mockResolvedValue(void 0);
       mocks.person.create.mockResolvedValue(makePerson({ id: 'cat-person', name: 'cat', species: 'cat' }));
       mocks.person.createAssetFace.mockResolvedValue('face-id');
-      mocks.person.getById.mockResolvedValue(makePerson({ id: 'cat-person' }));
       mocks.person.update.mockResolvedValue({} as any);
 
       await sut.handlePetDetection({ id: asset.id });

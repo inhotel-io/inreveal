@@ -1211,6 +1211,125 @@ class TestPetDetection:
 
         assert detector.min_score == 0.8
 
+    def test_nms_keeps_expected_boxes_on_a_fixed_overlapping_set(self) -> None:
+        """Pins the greedy NMS survivors for a fixed set of overlapping boxes.
+
+        Guards against a silent behaviour change if `_nms` is ever swapped for another
+        implementation (e.g. `cv2.dnn.NMSBoxes`).
+        """
+        boxes = np.array(
+            [
+                [0.0, 0.0, 100.0, 100.0],  # 0: highest score, suppresses 1 and 3
+                [5.0, 5.0, 105.0, 105.0],  # 1: IoU 0.82 with 0 -> suppressed
+                [300.0, 300.0, 400.0, 400.0],  # 2: disjoint -> kept
+                [60.0, 0.0, 160.0, 100.0],  # 3: IoU 0.25 with 0 -> kept
+                [310.0, 310.0, 410.0, 410.0],  # 4: IoU 0.68 with 2 -> suppressed
+            ],
+            dtype=np.float32,
+        )
+        scores = np.array([0.95, 0.90, 0.85, 0.80, 0.75], dtype=np.float32)
+
+        kept = PetDetector._nms(boxes, scores, 0.45)
+
+        assert kept.tolist() == [0, 2, 3]
+
+    def test_nms_returns_empty_for_no_boxes(self) -> None:
+        kept = PetDetector._nms(
+            np.zeros((0, 4), dtype=np.float32),
+            np.zeros((0,), dtype=np.float32),
+            0.45,
+        )
+
+        assert kept.tolist() == []
+
+    def test_postprocess_keeps_only_animals_above_threshold(self, cv_image: cv2.Mat, mocker: MockerFixture) -> None:
+        mocker.patch.object(PetDetector, "load")
+        detector = PetDetector("yolo11n", min_score=0.5, cache_dir="test_cache")
+
+        session = mock.Mock()
+        session.run.return_value = self._make_yolo_output([
+            (100, 100, 60, 60, 0, 0.99),  # person, high score -> dropped (not an animal)
+            (200, 200, 60, 60, 15, 0.80),  # cat -> kept
+            (400, 400, 60, 60, 16, 0.30),  # dog, below threshold -> dropped
+            (500, 500, 60, 60, 23, 0.60),  # giraffe -> kept
+        ])
+        detector.session = session
+        detector._input_name = "images"
+
+        results = detector.predict(cv_image)
+
+        assert [(r["label"], pytest.approx(r["score"], abs=1e-5)) for r in results] == [
+            ("cat", 0.80),
+            ("giraffe", 0.60),
+        ]
+
+    def test_postprocess_non_animal_never_suppresses_an_overlapping_animal(
+        self, cv_image: cv2.Mat, mocker: MockerFixture
+    ) -> None:
+        """Class filtering happens before NMS, so a high-scoring person cannot suppress a cat."""
+        mocker.patch.object(PetDetector, "load")
+        detector = PetDetector("yolo11n", min_score=0.5, cache_dir="test_cache")
+
+        session = mock.Mock()
+        session.run.return_value = self._make_yolo_output([
+            (320, 320, 100, 100, 0, 0.99),  # person, same box as the cat below
+            (320, 320, 100, 100, 15, 0.60),  # cat
+        ])
+        detector.session = session
+        detector._input_name = "images"
+
+        results = detector.predict(cv_image)
+
+        assert len(results) == 1
+        assert results[0]["label"] == "cat"
+
+    def test_postprocess_returns_empty_when_everything_is_below_threshold(
+        self, cv_image: cv2.Mat, mocker: MockerFixture
+    ) -> None:
+        mocker.patch.object(PetDetector, "load")
+        detector = PetDetector("yolo11n", min_score=0.9, cache_dir="test_cache")
+
+        session = mock.Mock()
+        session.run.return_value = self._make_yolo_output([
+            (320, 320, 100, 100, 15, 0.60),
+            (100, 100, 40, 40, 0, 0.80),
+        ])
+        detector.session = session
+        detector._input_name = "images"
+
+        assert detector.predict(cv_image) == []
+
+    def test_postprocess_returns_empty_when_only_non_animals_pass_threshold(
+        self, cv_image: cv2.Mat, mocker: MockerFixture
+    ) -> None:
+        mocker.patch.object(PetDetector, "load")
+        detector = PetDetector("yolo11n", min_score=0.5, cache_dir="test_cache")
+
+        session = mock.Mock()
+        session.run.return_value = self._make_yolo_output([
+            (320, 320, 100, 100, 0, 0.95),  # person
+            (100, 100, 40, 40, 2, 0.90),  # car
+        ])
+        detector.session = session
+        detector._input_name = "images"
+
+        assert detector.predict(cv_image) == []
+
+    def test_postprocess_scales_boxes_to_the_original_image_size(self, mocker: MockerFixture) -> None:
+        mocker.patch.object(PetDetector, "load")
+        detector = PetDetector("yolo11n", min_score=0.5, cache_dir="test_cache")
+
+        session = mock.Mock()
+        session.run.return_value = self._make_yolo_output([(320, 160, 64, 32, 15, 0.9)])
+        detector.session = session
+        detector._input_name = "images"
+
+        # 1280x320 original: scale_x = 2.0, scale_y = 0.5
+        image = np.zeros((320, 1280, 3), dtype=np.uint8)
+        results = detector.predict(image)
+
+        assert results[0]["boundingBox"] == {"x1": 576, "y1": 72, "x2": 704, "y2": 88}
+
 
 @pytest.mark.asyncio
 class TestCache:

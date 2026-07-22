@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { type ClassificationFaceExclusion, type SystemConfig } from 'src/config';
 import { OnEvent, OnJob } from 'src/decorators';
-import { AuthDto } from 'src/dtos/auth.dto';
 import { AssetVisibility, ImmichWorker, JobName, JobStatus, QueueName, SystemMetadataKey } from 'src/enum';
 import { type ClassificationFaceSummary } from 'src/repositories/classification.repository';
 import { ArgOf } from 'src/repositories/event.repository';
@@ -12,46 +11,35 @@ import { upsertTags } from 'src/utils/tag';
 
 type ClassificationConfig = SystemConfig['classification'];
 
+/** Face-exclusion rule → the face-summary flag that disqualifies an asset. `off` (or absent) is not listed. */
+const FACE_EXCLUSION_FLAGS: Partial<Record<ClassificationFaceExclusion, keyof ClassificationFaceSummary>> = {
+  any_assigned_face: 'hasAssignedFace',
+  named_people: 'hasNamedPerson',
+  named_visible_people: 'hasNamedVisiblePerson',
+};
+
+const getFaceExclusionFlag = (category: ClassificationConfig['categories'][number]) =>
+  category.faceExclusion ? FACE_EXCLUSION_FLAGS[category.faceExclusion] : undefined;
+
 @Injectable()
 export class ClassificationService extends BaseService {
-  private embeddingCache = new Map<string, number[]>();
-  private pendingEncodes = new Map<string, Promise<number[]>>();
+  // Caching the promise (not the resolved value) also deduplicates concurrent encodes of the same
+  // prompt; failures evict the entry so the next caller retries.
+  private embeddingCache = new Map<string, Promise<number[]>>();
 
-  private async getOrEncodePrompt(prompt: string, modelName: string): Promise<number[]> {
+  private getOrEncodePrompt(prompt: string, modelName: string): Promise<number[]> {
     const key = `${modelName}::${prompt}`;
 
-    const cached = this.embeddingCache.get(key);
-    if (cached) {
-      return cached;
+    let embedding = this.embeddingCache.get(key);
+    if (!embedding) {
+      embedding = this.machineLearningRepository
+        .encodeText(prompt, { modelName })
+        .then((raw) => this.parseEmbedding(raw));
+      embedding.catch(() => this.embeddingCache.delete(key));
+      this.embeddingCache.set(key, embedding);
     }
 
-    const pending = this.pendingEncodes.get(key);
-    if (pending) {
-      return pending;
-    }
-
-    const promise = this.machineLearningRepository
-      .encodeText(prompt, { modelName })
-      .then((raw) => {
-        const embedding = typeof raw === 'string' ? this.parseEmbedding(raw) : (raw as number[]);
-        this.embeddingCache.set(key, embedding);
-        this.pendingEncodes.delete(key);
-        return embedding;
-      })
-      .catch((error) => {
-        this.pendingEncodes.delete(key);
-        throw error;
-      });
-
-    this.pendingEncodes.set(key, promise);
-    return promise;
-  }
-
-  async scanLibrary(_auth: AuthDto): Promise<void> {
-    await this.jobRepository.queue({
-      name: JobName.AssetClassifyQueueAll,
-      data: { force: true },
-    });
+    return embedding;
   }
 
   @OnEvent({ name: 'ConfigInit', workers: [ImmichWorker.Microservices] })
@@ -75,7 +63,6 @@ export class ClassificationService extends BaseService {
     }
 
     this.embeddingCache.clear();
-    this.pendingEncodes.clear();
 
     if (classificationChanged) {
       await this.reconcileAutoTags(oldConfig.classification, newConfig.classification);
@@ -197,53 +184,31 @@ export class ClassificationService extends BaseService {
     return JobStatus.Success;
   }
 
-  private getFaceExclusion(category: ClassificationConfig['categories'][number]): ClassificationFaceExclusion {
-    return category.faceExclusion ?? 'off';
-  }
-
-  private isFaceAwareCategory(category: ClassificationConfig['categories'][number]) {
-    return this.getFaceExclusion(category) !== 'off';
-  }
-
-  private matchesFaceExclusion(rule: ClassificationFaceExclusion, summary: ClassificationFaceSummary) {
-    switch (rule) {
-      case 'any_assigned_face': {
-        return summary.hasAssignedFace;
-      }
-      case 'named_people': {
-        return summary.hasNamedPerson;
-      }
-      case 'named_visible_people': {
-        return summary.hasNamedVisiblePerson;
-      }
-      case 'off': {
-        return false;
-      }
-    }
-  }
-
   private async getEligibleCategories(
     categories: ClassificationConfig['categories'],
     machineLearning: SystemConfig['machineLearning'],
     assetId: string,
   ) {
-    const faceAwareCategories = categories.filter((category) => this.isFaceAwareCategory(category));
-    if (faceAwareCategories.length === 0) {
+    if (!categories.some((category) => getFaceExclusionFlag(category))) {
       return categories;
     }
 
     if (!isFacialRecognitionEnabled(machineLearning)) {
-      return categories.filter((category) => !this.isFaceAwareCategory(category));
+      return categories.filter((category) => !getFaceExclusionFlag(category));
     }
 
     await this.jobRepository.waitForQueueCompletion(QueueName.FaceDetection, QueueName.FacialRecognition);
     const faceSummary = await this.classificationRepository.getFaceSummary(assetId);
 
-    return categories.filter((category) => !this.matchesFaceExclusion(this.getFaceExclusion(category), faceSummary));
+    return categories.filter((category) => {
+      const flag = getFaceExclusionFlag(category);
+      return !flag || !faceSummary[flag];
+    });
   }
 
+  /** pgvector renders a vector as `[1,2,3]`, which is already valid JSON. */
   private parseEmbedding(raw: string): number[] {
-    return raw.replaceAll(/[[\]]/g, '').split(',').map(Number);
+    return JSON.parse(raw) as number[];
   }
 
   private cosineSimilarity(a: number[], b: number[]): number {

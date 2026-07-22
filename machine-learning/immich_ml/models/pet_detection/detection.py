@@ -26,6 +26,8 @@ _ANIMAL_CLASSES: dict[int, str] = {
     23: "giraffe",
 }
 
+_ANIMAL_CLASS_IDS = np.array(sorted(_ANIMAL_CLASSES), dtype=np.int64)
+
 _INPUT_SIZE = 640
 _NMS_IOU_THRESHOLD = 0.45
 
@@ -97,20 +99,11 @@ class PetDetector(InferenceModel):
         class_ids = np.argmax(class_scores, axis=1)
         confidences = class_scores[np.arange(len(class_ids)), class_ids]
 
-        # Filter by confidence threshold
-        mask = confidences >= self.min_score
+        # Keep only animal classes above the confidence threshold
+        mask = (confidences >= self.min_score) & np.isin(class_ids, _ANIMAL_CLASS_IDS)
         boxes_cxcywh = boxes_cxcywh[mask]
         confidences = confidences[mask]
         class_ids = class_ids[mask]
-
-        if len(boxes_cxcywh) == 0:
-            return []
-
-        # Filter to only animal classes
-        animal_mask = np.array([int(cid) in _ANIMAL_CLASSES for cid in class_ids])
-        boxes_cxcywh = boxes_cxcywh[animal_mask]
-        confidences = confidences[animal_mask]
-        class_ids = class_ids[animal_mask]
 
         if len(boxes_cxcywh) == 0:
             return []

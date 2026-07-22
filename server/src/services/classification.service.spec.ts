@@ -1,6 +1,5 @@
 import { AssetVisibility, JobName, JobStatus, QueueName, SystemMetadataKey } from 'src/enum';
 import { ClassificationService } from 'src/services/classification.service';
-import { authStub } from 'test/fixtures/auth.stub';
 import { makeStream, newTestService, ServiceMocks } from 'test/utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,6 +44,9 @@ const expectNoFacePrerequisiteQueues = (mocks: ServiceMocks) => {
   expectNoQueuedJob(mocks, JobName.FacialRecognitionQueueAll);
 };
 
+const parseEmbedding = (sut: ClassificationService, raw: string) =>
+  (sut as unknown as { parseEmbedding: (raw: string) => number[] }).parseEmbedding(raw);
+
 describe(ClassificationService.name, () => {
   let sut: ClassificationService;
   let mocks: ServiceMocks;
@@ -55,6 +57,26 @@ describe(ClassificationService.name, () => {
 
   it('should work', () => {
     expect(sut).toBeDefined();
+  });
+
+  // pgvector renders a `vector` column as bracketed, comma-separated float4 text. These samples pin
+  // the exact shapes that reach `parseEmbedding` from both `search.getEmbedding` and `encodeText`.
+  describe('parseEmbedding', () => {
+    it('should parse a plain pgvector literal', () => {
+      expect(parseEmbedding(sut, '[1,0,0]')).toEqual([1, 0, 0]);
+    });
+
+    it('should parse negatives, decimals and exponent notation', () => {
+      expect(parseEmbedding(sut, '[-0.0123,0.5,1e-05,-2.5e+10,3]')).toEqual([-0.0123, 0.5, 1e-5, -2.5e10, 3]);
+    });
+
+    it('should parse a literal with spaces after the separators', () => {
+      expect(parseEmbedding(sut, '[0.1, -0.2, 0.3]')).toEqual([0.1, -0.2, 0.3]);
+    });
+
+    it('should preserve full float precision', () => {
+      expect(parseEmbedding(sut, '[0.123456789,0.987654321]')).toEqual([0.123_456_789, 0.987_654_321]);
+    });
   });
 
   describe('handleClassify', () => {
@@ -908,19 +930,6 @@ describe(ClassificationService.name, () => {
     });
   });
 
-  describe('scanLibrary', () => {
-    it('should queue AssetClassifyQueueAll with force', async () => {
-      mocks.job.queue.mockResolvedValue(void 0 as any);
-
-      await sut.scanLibrary(authStub.user1);
-
-      expect(mocks.job.queue).toHaveBeenCalledWith({
-        name: JobName.AssetClassifyQueueAll,
-        data: { force: true },
-      });
-    });
-  });
-
   describe('onConfigUpdate', () => {
     it('should clear cache and clean up removed categories', async () => {
       const oldConfig = makeClassificationConfig([
@@ -969,7 +978,7 @@ describe(ClassificationService.name, () => {
       };
 
       // Pre-populate the cache
-      sut['embeddingCache'].set('old-model::test', [1, 0, 0]);
+      sut['embeddingCache'].set('old-model::test', Promise.resolve([1, 0, 0]));
 
       await sut.onConfigUpdate({ oldConfig, newConfig } as any);
 
@@ -1002,7 +1011,7 @@ describe(ClassificationService.name, () => {
         false,
       );
 
-      sut['embeddingCache'].set('test-model::test', [1, 0, 0]);
+      sut['embeddingCache'].set('test-model::test', Promise.resolve([1, 0, 0]));
 
       await sut.onConfigUpdate({ oldConfig, newConfig } as any);
 

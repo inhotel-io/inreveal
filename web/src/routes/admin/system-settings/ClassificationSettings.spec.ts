@@ -2,7 +2,9 @@ import {
   Action,
   ClassificationFaceExclusion,
   getConfig,
-  scanClassification,
+  QueueCommand,
+  QueueName,
+  runQueueCommandLegacy,
   updateConfig,
   type SystemConfigDto,
 } from '@immich/sdk';
@@ -17,8 +19,10 @@ import ClassificationSettings from './ClassificationSettings.svelte';
 vi.mock('@immich/sdk', () => ({
   getConfig: vi.fn(),
   updateConfig: vi.fn(),
-  scanClassification: vi.fn(),
+  runQueueCommandLegacy: vi.fn(),
   Action: { Tag: 'tag', TagAndArchive: 'tag_and_archive' },
+  QueueCommand: { Start: 'start', Pause: 'pause', Resume: 'resume', Empty: 'empty', ClearFailed: 'clear-failed' },
+  QueueName: { Classification: 'classification' },
   ClassificationFaceExclusion: {
     Off: 'off',
     AnyAssignedFace: 'any_assigned_face',
@@ -26,6 +30,12 @@ vi.mock('@immich/sdk', () => ({
     NamedVisiblePeople: 'named_visible_people',
   },
 }));
+
+const expectClassificationScanQueued = () =>
+  expect(runQueueCommandLegacy).toHaveBeenCalledWith({
+    name: QueueName.Classification,
+    queueCommandDto: { command: QueueCommand.Start, force: true },
+  });
 
 const mockFeatureFlags = { configFile: false, smartSearch: true, trash: true };
 vi.mock(import('$lib/managers/feature-flags-manager.svelte'), () => ({
@@ -82,8 +92,7 @@ describe('ClassificationSettings', () => {
     mockFeatureFlags.configFile = false;
     vi.mocked(getConfig).mockResolvedValue(makeConfig());
     vi.mocked(updateConfig).mockResolvedValue(void 0 as unknown as SystemConfigDto);
-    // @ts-expect-error mock returns void but SDK type is string
-    vi.mocked(scanClassification).mockResolvedValue(void 0);
+    vi.mocked(runQueueCommandLegacy).mockResolvedValue({} as never);
   });
 
   it('should render empty state when no categories', async () => {
@@ -181,7 +190,7 @@ describe('ClassificationSettings', () => {
     await fireEvent.click(screen.getByText('Save'));
 
     await waitFor(() => {
-      expect(scanClassification).toHaveBeenCalled();
+      expectClassificationScanQueued();
       expect(toastManager.primary).toHaveBeenCalledWith('Rescan started — existing auto-tags will be re-evaluated');
     });
   });
@@ -277,7 +286,7 @@ describe('ClassificationSettings', () => {
     expect(modalManager.showDialog).not.toHaveBeenCalled();
   });
 
-  it('should call scanClassification when Scan All Libraries is confirmed', async () => {
+  it('should queue a forced classification job when Scan All Libraries is confirmed', async () => {
     vi.mocked(modalManager.showDialog).mockResolvedValue(true);
 
     render(ClassificationSettings);
@@ -288,7 +297,7 @@ describe('ClassificationSettings', () => {
     await fireEvent.click(screen.getByText('Scan All Libraries'));
 
     await waitFor(() => {
-      expect(scanClassification).toHaveBeenCalled();
+      expectClassificationScanQueued();
     });
   });
 
@@ -306,7 +315,7 @@ describe('ClassificationSettings', () => {
       expect(modalManager.showDialog).toHaveBeenCalled();
     });
 
-    expect(scanClassification).not.toHaveBeenCalled();
+    expect(runQueueCommandLegacy).not.toHaveBeenCalled();
   });
 
   it('should show face exclusion dropdown when creating a category', async () => {

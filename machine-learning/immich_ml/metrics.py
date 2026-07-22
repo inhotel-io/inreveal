@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import os
 import time
 from collections.abc import Callable, Iterable
@@ -79,10 +80,8 @@ def record_model_load(task: str, model_type: str, status: str, started: float) -
 
 
 def set_model_cache_entries(labels: Iterable[tuple[str, str]]) -> None:
-    counts: dict[tuple[str, str], int] = {}
-    for label in labels:
-        counts[label] = counts.get(label, 0) + 1
-
+    # Qualified: `Counter` at module scope is `prometheus_client.Counter`.
+    counts = collections.Counter(labels)
     current_labels = set(counts)
     for task, model_type in _MODEL_CACHE_LABELS - current_labels:
         MODEL_CACHE_ENTRIES.labels(task=task, type=model_type).set(0)

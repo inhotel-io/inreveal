@@ -1,6 +1,4 @@
 import { LoginResponseDto, QueueCommand, getConfig, type SystemConfigDto } from '@immich/sdk';
-import { createUserDto } from 'src/fixtures';
-import { errorDto } from 'src/responses';
 import { app, asBearerAuth, utils } from 'src/utils';
 import request from 'supertest';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -21,36 +19,11 @@ const expectValidationError = (body: unknown, pathSegment: string, message: stri
 
 describe('/classification', () => {
   let admin: LoginResponseDto;
-  let user: LoginResponseDto;
 
   beforeAll(async () => {
     await utils.resetDatabase();
 
     admin = await utils.adminSetup();
-    user = await utils.userSetup(admin.accessToken, createUserDto.user1);
-  });
-
-  describe('POST /classification/scan', () => {
-    it('should require authentication', async () => {
-      const { status, body } = await request(app).post('/classification/scan');
-      expect(status).toBe(401);
-      expect(body).toEqual(errorDto.unauthorized);
-    });
-
-    it('should require admin access', async () => {
-      const { status, body } = await request(app)
-        .post('/classification/scan')
-        .set('Authorization', `Bearer ${user.accessToken}`);
-      expect(status).toBe(403);
-      expect(body).toEqual(errorDto.forbidden);
-    });
-
-    it('should return 204 for admin', async () => {
-      const { status } = await request(app)
-        .post('/classification/scan')
-        .set('Authorization', `Bearer ${admin.accessToken}`);
-      expect(status).toBe(204);
-    });
   });
 
   describe('Queue Operations', () => {
@@ -89,16 +62,6 @@ describe('/classification', () => {
           queueStatus: expect.objectContaining({ isPaused: false }),
         }),
       );
-
-      await utils.waitForQueueFinish(admin.accessToken, 'classification');
-    });
-
-    it('should trigger job via scan endpoint and complete', async () => {
-      const { status } = await request(app)
-        .post('/classification/scan')
-        .set('Authorization', `Bearer ${admin.accessToken}`);
-
-      expect(status).toBe(204);
 
       await utils.waitForQueueFinish(admin.accessToken, 'classification');
     });

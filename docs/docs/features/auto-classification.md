@@ -256,7 +256,9 @@ New uploads are classified automatically. To classify your existing library:
 Or via API:
 
 ```bash
-curl -X POST -H "Authorization: Bearer $TOKEN" http://localhost:2283/api/classification/scan
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"command":"start","force":true}' \
+  http://localhost:2283/api/jobs/classification
 ```
 
 This queues all assets across all users for classification. It's additive — existing tags are kept, and new matches get tagged.
@@ -398,7 +400,7 @@ The snapshot is the bridge between the two paths. Both paths write it after runn
 ### Key Details
 
 - **Cosine similarity** computed in-process (dot product / magnitude product), not via database query
-- **Batch processing** — `scanLibrary` streams unclassified assets and queues individual jobs in batches of 1,000
+- **Batch processing** — the `AssetClassifyQueueAll` job streams unclassified assets and queues individual jobs in batches of 1,000
 - **Idempotent tagging** — Re-classification never duplicates tags (uses upsert)
 - **Global kill switch** — `classification.enabled: false` short-circuits both the queue-all job and individual classify jobs without processing any assets
 - **Duplicate name validation** — Category names must be unique (enforced by DTO validation)

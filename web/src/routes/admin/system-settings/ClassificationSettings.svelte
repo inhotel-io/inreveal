@@ -5,7 +5,9 @@
     Action,
     ClassificationFaceExclusion,
     getConfig,
-    scanClassification,
+    QueueCommand,
+    QueueName,
+    runQueueCommandLegacy,
     updateConfig,
     type SystemConfigDto,
   } from '@immich/sdk';
@@ -45,6 +47,14 @@
     [ClassificationFaceExclusion.NamedPeople]: $t('admin.classification_face_exclusion_named_people'),
     [ClassificationFaceExclusion.NamedVisiblePeople]: $t('admin.classification_face_exclusion_named_visible'),
   });
+
+  // Same standard queue-all call every other admin "run job" button makes; `force` re-evaluates
+  // already-classified assets.
+  const startClassificationScan = () =>
+    runQueueCommandLegacy({
+      name: QueueName.Classification,
+      queueCommandDto: { command: QueueCommand.Start, force: true },
+    });
 
   const getFaceExclusion = (category: Partial<Category>): FaceExclusion =>
     category.faceExclusion ?? ClassificationFaceExclusion.Off;
@@ -148,7 +158,7 @@
         });
 
         if (shouldRescan) {
-          await scanClassification();
+          await startClassificationScan();
           toastManager.primary(get(t)('admin.classification_rescan_started'));
         }
       }
@@ -190,7 +200,7 @@
     }
     isScanning = true;
     try {
-      await scanClassification();
+      await startClassificationScan();
       toastManager.primary(get(t)('admin.classification_scan_started'));
     } catch (error) {
       handleError(error, get(t)('admin.classification_scan_failed'));
