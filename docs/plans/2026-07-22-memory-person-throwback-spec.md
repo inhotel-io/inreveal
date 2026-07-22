@@ -65,7 +65,7 @@ default) — so this branch serialises against any other branch adding a memory 
 | 9   | `server/test/medium/specs/services/memory.service.spec.ts`       | end-to-end generation medium test                                      |
 | 10  | `e2e/src/specs/server/api/server.e2e-spec.ts`                    | `availableMemoryTypes` fixture — **the server unit suite misses this** |
 | 11  | `web/src/routes/admin/system-settings/MemoriesSettings.svelte`   | hardcoded `memoryTypeKeys` array                                       |
-| 12  | `web/src/routes/admin/system-settings/MemoriesSettings.spec.ts`  | switch count **and** the full `types` object literal in the save test  |
+| 12  | `web/src/routes/admin/system-settings/MemoriesSettings.spec.ts`  | the full `types` object literal in the save-payload test              |
 | 13  | `i18n/en.json`                                                   | 4 keys (§3.6)                                                          |
 | 14  | `docs/docs/features/memories.md`                                 | user-facing type list                                                  |
 | 15  | `docs/docs/install/config-file.md`                               | `memories.types` config keys                                           |
@@ -287,13 +287,16 @@ Candidate shape:
 
 | Key                                              | Value                                                                                    |
 | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `admin.memory_type_person_throwback`             | Person throwback                                                                         |
-| `admin.memory_type_person_throwback_description` | Resurface a warm chapter with someone who has not appeared in photos for a year or more. |
+| `admin.memory_type_person_throwback_setting`             | Person throwback                                                                 |
+| `admin.memory_type_person_throwback_setting_description` | Resurface a warm chapter with someone who has not appeared in photos for a year or more. |
 | `memory_type_person_throwback`                   | Times with someone                                                                       |
 | `memory_type_person_throwback_description`       | Occasionally resurface photos of a person you have not photographed in a long while.     |
 
-Exact key naming must be copied from the `themed` keys already in `en.json` — web and mobile share
-one `i18n/` directory, and only `en.json` needs the new keys.
+Note the shape, verified against `en.json`: the **admin** pair is `memory_type_<key>_setting` /
+`_setting_description` nested under the `admin` object (~line 330), while the **user** pair is
+`memory_type_<key>` / `_description` at top level (~line 2013). The admin keys are _not_
+`admin.memory_type_<key>`. Web and mobile share one `i18n/` directory; only `en.json` needs the new
+keys.
 
 ## 4. Behaviour spec (tests)
 
@@ -598,7 +601,7 @@ No `MemoryRuleDeps` change — `personRepository` and `assetRepository` are alre
 **Depends on:** Slice 4.
 
 Add the key to the hardcoded `memoryTypeKeys` array in `MemoriesSettings.svelte`, then fix
-`MemoriesSettings.spec.ts` — **two** places: the switch count, and the full `types` object literal
+`MemoriesSettings.spec.ts` — the full `types` object literal
 in the save-payload assertion. Add the four `i18n/en.json` keys from §3.6 (EN only; web and mobile
 share the directory).
 
