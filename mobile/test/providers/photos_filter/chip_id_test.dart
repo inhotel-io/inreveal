@@ -12,21 +12,17 @@ void main() {
       expect(const TagChipId('t1'), const TagChipId('t1'));
       expect(const TagChipId('t1'), isNot(const TagChipId('t2')));
     });
-    test('Value-less chip ids are equal across instances', () {
-      expect(const LocationChipId(), const LocationChipId());
-      expect(const DateChipId(), const DateChipId());
-      expect(const RatingChipId(), const RatingChipId());
-      expect(const MediaTypeChipId(), const MediaTypeChipId());
-      expect(const FavouriteChipId(), const FavouriteChipId());
-      expect(const ArchiveChipId(), const ArchiveChipId());
-      expect(const NotInAlbumChipId(), const NotInAlbumChipId());
-      expect(const UntaggedChipId(), const UntaggedChipId());
-      expect(const TextChipId(), const TextChipId());
-      expect(const CameraChipId(), const CameraChipId());
-      expect(const CameraChipId().hashCode, const CameraChipId().hashCode);
+    test('Value-less chip ids are equal across reads and distinct from each other', () {
+      expect(SimpleChipId.location, SimpleChipId.location);
+      expect(SimpleChipId.camera.hashCode, SimpleChipId.camera.hashCode);
+      expect(SimpleChipId.values.toSet(), hasLength(SimpleChipId.values.length));
+      for (final id in SimpleChipId.values) {
+        expect(id, isA<ChipId>());
+      }
     });
+
     test('Different value-less chip ids are NOT equal', () {
-      expect(const LocationChipId(), isNot(const DateChipId()));
+      expect(SimpleChipId.location, isNot(SimpleChipId.date));
     });
   });
 }

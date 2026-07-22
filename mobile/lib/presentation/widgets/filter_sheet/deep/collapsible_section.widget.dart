@@ -12,7 +12,6 @@ class CollapsibleSection extends ConsumerWidget {
   final FilterSectionId sectionId;
   final String titleKey;
   final bool isEmpty;
-  final Widget? trailingHeader;
   final Widget child;
 
   const CollapsibleSection({
@@ -21,7 +20,6 @@ class CollapsibleSection extends ConsumerWidget {
     required this.titleKey,
     required this.child,
     this.isEmpty = false,
-    this.trailingHeader,
   });
 
   @override
@@ -52,7 +50,6 @@ class CollapsibleSection extends ConsumerWidget {
                 style: theme.textTheme.labelSmall?.copyWith(letterSpacing: 2, color: theme.colorScheme.outline),
               ),
             ),
-            if (trailingHeader != null) Flexible(child: trailingHeader!),
             if (!isEmpty)
               Icon(
                 expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,

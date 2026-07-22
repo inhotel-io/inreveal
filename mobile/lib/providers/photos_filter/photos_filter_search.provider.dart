@@ -54,11 +54,6 @@ class PhotosFilterSearchNotifier extends StateNotifier<PhotosFilterSearchState> 
   Stream<int> get count => _countController.stream;
   List<BaseAsset> getAssets() => List.unmodifiable(state.assets);
 
-  // Pagination/loading accessors for tests that drive the notifier directly.
-  // UI consumers read these off [PhotosFilterSearchState] via the provider.
-  int? get nextPage => state.nextPage;
-  bool get isLoading => state.isLoading;
-
   Future<void> loadMore() async {
     if (state.nextPage == null || state.isLoading || _disposed) return;
     state = state.copyWith(isLoading: true);

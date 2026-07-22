@@ -1,8 +1,8 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/deep_section_scaffold.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/search_more_row.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
@@ -37,7 +37,6 @@ class TagsSectionDeep extends ConsumerWidget {
     return DeepSectionScaffold<FilterSuggestionsTagDto>(
       sectionId: FilterSectionId.tags,
       titleKey: 'filter_sheet_deep_tags_section',
-      emptyCaptionKey: 'filter_sheet_deep_empty_tags',
       items: tagsAsync,
       onRetry: () => ref.invalidate(photosFilterSuggestionsProvider(filter)),
       childBuilder: (tags) {
@@ -50,58 +49,18 @@ class TagsSectionDeep extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Wrap(spacing: 8, runSpacing: 8, children: [for (final tag in display) _TagChip(tag: tag)]),
-            if (count > 0) _SearchMoreRow(count: count, onOpenPicker: onOpenPicker),
+            if (count > 0)
+              SearchMoreRow(
+                count: count,
+                i18nRootKey: 'filter_sheet_deep_search_n_tags',
+                keyName: 'tags-section-search-more',
+                onOpenPicker: onOpenPicker,
+              ),
           ],
         );
       },
     );
   }
-}
-
-class _SearchMoreRow extends StatelessWidget {
-  final int count;
-  final VoidCallback? onOpenPicker;
-  const _SearchMoreRow({required this.count, this.onOpenPicker});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: InkWell(
-        key: const Key('tags-section-search-more'),
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onOpenPicker?.call();
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.search_rounded, size: 18, color: theme.colorScheme.primary),
-              const SizedBox(width: 10),
-              // The translated label already ends in "→" (see filter_sheet_deep_search_n_tags).
-              Expanded(
-                child: Text(
-                  _searchMoreTagsLabel(count),
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Plural helper — nested-leaf lookup avoids `.plural()`, which reads a
-/// late-initialized locale field and throws in widget tests without an
-/// `EasyLocalization` ancestor. Matches the pattern in `when_accordion_section.widget.dart`.
-String _searchMoreTagsLabel(int count) {
-  final variant = count == 1 ? 'one' : 'other';
-  return 'filter_sheet_deep_search_n_tags.$variant'.tr(namedArgs: {'count': '$count'});
 }
 
 class _TagChip extends ConsumerWidget {

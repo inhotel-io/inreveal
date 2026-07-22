@@ -9,35 +9,8 @@ class AlphaScrubber extends StatefulWidget {
   final ValueChanged<String> onLetter;
   const AlphaScrubber({super.key, required this.letterToIndex, required this.onLetter});
 
-  static const List<String> letters = [
-    'A',
-    'B',
-    'C',
-    'D',
-    'E',
-    'F',
-    'G',
-    'H',
-    'I',
-    'J',
-    'K',
-    'L',
-    'M',
-    'N',
-    'O',
-    'P',
-    'Q',
-    'R',
-    'S',
-    'T',
-    'U',
-    'V',
-    'W',
-    'X',
-    'Y',
-    'Z',
-    '#',
-  ];
+  /// 'A'..'Z' then the '#' bucket for names that don't start with a letter.
+  static final List<String> letters = [...List.generate(26, (i) => String.fromCharCode(65 + i)), '#'];
 
   @override
   State<AlphaScrubber> createState() => _AlphaScrubberState();

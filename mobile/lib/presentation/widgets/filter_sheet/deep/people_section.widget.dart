@@ -1,9 +1,10 @@
-import 'package:easy_localization/easy_localization.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/deep_section_scaffold.widget.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/search_more_row.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/presentation/widgets/images/remote_image_provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_debounce.provider.dart';
@@ -38,7 +39,6 @@ class PeopleSectionDeep extends ConsumerWidget {
     return DeepSectionScaffold<FilterSuggestionsPersonDto>(
       sectionId: FilterSectionId.people,
       titleKey: 'filter_sheet_deep_people_section',
-      emptyCaptionKey: 'filter_sheet_deep_empty_people',
       items: peopleAsync,
       onRetry: () => ref.invalidate(photosFilterSuggestionsProvider(filter)),
       childBuilder: (people) {
@@ -51,59 +51,18 @@ class PeopleSectionDeep extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Wrap(spacing: 14, runSpacing: 14, children: [for (final p in display) _PeopleGridTile(person: p)]),
-            if (count > 0) _SearchMoreRow(count: count, onOpenPicker: onOpenPicker),
+            if (count > 0)
+              SearchMoreRow(
+                count: count,
+                i18nRootKey: 'filter_sheet_deep_search_n_people',
+                keyName: 'people-section-search-more',
+                onOpenPicker: onOpenPicker,
+              ),
           ],
         );
       },
     );
   }
-}
-
-class _SearchMoreRow extends StatelessWidget {
-  final int count;
-  final VoidCallback? onOpenPicker;
-  const _SearchMoreRow({required this.count, this.onOpenPicker});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: InkWell(
-        key: const Key('people-section-search-more'),
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onOpenPicker?.call();
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Icon(Icons.search_rounded, size: 18, color: theme.colorScheme.primary),
-              const SizedBox(width: 10),
-              // The translated label already ends in "→" (see filter_sheet_deep_search_n_people).
-              Expanded(
-                child: Text(
-                  _searchMoreLabel(count),
-                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.primary),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Plural helper — nested-leaf lookup avoids `.plural()`, which reads a
-/// late-initialized locale field and throws in widget tests without an
-/// `EasyLocalization` ancestor. Matches the pattern in
-/// `match_count_label.widget.dart`.
-String _searchMoreLabel(int count) {
-  final variant = count == 1 ? 'one' : 'other';
-  return 'filter_sheet_deep_search_n_people.$variant'.tr(namedArgs: {'count': '$count'});
 }
 
 class _PeopleGridTile extends ConsumerWidget {
@@ -168,14 +127,5 @@ class _PeopleGridTile extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-extension<E> on Iterable<E> {
-  E? firstWhereOrNull(bool Function(E) test) {
-    for (final e in this) {
-      if (test(e)) return e;
-    }
-    return null;
   }
 }

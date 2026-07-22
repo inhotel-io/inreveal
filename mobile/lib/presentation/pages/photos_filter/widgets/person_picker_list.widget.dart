@@ -87,8 +87,8 @@ class _PersonPickerListState extends ConsumerState<PersonPickerList> {
     final showScrubber = media.size.width >= 480 && media.orientation == Orientation.portrait;
 
     final built = _build(context);
-    final index = peopleAlphaIndex(widget.people);
-    final letterToIndex = {for (final e in index.entries) e.key: 0}; // presence, value unused
+    // Presence-only map for the scrubber; values are unused.
+    final letterToIndex = {for (final letter in built.letterOffsets.keys) letter: 0};
 
     return Stack(
       children: [

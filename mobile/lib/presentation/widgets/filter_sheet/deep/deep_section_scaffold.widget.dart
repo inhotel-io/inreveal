@@ -4,8 +4,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/collapsible_section.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 
-/// Shared shell for Deep filter-sheet sections — title + optional trailing header
-/// + loading skeleton / error retry / empty caption / childBuilder output.
+/// Shared shell for Deep filter-sheet sections — title + loading skeleton /
+/// error retry / childBuilder output.
 ///
 /// Caches the last-seen data list so that when the upstream family provider is
 /// swapped (filter changed → fresh AsyncLoading), we keep rendering stale data
@@ -15,24 +15,17 @@ import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_i
 class DeepSectionScaffold<T> extends StatefulWidget {
   final FilterSectionId sectionId;
   final String titleKey;
-  final String emptyCaptionKey;
   final AsyncValue<List<T>> items;
   final VoidCallback? onRetry;
   final Widget Function(List<T> data) childBuilder;
-
-  /// Optional trailing widget that sits next to the title (sections inject a
-  /// "Search N →" affordance here — consumed by Tasks A4 / A7).
-  final Widget? trailingHeader;
 
   const DeepSectionScaffold({
     super.key,
     required this.sectionId,
     required this.titleKey,
-    required this.emptyCaptionKey,
     required this.items,
     required this.childBuilder,
     this.onRetry,
-    this.trailingHeader,
   });
 
   @override
@@ -54,8 +47,6 @@ class _DeepSectionScaffoldState<T> extends State<DeepSectionScaffold<T>> {
     Widget body;
     if (cache != null) {
       // Body is hidden by CollapsibleSection when empty; isEmpty drives the "(0)" + disabled header.
-      // widget.emptyCaptionKey is kept on the constructor for callers, but its caption is
-      // unreachable while isEmpty is true, so we skip building it here.
       body = cache.isEmpty
           ? const SizedBox.shrink()
           : Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: widget.childBuilder(cache));
@@ -70,7 +61,6 @@ class _DeepSectionScaffoldState<T> extends State<DeepSectionScaffold<T>> {
       sectionId: widget.sectionId,
       titleKey: widget.titleKey,
       isEmpty: isEmpty,
-      trailingHeader: isEmpty ? null : widget.trailingHeader,
       child: body,
     );
   }

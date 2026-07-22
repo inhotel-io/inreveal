@@ -256,82 +256,6 @@ void main() {
     });
   });
 
-  group('clearDimension', () {
-    test('clears people dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      const alice = PersonDto(id: 'alice', name: 'Alice', isHidden: false, thumbnailPath: '');
-      notifier.togglePerson(alice);
-      notifier.toggleTag('t1');
-      notifier.clearDimension(Dimension.people);
-      final f = container.read(photosFilterProvider);
-      expect(f.people, isEmpty);
-      expect(f.tagIds, ['t1']);
-    });
-    test('clears tags dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      notifier.toggleTag('t1');
-      notifier.clearDimension(Dimension.tags);
-      expect(
-        container.read(photosFilterProvider).tagIds == null || container.read(photosFilterProvider).tagIds!.isEmpty,
-        true,
-      );
-    });
-    test('clears location dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      notifier.setLocation(SearchLocationFilter(country: 'France'));
-      notifier.clearDimension(Dimension.location);
-      expect(container.read(photosFilterProvider).location.country, null);
-    });
-    test('clears date dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      notifier.setDateRange(start: DateTime(2024, 1, 1), end: DateTime(2024, 12, 31));
-      notifier.clearDimension(Dimension.date);
-      final d = container.read(photosFilterProvider).date;
-      expect(d.takenAfter, null);
-      expect(d.takenBefore, null);
-    });
-    test('clears camera dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      // No setCamera method yet — set the camera filter directly via copyWith for this test setup.
-      // Easier: expect calling clearDimension(Dimension.camera) on an already-empty filter to be a no-op.
-      notifier.clearDimension(Dimension.camera);
-      final c = container.read(photosFilterProvider).camera;
-      expect(c.make, null);
-      expect(c.model, null);
-    });
-    test('clears rating dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      notifier.setRating(4);
-      notifier.clearDimension(Dimension.rating);
-      expect(container.read(photosFilterProvider).rating.rating.unwrapOrNull, null);
-    });
-    test('clears mediaType dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      notifier.setMediaType(AssetType.image);
-      notifier.clearDimension(Dimension.mediaType);
-      expect(container.read(photosFilterProvider).mediaType, AssetType.other);
-    });
-    test('clears display dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      notifier.setFavouritesOnly(true);
-      notifier.setArchivedIncluded(true);
-      notifier.setNotInAlbum(true);
-      notifier.setUntagged(true);
-      notifier.clearDimension(Dimension.display);
-      final d = container.read(photosFilterProvider).display;
-      expect(d.isFavorite, false);
-      expect(d.isArchive, false);
-      expect(d.isNotInAlbum, false);
-      expect(d.isUntagged, false);
-    });
-    test('clears text dimension', () {
-      final notifier = container.read(photosFilterProvider.notifier);
-      notifier.setText('paris');
-      notifier.clearDimension(Dimension.text);
-      expect(container.read(photosFilterProvider).context, null);
-    });
-  });
-
   group('removeChip', () {
     test('PersonChipId removes that person, keeping others', () {
       final notifier = container.read(photosFilterProvider.notifier);
@@ -366,13 +290,13 @@ void main() {
     test('LocationChipId clears location', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setLocation(SearchLocationFilter(country: 'France'));
-      notifier.removeChip(const LocationChipId());
+      notifier.removeChip(SimpleChipId.location);
       expect(container.read(photosFilterProvider).location.country, null);
     });
     test('DateChipId clears date', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setDateRange(start: DateTime(2024, 1, 1), end: DateTime(2024, 12, 31));
-      notifier.removeChip(const DateChipId());
+      notifier.removeChip(SimpleChipId.date);
       final d = container.read(photosFilterProvider).date;
       expect(d.takenAfter, null);
       expect(d.takenBefore, null);
@@ -380,7 +304,7 @@ void main() {
     test('CameraChipId clears camera', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setCamera(SearchCameraFilter(make: 'Canon', model: 'R5'));
-      notifier.removeChip(const CameraChipId());
+      notifier.removeChip(SimpleChipId.camera);
       final c = container.read(photosFilterProvider).camera;
       expect(c.make, null);
       expect(c.model, null);
@@ -388,43 +312,43 @@ void main() {
     test('RatingChipId clears rating', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setRating(4);
-      notifier.removeChip(const RatingChipId());
+      notifier.removeChip(SimpleChipId.rating);
       expect(container.read(photosFilterProvider).rating.rating.unwrapOrNull, null);
     });
     test('MediaTypeChipId clears mediaType', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setMediaType(AssetType.image);
-      notifier.removeChip(const MediaTypeChipId());
+      notifier.removeChip(SimpleChipId.mediaType);
       expect(container.read(photosFilterProvider).mediaType, AssetType.other);
     });
     test('FavouriteChipId clears favourites', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setFavouritesOnly(true);
-      notifier.removeChip(const FavouriteChipId());
+      notifier.removeChip(SimpleChipId.favourite);
       expect(container.read(photosFilterProvider).display.isFavorite, false);
     });
     test('ArchiveChipId clears archive', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setArchivedIncluded(true);
-      notifier.removeChip(const ArchiveChipId());
+      notifier.removeChip(SimpleChipId.archive);
       expect(container.read(photosFilterProvider).display.isArchive, false);
     });
     test('NotInAlbumChipId clears not-in-album', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setNotInAlbum(true);
-      notifier.removeChip(const NotInAlbumChipId());
+      notifier.removeChip(SimpleChipId.notInAlbum);
       expect(container.read(photosFilterProvider).display.isNotInAlbum, false);
     });
     test('UntaggedChipId clears untagged', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setUntagged(true);
-      notifier.removeChip(const UntaggedChipId());
+      notifier.removeChip(SimpleChipId.untagged);
       expect(container.read(photosFilterProvider).display.isUntagged, false);
     });
     test('TextChipId clears text', () {
       final notifier = container.read(photosFilterProvider.notifier);
       notifier.setText('paris');
-      notifier.removeChip(const TextChipId());
+      notifier.removeChip(SimpleChipId.text);
       expect(container.read(photosFilterProvider).context, null);
     });
   });

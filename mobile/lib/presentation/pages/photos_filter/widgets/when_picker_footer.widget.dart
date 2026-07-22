@@ -1,22 +1,8 @@
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/month_labels.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
-
-const _monthKeys = <String>[
-  'filter_sheet_deep_when_month_jan',
-  'filter_sheet_deep_when_month_feb',
-  'filter_sheet_deep_when_month_mar',
-  'filter_sheet_deep_when_month_apr',
-  'filter_sheet_deep_when_month_may',
-  'filter_sheet_deep_when_month_jun',
-  'filter_sheet_deep_when_month_jul',
-  'filter_sheet_deep_when_month_aug',
-  'filter_sheet_deep_when_month_sep',
-  'filter_sheet_deep_when_month_oct',
-  'filter_sheet_deep_when_month_nov',
-  'filter_sheet_deep_when_month_dec',
-];
 
 /// Sticky footer for [WhenPickerPage] showing the current date-range
 /// selection on the left and a Done button on the right.
@@ -77,8 +63,8 @@ class WhenPickerFooter extends ConsumerWidget {
   static String _formatLabel(DateTime? start, DateTime? end) {
     if (start == null || end == null) return 'filter_sheet_picker_all_time'.tr();
 
-    final startMonth = _monthKeys[start.month - 1].tr();
-    final endMonth = _monthKeys[end.month - 1].tr();
+    final startMonth = monthLabel(start.month);
+    final endMonth = monthLabel(end.month);
 
     final sameMonth = start.year == end.year && start.month == end.month;
     final sameYear = start.year == end.year;

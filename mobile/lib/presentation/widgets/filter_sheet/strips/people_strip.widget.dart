@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:auto_route/auto_route.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
@@ -157,14 +158,5 @@ class _PersonTile extends ConsumerWidget {
         ),
       ),
     );
-  }
-}
-
-extension<E> on Iterable<E> {
-  E? firstWhereOrNull(bool Function(E) test) {
-    for (final e in this) {
-      if (test(e)) return e;
-    }
-    return null;
   }
 }

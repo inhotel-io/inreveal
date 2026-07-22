@@ -125,7 +125,7 @@ void main() {
       final chips = activeChipsFromFilter(f);
       expect(chips, hasLength(1));
       expect(chips.single.label, 'France');
-      expect(chips.single.id, isA<LocationChipId>());
+      expect(chips.single.id, SimpleChipId.location);
       expect(chips.single.visual, ChipVisual.location);
     });
 
@@ -144,7 +144,7 @@ void main() {
       final chips = activeChipsFromFilter(f);
       expect(chips, hasLength(1));
       expect(chips.single.label, 'Canon · R5');
-      expect(chips.single.id, isA<CameraChipId>());
+      expect(chips.single.id, SimpleChipId.camera);
       expect(chips.single.visual, ChipVisual.camera);
     });
 
@@ -153,7 +153,7 @@ void main() {
       final chips = activeChipsFromFilter(f);
       expect(chips, hasLength(1));
       expect(chips.single.label, 'Canon');
-      expect(chips.single.id, isA<CameraChipId>());
+      expect(chips.single.id, SimpleChipId.camera);
     });
 
     test('camera with all fields null → no chip (defensive)', () {
@@ -193,7 +193,7 @@ void main() {
       final chips = activeChipsFromFilter(f);
       expect(chips, hasLength(1));
       expect(chips.single.label, '★ 4+');
-      expect(chips.single.id, isA<RatingChipId>());
+      expect(chips.single.id, SimpleChipId.rating);
     });
 
     test('mediaType = other → no chip', () {
@@ -206,7 +206,7 @@ void main() {
       final chips = activeChipsFromFilter(f);
       expect(chips, hasLength(1));
       expect(chips.single.label, 'filter_sheet_media_photos');
-      expect(chips.single.id, isA<MediaTypeChipId>());
+      expect(chips.single.id, SimpleChipId.mediaType);
     });
 
     test('text chip with whitespace-only context → no chip', () {
@@ -224,8 +224,11 @@ void main() {
     test('favourites / archived / notInAlbum / untagged emit toggle chips', () {
       final f = _base()
         ..display = SearchDisplayFilters(isFavorite: true, isArchive: true, isNotInAlbum: true, isUntagged: true);
-      final ids = activeChipsFromFilter(f).map((c) => c.id.runtimeType).toSet();
-      expect(ids, containsAll([FavouriteChipId, ArchiveChipId, NotInAlbumChipId, UntaggedChipId]));
+      final ids = activeChipsFromFilter(f).map((c) => c.id).toSet();
+      expect(
+        ids,
+        containsAll([SimpleChipId.favourite, SimpleChipId.archive, SimpleChipId.notInAlbum, SimpleChipId.untagged]),
+      );
     });
 
     test('combined filter preserves documented order', () {

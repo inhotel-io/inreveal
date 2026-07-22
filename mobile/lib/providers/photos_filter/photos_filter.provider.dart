@@ -7,8 +7,6 @@ import 'package:immich_mobile/utils/option.dart';
 
 final photosFilterProvider = NotifierProvider<PhotosFilterNotifier, SearchFilter>(PhotosFilterNotifier.new);
 
-enum Dimension { people, tags, location, date, camera, rating, mediaType, display, text }
-
 class PhotosFilterNotifier extends Notifier<SearchFilter> {
   @override
   SearchFilter build() => SearchFilter.empty();
@@ -78,29 +76,6 @@ class PhotosFilterNotifier extends Notifier<SearchFilter> {
 
   void clearTags() => state = state.copyWith()..tagIds = null;
 
-  void clearDimension(Dimension d) {
-    switch (d) {
-      case Dimension.people:
-        clearPeople();
-      case Dimension.tags:
-        clearTags();
-      case Dimension.location:
-        setLocation(null);
-      case Dimension.date:
-        setDateRange(start: null, end: null);
-      case Dimension.camera:
-        state = state.copyWith(camera: SearchCameraFilter());
-      case Dimension.rating:
-        setRating(null);
-      case Dimension.mediaType:
-        setMediaType(null);
-      case Dimension.display:
-        state = state.copyWith(display: SearchDisplayFilters(isFavorite: false, isArchive: false, isNotInAlbum: false));
-      case Dimension.text:
-        setText('');
-    }
-  }
-
   void removeChip(ChipId id) {
     switch (id) {
       case PersonChipId(:final personId):
@@ -108,25 +83,25 @@ class PhotosFilterNotifier extends Notifier<SearchFilter> {
       case TagChipId(:final tagId):
         final next = List<String>.from(state.tagIds ?? const [])..remove(tagId);
         state = state.copyWith()..tagIds = next.isEmpty ? null : next;
-      case LocationChipId():
+      case SimpleChipId.location:
         setLocation(null);
-      case CameraChipId():
+      case SimpleChipId.camera:
         setCamera(null);
-      case DateChipId():
+      case SimpleChipId.date:
         setDateRange(start: null, end: null);
-      case RatingChipId():
+      case SimpleChipId.rating:
         setRating(null);
-      case MediaTypeChipId():
+      case SimpleChipId.mediaType:
         setMediaType(null);
-      case FavouriteChipId():
+      case SimpleChipId.favourite:
         setFavouritesOnly(false);
-      case ArchiveChipId():
+      case SimpleChipId.archive:
         setArchivedIncluded(false);
-      case NotInAlbumChipId():
+      case SimpleChipId.notInAlbum:
         setNotInAlbum(false);
-      case UntaggedChipId():
+      case SimpleChipId.untagged:
         setUntagged(false);
-      case TextChipId():
+      case SimpleChipId.text:
         setText('');
     }
   }

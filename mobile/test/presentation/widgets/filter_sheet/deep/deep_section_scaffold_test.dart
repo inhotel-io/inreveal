@@ -20,7 +20,6 @@ Future<ValueNotifier<AsyncValue<List<int>>>> _pump(
   WidgetTester tester, {
   required AsyncValue<List<int>> initial,
   VoidCallback? onRetry,
-  String emptyKey = 'empty_caption_key',
 }) async {
   final notifier = ValueNotifier<AsyncValue<List<int>>>(initial);
   addTearDown(notifier.dispose);
@@ -30,7 +29,6 @@ Future<ValueNotifier<AsyncValue<List<int>>>> _pump(
       builder: (_, value, __) => DeepSectionScaffold<int>(
         sectionId: FilterSectionId.people,
         titleKey: 'filter_sheet_deep_people_section',
-        emptyCaptionKey: emptyKey,
         items: value,
         onRetry: onRetry,
         childBuilder: (data) => Wrap(children: [for (final d in data) Text('item:$d')]),

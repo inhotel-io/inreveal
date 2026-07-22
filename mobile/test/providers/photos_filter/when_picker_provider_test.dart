@@ -7,74 +7,74 @@ import 'package:immich_mobile/providers/photos_filter/when_picker.provider.dart'
 void main() {
   group('parseWhenQuery', () {
     test('4-digit year', () {
-      expect(parseWhenQuery('2024'), const WhenQuery.year(2024));
-      expect(parseWhenQuery('1999'), const WhenQuery.year(1999));
+      expect(parseWhenQuery('2024'), whenQueryYear(2024));
+      expect(parseWhenQuery('1999'), whenQueryYear(1999));
     });
 
     test('2-digit decade suffix', () {
-      expect(parseWhenQuery('20s'), const WhenQuery.decade(2020));
-      expect(parseWhenQuery('00s'), const WhenQuery.decade(2000));
+      expect(parseWhenQuery('20s'), whenQueryDecade(2020));
+      expect(parseWhenQuery('00s'), whenQueryDecade(2000));
     });
 
     test('4-digit decade', () {
-      expect(parseWhenQuery('2020s'), const WhenQuery.decade(2020));
-      expect(parseWhenQuery('1990s'), const WhenQuery.decade(1990));
+      expect(parseWhenQuery('2020s'), whenQueryDecade(2020));
+      expect(parseWhenQuery('1990s'), whenQueryDecade(1990));
     });
 
     test('decade with whitespace', () {
-      expect(parseWhenQuery(' 2020s '), const WhenQuery.decade(2020));
-      expect(parseWhenQuery('  20s'), const WhenQuery.decade(2020));
+      expect(parseWhenQuery(' 2020s '), whenQueryDecade(2020));
+      expect(parseWhenQuery('  20s'), whenQueryDecade(2020));
     });
 
     test('case-insensitive decade suffix', () {
-      expect(parseWhenQuery('20S'), const WhenQuery.decade(2020));
-      expect(parseWhenQuery('2020S'), const WhenQuery.decade(2020));
+      expect(parseWhenQuery('20S'), whenQueryDecade(2020));
+      expect(parseWhenQuery('2020S'), whenQueryDecade(2020));
     });
 
     test('rejects 3-digit', () {
-      expect(parseWhenQuery('202'), const WhenQuery.none());
-      expect(parseWhenQuery('202s'), const WhenQuery.none());
+      expect(parseWhenQuery('202'), whenQueryNone);
+      expect(parseWhenQuery('202s'), whenQueryNone);
     });
 
     test('rejects 5-digit', () {
-      expect(parseWhenQuery('20248'), const WhenQuery.none());
-      expect(parseWhenQuery('20248s'), const WhenQuery.none());
+      expect(parseWhenQuery('20248'), whenQueryNone);
+      expect(parseWhenQuery('20248s'), whenQueryNone);
     });
 
     test('rejects non-decade-start 4-digit with s', () {
-      expect(parseWhenQuery('2025s'), const WhenQuery.none());
-      expect(parseWhenQuery('2021s'), const WhenQuery.none());
+      expect(parseWhenQuery('2025s'), whenQueryNone);
+      expect(parseWhenQuery('2021s'), whenQueryNone);
     });
 
     test('empty and garbage return none', () {
-      expect(parseWhenQuery(''), const WhenQuery.none());
-      expect(parseWhenQuery('   '), const WhenQuery.none());
-      expect(parseWhenQuery('apples'), const WhenQuery.none());
-      expect(parseWhenQuery('2024apples'), const WhenQuery.none());
+      expect(parseWhenQuery(''), whenQueryNone);
+      expect(parseWhenQuery('   '), whenQueryNone);
+      expect(parseWhenQuery('apples'), whenQueryNone);
+      expect(parseWhenQuery('2024apples'), whenQueryNone);
     });
 
     test('WhenQuery equality', () {
-      expect(const WhenQuery.year(2024), const WhenQuery.year(2024));
-      expect(const WhenQuery.year(2024), isNot(const WhenQuery.year(2023)));
-      expect(const WhenQuery.decade(2020), const WhenQuery.decade(2020));
-      expect(const WhenQuery.none(), const WhenQuery.none());
-      expect(const WhenQuery.year(2024), isNot(const WhenQuery.decade(2020)));
+      expect(whenQueryYear(2024), whenQueryYear(2024));
+      expect(whenQueryYear(2024), isNot(whenQueryYear(2023)));
+      expect(whenQueryDecade(2020), whenQueryDecade(2020));
+      expect(whenQueryNone, whenQueryNone);
+      expect(whenQueryYear(2024), isNot(whenQueryDecade(2020)));
     });
   });
 
-  group('WhenQueryAccess extension', () {
+  group('WhenQuery record accessors', () {
     test('yearValue returns int for year query, null otherwise', () {
-      expect(const WhenQuery.year(2024).yearValue, 2024);
-      expect(const WhenQuery.year(1999).yearValue, 1999);
-      expect(const WhenQuery.decade(2020).yearValue, isNull);
-      expect(const WhenQuery.none().yearValue, isNull);
+      expect(whenQueryYear(2024).year, 2024);
+      expect(whenQueryYear(1999).year, 1999);
+      expect(whenQueryDecade(2020).year, isNull);
+      expect(whenQueryNone.year, isNull);
     });
 
     test('decadeStartValue returns int for decade query, null otherwise', () {
-      expect(const WhenQuery.decade(2020).decadeStartValue, 2020);
-      expect(const WhenQuery.decade(1990).decadeStartValue, 1990);
-      expect(const WhenQuery.year(2024).decadeStartValue, isNull);
-      expect(const WhenQuery.none().decadeStartValue, isNull);
+      expect(whenQueryDecade(2020).decadeStart, 2020);
+      expect(whenQueryDecade(1990).decadeStart, 1990);
+      expect(whenQueryYear(2024).decadeStart, isNull);
+      expect(whenQueryNone.decadeStart, isNull);
     });
   });
 
@@ -82,13 +82,13 @@ void main() {
     test('reacts to whenPickerQueryProvider', () {
       final c = ProviderContainer();
       addTearDown(c.dispose);
-      expect(c.read(whenPickerParsedProvider), const WhenQuery.none());
+      expect(c.read(whenPickerParsedProvider), whenQueryNone);
 
       c.read(whenPickerQueryProvider.notifier).state = '2024';
-      expect(c.read(whenPickerParsedProvider), const WhenQuery.year(2024));
+      expect(c.read(whenPickerParsedProvider), whenQueryYear(2024));
 
       c.read(whenPickerQueryProvider.notifier).state = '20s';
-      expect(c.read(whenPickerParsedProvider), const WhenQuery.decade(2020));
+      expect(c.read(whenPickerParsedProvider), whenQueryDecade(2020));
     });
   });
 

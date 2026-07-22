@@ -5,7 +5,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/decade_anchor_strip.widget.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/quick_ranges_row.widget.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/when_picker_footer.widget.dart';
-import 'package:immich_mobile/presentation/pages/photos_filter/widgets/when_picker_search_header.widget.dart';
+import 'package:immich_mobile/presentation/pages/photos_filter/widgets/picker_no_results_panel.widget.dart';
+import 'package:immich_mobile/presentation/pages/photos_filter/widgets/picker_search_header.widget.dart';
 import 'package:immich_mobile/presentation/pages/photos_filter/widgets/when_picker_year_accordion.widget.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/temporal_utils.dart';
@@ -71,7 +72,7 @@ class _WhenPickerPageState extends ConsumerState<WhenPickerPage> {
     // Auto-expand + scroll to a typed year query.
     ref.listen<WhenQuery>(whenPickerParsedProvider, (prev, next) {
       if (prev == next) return;
-      final year = next.yearValue;
+      final year = next.year;
       if (year == null) return;
       setState(() => _expandedYear = year);
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -105,7 +106,9 @@ class _WhenPickerPageState extends ConsumerState<WhenPickerPage> {
             child: CustomScrollView(
               controller: _scrollController,
               slivers: [
-                WhenPickerSearchHeader(
+                PickerSearchHeader(
+                  keyPrefix: 'when-picker',
+                  hintKey: 'filter_sheet_picker_search_when_hint',
                   controller: _controller,
                   value: _controller.text,
                   onChanged: (v) => ref.read(whenPickerQueryProvider.notifier).state = v,
@@ -145,7 +148,8 @@ class _WhenPickerPageState extends ConsumerState<WhenPickerPage> {
           return [
             SliverFillRemaining(
               hasScrollBody: false,
-              child: _WhenNoResultsPanel(
+              child: PickerNoResultsPanel(
+                keyPrefix: 'when-picker',
                 query: query.trim(),
                 onClear: () => ref.read(whenPickerQueryProvider.notifier).state = '',
               ),
@@ -165,37 +169,6 @@ class _WhenPickerPageState extends ConsumerState<WhenPickerPage> {
           ),
         ];
       },
-    );
-  }
-}
-
-class _WhenNoResultsPanel extends StatelessWidget {
-  final String query;
-  final VoidCallback onClear;
-  const _WhenNoResultsPanel({required this.query, required this.onClear});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'filter_sheet_picker_no_results'.tr(namedArgs: {'query': query}),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            key: const Key('when-picker-clear-search'),
-            onPressed: onClear,
-            child: Text('filter_sheet_picker_clear_search'.tr()),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -15,28 +15,22 @@ import 'package:immich_mobile/utils/image_url_builder.dart';
 ///   * location/rating/media/toggle/text — icon from spec.
 ///   * when    — no leading; label uses tabular figures.
 ///
-/// Trailing × calls [onRemove] when provided, otherwise removes [spec.id].
+/// Trailing × removes [spec.id] from the active filter.
 class ActiveFilterChip extends ConsumerWidget {
   final ActiveChipSpec spec;
-  final VoidCallback? onRemove;
-  const ActiveFilterChip({super.key, required this.spec, this.onRemove});
+  const ActiveFilterChip({super.key, required this.spec});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     void removeChip() {
       HapticFeedback.selectionClick();
-      final callback = onRemove;
-      if (callback != null) {
-        callback();
-      } else {
-        ref.read(photosFilterProvider.notifier).removeChip(spec.id);
-      }
+      ref.read(photosFilterProvider.notifier).removeChip(spec.id);
     }
 
     return Semantics(
       button: true,
-      label: spec.semanticsLabel ?? '${spec.label}, ${'remove_filter'.tr()}',
+      label: '${spec.label}, ${'remove_filter'.tr()}',
       onTap: removeChip,
       child: ExcludeSemantics(
         child: Material(

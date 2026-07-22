@@ -16,16 +16,16 @@ class _FakePrefs implements FilterSectionPrefs {
   Future<void> saveCollapsed(Set<FilterSectionId> ids) async {}
 }
 
-List<Override> _prefs([Set<FilterSectionId> collapsed = const {}]) =>
-    [filterSectionPrefsProvider.overrideWithValue(_FakePrefs({...collapsed}))];
+List<Override> _prefs([Set<FilterSectionId> collapsed = const {}]) => [
+  filterSectionPrefsProvider.overrideWithValue(_FakePrefs({...collapsed})),
+];
 
-CollapsibleSection _section(FilterSectionId id, {bool isEmpty = false, Widget? trailing}) => CollapsibleSection(
-      sectionId: id,
-      titleKey: id.titleKey,
-      isEmpty: isEmpty,
-      trailingHeader: trailing,
-      child: const Text('BODY', key: Key('body-marker')),
-    );
+CollapsibleSection _section(FilterSectionId id, {bool isEmpty = false}) => CollapsibleSection(
+  sectionId: id,
+  titleKey: id.titleKey,
+  isEmpty: isEmpty,
+  child: const Text('BODY', key: Key('body-marker')),
+);
 
 void main() {
   testWidgets('expanded by default: header + body visible', (t) async {
@@ -56,14 +56,6 @@ void main() {
     await t.tap(find.byKey(const Key('collapsible-header-tags')));
     await t.pumpAndSettle();
     expect(find.byKey(const Key('body-marker')), findsNothing); // still collapsed/disabled
-  });
-
-  testWidgets('trailing header is rendered when provided', (t) async {
-    await t.pumpConsumerWidget(
-      _section(FilterSectionId.people, trailing: const Text('TRAILING', key: Key('trailing-marker'))),
-      overrides: _prefs(),
-    );
-    expect(find.byKey(const Key('trailing-marker')), findsOneWidget);
   });
 
   testWidgets('reduced motion collapses immediately', (t) async {

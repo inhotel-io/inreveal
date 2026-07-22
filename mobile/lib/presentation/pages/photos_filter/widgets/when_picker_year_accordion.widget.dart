@@ -1,7 +1,7 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/presentation/widgets/filter_sheet/month_labels.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/temporal_utils.dart';
 import 'package:immich_mobile/providers/photos_filter/time_buckets.provider.dart';
@@ -149,21 +149,6 @@ class _MonthGrid extends StatelessWidget {
   }
 }
 
-const _monthKeys = <String>[
-  'filter_sheet_deep_when_month_jan',
-  'filter_sheet_deep_when_month_feb',
-  'filter_sheet_deep_when_month_mar',
-  'filter_sheet_deep_when_month_apr',
-  'filter_sheet_deep_when_month_may',
-  'filter_sheet_deep_when_month_jun',
-  'filter_sheet_deep_when_month_jul',
-  'filter_sheet_deep_when_month_aug',
-  'filter_sheet_deep_when_month_sep',
-  'filter_sheet_deep_when_month_oct',
-  'filter_sheet_deep_when_month_nov',
-  'filter_sheet_deep_when_month_dec',
-];
-
 class _MonthCell extends ConsumerWidget {
   final int year;
   final MonthCount month;
@@ -209,7 +194,7 @@ class _MonthCell extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              _monthKeys[month.month - 1].tr(),
+              monthLabel(month.month),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

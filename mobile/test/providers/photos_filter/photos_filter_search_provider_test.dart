@@ -35,7 +35,7 @@ void main() {
     expect(n.getAssets().length, 200);
     await n.loadMore();
     expect(n.getAssets().length, 226);
-    expect(n.nextPage, isNull);
+    expect(n.state.nextPage, isNull);
     await n.loadMore();
     verify(() => s.search(any(), 1)).called(1);
     verify(() => s.search(any(), 2)).called(1);
@@ -49,8 +49,8 @@ void main() {
     addTearDown(n.dispose);
     await n.firstLoad;
     expect(n.getAssets(), isEmpty);
-    expect(n.nextPage, isNull);
-    expect(n.isLoading, isFalse);
+    expect(n.state.nextPage, isNull);
+    expect(n.state.isLoading, isFalse);
     await n.loadMore();
     verify(() => s.search(any(), 1)).called(1);
   });
@@ -133,7 +133,7 @@ void main() {
       addTearDown(n.dispose);
       await n.firstLoad;
       await n.loadMore();
-      expect(n.nextPage, isNull);
+      expect(n.state.nextPage, isNull);
       verifyNever(() => s.search(any(), any()));
     });
   });

@@ -27,7 +27,6 @@ class ActiveChipSpec {
   final List<String?>? avatarPersonSpaceIds;
   final int? tagDotSeed;
   final IconData? icon;
-  final String? semanticsLabel;
 
   const ActiveChipSpec({
     required this.id,
@@ -37,7 +36,6 @@ class ActiveChipSpec {
     this.avatarPersonSpaceIds,
     this.tagDotSeed,
     this.icon,
-    this.semanticsLabel,
   });
 }
 
@@ -117,7 +115,7 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
   if (locParts.isNotEmpty) {
     out.add(
       ActiveChipSpec(
-        id: const LocationChipId(),
+        id: SimpleChipId.location,
         label: locParts.join(' · '),
         visual: ChipVisual.location,
         icon: Icons.place_rounded,
@@ -133,7 +131,7 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
   if (cameraParts.isNotEmpty) {
     out.add(
       ActiveChipSpec(
-        id: const CameraChipId(),
+        id: SimpleChipId.camera,
         label: cameraParts.join(' · '),
         visual: ChipVisual.camera,
         icon: Icons.photo_camera_rounded,
@@ -158,19 +156,14 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
     } else {
       label = 'Before ${fmt.format(before!)}';
     }
-    out.add(ActiveChipSpec(id: const DateChipId(), label: label, visual: ChipVisual.when));
+    out.add(ActiveChipSpec(id: SimpleChipId.date, label: label, visual: ChipVisual.when));
   }
 
   // ── rating ───────────────────────────────────────────────────────────
   final rating = filter.rating.rating.unwrapOrNull;
   if (rating != null && rating > 0) {
     out.add(
-      ActiveChipSpec(
-        id: const RatingChipId(),
-        label: '★ $rating+',
-        visual: ChipVisual.rating,
-        icon: Icons.star_rounded,
-      ),
+      ActiveChipSpec(id: SimpleChipId.rating, label: '★ $rating+', visual: ChipVisual.rating, icon: Icons.star_rounded),
     );
   }
 
@@ -194,14 +187,14 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
         label = '';
         icon = Icons.help_outline_rounded;
     }
-    out.add(ActiveChipSpec(id: const MediaTypeChipId(), label: label, visual: ChipVisual.media, icon: icon));
+    out.add(ActiveChipSpec(id: SimpleChipId.mediaType, label: label, visual: ChipVisual.media, icon: icon));
   }
 
   // ── toggles ──────────────────────────────────────────────────────────
   if (filter.display.isFavorite) {
     out.add(
       const ActiveChipSpec(
-        id: FavouriteChipId(),
+        id: SimpleChipId.favourite,
         label: 'filter_sheet_favourites',
         visual: ChipVisual.toggle,
         icon: Icons.favorite_rounded,
@@ -211,7 +204,7 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
   if (filter.display.isArchive) {
     out.add(
       const ActiveChipSpec(
-        id: ArchiveChipId(),
+        id: SimpleChipId.archive,
         label: 'filter_sheet_archived',
         visual: ChipVisual.toggle,
         icon: Icons.archive_rounded,
@@ -221,7 +214,7 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
   if (filter.display.isNotInAlbum) {
     out.add(
       const ActiveChipSpec(
-        id: NotInAlbumChipId(),
+        id: SimpleChipId.notInAlbum,
         label: 'filter_sheet_not_in_album',
         visual: ChipVisual.toggle,
         icon: Icons.folder_off_rounded,
@@ -231,7 +224,7 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
   if (filter.display.isUntagged) {
     out.add(
       const ActiveChipSpec(
-        id: UntaggedChipId(),
+        id: SimpleChipId.untagged,
         label: 'untagged',
         visual: ChipVisual.toggle,
         icon: Icons.label_off_rounded,
@@ -244,12 +237,7 @@ List<ActiveChipSpec> activeChipsFromFilter(SearchFilter filter, {FilterSuggestio
   if (ctx != null && ctx.isNotEmpty) {
     final truncated = ctx.length > 24 ? '${ctx.substring(0, 24)}…' : ctx;
     out.add(
-      ActiveChipSpec(
-        id: const TextChipId(),
-        label: '"$truncated"',
-        visual: ChipVisual.text,
-        icon: Icons.search_rounded,
-      ),
+      ActiveChipSpec(id: SimpleChipId.text, label: '"$truncated"', visual: ChipVisual.text, icon: Icons.search_rounded),
     );
   }
 
