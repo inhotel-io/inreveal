@@ -33,10 +33,10 @@
  * `.first()`, explicit timeout).
  */
 import {
-  declineFaceRepair,
   getFaceRepairPersonFaces,
   mergePerson,
   resolveFaces,
+  unconfirmFaceRepairFaces,
   type LoginResponseDto,
 } from '@immich/sdk';
 import { expect, test } from '@playwright/test';
@@ -167,7 +167,7 @@ test.describe.serial('Face Cleanup', () => {
    * Resolutions page — empty state.
    *
    * Before any decline/lock is recorded the page shows the top-level empty-state placeholder.
-   * Text from admin.face_cleanup_resolutions_empty = "No declines or locks yet". (The declines-only
+   * Text from admin.face_cleanup_resolutions_empty = "No decisions recorded yet". (The declines-only
    * `/admin/face-cleanup/declined` route was replaced by this unified page in Slice 7 — it now 307-redirects
    * here; see web/src/routes/admin/face-cleanup/declined/+page.ts.)
    */
@@ -177,43 +177,68 @@ test.describe.serial('Face Cleanup', () => {
     await page.goto('/admin/face-cleanup/resolutions');
 
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('No declines or locks yet').first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('No decisions recorded yet').first()).toBeVisible({ timeout: 10_000 });
   });
 
   /**
-   * Dismiss → Undo flow (person-level decline, seeded via the API).
-   *
-   * The dashboard `dismiss-btn` (data-testid added in Slice 4) is only rendered when a completed
-   * scan has flagged person rows, which X1 below seeds directly. Here we instead seed the decline
-   * directly via `declineFaceRepair` to exercise the same server path that the dismiss button calls, then
-   * verify the row renders on the resolutions page.
+   * A "keep here" (soft-decline) recorded through the cleanup console is a NEGATIVE verdict in the shared
+   * layer, and the resolutions page lists it with an Undo. Clicking Undo removes the verdict, so a later scan
+   * may flag the face again. (Cluster-level dismisses are console-local and intentionally NOT listed here.)
    */
-  test('person-level decline appears on the resolutions page', async ({ context, page }) => {
+  test('a cleanup keep-here verdict appears on the resolutions page and Undo re-enables flagging', async ({
+    context,
+    page,
+  }) => {
     await utils.setAuthCookies(context, admin.accessToken);
+    const db = await utils.connectDatabase();
 
-    // Seed: create a real person so the FK constraint on face_repair_decline.personId is satisfied.
-    const person = await utils.createPerson(admin.accessToken, { name: 'E2E Dismiss Target' });
+    const sourceName = 'Verdict Kept Person';
+    const source = await utils.createPerson(admin.accessToken, { name: sourceName });
+    const owner = await utils.createPerson(admin.accessToken, { name: 'Verdict Owner Person' });
+    const asset = await utils.createAsset(admin.accessToken);
+    const faceId = await utils.createFace({ assetId: asset.id, personId: source.id });
 
-    // Call the same API endpoint that the `dismiss-btn` triggers.
-    await declineFaceRepair(
-      {
-        faceRepairDeclineRequestDto: {
-          persons: [{ personId: person.id, suspectedOwnerIds: [] }],
-        },
-      },
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceId],
+    });
+
+    // "Keep here": the admin says this face genuinely belongs to `source`, not the suspected owner.
+    await resolveFaces(
+      { faceRepairResolveRequestDto: { personId: source.id, stay: [faceId] } },
       { headers: asBearerAuth(admin.accessToken) },
     );
 
-    // Navigate to the resolutions list.
+    // The face drains from the console.
+    const beforeUndo = await getFaceRepairPersonFaces(
+      { personId: source.id },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    expect(beforeUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
+
     await page.goto('/admin/face-cleanup/resolutions');
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
 
-    // The seeded person-level decline row renders with an "Undo" button
-    // (text from admin.face_cleanup_resolutions_undo = "Undo").
-    await expect(page.getByRole('button', { name: 'Undo' }).first()).toBeVisible({ timeout: 10_000 });
+    const verdictRow = page.locator('[data-testid="resolution-row"][data-source="cleanup"]');
+    await expect(verdictRow.first()).toBeVisible({ timeout: 10_000 });
 
-    // NOTE: the interactive Undo click → empty-state flow is intentionally not asserted here — X2 below
-    // exercises the interactive Undo click (on a lock row) end-to-end instead.
+    await verdictRow.first().locator('[data-testid="undo-button"]').click();
+    await expect(page.locator('[data-testid="resolution-row"]')).toHaveCount(0, { timeout: 10_000 });
+
+    // Undo re-enables flagging: a fresh scan snapshot proposing the same face is no longer suppressed.
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceId],
+    });
+    const afterUndo = await getFaceRepairPersonFaces(
+      { personId: source.id },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    expect(afterUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(true);
   });
 
   test('X1: routing every state via the bulk bar and applying drains the person from the console', async ({
@@ -388,15 +413,15 @@ test.describe.serial('Face Cleanup', () => {
    * The interactive select→lock→Apply route through the review page is covered by X1; medium tests M5/M16
    * cover the full re-scan-drops-a-locked-face semantics against a real second scan.
    */
-  test('X2: undoing a lock on the resolutions page re-enables flagging for that face', async ({ context, page }) => {
-    await utils.setAuthCookies(context, admin.accessToken);
+  test('X2: un-confirming a human-placed face re-enables flagging for that face', async () => {
+    // A confirm/lock records the human placement as the face's manual identity link (there is no separate
+    // lock row any more). Un-confirming it — via POST /admin/face-repair/unconfirm — downgrades that link so
+    // a later scan may suspect the face again. This is the recovery path the resolutions-page lock-undo used
+    // to provide.
     const db = await utils.connectDatabase();
 
-    const sourceName = 'X2 Locked Person';
-    const ownerName = 'X2 Owner Person';
-
-    const source = await utils.createPerson(admin.accessToken, { name: sourceName });
-    const owner = await utils.createPerson(admin.accessToken, { name: ownerName });
+    const source = await utils.createPerson(admin.accessToken, { name: 'X2 Confirmed Person' });
+    const owner = await utils.createPerson(admin.accessToken, { name: 'X2 Owner Person' });
     const asset = await utils.createAsset(admin.accessToken);
     const faceId = await utils.createFace({ assetId: asset.id, personId: source.id });
 
@@ -407,33 +432,34 @@ test.describe.serial('Face Cleanup', () => {
       faceIds: [faceId],
     });
 
-    // Lock the face through the real resolve endpoint (the interactive review-page → lock route is X1's
-    // concern; this test is scoped to the resolutions page's own list/undo behavior).
     await resolveFaces(
       { faceRepairResolveRequestDto: { personId: source.id, lock: [faceId] } },
       { headers: asBearerAuth(admin.accessToken) },
     );
 
-    const beforeUndo = await getFaceRepairPersonFaces(
+    const beforeUnconfirm = await getFaceRepairPersonFaces(
       { personId: source.id },
       { headers: asBearerAuth(admin.accessToken) },
     );
-    expect(beforeUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
+    expect(beforeUnconfirm.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
 
-    await page.goto('/admin/face-cleanup/resolutions');
-    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+    await unconfirmFaceRepairFaces(
+      { faceRepairUnconfirmRequestDto: { assetFaceIds: [faceId] } },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
 
-    const lockRow = page.locator('[data-testid="resolution-row"][data-kind="lock"]', { hasText: sourceName });
-    await expect(lockRow).toBeVisible({ timeout: 10_000 });
-
-    await lockRow.locator('[data-testid="undo-button"]').click();
-    await expect(lockRow).toHaveCount(0, { timeout: 10_000 });
-
-    const afterUndo = await getFaceRepairPersonFaces(
+    // A fresh scan snapshot proposing the same face is no longer suppressed.
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceId],
+    });
+    const afterUnconfirm = await getFaceRepairPersonFaces(
       { personId: source.id },
       { headers: asBearerAuth(admin.accessToken) },
     );
-    expect(afterUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(true);
+    expect(afterUnconfirm.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(true);
   });
 
   /**
@@ -498,14 +524,16 @@ test.describe.serial('Face Cleanup', () => {
 
     await page.waitForURL('**/admin/face-cleanup', { timeout: 15_000 });
 
-    // The face actually moved to `other`, and a lock row persists for it there.
+    // The face actually moved to `other`, and its human placement is recorded as a manual identity link on
+    // `other`'s identity (there is no separate lock table any more).
     const { rows: faceRows } = await db.query(`SELECT "personId" FROM "asset_face" WHERE id = $1`, [faceId]);
     expect(faceRows[0].personId).toBe(other.id);
-    const { rows: lockRows } = await db.query(`SELECT "personId" FROM "face_repair_lock" WHERE "assetFaceId" = $1`, [
-      faceId,
-    ]);
-    expect(lockRows).toHaveLength(1);
-    expect(lockRows[0].personId).toBe(other.id);
+    const { rows: linkRows } = await db.query(
+      `SELECT fif.source FROM "face_identity_face" fif WHERE fif."assetFaceId" = $1`,
+      [faceId],
+    );
+    expect(linkRows).toHaveLength(1);
+    expect(linkRows[0].source).toBe('manual');
 
     // Simulate a LATER real scan: it would re-derive faceId as a candidate now living on `other` and, absent
     // the lock, propose it flagged toward `owner` again (the age-gap/re-suspect case) — seed that snapshot
@@ -563,26 +591,25 @@ test.describe.serial('Face Cleanup', () => {
       { faceRepairResolveRequestDto: { personId: source.id, lock: [faceId] } },
       { headers: asBearerAuth(admin.accessToken) },
     );
-    const { rows: lockRowsBefore } = await db.query(
-      `SELECT "personId" FROM "face_repair_lock" WHERE "assetFaceId" = $1`,
+    const { rows: linkRowsBefore } = await db.query(
+      `SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`,
       [faceId],
     );
-    expect(lockRowsBefore).toHaveLength(1);
-    expect(lockRowsBefore[0].personId).toBe(source.id);
+    expect(linkRowsBefore).toHaveLength(1);
+    expect(linkRowsBefore[0].source).toBe('manual');
 
-    // Merge `source` into `mergeTarget` via the real API — this re-points the lock row (Slice 1 fix)
-    // instead of cascade-deleting it (the pre-Slice-1 gap this test guards against).
+    // Merge `source` into `mergeTarget` via the real API. The human placement is keyed by identity, which the
+    // merge preserves, so it survives with no bespoke re-pointing (the whole point of the unified layer).
     await mergePerson(
       { id: mergeTarget.id, mergePersonDto: { ids: [source.id] } },
       { headers: asBearerAuth(admin.accessToken) },
     );
 
-    const { rows: lockRowsAfter } = await db.query(
-      `SELECT "personId" FROM "face_repair_lock" WHERE "assetFaceId" = $1`,
-      [faceId],
-    );
-    expect(lockRowsAfter).toHaveLength(1);
-    expect(lockRowsAfter[0].personId).toBe(mergeTarget.id);
+    const { rows: linkRowsAfter } = await db.query(`SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`, [
+      faceId,
+    ]);
+    expect(linkRowsAfter).toHaveLength(1);
+    expect(linkRowsAfter[0].source).toBe('manual');
 
     // The merge itself re-points the face to the target too.
     const { rows: faceRows } = await db.query(`SELECT "personId" FROM "asset_face" WHERE id = $1`, [faceId]);
