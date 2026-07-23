@@ -69,7 +69,13 @@ const seedFaceSearch = (db: PgClient, faceId: string) =>
  */
 const seedFlaggedScan = async (
   db: PgClient,
-  args: { ownerUserId: string; personId: string; suspectedOwnerId: string; faceIds: string[] },
+  args: {
+    ownerUserId: string;
+    personId: string;
+    suspectedOwnerId: string;
+    faceIds: string[];
+    preserveSource?: boolean;
+  },
 ): Promise<string> => {
   const totals = {
     eligibleFaces: args.faceIds.length,
@@ -113,7 +119,13 @@ const seedFlaggedScan = async (
     // the unified verdict layer correctly excludes human-placed (source='manual') faces from flagging. Left
     // as 'manual', these seeded faces would be filtered straight back out and the review page would show
     // "no flagged faces". Downgrade to 'ml' so they represent what a real scan actually flags.
-    await db.query(`UPDATE "face_identity_face" SET "source" = 'ml' WHERE "assetFaceId" = $1`, [faceId]);
+    //
+    // `preserveSource` skips this for durability RE-seeds: those simulate a later scan re-proposing a face
+    // that a prior move/lock legitimately set to source='manual', and the whole point is to prove the
+    // manual placement keeps it out of the review — downgrading it here would defeat the test.
+    if (!args.preserveSource) {
+      await db.query(`UPDATE "face_identity_face" SET "source" = 'ml' WHERE "assetFaceId" = $1`, [faceId]);
+    }
     await db.query(
       `INSERT INTO "face_repair_scan_flagged_face" ("scanId", "assetFaceId", "personId", "suspectedOwnerId")
        VALUES ($1, $2, $3, $4)`,
@@ -484,6 +496,7 @@ test.describe.serial('Face Cleanup', () => {
       personId: other.id,
       suspectedOwnerId: owner.id,
       faceIds: [faceId],
+      preserveSource: true,
     });
 
     const afterRescan = await getFaceRepairPersonFaces(
@@ -563,6 +576,7 @@ test.describe.serial('Face Cleanup', () => {
       personId: mergeTarget.id,
       suspectedOwnerId: owner.id,
       faceIds: [faceId],
+      preserveSource: true,
     });
 
     const afterRescan = await getFaceRepairPersonFaces(
