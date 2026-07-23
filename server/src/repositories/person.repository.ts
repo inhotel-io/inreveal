@@ -10,6 +10,7 @@ import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
+import { retargetVerdictPersonId } from 'src/utils/face-verdict-merge';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
 import {
   spaceAssetPathBranches,
@@ -205,11 +206,14 @@ export class PersonRepository {
       .where('personId', '=', input.sourcePersonId)
       .execute();
 
-    // The Face Cleanup lock and face-level decline re-pointing that used to live here is gone with the
-    // tables it maintained. Both facts now live in merge-safe storage by construction: a human placement is
-    // `face_identity_face.source='manual'`, keyed by identity (which the merge preserves), and a negative
-    // verdict carries its target's `identityId` alongside a `personId` that is ON DELETE SET NULL rather than
-    // CASCADE. Nothing to re-point.
+    // Human placements live in `face_identity_face.source='manual'` (identity-keyed); negative/keep-here
+    // verdicts live in `face_person_verdict`. Both are re-pointed to the survivor at merge time: the
+    // identityId re-key runs in mergeIdentitiesAfterProfileResolution, and the personId re-target runs
+    // just below (survivor-wins). The identityId FK is ON DELETE SET NULL as a safety net.
+
+    // D1: move this person's verdicts to the survivor before deleting the source person (personId FK is
+    // SET NULL — a bare delete would orphan them). Survivor-wins on the (personId, assetFaceId) collision.
+    await retargetVerdictPersonId(db, input.sourcePersonId, input.targetPersonId);
 
     const targetNeedsFeatureFaceRepair =
       !target.faceAssetId || !(await this.isFeatureFaceValid(input.targetPersonId, target.faceAssetId, db));

@@ -92,9 +92,9 @@ export class FacePersonVerdictTable {
   spacePersonId!: string | null;
 
   // Identity-first key. Written whenever the target has an identity; the target columns above remain the
-  // fallback for people that have none yet (or acquire one later via FaceIdentityBackfill), so no re-key
-  // pass is ever needed.
-  @ForeignKeyColumn(() => FaceIdentityTable, { onDelete: 'CASCADE', index: false, nullable: true })
+  // fallback. Merges re-key this onto the survivor; ON DELETE SET NULL is the safety net that degrades an
+  // orphaned verdict to target-fallback matching instead of destroying it (parent §4.1).
+  @ForeignKeyColumn(() => FaceIdentityTable, { onDelete: 'SET NULL', index: false, nullable: true })
   identityId!: string | null;
 
   @ForeignKeyColumn(() => AssetFaceTable, { onDelete: 'CASCADE', index: false })

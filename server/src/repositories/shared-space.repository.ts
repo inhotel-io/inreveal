@@ -24,6 +24,7 @@ import { SharedSpacePersonFaceTable } from 'src/schema/tables/shared-space-perso
 import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
 import { anyUuid, retryOnDeadlock, searchAssetBuilderLegacy } from 'src/utils/database';
+import { retargetVerdictSpacePersonId } from 'src/utils/face-verdict-merge';
 import {
   spaceAlbumAssetExists,
   spaceAssetPathBranches,
@@ -2751,6 +2752,10 @@ export class SharedSpaceRepository {
     }
 
     await db.deleteFrom('shared_space_person_alias').where('personId', '=', input.sourcePersonId).execute();
+
+    // D1: move this space-person's verdicts to the survivor before deleting the source row.
+    await retargetVerdictSpacePersonId(db, input.sourcePersonId, input.targetPersonId);
+
     const [deleteResult] = await db.deleteFrom('shared_space_person').where('id', '=', input.sourcePersonId).execute();
     if (Number(deleteResult.numDeletedRows ?? 0) === 0) {
       throw new Error('Space person profile not found');
