@@ -283,7 +283,35 @@ rows is pinned by test rather than changed (§8).
 A **new page with its own view-model**, reusing the guided page's tile presentation, `PersonPicker`,
 and the `resolveFaces` SDK call. Interaction is identical to guided: tile grid → bulk select → Apply.
 
-`manual-review.svelte.ts`:
+Person name and `ownerId` come from the §5.5 endpoint, fetched from the URL so refresh and deep-links
+work. Faces come from `getFaceRepairClusterFaces(personId, {excludeFaceIds: [], page, size})`.
+
+#### The visual inversion
+
+In guided, **every tile always carries a badge and a ribbon**, because every face always holds one of
+six terminal states — the grid is a wall of colour the admin audits. Manual inverts this: the default
+is `keep`, which writes nothing (§3.1), so **tiles start clean and colour appears only where the admin
+has acted**. The page reads calm, and the admin's work is legible as the exceptions.
+
+This is not styling preference; it falls directly out of the data model. It is also why `keep` needs
+no colour token: it is signalled by **absence**, which satisfies the guided page's existing rule that
+_state is never encoded in colour alone_ without inventing a seventh swatch.
+
+#### Tile states — reusing guided's exact tokens
+
+| State                     | Colour           | Icon                   | Tile treatment                                            |
+| ------------------------- | ---------------- | ---------------------- | --------------------------------------------------------- |
+| **`keep`** (default)      | —                | —                      | **clean crop — no badge, no ribbon**                      |
+| `move` (to picked person) | `#d97706` amber  | `mdiAccountArrowRight` | badge + ribbon showing the destination name               |
+| `lock`                    | `#7c3aed` violet | `mdiLock`              | badge + ribbon                                            |
+| `unknown`                 | `#0d9488` teal   | `mdiAccountQuestion`   | badge + ribbon                                            |
+| `detach`                  | `#475569` slate  | `mdiImageOff`          | badge + ribbon + `grayscale(1) opacity(0.55)` on the crop |
+| ~~`owner`~~ / ~~`stay`~~  | —                | —                      | **absent** — both require a suspected owner               |
+
+Badge, ribbon, and selection markup are identical to the guided tile (`[personId]/+page.svelte:491-531`),
+reusing `STATE_COLOR` / `STATE_ICON` so one glyph means one thing across both pages.
+
+#### `manual-review.svelte.ts`
 
 - `ManualFace = { assetFaceId: string }` — **no `suspectedOwnerId`**.
 - `ManualFaceState = 'keep' | 'move' | 'lock' | 'unknown' | 'detach'`, **default `'keep'`**.
@@ -293,13 +321,38 @@ and the `resolveFaces` SDK call. Interaction is identical to guided: tile grid �
 - `buildResolveRequest`: `keep` faces are **omitted entirely**; `move` groups by destination (+lock
   flag); `lock`/`unknown`/`detach` become id lists. **`stay` is never emitted.**
 - Apply is **disabled when every face is `keep`** — an all-keep request would be an empty resolve,
-  which the server 400s.
+  which the server 400s. Hint: "mark at least one face".
 
-Person name and `ownerId` come from the §5.5 endpoint, fetched from the URL so refresh and deep-links
-work. Faces come from `getFaceRepairClusterFaces(personId, {excludeFaceIds: [], page, size})`.
+#### Two interaction problems specific to this page
 
-**Move entire cluster** is offered, but — unlike guided, where it rides the scan's suspected owner —
-it requires choosing a destination through `PersonPicker`.
+**Selection cannot claim the whole cluster.** Guided holds its entire flagged set in memory, so
+"select all 47" is truthful. Manual server-pages a cluster that may hold thousands, so an unqualified
+"select all" would either lie or force loading everything. **Selection therefore always means _loaded_
+faces** — labelled `Select all loaded (120)`, with `showing 120 of 1,204` in the header. Whole-cluster
+work goes through the separate **Move entire cluster…** action, which uses the server's `entireCluster`
+(enumerated server-side, no client paging) and — unlike guided, where it rides the scan's suspected
+owner — requires picking a destination through `PersonPicker`.
+
+**A `keep` default needs an undo.** Guided never needs one: every face is already stamped, so the
+admin only ever swaps one stamp for another. In manual, marking is a deliberate act, so mis-marking
+needs reversing — hence an **Unmark** bulk action returning a selection to `keep`. Without it the only
+recovery is Reset, which discards every staged decision on the page.
+
+#### Remaining behaviour
+
+- **Load more appends without disturbing staged marks or selection** — the whole reason the model owns
+  its list.
+- **Not-a-face keeps guided's destructive confirm.** It is the one irreversible action and it sits
+  beside Unknown, which means the opposite (_bin this crop_ vs _this is a real person I cannot name_).
+- **Empty vs error are distinct states**: a zero-face person gets the dashed empty treatment; a failed
+  load gets an error + Retry. Conflating them was defect D17 on the guided page — do not repeat it.
+- The dock summarises staged work (`3 move · 2 lock · 7 not a face`) so the admin can see the shape of
+  a submission before applying it.
+
+**Reused:** tile markup, `STATE_COLOR`/`STATE_ICON`, `PersonPicker`, the destructive-confirm modal, the
+footer-dock shell, `AdminPageLayout` + breadcrumbs, the admin face-thumbnail route.
+**New:** the view-model, loaded-vs-total selection semantics, Unmark, and a manual-mode help modal
+(guided's `ActionsHelpModal` is left alone — its "names all six actions" test is load-bearing).
 
 ### 6.5 Why a separate page (the finding that changed this design)
 
@@ -420,83 +473,83 @@ lines) plus a controller spec that mocks the service. Server behaviour work ther
   "done" before a job is enqueued, so poll the post-condition. A failure in a `.serial` file skips
   everything after it.
 
-**TDD.** Slices 1 and 3–24 are **red-first**: write the failing test, confirm it fails for the right
-reason, then implement. Slice 2 is the deliberate exception — a regression guard that must be **green
-on arrival**, pinning the `stay` invariant before slices 3–5 touch the guard around it. Slices 7, 25
-and 26 are mechanical/verification and carry no new red test.
+**TDD.** Every slice except 12 is **red-first**: write the failing test, confirm it fails for the right
+reason, then implement. Slice 12 is a verification sweep and carries no new red test. Within slice 1,
+the `stay` regression guard is written **first and must be green on arrival** — it pins the invariant
+before the same slice relaxes the guard around it.
 
 ## 9. Slices
 
+Sliced on one test: **can it ship on its own without leaving the tree broken or dead?** Work that
+fails that test is merged — a route move without its e2e repair leaves CI red, an endpoint without its
+SDK regen has no caller, a page shell without its grid renders nothing. Conversely the pure
+view-model stays separate despite being small, because it carries the most logic risk on the branch
+and deserves its own red-first cycle.
+
+Each web slice adds the i18n keys it needs; there is no separate i18n slice (nothing renders without
+them).
+
 **Server**
 
-1. **Eligibility read.** `getEligibleFaceIdsForPerson`, mirroring `getClusterFacePage`'s predicate; no
-   `@GenerateSql`. Medium tests per exclusion arm (wrong person, soft-deleted, invisible asset,
-   non-ML source).
-2. **Regression guard for `stay` (green on arrival).** Pin `stay`-on-non-flagged → 400 and `stay`
-   with no scan → 400 **before** touching E15, so the invariant is documented ahead of the change.
-   Lands ahead of slices 3–5 deliberately.
-3. **Relax E15 for `lock` + eligibility rejection.** Rewrite medium `:1372` from rejection to success
-   and invert its side-effect assertions. Add the §5.3 identity-steal case and the
+1. **Relax E15 for `lock`, with the eligibility read.** Add
+   `getEligibleFaceIdsForPerson` (mirroring `getClusterFacePage`'s predicate; **no `@GenerateSql`**),
+   relax the guard for `lock`, and reject non-eligible ids. Write the `stay` regression guard **first**
+   (`stay`-on-non-flagged → 400, `stay` with no scan → 400; green on arrival) so the invariant is
+   pinned before the guard around it moves. Rewrite medium `:1372` from rejection to success and invert
+   its side-effect assertions. Covers the §5.3 identity-steal hazard and the
    foreign/deleted/nonexistent rejections.
-4. **Relax E15 for `detach`.** Rewrite medium `:1467`; prove person-scoping leaves other clusters
-   untouched.
-5. **Relax E15 for `unknown`.** Rewrite medium `:2003` to the §5.4 semantics (success, `unknown: 0`,
-   no orphan cluster); cover park-everything and the `countAllFaces`-gated source cleanup.
-6. **Person metadata endpoint.** Repo + service + DTO + route, with the §7 metadata edge cases and the
-   controller-level admin gate.
-7. **OpenAPI regen.** `mise open-api` (TS SDK + Dart). Mechanical; verify the new call is exposed.
+2. **Relax E15 for `detach` and `unknown`.** One guard change, two buckets. Rewrite medium `:1467`
+   (prove person-scoping leaves other clusters untouched) and `:2003` to the §5.4 semantics (success
+   with `unknown: 0`, no orphan cluster). Cover park-everything and the `countAllFaces`-gated source
+   cleanup.
+3. **Person metadata endpoint + SDK regen.** Repo + service + DTO + route with the §7 edge cases and
+   the controller admin gate, then `mise open-api` (TS SDK + Dart) in the same slice — the endpoint has
+   no caller until the client is regenerated.
 
 **Web — route move (must precede the new surfaces)**
 
-8. **Move the dashboard to `/admin/face-cleanup/scan`.** `git mv` the 10-file cluster, add
-   `Route.faceCleanupScan()`, repoint the six §6.6 call sites, and leave `/admin/face-cleanup` as a
-   temporary 307 redirect so the slice ships without a dead entry point. Navbar unchanged.
-9. **Repair the e2e assertions the move breaks.** Four in `face-cleanup.e2e-spec.ts`: `:151` and
-   `:295` (`goto`), `:361` and `:541` (`waitForURL('**/admin/face-cleanup')`, which will not match
-   `/scan`). **`:363-365` must be fixed, not repointed** — pointed at a chooser it would pass
-   vacuously, silently gutting the drain check.
+4. **Move the dashboard to `/admin/face-cleanup/scan`, and repair the e2e it breaks.** `git mv` the
+   10-file cluster, add `Route.faceCleanupScan()`, repoint the six §6.6 call sites, and leave
+   `/admin/face-cleanup` as a temporary 307 redirect. **The four e2e fixes ship in this slice** —
+   `:151`/`:295` (`goto`) and `:361`/`:541` (`waitForURL('**/admin/face-cleanup')`, which will not
+   match `/scan`) — because the move alone leaves CI red. **`:363-365` must be fixed, not repointed**:
+   aimed at a chooser it would pass vacuously, silently gutting the drain check. Navbar unchanged.
 
 **Web — new surfaces**
 
-10. **Chooser landing — returning presentation.** Replace slice 8's redirect with the two
-    equal-weight cards, live counts from `getLatestScan()`, the user count from `searchUsersAdmin`,
-    and correct destinations. Novel UI in admin — no existing chooser to copy; the 307-redirect
-    pattern is the only precedent reused.
-11. **Chooser — first-visit presentation.** The never-scanned layout: explanatory header, guided card
-    in its "needs a scan first" form linking to `/scan`, manual card advertising "no scan needed".
-    Tested independently of slice 10 because it is a genuinely different rendering, not a
-    missing-data variant — and it is the state every new instance starts in.
-12. **Chooser — remaining card states.** Running (guided shows progress; **manual card disabled**
-    with the scan-conflict explanation), completed-with-zero-flagged, and failed. The disabled-manual
-    assertion is the important one — it is the UI half of the 409 guard in §7.
-13. **People browser shell + owner selector.** Route, layout, `searchUsersAdmin`, single-user
-    auto-select.
-14. **People grid.** Thumbnails, face counts, pagination; pin hidden / non-`person`-type behaviour.
-15. **People search.** Optional `query` wiring; no-results state.
-16. **Manual review page shell.** Route, person metadata from slice 6, navigation in from the browser,
-    refresh/deep-link, unnamed fallback.
-17. **Manual view-model (pure).** `manual-review.svelte.ts` per §6.4 — states, `keep` default,
-    `appendFaces` preserving state + selection, `buildResolveRequest` omitting `keep` and never
-    emitting `stay`. Heaviest unit-test slice.
-18. **Manual tile grid + selection + server paging.** Click / shift-range / select-all semantics
-    honest about server paging; paging must not lose staged decisions.
-19. **Manual bulk bar.** Move (via `PersonPicker` with `ownerId`), lock, unknown, not-a-face, plus the
-    destructive confirm on detach.
-20. **Manual entire-cluster move.** With its own destination picker (no suspected owner to ride).
-21. **Manual Apply.** Submit, report results, surface 409/errors, disable on all-keep.
-22. **Manual actions help.** A manual-mode help modal listing this mode's actions; the guided
-    `ActionsHelpModal` and its "names all six actions" test are left alone.
+5. **Chooser landing, all states.** Replace slice 4's redirect with the two equal-weight cards and the
+   full §6.2 state matrix: first-visit (explanatory header, "needs a scan first" vs "no scan needed"),
+   returning with live counts, running (**manual card disabled** — the UI half of the 409 guard),
+   zero-flagged, and failed. One component, one state machine, one slice. Novel UI in admin; only the
+   307-redirect pattern is precedent.
+6. **People browser.** Route, owner selector (`searchUsersAdmin`, single-user auto-select), paginated
+   grid with thumbnails and face counts, and search via the optional `query`. Pin hidden /
+   non-`person`-type behaviour. No-results and load-error states.
+7. **Manual view-model (pure).** `manual-review.svelte.ts` per §6.4 — `keep` default, `appendFaces`
+   preserving state **and** selection, `buildResolveRequest` omitting `keep` and never emitting
+   `stay`, all-keep building to empty. Kept separate deliberately: highest logic risk on the branch,
+   and it is a pure module, so it carries the bulk of the coverage cheaply.
+8. **Manual page + grid + paging.** Route, person metadata from slice 3, navigation in from the
+   browser, refresh/deep-link, unnamed fallback, the tile grid with §6.4's clean-`keep` treatment,
+   selection (click / shift-range), server paging that **preserves staged marks**, and the honest
+   `Select all loaded (N)` / `showing N of M` semantics. Empty vs error distinguished (D17).
+9. **Manual bulk actions + Apply.** Move via `PersonPicker`, lock, unknown, not-a-face with its
+   destructive confirm, **Unmark**, the staged-work tally, submit, result reporting, 409 surfacing,
+   and Apply disabled while everything is `keep`.
+10. **Manual entire-cluster move + help modal.** `entireCluster` with its own destination picker (no
+    suspected owner to ride), plus a manual-mode actions help modal. Guided's `ActionsHelpModal` and
+    its "names all six actions" test are left alone.
 
 **Integration**
 
-23. **e2e manual flow.** Browse → pick a person with no scan → move, lock, not-a-face → assert rows.
-24. **e2e cross-engine invariant.** A manual decision survives a later scan: locked faces are not
-    re-flagged, detached faces stay gone.
-25. **i18n + docs.** Keys in `i18n/en.json` (shared by web **and** mobile — grep both before touching
-    existing keys) and a docs note on the two modes.
-26. **Final gate.** `pnpm lint` (server is `--max-warnings 0`), `prettier --check .` across the server
-    package **and** `cd docs && pnpm format` — prettier is a CI gate separate from eslint and docs
-    prettier reaches this file — plus type checks, web checks, and the full server/web/e2e suites.
+11. **e2e: manual flow + cross-engine invariant.** Browse → pick a person with no scan → move, lock,
+    not-a-face → assert the rows; then prove a manual decision survives a later scan (locked faces are
+    not re-flagged, detached faces stay gone). Both live in the same `.serial` spec file, so they land
+    together.
+12. **Final gate + docs.** `pnpm lint` (server is `--max-warnings 0`), `prettier --check .` across the
+    server package **and** `cd docs && pnpm format` — prettier is a CI gate separate from eslint and
+    docs prettier reaches this file — type checks, web checks, the full server/web/e2e suites, and a
+    docs note on the two modes.
 
 ## 10. Accepted tradeoffs
 
@@ -519,7 +572,7 @@ Recorded so reviewers can see what was verified rather than assumed:
 | Manual mode reuses the guided page behind a mode flag   | **False** — model has a required `suspectedOwnerId`, no neutral state, and a `$derived` rebuild bug (§6.5) |
 | Re-lock is an idempotent no-op via a plain unique index | **False** — PRIMARY KEY, and `DO UPDATE` that can steal a face from another identity (§5.3)                |
 | Adding a repo method needs `mise sql` regeneration      | **False** — decorator is `@GenerateSql`; `FaceRepairRepository` has none                                   |
-| Slice 8 must repoint the navbar                         | **False** — `NavbarItem` matches by prefix; no-op                                                          |
+| The route move must repoint the navbar                  | **False** — `NavbarItem` matches by prefix; no-op                                                          |
 | `resolveFaces` has server unit-test coverage            | **False** — medium only; unit specs cover other seams                                                      |
 | "Move entire cluster remains available" in manual mode  | **False client-side** — bound to a null `ownerPersonId`; needs its own picker (§6.4)                       |
 | Relaxing `unknown` is purely permissive                 | **Incomplete** — it converts one 400 into a success with `unknown: 0` (§5.4)                               |
