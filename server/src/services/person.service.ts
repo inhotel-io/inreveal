@@ -417,6 +417,17 @@ export class PersonService extends BaseService {
     await this.reassignFacesById(auth, personId, { id: assetFaceId });
   }
 
+  // D2: reject/ignore write the target's identity + the acting user, same as a cleanup verdict, so the
+  // negative-verdict row answers "not this person" everywhere the identity is checked (not just for this
+  // person row) and records who made the call.
+  private async verdictOpts(
+    auth: AuthDto,
+    personId: string,
+  ): Promise<{ identityId: string; source: 'suggestion'; actorId: string }> {
+    const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId);
+    return { identityId: identity.id, source: 'suggestion', actorId: auth.user.id };
+  }
+
   async rejectFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
     // Owner-only on the PERSON only — intentionally asymmetric with confirm. Reject never
     // touches the face (it only suppresses a (personId, assetFaceId) suggestion row), so
@@ -424,14 +435,14 @@ export class PersonService extends BaseService {
     // assigns the face. Consequence: reject on a CASCADE-deleted face (person still exists)
     // → markRejected affects 0 rows → benign 200; that asymmetry is by-design, not a gap.
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
-    await this.facePersonVerdictRepository.markRejected(personId, assetFaceId);
+    await this.facePersonVerdictRepository.markRejected(personId, assetFaceId, await this.verdictOpts(auth, personId));
     // Face stays unassigned; the Phase-1 conditional upsertPending never resurrects a
     // 'rejected' row, so a later scan will not re-suggest it for this person.
   }
 
   async ignoreFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
-    await this.facePersonVerdictRepository.markIgnored(personId, assetFaceId);
+    await this.facePersonVerdictRepository.markIgnored(personId, assetFaceId, await this.verdictOpts(auth, personId));
     // Face stays unassigned; ignored rows suppress future suggestions without rejecting the match.
   }
 

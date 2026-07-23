@@ -1335,6 +1335,12 @@ export class SharedSpaceService extends BaseService {
     await this.facePersonVerdictRepository.resolveAssignedFace(assetFaceId);
   }
 
+  // D9/D2: reachability (RBAC — is this face's asset in the space at all), not pendingness, gates a space
+  // reject/ignore; then the upsert runs unconditionally, same as the personal path. This matches the personal
+  // path's semantics (a reject/ignore on a drained-but-otherwise-valid target still records) while still
+  // refusing a face whose asset has genuinely left the space. Carries the target's identity + acting user,
+  // same as a cleanup verdict, so the negative-verdict row answers "not this person" everywhere the identity
+  // is checked and records who made the call.
   private async resolveSpacePersonFaceSuggestion(
     auth: AuthDto,
     spaceId: string,
@@ -1344,20 +1350,16 @@ export class SharedSpaceService extends BaseService {
   ): Promise<void> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     const person = await this.requireSpacePersonInSpace(spaceId, personId);
-    const distanceConfig = await this.getFaceSuggestionDistanceConfig();
-    const isPending = await this.facePersonVerdictRepository.hasPendingForSpacePerson(
-      spaceId,
-      person.id,
-      assetFaceId,
-      distanceConfig,
-    );
-    if (!isPending) {
+    const reachable = await this.facePersonVerdictRepository.isFaceReachableInSpace(spaceId, assetFaceId);
+    if (!reachable) {
       return;
     }
 
+    const identity = await this.faceIdentityRepository.ensureSpacePersonIdentity(person.id);
+    const opts = { identityId: identity.id, source: 'suggestion' as const, actorId: auth.user.id };
     await (action === 'rejected'
-      ? this.facePersonVerdictRepository.markRejectedForSpacePerson(person.id, assetFaceId)
-      : this.facePersonVerdictRepository.markIgnoredForSpacePerson(person.id, assetFaceId));
+      ? this.facePersonVerdictRepository.markRejectedForSpacePerson(person.id, assetFaceId, opts)
+      : this.facePersonVerdictRepository.markIgnoredForSpacePerson(person.id, assetFaceId, opts));
   }
 
   async rejectSpacePersonFaceSuggestion(
