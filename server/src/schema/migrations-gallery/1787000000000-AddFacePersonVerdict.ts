@@ -75,22 +75,22 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   // schema-drift check reports it as unmanaged.
   await sql`
     INSERT INTO "migration_overrides" ("name", "value")
-    VALUES ('index_face_person_verdict_personId_assetFaceId_uq', '{"type":"index","name":"face_person_verdict_personId_assetFaceId_uq","sql":"CREATE UNIQUE INDEX \\"face_person_verdict_personId_assetFaceId_uq\\" ON \\"face_person_verdict\\" (\\"personId\\", \\"assetFaceId\\") WHERE \\"personId\\" IS NOT NULL;"}'::jsonb)
+    VALUES ('index_face_person_verdict_personId_assetFaceId_uq', '{"type":"index","name":"face_person_verdict_personId_assetFaceId_uq","sql":"CREATE UNIQUE INDEX \\"face_person_verdict_personId_assetFaceId_uq\\" ON \\"face_person_verdict\\" (\\"personId\\", \\"assetFaceId\\") WHERE (\\"personId\\" IS NOT NULL);"}'::jsonb)
     ON CONFLICT ("name") DO UPDATE SET "value" = EXCLUDED."value"
   `.execute(db);
   await sql`
     INSERT INTO "migration_overrides" ("name", "value")
-    VALUES ('index_face_person_verdict_spacePersonId_assetFaceId_uq', '{"type":"index","name":"face_person_verdict_spacePersonId_assetFaceId_uq","sql":"CREATE UNIQUE INDEX \\"face_person_verdict_spacePersonId_assetFaceId_uq\\" ON \\"face_person_verdict\\" (\\"spacePersonId\\", \\"assetFaceId\\") WHERE \\"spacePersonId\\" IS NOT NULL;"}'::jsonb)
+    VALUES ('index_face_person_verdict_spacePersonId_assetFaceId_uq', '{"type":"index","name":"face_person_verdict_spacePersonId_assetFaceId_uq","sql":"CREATE UNIQUE INDEX \\"face_person_verdict_spacePersonId_assetFaceId_uq\\" ON \\"face_person_verdict\\" (\\"spacePersonId\\", \\"assetFaceId\\") WHERE (\\"spacePersonId\\" IS NOT NULL);"}'::jsonb)
     ON CONFLICT ("name") DO UPDATE SET "value" = EXCLUDED."value"
   `.execute(db);
   await sql`
     INSERT INTO "migration_overrides" ("name", "value")
-    VALUES ('index_face_person_verdict_spacePersonId_status_distance_idx', '{"type":"index","name":"face_person_verdict_spacePersonId_status_distance_idx","sql":"CREATE INDEX \\"face_person_verdict_spacePersonId_status_distance_idx\\" ON \\"face_person_verdict\\" (\\"spacePersonId\\", \\"status\\", \\"distance\\") WHERE \\"spacePersonId\\" IS NOT NULL;"}'::jsonb)
+    VALUES ('index_face_person_verdict_spacePersonId_status_distance_idx', '{"type":"index","name":"face_person_verdict_spacePersonId_status_distance_idx","sql":"CREATE INDEX \\"face_person_verdict_spacePersonId_status_distance_idx\\" ON \\"face_person_verdict\\" (\\"spacePersonId\\", \\"status\\", \\"distance\\") WHERE (\\"spacePersonId\\" IS NOT NULL);"}'::jsonb)
     ON CONFLICT ("name") DO UPDATE SET "value" = EXCLUDED."value"
   `.execute(db);
   await sql`
     INSERT INTO "migration_overrides" ("name", "value")
-    VALUES ('index_face_person_verdict_identityId_assetFaceId_idx', '{"type":"index","name":"face_person_verdict_identityId_assetFaceId_idx","sql":"CREATE INDEX \\"face_person_verdict_identityId_assetFaceId_idx\\" ON \\"face_person_verdict\\" (\\"identityId\\", \\"assetFaceId\\") WHERE \\"identityId\\" IS NOT NULL;"}'::jsonb)
+    VALUES ('index_face_person_verdict_identityId_assetFaceId_idx', '{"type":"index","name":"face_person_verdict_identityId_assetFaceId_idx","sql":"CREATE INDEX \\"face_person_verdict_identityId_assetFaceId_idx\\" ON \\"face_person_verdict\\" (\\"identityId\\", \\"assetFaceId\\") WHERE (\\"identityId\\" IS NOT NULL);"}'::jsonb)
     ON CONFLICT ("name") DO UPDATE SET "value" = EXCLUDED."value"
   `.execute(db);
 
