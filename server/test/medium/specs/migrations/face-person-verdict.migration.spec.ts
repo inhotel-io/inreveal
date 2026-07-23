@@ -126,7 +126,7 @@ describe('face_person_verdict migration', () => {
     expect(defs.face_person_verdict_updateId_idx).toBeDefined();
   });
 
-  it('uses SET NULL on the targets and CASCADE on identity and face', async () => {
+  it('uses SET NULL on the targets and identity, and CASCADE on face', async () => {
     const fks = await sql<{ conname: string; def: string }>`
       SELECT conname, pg_get_constraintdef(oid) AS def
       FROM pg_constraint
@@ -137,7 +137,9 @@ describe('face_person_verdict migration', () => {
     expect(byName['face_person_verdict_personId_fkey']).toContain('ON DELETE SET NULL');
     expect(byName['face_person_verdict_spacePersonId_fkey']).toContain('ON DELETE SET NULL');
     expect(byName['face_person_verdict_actorId_fkey']).toContain('ON DELETE SET NULL');
-    expect(byName['face_person_verdict_identityId_fkey']).toContain('ON DELETE CASCADE');
+    // D1: identity is SET NULL (not CASCADE) — merges re-key it onto the survivor, and this is the
+    // defense-in-depth net for any deletion path that misses that re-key.
+    expect(byName['face_person_verdict_identityId_fkey']).toContain('ON DELETE SET NULL');
     expect(byName['face_person_verdict_assetFaceId_fkey']).toContain('ON DELETE CASCADE');
   });
 
