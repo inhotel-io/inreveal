@@ -31,6 +31,27 @@ on:
         required: false
         default: false
         type: boolean
+  workflow_call:
+    inputs:
+      rc_tag:
+        description: 'Custom image tag, e.g. pr-123. Must not be "release", "v<N>", or "v<N>.<N>.<N>".'
+        required: true
+        type: string
+      ref:
+        description: 'Git ref (branch/tag/SHA) to build. Leave empty to use the caller ref.'
+        required: false
+        default: ''
+        type: string
+      fork_version:
+        description: 'Override the stamped fork version (e.g. 5.1.0). Leave empty to derive from the latest v<N>.<N>.<N> git tag.'
+        required: false
+        default: ''
+        type: string
+      build_ml:
+        description: 'Also build the CPU machine-learning image under the same RC tag.'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.rc_tag }}
