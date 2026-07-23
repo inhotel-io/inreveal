@@ -14,7 +14,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleError } from '$lib/utils/handle-error';
 import ClassificationSettings from './ClassificationSettings.svelte';
+
+vi.mock('$lib/utils/handle-error', () => ({
+  handleError: vi.fn(),
+}));
 
 vi.mock('@immich/sdk', () => ({
   getConfig: vi.fn(),
@@ -193,6 +198,35 @@ describe('ClassificationSettings', () => {
       expectClassificationScanQueued();
       expect(toastManager.primary).toHaveBeenCalledWith('Rescan started — existing auto-tags will be re-evaluated');
     });
+  });
+
+  it('should report a failed auto-rescan as a scan error (not a save error) and still close the editor', async () => {
+    vi.mocked(getConfig).mockResolvedValue(makeConfig([makeCategory({ similarity: 0.28 })]));
+    vi.mocked(modalManager.showDialog).mockResolvedValue(true);
+    // The config saves fine, but the rescan hits the guarded jobs API while a job is already running.
+    vi.mocked(runQueueCommandLegacy).mockRejectedValue(new Error('Job is already running'));
+
+    render(ClassificationSettings);
+    await waitFor(() => {
+      expect(screen.getByText('Screenshots')).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByLabelText('Edit'));
+    await fireEvent.input(screen.getByRole('slider'), { target: { value: '0.40' } });
+    await fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      // The save itself succeeded ...
+      expect(updateConfig).toHaveBeenCalled();
+      expect(toastManager.primary).toHaveBeenCalledWith('Category "Screenshots" updated');
+      // ... and the rescan failure is surfaced as a scan error.
+      expect(handleError).toHaveBeenCalledWith(expect.anything(), 'Unable to start library scan');
+    });
+
+    // It must NOT be reported as a save failure ...
+    expect(handleError).not.toHaveBeenCalledWith(expect.anything(), 'Unable to save category');
+    // ... and the editor must close despite the rescan failing (the persisted save is final).
+    expect(screen.queryByText('Save')).not.toBeInTheDocument();
   });
 
   it('should NOT show rescan dialog when similarity is decreased', async () => {

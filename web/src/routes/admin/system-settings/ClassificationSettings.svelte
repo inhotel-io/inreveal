@@ -158,8 +158,14 @@
         });
 
         if (shouldRescan) {
-          await startClassificationScan();
-          toastManager.primary(get(t)('admin.classification_rescan_started'));
+          try {
+            await startClassificationScan();
+            toastManager.primary(get(t)('admin.classification_rescan_started'));
+          } catch (error) {
+            // The config already persisted above; a rescan that 400s ("job already running") is a
+            // scan failure, not a save failure, and must not keep the editor open.
+            handleError(error, get(t)('admin.classification_scan_failed'));
+          }
         }
       }
 
