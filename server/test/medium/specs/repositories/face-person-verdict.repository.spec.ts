@@ -260,7 +260,12 @@ describe('FacePersonVerdictRepository', () => {
     it('excludes a pending row at exactly distance == maxDistance (lower bound is exclusive, `>` semantics)', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
-      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Boundary Low', isHidden: false, type: 'person' });
+      const { person } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'Boundary Low',
+        isHidden: false,
+        type: 'person',
+      });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
 
@@ -273,7 +278,12 @@ describe('FacePersonVerdictRepository', () => {
     it('includes a pending row at exactly distance == suggestionMaxDistance (upper bound is inclusive, `<=` semantics)', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
-      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Boundary High', isHidden: false, type: 'person' });
+      const { person } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'Boundary High',
+        isHidden: false,
+        type: 'person',
+      });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
       const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
 
