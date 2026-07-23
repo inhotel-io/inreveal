@@ -52,7 +52,7 @@ class ModelSource(StrEnum):
     MCLIP = "mclip"
     OPENCLIP = "openclip"
     PADDLE = "paddle"
-    YOLO = "yolo"
+    RFDETR = "rfdetr"
 
 
 class ModelPrecision(StrEnum):
