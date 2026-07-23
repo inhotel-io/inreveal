@@ -7385,7 +7385,9 @@ describe(SharedSpaceService.name, () => {
       });
       expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith('face-1');
       // Slice 3 (D3): confirm writes the space projection row so the same space's next scan excludes the face.
-      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith([{ personId: 'space-person-1', assetFaceId: 'face-1' }]);
+      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith([
+        { personId: 'space-person-1', assetFaceId: 'face-1' },
+      ]);
 
       expect(mocks.facePersonVerdict.claimPendingForSpacePerson.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.faceIdentity.replaceFaceIdentity.mock.invocationCallOrder[0],
