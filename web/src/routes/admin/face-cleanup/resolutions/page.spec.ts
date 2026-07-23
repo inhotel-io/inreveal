@@ -113,6 +113,43 @@ const SUGGESTION_ROW = {
   createdAt: '2026-07-02T00:00:00.000Z',
 };
 
+// A verdict recorded against a shared-space person, never a personal person — must render with the space
+// named (D15 1.4a).
+const SPACE_PERSON_ROW = {
+  id: 'verdict-3',
+  assetFaceId: 'face-3',
+  status: 'rejected',
+  source: 'cleanup',
+  personId: null,
+  personName: null,
+  personThumbnailFaceId: null,
+  spacePersonId: 'space-person-1',
+  spacePersonName: 'Casper',
+  spaceName: 'Family Trip',
+  actorId: 'admin-1',
+  actorName: 'Admin',
+  createdAt: '2026-07-03T00:00:00.000Z',
+};
+
+// A fully-orphaned verdict: the suspected owner AND its identity were both GC'd/degraded away after the
+// verdict was recorded (personId + spacePersonId both SET NULL, no identity survives either) — the row must
+// still render as a valid row (falling back to "unnamed"), never throw (D15 1.4b).
+const ORPHANED_ROW = {
+  id: 'verdict-4',
+  assetFaceId: 'face-4',
+  status: 'ignored',
+  source: 'suggestion',
+  personId: null,
+  personName: null,
+  personThumbnailFaceId: null,
+  spacePersonId: null,
+  spacePersonName: null,
+  spaceName: null,
+  actorId: null,
+  actorName: null,
+  createdAt: '2026-07-04T00:00:00.000Z',
+};
+
 describe('+page.svelte (face-cleanup resolutions)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -137,6 +174,27 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(screen.getAllByText('admin.face_cleanup_resolutions_not_person')).toHaveLength(2);
     // No locks section survives.
     expect(screen.queryByTestId('locks-section')).not.toBeInTheDocument();
+  });
+
+  it('renders a space-person verdict with its space named, and a fully-orphaned verdict as a valid row', async () => {
+    vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      resolutions: [SPACE_PERSON_ROW, ORPHANED_ROW],
+    } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
+
+    const rows = screen.getAllByTestId('resolution-row');
+    const spacePersonRow = rows.find((r) => r.dataset.source === 'cleanup')!;
+    const orphanedRow = rows.find((r) => r.dataset.source === 'suggestion')!;
+
+    // (a) space-person row: target name resolves to the space person, and the space is named alongside it.
+    expect(within(spacePersonRow).getByText('admin.face_cleanup_resolutions_not_person')).toBeInTheDocument();
+    expect(within(spacePersonRow).getByText('admin.face_cleanup_resolutions_in_space')).toBeInTheDocument();
+
+    // (b) fully-orphaned row: no crash, renders as a valid row falling back to "unnamed".
+    expect(within(orphanedRow).getByText('admin.face_cleanup_resolutions_not_person')).toBeInTheDocument();
   });
 
   it('filters by source', async () => {

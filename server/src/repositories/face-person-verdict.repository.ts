@@ -167,7 +167,7 @@ export class FacePersonVerdictRepository {
     return Number(result.numInsertedOrUpdatedRows ?? 0n);
   }
 
-  @GenerateSql({ params: [{ personId: DummyValue.UUID, assetFaceId: DummyValue.UUID, status: 'rejected' }] })
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, { source: 'cleanup' }] })
   async markRejected(
     personId: string,
     assetFaceId: string,
@@ -176,7 +176,7 @@ export class FacePersonVerdictRepository {
     return this.recordPersonalVerdict({ personId, assetFaceId, status: 'rejected', ...opts });
   }
 
-  @GenerateSql({ params: [{ personId: DummyValue.UUID, assetFaceId: DummyValue.UUID, status: 'ignored' }] })
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, { source: 'suggestion' }] })
   async markIgnored(
     personId: string,
     assetFaceId: string,
@@ -222,7 +222,7 @@ export class FacePersonVerdictRepository {
     return Number(result.numInsertedOrUpdatedRows ?? 0n);
   }
 
-  @GenerateSql({ params: [{ spacePersonId: DummyValue.UUID, assetFaceId: DummyValue.UUID, status: 'rejected' }] })
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, { source: 'cleanup' }] })
   async markRejectedForSpacePerson(
     spacePersonId: string,
     assetFaceId: string,
@@ -231,7 +231,7 @@ export class FacePersonVerdictRepository {
     return this.recordSpacePersonVerdict({ spacePersonId, assetFaceId, status: 'rejected', ...opts });
   }
 
-  @GenerateSql({ params: [{ spacePersonId: DummyValue.UUID, assetFaceId: DummyValue.UUID, status: 'ignored' }] })
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, { source: 'suggestion' }] })
   async markIgnoredForSpacePerson(
     spacePersonId: string,
     assetFaceId: string,

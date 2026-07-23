@@ -135,7 +135,10 @@ export class FaceRepairAdminController {
   // still uses them until the resolutions page dispatch migrates off them.
   @Get('resolutions')
   @Authenticated({ admin: true })
-  @Endpoint({ summary: 'List face-repair resolutions (declines + locks)', history: new HistoryBuilder().added('v1') })
+  @Endpoint({
+    summary: 'List face-repair resolutions (negative verdicts from both engines)',
+    history: new HistoryBuilder().added('v1'),
+  })
   getFaceRepairResolutions(): Promise<FaceRepairResolutionsListDto> {
     return this.service.listResolutions() as unknown as Promise<FaceRepairResolutionsListDto>;
   }

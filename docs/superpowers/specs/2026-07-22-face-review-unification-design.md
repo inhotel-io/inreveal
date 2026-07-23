@@ -1213,3 +1213,61 @@ All 10 gating workflows green. #592 and #770 marked superseded (not merged).
   `pnpm test:medium -- --run <path>` can drop the path filter (verify the intended file ran); `make sql`
   without a running DB deletes every query file; web `pnpm lint` may abort locally, leaving CI as the only
   lint gate; the web Playwright suite must run against :2285, not :2283.
+
+---
+
+## 2026-07-23 corrections
+
+Recorded during the TDD remediation (`docs/superpowers/specs/2026-07-23-face-verdict-layer-remediation-design.md`,
+Slices 1–10). This document is left otherwise unedited; the four corrections below are the ones the
+remediation's review surfaced.
+
+1. **§4.2 — the `face_repair_cluster_mute` rename never shipped.** The table, its repository, and its
+   migration are still named `face_repair_decline`
+   (`server/src/schema/tables/face-repair-decline.table.ts`,
+   `server/src/repositories/face-repair-decline.repository.ts`,
+   `server/src/schema/migrations-gallery/1781000000000-AddFaceRepairDecline.ts`). Slice 5 narrowed the table
+   to the cluster-mute shape §4.2 describes (dropping `type`, `assetFaceId`, `suspectedOwnerId` in favor of
+   the `suspectedOwnerIds` jsonb column) but kept the pre-existing name throughout. Read every `§4.2`/`§3.4`
+   reference to `face_repair_cluster_mute` as `face_repair_decline`.
+
+2. **§4.4 — the final fork-migration set is six, not five.** The listed set (`AddFacePersonVerdict`,
+   `AddFaceRepairScan`, `AddFaceRepairScanFlaggedFace`, `AddFaceRepairScanInFlightIndex`,
+   `AddFaceRepairClusterMute`) omits `1784000000000-FixFaceRepairScanInFlightIndexOverride`, which is
+   unchanged by this feature but is part of the surviving set all the same (confirmed against
+   `server/src/schema/migrations-gallery/`). §3.4/§4.4's "Slices 2 and 5 reduce these ten to five" (line 413)
+   should read **ten to six**: the three #592 migrations (`AddPersonFaceSuggestion`,
+   `AddSpacePersonFaceSuggestion`, `AddFaceSuggestionIntentStatuses`) collapse into one
+   (`AddFacePersonVerdict`, −2), and the two #770 lock migrations (`AddFaceRepairLock`,
+   `FaceRepairLockPersonNullable`) are retired outright (−2) — net −4 against the ten-migration starting
+   inventory in §3.4, landing on six, not five. (`AddFaceIdentities` and
+   `ReconcileFaceIdentityIndexOverrides` are pre-existing infrastructure outside this feature's ten-migration
+   inventory and are unaffected either way.)
+
+3. **§8 coverage matrix rows 34, 35, 37 claim tests that were never written.** Two follow-ups referenced by
+   these rows were deferred, not shipped:
+   - **Un-confirm / skipped-section (rows 34, 37).** Row 34's "BDD 'un-confirming'" claims a
+     `face-review-cross-flow.spec.ts` scenario for "un-confirm → re-flag" (§ Slice 7's Gherkin scenario
+     "Un-confirming makes a face eligible again") — no such scenario exists in
+     `server/test/medium/specs/services/face-review-cross-flow.spec.ts`; only the admin-side
+     `unconfirmFaces`/`X2` e2e coverage (`e2e/src/specs/web/face-cleanup.e2e-spec.ts`) shipped. Row 37's
+     "skipped section hidden when empty" component spec was never built — no such UI element exists under
+     `web/src/routes/admin/face-cleanup/`.
+   - **Undo-my-reject (row 35).** No user-facing "undo my own rejection" surface or Playwright spec exists
+     anywhere in `web/src` or `e2e/src` — the only undo surface shipped is the admin Resolutions page
+     (§5.3), which is global/admin-scoped, not the per-user surface row 35 describes.
+
+   Mark rows 34, 35, 37 **deferred, not covered** rather than tested.
+
+4. **§3.2's merge-safety claim was false.** The "Negative verdict is identity-first with target fallback"
+   row claims a reject "survives merges for free" — at the time this was written, `face_person_verdict
+.identityId` was `ON DELETE CASCADE` (as shipped in the original `AddFacePersonVerdict` migration), so a
+   merge that deleted the losing identity **destroyed** the verdict row rather than letting it survive.
+   `server/src/repositories/person.repository.ts` carried a matching comment asserting the same
+   free-durability claim. Both were corrected by the remediation's Slice 1
+   (`docs/superpowers/plans/2026-07-23-face-verdict-remediation-slice-1.md`): merges now re-key
+   `identityId`/re-target `personId`/`spacePersonId` onto the survivor inside the existing merge
+   transactions, and the FK itself was flipped to `ON DELETE SET NULL` as defense-in-depth for any deletion
+   path that misses the re-key (identity GC, future code) — degrading an orphaned row to target-fallback
+   matching instead of destroying it. The `person.repository.ts` comment was rewritten to describe this
+   actual (re-key + SET-NULL-degrade) mechanism instead of a "for free" guarantee.

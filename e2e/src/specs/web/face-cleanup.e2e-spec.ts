@@ -239,11 +239,16 @@ test.describe.serial('Face Cleanup', () => {
     await page.goto('/admin/face-cleanup/resolutions');
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
 
-    const verdictRow = page.locator('[data-testid="resolution-row"][data-source="cleanup"]');
+    // Scoped to the target person's own name — this suite runs `.serial` against a shared DB, so other tests
+    // in this file may leave their own resolution rows behind. Filtering here (both for the click AND the
+    // post-undo assertion below) means this test's outcome never depends on running first/alone.
+    const verdictRow = page
+      .locator('[data-testid="resolution-row"][data-source="cleanup"]')
+      .filter({ hasText: owner.name });
     await expect(verdictRow.first()).toBeVisible({ timeout: 10_000 });
 
     await verdictRow.first().locator('[data-testid="undo-button"]').click();
-    await expect(page.locator('[data-testid="resolution-row"]')).toHaveCount(0, { timeout: 10_000 });
+    await expect(verdictRow).toHaveCount(0, { timeout: 10_000 });
 
     // Undo removed the negative verdict from the shared layer — so the (face, owner) pairing is no longer
     // settled and a later scan may flag it again. (The full re-scan-re-flags semantics are covered by the

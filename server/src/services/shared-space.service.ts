@@ -2958,21 +2958,6 @@ export class SharedSpaceService extends BaseService {
     return [...affectedPersonIds];
   }
 
-  private async findOrCreateSpacePersonForFace(input: {
-    spaceId: string;
-    faceId: string;
-    personId: string;
-    identityId: string;
-    type: string;
-  }): Promise<SpacePersonMatchResult> {
-    const spacePerson = await this.findOrCreateCompatibleSpacePersonForIdentity(input);
-    if (!spacePerson) {
-      throw new Error(`Identity ${input.identityId} is already attached to a different space person type`);
-    }
-
-    return spacePerson;
-  }
-
   private async findOrCreateCompatibleSpacePersonForIdentity(input: {
     spaceId: string;
     faceId: string;

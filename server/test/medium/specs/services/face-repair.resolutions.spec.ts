@@ -119,6 +119,66 @@ describe('FaceRepairService.listResolutions', () => {
     });
   });
 
+  it('lists a space-person verdict rendered with its space named', async () => {
+    const { sut, ctx, verdictRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, name: 'Family Trip' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Jane' });
+    const faceId = await seedFace(ctx, user.id, source.id);
+
+    const spacePerson = await db
+      .insertInto('shared_space_person')
+      .values({ spaceId: space.id, name: 'Casper', type: 'person', isHidden: false })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    await verdictRepo.markRejectedForSpacePerson(spacePerson.id, faceId, { source: 'cleanup', actorId: user.id });
+
+    const { resolutions } = await sut.listResolutions();
+    expect(resolutions).toHaveLength(1);
+    expect(resolutions[0]).toMatchObject({
+      assetFaceId: faceId,
+      spacePersonId: spacePerson.id,
+      spacePersonName: 'Casper',
+      spaceName: 'Family Trip',
+      personId: null,
+      personName: null,
+    });
+  });
+
+  it('lists a fully-orphaned verdict (target AND identity both GC-d away) as a valid row, never broken', async () => {
+    const { sut, ctx, verdictRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Jane' });
+    const faceId = await seedFace(ctx, user.id, source.id);
+
+    const identity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(ownerA.id);
+    await verdictRepo.markRejected(ownerA.id, faceId, {
+      identityId: identity.id,
+      source: 'cleanup',
+      actorId: user.id,
+    });
+
+    // Simulate the GC/degrade path: the suspected owner is deleted (personId SET NULL) and its identity is
+    // independently degraded away too (identityId SET NULL) — the row is now "fully orphaned" (no target, no
+    // identity), unreachable by every scan predicate (§ table comment), but the unscoped admin listing is
+    // not target-filtered and must still surface it without breaking.
+    await ctx.get(PersonRepository).delete([ownerA.id]);
+    await db.deleteFrom('face_identity').where('id', '=', identity.id).execute();
+
+    const { resolutions } = await sut.listResolutions();
+    expect(resolutions).toHaveLength(1);
+    expect(resolutions[0]).toMatchObject({
+      assetFaceId: faceId,
+      personId: null,
+      personName: null,
+      spacePersonId: null,
+      spacePersonName: null,
+      spaceName: null,
+    });
+  });
+
   it('does not list human placements — those are unbounded and undone in context', async () => {
     const { sut, ctx } = setup();
     const { user } = await ctx.newUser();
