@@ -48,7 +48,7 @@ describe(MachineLearningRepository.name, () => {
     },
     petDetection: {
       enabled: false,
-      modelName: 'yolo11s',
+      modelName: 'rfdetr-nano',
       minScore: 0.6,
     },
   };

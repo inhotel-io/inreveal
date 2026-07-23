@@ -144,8 +144,8 @@ const updatedConfig = Object.freeze<SystemConfig>({
     },
     petDetection: {
       enabled: false,
-      modelName: 'yolo11s',
-      minScore: 0.6,
+      modelName: 'rfdetr-nano',
+      minScore: 0.3,
     },
   },
   map: {
