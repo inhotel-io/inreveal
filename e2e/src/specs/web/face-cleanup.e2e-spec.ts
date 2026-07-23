@@ -180,64 +180,6 @@ test.describe.serial('Face Cleanup', () => {
     await expect(page.getByText('No decisions recorded yet').first()).toBeVisible({ timeout: 10_000 });
   });
 
-  /**
-   * A "keep here" (soft-decline) recorded through the cleanup console is a NEGATIVE verdict in the shared
-   * layer, and the resolutions page lists it with an Undo. Clicking Undo removes the verdict, so a later scan
-   * may flag the face again. (Cluster-level dismisses are console-local and intentionally NOT listed here.)
-   */
-  test('a cleanup keep-here verdict appears on the resolutions page and Undo re-enables flagging', async ({
-    context,
-    page,
-  }) => {
-    await utils.setAuthCookies(context, admin.accessToken);
-    const db = await utils.connectDatabase();
-
-    const sourceName = 'Verdict Kept Person';
-    const source = await utils.createPerson(admin.accessToken, { name: sourceName });
-    const owner = await utils.createPerson(admin.accessToken, { name: 'Verdict Owner Person' });
-    const asset = await utils.createAsset(admin.accessToken);
-    const faceId = await utils.createFace({ assetId: asset.id, personId: source.id });
-
-    await seedFlaggedScan(db, {
-      ownerUserId: admin.userId,
-      personId: source.id,
-      suspectedOwnerId: owner.id,
-      faceIds: [faceId],
-    });
-
-    // "Keep here": the admin says this face genuinely belongs to `source`, not the suspected owner.
-    await resolveFaces(
-      { faceRepairResolveRequestDto: { personId: source.id, stay: [faceId] } },
-      { headers: asBearerAuth(admin.accessToken) },
-    );
-
-    // The face drains from the console.
-    const beforeUndo = await getFaceRepairPersonFaces(
-      { personId: source.id },
-      { headers: asBearerAuth(admin.accessToken) },
-    );
-    expect(beforeUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
-
-    await page.goto('/admin/face-cleanup/resolutions');
-    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
-
-    const verdictRow = page.locator('[data-testid="resolution-row"][data-source="cleanup"]');
-    await expect(verdictRow.first()).toBeVisible({ timeout: 10_000 });
-
-    await verdictRow.first().locator('[data-testid="undo-button"]').click();
-    await expect(page.locator('[data-testid="resolution-row"]')).toHaveCount(0, { timeout: 10_000 });
-
-    // Undo removed the negative verdict from the shared layer — so the (face, owner) pairing is no longer
-    // settled and a later scan may flag it again. (The full re-scan-re-flags semantics are covered by the
-    // medium tests face-repair.resolutions.spec.ts + face-review-cross-flow.spec.ts, which are not subject to
-    // scan-snapshot timing; here we assert the durable state the page's Undo produced.)
-    const { rows: verdictRows } = await db.query(
-      `SELECT id FROM "face_person_verdict" WHERE "assetFaceId" = $1 AND status IN ('rejected', 'ignored')`,
-      [faceId],
-    );
-    expect(verdictRows).toHaveLength(0);
-  });
-
   test('X1: routing every state via the bulk bar and applying drains the person from the console', async ({
     context,
     page,
@@ -622,5 +564,62 @@ test.describe.serial('Face Cleanup', () => {
       { headers: asBearerAuth(admin.accessToken) },
     );
     expect(afterRescan.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
+  });
+  /**
+   * A "keep here" (soft-decline) recorded through the cleanup console is a NEGATIVE verdict in the shared
+   * layer, and the resolutions page lists it with an Undo. Clicking Undo removes the verdict, so a later scan
+   * may flag the face again. (Cluster-level dismisses are console-local and intentionally NOT listed here.)
+   */
+  test('a cleanup keep-here verdict appears on the resolutions page and Undo re-enables flagging', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    const db = await utils.connectDatabase();
+
+    const sourceName = 'Verdict Kept Person';
+    const source = await utils.createPerson(admin.accessToken, { name: sourceName });
+    const owner = await utils.createPerson(admin.accessToken, { name: 'Verdict Owner Person' });
+    const asset = await utils.createAsset(admin.accessToken);
+    const faceId = await utils.createFace({ assetId: asset.id, personId: source.id });
+
+    await seedFlaggedScan(db, {
+      ownerUserId: admin.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceId],
+    });
+
+    // "Keep here": the admin says this face genuinely belongs to `source`, not the suspected owner.
+    await resolveFaces(
+      { faceRepairResolveRequestDto: { personId: source.id, stay: [faceId] } },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+
+    // The face drains from the console.
+    const beforeUndo = await getFaceRepairPersonFaces(
+      { personId: source.id },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    expect(beforeUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
+
+    await page.goto('/admin/face-cleanup/resolutions');
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+
+    const verdictRow = page.locator('[data-testid="resolution-row"][data-source="cleanup"]');
+    await expect(verdictRow.first()).toBeVisible({ timeout: 10_000 });
+
+    await verdictRow.first().locator('[data-testid="undo-button"]').click();
+    await expect(page.locator('[data-testid="resolution-row"]')).toHaveCount(0, { timeout: 10_000 });
+
+    // Undo removed the negative verdict from the shared layer — so the (face, owner) pairing is no longer
+    // settled and a later scan may flag it again. (The full re-scan-re-flags semantics are covered by the
+    // medium tests face-repair.resolutions.spec.ts + face-review-cross-flow.spec.ts, which are not subject to
+    // scan-snapshot timing; here we assert the durable state the page's Undo produced.)
+    const { rows: verdictRows } = await db.query(
+      `SELECT id FROM "face_person_verdict" WHERE "assetFaceId" = $1 AND status IN ('rejected', 'ignored')`,
+      [faceId],
+    );
+    expect(verdictRows).toHaveLength(0);
   });
 });
