@@ -398,6 +398,16 @@ No commit here. Summarise in the PR description or a comment that Tasks 3.3–3.
 
 **Type consistency:** Reusable inputs `rc_tag`/`ref`/`fork_version`/`build_ml` are named identically in Task 1 (definition) and Task 2 (call). `marker`, `serverImage`, `mlImage`, `buildResult` used consistently within the single script. Label names `rc`/`rc-ml` consistent across trigger, `build_ml` expression, and Task 3. Image path `ghcr.io/open-noodle/gallery-server` matches the reusable workflow's `merge-server` output.
 
+## Live validation results (PR #837)
+
+Run on 2026-07-23 against the real repo, exercising the workflow from the PR branch:
+
+- Labels `rc` and `rc-ml` created in `open-noodle/gallery`.
+- **Guard, negative case:** adding the unrelated `changelog:chore` label ran the workflow but skipped the `build` job (and therefore the `comment` job) — confirming unrelated label churn does not rebuild.
+- **Guard, positive case:** adding `rc` triggered run `30043534178`; the `build-ml` / `merge-ml` jobs were skipped, confirming ML is never built without `rc-ml`.
+- **Image published:** `ghcr.io/open-noodle/gallery-server:pr-837` exists in GHCR as a multi-arch manifest (`linux/amd64` + `linux/arm64`).
+- **Comment created:** a single comment carrying the `<!-- gallery-rc-build-comment -->` marker, authored by `github-actions[bot]`, showing the built commit, the run link, and a server-only compose snippet.
+
 ## Post-review amendments
 
 A whole-branch code review after this plan was executed surfaced four deviations, applied on top of the code above:
