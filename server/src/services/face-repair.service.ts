@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { AssetFace } from 'src/database';
 import { OnJob } from 'src/decorators';
 import { FaceRepairResolveRequest, FaceRepairResolveResponse, FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
@@ -18,6 +19,7 @@ import {
   findUnresolvableIds,
   tallyReattribution,
 } from 'src/utils/face-repair';
+import { ImmichMediaResponse } from 'src/utils/file';
 
 export interface ReattributionCandidate extends ReattributionTally {
   assetFaceId: string;
@@ -1048,6 +1050,26 @@ export class FaceRepairService extends BaseService {
   async createOwnerPerson(ownerId: string, name: string): Promise<{ id: string }> {
     const person = await this.personRepository.create({ ownerId, name });
     return { id: person.id };
+  }
+
+  // Slice 7 (D7): admin cleanup + resolutions surfaces render face crops for clusters the admin does not own.
+  // Join-free, tombstone-inclusive read — no person join, no ownership check (the whole controller is
+  // admin-gated by design). Serves the crop for ANY asset_face row, including tombstoned ones (the "not a
+  // face" action sets deletedAt but keeps boundingBox/dims, and resolutions history must still render them).
+  async getAdminFaceThumbnail(assetFaceId: string): Promise<ImmichMediaResponse> {
+    let face: AssetFace;
+    try {
+      face = await this.personRepository.getFaceByIdIncludingTombstoned(assetFaceId);
+    } catch {
+      throw new NotFoundException();
+    }
+
+    const sourcePath = await this.getFaceThumbnailSource(face.assetId);
+    if (!sourcePath) {
+      throw new NotFoundException();
+    }
+
+    return this.generateFaceThumbnailResponse(face, sourcePath);
   }
 
   private async collectClusterFaceIds(personId: string): Promise<string[]> {

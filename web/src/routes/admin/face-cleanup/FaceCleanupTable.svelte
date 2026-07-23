@@ -1,6 +1,7 @@
 <script lang="ts">
   import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
   import { Route } from '$lib/route';
+  import { getAdminFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { getPeopleThumbnailPath, type UserAdminResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiArrowRight, mdiCheckCircle, mdiAlertCircle } from '@mdi/js';
@@ -20,7 +21,11 @@
 
   const usersById = $derived(new Map(users.map((u) => [u.id, u])));
 
-  const thumbUrl = (personId: string) => `/api${getPeopleThumbnailPath(personId)}`;
+  // Admin cleanup renders clusters the admin does not own — the person-scoped thumbnail 404s/403s for
+  // those. Prefer the face-keyed admin route; fall back to the person-scoped one only when a row has no
+  // thumbnailFaceId (unexpected, but graceful).
+  const thumbUrl = (personId: string, thumbnailFaceId: string | null) =>
+    thumbnailFaceId ? getAdminFaceThumbnailUrl(thumbnailFaceId) : `/api${getPeopleThumbnailPath(personId)}`;
 
   const filterPerson = (p: FaceCleanupPerson) => {
     if (filter === 'review-first') {
@@ -162,7 +167,7 @@
     <!-- Person -->
     <div class="flex min-w-0 items-center gap-3">
       <img
-        src={thumbUrl(person.personId)}
+        src={thumbUrl(person.personId, person.thumbnailFaceId)}
         alt=""
         loading="lazy"
         class="size-10 flex-none rounded-xl bg-gray-100 object-cover dark:bg-gray-700"
@@ -213,7 +218,7 @@
       {#if primaryOwner}
         <Icon icon={mdiArrowRight} size="16" class="flex-none text-gray-300" />
         <img
-          src={thumbUrl(primaryOwner.ownerPersonId)}
+          src={thumbUrl(primaryOwner.ownerPersonId, primaryOwner.thumbnailFaceId)}
           alt=""
           loading="lazy"
           class="size-6 flex-none rounded-full bg-gray-100 object-cover dark:bg-gray-700"
