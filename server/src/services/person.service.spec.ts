@@ -1513,7 +1513,10 @@ describe(PersonService.name, () => {
 
       const [result] = await sut.getFacesById(auth, { id: face.assetId });
 
-      expect(result.person).toBeNull();
+      // #796 surfaces the person to any viewer with asset read access; #808 must still not
+      // identity-resolve a face the caller does not own, so the person is returned raw (birthDate
+      // untouched) and the resolver is never called.
+      expect(result.person).toEqual(expect.objectContaining({ id: face.person!.id, birthDate: null }));
       expect((mocks.faceIdentity as any).getResolvedPersonByIdentityId).not.toHaveBeenCalled();
     });
 
