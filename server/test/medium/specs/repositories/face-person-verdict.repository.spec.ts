@@ -257,6 +257,36 @@ describe('FacePersonVerdictRepository', () => {
       expect(res.items.map((i) => i.distance)).toEqual([0.6, 0.7]);
     });
 
+    it('excludes a pending row at exactly distance == maxDistance (lower bound is exclusive, `>` semantics)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Boundary Low', isHidden: false, type: 'person' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await sut.upsertPending([{ personId: person.id, assetFaceId: assetFace.id, distance: opts.maxDistance }]);
+
+      const res = await sut.getPendingForPerson(person.id, opts);
+      expect(res).toEqual({ total: 0, items: [] });
+    });
+
+    it('includes a pending row at exactly distance == suggestionMaxDistance (upper bound is inclusive, `<=` semantics)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Boundary High', isHidden: false, type: 'person' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await sut.upsertPending([
+        { personId: person.id, assetFaceId: assetFace.id, distance: opts.suggestionMaxDistance },
+      ]);
+
+      const res = await sut.getPendingForPerson(person.id, opts);
+      expect(res.total).toBe(1);
+      expect(res.items.map((i) => i.assetFaceId)).toEqual([assetFace.id]);
+      expect(res.items[0].distance).toBe(opts.suggestionMaxDistance);
+    });
+
     it('returns empty for an unnamed person (read gate)', async () => {
       const { sut } = setup();
       const res = await sut.getPendingForPerson(unnamedPersonId, opts);
@@ -722,7 +752,7 @@ describe('FacePersonVerdictRepository', () => {
       expect(res.items.find((i) => i.assetFaceId === assetFaceId)).toBeUndefined();
     });
 
-    it('half 2: removing the candidate person (what removeAllPeople does in a merge) drops its rows via FK CASCADE', async () => {
+    it('half 2: removing the candidate person (what removeAllPeople does in a merge) SET NULLs the row — it survives, degraded, not deleted', async () => {
       const { ctx } = setup();
       // Create a fresh person specifically for this test so we can delete it
       const { user } = await ctx.newUser();
@@ -735,17 +765,23 @@ describe('FacePersonVerdictRepository', () => {
 
       const { sut } = setup();
       await sut.upsertPending([{ personId: tempPersonId, assetFaceId, distance: 0.6 }]);
-      expect(await getRow(tempPersonId, assetFaceId)).toBeTruthy();
+      const before = await getRow(tempPersonId, assetFaceId);
+      expect(before).toBeTruthy();
 
       // mergePerson → removeAllPeople([mergedAwayPerson]) deletes the person row
       await defaultDatabase.deleteFrom('person').where('id', '=', tempPersonId).execute();
 
-      const remaining = await defaultDatabase
+      // personId is ON DELETE SET NULL (post-Slice-1 semantics), not CASCADE: the row survives the person
+      // delete with personId nulled out. Querying by the row's own id — not by personId, which is now null —
+      // so this assertion can't vacuously pass the way `WHERE personId = tempPersonId` would (that predicate
+      // returns no rows whether the row was SET NULL or actually deleted).
+      const survivor = await defaultDatabase
         .selectFrom('face_person_verdict')
         .selectAll()
-        .where('personId', '=', tempPersonId)
-        .execute();
-      expect(remaining).toEqual([]); // Phase-1 FK ON DELETE CASCADE
+        .where('id', '=', before.id)
+        .executeTakeFirst();
+      expect(survivor).toBeDefined();
+      expect(survivor!.personId).toBeNull();
     });
   });
 
