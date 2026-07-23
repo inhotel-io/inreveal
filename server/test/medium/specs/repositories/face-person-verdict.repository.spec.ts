@@ -1,5 +1,6 @@
 import { Kysely } from 'kysely';
 import { AssetVisibility } from 'src/enum';
+import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { DB } from 'src/schema';
@@ -445,6 +446,45 @@ describe('FacePersonVerdictRepository', () => {
     it('claimPending returns 0 for a pair that has no row (benign idempotent)', async () => {
       const { sut } = setup();
       expect(await sut.claimPending(personId, assetFaceId)).toBe(0);
+    });
+
+    it('reject over an existing keep-here row preserves identityId, updates status/source/actor (D10)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { user: admin } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Coalesce Person', isHidden: false });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const identity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(person.id);
+
+      // A cleanup keep-here (rejected) row WITH identityId + actorId — the stronger existing key.
+      await sut.markRejected(person.id, assetFace.id, {
+        identityId: identity.id,
+        source: 'cleanup',
+        actorId: admin.id,
+      });
+      let row = await getRow(person.id, assetFace.id);
+      expect(row).toMatchObject({ identityId: identity.id, status: 'rejected', source: 'cleanup', actorId: admin.id });
+
+      // A degenerate caller reject WITHOUT opts must never null the stronger existing identityId.
+      await sut.markRejected(person.id, assetFace.id);
+      row = await getRow(person.id, assetFace.id);
+      expect(row.identityId).toBe(identity.id);
+      expect(row.status).toBe('rejected');
+
+      // A subsequent human reject WITH opts overwrites status/source/actor and keeps identityId.
+      await sut.markRejected(person.id, assetFace.id, {
+        identityId: identity.id,
+        source: 'suggestion',
+        actorId: user.id,
+      });
+      row = await getRow(person.id, assetFace.id);
+      expect(row).toMatchObject({
+        identityId: identity.id,
+        status: 'rejected',
+        source: 'suggestion',
+        actorId: user.id,
+      });
     });
   });
 
@@ -1147,6 +1187,49 @@ describe('FacePersonVerdictRepository', () => {
         .where('status', '=', 'pending')
         .execute();
       expect(pending).toEqual([]);
+    });
+  });
+
+  describe('isFaceReachableInSpace', () => {
+    it('true for a face whose asset is in the space, false when it is not', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await expect(sut.isFaceReachableInSpace(space.id, assetFace.id)).resolves.toBe(true);
+
+      await ctx.database
+        .deleteFrom('shared_space_asset')
+        .where('spaceId', '=', space.id)
+        .where('assetId', '=', asset.id)
+        .execute();
+
+      await expect(sut.isFaceReachableInSpace(space.id, assetFace.id)).resolves.toBe(false);
+    });
+
+    it('true when reachable only via the album-contribution branch', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: contributor } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+      const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'ContribAlbum' });
+      await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+
+      // The asset reaches the space ONLY via a contribution into the linked album — no
+      // shared_space_asset row, no album_asset row, no library link.
+      const { asset } = await ctx.newAsset({ ownerId: contributor.id });
+      await ctx.newAlbumSpaceAsset({
+        albumId: album.id,
+        assetId: asset.id,
+        spaceId: space.id,
+        addedById: contributor.id,
+      });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await expect(sut.isFaceReachableInSpace(space.id, assetFace.id)).resolves.toBe(true);
     });
   });
 });
