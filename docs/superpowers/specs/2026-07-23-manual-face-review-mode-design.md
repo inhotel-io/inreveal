@@ -212,13 +212,57 @@ cannot collide.
 
 ### 6.2 The chooser
 
-- **Guided review** — last scan age, flagged count, flagged-people count, from the `getLatestScan()`
-  the dashboard already calls → `/admin/face-cleanup/scan`
-- **Manual review** — static description plus the **user** count from `searchUsersAdmin` →
-  `/admin/face-cleanup/people`
+Two **equal-weight** cards in a `lg:grid-cols-2` grid — identical footprint, and **neither is marked
+recommended**. We do not know which mode a given admin lives in: some will triage scans, others will
+spend all their time in manual review. The chooser must not pick a winner.
 
-No global people total is shown: no endpoint produces one (people are only counted per owner), and an
-aggregate endpoint purely to decorate a card is not worth it.
+The page is a **status board that happens to be a fork**: a chooser that is only two links taxes the
+flow you use most, so the guided card carries the scan's live state, letting an admin see whether
+guided work is even waiting without clicking in.
+
+It has two distinct presentations:
+
+**First visit (no scan has ever run).** The honest difference here is not visual weight but
+_readiness_: guided needs setup, manual does not. An explanatory header introduces both modes, the
+guided card reads "Needs a scan first — runs in the background" with a **Run first scan** action, and
+the manual card reads "No scan needed — start right away" with **Browse people**. This matters because
+manual review is fully usable on a brand-new instance, and a first-time admin should not conclude the
+feature is unavailable until a scan finishes.
+
+**Returning (a scan exists).** The same grid compacts into a status board: scan age and a re-scan
+action in the header, live counts on the guided card, user count on the manual card.
+
+Card states:
+
+| Scan state             | Guided card                               | Manual card                                   |
+| ---------------------- | ----------------------------------------- | --------------------------------------------- |
+| Never scanned          | "Needs a scan first" → **Run first scan** | "No scan needed" → **Browse people**          |
+| Running                | progress + heartbeat → **View progress**  | **disabled** — "available when scan finishes" |
+| Completed, flagged > 0 | amber counts → **Continue**               | **Browse**                                    |
+| Completed, 0 flagged   | green "Nothing flagged" → **Re-scan**     | **Browse**                                    |
+| Failed                 | red error line → **View details**         | **Browse**                                    |
+
+Two deliberate decisions:
+
+- **The disabled manual card during a running scan is load-bearing, not decoration.** `resolveFaces`
+  returns 409 while a scan runs (§7). Without this state an admin can enter manual review, stage
+  dozens of decisions across a server-paged cluster, hit Apply, and lose all of it to a conflict.
+  Surfacing the constraint at the fork turns a data-loss trap into a sentence.
+- **"Run first scan" navigates to `/scan`; it does not trigger inline.** The dashboard already owns
+  the trigger, the Advanced modal, and the concurrency rules, and its no-scan empty state is already
+  tested (`face-cleanup/page.spec.ts:176`). Duplicating a trigger on the chooser would fork that
+  logic.
+
+Counts come from calls that already exist: `getLatestScan()` for the guided card, `searchUsersAdmin`
+for the user count. **No global people total is shown** — no endpoint produces one (people are only
+counted per owner), and an aggregate endpoint purely to decorate a card is not worth it.
+
+Visually the page reuses the dashboard's established vocabulary rather than inventing one: the card
+shell (`rounded-2xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800`), the
+dot + label + `text-2xl font-semibold tabular-nums` value + `text-xs text-gray-400` sub rhythm, the
+dashed empty-state treatment, and the existing semantic colours (amber = flagged, green = done,
+red = failure). Only `Button` and `Icon` come from `@immich/ui`; cards are hand-rolled Tailwind, as
+they already are on the dashboard.
 
 Both destinations are directly linkable. **The admin navbar needs no change** — it already points at
 `/admin/face-cleanup` and `NavbarItem` highlights by `pathname.startsWith(href)`, so it stays active
@@ -341,9 +385,14 @@ resolves name/owner; unnamed person renders the fallback heading; detach require
 confirm; entire-cluster move requires a picked destination; a person the scan flagged shows no flagged
 badging.
 
-_Browser/chooser:_ chooser renders both cards and degrades when no scan has ever run; owner selector
-auto-selects on single-user; search filters; pagination loads further pages; hidden / non-`person`-type
-rows behave as `searchOwnerPeople` already returns (pinned, not changed).
+_Chooser:_ first visit (no scan ever) renders the explanatory header, the guided card's "needs a scan
+first" form, and the manual card's "no scan needed" affordance — manual must be **reachable** on a
+brand-new instance; returning renders live counts; **during a running scan the manual card is
+disabled** and the guided card shows progress; zero-flagged renders the green state; a failed scan
+renders the error state; neither card is marked recommended.
+
+_Browser:_ owner selector auto-selects on single-user; search filters; pagination loads further pages;
+hidden / non-`person`-type rows behave as `searchOwnerPeople` already returns (pinned, not changed).
 
 ## 8. Test plan
 
@@ -371,9 +420,10 @@ lines) plus a controller spec that mocks the service. Server behaviour work ther
   "done" before a job is enqueued, so poll the post-condition. A failure in a `.serial` file skips
   everything after it.
 
-**TDD.** Slices 1–20 are **red-first**: write the failing test, confirm it fails for the right reason,
-then implement. Slice 2 is the exception by design — a regression guard that must be **green on
-arrival**. Slices 21–24 are mechanical/verification and carry no new red test.
+**TDD.** Slices 1 and 3–24 are **red-first**: write the failing test, confirm it fails for the right
+reason, then implement. Slice 2 is the deliberate exception — a regression guard that must be **green
+on arrival**, pinning the `stay` invariant before slices 3–5 touch the guard around it. Slices 7, 25
+and 26 are mechanical/verification and carry no new red test.
 
 ## 9. Slices
 
@@ -408,35 +458,43 @@ arrival**. Slices 21–24 are mechanical/verification and carry no new red test.
 
 **Web — new surfaces**
 
-10. **Chooser landing.** Replace slice 8's redirect with the two cards, live counts, correct
-    destinations, and the never-scanned state. Novel UI in admin — no existing chooser to copy; the
-    307-redirect pattern is the only precedent reused.
-11. **People browser shell + owner selector.** Route, layout, `searchUsersAdmin`, single-user
+10. **Chooser landing — returning presentation.** Replace slice 8's redirect with the two
+    equal-weight cards, live counts from `getLatestScan()`, the user count from `searchUsersAdmin`,
+    and correct destinations. Novel UI in admin — no existing chooser to copy; the 307-redirect
+    pattern is the only precedent reused.
+11. **Chooser — first-visit presentation.** The never-scanned layout: explanatory header, guided card
+    in its "needs a scan first" form linking to `/scan`, manual card advertising "no scan needed".
+    Tested independently of slice 10 because it is a genuinely different rendering, not a
+    missing-data variant — and it is the state every new instance starts in.
+12. **Chooser — remaining card states.** Running (guided shows progress; **manual card disabled**
+    with the scan-conflict explanation), completed-with-zero-flagged, and failed. The disabled-manual
+    assertion is the important one — it is the UI half of the 409 guard in §7.
+13. **People browser shell + owner selector.** Route, layout, `searchUsersAdmin`, single-user
     auto-select.
-12. **People grid.** Thumbnails, face counts, pagination; pin hidden / non-`person`-type behaviour.
-13. **People search.** Optional `query` wiring; no-results state.
-14. **Manual review page shell.** Route, person metadata from slice 6, navigation in from the browser,
+14. **People grid.** Thumbnails, face counts, pagination; pin hidden / non-`person`-type behaviour.
+15. **People search.** Optional `query` wiring; no-results state.
+16. **Manual review page shell.** Route, person metadata from slice 6, navigation in from the browser,
     refresh/deep-link, unnamed fallback.
-15. **Manual view-model (pure).** `manual-review.svelte.ts` per §6.4 — states, `keep` default,
+17. **Manual view-model (pure).** `manual-review.svelte.ts` per §6.4 — states, `keep` default,
     `appendFaces` preserving state + selection, `buildResolveRequest` omitting `keep` and never
     emitting `stay`. Heaviest unit-test slice.
-16. **Manual tile grid + selection + server paging.** Click / shift-range / select-all semantics
+18. **Manual tile grid + selection + server paging.** Click / shift-range / select-all semantics
     honest about server paging; paging must not lose staged decisions.
-17. **Manual bulk bar.** Move (via `PersonPicker` with `ownerId`), lock, unknown, not-a-face, plus the
+19. **Manual bulk bar.** Move (via `PersonPicker` with `ownerId`), lock, unknown, not-a-face, plus the
     destructive confirm on detach.
-18. **Manual entire-cluster move.** With its own destination picker (no suspected owner to ride).
-19. **Manual Apply.** Submit, report results, surface 409/errors, disable on all-keep.
-20. **Manual actions help.** A manual-mode help modal listing this mode's actions; the guided
+20. **Manual entire-cluster move.** With its own destination picker (no suspected owner to ride).
+21. **Manual Apply.** Submit, report results, surface 409/errors, disable on all-keep.
+22. **Manual actions help.** A manual-mode help modal listing this mode's actions; the guided
     `ActionsHelpModal` and its "names all six actions" test are left alone.
 
 **Integration**
 
-21. **e2e manual flow.** Browse → pick a person with no scan → move, lock, not-a-face → assert rows.
-22. **e2e cross-engine invariant.** A manual decision survives a later scan: locked faces are not
+23. **e2e manual flow.** Browse → pick a person with no scan → move, lock, not-a-face → assert rows.
+24. **e2e cross-engine invariant.** A manual decision survives a later scan: locked faces are not
     re-flagged, detached faces stay gone.
-23. **i18n + docs.** Keys in `i18n/en.json` (shared by web **and** mobile — grep both before touching
+25. **i18n + docs.** Keys in `i18n/en.json` (shared by web **and** mobile — grep both before touching
     existing keys) and a docs note on the two modes.
-24. **Final gate.** `pnpm lint` (server is `--max-warnings 0`), `prettier --check .` across the server
+26. **Final gate.** `pnpm lint` (server is `--max-warnings 0`), `prettier --check .` across the server
     package **and** `cd docs && pnpm format` — prettier is a CI gate separate from eslint and docs
     prettier reaches this file — plus type checks, web checks, and the full server/web/e2e suites.
 
