@@ -56,9 +56,11 @@ export async function retargetVerdictSpacePersonId(
 ## Task 1: Red — author the merge-durability regression suite
 
 **Files:**
+
 - Create: `server/test/medium/specs/services/face-verdict.merge-durability.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `IdentityMergePropagationService` (real merge flow), `FaceIdentityRepository.ensurePersonIdentity`/`mergeIdentities`, `FacePersonVerdictRepository.markRejected`/`getNegativeVerdictTokens`/`deleteUnreferencedIdentities`, medium-test helpers `newMediumService`, `getKyselyDB`, `ctx.newUser`/`newPerson`/`newAsset`/`newAssetFace`, `factory.auth`.
 - Produces: the permanent Slice-1 regression suite.
 
@@ -89,7 +91,13 @@ let defaultDatabase: Kysely<DB>;
 const setup = (db: Kysely<DB> = defaultDatabase) => {
   const { ctx } = newMediumService(BaseService, {
     database: db,
-    real: [DatabaseRepository, FaceIdentityRepository, PersonRepository, SharedSpaceRepository, FacePersonVerdictRepository],
+    real: [
+      DatabaseRepository,
+      FaceIdentityRepository,
+      PersonRepository,
+      SharedSpaceRepository,
+      FacePersonVerdictRepository,
+    ],
     mock: [JobRepository, LoggingRepository],
   });
   const jobRepository = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
@@ -116,7 +124,11 @@ beforeAll(async () => {
 
 const seedFace = async (ctx: Awaited<ReturnType<typeof setup>>['ctx'], ownerId: string) => {
   const { asset } = await ctx.newAsset({ ownerId });
-  const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null, sourceType: SourceType.MachineLearning });
+  const { assetFace } = await ctx.newAssetFace({
+    assetId: asset.id,
+    personId: null,
+    sourceType: SourceType.MachineLearning,
+  });
   return assetFace.id;
 };
 
@@ -138,7 +150,9 @@ describe('face verdict merge durability (D1)', () => {
     const robertIdentity = await faceIdentityRepository.ensurePersonIdentity(robert.id);
     // cleanup keep-here: (F, Bob, I(Bob), rejected, cleanup)
     await facePersonVerdictRepository.markRejected(bob.id, faceId, {
-      identityId: bobIdentity.id, source: 'cleanup', actorId: user.id,
+      identityId: bobIdentity.id,
+      source: 'cleanup',
+      actorId: user.id,
     });
 
     await sut.mergePersonalPeople(factory.auth({ user }), robert.id, [bob.id]);
@@ -174,12 +188,24 @@ describe('face verdict merge durability (D1)', () => {
     const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
     const faceId = await seedFace(ctx, user.id);
     const bobIdentity = await faceIdentityRepository.ensurePersonIdentity(bob.id);
-    const target = await defaultDatabase.insertInto('face_identity').values({ type: 'person' }).returningAll().executeTakeFirstOrThrow();
-    await facePersonVerdictRepository.markRejected(bob.id, faceId, { identityId: bobIdentity.id, source: 'cleanup', actorId: user.id });
+    const target = await defaultDatabase
+      .insertInto('face_identity')
+      .values({ type: 'person' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    await facePersonVerdictRepository.markRejected(bob.id, faceId, {
+      identityId: bobIdentity.id,
+      source: 'cleanup',
+      actorId: user.id,
+    });
 
     // 'manual' source merges all sources without the embedding-consistency filter, exercising the
     // identical re-key statement; the shared-space-evidence production path is covered above.
-    await faceIdentityRepository.mergeIdentities({ targetIdentityId: target.id, sourceIdentityIds: [bobIdentity.id], source: 'manual' });
+    await faceIdentityRepository.mergeIdentities({
+      targetIdentityId: target.id,
+      sourceIdentityIds: [bobIdentity.id],
+      source: 'manual',
+    });
 
     const rows = await verdictRow(faceId);
     expect(rows).toHaveLength(1);
@@ -196,8 +222,16 @@ describe('face verdict merge durability (D1)', () => {
     const bobIdentity = await faceIdentityRepository.ensurePersonIdentity(bob.id);
     const robertIdentity = await faceIdentityRepository.ensurePersonIdentity(robert.id);
     // Bob IGNORED F, Robert (survivor) REJECTED F. Distinct statuses prove which row survives.
-    await facePersonVerdictRepository.markIgnored(bob.id, faceId, { identityId: bobIdentity.id, source: 'suggestion', actorId: user.id });
-    await facePersonVerdictRepository.markRejected(robert.id, faceId, { identityId: robertIdentity.id, source: 'cleanup', actorId: user.id });
+    await facePersonVerdictRepository.markIgnored(bob.id, faceId, {
+      identityId: bobIdentity.id,
+      source: 'suggestion',
+      actorId: user.id,
+    });
+    await facePersonVerdictRepository.markRejected(robert.id, faceId, {
+      identityId: robertIdentity.id,
+      source: 'cleanup',
+      actorId: user.id,
+    });
 
     await sut.mergePersonalPeople(factory.auth({ user }), robert.id, [bob.id]);
 
@@ -213,7 +247,11 @@ describe('face verdict merge durability (D1)', () => {
     const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
     const faceId = await seedFace(ctx, user.id);
     const bobIdentity = await faceIdentityRepository.ensurePersonIdentity(bob.id);
-    await facePersonVerdictRepository.markRejected(bob.id, faceId, { identityId: bobIdentity.id, source: 'cleanup', actorId: user.id });
+    await facePersonVerdictRepository.markRejected(bob.id, faceId, {
+      identityId: bobIdentity.id,
+      source: 'cleanup',
+      actorId: user.id,
+    });
     // remove the person so only the verdict references the identity, then GC
     await defaultDatabase.deleteFrom('person').where('id', '=', bob.id).execute();
     await faceIdentityRepository.deleteUnreferencedIdentities();
@@ -238,6 +276,7 @@ Expected: scenarios 1, 2, 4, 5 FAIL — scenario 1 finds `identityId` still = Bo
 ## Task 2: Green — create the merge helper module
 
 **Files:**
+
 - Create: `server/src/utils/face-verdict-merge.ts`
 
 - [ ] **Step 1: Write the helpers**
@@ -325,6 +364,7 @@ export async function retargetVerdictSpacePersonId(
 ## Task 3: Green — re-key identity inside both identity-merge methods
 
 **Files:**
+
 - Modify: `server/src/repositories/face-identity.repository.ts`
 
 **Interfaces:** Consumes `rekeyVerdictIdentity` from Task 2.
@@ -338,16 +378,16 @@ import { rekeyVerdictIdentity } from 'src/utils/face-verdict-merge';
 - [ ] **Step 2:** In `mergeIdentities`, immediately AFTER the `shared_space_person` re-key (the `.updateTable('shared_space_person')…execute()` block that ends ~line 3078) and BEFORE the `const deletable = …` query (~line 3084), insert:
 
 ```ts
-      // D1: move any verdict rows off the merged-away identities onto the survivor before those
-      // identities are deleted (identityId FK is SET NULL, but we re-key so identity-first reads keep working).
-      await rekeyVerdictIdentity(trx, mergeableSourceIdentityIds, input.targetIdentityId);
+// D1: move any verdict rows off the merged-away identities onto the survivor before those
+// identities are deleted (identityId FK is SET NULL, but we re-key so identity-first reads keep working).
+await rekeyVerdictIdentity(trx, mergeableSourceIdentityIds, input.targetIdentityId);
 ```
 
 - [ ] **Step 3:** In `mergeIdentitiesAfterProfileResolution`, AFTER the `shared_space_person` type-sync updates and BEFORE the `const deletable = …` query (~line 3180), insert (note the transaction variable here is the passed `db`, and the source set is `sourceIdentityIds`):
 
 ```ts
-      // D1: same re-key as mergeIdentities, on the production person-merge path.
-      await rekeyVerdictIdentity(db, sourceIdentityIds, input.targetIdentityId);
+// D1: same re-key as mergeIdentities, on the production person-merge path.
+await rekeyVerdictIdentity(db, sourceIdentityIds, input.targetIdentityId);
 ```
 
 - [ ] **Step 4: Type-check** `cd server && pnpm check`. Expected: clean.
@@ -357,6 +397,7 @@ import { rekeyVerdictIdentity } from 'src/utils/face-verdict-merge';
 ## Task 4: Green — survivor-wins re-target inside the person / space-person merges
 
 **Files:**
+
 - Modify: `server/src/repositories/person.repository.ts` (`mergePersonProfile`, ~lines 138-195)
 - Modify: `server/src/repositories/shared-space.repository.ts` (`mergeSpacePersonProfile`, ~lines 2692-2721)
 
@@ -365,25 +406,25 @@ import { rekeyVerdictIdentity } from 'src/utils/face-verdict-merge';
 - [ ] **Step 1: person.repository.ts** — add import `import { retargetVerdictPersonId } from 'src/utils/face-verdict-merge';`. In `mergePersonProfile`, immediately BEFORE `const targetNeedsFeatureFaceRepair = …` / the `deleteFrom('person')` at ~line 189, insert:
 
 ```ts
-    // D1: move this person's verdicts to the survivor before deleting the source person (personId FK is
-    // SET NULL — a bare delete would orphan them). Survivor-wins on the (personId, assetFaceId) collision.
-    await retargetVerdictPersonId(db, input.sourcePersonId, input.targetPersonId);
+// D1: move this person's verdicts to the survivor before deleting the source person (personId FK is
+// SET NULL — a bare delete would orphan them). Survivor-wins on the (personId, assetFaceId) collision.
+await retargetVerdictPersonId(db, input.sourcePersonId, input.targetPersonId);
 ```
 
 - [ ] **Step 2: Replace the false merge-safety comment** at `person.repository.ts:181-185` with an accurate one:
 
 ```ts
-    // Human placements live in `face_identity_face.source='manual'` (identity-keyed); negative/keep-here
-    // verdicts live in `face_person_verdict`. Both are re-pointed to the survivor at merge time: the
-    // identityId re-key runs in mergeIdentitiesAfterProfileResolution, and the personId re-target runs
-    // just above (survivor-wins). The identityId FK is ON DELETE SET NULL as a safety net.
+// Human placements live in `face_identity_face.source='manual'` (identity-keyed); negative/keep-here
+// verdicts live in `face_person_verdict`. Both are re-pointed to the survivor at merge time: the
+// identityId re-key runs in mergeIdentitiesAfterProfileResolution, and the personId re-target runs
+// just above (survivor-wins). The identityId FK is ON DELETE SET NULL as a safety net.
 ```
 
 - [ ] **Step 3: shared-space.repository.ts** — add import `import { retargetVerdictSpacePersonId } from 'src/utils/face-verdict-merge';`. In `mergeSpacePersonProfile`, immediately BEFORE the `deleteFrom('shared_space_person')` at ~line 2716, insert:
 
 ```ts
-    // D1: move this space-person's verdicts to the survivor before deleting the source row.
-    await retargetVerdictSpacePersonId(db, input.sourcePersonId, input.targetPersonId);
+// D1: move this space-person's verdicts to the survivor before deleting the source row.
+await retargetVerdictSpacePersonId(db, input.sourcePersonId, input.targetPersonId);
 ```
 
 > Confirm the exact param names on `mergeSpacePersonProfile`'s `input` (digest: `{ sourcePersonId, targetPersonId }`, space-person ids) and that its `db` is the passed transaction. Match them.
@@ -395,6 +436,7 @@ import { rekeyVerdictIdentity } from 'src/utils/face-verdict-merge';
 ## Task 5: Green — flip the identityId FK to SET NULL (defense-in-depth)
 
 **Files:**
+
 - Modify: `server/src/schema/tables/face-person-verdict.table.ts` (~lines 94-98)
 - Modify: `server/src/schema/migrations-gallery/1787000000000-AddFacePersonVerdict.ts` (~line 28)
 
@@ -442,6 +484,7 @@ Expected: all 5 tests PASS.
 - [ ] **Step 2: Run the sibling merge/verdict suites — no regressions**
 
 Run each and confirm green:
+
 - `cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run test/medium/specs/services/identity-merge-propagation.service.spec.ts`
 - `cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run test/medium/specs/services/face-repair.merge-consistency.spec.ts`
 - `cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run test/medium/specs/repositories/face-person-verdict.repository.spec.ts`
@@ -459,6 +502,7 @@ Run each and confirm green:
 cd server && pnpm check          # tsc --noEmit, clean
 cd server && pnpm lint           # eslint --max-warnings 0, clean
 ```
+
 Plus all five spec runs from Task 6 Steps 1-2 green.
 
 - [ ] **Step 2: Commit** (single slice commit):
@@ -482,14 +526,14 @@ git commit -m "fix(server): re-key face verdicts through merges instead of casca
 
 ## Edge-case coverage map (spec §Slice 1 table → test)
 
-| Edge case | Covered by |
-| --- | --- |
-| Both merged people hold rows for the same face | scenario 4 "survivor wins" (both rejected) |
-| Source pending + survivor rejected (and vice versa) | scenario 4 variant — survivor's row wins regardless of status (add a 2nd assertion seeding Bob=pending, Robert=rejected → 1 row, Robert's) |
-| Merge where loser has no identity | scenario 2 (identity-null) — personId re-target fires, identity re-key is a no-op |
-| Identity merge, same face via both identities | non-unique index → both keyed to target, reads treat as one fact (assert length≥1, identityId=target) — fold into scenario 3 with a 2nd source identity if cheap |
-| Self-merge / rollback mid-trx | merge trx is all-or-nothing (covered structurally; no separate test needed — re-key is inside the same `trx`/`db`) |
-| `deleteUnreferencedIdentities` on identity referenced only by verdicts | scenario 5 (GC → SET NULL degrade) |
+| Edge case                                                              | Covered by                                                                                                                                                       |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Both merged people hold rows for the same face                         | scenario 4 "survivor wins" (both rejected)                                                                                                                       |
+| Source pending + survivor rejected (and vice versa)                    | scenario 4 variant — survivor's row wins regardless of status (add a 2nd assertion seeding Bob=pending, Robert=rejected → 1 row, Robert's)                       |
+| Merge where loser has no identity                                      | scenario 2 (identity-null) — personId re-target fires, identity re-key is a no-op                                                                                |
+| Identity merge, same face via both identities                          | non-unique index → both keyed to target, reads treat as one fact (assert length≥1, identityId=target) — fold into scenario 3 with a 2nd source identity if cheap |
+| Self-merge / rollback mid-trx                                          | merge trx is all-or-nothing (covered structurally; no separate test needed — re-key is inside the same `trx`/`db`)                                               |
+| `deleteUnreferencedIdentities` on identity referenced only by verdicts | scenario 5 (GC → SET NULL degrade)                                                                                                                               |
 
 > Implementer: add the two parenthetical extra assertions (source-pending/survivor-rejected; identity-merge same-face) so every row of the spec's edge table has a proving assertion.
 
@@ -498,4 +542,4 @@ git commit -m "fix(server): re-key face verdicts through merges instead of casca
 - **Spec coverage:** all 5 Slice-1 scenarios + the 6-row edge table map to tests above. FK flip, both identity-merge methods, both profile-merge methods, both comments — each has a task. ✅
 - **Placeholder scan:** no TBD/TODO; every code step shows real code. The two "confirm exact param names / import paths" notes are verification instructions, not placeholders — the code is complete and the fallback is named. ✅
 - **Type consistency:** helper names (`rekeyVerdictIdentity`, `retargetVerdictPersonId`, `retargetVerdictSpacePersonId`) are used identically in the interface block, Task 2 definitions, and Tasks 3-4 call sites. ✅
-- **Scope:** no Slice-2+ work (identity/actor on writes, reads, manual preservation) leaks in. Suggestion rows are seeded in their *current* (identity-null) form deliberately. ✅
+- **Scope:** no Slice-2+ work (identity/actor on writes, reads, manual preservation) leaks in. Suggestion rows are seeded in their _current_ (identity-null) form deliberately. ✅

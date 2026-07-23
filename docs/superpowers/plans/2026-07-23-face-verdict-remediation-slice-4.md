@@ -5,8 +5,9 @@
 **Goal:** Close **D4**. A positive verdict (`face_identity_face.source='manual'`) can only be created or removed by an explicit human placement or `unconfirm` — never silently downgraded by an automatic merge, a recognition-race replace, or a backfill sweep. And per **R1 (SIGNED OFF: preserve prior source)**, a people-merge re-points identity while **preserving each rode-along face's prior source** (stops fabricating `'manual'` placements that blind the cleanup scan to whole clusters).
 
 **Architecture — TWO deliberately different mechanisms (do not conflate):**
+
 1. **Preserve-manual CASE** (D4a/D4b/D4c) at write sites whose incoming `source` is genuinely non-`'manual'` (`'shared-space-evidence'` / `'owner-person'` / `'backfill'`): `source = CASE WHEN existing='manual' THEN 'manual' ELSE <incoming> END`. Keeps a human placement while relabeling everything else. This is the `realignFacesToPersonIdentity` pattern.
-2. **Full source preservation** (D4d / R1) at the human people-merge path, whose incoming `source` is *always* `'manual'`: **omit `source` from the write entirely** so Postgres leaves each face's true prior source untouched. A CASE here is a **FALSE FIX** — `ELSE 'manual'` == the bug.
+2. **Full source preservation** (D4d / R1) at the human people-merge path, whose incoming `source` is _always_ `'manual'`: **omit `source` from the write entirely** so Postgres leaves each face's true prior source untouched. A CASE here is a **FALSE FIX** — `ELSE 'manual'` == the bug.
 
 **Tech Stack:** Kysely (`sql` CASE; ON CONFLICT `doUpdateSet` — omitting a key leaves the column untouched), Vitest medium.
 
@@ -35,6 +36,7 @@
 - **Modify tests:** `server/test/medium/specs/repositories/face-identity.manual-durability.spec.ts` (D4a/b/c), `server/test/medium/specs/services/identity-merge-propagation.service.spec.ts` (D4d — parameterize `createIdentityLinkedFace` source + add a discriminating test).
 
 **Interface produced:**
+
 ```ts
 // face-identity.repository.ts (exported or module-private)
 function preserveManualSource(incoming: FaceIdentityFaceSource): RawBuilder<FaceIdentityFaceSource>;
@@ -56,11 +58,13 @@ function preserveManualSource(incoming: FaceIdentityFaceSource): RawBuilder<Face
   - **"a people merge preserves each rode-along face's prior source"** — target T, source S (real profiles + identities); seed one S-linked face with `source: 'ml'`, one with `source: 'owner-person'`, one with `source: 'manual'`; `sut.mergePersonalPeople(auth, T, [S])`; assert the ml/owner-person faces KEEP `'ml'`/`'owner-person'` (re-keyed to T's identity, NOT stamped `'manual'`), and the manual face stays `'manual'`.
 
 - [ ] **Step 3: Run RED**:
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/repositories/face-identity.manual-durability.spec.ts \
   test/medium/specs/services/identity-merge-propagation.service.spec.ts
 ```
+
 Expected RED: D4a Fm downgraded to `'shared-space-evidence'`; D4b manual → `'owner-person'`; D4c manual → `'backfill'`; D4d ml/owner-person → `'manual'`. Confirm both files executed.
 
 ---
@@ -70,6 +74,7 @@ Expected RED: D4a Fm downgraded to `'shared-space-evidence'`; D4b manual → `'o
 **Files:** Modify `face-identity.repository.ts`.
 
 - [ ] **Step 1:** Add the helper:
+
 ```ts
 // Keep a human placement (source='manual') intact; relabel everything else to the incoming source.
 // Mirrors realignFacesToPersonIdentity. Do NOT use this where `incoming` is itself 'manual' (see linkPersonFaces preserveSource).
@@ -77,9 +82,11 @@ function preserveManualSource(incoming: FaceIdentityFaceSource) {
   return sql<FaceIdentityFaceSource>`CASE WHEN "face_identity_face"."source" = 'manual' THEN 'manual' ELSE ${incoming} END`;
 }
 ```
+
 - [ ] **Step 2 (D4a):** `mergeIdentities` write ~3047-3051: `source: input.source` → `source: preserveManualSource(input.source)`.
 - [ ] **Step 3 (D4b):** `replaceFaceIdentity` `doUpdateSet` ~2337-2343: `source: input.source` → `source: preserveManualSource(input.source)`.
 - [ ] **Step 4 (D4c):** `linkPersonFaces` — add `preserveSource?: boolean` to `LinkPersonFacesInput`; the `doUpdateSet` becomes:
+
 ```ts
 .onConflict((oc) =>
   oc.column('assetFaceId').doUpdateSet(
@@ -89,7 +96,9 @@ function preserveManualSource(incoming: FaceIdentityFaceSource) {
   ),
 )
 ```
+
 (Insert/expression branch unchanged — a fresh row has no prior source, `eb.val(input.source)` is correct.)
+
 - [ ] **Step 5:** `cd server && pnpm check`. Expected clean.
 
 ---
@@ -99,21 +108,26 @@ function preserveManualSource(incoming: FaceIdentityFaceSource) {
 **Files:** Modify `face-identity.repository.ts`, `identity-merge-propagation.service.ts`.
 
 - [ ] **Step 1 (repo):** `mergeIdentitiesAfterProfileResolution` write ~3150-3154: remove `source: input.source` from the `.set({...})` so only `identityId` is written:
+
 ```ts
 await db
   .updateTable('face_identity_face')
-  .set({ identityId: input.targetIdentityId })   // R1: re-point identity, PRESERVE each face's prior source
+  .set({ identityId: input.targetIdentityId }) // R1: re-point identity, PRESERVE each face's prior source
   .where('identityId', 'in', sourceIdentityIds)
   .execute();
 ```
+
 Keep the `source` param (still used by the cross-type gate ~3138 `input.source !== 'manual'`). Add a comment explaining the omission is intentional (the trap).
+
 - [ ] **Step 2 (service):** `identity-merge-propagation.service.ts` ~329-332: add `preserveSource: true` to the `linkPersonFaces` call so the target person's own pre-existing links aren't stamped `'manual'` either:
+
 ```ts
 await this.deps.faceIdentityRepository.linkPersonFaces(
   { personId: step.targetPersonId, identityId: plan.targetIdentityId, source: 'manual', preserveSource: true },
   db,
 );
 ```
+
 - [ ] **Step 3:** `cd server && pnpm check`.
 
 ---
@@ -122,12 +136,15 @@ await this.deps.faceIdentityRepository.linkPersonFaces(
 
 - [ ] **Step 1: Refactor** — `realignFacesToPersonIdentity`'s inline CASE (~2710) now duplicates `preserveManualSource('backfill')`; replace it with `source: preserveManualSource('backfill')` for a single source of truth. Re-run the manual-durability spec — the existing realign test (~93-123) must stay green.
 - [ ] **Step 2: Run the D4 tests GREEN**:
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/repositories/face-identity.manual-durability.spec.ts \
   test/medium/specs/services/identity-merge-propagation.service.spec.ts
 ```
+
 - [ ] **Step 3: Cleanup-suite reconciliation** — run the full cleanup + durability suites:
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/face-repair.service.spec.ts \
@@ -137,9 +154,12 @@ cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/face-verdict.merge-durability.spec.ts \
   test/medium/specs/services/face-suggestion-exclusions.spec.ts
 ```
+
 If any flagged-count assertion over a merged cluster changed, investigate WHY (rode-along faces are now flaggable), confirm the new count is correct behavior, and update the assertion with a comment. **Do NOT** revert the fix to keep an old count. If a test genuinely regresses (not a count-shift), STOP.
+
 - [ ] **Step 4: Done gate:** `cd server && pnpm check && pnpm lint`; also run the unit `identity-merge-propagation` / `face-repair.person` specs if they assert source. All green.
 - [ ] **Step 5: Commit:**
+
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/face-unified
 git add server/src/repositories/face-identity.repository.ts \
@@ -154,12 +174,12 @@ git commit -m "fix(server): manual face placements survive merges, races, and ba
 
 ## Edge-case coverage map (spec §Slice 4 table → test)
 
-| Edge case | Covered by |
-| --- | --- |
-| Recognition race, face assigned but NOT linked | control in D4b test: a non-manual face → `'owner-person'` (ELSE branch, today's correct behaviour) |
-| Manual merge (user-driven people merge) | D4d test — per-face sources preserved; the merge is recorded on identity keys, not by stamping faces |
-| `unconfirm` after this slice | still demotes manual→ml (sanctioned path) — add/keep an assertion that `unconfirm` is unaffected (run an existing resolutions unconfirm test) |
-| Backfill after merge (Slice-1 scenario) | realign CASE (now via `preserveManualSource`) unchanged; the existing realign test ~93-123 keeps it pinned |
+| Edge case                                      | Covered by                                                                                                                                    |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recognition race, face assigned but NOT linked | control in D4b test: a non-manual face → `'owner-person'` (ELSE branch, today's correct behaviour)                                            |
+| Manual merge (user-driven people merge)        | D4d test — per-face sources preserved; the merge is recorded on identity keys, not by stamping faces                                          |
+| `unconfirm` after this slice                   | still demotes manual→ml (sanctioned path) — add/keep an assertion that `unconfirm` is unaffected (run an existing resolutions unconfirm test) |
+| Backfill after merge (Slice-1 scenario)        | realign CASE (now via `preserveManualSource`) unchanged; the existing realign test ~93-123 keeps it pinned                                    |
 
 ## Self-review (author)
 

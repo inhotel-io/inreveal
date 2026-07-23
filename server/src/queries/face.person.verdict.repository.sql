@@ -58,6 +58,7 @@ where
 insert into
   "face_person_verdict" (
     "personId",
+    "assetFaceId",
     "identityId",
     "status",
     "source",
@@ -65,13 +66,16 @@ insert into
     "distance"
   )
 values
-  ($1, $2, $3, $4, $5, $6)
+  ($1, $2, $3, $4, $5, $6, $7)
 on conflict ("personId", "assetFaceId")
 where
   "personId" is not null do update
 set
-  "status" = $7,
-  "identityId" = $8,
+  "status" = $8,
+  "identityId" = coalesce(
+    excluded."identityId",
+    "face_person_verdict"."identityId"
+  ),
   "source" = $9,
   "actorId" = $10,
   "updatedAt" = now()
@@ -80,6 +84,7 @@ set
 insert into
   "face_person_verdict" (
     "personId",
+    "assetFaceId",
     "identityId",
     "status",
     "source",
@@ -87,13 +92,16 @@ insert into
     "distance"
   )
 values
-  ($1, $2, $3, $4, $5, $6)
+  ($1, $2, $3, $4, $5, $6, $7)
 on conflict ("personId", "assetFaceId")
 where
   "personId" is not null do update
 set
-  "status" = $7,
-  "identityId" = $8,
+  "status" = $8,
+  "identityId" = coalesce(
+    excluded."identityId",
+    "face_person_verdict"."identityId"
+  ),
   "source" = $9,
   "actorId" = $10,
   "updatedAt" = now()
@@ -102,6 +110,7 @@ set
 insert into
   "face_person_verdict" (
     "spacePersonId",
+    "assetFaceId",
     "identityId",
     "status",
     "source",
@@ -109,13 +118,16 @@ insert into
     "distance"
   )
 values
-  ($1, $2, $3, $4, $5, $6)
+  ($1, $2, $3, $4, $5, $6, $7)
 on conflict ("spacePersonId", "assetFaceId")
 where
   "spacePersonId" is not null do update
 set
-  "status" = $7,
-  "identityId" = $8,
+  "status" = $8,
+  "identityId" = coalesce(
+    excluded."identityId",
+    "face_person_verdict"."identityId"
+  ),
   "source" = $9,
   "actorId" = $10,
   "updatedAt" = now()
@@ -124,6 +136,7 @@ set
 insert into
   "face_person_verdict" (
     "spacePersonId",
+    "assetFaceId",
     "identityId",
     "status",
     "source",
@@ -131,13 +144,16 @@ insert into
     "distance"
   )
 values
-  ($1, $2, $3, $4, $5, $6)
+  ($1, $2, $3, $4, $5, $6, $7)
 on conflict ("spacePersonId", "assetFaceId")
 where
   "spacePersonId" is not null do update
 set
-  "status" = $7,
-  "identityId" = $8,
+  "status" = $8,
+  "identityId" = coalesce(
+    excluded."identityId",
+    "face_person_verdict"."identityId"
+  ),
   "source" = $9,
   "actorId" = $10,
   "updatedAt" = now()
@@ -164,7 +180,8 @@ where
 
 -- FacePersonVerdictRepository.getPendingForPerson
 select
-  "person"."id"
+  "person"."id",
+  "person"."identityId"
 from
   "person"
 where
@@ -175,7 +192,8 @@ where
 
 -- FacePersonVerdictRepository.getPendingForSpacePerson
 select
-  "shared_space_person"."id"
+  "shared_space_person"."id",
+  "shared_space_person"."identityId"
 from
   "shared_space_person"
   inner join "shared_space" on "shared_space"."id" = "shared_space_person"."spaceId"
@@ -257,6 +275,62 @@ where
         where
           "album_space_asset"."assetId" = "asset"."id"
           and "shared_space_album"."spaceId" = $14::uuid
+      )
+    )
+  )
+
+-- FacePersonVerdictRepository.isFaceReachableInSpace
+select
+  "asset_face"."id"
+from
+  "asset_face"
+  inner join "asset" on "asset"."id" = "asset_face"."assetId"
+where
+  "asset_face"."id" = $1
+  and (
+    exists (
+      select
+        1 as "exists"
+      from
+        "shared_space_asset"
+      where
+        "shared_space_asset"."assetId" = "asset"."id"
+        and "shared_space_asset"."spaceId" = $2::uuid
+    )
+    or exists (
+      select
+        1 as "exists"
+      from
+        "shared_space_library"
+      where
+        "shared_space_library"."libraryId" = "asset"."libraryId"
+        and "shared_space_library"."spaceId" = $3::uuid
+    )
+    or (
+      exists (
+        select
+          1 as "exists"
+        from
+          "shared_space_album"
+          inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+          inner join "album" on "album"."id" = "shared_space_album"."albumId"
+          and "album"."deletedAt" is null
+        where
+          "album_asset"."assetId" = "asset"."id"
+          and "shared_space_album"."spaceId" = $4::uuid
+      )
+      or exists (
+        select
+          1 as "exists"
+        from
+          "shared_space_album"
+          inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+          and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+          inner join "album" on "album"."id" = "shared_space_album"."albumId"
+          and "album"."deletedAt" is null
+        where
+          "album_space_asset"."assetId" = "asset"."id"
+          and "shared_space_album"."spaceId" = $5::uuid
       )
     )
   )

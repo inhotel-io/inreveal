@@ -35,6 +35,7 @@
 ## Task 1: Red — confirm atomicity + dashboard staleness (medium)
 
 - [ ] **Step 1 (confirm atomicity):** In `test/medium/specs/services/person.service.spec.ts`, add a `describe('confirmFaceSuggestion (atomicity)', ...)` (mirror the fault-injection at `identity-merge-propagation.service.spec.ts:231-254`):
+
 ```ts
 it('rolls back the reassign when the identity relink fails (no torn write)', async () => {
   // seed a person P, a face F assigned to another person Q, a pending verdict (P, F).
@@ -44,7 +45,9 @@ it('rolls back the reassign when the identity relink fails (no torn write)', asy
   //   (claim rolled back — claim-then-work contract, strictly safer).
 });
 ```
+
 - [ ] **Step 2 (dashboard staleness):** In `test/medium/specs/services/face-repair.scan.spec.ts`, add:
+
 ```ts
 it('drops a person’s flagged count once a suggestion-side verdict settles one of its flagged faces (D12)', async () => {
   // run a scan flagging person P with N faces (getLatestScanStatus → flagged N).
@@ -52,11 +55,14 @@ it('drops a person’s flagged count once a suggestion-side verdict settles one 
   // re-poll getLatestScanStatus → P.flagged === N-1 (and flaggedFraction / suspectedOwners[].count updated).
 });
 ```
+
 - [ ] **Step 3: Run RED** — both files:
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/person.service.spec.ts test/medium/specs/services/face-repair.scan.spec.ts
 ```
+
 Expected RED: confirm leaves the face reassigned despite the relink failure (torn write); dashboard count stays N. Confirm both files executed.
 
 ---
@@ -65,6 +71,7 @@ Expected RED: confirm leaves the face reassigned despite the relink failure (tor
 
 - [ ] **Step 1:** Add `db: Kysely<DB> | Transaction<DB> = this.db` to `reassignFace`, `claimPending`, `resolveAssignedFace`, `drainPendingForFaces`, and `replaceFaceIdentity` (singular); each uses the passed `db` instead of `this.db`. (Copy the exact pattern from `ensurePersonIdentity`.)
 - [ ] **Step 2:** In `person.service.ts`, wrap the confirm write chain:
+
 ```ts
 async confirmFaceSuggestion(auth, personId, assetFaceId) {
   await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
@@ -84,7 +91,9 @@ async confirmFaceSuggestion(auth, personId, assetFaceId) {
   if (face.person?.faceAssetId === face.id) await this.createNewFeaturePhoto([face.person.id]);
 }
 ```
+
 > Keep `reassignFacesById` (the public method) working for its OTHER callers — do NOT break its signature; the confirm path uses its own trx-wrapped chain above (or a shared private trx helper). Preserve the existing idempotent/cascade-deleted behaviour (claim===0 → no-op).
+
 - [ ] **Step 3:** Run the confirm atomicity test GREEN + `pnpm check`.
 
 ---
@@ -97,11 +106,13 @@ async confirmFaceSuggestion(auth, personId, assetFaceId) {
   - `detach` bucket (~908-913): add `await drainPendingForFaces(detachedIds, trx)` inside the existing trx (after `detachFaces`).
   - `move`/`unknown` buckets: drained by `executeRepair` (Step 1) — remove the aggregate `drainPendingForFaces([...settledFaceIds])` (~1011-1020). `stay` faces carry no move/link change → confirm whether they need a drain (a "keep here" negative verdict already drains via its own write path; if `stay` produced a pending row that must clear, add a small `drainPendingForFaces(stay, trx)` in its bucket — check the `stay` handling and preserve its current drain semantics).
 - [ ] **Step 3:** Run the full cleanup suite — behaviour preserved, drains now atomic:
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/face-repair.resolve.spec.ts test/medium/specs/services/face-repair.service.spec.ts \
   test/medium/specs/services/face-review-cross-flow.spec.ts test/medium/specs/services/face-suggestion-exclusions.spec.ts
 ```
+
 If a leak/drain test changes, confirm the new behaviour is correct (atomic) and update deliberately.
 
 ---
@@ -112,7 +123,7 @@ If a leak/drain test changes, confirm the new behaviour is correct (atomic) and 
   - fetch `getScanFlaggedFacesForPersons(scan.id, allPersonIds)` (already batch-capable).
   - `this.faceVerdictService.buildVerdictMaps({ personIds, assetFaceIds, suspectedOwnerIds })` then `applyVerdictFilters(byPerson, verdictMaps)` (the exact pattern `getPersonFlaggedFaces` uses at ~586-615, fanned out over the scan).
   - re-derive each person's `flagged`, `flaggedFraction` (over frozen `eligible`), and `suspectedOwners[].count` from the surviving faces; drop persons whose flagged count hits 0. Keep names/thumbnails from `withCurrentNames`.
-> This adds exactly one `getScanFlaggedFacesForPersons` query + one batched `buildVerdictMaps` per dashboard poll — the measured-cheaper option (a). Document in the report that (b) was rejected (it would require decrementing JSON counts at every verdict-write site, with no reusable per-face-decrement primitive).
+    > This adds exactly one `getScanFlaggedFacesForPersons` query + one batched `buildVerdictMaps` per dashboard poll — the measured-cheaper option (a). Document in the report that (b) was rejected (it would require decrementing JSON counts at every verdict-write site, with no reusable per-face-decrement primitive).
 - [ ] **Step 2:** Run the dashboard staleness test GREEN + the scan suite (`face-repair.scan.spec.ts`) — existing totals/shape assertions must still pass (no verdicts seeded in those → counts unchanged).
 
 ---
@@ -121,6 +132,7 @@ If a leak/drain test changes, confirm the new behaviour is correct (atomic) and 
 
 - [ ] **Step 1:** In `person.service.spec.ts` (unit) `confirmFaceSuggestion` block (~6542-6567), append the trailing `trx` arg (the `test/utils.ts:318` passthrough makes `trx === mocks.database`) to the four `toHaveBeenCalledWith` assertions: `claimPending(person.id, face.id, mocks.database)`, `reassignFace(face.id, person.id, mocks.database)`, `replaceFaceIdentity({...}, mocks.database)`, `resolveAssignedFace(face.id, mocks.database)`. The deny/idempotent/cascade `.not.toHaveBeenCalled()` tests are unaffected.
 - [ ] **Step 2: Done gate (full):**
+
 ```
 cd server && pnpm check && pnpm lint
 cd server && pnpm exec vitest --config test/vitest.config.mjs --run   # FULL unit (the confirm-arg change ripples)
@@ -129,7 +141,9 @@ cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/face-repair.resolve.spec.ts test/medium/specs/services/face-repair.service.spec.ts \
   test/medium/specs/services/face-review-cross-flow.spec.ts
 ```
+
 - [ ] **Step 3: Commit:**
+
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/face-unified
 git add server/src/repositories/person.repository.ts server/src/repositories/face-person-verdict.repository.ts \
@@ -145,12 +159,12 @@ git commit -m "fix(server): transactional confirm and drains; live dashboard cou
 
 ## Edge-case coverage map
 
-| Case | Test |
-| --- | --- |
-| Confirm relink fails → reassign + claim roll back (no torn write) | Task 1 Step 1 |
-| Dashboard count drops when a flagged face settles via a verdict | Task 1 Step 2 |
-| Drains atomic (drain rolls back with its move/lock/detach) | Task 3 cleanup suite (behaviour preserved, now in-trx) |
-| R4: rolled-back claim leaves the row pending (strictly safer) | Task 1 Step 1 second assertion (verdict still pending) |
+| Case                                                              | Test                                                   |
+| ----------------------------------------------------------------- | ------------------------------------------------------ |
+| Confirm relink fails → reassign + claim roll back (no torn write) | Task 1 Step 1                                          |
+| Dashboard count drops when a flagged face settles via a verdict   | Task 1 Step 2                                          |
+| Drains atomic (drain rolls back with its move/lock/detach)        | Task 3 cleanup suite (behaviour preserved, now in-trx) |
+| R4: rolled-back claim leaves the row pending (strictly safer)     | Task 1 Step 1 second assertion (verdict still pending) |
 
 ## Self-review (author)
 
