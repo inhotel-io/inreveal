@@ -108,6 +108,12 @@ const seedFlaggedScan = async (
 
   for (const faceId of args.faceIds) {
     await seedFaceSearch(db, faceId);
+    // `utils.createFace` links every face with source='manual' (its shortcut for a full face→identity
+    // link). A face a scan FLAGS is by definition an ML-clustered attribution, not a human placement — and
+    // the unified verdict layer correctly excludes human-placed (source='manual') faces from flagging. Left
+    // as 'manual', these seeded faces would be filtered straight back out and the review page would show
+    // "no flagged faces". Downgrade to 'ml' so they represent what a real scan actually flags.
+    await db.query(`UPDATE "face_identity_face" SET "source" = 'ml' WHERE "assetFaceId" = $1`, [faceId]);
     await db.query(
       `INSERT INTO "face_repair_scan_flagged_face" ("scanId", "assetFaceId", "personId", "suspectedOwnerId")
        VALUES ($1, $2, $3, $4)`,
