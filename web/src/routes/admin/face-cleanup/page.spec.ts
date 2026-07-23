@@ -606,4 +606,97 @@ describe('+page.svelte (face cleanup)', () => {
     });
     expect(screen.queryByTestId('dismiss-btn')).not.toBeInTheDocument();
   });
+
+  // ---- D17: a failed INITIAL load must not render as the reassuring "no scan yet" empty state ----
+
+  it('shows a load-error state (not the empty state) when the initial scan fetch fails, and Retry re-fetches', async () => {
+    vi.mocked(getLatestScan).mockRejectedValueOnce(new Error('network down'));
+
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('load-error-banner')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('admin.face_cleanup_empty_no_scan')).not.toBeInTheDocument();
+
+    vi.mocked(getLatestScan).mockResolvedValueOnce(null as unknown as object);
+    await fireEvent.click(screen.getByTestId('load-error-retry'));
+
+    await waitFor(() => {
+      expect(screen.getByText('admin.face_cleanup_empty_no_scan')).toBeInTheDocument();
+      expect(screen.queryByTestId('load-error-banner')).not.toBeInTheDocument();
+    });
+  });
+
+  it('does NOT show the load-error state for a transient poll failure once the initial load succeeded', async () => {
+    const runningScan = {
+      id: 'scan-1',
+      status: 'running',
+      progress: { scanned: 500, total: 1000 },
+      totals: null,
+      persons: [],
+      error: null,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      createdAt: new Date().toISOString(),
+    };
+    vi.mocked(getLatestScan)
+      .mockResolvedValueOnce(runningScan as unknown as object) // initial load: succeeds
+      .mockRejectedValueOnce(new Error('blip')); // first poll: transient failure
+
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => expect(screen.getByText('admin.face_cleanup_scan_running')).toBeInTheDocument());
+
+    await vi.advanceTimersByTimeAsync(2000);
+
+    await waitFor(() => expect(getLatestScan).toHaveBeenCalledTimes(2));
+    // Still showing the running-scan state, not a load-error banner, despite the poll blip.
+    expect(screen.getByText('admin.face_cleanup_scan_running')).toBeInTheDocument();
+    expect(screen.queryByTestId('load-error-banner')).not.toBeInTheDocument();
+  });
+
+  // ---- D8/D17: bulk-apply must refetch even when one of several selected persons fails (partial failure) ----
+
+  it('refetches the scan even when one of several selected persons fails to apply (partial failure)', async () => {
+    const persons = [
+      makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
+      makeScanPerson({ personId: 'c2', recommendation: 'confident', ownerId: 'owner2' }),
+    ];
+    vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+    vi.mocked(getFaceRepairPersonFaces).mockImplementation((({ personId }: { personId: string }) =>
+      Promise.resolve({
+        personId,
+        flaggedFaces: [{ assetFaceId: `f-${personId}`, suspectedOwnerId: 'owner-a' }],
+      })) as typeof getFaceRepairPersonFaces);
+    vi.mocked(resolveFaces).mockImplementation((({
+      faceRepairResolveRequestDto,
+    }: {
+      faceRepairResolveRequestDto: { personId: string };
+    }) =>
+      faceRepairResolveRequestDto.personId === 'c2'
+        ? Promise.reject(Object.assign(new Error('boom'), { status: 500 }))
+        : Promise.resolve({
+            moved: 1,
+            declined: 0,
+            locked: 0,
+            detached: 0,
+            unknown: 0,
+            skipped: 0,
+          })) as typeof resolveFaces);
+
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => {
+      expect(screen.getByText('admin.face_cleanup_apply')).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByText('admin.face_cleanup_apply'));
+
+    await waitFor(() => {
+      expect(screen.getByText('admin.face_cleanup_apply_error')).toBeInTheDocument();
+    });
+    // The table still refreshes on a partial failure — today's code skips the refetch entirely on any throw.
+    expect(getLatestScan).toHaveBeenCalledTimes(2);
+  });
 });
