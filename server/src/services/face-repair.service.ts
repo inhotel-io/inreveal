@@ -838,9 +838,12 @@ export class FaceRepairService extends BaseService {
     applyVerdictFilters(byPerson, verdictMaps);
     const resolvable = new Set((byPerson.get(personId) ?? []).map((face) => face.assetFaceId));
 
-    // stay/detach/unknown (E15) act only on this person's raw flagged snapshot. `lock` is exempt: it is
-    // meaningful for ANY face on this person (manual review), and is gated on eligibility below instead.
-    const unresolvable = findUnresolvableIds([...stay, ...detach, ...unknown], flaggedIds);
+    // E15: only `stay` is snapshot-gated. It writes a negative verdict against the face's SUSPECTED owner,
+    // read from the snapshot via snapshotOwnerByFace.get(id)! — with no snapshot row there is no owner to
+    // record against, and the non-null assertion would yield undefined (500 / FK violation). lock, detach
+    // and unknown are all meaningful for any face on this person (manual review): lock is gated on
+    // eligibility instead (slice 1), and detach/unknown are person-scoped at the write layer.
+    const unresolvable = findUnresolvableIds([...stay], flaggedIds);
     if (unresolvable.length > 0) {
       throw new BadRequestException('Some faces are not in the flagged snapshot for this person');
     }
