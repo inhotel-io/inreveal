@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Next, Param, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { NextFunction, Response } from 'express';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
 import { AuthDto } from 'src/dtos/auth.dto';
 import {
@@ -29,13 +30,18 @@ import {
   FaceRepairUnconfirmRequestDto,
 } from 'src/dtos/face-repair.dto';
 import { ApiTag } from 'src/enum';
-import { Auth, Authenticated } from 'src/middleware/auth.guard';
+import { Auth, Authenticated, FileResponse } from 'src/middleware/auth.guard';
+import { LoggingRepository } from 'src/repositories/logging.repository';
 import { FaceRepairService } from 'src/services/face-repair.service';
+import { sendFile } from 'src/utils/file';
 
 @ApiTags(ApiTag.Faces)
 @Controller('admin/face-repair')
 export class FaceRepairAdminController {
-  constructor(private service: FaceRepairService) {}
+  constructor(
+    private service: FaceRepairService,
+    private logger: LoggingRepository,
+  ) {}
 
   @Post()
   @Authenticated({ admin: true })
@@ -177,5 +183,20 @@ export class FaceRepairAdminController {
     @Body() dto: FaceRepairOwnerPersonCreateRequestDto,
   ): Promise<FaceRepairOwnerPersonCreatedResponseDto> {
     return this.service.createOwnerPerson(ownerId, dto.name) as Promise<FaceRepairOwnerPersonCreatedResponseDto>;
+  }
+
+  // Slice 7 (D7): face-keyed, join-free, admin-gated thumbnail. Admin cleanup + resolutions surfaces render
+  // face crops for clusters the admin does not own — the person-scoped `/people/.../thumbnail` route 404s or
+  // 403s for those. No `requireAccess`: the whole controller is admin-only by design.
+  @Get('faces/:assetFaceId/thumbnail')
+  @FileResponse()
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Get an admin face-repair face thumbnail', history: new HistoryBuilder().added('v1') })
+  async getFaceRepairFaceThumbnail(
+    @Res() res: Response,
+    @Next() next: NextFunction,
+    @Param('assetFaceId', new ParseUUIDPipe({ version: '4' })) assetFaceId: string,
+  ): Promise<void> {
+    await sendFile(res, next, () => this.service.getAdminFaceThumbnail(assetFaceId), this.logger);
   }
 }

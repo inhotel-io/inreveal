@@ -643,4 +643,76 @@ test.describe.serial('Face Cleanup', () => {
     );
     expect(afterRescan.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
   });
+
+  /**
+   * Slice 7 (D7): admin cleanup + resolutions surfaces render face crops for clusters the admin does not own.
+   * Every scenario above seeds under `admin` itself, so the person-scoped `/people/.../faces/.../thumbnail`
+   * route (still owner/access-checked) happens to work by construction — it never exercises the broken-image
+   * case a real deployment hits constantly (an admin reviewing a REGULAR user's flagged cluster). This test
+   * seeds a cluster owned by a SECOND user and asserts the face `<img>` elements the admin sees actually
+   * decode (naturalWidth > 0), on both the review grid and — after a "keep here" negative verdict, which has
+   * no person↔face join at all — the resolutions page (the structural-404 site).
+   */
+  test('admin renders face crops for a cluster owned by a different user (review grid + resolutions)', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    const db = await utils.connectDatabase();
+
+    const secondUser = await utils.userSetup(admin.accessToken, {
+      email: 'face-cleanup-second-user@test.com',
+      name: 'Face Cleanup Second User',
+      password: 'password',
+    });
+
+    const source = await utils.createPerson(secondUser.accessToken, { name: 'Second User Flagged Person' });
+    const owner = await utils.createPerson(secondUser.accessToken, { name: 'Second User Owner Person' });
+    const asset = await utils.createAsset(secondUser.accessToken);
+    const faceCrop = await utils.createFace({ assetId: asset.id, personId: source.id });
+    const faceStay = await utils.createFace({ assetId: asset.id, personId: source.id });
+
+    await seedFlaggedScan(db, {
+      ownerUserId: secondUser.userId,
+      personId: source.id,
+      suspectedOwnerId: owner.id,
+      faceIds: [faceCrop, faceStay],
+    });
+
+    // getFaceThumbnailSource needs a generated Preview/Thumbnail file (it does NOT fall back to the original),
+    // so the naturalWidth>0 assertions below would race the async thumbnail job without this wait. If this is
+    // still flaky when the Slice-10 e2e run executes it, poll the crop response instead (waitForQueueFinish can
+    // return "done" before the job is enqueued — see memory e2e-waitforqueuefinish-false-done).
+    await utils.waitForQueueFinish(secondUser.accessToken, 'metadataExtraction');
+    await utils.waitForQueueFinish(secondUser.accessToken, 'thumbnailGeneration');
+
+    // Admin reviews the second user's cluster — the OLD person-scoped thumbnail route requires
+    // AssetRead/PersonRead access the admin doesn't hold on this owner's rows and would 403/404 here.
+    await page.goto(`/admin/face-cleanup/${source.id}`);
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+
+    const tile = page.locator('[data-testid="face-tile"]').first();
+    await expect(tile).toBeVisible({ timeout: 15_000 });
+    const tileImg = tile.locator('img');
+    await expect(tileImg).toHaveAttribute('src', /.+/);
+    const tileNaturalWidth = await tileImg.evaluate((img: HTMLImageElement) => img.naturalWidth);
+    expect(tileNaturalWidth).toBeGreaterThan(0);
+
+    // "Keep here": a negative verdict with NO person↔face join at all — the structural-404 case the
+    // resolutions page must still render a thumbnail for.
+    await resolveFaces(
+      { faceRepairResolveRequestDto: { personId: source.id, stay: [faceStay] } },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+
+    await page.goto('/admin/face-cleanup/resolutions');
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+
+    const row = page.locator('[data-testid="resolution-row"]').first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    const rowImg = row.locator('img').first();
+    await expect(rowImg).toHaveAttribute('src', /.+/);
+    const rowNaturalWidth = await rowImg.evaluate((img: HTMLImageElement) => img.naturalWidth);
+    expect(rowNaturalWidth).toBeGreaterThan(0);
+  });
 });

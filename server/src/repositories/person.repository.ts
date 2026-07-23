@@ -481,6 +481,18 @@ export class PersonRepository {
       .executeTakeFirstOrThrow();
   }
 
+  // Admin face-thumbnail read: no person join, and INCLUDES tombstoned faces (the "not a face"
+  // action sets deletedAt but keeps boundingBox/dims, and resolutions history must still render).
+  @GenerateSql({ params: [DummyValue.UUID] })
+  getFaceByIdIncludingTombstoned(id: string) {
+    return this.db
+      .selectFrom('asset_face')
+      .selectAll('asset_face')
+      .select(withPerson)
+      .where('asset_face.id', '=', id)
+      .executeTakeFirstOrThrow();
+  }
+
   @GenerateSql({ params: [{ personId: DummyValue.UUID, take: 50, skip: 0 }] })
   getRepresentativeFaces(options: RepresentativeFaceListOptions) {
     return this.db

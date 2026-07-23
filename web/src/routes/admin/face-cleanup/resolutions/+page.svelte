@@ -1,7 +1,7 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import { Route } from '$lib/route';
-  import { getPersonFaceThumbnailUrl } from '$lib/utils/people-utils';
+  import { getAdminFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { getFaceRepairResolutions, getPeopleThumbnailPath, removeFaceRepairResolutions } from '@immich/sdk';
   import { Button, toastManager } from '@immich/ui';
   import { onMount } from 'svelte';
@@ -42,8 +42,12 @@
     sourceFilter === 'all' ? resolutions : resolutions.filter((r) => r.source === sourceFilter),
   );
 
-  const personThumbUrl = (personId: string) => `/api${getPeopleThumbnailPath(personId)}`;
-  const faceThumbnailUrl = (personId: string, faceId: string) => getPersonFaceThumbnailUrl(personId, faceId);
+  // A negative-verdict face has no person↔face join by construction (that's what "not this person" means) —
+  // the old person-scoped route's `getRepresentativeFaceForUpdate` join returns nothing for these rows,
+  // 404-ing the row's thumbnail structurally. Face-keyed, admin-gated, no join required.
+  const faceThumbnailUrl = (faceId: string) => getAdminFaceThumbnailUrl(faceId);
+  const personThumbUrl = (personId: string, thumbnailFaceId: string | null) =>
+    thumbnailFaceId ? getAdminFaceThumbnailUrl(thumbnailFaceId) : `/api${getPeopleThumbnailPath(personId)}`;
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString();
 
   const targetName = (item: ResolutionItem) =>
@@ -140,16 +144,12 @@
               title={item.source}
             ></span>
 
-            <!-- Face thumbnail -->
-            {#if item.personId}
-              <img
-                src={faceThumbnailUrl(item.personId, item.assetFaceId)}
-                alt=""
-                class="size-10 flex-none rounded-xl bg-gray-100 object-cover dark:bg-gray-700"
-              />
-            {:else}
-              <div class="size-10 flex-none rounded-xl bg-gray-100 dark:bg-gray-700"></div>
-            {/if}
+            <!-- Face thumbnail: always available (face-keyed, no person↔face join required) -->
+            <img
+              src={faceThumbnailUrl(item.assetFaceId)}
+              alt=""
+              class="size-10 flex-none rounded-xl bg-gray-100 object-cover dark:bg-gray-700"
+            />
 
             <!-- Info -->
             <div class="min-w-0 flex-1">
@@ -179,7 +179,7 @@
             <!-- Target person thumbnail -->
             {#if item.personId}
               <img
-                src={personThumbUrl(item.personId)}
+                src={personThumbUrl(item.personId, item.personThumbnailFaceId)}
                 alt=""
                 class="size-8 flex-none rounded-full bg-gray-100 object-cover dark:bg-gray-700"
               />
