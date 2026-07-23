@@ -4,7 +4,7 @@ import { OnJob } from 'src/decorators';
 import { FaceRepairResolveRequest, FaceRepairResolveResponse, FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
 import { RepairScanPerson, RepairScanRow, ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
-import { OwnerPersonRow } from 'src/repositories/face-repair.repository';
+import { OwnerPersonRow, PersonMetadataRow } from 'src/repositories/face-repair.repository';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
 import { JobOf } from 'src/types';
@@ -671,6 +671,17 @@ export class FaceRepairService extends BaseService {
       suspectedOwnerId: f.suspectedOwnerId,
     }));
     return { personId, flaggedFaces };
+  }
+
+  // Slice 3 (manual face review): the manual review page has no scan to derive personName/ownerId from, and
+  // ownerId is what scopes the move-picker. Admin-gated at the controller; not owner-scoped here by design —
+  // an admin must be able to look up any person, not just their own.
+  async getPersonMetadata(personId: string): Promise<PersonMetadataRow> {
+    const person = await this.faceRepairRepository.getPersonMetadata(personId);
+    if (!person) {
+      throw new NotFoundException('Person not found');
+    }
+    return person;
   }
 
   async createDeclines(input: {

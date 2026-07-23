@@ -17,6 +17,14 @@ export interface OwnerPersonRow {
   thumbnailFaceId: string | null;
 }
 
+export interface PersonMetadataRow {
+  id: string;
+  name: string;
+  ownerId: string;
+  faceCount: number;
+  thumbnailFaceId: string | null;
+}
+
 export class FaceRepairRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
 
@@ -70,6 +78,34 @@ export class FaceRepairRepository {
     }));
 
     return { people, total, hasMore };
+  }
+
+  // Slice 3 (manual face review): the manual review page has no scan to read personName/ownerId off, and the
+  // user-scoped GET /people/:id does not admin-bypass for a person the admin does not own. Reuses
+  // searchOwnerPeople's exact join conditions (deletedAt is null, isVisible = true) so faceCount agrees between
+  // the browser grid and this review-page header — a mismatch there would read as a bug. No `@GenerateSql`:
+  // this repository has none.
+  async getPersonMetadata(personId: string): Promise<PersonMetadataRow | undefined> {
+    const row = await this.db
+      .selectFrom('person')
+      .leftJoin('asset_face', (join) =>
+        join
+          .onRef('asset_face.personId', '=', 'person.id')
+          .on('asset_face.deletedAt', 'is', null)
+          .on('asset_face.isVisible', '=', true),
+      )
+      .select([
+        'person.id as id',
+        'person.name as name',
+        'person.ownerId as ownerId',
+        'person.faceAssetId as thumbnailFaceId',
+      ])
+      .select((eb) => eb.fn.count('asset_face.id').as('faceCount'))
+      .where('person.id', '=', personId)
+      .groupBy(['person.id'])
+      .executeTakeFirst();
+
+    return row && { ...row, faceCount: Number(row.faceCount) };
   }
 
   // Non-Timeline faces (e.g. Archive) are intentionally eligible: they may be left unassigned

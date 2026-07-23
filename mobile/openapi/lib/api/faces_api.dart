@@ -510,6 +510,60 @@ class FacesApi {
     return null;
   }
 
+  /// Get a person for manual review
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] personId (required):
+  Future<Response> getFaceRepairPersonMetadataWithHttpInfo(String personId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/admin/face-repair/person/{personId}'
+      .replaceAll('{personId}', personId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get a person for manual review
+  ///
+  /// Parameters:
+  ///
+  /// * [String] personId (required):
+  Future<FaceRepairPersonMetadataResponseDto?> getFaceRepairPersonMetadata(String personId, { Future<void>? abortTrigger, }) async {
+    final response = await getFaceRepairPersonMetadataWithHttpInfo(personId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceRepairPersonMetadataResponseDto',) as FaceRepairPersonMetadataResponseDto;
+    
+    }
+    return null;
+  }
+
   /// List face-repair resolutions (negative verdicts from both engines)
   ///
   /// Note: This method returns the HTTP [Response].
