@@ -838,10 +838,23 @@ export class FaceRepairService extends BaseService {
     applyVerdictFilters(byPerson, verdictMaps);
     const resolvable = new Set((byPerson.get(personId) ?? []).map((face) => face.assetFaceId));
 
-    // stay/lock/detach/unknown (E15) act only on this person's raw flagged snapshot.
-    const unresolvable = findUnresolvableIds([...stay, ...lock, ...detach, ...unknown], flaggedIds);
+    // stay/detach/unknown (E15) act only on this person's raw flagged snapshot. `lock` is exempt: it is
+    // meaningful for ANY face on this person (manual review), and is gated on eligibility below instead.
+    const unresolvable = findUnresolvableIds([...stay, ...detach, ...unknown], flaggedIds);
     if (unresolvable.length > 0) {
       throw new BadRequestException('Some faces are not in the flagged snapshot for this person');
+    }
+
+    // `lock` writes through replaceFaceIdentities, which is keyed only by assetFaceId — no person scope and
+    // an unconditional ON CONFLICT DO UPDATE. Snapshot membership used to prove the face was on this person;
+    // with that gate lifted the check must be explicit, or a lock could re-point any face in the database
+    // (including another user's) onto this person's identity.
+    if (lock.length > 0) {
+      const eligible = await this.faceRepairRepository.getEligibleFaceIdsForPerson(personId, lock);
+      const ineligible = lock.filter((id) => !eligible.has(id));
+      if (ineligible.length > 0) {
+        throw new BadRequestException('Some faces are not eligible for this person');
+      }
     }
 
     // moveToPerson: a requested face no longer flagged here — moved off since the scan, or declined since

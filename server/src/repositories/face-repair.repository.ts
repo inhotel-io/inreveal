@@ -206,6 +206,30 @@ export class FaceRepairRepository {
     };
   }
 
+  // Which of `faceIds` are currently eligible ON `personId`. Mirrors getClusterFacePage's predicate so
+  // "lockable" is exactly "listed on the manual review page" — a third, subtly different eligibility
+  // predicate would be a bug farm. Advisory only: the write-time guards in reattributeFaces/detachFaces
+  // remain authoritative; this exists so a manual lock that cannot apply is an explicit 400 rather than
+  // a silent no-op.
+  async getEligibleFaceIdsForPerson(personId: string, faceIds: string[]): Promise<Set<string>> {
+    if (faceIds.length === 0) {
+      return new Set();
+    }
+    const rows = await this.db
+      .selectFrom('asset_face')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+      .select(['asset_face.id as assetFaceId'])
+      .where('asset_face.id', 'in', faceIds)
+      .where('asset_face.personId', '=', personId)
+      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.deletedAt', 'is', null)
+      .execute();
+    return new Set(rows.map((row) => row.assetFaceId));
+  }
+
   // Re-attribute the given faces from `fromPersonId` to `toPersonId` ONLY if they are still assigned to
   // `fromPersonId` and machine-learning-sourced (eligibility re-check at write — a face moved by a concurrent
   // job since planning is skipped). Returns the ids actually moved (so the caller links identities for exactly

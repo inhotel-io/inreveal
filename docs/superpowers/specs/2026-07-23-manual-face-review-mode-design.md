@@ -129,8 +129,15 @@ depends on the rejection.
 
 ### 5.2 The eligibility check this requires (safety-critical)
 
-Snapshot membership implicitly proved _"this face is on this person"_. Dropping it for three buckets
-removes that proof:
+Snapshot membership implicitly proved _"this face is on this person"_ — and the mechanism is more
+specific than "the id was in a stored list". `getScanFlaggedFacesForPersons`
+(`face-repair-scan.repository.ts:293-316`) INNER JOINs `asset_face` and re-validates `personId`,
+`deletedAt`, `isVisible` and `sourceType` **at snapshot-read time**, inside the resolve call itself.
+So today a foreign, deleted, or nonexistent id cannot reach the write path at all: it never enters
+`flaggedIds`, and the snapshot gate rejects it.
+
+That is why lifting the gate is not merely permissive — it **removes a live guard**. Dropping it for
+three buckets removes that proof:
 
 - `detach` — **already person-scoped**: `detachFaces` filters `WHERE personId = personId`
   (`face-repair.repository.ts:275-284`), and the identity-strip is keyed on the `RETURNING` output,
