@@ -2,11 +2,13 @@ import {
   getFaceRepairClusterFaces,
   getFaceRepairPersonMetadata,
   getLatestScan,
+  resolveFaces,
   type FaceRepairClusterFacesResponseDto,
   type FaceRepairPersonMetadataResponseDto,
 } from '@immich/sdk';
+import { modalManager, toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Page from './+page.svelte';
 import { createManualReviewModel, type ManualReviewModel } from './manual-review.svelte';
@@ -32,6 +34,7 @@ vi.mock('@immich/sdk', async (importOriginal) => {
     getFaceRepairPersonMetadata: vi.fn(),
     getFaceRepairClusterFaces: vi.fn(),
     getLatestScan: vi.fn(),
+    resolveFaces: vi.fn(),
     getPeopleThumbnailPath: (id: string) => `/people/${id}/thumbnail`,
   };
 });
@@ -42,6 +45,15 @@ vi.mock('@immich/ui', async (original) => {
   return {
     ...mod,
     Icon: noop.default,
+    toastManager: {
+      primary: vi.fn(),
+      success: vi.fn(),
+      danger: vi.fn(),
+    },
+    // The picker modal itself is covered end-to-end by PersonPicker.spec.ts; here we only need to verify
+    // the "Move to…" bulk action opens it with the right props and routes back whatever it resolves with —
+    // same seam the guided page's page.spec.ts uses.
+    modalManager: { show: vi.fn() },
   };
 });
 
@@ -152,12 +164,36 @@ const getVm = (): ManualReviewModel => {
   return calls.at(-1)!.value as ManualReviewModel;
 };
 
+// Slice 9 tests drive the REAL bulk-action buttons and Apply — never the model directly (unlike slice 8's
+// getVm() seam above, which existed only because there was no UI yet to click).
+const tileFor = (id: string) => document.querySelector(`[data-testid="face-tile"][data-faceid="${id}"]`)!;
+const selectTile = async (index: number) => {
+  const tiles = screen.getAllByTestId('face-tile');
+  await fireEvent.click(tiles[index]);
+};
+
+// `modalManager.show` is a generic overloaded method (its return type depends on the component passed in), so
+// `vi.mocked(modalManager.show)` can't infer a concrete signature at this call site — same cast the guided
+// page's page.spec.ts uses.
+const showModal = modalManager.show as unknown as ReturnType<
+  typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | undefined>>
+>;
+
 describe('+page.svelte (manual face-review page)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getFaceRepairPersonMetadata).mockResolvedValue(makeMetadata());
     vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(makeFacesResponse([face('f1'), face('f2'), face('f3')], 3));
     vi.mocked(getLatestScan).mockResolvedValue({} as unknown as object);
+    vi.mocked(resolveFaces).mockResolvedValue({
+      moved: 0,
+      declined: 0,
+      locked: 0,
+      detached: 0,
+      unknown: 0,
+      skipped: 0,
+    });
+    showModal.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -438,5 +474,343 @@ describe('+page.svelte (manual face-review page)', () => {
     }
     expect(document.querySelector('[data-state-icon]')).toBeNull();
     expect(screen.queryByText(/flagged/i)).not.toBeInTheDocument();
+  });
+
+  // ==== Slice 9 — footer dock: five bulk actions, the staged-work tally, and Apply (design §6.4) ====
+  // Unlike slice 8, these tests drive the REAL UI — the bulk-action buttons and Apply — never the model
+  // directly. The getVm() seam above only existed because there was no UI yet to click; that is the whole
+  // point of this slice.
+  describe('Slice 9 — bulk actions + Apply', () => {
+    // ---- 3. Apply is disabled while everything is `keep` ----
+    it('Apply is disabled while every face is keep, and cannot be activated', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      expect(screen.getByTestId('manual-review-dock')).toBeInTheDocument();
+      const applyBtn = screen.getByTestId('manual-review-apply-btn');
+      expect(applyBtn).toBeDisabled();
+
+      await fireEvent.click(applyBtn);
+      expect(resolveFaces).not.toHaveBeenCalled();
+    });
+
+    // ---- 1. each of Lock/Unknown/Not-a-face applies to EXACTLY the current selection, others stay keep ----
+    it.each([
+      ['manual-review-bulk-lock', 'lock'],
+      ['manual-review-bulk-unknown', 'unknown'],
+      ['manual-review-bulk-detach', 'detach'],
+    ] as const)('%s marks exactly the selected face %s, leaving the rest keep', async (buttonTestId, expectedState) => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await selectTile(0);
+      await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId(buttonTestId));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('manual-review-bulk-bar')).not.toBeInTheDocument();
+        expect(tileFor('f1')).toHaveAttribute('data-state', expectedState);
+      });
+      expect(tileFor('f2')).toHaveAttribute('data-state', 'keep');
+      expect(tileFor('f3')).toHaveAttribute('data-state', 'keep');
+    });
+
+    // ---- Move to… (PersonPicker) ----
+    describe('Move to…', () => {
+      it("passes the person's ownerId from the metadata endpoint, and the current selection count", async () => {
+        render(Page, { props: { data: makePageData() } });
+        await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+        await selectTile(0);
+        await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+        await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
+
+        await waitFor(() => {
+          expect(showModal).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ ownerId: OWNER_ID, faceCount: 1 }),
+          );
+        });
+      });
+
+      it('marks exactly the selection move, leaving the rest keep, with the chosen destination + lock flag landing in the request', async () => {
+        showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: true });
+
+        render(Page, { props: { data: makePageData() } });
+        await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+        await selectTile(0); // f1
+        await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
+
+        await waitFor(() => {
+          expect(screen.queryByTestId('manual-review-bulk-bar')).not.toBeInTheDocument();
+          expect(tileFor('f1')).toHaveAttribute('data-state', 'move');
+        });
+        expect(tileFor('f2')).toHaveAttribute('data-state', 'keep');
+        expect(tileFor('f3')).toHaveAttribute('data-state', 'keep');
+
+        await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+        await waitFor(() => {
+          expect(resolveFaces).toHaveBeenCalledWith({
+            faceRepairResolveRequestDto: {
+              personId: PERSON_ID,
+              moveToPerson: [{ destinationPersonId: 'dest-1', faceIds: ['f1'], lock: true }],
+              stay: [],
+              lock: [],
+              detach: [],
+              unknown: [],
+            },
+          });
+        });
+      });
+
+      it('leaves the selection untouched if the picker is closed without choosing a destination', async () => {
+        showModal.mockResolvedValueOnce(undefined);
+
+        render(Page, { props: { data: makePageData() } });
+        await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+        await selectTile(0);
+        await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
+
+        await waitFor(() => expect(showModal).toHaveBeenCalled());
+
+        // Selection (still `keep`) survives an uncommitted picker — the bulk bar is still showing.
+        expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument();
+        expect(tileFor('f1')).toHaveAttribute('data-state', 'keep');
+      });
+    });
+
+    // ---- 2. Unmark returns marked faces to `keep` AND removes them from the request ----
+    it('Unmark returns marked faces to keep and removes them from the Apply request, without touching an untouched mark', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      // Lock both f1 and f2.
+      await selectTile(0);
+      await selectTile(1);
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-lock'));
+
+      await waitFor(() => {
+        expect(tileFor('f1')).toHaveAttribute('data-state', 'lock');
+        expect(tileFor('f2')).toHaveAttribute('data-state', 'lock');
+      });
+
+      // Re-select only f1 and Unmark it.
+      await selectTile(0);
+      await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-unmark'));
+
+      await waitFor(() => {
+        expect(tileFor('f1')).toHaveAttribute('data-state', 'keep');
+      });
+      // f2's mark is untouched by unmarking f1.
+      expect(tileFor('f2')).toHaveAttribute('data-state', 'lock');
+
+      await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [],
+            stay: [],
+            lock: ['f2'],
+            detach: [],
+            unknown: [],
+          },
+        });
+      });
+    });
+
+    // ---- 4. the tally reports staged work per bucket ----
+    it('the tally reports staged work per bucket', async () => {
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue(
+        makeFacesResponse([face('f1'), face('f2'), face('f3'), face('f4'), face('f5')], 5),
+      );
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(5));
+
+      // 2 -> move
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest', lock: false });
+      await selectTile(0);
+      await selectTile(1);
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
+      await waitFor(() => expect(tileFor('f1')).toHaveAttribute('data-state', 'move'));
+
+      // 1 -> lock
+      await selectTile(2);
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-lock'));
+      await waitFor(() => expect(tileFor('f3')).toHaveAttribute('data-state', 'lock'));
+
+      // 2 -> detach
+      await selectTile(3);
+      await selectTile(4);
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-detach'));
+      await waitFor(() => expect(tileFor('f4')).toHaveAttribute('data-state', 'detach'));
+
+      const tally = screen.getByTestId('manual-review-tally');
+      expect(within(tally).getByTestId('manual-review-tally-move')).toHaveTextContent('2');
+      expect(within(tally).getByTestId('manual-review-tally-lock')).toHaveTextContent('1');
+      expect(within(tally).getByTestId('manual-review-tally-unknown')).toHaveTextContent('0');
+      expect(within(tally).getByTestId('manual-review-tally-detach')).toHaveTextContent('2');
+    });
+
+    // ---- 6. Apply posts the exact request the model built, asserting the FULL payload shape including
+    //      `stay: []` explicitly — the single most important payload assertion on this page ----
+    it('Apply posts the exact request the model built, across mixed buckets, asserting `stay: []` explicitly', async () => {
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest', lock: false });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await selectTile(0); // f1 -> move
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
+      await waitFor(() => expect(tileFor('f1')).toHaveAttribute('data-state', 'move'));
+
+      await selectTile(1); // f2 -> unknown
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-unknown'));
+      await waitFor(() => expect(tileFor('f2')).toHaveAttribute('data-state', 'unknown'));
+
+      // f3 stays `keep` — it must not appear in ANY bucket below.
+
+      await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            moveToPerson: [{ destinationPersonId: 'dest-1', faceIds: ['f1'], lock: false }],
+            stay: [],
+            lock: [],
+            detach: [],
+            unknown: ['f2'],
+          },
+        });
+      });
+    });
+
+    // ---- 7. detach requires the destructive confirm on Apply; declining does NOT post ----
+    describe('destructive confirm — Not a face', () => {
+      const stageDetach = async () => {
+        render(Page, { props: { data: makePageData() } });
+        await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+        await selectTile(0);
+        await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+        await fireEvent.click(screen.getByTestId('manual-review-bulk-detach'));
+      };
+
+      it('does NOT commit anything when Apply carries a detached face — it asks first', async () => {
+        await stageDetach();
+
+        await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+        await waitFor(() => expect(screen.getByTestId('manual-review-detach-confirm')).toBeInTheDocument());
+        expect(resolveFaces).not.toHaveBeenCalled();
+      });
+
+      it('declining the confirm does NOT post, and the staged mark survives', async () => {
+        await stageDetach();
+        await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+        await waitFor(() => expect(screen.getByTestId('manual-review-detach-confirm')).toBeInTheDocument());
+
+        await fireEvent.click(screen.getByTestId('manual-review-detach-confirm-cancel'));
+
+        await waitFor(() => expect(screen.queryByTestId('manual-review-detach-confirm')).not.toBeInTheDocument());
+        expect(resolveFaces).not.toHaveBeenCalled();
+        expect(tileFor('f1')).toHaveAttribute('data-state', 'detach');
+      });
+
+      it('confirming posts the request with the detached face', async () => {
+        await stageDetach();
+        await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+        await waitFor(() => expect(screen.getByTestId('manual-review-detach-confirm')).toBeInTheDocument());
+
+        await fireEvent.click(screen.getByTestId('manual-review-detach-confirm-cta'));
+
+        await waitFor(() => {
+          expect(resolveFaces).toHaveBeenCalledWith({
+            faceRepairResolveRequestDto: {
+              personId: PERSON_ID,
+              moveToPerson: [],
+              stay: [],
+              lock: [],
+              detach: ['f1'],
+              unknown: [],
+            },
+          });
+        });
+      });
+
+      it('does NOT ask when nothing is being discarded — a routine Apply goes straight through', async () => {
+        render(Page, { props: { data: makePageData() } });
+        await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+        await selectTile(0);
+        await fireEvent.click(screen.getByTestId('manual-review-bulk-lock'));
+        await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+        await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
+        expect(screen.queryByTestId('manual-review-detach-confirm')).not.toBeInTheDocument();
+      });
+    });
+
+    // ---- 8. a 409 (a scan started mid-review) is surfaced WITHOUT discarding staged work ----
+    it('surfaces a 409 without discarding staged work, and does not re-fetch the cluster', async () => {
+      let rejectApply!: () => void;
+      vi.mocked(resolveFaces).mockReturnValueOnce(
+        new Promise((_, reject) => {
+          rejectApply = () => reject(Object.assign(new Error('conflict'), { status: 409 }));
+        }),
+      );
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await selectTile(0);
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-lock'));
+
+      const applyBtn = screen.getByTestId('manual-review-apply-btn');
+      await fireEvent.click(applyBtn);
+      expect(applyBtn).toBeDisabled();
+
+      rejectApply();
+
+      await waitFor(() => {
+        expect(screen.getByText('admin.face_cleanup_review_apply_conflict')).toBeInTheDocument();
+      });
+
+      // Staged work survives the conflict — losing it is exactly what the chooser's disabled-manual card
+      // exists to prevent (design §7); the cluster was never re-fetched (that only happens on success).
+      expect(tileFor('f1')).toHaveAttribute('data-state', 'lock');
+      expect(getFaceRepairClusterFaces).toHaveBeenCalledTimes(1);
+    });
+
+    // ---- 9. result reporting — counts from the response are shown ----
+    it('reports what the server actually did after a successful apply', async () => {
+      vi.mocked(resolveFaces).mockResolvedValueOnce({
+        moved: 1,
+        declined: 0,
+        locked: 2,
+        detached: 0,
+        unknown: 0,
+        skipped: 0,
+      });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await selectTile(0);
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-lock'));
+      await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+      await waitFor(() => {
+        expect(toastManager.primary).toHaveBeenCalledWith(
+          expect.stringContaining('admin.face_cleanup_manual_review_apply_summary'),
+        );
+      });
+    });
   });
 });
