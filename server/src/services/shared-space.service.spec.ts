@@ -7363,6 +7363,7 @@ describe(SharedSpaceService.name, () => {
     it('ensures identity, marks confirmed, replaces identity link, then resolves other pending rows', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.facePersonVerdict.claimPendingForSpacePerson.mockResolvedValue(1);
+      mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
 
       await sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1');
 
@@ -7383,6 +7384,8 @@ describe(SharedSpaceService.name, () => {
         source: 'manual',
       });
       expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith('face-1');
+      // Slice 3 (D3): confirm writes the space projection row so the same space's next scan excludes the face.
+      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith([{ personId: 'space-person-1', assetFaceId: 'face-1' }]);
 
       expect(mocks.facePersonVerdict.claimPendingForSpacePerson.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.faceIdentity.replaceFaceIdentity.mock.invocationCallOrder[0],
