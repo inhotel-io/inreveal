@@ -25,7 +25,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
       CONSTRAINT "face_person_verdict_single_target_chk" CHECK (num_nonnulls("personId", "spacePersonId") <= 1),
       CONSTRAINT "face_person_verdict_personId_fkey" FOREIGN KEY ("personId") REFERENCES "person" ("id") ON DELETE SET NULL,
       CONSTRAINT "face_person_verdict_spacePersonId_fkey" FOREIGN KEY ("spacePersonId") REFERENCES "shared_space_person" ("id") ON DELETE SET NULL,
-      CONSTRAINT "face_person_verdict_identityId_fkey" FOREIGN KEY ("identityId") REFERENCES "face_identity" ("id") ON DELETE CASCADE,
+      CONSTRAINT "face_person_verdict_identityId_fkey" FOREIGN KEY ("identityId") REFERENCES "face_identity" ("id") ON DELETE SET NULL,
       CONSTRAINT "face_person_verdict_assetFaceId_fkey" FOREIGN KEY ("assetFaceId") REFERENCES "asset_face" ("id") ON DELETE CASCADE,
       CONSTRAINT "face_person_verdict_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "user" ("id") ON DELETE SET NULL
     )

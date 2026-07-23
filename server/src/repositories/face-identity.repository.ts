@@ -12,6 +12,7 @@ import { FaceIdentityTable } from 'src/schema/tables/face-identity.table';
 import { anyUuid } from 'src/utils/database';
 import { asDateString, asDateTimeString } from 'src/utils/date';
 import { targetTokens } from 'src/utils/face-repair';
+import { rekeyVerdictIdentity } from 'src/utils/face-verdict-merge';
 import { spaceAlbumAssetExistsSql, spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
 
 export type FaceIdentity = Selectable<FaceIdentityTable>;
@@ -3081,6 +3082,10 @@ export class FaceIdentityRepository {
         )
         .execute();
 
+      // D1: move any verdict rows off the merged-away identities onto the survivor before those
+      // identities are deleted (identityId FK is SET NULL, but we re-key so identity-first reads keep working).
+      await rekeyVerdictIdentity(trx, mergeableSourceIdentityIds, input.targetIdentityId);
+
       const deletable = await trx
         .selectFrom('face_identity')
         .leftJoin('person', 'person.identityId', 'face_identity.id')
@@ -3176,6 +3181,9 @@ export class FaceIdentityRepository {
       .where('identityId', '=', input.targetIdentityId)
       .where('type', '!=', targetIdentity.type)
       .execute();
+
+    // D1: same re-key as mergeIdentities, on the production person-merge path.
+    await rekeyVerdictIdentity(db, sourceIdentityIds, input.targetIdentityId);
 
     const deletable = await db
       .selectFrom('face_identity')
