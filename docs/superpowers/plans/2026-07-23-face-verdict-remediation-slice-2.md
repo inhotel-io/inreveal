@@ -29,6 +29,7 @@
 - **Modify** medium spec: `server/test/medium/specs/repositories/face-person-verdict.repository.spec.ts` (coalesce + reachability), `server/test/medium/specs/services/shared-space-face-suggestions.service.spec.ts` (drained-but-reachable still writes; unreachable refused).
 
 **Interfaces produced (later tasks depend on these):**
+
 ```ts
 // face-person-verdict.repository.ts
 async isFaceReachableInSpace(spaceId: string, assetFaceId: string): Promise<boolean>;
@@ -114,20 +115,26 @@ async isFaceReachableInSpace(spaceId: string, assetFaceId: string): Promise<bool
 **Files:** Modify `server/src/services/person.service.ts`, `server/src/services/person.service.spec.ts`
 
 - [ ] **Step 1 (Red):** Update the pinned unit assertions to expect full opts. At `person.service.spec.ts:6513`:
+
 ```ts
 expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1', {
-  identityId: expect.any(String), source: 'suggestion', actorId: authUser.id,
+  identityId: expect.any(String),
+  source: 'suggestion',
+  actorId: authUser.id,
 });
 ```
+
 Apply the analogous 3-arg update at 6525 (markIgnored), 6539/6540, 6551 (dismiss → reject). Ensure `ensurePersonIdentity` is mocked to return an identity (`{ id: 'identity-1' }`) so the call resolves. Run: `cd server && pnpm exec vitest --run src/services/person.service.spec.ts`. Expected: RED — called with 2 args.
 
 - [ ] **Step 2 (Green):** In `person.service.ts`, add a private helper and use it:
+
 ```ts
 private async verdictOpts(auth: AuthDto, personId: string): Promise<{ identityId: string; source: 'suggestion'; actorId: string }> {
   const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId);
   return { identityId: identity.id, source: 'suggestion', actorId: auth.user.id };
 }
 ```
+
 ```ts
 async rejectFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
   await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
@@ -138,6 +145,7 @@ async ignoreFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string)
   await this.facePersonVerdictRepository.markIgnored(personId, assetFaceId, await this.verdictOpts(auth, personId));
 }
 ```
+
 Run Step-1 command → GREEN.
 
 ---
@@ -149,9 +157,10 @@ Run Step-1 command → GREEN.
 - [ ] **Step 1 (Red):** Rewrite the "no-ops stale/already-resolved" test (`shared-space.service.spec.ts:~7367-7388`) so that:
   - it mocks the NEW `isFaceReachableInSpace` (not `hasPendingForSpacePerson`): when reachability is `false` → assert `markRejectedForSpacePerson` is NOT called (still refuses genuinely-unreachable faces);
   - a NEW test: reachability `true` but no pending row (drained) → `markRejectedForSpacePerson` IS called with opts.
-  Update the pinned 2-arg assertions at 7397/7411/7425 to 3-arg with `{ identityId: expect.any(String), source: 'suggestion', actorId: authUser.id }`. Mock `ensureSpacePersonIdentity` → `{ id: 'identity-1' }`. Run: `cd server && pnpm exec vitest --run src/services/shared-space.service.spec.ts`. Expected RED.
+    Update the pinned 2-arg assertions at 7397/7411/7425 to 3-arg with `{ identityId: expect.any(String), source: 'suggestion', actorId: authUser.id }`. Mock `ensureSpacePersonIdentity` → `{ id: 'identity-1' }`. Run: `cd server && pnpm exec vitest --run src/services/shared-space.service.spec.ts`. Expected RED.
 
 - [ ] **Step 2 (Green):** In `resolveSpacePersonFaceSuggestion`, replace the pending gate + 2-arg calls:
+
 ```ts
 private async resolveSpacePersonFaceSuggestion(auth: AuthDto, spaceId: string, personId: string, assetFaceId: string, action: 'rejected' | 'ignored'): Promise<void> {
   await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
@@ -168,6 +177,7 @@ private async resolveSpacePersonFaceSuggestion(auth: AuthDto, spaceId: string, p
     : this.facePersonVerdictRepository.markIgnoredForSpacePerson(person.id, assetFaceId, opts));
 }
 ```
+
 Run Step-1 command → GREEN.
 
 > `confirmSpacePersonFaceSuggestion` still uses `hasPendingForSpacePerson` (confirm is a claim-then-work op — leave it; Slice 3 revisits confirm). Only reject/ignore decouple here.
@@ -188,6 +198,7 @@ Run Step-1 command → GREEN.
 ## Task 6: Done gate + commit
 
 - [ ] **Step 1: Full gate** (run in full):
+
 ```bash
 cd server && pnpm check      # clean
 cd server && pnpm lint       # --max-warnings 0, clean
@@ -196,9 +207,11 @@ cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/repositories/face-person-verdict.repository.spec.ts \
   test/medium/specs/services/shared-space-face-suggestions.service.spec.ts
 ```
+
 Plus: if the resolutions web spec / its fixture asserts a null actor for a user verdict, update the fixture so the actor column is populated (edge case in spec §Slice 2). Verify `cd web && pnpm exec vitest --run <resolutions spec>` if one exists and touches actor; otherwise note none exists.
 
 - [ ] **Step 2: Commit:**
+
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/face-unified
 git add server/src/services/person.service.ts server/src/services/shared-space.service.ts \
@@ -214,14 +227,14 @@ git commit -m "fix(server): user face verdicts carry identity and actor; space r
 
 ## Edge-case coverage map (spec §Slice 2 table → test)
 
-| Edge case | Covered by |
-| --- | --- |
-| Reject a person with no identity yet | `verdictOpts` calls `ensurePersonIdentity` first — unit asserts `markRejected` receives a non-null `identityId`; medium: reject a person seeded without an identity → row carries `I(P)` |
-| Reject after the face was CASCADE-deleted | 0 rows affected, benign — medium: delete the face, reject → `markRejected` returns 0, no throw |
-| Double reject / reject-then-ignore race | last human wins on status; identityId never nulled — medium extends the coalesce test with a second write |
-| Space reject by a viewer | still 403 via Editor gate — unit: viewer auth → `requireRole` throws (unchanged; assert still thrown) |
-| Space reject reachable only via 3rd (contribution) path | accepted — repo medium test in Task 1 Step 1 (contribution branch → reachable true) + service accepts |
-| Resolutions actor column populated | Task 6 Step 1 fixture/web-spec check |
+| Edge case                                               | Covered by                                                                                                                                                                               |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reject a person with no identity yet                    | `verdictOpts` calls `ensurePersonIdentity` first — unit asserts `markRejected` receives a non-null `identityId`; medium: reject a person seeded without an identity → row carries `I(P)` |
+| Reject after the face was CASCADE-deleted               | 0 rows affected, benign — medium: delete the face, reject → `markRejected` returns 0, no throw                                                                                           |
+| Double reject / reject-then-ignore race                 | last human wins on status; identityId never nulled — medium extends the coalesce test with a second write                                                                                |
+| Space reject by a viewer                                | still 403 via Editor gate — unit: viewer auth → `requireRole` throws (unchanged; assert still thrown)                                                                                    |
+| Space reject reachable only via 3rd (contribution) path | accepted — repo medium test in Task 1 Step 1 (contribution branch → reachable true) + service accepts                                                                                    |
+| Resolutions actor column populated                      | Task 6 Step 1 fixture/web-spec check                                                                                                                                                     |
 
 ## Self-review (author)
 

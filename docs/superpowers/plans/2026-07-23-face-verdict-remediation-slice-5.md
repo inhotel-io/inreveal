@@ -31,12 +31,14 @@
 **Files:** Modify `server/test/medium/specs/schema-drift.spec.ts`.
 
 - [ ] **Step 1:** Replace the `it('does not report drift for face_repair_scan_in_flight_uq', ...)` block with:
+
 ```ts
 it('reports no schema drift at all (decorator/override vs a freshly-migrated DB)', async () => {
   const drift = await computeDrift();
   expect(drift.asHuman()).toEqual([]);
 });
 ```
+
 Update the comment above it to describe the general contract (any override whose stored `sql` doesn't byte-match `schemaFromCode` produces boot-time drift; this gate catches all of them, not one named index).
 
 - [ ] **Step 2: Run RED** — `cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run test/medium/specs/schema-drift.spec.ts`. Expected RED: the assertion fails listing the four `face_person_verdict_*` override/index offenders (OverrideUpdate + possibly IndexDrop/IndexCreate). **Record the FULL list of offenders** the assertion prints — if anything OTHER than the four verdict indexes appears, note it for the controller (R3). Confirm the file executed.
@@ -48,14 +50,19 @@ Update the comment above it to describe the general contract (any override whose
 **Files:** Modify `server/src/schema/migrations-gallery/1787000000000-AddFacePersonVerdict.ts`.
 
 - [ ] **Step 1:** In each of the four `INSERT INTO "migration_overrides"` values (~78, 83, 88, 93), change the trailing predicate inside the escaped `sql` string from bare to parenthesized. Example for the first (`personId`):
+
 ```
 ... ON \"face_person_verdict\" (\"personId\", \"assetFaceId\") WHERE \"personId\" IS NOT NULL;
 ```
+
 becomes
+
 ```
 ... ON \"face_person_verdict\" (\"personId\", \"assetFaceId\") WHERE (\"personId\" IS NOT NULL);
 ```
+
 Apply the identical `WHERE \"col\" IS NOT NULL` → `WHERE (\"col\" IS NOT NULL)` transform to all four:
+
 - `index_face_person_verdict_personId_assetFaceId_uq` → `WHERE ("personId" IS NOT NULL)`
 - `index_face_person_verdict_spacePersonId_assetFaceId_uq` → `WHERE ("spacePersonId" IS NOT NULL)`
 - `index_face_person_verdict_spacePersonId_status_distance_idx` → `WHERE ("spacePersonId" IS NOT NULL)`
@@ -73,17 +80,23 @@ Apply the identical `WHERE \"col\" IS NOT NULL` → `WHERE (\"col\" IS NOT NULL)
 **Files:** Modify `scripts/revert-to-immich.sql`.
 
 - [ ] **Step 1:** Confirm `index_face_repair_scan_in_flight_uq` is absent from the override-deletion `IN (...)` list (`grep -n 'index_face_repair_scan_in_flight_uq' scripts/revert-to-immich.sql` → no hit in the deletion list). Add it among the `index_*` entries (e.g. after `'index_face_person_verdict_identityId_assetFaceId_idx'`):
+
 ```sql
    'index_face_person_verdict_identityId_assetFaceId_idx',
    'index_face_repair_scan_in_flight_uq',
 ```
+
 - [ ] **Step 2: Done gate:**
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run test/medium/specs/schema-drift.spec.ts   # []
 cd server && pnpm check && pnpm lint
 ```
-(The Revert-to-Immich Validation *workflow* is a CI job — dispatched in Slice 10; known to false-fail on Docker Hub rate limits. Not run locally here.)
+
+(The Revert-to-Immich Validation _workflow_ is a CI job — dispatched in Slice 10; known to false-fail on Docker Hub rate limits. Not run locally here.)
+
 - [ ] **Step 3: Commit:**
+
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/face-unified
 git add server/src/schema/migrations-gallery/1787000000000-AddFacePersonVerdict.ts \

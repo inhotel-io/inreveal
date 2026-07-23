@@ -153,6 +153,27 @@ where
   "asset_face"."id" = $1
   and "asset_face"."deletedAt" is null
 
+-- PersonRepository.getFaceByIdIncludingTombstoned
+select
+  "asset_face".*,
+  (
+    select
+      to_json(obj)
+    from
+      (
+        select
+          "person".*
+        from
+          "person"
+        where
+          "person"."id" = "asset_face"."personId"
+      ) as obj
+  ) as "person"
+from
+  "asset_face"
+where
+  "asset_face"."id" = $1
+
 -- PersonRepository.getRepresentativeFaces
 select
   "asset_face".*,
