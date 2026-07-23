@@ -294,10 +294,9 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     // A user confirms ONE of those faces as Anna (it genuinely is a young/rare photo of her). Confirm writes
     // the human-placement record — the manual identity link — via the real PersonService path.
     await person.reassignFacesById(auth, anna.id, { id: leaked[0] });
-    await person.confirmFaceSuggestion(auth, anna.id, leaked[0]).catch(() => {
-      // confirmFaceSuggestion is idempotent when there is no pending row (there is none here — we assigned
-      // directly above to reach the manual-link state a confirm produces). The link is what matters.
-    });
+    // confirmFaceSuggestion is idempotent when there is no pending row (there is none here — we assigned
+    // directly above to reach the manual-link state a confirm produces). The link is what matters.
+    await person.confirmFaceSuggestion(auth, anna.id, leaked[0]);
 
     // Re-scan: the confirmed face is no longer flagged; the other two still are. Before the unification this
     // was the ping-pong — an admin would be asked to move the user's confirmed face away, unrecoverably.

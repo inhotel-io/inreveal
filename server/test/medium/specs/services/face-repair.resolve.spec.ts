@@ -1026,14 +1026,14 @@ describe('FaceRepairService.resolveFaces: empty resolve is rejected (M19, E16)',
 const declineRowsFor = (assetFaceId: string, suspectedOwnerId: string) =>
   db
     .selectFrom('face_person_verdict')
-    .select(['id', 'actorId as declinedBy', 'source', 'status'])
+    .select(['id', 'actorId as declinedBy', 'source', 'status', 'identityId', 'actorId'])
     .where('assetFaceId', '=', assetFaceId)
     .where('personId', '=', suspectedOwnerId)
     .where('status', 'in', ['rejected', 'ignored'])
     .execute();
 
 describe('FaceRepairService.resolveFaces: soft-stay (M4, E3)', () => {
-  it('writes a face_repair_decline row for the stayed face and its stored suspected owner', async () => {
+  it('writes a rejected face_person_verdict row for the stayed face and its stored suspected owner', async () => {
     const { sut, ctx, scanRepo } = setup();
     const { user } = await ctx.newUser();
     const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
@@ -1056,6 +1056,30 @@ describe('FaceRepairService.resolveFaces: soft-stay (M4, E3)', () => {
     // The face itself is untouched (soft-stay never moves anything).
     const byId = await personIdsOf([f1]);
     expect(byId[f1]).toBe(source.id);
+  });
+
+  it('a keep-here row stores both the suspected owner identity and the acting admin (not null)', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    // ownerA already has an established identity (e.g. from an earlier manual placement elsewhere) — this is
+    // the case the identity-first key exists to serve: the decline should key off it, not just the person row.
+    const identity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(ownerA.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+
+    const rows = await declineRowsFor(f1, ownerA.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].identityId).toBe(identity.id);
+    expect(rows[0].actorId).toBe(user.id);
   });
 
   it('a re-flagged pairing toward the SAME declined owner is silently skipped by move-to-owner, but a genuinely different owner still moves', async () => {
@@ -1261,7 +1285,7 @@ const manualLinkFor = (assetFaceId: string) =>
     .execute();
 
 describe('FaceRepairService.resolveFaces: confirm/lock (M5, E2)', () => {
-  it('inserts a face_repair_lock row for the locked face, recording the reviewed person and admin', async () => {
+  it("records a manual face_identity_face link for the locked face, keyed by the reviewed person's identity", async () => {
     const { sut, ctx, scanRepo } = setup();
     const { user } = await ctx.newUser();
     const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
