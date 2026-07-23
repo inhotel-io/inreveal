@@ -11,6 +11,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Page from './+page.svelte';
+import ManualActionsHelpModal from './ManualActionsHelpModal.svelte';
 import { createManualReviewModel, type ManualReviewModel } from './manual-review.svelte';
 
 // Manual review page (Slice 8, design §6.4 of
@@ -811,6 +812,142 @@ describe('+page.svelte (manual face-review page)', () => {
           expect.stringContaining('admin.face_cleanup_manual_review_apply_summary'),
         );
       });
+    });
+  });
+
+  // ==== Slice 10, Part A — Move entire cluster (design §6.4 "Selection cannot claim the whole cluster") ====
+  // The server's entireCluster enumerates the whole cluster SERVER-SIDE — the right tool here, because
+  // selection can only ever cover LOADED faces on a server-paged page. Unlike guided (where entireCluster rides
+  // the scan's suspected owner), manual has no scan and therefore no suggested destination, so this control
+  // REQUIRES an explicit destination picked through PersonPicker.
+  describe('Slice 10 — Move entire cluster', () => {
+    it("opens PersonPicker with the person's ownerId, independent of any selection", async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
+
+      await waitFor(() => {
+        expect(showModal).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ ownerId: OWNER_ID }));
+      });
+    });
+
+    it('is available with nothing selected, and remains available once a selection exists', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      // Not gated behind selection — it is not a selection action.
+      expect(screen.getByTestId('manual-review-move-entire-btn')).not.toBeDisabled();
+
+      await selectTile(0);
+      await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+
+      expect(screen.getByTestId('manual-review-move-entire-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('manual-review-move-entire-btn')).not.toBeDisabled();
+    });
+
+    it('posts nothing when the picker is cancelled without a destination', async () => {
+      showModal.mockResolvedValueOnce(undefined);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
+      await waitFor(() => expect(showModal).toHaveBeenCalled());
+
+      expect(screen.queryByTestId('manual-review-entire-confirm')).not.toBeInTheDocument();
+      expect(resolveFaces).not.toHaveBeenCalled();
+    });
+
+    it('confirms before posting, carrying the distinct never-seen-faces warning copy', async () => {
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
+
+      await waitFor(() => expect(screen.getByTestId('manual-review-entire-confirm')).toBeInTheDocument());
+      expect(resolveFaces).not.toHaveBeenCalled();
+      // The manual-specific confirm copy (never the guided page's generic entire-cluster body, which says
+      // nothing about faces the admin has never reviewed).
+      expect(screen.getByTestId('manual-review-entire-confirm')).toHaveTextContent(
+        'admin.face_cleanup_manual_review_move_entire_confirm_body',
+      );
+    });
+
+    it('declining the confirm posts nothing', async () => {
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
+      await waitFor(() => expect(screen.getByTestId('manual-review-entire-confirm')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('manual-review-entire-confirm-cancel'));
+
+      await waitFor(() => expect(screen.queryByTestId('manual-review-entire-confirm')).not.toBeInTheDocument());
+      expect(resolveFaces).not.toHaveBeenCalled();
+    });
+
+    it('choosing a destination and confirming posts ONLY entireCluster — no per-face buckets at all', async () => {
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: true });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
+      await waitFor(() => expect(screen.getByTestId('manual-review-entire-confirm')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getByTestId('manual-review-entire-confirm-cta'));
+
+      // Exact-equality: the server 400s entireCluster combined with any per-face bucket (moveToPerson/stay/
+      // lock/detach/unknown), so this request must carry ONLY personId + entireCluster.
+      await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledWith({
+          faceRepairResolveRequestDto: {
+            personId: PERSON_ID,
+            entireCluster: { destinationPersonId: 'dest-1' },
+          },
+        });
+      });
+      expect(screen.queryByTestId('manual-review-entire-confirm')).not.toBeInTheDocument();
+    });
+
+    it('refreshes the page (re-fetches metadata + cluster faces) after a successful entire-cluster move', async () => {
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      expect(getFaceRepairPersonMetadata).toHaveBeenCalledTimes(1);
+      expect(getFaceRepairClusterFaces).toHaveBeenCalledTimes(1);
+
+      await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
+      await waitFor(() => expect(screen.getByTestId('manual-review-entire-confirm')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('manual-review-entire-confirm-cta'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
+      await waitFor(() => {
+        expect(getFaceRepairPersonMetadata).toHaveBeenCalledTimes(2);
+        expect(getFaceRepairClusterFaces).toHaveBeenCalledTimes(2);
+      });
+    });
+  });
+
+  // ==== Slice 10, Part B — manual actions help modal launcher ====
+  // The modal's own content (naming all six actions, the Keep-writes-nothing explanation, the swatch-matches-
+  // tile rule, etc.) is covered by ManualActionsHelpModal.spec.ts against REAL i18n — this only proves the page
+  // wires a launcher to the RIGHT component.
+  describe('Slice 10 — manual actions help modal launcher', () => {
+    it('opens ManualActionsHelpModal', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('manual-review-help-open'));
+
+      expect(showModal).toHaveBeenCalledWith(ManualActionsHelpModal, {});
     });
   });
 });

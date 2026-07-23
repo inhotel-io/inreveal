@@ -9,19 +9,20 @@
     getPeopleThumbnailPath,
     resolveFaces,
     type FaceRepairPersonMetadataResponseDto,
+    type FaceRepairResolveRequestDto,
   } from '@immich/sdk';
   import { Button, Icon, modalManager, toastManager } from '@immich/ui';
-  import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiUndo } from '@mdi/js';
+  import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiInformationOutline, mdiUndo } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import PersonPicker from '../../[personId]/PersonPicker.svelte';
   import type { PageData } from './$types';
+  import ManualActionsHelpModal from './ManualActionsHelpModal.svelte';
   import {
     createManualReviewModel,
     MANUAL_STATE_COLOR,
     MANUAL_STATE_ICON,
     type ManualFaceState,
-    type ManualResolveRequest,
   } from './manual-review.svelte';
 
   // Manual review page (Slice 8 grid/paging + Slice 9 footer dock, design §6.4). This is a NEW page with its
@@ -37,7 +38,14 @@
   // Five bulk actions land here: Move to… (PersonPicker), Lock, Unknown, Not a face (destructive confirm),
   // and Unmark (the keep-default's undo — design §6.4 "A keep default needs an undo"). `stay`/`owner` are
   // never offered: both require a suspected owner, which manual mode has no scan to supply (§3.2, §6.4).
-  // The entire-cluster move and the manual help modal are OUT OF SCOPE here (slice 10).
+  //
+  // Slice 10 adds two more things: "Move entire cluster…", which — unlike guided, where the same action rides
+  // the scan's suspected owner — has no owner to ride here, so it opens PersonPicker for an explicit destination
+  // and is wired straight to `resolveFaces` with ONLY `entireCluster` populated, never through the per-face
+  // model (selection can only ever cover loaded faces; entireCluster is enumerated server-side precisely so a
+  // whole-cluster move never has to). And ManualActionsHelpModal, manual's own action-legend modal — guided's
+  // ActionsHelpModal documents a different six actions (owner/stay instead of keep/Unmark) and its "names all
+  // six" test is load-bearing, so this is a deliberate fork, not a shared component.
 
   type Props = { data: PageData };
   const { data }: Props = $props();
@@ -63,6 +71,11 @@
   // "Not a face" is the one irreversible action here too (same reason as guided) — Apply asks first whenever
   // it carries a detached face.
   let showDetachConfirm = $state(false);
+  // "Move entire cluster…" (slice 10): the destination chosen through PersonPicker, staged only long enough to
+  // drive the confirm modal's copy — it is never read by the per-face model, and is cleared again as soon as
+  // the confirm resolves one way or the other.
+  let showEntireConfirm = $state(false);
+  let entireClusterDestination = $state<{ personId: string; name: string } | null>(null);
 
   // Server-sourced, so it is never a static UI-copy fallback derived from `metadata.name` alone — an empty or
   // whitespace-only name must not render as a blank heading (plan item 3).
@@ -206,13 +219,63 @@
     vm.unmarkSelection();
   };
 
+  // ---- Move entire cluster… (slice 10, design §6.4 "Selection cannot claim the whole cluster") ----
+  //
+  // Deliberately NOT a bulk action: it is available regardless of `vm.selectedCount`, because it is not a
+  // selection action at all — the server's `entireCluster` enumerates every eligible face SERVER-SIDE, with no
+  // client paging, which is exactly why it is the right tool for the faces this page never even loaded.
+  //
+  // Unlike guided's identically-named action, which rides the scan's suspected owner straight into a confirm,
+  // manual has no scan and therefore no suggested destination — this REQUIRES an explicit pick through
+  // PersonPicker first.
+  const handleMoveEntireCluster = async () => {
+    if (!metadata) {
+      return;
+    }
+    const destination = await modalManager.show(PersonPicker, {
+      ownerId: metadata.ownerId,
+      faceCount: vm.total,
+    });
+    if (!destination) {
+      // Cancelling posts nothing — no confirm, no resolve, nothing staged.
+      return;
+    }
+    entireClusterDestination = destination;
+    showEntireConfirm = true;
+  };
+
+  const cancelMoveEntireCluster = () => {
+    showEntireConfirm = false;
+    entireClusterDestination = null;
+  };
+
+  // The whole point of a whole-cluster move — and also its risk — is that it moves faces the admin has never
+  // loaded, let alone reviewed on this page. The confirm exists to say so out loud before it happens.
+  const confirmMoveEntireCluster = async () => {
+    showEntireConfirm = false;
+    if (!entireClusterDestination) {
+      return;
+    }
+    // entireCluster is mutually exclusive with every per-face bucket server-side (a combined request 400s), so
+    // this request carries ONLY personId + entireCluster — never routed through vm.buildResolveRequest().
+    await commitResolve({ personId, entireCluster: { destinationPersonId: entireClusterDestination.personId } });
+    entireClusterDestination = null;
+  };
+
+  // Read-only — same convention as guided's handleOpenHelp: never touches the model, so opening/closing it
+  // leaves every staged mark and the current selection exactly as they were.
+  const handleOpenHelp = () => {
+    void modalManager.show(ManualActionsHelpModal, {});
+  };
+
   // Every resolve funnels through here, mirroring guided's commitResolve so a failure — most importantly the
   // 409 a scan-in-progress produces (design §7) — can never be swallowed. Unlike guided, success does NOT
   // navigate away: this page has no terminal "every face accounted for" state to leave (most faces are
   // expected to stay `keep` forever), so a successful apply instead refreshes the cluster (some faces just
   // moved/locked/detached/parked away) and resets the model, since every mark it held has now either been
-  // submitted or is stale.
-  const commitResolve = async (request: ManualResolveRequest) => {
+  // submitted or is stale. Widened to the SDK's own request type (rather than the narrower ManualResolveRequest)
+  // so the same function also carries the entire-cluster request, which has no per-face buckets at all.
+  const commitResolve = async (request: FaceRepairResolveRequestDto) => {
     if (applying) {
       return;
     }
@@ -393,6 +456,31 @@
             data-testid="manual-review-clear-selection"
           >
             {$t('admin.face_cleanup_review_bulk_clear')}
+          </button>
+          <span class="h-4 w-px bg-gray-200 dark:bg-gray-700"></span>
+          <!-- Move entire cluster… (slice 10): NOT a selection action — available regardless of
+               vm.selectedCount, since it is the tool for the faces selection can never reach. -->
+          <Button
+            color="secondary"
+            size="small"
+            disabled={applying}
+            onclick={handleMoveEntireCluster}
+            data-testid="manual-review-move-entire-btn"
+          >
+            {$t('admin.face_cleanup_review_move_entire')}
+          </Button>
+          <!-- Plain button, not <IconButton>: @immich/ui wraps any titled button in a Tooltip, which needs a
+               TooltipProvider from the app root — absent when this page is rendered in isolation (same
+               convention as guided's banner-help/bulk-help). -->
+          <button
+            type="button"
+            onclick={handleOpenHelp}
+            aria-label={$t('admin.face_cleanup_review_help_open')}
+            title={$t('admin.face_cleanup_review_help_open')}
+            class="flex-none rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+            data-testid="manual-review-help-open"
+          >
+            <Icon icon={mdiInformationOutline} size="16" />
           </button>
         </div>
 
@@ -584,6 +672,33 @@
       </div>
     {/if}
   {/snippet}
+
+  <!-- Move entire cluster… confirm (slice 10): reuses guided's entire-cluster confirm SHELL, but the body copy
+       is manual-specific — it names the exact risk (faces the admin has never loaded or reviewed on this
+       page), which guided's owner-riding confirm has no reason to say. Cancel posts nothing. -->
+  {#if showEntireConfirm}
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      data-testid="manual-review-entire-confirm"
+    >
+      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
+        <h3 class="text-lg font-semibold">{$t('admin.face_cleanup_review_move_entire_confirm_title')}</h3>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+          {$t('admin.face_cleanup_manual_review_move_entire_confirm_body', {
+            values: { count: vm.total.toLocaleString(), name: entireClusterDestination?.name ?? '' },
+          })}
+        </p>
+        <div class="mt-5 flex justify-end gap-3">
+          <Button color="secondary" onclick={cancelMoveEntireCluster} data-testid="manual-review-entire-confirm-cancel">
+            {$t('admin.face_cleanup_review_cancel')}
+          </Button>
+          <Button color="primary" onclick={confirmMoveEntireCluster} data-testid="manual-review-entire-confirm-cta">
+            {$t('admin.face_cleanup_review_move_entire_confirm_cta', { values: { count: vm.total.toLocaleString() } })}
+          </Button>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   <!-- The only destructive confirmation on this page, reusing guided's exact flow (design §6.4 "Reused"):
        `danger` on the CTA, Cancel returns to the review with every staged mark intact — nothing is committed
