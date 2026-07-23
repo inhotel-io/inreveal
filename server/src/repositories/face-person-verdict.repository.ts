@@ -151,7 +151,9 @@ export class FacePersonVerdictRepository {
           .where('personId', 'is not', null)
           .doUpdateSet({
             status: input.status,
-            identityId: input.identityId ?? null,
+            // D10: never null a stronger existing key — keep the existing identity when the incoming write
+            // omits one. `excluded` is the Postgres ON CONFLICT alias for the row proposed for insertion.
+            identityId: sql`coalesce(excluded."identityId", "face_person_verdict"."identityId")`,
             source: input.source ?? 'suggestion',
             actorId: input.actorId ?? null,
             updatedAt: sql`now()`,
@@ -204,7 +206,9 @@ export class FacePersonVerdictRepository {
           .where('spacePersonId', 'is not', null)
           .doUpdateSet({
             status: input.status,
-            identityId: input.identityId ?? null,
+            // D10: never null a stronger existing key — keep the existing identity when the incoming write
+            // omits one. `excluded` is the Postgres ON CONFLICT alias for the row proposed for insertion.
+            identityId: sql`coalesce(excluded."identityId", "face_person_verdict"."identityId")`,
             source: input.source ?? 'suggestion',
             actorId: input.actorId ?? null,
             updatedAt: sql`now()`,
@@ -515,5 +519,29 @@ export class FacePersonVerdictRepository {
       .executeTakeFirst();
 
     return !!row;
+  }
+
+  // D9: pure RBAC reachability for a face's asset in a space — is this face's asset in the space at all —
+  // decoupled from the display-state/pending gates that hasPendingForSpacePerson bundles in. Used to gate
+  // space reject/ignore so a drained-but-still-reachable face can still be resolved (no silent no-op), while
+  // a face whose asset has genuinely left the space is still refused.
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
+  async isFaceReachableInSpace(spaceId: string, assetFaceId: string): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('asset_face')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+      .select('asset_face.id')
+      .where('asset_face.id', '=', assetFaceId)
+      .where((eb) =>
+        eb.or(
+          spaceAssetPathBranches(eb as unknown as ExpressionBuilder<DB, keyof DB>, {
+            correlateAssetId: 'asset.id',
+            correlateLibraryId: 'asset.libraryId',
+            scope: { spaceId },
+          }),
+        ),
+      )
+      .executeTakeFirst();
+    return row !== undefined;
   }
 }

@@ -301,4 +301,58 @@ describe('SharedSpaceService space face suggestions', () => {
     expect(row.status).toBe('rejected');
     expect(link).toBeUndefined();
   });
+
+  // D9: reachability (RBAC), not pendingness, gates a space reject/ignore. A drained-but-still-reachable
+  // face (e.g. a concurrent confirm claimed the queue row for a sibling target) must still be resolvable —
+  // not silently no-op the way the old hasPendingForSpacePerson gate did.
+  it('space reject on a drained-but-reachable face still records the verdict (D9)', async () => {
+    const { ctx, sut } = setup();
+    const fx = await createSuggestionFixture(ctx);
+    // Drain the pending row directly — the face's asset stays in the space (reachable), it simply has no
+    // queue row left to claim.
+    await ctx.get(FacePersonVerdictRepository).claimPendingForSpacePerson(fx.spacePerson.id, fx.assetFace.id);
+    const drained = await ctx.database
+      .selectFrom('face_person_verdict')
+      .selectAll()
+      .where('spacePersonId', '=', fx.spacePerson.id)
+      .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirst();
+    expect(drained).toBeUndefined();
+
+    await sut.rejectSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id);
+
+    const row = await ctx.database
+      .selectFrom('face_person_verdict')
+      .selectAll()
+      .where('spacePersonId', '=', fx.spacePerson.id)
+      .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirstOrThrow();
+    expect(row.status).toBe('rejected');
+    expect(row.source).toBe('suggestion');
+    expect(row.identityId).toEqual(expect.any(String));
+    expect(row.actorId).toBe(fx.reviewer.id);
+  });
+
+  it('space reject on a genuinely unreachable face is refused (no verdict row written)', async () => {
+    const { ctx, sut } = setup();
+    const fx = await createSuggestionFixture(ctx);
+    await ctx.database
+      .deleteFrom('shared_space_asset')
+      .where('spaceId', '=', fx.space.id)
+      .where('assetId', '=', fx.asset.id)
+      .execute();
+
+    await expect(
+      sut.rejectSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
+    ).resolves.toBeUndefined();
+
+    const row = await ctx.database
+      .selectFrom('face_person_verdict')
+      .select(['status', 'identityId', 'actorId'])
+      .where('spacePersonId', '=', fx.spacePerson.id)
+      .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirstOrThrow();
+    // The original pending row is untouched — no verdict was written.
+    expect(row).toEqual({ status: 'pending', identityId: null, actorId: null });
+  });
 });
