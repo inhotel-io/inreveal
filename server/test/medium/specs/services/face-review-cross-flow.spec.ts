@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { AssetVisibility, SourceType } from 'src/enum';
+import { AssetVisibility, JobStatus, SharedSpaceRole, SourceType, SystemMetadataKey } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -17,7 +17,9 @@ import { SystemMetadataRepository } from 'src/repositories/system-metadata.repos
 import { DB } from 'src/schema';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import { PersonService } from 'src/services/person.service';
-import { newMediumService } from 'test/medium.factory';
+import { SharedSpaceService } from 'src/services/shared-space.service';
+import { clearConfigCache } from 'src/utils/config';
+import { MediumTestContext, newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 import { Mocked } from 'vitest';
@@ -109,6 +111,115 @@ const setupPerson = () => {
   jobs.queue.mockResolvedValue();
   jobs.queueAll.mockResolvedValue();
   return { sut, ctx };
+};
+
+// D3 (defect 5) — the suggestion side of the cross-flow: PersonService's suggestion-scan handlers read
+// `machineLearning.facialRecognition.{maxDistance,suggestionMaxDistance}` via cached getConfig(), which
+// setupPerson's mock doesn't provide (it only stubs minFaces, for reassign/confirm's preference lookup).
+// Wraps setupPerson unmodified with a full suggestion-band config and a cleared module-level config cache
+// so it can't pick up a stale value from a preceding test's mock/DB config.
+const SUGGESTION_BAND = { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 1 };
+
+const setupSuggestionPerson = () => {
+  clearConfigCache();
+  const { sut, ctx } = setupPerson();
+  ctx
+    .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+    .get.mockResolvedValue({ machineLearning: { facialRecognition: SUGGESTION_BAND } } as any);
+  return { sut, ctx };
+};
+
+const setupSpace = () =>
+  newMediumService(SharedSpaceService, {
+    database: db,
+    real: [
+      SharedSpaceRepository,
+      FacePersonVerdictRepository,
+      FaceIdentityRepository,
+      ConfigRepository,
+      SystemMetadataRepository,
+    ],
+    mock: [LoggingRepository, JobRepository],
+  });
+
+// SharedSpaceService reads config with `withCache: false` (always fresh from the DB), so writing the real
+// row here is enough regardless of the personal side's mocked/cached config above.
+const enableSpaceSuggestionBand = (ctx: MediumTestContext) =>
+  ctx.get(SystemMetadataRepository).set(SystemMetadataKey.SystemConfig, {
+    machineLearning: { facialRecognition: SUGGESTION_BAND },
+  } as any);
+
+// Bipolar embeddings give an EXACT, reproducible cosine distance (see face-suggestion-exclusions.spec.ts for
+// the derivation): 0 flips is the shared "anchor" axis, 180 flips (distance ≈ 0.703) sits inside the open
+// suggestion band (0.5, 0.8].
+const bipolarEmbedding = (flips: number) =>
+  '[' + Array.from({ length: 512 }, (_, index) => (index < flips ? -1 : 1)).join(',') + ']';
+const SUGGESTION_ANCHOR = bipolarEmbedding(0);
+const SUGGESTION_CANDIDATE = bipolarEmbedding(180);
+
+const seedSuggestionFace = async (
+  ctx: MediumTestContext,
+  input: { ownerId: string; personId?: string | null; embedding: string },
+) => {
+  const { asset } = await ctx.newAsset({ ownerId: input.ownerId, visibility: AssetVisibility.Timeline });
+  const { assetFace } = await ctx.newAssetFace({
+    assetId: asset.id,
+    personId: input.personId ?? null,
+    sourceType: SourceType.MachineLearning,
+  });
+  await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: input.embedding }).execute();
+  return { asset, assetFace };
+};
+
+const newSuggestionAnchoredPerson = async (ctx: MediumTestContext, ownerId: string, name: string) => {
+  const { person } = await ctx.newPerson({ ownerId, name });
+  await seedSuggestionFace(ctx, { ownerId, personId: person.id, embedding: SUGGESTION_ANCHOR });
+  return person;
+};
+
+const newSuggestionSpace = async (ctx: MediumTestContext, ownerId: string) => {
+  const { space } = await ctx.newSharedSpace({ createdById: ownerId, faceRecognitionEnabled: true });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: ownerId, role: SharedSpaceRole.Owner });
+  return space;
+};
+
+const newSuggestionAnchoredSpacePerson = async (
+  ctx: MediumTestContext,
+  input: { spaceId: string; ownerId: string; name: string; identityId?: string | null },
+) => {
+  const spacePerson = await ctx.database
+    .insertInto('shared_space_person')
+    .values({
+      spaceId: input.spaceId,
+      name: input.name,
+      type: 'person',
+      isHidden: false,
+      identityId: input.identityId ?? null,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  const { assetFace: anchor } = await seedSuggestionFace(ctx, { ownerId: input.ownerId, embedding: SUGGESTION_ANCHOR });
+  await ctx.get(SharedSpaceRepository).addPersonFaces([{ personId: spacePerson.id, assetFaceId: anchor.id }]);
+  return spacePerson;
+};
+
+const newSuggestionCandidateFace = (ctx: MediumTestContext, ownerId: string) =>
+  seedSuggestionFace(ctx, { ownerId, embedding: SUGGESTION_CANDIDATE });
+
+const pendingFor = async (
+  ctx: MediumTestContext,
+  column: 'personId' | 'spacePersonId',
+  targetId: string,
+  assetFaceId: string,
+) => {
+  const row = await ctx.database
+    .selectFrom('face_person_verdict')
+    .select('id')
+    .where(column, '=', targetId)
+    .where('assetFaceId', '=', assetFaceId)
+    .where('status', '=', 'pending')
+    .executeTakeFirst();
+  return row !== undefined;
 };
 
 type RepairCtx = ReturnType<typeof setupRepair>['ctx'];
@@ -312,5 +423,129 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
       hasPerson: false,
     });
     expect(results.map((r) => r.id)).not.toContain(face);
+  });
+
+  // D3 (defect 5) — the suggestion engine's two scopes (personal, space) share ONE verdict layer: a
+  // rejection recorded in either scope must be honoured by the other, in both directions, without a re-scan.
+  it('one rejection answers personal and space scope (defect 5)', async () => {
+    const { sut: person, ctx } = setupSuggestionPerson();
+    const { sut: space, ctx: spaceCtx } = setupSpace();
+    await enableSpaceSuggestionBand(spaceCtx);
+    const { user } = await ctx.newUser();
+    const auth = factory.auth({ user });
+
+    const anna = await newSuggestionAnchoredPerson(ctx, user.id, 'Anna');
+    const identity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(anna.id);
+    const s = await newSuggestionSpace(ctx, user.id);
+    const spaceAnna = await newSuggestionAnchoredSpacePerson(ctx, {
+      spaceId: s.id,
+      ownerId: user.id,
+      name: 'Space Anna',
+      identityId: identity.id,
+    });
+
+    // Forward: a PERSONAL rejection suppresses the SPACE scan.
+    const { assetFace: faceOne } = await newSuggestionCandidateFace(ctx, user.id);
+    await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceOne.assetId, addedById: user.id });
+    await person.rejectFaceSuggestion(auth, anna.id, faceOne.id);
+    await expect(person.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
+    expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, faceOne.id)).toBe(false);
+
+    // Reverse: a SPACE rejection suppresses the PERSONAL scan.
+    const { assetFace: faceTwo } = await newSuggestionCandidateFace(ctx, user.id);
+    await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceTwo.assetId, addedById: user.id });
+    await space.rejectSpacePersonFaceSuggestion(auth, s.id, spaceAnna.id, faceTwo.id);
+    await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
+    expect(await pendingFor(ctx, 'personId', anna.id, faceTwo.id)).toBe(false);
+  });
+
+  it('keep-here suppresses a later suggestion', async () => {
+    const { sut: repair, ctx } = setupRepair();
+    const { sut: person } = setupSuggestionPerson();
+    const { user } = await ctx.newUser();
+
+    const o = await newSuggestionAnchoredPerson(ctx, user.id, 'O');
+    // O's identity must exist BEFORE the keep-here write below — resolveFaces's stay bucket only reads an
+    // owner's identity token, it never creates one, so the negative verdict would carry a null identityId
+    // (personId-only) if O had never been identity-linked yet.
+    const oIdentity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(o.id);
+    const s = await newSuggestionSpace(ctx, user.id);
+    const spaceO = await newSuggestionAnchoredSpacePerson(ctx, {
+      spaceId: s.id,
+      ownerId: user.id,
+      name: 'Space O',
+      identityId: oIdentity.id,
+    });
+
+    // Anna's cluster is contaminated with one face on O's axis — the classic leak the cleanup scan flags,
+    // with O as the suspected owner.
+    const { person: anna } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+    const { assetFace: face } = await seedSuggestionFace(ctx, {
+      ownerId: user.id,
+      personId: anna.id,
+      embedding: SUGGESTION_CANDIDATE,
+    });
+
+    const scanRepo = ctx.get(FaceRepairScanRepository);
+    const scan = await scanRepo.createScan({
+      requestedBy: user.id,
+      params: {
+        maxDistance: 0.6,
+        minFaces: 1,
+        voteWindow: 50,
+        voteMargin: 2,
+        maxAttributionDistance: 0.35,
+        maxFlaggedFraction: 0.5,
+        largeClusterThreshold: 50,
+      },
+    });
+    await scanRepo.replaceScanFlaggedFaces(scan.id, [
+      { assetFaceId: face.id, personId: anna.id, suspectedOwnerId: o.id },
+    ]);
+    await scanRepo.completeScan(scan.id, {
+      totals: {
+        eligibleFaces: 1,
+        flaggedFaces: 1,
+        toRepair: 1,
+        reviewOnlyFaces: 0,
+        reviewOnlyPersons: 0,
+        affectedPersons: 1,
+        reviewOnlyByReason: { overCap: 0, badTarget: 0, unAttributable: 0 },
+      },
+      persons: [
+        {
+          personId: anna.id,
+          ownerId: user.id,
+          personName: 'Anna',
+          faceCount: 1,
+          thumbnailFaceId: null,
+          eligible: 1,
+          flagged: 1,
+          flaggedFraction: 1,
+          suspectedOwners: [],
+          recommendation: 'confident',
+          reviewReasons: [],
+        },
+      ],
+    });
+
+    // The admin says "keep it here" — F stays on Anna, but a durable decline is recorded against O.
+    await repair.resolveFaces(
+      { personId: anna.id, moveToPerson: [], stay: [face.id], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+
+    // Later, the kept face is unassigned (e.g. a reset) — the exact shape a suggestion-scan candidate has.
+    await ctx.database.updateTable('asset_face').set({ personId: null }).where('id', '=', face.id).execute();
+    await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: face.assetId, addedById: user.id });
+
+    await expect(person.handlePersonSuggestionScan({ id: o.id })).resolves.toBe(JobStatus.Success);
+    expect(await pendingFor(ctx, 'personId', o.id, face.id)).toBe(false);
+
+    // The same keep-here decision, honoured in a DIFFERENT scope that shares O's identity — a space person
+    // is a distinct (spacePersonId, assetFaceId) row from O's own, so this is not covered by the
+    // same-target "never resurrect" upsert guard the personal assertion above could already pass on alone.
+    await expect(person.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
+    expect(await pendingFor(ctx, 'spacePersonId', spaceO.id, face.id)).toBe(false);
   });
 });

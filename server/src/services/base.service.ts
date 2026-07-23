@@ -75,6 +75,7 @@ import { ViewRepository } from 'src/repositories/view-repository';
 import { WebsocketRepository } from 'src/repositories/websocket.repository';
 import { WorkflowRepository } from 'src/repositories/workflow.repository';
 import { UserTable } from 'src/schema/tables/user.table';
+import { FaceVerdictService } from 'src/services/face-verdict.service';
 import { IdentityMergePropagationService } from 'src/services/identity-merge-propagation.service';
 import { ClassConstructor, GenerateThumbnailOptions, ImageDimensions } from 'src/types';
 import { AccessRequest, checkAccess, requireAccess } from 'src/utils/access';
@@ -164,6 +165,7 @@ export const BASE_SERVICE_DEPENDENCIES = [
 export class BaseService {
   protected storageCore: StorageCore;
   protected identityMergePropagationService: IdentityMergePropagationService;
+  protected faceVerdictService: FaceVerdictService;
 
   constructor(
     protected logger: LoggingRepository,
@@ -247,6 +249,12 @@ export class BaseService {
       logger: this.logger,
       personRepository,
       sharedSpaceRepository,
+    });
+    this.faceVerdictService = new FaceVerdictService({
+      faceIdentityRepository,
+      facePersonVerdictRepository,
+      faceRepairDeclineRepository,
+      logger: this.logger,
     });
   }
 
