@@ -686,10 +686,11 @@ test.describe.serial('Face Cleanup', () => {
 
     // getFaceThumbnailSource needs a generated Preview/Thumbnail file (it does NOT fall back to the original),
     // so the naturalWidth>0 assertions below would race the async thumbnail job without this wait. If this is
-    // still flaky when the Slice-10 e2e run executes it, poll the crop response instead (waitForQueueFinish can
     // return "done" before the job is enqueued — see memory e2e-waitforqueuefinish-false-done).
-    await utils.waitForQueueFinish(secondUser.accessToken, 'metadataExtraction');
-    await utils.waitForQueueFinish(secondUser.accessToken, 'thumbnailGeneration');
+    // The queue-status endpoint is admin-only, so poll with the ADMIN token (the jobs run on the shared
+    // global queue regardless of which user owns the asset) — secondUser's token 403s here.
+    await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+    await utils.waitForQueueFinish(admin.accessToken, 'thumbnailGeneration');
 
     // Admin reviews the second user's cluster — the OLD person-scoped thumbnail route requires
     // AssetRead/PersonRead access the admin doesn't hold on this owner's rows and would 403/404 here.
