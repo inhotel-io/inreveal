@@ -246,6 +246,7 @@ DELETE FROM "migration_overrides"
    'index_face_person_verdict_spacePersonId_assetFaceId_uq',
    'index_face_person_verdict_spacePersonId_status_distance_idx',
    'index_face_person_verdict_identityId_assetFaceId_idx',
+   'index_face_repair_scan_in_flight_uq',
    'index_person_ownerId_identityId_key',
    'index_shared_space_person_identityId_spaceId_idx',
    'index_shared_space_person_space_name_idx',
