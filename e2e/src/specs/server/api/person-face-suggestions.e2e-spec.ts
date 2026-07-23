@@ -14,6 +14,7 @@
 // - The config is restored to defaults in afterAll.
 
 import { LoginResponseDto, PersonResponseDto, updateConfig } from '@immich/sdk';
+import { type SpaceContext, buildSpaceContext } from 'src/actors';
 import { createUserDto, uuidDto } from 'src/fixtures';
 import { errorDto } from 'src/responses';
 import { app, asBearerAuth, utils } from 'src/utils';
@@ -281,5 +282,61 @@ describe('/people/:id/face-suggestions', () => {
         .set(asBearerAuth(owner.accessToken));
       expect(status).toBe(200);
     });
+  });
+});
+
+// --------------------------------------------------------------------------
+// GET /people/:id/face-suggestions — space-member read scope (D6)
+// --------------------------------------------------------------------------
+//
+// A person owned by spaceOwner with a face on a space-shared asset is space-reachable via
+// PersonRead (owner ∪ shared-space member — see access.ts). Before the D6 fix, that meant a
+// space Viewer or Editor could read the OWNER's whole-library pending suggestion queue through
+// this endpoint. The fix moves the gate to PersonUpdate (checkOwnerAccess alone, no space
+// carve-out): the owner gets 200, viewers and editors both get 400.
+describe('GET /people/:id/face-suggestions — space-member read scope (D6)', () => {
+  let ctx: SpaceContext;
+
+  beforeAll(async () => {
+    await utils.resetDatabase();
+    ctx = await buildSpaceContext();
+
+    const config = await utils.getSystemConfig(ctx.admin.token!);
+    config.machineLearning.facialRecognition.suggestionMaxDistance = 0.8;
+    await updateConfig({ systemConfigDto: config }, { headers: asBearerAuth(ctx.admin.token!) });
+  });
+
+  afterAll(async () => {
+    const defaults = await utils.getSystemConfig(ctx.admin.token!);
+    defaults.machineLearning.facialRecognition.suggestionMaxDistance = 0;
+    await updateConfig({ systemConfigDto: defaults }, { headers: asBearerAuth(ctx.admin.token!) });
+  });
+
+  it('a space viewer and a space editor are refused (400); the owner is allowed (200)', async () => {
+    const person = await utils.createPerson(ctx.spaceOwner.token!, { name: 'D6 Space Person' });
+    // The person's face on the space-shared asset is what makes the person space-reachable via
+    // PersonRead (own ∪ shared-space member) — the exact condition the D6 fix closes off for
+    // this owner-only read.
+    await utils.createFace({ assetId: ctx.spaceAssetId, personId: person.id });
+
+    const db = await utils.connectDatabase();
+    const unassignedFace = await insertUnassignedFace(db, ctx.spaceAssetId);
+    await insertSuggestion(db, person.id, unassignedFace, 0.6);
+
+    const viewerResponse = await request(app)
+      .get(`/people/${person.id}/face-suggestions`)
+      .set(asBearerAuth(ctx.spaceViewer.token!));
+    expect(viewerResponse.status).toBe(400);
+
+    const editorResponse = await request(app)
+      .get(`/people/${person.id}/face-suggestions`)
+      .set(asBearerAuth(ctx.spaceEditor.token!));
+    expect(editorResponse.status).toBe(400);
+
+    const ownerResponse = await request(app)
+      .get(`/people/${person.id}/face-suggestions`)
+      .set(asBearerAuth(ctx.spaceOwner.token!));
+    expect(ownerResponse.status).toBe(200);
+    expect(ownerResponse.body.total).toBeGreaterThanOrEqual(1);
   });
 });
