@@ -97,7 +97,7 @@ vi.mock('$lib/components/layouts/AdminPageLayout.svelte', async () => {
 
 // Mock people-utils thumbnail helper
 vi.mock('$lib/utils/people-utils', () => ({
-  getPersonFaceThumbnailUrl: (personId: string, faceId: string) => `/api/people/${personId}/faces/${faceId}/thumbnail`,
+  getAdminFaceThumbnailUrl: (assetFaceId: string) => `/api/admin/face-repair/faces/${assetFaceId}/thumbnail`,
   getSpacePersonFaceThumbnailUrl: vi.fn(),
 }));
 

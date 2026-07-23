@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { getAdminFaceThumbnailUrl } from '$lib/utils/people-utils';
   import {
     createFaceRepairOwnerPerson,
     getFaceRepairOwnerPeople,
@@ -52,7 +53,10 @@
   const unnamedLabel = () => $t('admin.face_cleanup_review_unnamed');
   const displayName = (name: string) => (name.trim() ? name : unnamedLabel());
   const shortId = (id: string) => id.slice(0, 8);
-  const thumbUrl = (personId: string) => `/api${getPeopleThumbnailPath(personId)}`;
+  // Admin picker searches ANY owner's people — the person-scoped thumbnail route 404s/403s for a person the
+  // admin doesn't own. Prefer the face-keyed admin route; fall back only when a row has no thumbnailFaceId.
+  const thumbUrl = (personId: string, thumbnailFaceId: string | null) =>
+    thumbnailFaceId ? getAdminFaceThumbnailUrl(thumbnailFaceId) : `/api${getPeopleThumbnailPath(personId)}`;
 
   // Guards against a stale response landing after a newer keystroke's request (no debounce — the owner
   // people list is admin-scale, not a hot path per FaceRepairRepository.searchOwnerPeople).
@@ -170,7 +174,7 @@
             data-testid={`person-picker-row-${person.id}`}
           >
             <img
-              src={thumbUrl(person.id)}
+              src={thumbUrl(person.id, person.thumbnailFaceId)}
               alt=""
               class="size-9 flex-none rounded-xl bg-gray-100 object-cover dark:bg-gray-700"
             />

@@ -1,7 +1,7 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import { Route } from '$lib/route';
-  import { getPersonFaceThumbnailUrl } from '$lib/utils/people-utils';
+  import { getAdminFaceThumbnailUrl } from '$lib/utils/people-utils';
   import {
     getFaceRepairClusterFaces,
     getFaceRepairPersonFaces,
@@ -109,8 +109,12 @@
   const visibleFaces = $derived(vm.faces.slice(0, visibleCount));
   const hasMore = $derived(visibleCount < vm.faces.length);
 
-  const personThumbUrl = (id: string) => `/api${getPeopleThumbnailPath(id)}`;
-  const faceThumbnailUrl = (faceId: string) => getPersonFaceThumbnailUrl(personId, faceId);
+  // Admin cleanup/resolutions render clusters the admin does not own, and a negative-verdict face has no
+  // person↔face join at all — the person-scoped thumbnail routes 404/403 for those. Face-keyed, admin-gated,
+  // no join required.
+  const personThumbUrl = (id: string, thumbnailFaceId: string | null) =>
+    thumbnailFaceId ? getAdminFaceThumbnailUrl(thumbnailFaceId) : `/api${getPeopleThumbnailPath(id)}`;
+  const faceThumbnailUrl = (faceId: string) => getAdminFaceThumbnailUrl(faceId);
 
   const ownerNameById = (ownerPersonId: string): string =>
     scanPerson?.suspectedOwners?.find((o) => o.ownerPersonId === ownerPersonId)?.ownerName ??
@@ -346,7 +350,7 @@
     <div class="mb-6 flex items-center gap-4">
       {#if !loading && scanPerson}
         <img
-          src={personThumbUrl(personId)}
+          src={personThumbUrl(personId, scanPerson.thumbnailFaceId)}
           alt=""
           class="size-14 flex-none rounded-2xl bg-gray-100 object-cover dark:bg-gray-700"
         />
