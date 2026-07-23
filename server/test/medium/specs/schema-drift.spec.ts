@@ -30,13 +30,16 @@ const computeDrift = async () => {
 };
 
 describe('schema drift', () => {
-  // Regression for the face_repair_scan_in_flight_uq override drift: the migration stored the partial
-  // index's override with a bare `WHERE "status" IN (...)`, but schemaFromCode emits it parenthesized
-  // (`WHERE ("status" IN (...))`), so every boot logged "index missing + extra + override needs update"
-  // for this index. 1784000000000-FixFaceRepairScanInFlightIndexOverride reconciles the stored override.
-  it('does not report drift for face_repair_scan_in_flight_uq', async () => {
+  // General contract: any migration_overrides row whose stored `sql` doesn't byte-match what
+  // schemaFromCode's asIndexCreate/asTriggerCreate would emit for that object produces boot-time
+  // drift (the decorator-vs-database check the server runs on startup logs it as missing + extra +
+  // "override needs to be updated"). This gate asserts there are ZERO such offenders anywhere in the
+  // schema, not just for one named index — a per-index filter would silently hide new instances of
+  // the same class of bug (as happened with face_repair_scan_in_flight_uq, fixed by
+  // 1784000000000-FixFaceRepairScanInFlightIndexOverride, and again with the face_person_verdict
+  // partial-index overrides).
+  it('reports no schema drift at all (decorator/override vs a freshly-migrated DB)', async () => {
     const drift = await computeDrift();
-    const offenders = drift.asHuman().filter((message: string) => message.includes('face_repair_scan_in_flight_uq'));
-    expect(offenders).toEqual([]);
+    expect(drift.asHuman()).toEqual([]);
   });
 });
