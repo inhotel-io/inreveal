@@ -397,3 +397,12 @@ No commit here. Summarise in the PR description or a comment that Tasks 3.3–3.
 **Placeholder scan:** No TBD/TODO; `<PR_NUMBER>` in Task 3 is a runtime value the operator substitutes, not an unfinished spec. Full github-script provided.
 
 **Type consistency:** Reusable inputs `rc_tag`/`ref`/`fork_version`/`build_ml` are named identically in Task 1 (definition) and Task 2 (call). `marker`, `serverImage`, `mlImage`, `buildResult` used consistently within the single script. Label names `rc`/`rc-ml` consistent across trigger, `build_ml` expression, and Task 3. Image path `ghcr.io/open-noodle/gallery-server` matches the reusable workflow's `merge-server` output.
+
+## Post-review amendments
+
+A whole-branch code review after this plan was executed surfaced four deviations, applied on top of the code above:
+
+- `gallery-pr-rc-comment.yml`: `comment` job's `if:` also excludes `needs.build.result == 'cancelled'`, so a build superseded by `cancel-in-progress` can no longer overwrite a good comment with a "❌ failed (cancelled)" message.
+- `gallery-pr-rc-comment.yml`: the success-comment footer now reads "auto-updates on every push while the `rc`/`rc-ml` label is set" (was `rc`-only), since an `rc-ml`-only PR also auto-updates.
+- `gallery-pr-rc-comment.yml`: the sticky-comment lookup now also requires `c.user?.type === 'Bot'`, so a human "Quote reply" that copies the hidden marker can no longer be mistaken for the bot's own comment and edited.
+- `gallery-rc-build.yml`: both the `build-server` and `build-ml` jobs' "Prepare platform pair" step (renamed "Prepare build metadata") now also emits `source-commit=$(git rev-parse HEAD)`, and `BUILD_SOURCE_COMMIT` in each job's "Build and push by digest" step reads that output instead of `${{ github.sha }}` — on a `pull_request`-triggered call, `github.sha` is the ephemeral merge commit, not the checked-out `inputs.ref` commit actually built.

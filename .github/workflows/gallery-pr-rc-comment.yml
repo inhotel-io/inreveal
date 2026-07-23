@@ -39,7 +39,7 @@ jobs:
   comment:
     name: Update RC comment
     needs: build
-    if: ${{ always() && needs.build.result != 'skipped' }}
+    if: ${{ always() && needs.build.result != 'skipped' && needs.build.result != 'cancelled' }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
@@ -107,7 +107,7 @@ jobs:
                 '',
                 '</details>',
                 '',
-                `_Last updated ${updated} — auto-updates on every push while the \`rc\` label is set._`,
+                `_Last updated ${updated} — auto-updates on every push while the \`rc\`/\`rc-ml\` label is set._`,
               ].join('\n');
             } else {
               body = [
@@ -126,7 +126,9 @@ jobs:
               issue_number: prNumber,
               per_page: 100,
             });
-            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            const existing = comments.find(
+              (c) => c.body && c.body.includes(marker) && c.user?.type === 'Bot',
+            );
             if (existing) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
             } else {

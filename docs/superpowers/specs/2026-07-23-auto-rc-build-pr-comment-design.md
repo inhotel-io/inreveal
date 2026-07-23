@@ -52,8 +52,11 @@ trigger fired. The manual `workflow_dispatch` path keeps working exactly as befo
 tag-shape validation (`validate` job) already rejects reserved tags and accepts `pr-<number>`.
 
 The reusable workflow keeps its own `concurrency` block. When called, `github.workflow` resolves to
-the **caller** workflow name, so the manual-dispatch path and the auto path never share a
-concurrency group even if a tag collided.
+the **caller** workflow name, so the manual-dispatch path and the auto path land in **different**
+concurrency groups — a manual dispatch using a colliding `rc_tag` (e.g. `pr-123`) could therefore run
+concurrently with the auto PR build and race on pushing that tag (last writer wins). This is
+accepted as low-likelihood and non-destructive; the per-PR caller group (`pr-rc-<number>`,
+`cancel-in-progress: true`) is what actually prevents stacked builds for the same PR.
 
 ### 2. `gallery-pr-rc-comment.yml` — new orchestrator
 
@@ -126,6 +129,9 @@ comment:
   `github.rest.issues.createComment`. First-party `actions/github-script`, pinned to the SHA already
   used elsewhere in the repo — no new third-party dependency.
 - `needs.build.result` distinguishes success from failure; the comment body branches accordingly.
+- The job deliberately does **not** run when `needs.build.result == 'cancelled'`, so a superseded
+  run (cancelled by a newer push via `cancel-in-progress`) cannot overwrite a good comment with a
+  spurious failure message.
 
 ## Comment content
 
