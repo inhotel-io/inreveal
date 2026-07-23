@@ -10,6 +10,7 @@
   import ScanChecklist from './ScanChecklist.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { handleError } from '$lib/utils/handle-error';
   import type { PageData } from './$types';
 
   // Local types for the loosely-typed SDK response
@@ -64,6 +65,7 @@
 
   let scan = $state<FaceCleanupScan | null>(null);
   let loading = $state(true);
+  let loadError = $state(false);
   let scanning = $state(false);
   let applying = $state(false);
   let applyError = $state<string | null>(null);
@@ -162,13 +164,28 @@
     }
   };
 
-  onMount(async () => {
-    await fetchLatestScan();
-    loading = false;
+  // The INITIAL load is kept separate from fetchLatestScan's swallow-everything poll idiom above (D17): a
+  // failed first fetch must render as a distinct error state with a Retry, not the reassuring "no scan yet"
+  // empty state — but once that first fetch has succeeded, a later poll blip should keep showing the
+  // last-known scan state, not flash into an error banner. Retry re-runs this same function.
+  const loadInitial = async () => {
+    loading = true;
+    loadError = false;
+    try {
+      const result = await getLatestScan();
+      setScan(result as unknown as FaceCleanupScan | null);
+    } catch (error) {
+      loadError = true;
+      handleError(error, $t('admin.face_cleanup_load_error'));
+    } finally {
+      loading = false;
+    }
     if (scan && isActive(scan.status)) {
       startPolling();
     }
-  });
+  };
+
+  onMount(loadInitial);
 
   onDestroy(() => stopPolling());
 
@@ -241,12 +258,14 @@
       const approvedPersonIds = [...vm.selected];
       await Promise.all(approvedPersonIds.map((personId) => resolvePersonToOwners(personId)));
       toastManager.success($t('admin.face_cleanup_apply_success', { values: { count: approvedPersonIds.length } }));
-      // Refetch to get updated scan state
-      await fetchLatestScan();
     } catch (error: unknown) {
       const status = (error as { status?: number }).status;
       applyError = status === 409 ? $t('admin.face_cleanup_apply_conflict') : $t('admin.face_cleanup_apply_error');
     } finally {
+      // Refetch even on a partial/total failure: Promise.all rejects on the FIRST rejection, but sibling
+      // resolves already in flight can still have landed server-side — skipping this on error left the table
+      // showing stale pre-apply state even though some persons genuinely resolved (D17).
+      await fetchLatestScan();
       applying = false;
     }
   };
@@ -346,6 +365,19 @@
     {#if loading}
       <div class="flex items-center justify-center py-20 text-gray-400">
         <span>{$t('loading')}</span>
+      </div>
+
+      <!-- Initial load failed (D17): distinct from "no scan yet" — a network/server error is not the same as
+           a clean instance that has never scanned, and rendering it as the latter hides the failure. -->
+    {:else if loadError}
+      <div
+        class="mb-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400"
+        data-testid="load-error-banner"
+      >
+        <span class="flex-1">{$t('admin.face_cleanup_load_error')}</span>
+        <Button color="secondary" size="small" onclick={loadInitial} data-testid="load-error-retry">
+          {$t('retry')}
+        </Button>
       </div>
 
       <!-- No scan yet -->

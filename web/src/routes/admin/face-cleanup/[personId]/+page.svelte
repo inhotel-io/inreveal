@@ -16,6 +16,7 @@
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
+  import { handleError } from '$lib/utils/handle-error';
   import ActionsHelpModal from './ActionsHelpModal.svelte';
   import type { PageData } from './$types';
   import PersonPicker from './PersonPicker.svelte';
@@ -68,6 +69,7 @@
   let flaggedFaces = $state<FlaggedFace[]>([]);
   let scanPerson = $state<ScanPerson | null>(null);
   let loading = $state(true);
+  let loadError = $state(false);
   let applying = $state(false);
   let applyError = $state<string | null>(null);
 
@@ -143,7 +145,9 @@
     }
   };
 
-  onMount(async () => {
+  const loadPersonData = async () => {
+    loading = true;
+    loadError = false;
     try {
       const [facesResult, scanResult] = await Promise.all([getFaceRepairPersonFaces({ personId }), getLatestScan()]);
 
@@ -158,12 +162,17 @@
       if (flaggedFaces.length > 0) {
         void loadRestPage();
       }
-    } catch {
-      // leave empty — graceful state below handles it
+    } catch (error) {
+      // D17: a failed load is not the same as "this person has no flagged faces" (a genuine, graceful empty
+      // state below) — render a distinct error state with a Retry instead.
+      loadError = true;
+      handleError(error, $t('admin.face_cleanup_review_load_error'));
     } finally {
       loading = false;
     }
-  });
+  };
+
+  onMount(loadPersonData);
 
   const handleLoadMore = () => {
     visibleCount = Math.min(visibleCount + CHUNK_SIZE, vm.faces.length);
@@ -377,6 +386,18 @@
       <!-- Loading -->
       <div class="flex items-center justify-center py-20 text-gray-400">
         <span>{$t('loading')}</span>
+      </div>
+    {:else if loadError}
+      <!-- Initial load failed (D17): distinct from "no flagged faces" — a network/server error is not the
+           same as a stale/already-resolved cluster, and rendering it as the latter hides the failure. -->
+      <div
+        class="mb-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400"
+        data-testid="load-error-banner"
+      >
+        <span class="flex-1">{$t('admin.face_cleanup_review_load_error')}</span>
+        <Button color="secondary" size="small" onclick={loadPersonData} data-testid="load-error-retry">
+          {$t('retry')}
+        </Button>
       </div>
     {:else if flaggedFaces.length === 0}
       <!-- Stale / no flagged faces -->

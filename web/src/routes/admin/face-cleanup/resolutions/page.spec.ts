@@ -185,4 +185,27 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     });
     expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument();
   });
+
+  // ---- D17: a failed INITIAL load must not render as the reassuring "no verdicts" empty state ----
+
+  it('shows a load-error state (not the empty state) when the initial fetch fails, and Retry re-fetches', async () => {
+    vi.mocked(getFaceRepairResolutions).mockRejectedValueOnce(new Error('network down'));
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('load-error-banner')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('admin.face_cleanup_resolutions_empty')).not.toBeInTheDocument();
+
+    vi.mocked(getFaceRepairResolutions).mockResolvedValueOnce({
+      resolutions: [CLEANUP_ROW, SUGGESTION_ROW],
+    } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
+    await fireEvent.click(screen.getByTestId('load-error-retry'));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('resolution-row')).toHaveLength(2);
+      expect(screen.queryByTestId('load-error-banner')).not.toBeInTheDocument();
+    });
+  });
 });

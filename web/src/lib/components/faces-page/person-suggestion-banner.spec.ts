@@ -10,6 +10,12 @@ vi.mock('svelte-i18n', () => ({
   t: { subscribe: (run: (f: (k: string) => string) => void) => (run((k) => k), () => {}) },
 }));
 
+// Snooze is keyed per signed-in user (D17) — the banner drives isSuggestionSnoozed/snoozeSuggestions through
+// a real (unmocked) face-suggestion-snooze module, which needs a stable authenticated user to key against.
+vi.mock('$lib/managers/auth-manager.svelte', () => ({
+  authManager: { authenticated: true, user: { id: 'test-user' } },
+}));
+
 const person = { id: 'p1', name: 'Alice', isHidden: false, type: 'person' } as PersonResponseDto;
 const REF = '/api/people/p1/thumbnail?updatedAt=x'; // what getPeopleThumbnailUrl(person) returns
 

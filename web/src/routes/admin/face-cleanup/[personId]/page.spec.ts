@@ -988,4 +988,28 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     expect(screen.queryAllByTestId('face-tile')).toHaveLength(0);
     expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
   });
+
+  // ---- D17: a failed INITIAL load must not render as the reassuring "no flagged faces" empty state ----
+
+  it('shows a load-error state (not the graceful empty state) when the initial load fails, and Retry re-fetches', async () => {
+    vi.mocked(getFaceRepairPersonFaces).mockRejectedValueOnce(new Error('network down'));
+
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('load-error-banner')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('admin.face_cleanup_review_no_flagged')).not.toBeInTheDocument();
+
+    vi.mocked(getFaceRepairPersonFaces).mockResolvedValueOnce({
+      personId: PERSON_ID,
+      flaggedFaces: makeFlaggedFaces(),
+    } as unknown as FaceRepairPersonFacesDto);
+    await fireEvent.click(screen.getByTestId('load-error-retry'));
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('face-tile')).toHaveLength(3);
+      expect(screen.queryByTestId('load-error-banner')).not.toBeInTheDocument();
+    });
+  });
 });

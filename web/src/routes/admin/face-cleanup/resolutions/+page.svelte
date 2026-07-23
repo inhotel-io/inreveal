@@ -6,6 +6,7 @@
   import { Button, toastManager } from '@immich/ui';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { handleError } from '$lib/utils/handle-error';
 
   // A single negative-verdict row: "this face is NOT that person", from either engine. Human PLACEMENTS are
   // deliberately not listed here (the server omits them) — they are unbounded and are undone in context on
@@ -36,6 +37,7 @@
 
   let resolutions = $state<ResolutionItem[]>([]);
   let loading = $state(true);
+  let loadError = $state(false);
   let sourceFilter = $state<SourceFilter>('all');
 
   const filtered = $derived(
@@ -54,12 +56,16 @@
     item.personName ?? item.spacePersonName ?? $t('admin.face_cleanup_unnamed');
 
   const load = async () => {
+    loadError = false;
     try {
       const result = await getFaceRepairResolutions();
       const dto = result as unknown as { resolutions: ResolutionItem[] };
       resolutions = dto?.resolutions ?? [];
-    } catch {
-      // leave empty — graceful state below handles it
+    } catch (error) {
+      // D17: a failed load is not the same as a genuinely empty resolutions list — render a distinct error
+      // state (below) with a Retry, rather than the reassuring "no decisions recorded yet" empty card.
+      loadError = true;
+      handleError(error, $t('admin.face_cleanup_resolutions_load_error'));
     } finally {
       loading = false;
     }
@@ -121,6 +127,16 @@
     {#if loading}
       <div class="flex items-center justify-center py-20 text-gray-400">
         <span>{$t('loading')}</span>
+      </div>
+    {:else if loadError}
+      <div
+        class="mb-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400"
+        data-testid="load-error-banner"
+      >
+        <span class="flex-1">{$t('admin.face_cleanup_resolutions_load_error')}</span>
+        <Button color="secondary" size="small" onclick={load} data-testid="load-error-retry">
+          {$t('retry')}
+        </Button>
       </div>
     {:else if filtered.length === 0}
       <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">

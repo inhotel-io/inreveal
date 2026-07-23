@@ -20,6 +20,7 @@
     mdiEyeOffOutline,
   } from '@mdi/js';
   import { onMount } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
 
   type PageReq = { page: number; size: number };
@@ -39,10 +40,17 @@
   const PAGE_SIZE = 50;
   const PREFETCH = 3;
 
+  // D8: the server drains a face's pending row the instant it's confirmed/dismissed/ignored, so paging by a
+  // fixed offset (page 2, page 3, ...) walks a moving target and silently drops however many rows shifted out
+  // from under it. The only stable cursor is the HEAD of the list — every fetch below always re-reads page 1.
+  // `items` is append-only (acted rows are never spliced out) so back-navigation can still render them,
+  // read-only; `actedFaceIds` both drives that read-only state and skips rows this client already resolved
+  // but the server hasn't settled yet (the classic just-acted-then-refetched race).
+  const actedFaceIds = new SvelteSet<string>();
+
   let items = $state<PersonFaceSuggestionResponseDto[]>([]);
   let total = $state(0);
   let index = $state(0);
-  let pageNumber = $state(0);
   let loading = $state(true);
   let busy = $state(false);
   let confirmed = $state(0);
@@ -51,7 +59,15 @@
   let imgReady = $state(false);
 
   const current = $derived(items[index]);
+  const currentActed = $derived(current ? actedFaceIds.has(current.assetFaceId) : false);
   const photoUrl = $derived(current ? getAssetMediaUrl({ id: current.assetId, size: AssetMediaSize.Preview }) : '');
+
+  // `total` is the server's PENDING count — it shrinks as rows are acted on server-side, while `index` walks
+  // the append-only `items` buffer and only grows. Rendering `total` directly as the counter denominator makes
+  // it possible for the numerator to exceed it mid-session ("74 of 73"). `displayTotal` — pending remaining
+  // plus everything this session has already acted on — approximates the original total and is monotonic, so
+  // the numerator never outruns it.
+  const displayTotal = $derived(total + actedFaceIds.size);
 
   const highlight = $derived.by(() => {
     if (!current || !imgReady || !imgEl) {
@@ -73,16 +89,23 @@
     )[0];
   });
 
-  async function fetchPage(next: number) {
-    const res = await loadPage({ page: next, size: PAGE_SIZE });
+  // Always page 1: acted rows have drained server-side, so a fresh page-1 read is the only reliable view of
+  // what's still pending. Appends rather than replaces — rows already in `items` (acted or not) keep their
+  // position, so `index` never gets silently invalidated out from under the user — and only rows that are
+  // neither already local nor already acted-on-but-not-yet-settled get added.
+  async function fetchHead() {
+    const res = await loadPage({ page: 1, size: PAGE_SIZE });
     total = res.total;
-    items = next === 1 ? res.items : [...items, ...res.items];
-    pageNumber = next;
+    const existingIds = new Set(items.map((it) => it.assetFaceId));
+    const newOnes = res.items.filter((it) => !actedFaceIds.has(it.assetFaceId) && !existingIds.has(it.assetFaceId));
+    if (newOnes.length > 0) {
+      items = [...items, ...newOnes];
+    }
   }
 
   onMount(async () => {
     try {
-      await fetchPage(1);
+      await fetchHead();
     } catch (error) {
       handleError(error, $t('errors.unable_to_load_face_suggestions'));
       onClose({ confirmed });
@@ -95,30 +118,41 @@
     }
   });
 
-  async function maybePrefetch() {
-    if (items.length < total && index >= items.length - PREFETCH) {
-      try {
-        await fetchPage(pageNumber + 1);
-      } catch {
-        /* keep what we have */
-      }
-    }
-  }
-
+  // Close only when a FRESH fetch confirms nothing unacted is left — never on a stale `items.length >= total`,
+  // which the server's own shrinking total makes meaningless (D8).
   async function advance() {
     index++;
-    if (index >= items.length && items.length >= total) {
-      onClose({ confirmed });
-      return;
+    if (index >= items.length - PREFETCH) {
+      try {
+        await fetchHead();
+      } catch (error) {
+        if (index >= items.length) {
+          // Buffer exhausted AND the top-up failed (e.g. a network blip): falling through to the close check
+          // below would report a false "complete" while more may still be pending server-side. Back off to
+          // the last valid item, surface the error, and let the user retry (re-act or navigate) instead.
+          index--;
+          handleError(error, $t('errors.unable_to_load_face_suggestions'));
+          return;
+        }
+        /* buffer still has a valid next item — keep going; the close check below won't fire */
+      }
     }
-    await maybePrefetch();
     if (index >= items.length) {
       onClose({ confirmed });
     }
   }
 
+  // A `{ status: 400 }`-shaped error is the ONE documented already-resolved outcome for these action
+  // endpoints (requireAccess precedence on a CASCADE-deleted face/person — see person.service.ts
+  // confirmFaceSuggestion's `claimed === 0` path and the reject/ignore idempotent-200 comments). Read via a
+  // plain duck-typed `.status`, the same idiom the sibling admin pages already use for their 409 checks —
+  // matches a real caught SDK error without needing an `@immich/sdk` import/mock here.
+  function isAlreadyResolved(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 400;
+  }
+
   async function act(kind: 'confirm' | 'dismiss' | 'ignore') {
-    if (busy || !current) {
+    if (busy || !current || currentActed) {
       return;
     }
     busy = true;
@@ -132,11 +166,27 @@
       } else {
         await ignore(face);
       }
-    } catch {
-      // edges 9/10/11: benign, advance anyway
-    } finally {
+    } catch (error) {
       busy = false;
+      // The `.status === 400` check below is intentionally broad — any 400, not a narrower body-shape match —
+      // and that's safe: the genuinely-dangerous failure mode (insufficient space role / RBAC) throws 403,
+      // which falls through to the handleError branch, not this one. The only 400 these action endpoints raise
+      // is the benign requireAccess-precedence check on a gone/CASCADE-deleted face; the already-resolved
+      // `claimed === 0` outcome returns 200, so it never reaches this catch at all.
+      if (isAlreadyResolved(error)) {
+        // edges 9/10/11: benign, advance anyway — but never inflate `confirmed`, since our action didn't
+        // actually do anything (something else already resolved this row).
+        actedFaceIds.add(face);
+        await advance();
+      } else {
+        // A genuine failure (500, network drop, ...): surface it and leave `current` exactly as it was so
+        // the user can retry.
+        handleError(error, $t('errors.unable_to_process_face_suggestion'));
+      }
+      return;
     }
+    actedFaceIds.add(face);
+    busy = false;
     await advance();
   }
 
@@ -208,11 +258,21 @@
           <p
             data-testid="suggestion-progress"
             data-current={index + 1}
+            data-total={displayTotal}
             aria-live="polite"
             class="text-center text-sm text-gray-500 dark:text-gray-400"
           >
-            {$t('face_suggestion_progress', { values: { current: index + 1, total } })}
+            {$t('face_suggestion_progress', { values: { current: index + 1, total: displayTotal } })}
           </p>
+
+          {#if currentActed}
+            <p
+              data-testid="suggestion-reviewed-badge"
+              class="text-center text-xs font-semibold text-green-600 dark:text-green-400"
+            >
+              {$t('face_suggestion_reviewed')}
+            </p>
+          {/if}
 
           <div class="relative mx-auto max-h-[60vh]">
             <img
@@ -287,7 +347,7 @@
         <Button
           shape="round"
           color="secondary"
-          disabled={busy || !current}
+          disabled={busy || !current || currentActed}
           leadingIcon={mdiAccountRemoveOutline}
           data-testid="suggestion-different-btn"
           onclick={() => act('dismiss')}
@@ -297,7 +357,7 @@
         <Button
           shape="round"
           color="secondary"
-          disabled={busy || !current}
+          disabled={busy || !current || currentActed}
           leadingIcon={mdiEyeOffOutline}
           data-testid="suggestion-ignore-btn"
           onclick={() => act('ignore')}
@@ -306,7 +366,7 @@
         </Button>
         <Button
           shape="round"
-          disabled={busy || !current}
+          disabled={busy || !current || currentActed}
           leadingIcon={mdiAccountCheckOutline}
           data-testid="suggestion-same-btn"
           onclick={() => act('confirm')}
