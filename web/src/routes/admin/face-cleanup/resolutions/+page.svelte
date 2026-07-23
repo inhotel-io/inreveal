@@ -94,7 +94,7 @@
 
 <AdminPageLayout
   breadcrumbs={[
-    { title: $t('admin.face_cleanup'), href: Route.faceCleanup() },
+    { title: $t('admin.face_cleanup'), href: Route.faceCleanupScan() },
     { title: $t('admin.face_cleanup_resolutions_title') },
   ]}
 >
@@ -142,7 +142,7 @@
       <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
         <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_resolutions_empty')}</div>
         <div class="mt-4">
-          <Button color="secondary" href={Route.faceCleanup()}>{$t('admin.face_cleanup_review_back')}</Button>
+          <Button color="secondary" href={Route.faceCleanupScan()}>{$t('admin.face_cleanup_review_back')}</Button>
         </div>
       </div>
     {:else}

@@ -148,7 +148,7 @@ test.describe.serial('Face Cleanup', () => {
   test('admin can reach the face-cleanup page and it renders', async ({ context, page }) => {
     await utils.setAuthCookies(context, admin.accessToken);
 
-    await page.goto('/admin/face-cleanup');
+    await page.goto('/admin/face-cleanup/scan');
 
     // AdminPageLayout → BreadcrumbActionPage landmark — confirms the page mounted without error.
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
@@ -292,7 +292,7 @@ test.describe.serial('Face Cleanup', () => {
     });
 
     // Confirm the seeded person shows up on the dashboard before it's resolved.
-    await page.goto('/admin/face-cleanup');
+    await page.goto('/admin/face-cleanup/scan');
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(sourceName).first()).toBeVisible({ timeout: 10_000 });
 
@@ -358,8 +358,14 @@ test.describe.serial('Face Cleanup', () => {
     expect(moveGroups.get(other.id)).toEqual([faceOther]);
 
     // Apply navigates back to the dashboard on success; the person must have drained from the console.
-    await page.waitForURL('**/admin/face-cleanup', { timeout: 15_000 });
+    await page.waitForURL('**/admin/face-cleanup/scan', { timeout: 15_000 });
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+
+    // Wait for the dashboard to actually finish loading its (freshly refetched) scan snapshot before asserting
+    // an absence: the "Eligible faces" stat card only renders once `scan.status === 'completed'` and its
+    // (unconditionally-populated) totals have rendered. Without this, the absence check below could pass
+    // vacuously against a still-loading page rather than a genuinely drained one.
+    await expect(page.getByText('Eligible faces').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(sourceName)).toHaveCount(0);
   });
 
@@ -538,7 +544,7 @@ test.describe.serial('Face Cleanup', () => {
     expect(chosenGroup?.faceIds).toEqual([faceId]);
     expect(chosenGroup?.lock).toBe(true);
 
-    await page.waitForURL('**/admin/face-cleanup', { timeout: 15_000 });
+    await page.waitForURL('**/admin/face-cleanup/scan', { timeout: 15_000 });
 
     // The face actually moved to `other`, and its human placement is recorded as a manual identity link on
     // `other`'s identity (there is no separate lock table any more).

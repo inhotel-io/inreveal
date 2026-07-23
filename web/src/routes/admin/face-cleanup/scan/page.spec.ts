@@ -69,7 +69,7 @@ vi.mock('$app/navigation', () => ({
 vi.mock('$app/stores', () => ({
   page: {
     subscribe: vi.fn((run) => {
-      run({ url: new URL('http://localhost/admin/face-cleanup') });
+      run({ url: new URL('http://localhost/admin/face-cleanup/scan') });
       return () => {};
     }),
   },

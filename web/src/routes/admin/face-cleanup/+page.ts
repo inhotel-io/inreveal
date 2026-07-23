@@ -1,20 +1,6 @@
-import { searchUsersAdmin } from '@immich/sdk';
-import { authenticate } from '$lib/utils/auth';
-import { getFormatter } from '$lib/utils/i18n';
+import { redirect } from '@sveltejs/kit';
+import { Route } from '$lib/route';
 import type { PageLoad } from './$types';
 
-export const load = (async ({ url }) => {
-  await authenticate(url, { admin: true });
-
-  // The owner column maps each cluster's ownerId → the owning user (name + avatar).
-  const users = await searchUsersAdmin({ withDeleted: true });
-
-  const $t = await getFormatter();
-
-  return {
-    users,
-    meta: {
-      title: $t('admin.face_cleanup'),
-    },
-  };
-}) satisfies PageLoad;
+// Temporary: slice 5 replaces this with the mode chooser.
+export const load = (() => redirect(307, Route.faceCleanupScan())) satisfies PageLoad;

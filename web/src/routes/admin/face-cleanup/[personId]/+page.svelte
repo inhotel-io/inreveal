@@ -275,7 +275,7 @@
   };
 
   const handleCancel = () => {
-    void goto(Route.faceCleanup());
+    void goto(Route.faceCleanupScan());
   };
 
   // Every resolve on this page funnels through here, so a failure can never again be swallowed: the whole-cluster
@@ -302,7 +302,7 @@
           },
         }),
       );
-      void goto(Route.faceCleanup());
+      void goto(Route.faceCleanupScan());
     } catch (error: unknown) {
       const status = (error as { status?: number }).status;
       applyError =
@@ -344,11 +344,13 @@
   };
 </script>
 
-<AdminPageLayout breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanup() }, { title: personName }]}>
+<AdminPageLayout
+  breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanupScan() }, { title: personName }]}
+>
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Back link -->
     <a
-      href={Route.faceCleanup()}
+      href={Route.faceCleanupScan()}
       class="mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
     >
       <Icon icon={mdiArrowLeft} size="16" />

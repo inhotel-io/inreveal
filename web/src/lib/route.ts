@@ -167,6 +167,7 @@ export const Route = {
 
   // face cleanup
   faceCleanup: () => '/admin/face-cleanup',
+  faceCleanupScan: () => '/admin/face-cleanup/scan',
   viewFaceCleanupPerson: ({ id }: { id: string }) => `/admin/face-cleanup/${id}`,
   faceCleanupResolutions: () => '/admin/face-cleanup/resolutions',
 
