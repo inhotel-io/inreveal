@@ -2340,8 +2340,11 @@ export class FaceIdentityRepository {
     return rows.length;
   }
 
-  async replaceFaceIdentity(input: LinkFaceInput): Promise<FaceIdentityFace> {
-    return this.db
+  async replaceFaceIdentity(
+    input: LinkFaceInput,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<FaceIdentityFace> {
+    return db
       .insertInto('face_identity_face')
       .values({
         assetFaceId: input.assetFaceId,

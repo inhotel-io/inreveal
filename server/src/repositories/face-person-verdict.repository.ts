@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ExpressionBuilder, Kysely, sql } from 'kysely';
+import { ExpressionBuilder, Kysely, sql, Transaction } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { DummyValue, GenerateSql } from 'src/decorators';
 import { AssetVisibility } from 'src/enum';
@@ -49,8 +49,8 @@ export class FacePersonVerdictRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
-  async resolveAssignedFace(assetFaceId: string): Promise<void> {
-    await this.db
+  async resolveAssignedFace(assetFaceId: string, db: Kysely<DB> | Transaction<DB> = this.db): Promise<void> {
+    await db
       .deleteFrom('face_person_verdict')
       .where('assetFaceId', '=', assetFaceId)
       .where('status', '=', 'pending')
@@ -62,11 +62,11 @@ export class FacePersonVerdictRepository {
   // guarantee was held only by the read path's `af.personId IS NULL` filter, and would break the moment such
   // a face was later unassigned (e.g. a reset). Negative-verdict rows are left intact.
   @GenerateSql({ params: [[DummyValue.UUID]] })
-  async drainPendingForFaces(assetFaceIds: string[]): Promise<number> {
+  async drainPendingForFaces(assetFaceIds: string[], db: Kysely<DB> | Transaction<DB> = this.db): Promise<number> {
     if (assetFaceIds.length === 0) {
       return 0;
     }
-    const result = await this.db
+    const result = await db
       .deleteFrom('face_person_verdict')
       .where('assetFaceId', 'in', assetFaceIds)
       .where('status', '=', 'pending')
@@ -101,8 +101,12 @@ export class FacePersonVerdictRepository {
   // written by the caller's reassignment; all this layer has to do is drain the queue for that face. Callers
   // use `claimPending` first so a double-submit still reports "nothing to do" exactly once.
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async claimPending(personId: string, assetFaceId: string): Promise<number> {
-    const result = await this.db
+  async claimPending(
+    personId: string,
+    assetFaceId: string,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<number> {
+    const result = await db
       .deleteFrom('face_person_verdict')
       .where('personId', '=', personId)
       .where('assetFaceId', '=', assetFaceId)

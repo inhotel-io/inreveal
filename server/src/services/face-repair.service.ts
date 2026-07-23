@@ -3,7 +3,7 @@ import { AssetFace } from 'src/database';
 import { OnJob } from 'src/decorators';
 import { FaceRepairResolveRequest, FaceRepairResolveResponse, FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
-import { ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
+import { RepairScanPerson, RepairScanRow, ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
 import { OwnerPersonRow } from 'src/repositories/face-repair.repository';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
@@ -266,6 +266,9 @@ export class FaceRepairService extends BaseService {
       // Wrap the re-attribution and its identity relink in one transaction (A1). Without this a crash between
       // the two writes leaves a face on `to` still carrying `from`'s identity, which a later FaceIdentityBackfill
       // can resolve back to `from` and silently revert the approved move. One transaction makes the pair atomic.
+      // Slice 9 (D14): the pending-queue drain for these faces is IN the same transaction — a moved face that
+      // rolls back must not leave its suggestion queue row drained (and vice versa: a committed move must never
+      // leave a stale pending row behind for a face that just left `from`).
       const movedIds = await this.databaseRepository.transaction(async (trx) => {
         const ids = await this.faceRepairRepository.reattributeFaces(from, to, faceIds, trx);
         if (ids.length > 0) {
@@ -274,6 +277,7 @@ export class FaceRepairService extends BaseService {
             { assetFaceIds: ids, identityId: identity.id, source: 'manual' },
             trx,
           );
+          await this.facePersonVerdictRepository.drainPendingForFaces(ids, trx);
         }
         return ids;
       });
@@ -299,10 +303,8 @@ export class FaceRepairService extends BaseService {
     }
 
     // Leak 3, batch path: a moved face is now assigned elsewhere, so any outstanding suggestion for it is
-    // void. Drain at the write path (resolveFaces does the same for the interactive console).
-    if (movedFaceIds.length > 0) {
-      await this.facePersonVerdictRepository.drainPendingForFaces(movedFaceIds);
-    }
+    // void. Drained per-route, inside each route's transaction above (Slice 9) — not here, and not
+    // aggregated, so a route that rolls back never loses its drain and a route that commits never keeps one.
 
     return { moved, skipped, movedFaceIds };
   }
@@ -562,7 +564,64 @@ export class FaceRepairService extends BaseService {
     }
     // Refresh display names/thumbnails from the live person table — people get named after a scan and the
     // persisted report is only a snapshot. Keeps the console legible without an expensive full re-scan.
-    return this.faceRepairScanRepository.withCurrentNames(scan);
+    const withNames = await this.faceRepairScanRepository.withCurrentNames(scan);
+    return this.withLiveFlaggedCounts(withNames);
+  }
+
+  // D12 (Slice 9): the persisted scan report's flagged counts are a point-in-time snapshot. A verdict
+  // recorded AFTER the scan — a suggestion-side confirm/reject, or a cleanup keep-here/lock/detach on a
+  // DIFFERENT person's review — never touches the scan row, so without this the dashboard would keep
+  // showing an already-settled face as flagged until the next full re-scan. Recompute each person's
+  // flagged/flaggedFraction/suspectedOwners[].count live by re-applying the exact same verdict filters
+  // getPersonFlaggedFaces uses for a single person's review page, fanned out over every person the scan
+  // flagged — one batched query plus one batched buildVerdictMaps per dashboard poll (R2: measured cheaper
+  // than option (b), decrementing the persisted JSON counts at every verdict-write call site, which has no
+  // reusable per-face-decrement primitive and would touch far more call sites than this one read path).
+  // `eligible` (the denominator) is frozen at scan time — only how many of those eligible faces are STILL
+  // flagged changes here.
+  private async withLiveFlaggedCounts(scan: RepairScanRow): Promise<RepairScanRow> {
+    const persons = (scan.persons ?? []) as unknown as RepairScanPerson[];
+    if (persons.length === 0) {
+      return scan;
+    }
+
+    const personIds = persons.map((p) => p.personId);
+    const stored = await this.faceRepairScanRepository.getScanFlaggedFacesForPersons(scan.id, personIds);
+    const verdictMaps = await this.buildVerdictMaps({
+      personIds,
+      assetFaceIds: stored.map((face) => face.assetFaceId),
+      suspectedOwnerIds: stored.map((face) => face.suspectedOwnerId),
+    });
+
+    const byPerson = new Map<string, FlaggedFace[]>(personIds.map((id) => [id, []]));
+    for (const face of stored) {
+      byPerson.get(face.personId)?.push({
+        assetFaceId: face.assetFaceId,
+        currentPersonId: face.personId,
+        suspectedOwnerId: face.suspectedOwnerId,
+      });
+    }
+    applyVerdictFilters(byPerson, verdictMaps);
+
+    const refreshed = persons
+      .map((p) => {
+        const surviving = byPerson.get(p.personId) ?? [];
+        const countByOwner = new Map<string, number>();
+        for (const face of surviving) {
+          countByOwner.set(face.suspectedOwnerId, (countByOwner.get(face.suspectedOwnerId) ?? 0) + 1);
+        }
+        return {
+          ...p,
+          flagged: surviving.length,
+          flaggedFraction: p.eligible > 0 ? surviving.length / p.eligible : 0,
+          suspectedOwners: p.suspectedOwners
+            .map((owner) => ({ ...owner, count: countByOwner.get(owner.ownerPersonId) ?? 0 }))
+            .filter((owner) => owner.count > 0),
+        };
+      })
+      .filter((p) => p.flagged > 0);
+
+    return { ...scan, persons: refreshed as unknown as RepairScanRow['persons'] };
   }
 
   getClusterFaces(
@@ -871,6 +930,12 @@ export class FaceRepairService extends BaseService {
           actorId: resolvedBy,
         });
       }
+      // Slice 9 (D14/leak 3): a stayed face is settled — drain ANY still-pending suggestion row for it
+      // (not just the (suspectedOwnerId, face) pairing markRejected above just resolved), same as the
+      // aggregate drain used to before it was split per-bucket. Scoped to the raw `stay` bucket, not
+      // `declineFaces` — a dangling-owner stay still counts as settled even though no decline was written
+      // for it (see the comment above).
+      await this.facePersonVerdictRepository.drainPendingForFaces(stay);
     }
 
     // Confirm/lock (Slice 3, state 4): durably, owner-agnostically lock each `lock`-bucket face to this
@@ -882,13 +947,24 @@ export class FaceRepairService extends BaseService {
     // `personId`; marking its identity link `source='manual'` records that a human confirmed it there, which
     // is exactly what stops every future scan from suspecting it toward any owner — the age-gap case. Same
     // record a move writes, so there is one notion of "settled", not two.
+    // Slice 9 (D14): the identity relink and its pending-queue drain are wrapped in one transaction — this
+    // bucket was previously unwrapped (a torn-pair gap of the same class A1/executeRepair already closes): a
+    // crash between the two writes could leave a face locked without its stale suggestion drained, or (were
+    // the write ORDER ever reversed) a drained face without its lock link. Same shape as executeRepair's
+    // per-route transaction and `detach` below.
     let locked = moveLocked;
     if (lock.length > 0) {
-      const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId);
-      await this.faceIdentityRepository.replaceFaceIdentities({
-        assetFaceIds: lock,
-        identityId: identity.id,
-        source: 'manual',
+      await this.databaseRepository.transaction(async (trx) => {
+        const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId, trx);
+        await this.faceIdentityRepository.replaceFaceIdentities(
+          {
+            assetFaceIds: lock,
+            identityId: identity.id,
+            source: 'manual',
+          },
+          trx,
+        );
+        await this.facePersonVerdictRepository.drainPendingForFaces(lock, trx);
       });
       locked += lock.length;
     }
@@ -898,11 +974,17 @@ export class FaceRepairService extends BaseService {
     // a stripped-identity face still on this person (which a later FaceIdentityBackfill would silently re-link
     // right back onto it, the E4 regression). Placed BEFORE the empty-unnamed cleanup below: detaching every
     // remaining face can itself empty the person, and that cleanup must see the post-detach state.
+    // Slice 9 (D14): the pending-queue drain joins the same transaction — a detached face's stale suggestion
+    // must clear iff the detach itself commits.
     const detachedIds =
       detach.length > 0
-        ? await this.databaseRepository.transaction((trx) =>
-            this.faceRepairRepository.detachFaces(personId, detach, trx),
-          )
+        ? await this.databaseRepository.transaction(async (trx) => {
+            const ids = await this.faceRepairRepository.detachFaces(personId, detach, trx);
+            if (ids.length > 0) {
+              await this.facePersonVerdictRepository.drainPendingForFaces(ids, trx);
+            }
+            return ids;
+          })
         : [];
     if (detachedIds.length > 0) {
       const repointedIds = await this.faceRepairRepository.reconcileRepresentativeFaces([personId]);
@@ -1005,12 +1087,11 @@ export class FaceRepairService extends BaseService {
 
     // Leak 3: a terminally-resolved face must leave no stale pending suggestion behind. A moved face is now
     // assigned elsewhere, a detached face is tombstoned, a confirmed/kept face is settled — in every case an
-    // outstanding "is this <face> <person>?" suggestion is void. Drain them at the write path rather than
-    // relying on the suggestion read's `personId IS NULL` filter, which would let the row resurface if the
-    // face were later unassigned.
-    if (settledFaceIds.size > 0) {
-      await this.facePersonVerdictRepository.drainPendingForFaces([...settledFaceIds]);
-    }
+    // outstanding "is this <face> <person>?" suggestion is void. Slice 9 (D14): drained per-bucket, inside
+    // each bucket's own transaction, above — `move`/`unknown` via executeRepair's per-route transaction,
+    // `stay` alongside its decline write, `lock` and `detach` alongside their identity-link writes — rather
+    // than aggregated here after the fact, so a bucket that rolls back never loses its drain and a bucket
+    // that commits never keeps a stale one.
     // Compare against `resolvable` (the decline/lock-filtered pending set the review page shows), NOT the raw
     // `flaggedIds`: a face declined or locked in a PRIOR resolve is already settled and is filtered out of the
     // review UI, so the admin can never re-submit it here — measuring the drain against the raw snapshot would

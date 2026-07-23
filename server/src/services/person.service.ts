@@ -397,27 +397,60 @@ export class PersonService extends BaseService {
     };
   }
 
+  // D14/Slice 9: claim -> reassign -> resolveAssignedFace -> identity-relink is one atomic unit — a crash or
+  // failure mid-chain must never leave the face reassigned without its manual identity link (a torn write),
+  // the same defect class executeRepair's per-route transaction (A1) already closes for the cleanup engine.
+  // Reads (access checks, person/face lookups) happen BEFORE the transaction opens; only the writes are
+  // wrapped. This intentionally does NOT delegate to reassignFacesById (the public method, used autocommit
+  // by its OTHER callers, e.g. the face-editor reassign endpoint) — confirm gets its own trx-wrapped write
+  // chain so that method's signature/behaviour for those callers is untouched.
   async confirmFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
     await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
 
+    const person = await this.findOrFail(personId);
+    const face = await this.personRepository.getFaceById(assetFaceId);
+
     // Claim the queue row first so a double-submit resolves exactly once. There is deliberately no
-    // 'confirmed' status to write: the durable positive verdict is the face's manual identity link, which
-    // reassignFacesById writes below via replaceFaceIdentity(..., 'manual'). That link is what keeps the
-    // Face Cleanup scan from re-flagging this face and asking an admin to undo the confirmation.
-    const claimed = await this.facePersonVerdictRepository.claimPending(personId, assetFaceId);
+    // 'confirmed' status to write: the durable positive verdict is the face's manual identity link, written
+    // below via replaceFaceIdentity(..., 'manual'). That link is what keeps the Face Cleanup scan from
+    // re-flagging this face and asking an admin to undo the confirmation. A failure anywhere in the chain
+    // rolls the whole transaction back — including the claim — so a retried confirm sees the row still
+    // pending (R4: strictly safer than a claimed-but-never-applied row).
+    const claimed = await this.databaseRepository.transaction(async (trx) => {
+      const claimed = await this.facePersonVerdictRepository.claimPending(personId, assetFaceId, trx);
+      if (claimed === 0) {
+        // Idempotent: the row was already resolved (double-submit, or a concurrent scan/auto-assign) while
+        // person+face still exist. A CASCADE-deleted person/face never reaches here — the requireAccess
+        // checks above already threw 400 (owner-only precedence; edges 9/10 — the client treats that 400 as
+        // benign-advance).
+        return claimed;
+      }
+
+      await this.personRepository.reassignFace(face.id, personId, trx);
+      // Drains every OTHER target's still-pending row for this now-assigned face (edge 12).
+      await this.facePersonVerdictRepository.resolveAssignedFace(face.id, trx);
+      // Inlined (rather than the private replaceFaceIdentity wrapper) so every write here threads the SAME
+      // trx explicitly.
+      const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId, trx);
+      await this.faceIdentityRepository.replaceFaceIdentity(
+        { assetFaceId: face.id, identityId: identity.id, source: 'manual' },
+        trx,
+      );
+      return claimed;
+    });
     if (claimed === 0) {
-      // Idempotent: the row was already resolved (double-submit, or a concurrent scan/auto-assign) while
-      // person+face still exist. A CASCADE-deleted person/face never reaches here — the requireAccess
-      // checks above already threw 400 (owner-only precedence; edges 9/10 — the client treats that 400 as
-      // benign-advance).
       return;
     }
 
-    // Delegates assign + replaceFaceIdentity('manual') + createNewFeaturePhoto, and its embedded
-    // resolveAssignedFace drains every OTHER target's still-pending row for this now-assigned face
-    // (edge 12).
-    await this.reassignFacesById(auth, personId, { id: assetFaceId });
+    // Feature-photo refresh is display-only (a job enqueue + a non-identity person column), so it stays
+    // OUTSIDE the transaction — mirrors reassignFacesById's own placement of this step.
+    if (person.faceAssetId === null) {
+      await this.createNewFeaturePhoto([person.id]);
+    }
+    if (face.person && face.person.faceAssetId === face.id) {
+      await this.createNewFeaturePhoto([face.person.id]);
+    }
   }
 
   // D2: reject/ignore write the target's identity + the acting user, same as a cleanup verdict, so the

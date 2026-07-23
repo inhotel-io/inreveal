@@ -641,8 +641,12 @@ export class PersonRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
-  async reassignFace(assetFaceId: string, newPersonId: string): Promise<number> {
-    const result = await this.db
+  async reassignFace(
+    assetFaceId: string,
+    newPersonId: string,
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<number> {
+    const result = await db
       .updateTable('asset_face')
       .set({ personId: newPersonId })
       .where('asset_face.id', '=', assetFaceId)

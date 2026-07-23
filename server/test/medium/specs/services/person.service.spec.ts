@@ -19,6 +19,7 @@ import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
+import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
@@ -46,6 +47,7 @@ const setup = (db?: Kysely<DB>) => {
       ConfigRepository,
       DatabaseRepository,
       FaceIdentityRepository,
+      FacePersonVerdictRepository,
       PersonRepository,
       AssetRepository,
       AssetEditRepository,
@@ -1913,6 +1915,50 @@ describe(PersonService.name, () => {
       const auth = factory.auth({ user: { id: viewer.id }, session: { hasElevatedPermission: true } });
 
       await expect(sut.getThumbnail(auth, person.id)).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  // D14/Slice 9: confirm's claim -> reassign -> resolveAssignedFace -> identity-relink chain must be one
+  // atomic unit. Before this slice each write autocommitted separately, so a crash/failure between the
+  // reassign and the relink left the face pointed at the new person WITHOUT a manual identity link (a torn
+  // write) and the claimed pending row gone for good — the exact defect class executeRepair's per-route
+  // transaction (A1) already closes for the cleanup engine.
+  describe('confirmFaceSuggestion (atomicity)', () => {
+    it('rolls back the reassign when the identity relink fails (no torn write)', async () => {
+      const { sut, ctx } = setup();
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+
+      // P is the suggested target; the face actually sits on a DIFFERENT person, Q.
+      const { person: p } = await ctx.newPerson({ ownerId: user.id, name: 'P' });
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: q.id });
+      await verdictRepo.upsertPending([{ personId: p.id, assetFaceId: face.id, distance: 0.5 }]);
+
+      // The LAST write in the chain fails.
+      vi.spyOn(faceIdentityRepo, 'replaceFaceIdentity').mockRejectedValueOnce(new Error('relink failed'));
+
+      await expect(sut.confirmFaceSuggestion(auth, p.id, face.id)).rejects.toThrow('relink failed');
+
+      // The reassign must have rolled back — the face is still on Q, not P.
+      const reloadedFace = await ctx.database
+        .selectFrom('asset_face')
+        .select('personId')
+        .where('id', '=', face.id)
+        .executeTakeFirstOrThrow();
+      expect(reloadedFace.personId).toBe(q.id);
+
+      // The claim must have rolled back too — the row is still pending (claim-then-work contract, R4).
+      const verdict = await ctx.database
+        .selectFrom('face_person_verdict')
+        .select(['status'])
+        .where('personId', '=', p.id)
+        .where('assetFaceId', '=', face.id)
+        .executeTakeFirst();
+      expect(verdict?.status).toBe('pending');
     });
   });
 });

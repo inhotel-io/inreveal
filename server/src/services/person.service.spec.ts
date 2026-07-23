@@ -6620,9 +6620,9 @@ describe(PersonService.name, () => {
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set());
       mocks.access.person.checkSharedSpaceAccess.mockResolvedValue(new Set(['person-1']));
 
-      await expect(
-        sut.getFaceSuggestions(AuthFactory.create(), 'person-1', { page: 1, size: 10 }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(sut.getFaceSuggestions(AuthFactory.create(), 'person-1', { page: 1, size: 10 })).rejects.toThrow(
+        BadRequestException,
+      );
       expect(mocks.facePersonVerdict.getPendingForPerson).not.toHaveBeenCalled();
     });
 
@@ -6727,25 +6727,37 @@ describe(PersonService.name, () => {
 
       await sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id);
 
-      expect(mocks.facePersonVerdict.claimPending).toHaveBeenCalledWith(person.id, face.id);
-      expect(mocks.person.reassignFace).toHaveBeenCalledWith(face.id, person.id);
-      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
-        assetFaceId: face.id,
-        identityId: 'identity-1',
-        source: 'manual',
-      });
+      // Slice 9: every write in the chain now runs inside `databaseRepository.transaction`, so each call
+      // carries a trailing trx arg — the test/utils.ts L318 passthrough default makes `trx === mocks.database`.
+      expect(mocks.facePersonVerdict.claimPending).toHaveBeenCalledWith(person.id, face.id, mocks.database);
+      expect(mocks.person.reassignFace).toHaveBeenCalledWith(face.id, person.id, mocks.database);
+      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith(
+        {
+          assetFaceId: face.id,
+          identityId: 'identity-1',
+          source: 'manual',
+        },
+        mocks.database,
+      );
       expect(mocks.person.update).toHaveBeenCalledWith(
         expect.objectContaining({ id: person.id, faceAssetId: face.id }),
       );
-      expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith(face.id);
+      expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith(face.id, mocks.database);
     });
 
     it('is idempotent when the row is already confirmed/rejected/ignored but person+face still exist → 200, no reassign', async () => {
-      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
-      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
+      const face = AssetFaceFactory.create();
+      const person = PersonFactory.create();
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
+      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set([face.id]));
+      // Slice 9: person/face are now read BEFORE the transaction opens (claimPending — and the rest of the
+      // write chain — must run inside the trx, and these two lookups have no trx-aware repo method), so
+      // they're fetched unconditionally even on the idempotent path.
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.getFaceById.mockResolvedValue(getForAssetFace(face));
       mocks.facePersonVerdict.claimPending.mockResolvedValue(0); // already confirmed/rejected/ignored
 
-      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
+      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id)).resolves.toBeUndefined();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
     });
 

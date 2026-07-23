@@ -144,6 +144,84 @@ describe('FaceRepairService.handleFaceRepairScan', () => {
     expect(alexiaPerson!.suspectedOwners.length).toBeGreaterThan(0);
   });
 
+  // D12: the persisted scan report is a point-in-time snapshot. When the suggestion engine (or an admin,
+  // via a manual placement) settles one of a person's flagged faces AFTER the scan ran, the dashboard must
+  // reflect that live — not keep showing the stale scan-time count until the next full re-scan.
+  it('drops a person’s flagged count once a suggestion-side verdict settles one of its flagged faces (D12)', async () => {
+    const { sut, ctx } = setup();
+    const scanRepo = ctx.get(FaceRepairScanRepository);
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const { user } = await ctx.newUser();
+
+    // Karina-main: 10 first-axis faces (the reference cluster / suspected owner).
+    const karinaData = mediumFactory.personInsert({ ownerId: user.id, name: 'Karina' });
+    await db.insertInto('person').values(karinaData).execute();
+    for (let i = 0; i < 10; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: karinaData.id });
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+    }
+
+    // Alexia: 3 leaked first-axis faces (flagged toward Karina) + 8 genuine second-axis.
+    const alexiaData = mediumFactory.personInsert({ ownerId: user.id, name: 'Alexia' });
+    await db.insertInto('person').values(alexiaData).execute();
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaData.id });
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaData.id });
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+    }
+
+    const scan = await scanRepo.createScan({ requestedBy: null, params: PARAMS });
+    await sut.handleFaceRepairScan({ scanId: scan.id });
+
+    const before = await sut.getLatestScanStatus();
+    const alexiaBefore = before!.persons.find((p) => p.personId === alexiaData.id);
+    expect(alexiaBefore).toBeDefined();
+    expect(alexiaBefore!.flagged).toBe(3);
+    const karinaOwnerBefore = alexiaBefore!.suspectedOwners.find((o) => o.ownerPersonId === karinaData.id);
+    expect(karinaOwnerBefore).toBeDefined();
+    expect(karinaOwnerBefore!.count).toBe(3);
+
+    // Settle ONE of the flagged faces with a human placement — the exact durable record a suggestion-side
+    // confirm (or a cleanup "keep here"/lock) writes. This never touches the scan row itself.
+    const flaggedFaces = await scanRepo.getScanFlaggedFaces(scan.id, alexiaData.id);
+    expect(flaggedFaces.length).toBe(3);
+    const settledFaceId = flaggedFaces[0].assetFaceId;
+    const alexiaIdentity = await faceIdentityRepo.ensurePersonIdentity(alexiaData.id);
+    await faceIdentityRepo.replaceFaceIdentity({
+      assetFaceId: settledFaceId,
+      identityId: alexiaIdentity.id,
+      source: 'manual',
+    });
+
+    const after = await sut.getLatestScanStatus();
+    const alexiaAfter = after!.persons.find((p) => p.personId === alexiaData.id);
+    expect(alexiaAfter).toBeDefined();
+    expect(alexiaAfter!.flagged).toBe(2);
+    expect(alexiaAfter!.flaggedFraction).toBeCloseTo(2 / alexiaAfter!.eligible, 5);
+    const karinaOwnerAfter = alexiaAfter!.suspectedOwners.find((o) => o.ownerPersonId === karinaData.id);
+    expect(karinaOwnerAfter).toBeDefined();
+    expect(karinaOwnerAfter!.count).toBe(2);
+
+    // The scan's own persisted `eligible` denominator is untouched — only how many of those eligible faces
+    // are STILL flagged changes.
+    expect(alexiaAfter!.eligible).toBe(alexiaBefore!.eligible);
+  });
+
   it('triggerScan overrides flow to the engine: maxFlaggedFraction flips a cluster repairable→review-only', async () => {
     const { sut, ctx } = setup();
     const jobMock = ctx.getMock(JobRepository);
