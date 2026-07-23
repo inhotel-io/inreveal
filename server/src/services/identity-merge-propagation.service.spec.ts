@@ -1850,8 +1850,11 @@ describe('IdentityMergePropagationService', () => {
         { actorUserId: 'owner-1' },
       );
 
+      // Slice 4 / R1: preserveSource:true so the call PRESERVES each rode-along face's prior source
+      // instead of fabricating a 'manual' placement (see face-identity.repository.ts's preserveManualSource
+      // doc comment for why this must be omission, not a CASE, on the human people-merge path).
       expect(mocks.faceIdentity.linkPersonFaces).toHaveBeenCalledWith(
-        { personId: 'person-x', identityId: 'identity-x', source: 'manual' },
+        { personId: 'person-x', identityId: 'identity-x', source: 'manual', preserveSource: true },
         expect.anything(),
       );
       expect(mocks.faceIdentity.linkPersonFaces.mock.invocationCallOrder[0]).toBeLessThan(

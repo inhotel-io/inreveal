@@ -29,6 +29,10 @@ export type LinkPersonFacesInput = {
   personId: string;
   identityId: string;
   source: FaceIdentityFaceSource;
+  // Slice 4 / R1: when the incoming source is the human people-merge's literal 'manual', a preserve-manual
+  // CASE would degenerate to `ELSE 'manual'` and fabricate placements on faces a human never touched. Set
+  // this to omit `source` from the update entirely so each face's true prior source is left untouched.
+  preserveSource?: boolean;
 };
 
 export type BackfillResult = {
@@ -227,6 +231,18 @@ type HydratedAccessiblePersonRow = {
   species: string | null;
   numberOfAssets: string | number | null;
 };
+
+// Slice 4 (D4): keep a human placement (source='manual') intact while relabeling everything else to the
+// incoming source. Mirrors the CASE realignFacesToPersonIdentity has used since Slice 1.
+//
+// Only use this where `incoming` is a genuinely non-'manual' value at the call site (an automatic merge's
+// 'shared-space-evidence', a recognition-race 'owner-person', a backfill sweep's 'backfill'). Where the
+// incoming source is ITSELF the literal 'manual' (the human people-merge path), this degenerates to
+// `ELSE 'manual'` — identical to the bug it exists to prevent. That path must omit `source` from the write
+// entirely instead (see linkPersonFaces's `preserveSource` and mergeIdentitiesAfterProfileResolution).
+function preserveManualSource(incoming: FaceIdentityFaceSource) {
+  return sql<FaceIdentityFaceSource>`CASE WHEN "face_identity_face"."source" = 'manual' THEN 'manual' ELSE ${incoming} END`;
+}
 
 @Injectable()
 export class FaceIdentityRepository {
@@ -2336,7 +2352,9 @@ export class FaceIdentityRepository {
       .onConflict((oc) =>
         oc.column('assetFaceId').doUpdateSet({
           identityId: input.identityId,
-          source: input.source,
+          // D4b: a recognition-race replace (source='owner-person') must not downgrade an existing manual
+          // placement. `linkFace` delegates here too, so this also protects that caller.
+          source: preserveManualSource(input.source),
           confidence: input.confidence ?? null,
         }),
       )
@@ -2407,11 +2425,15 @@ export class FaceIdentityRepository {
           ),
       )
       .onConflict((oc) =>
-        oc.column('assetFaceId').doUpdateSet({
-          identityId: input.identityId,
-          source: input.source,
-          confidence: null,
-        }),
+        oc.column('assetFaceId').doUpdateSet(
+          input.preserveSource
+            ? // D4d/R1: the human people-merge caller — omit `source` entirely so Postgres leaves each
+              // face's true prior source untouched (a CASE here would degenerate to `ELSE 'manual'`, see
+              // preserveManualSource's doc comment).
+              { identityId: input.identityId, confidence: null }
+            : // D4c: the backfill caller — preserve an existing manual placement, relabel everything else.
+              { identityId: input.identityId, source: preserveManualSource(input.source), confidence: null },
+        ),
       )
       .execute();
   }
@@ -2706,7 +2728,7 @@ export class FaceIdentityRepository {
         // re-proposed. A blanket `source: 'backfill'` here silently downgraded that record whenever a link
         // drifted from its person's identity (most commonly right after a people merge), re-exposing
         // human-confirmed faces to both queues. Preserve 'manual'; realign everything else as before.
-        source: sql<FaceIdentityFaceSource>`CASE WHEN "face_identity_face"."source" = 'manual' THEN 'manual' ELSE 'backfill' END`,
+        source: preserveManualSource('backfill'),
       })
       .where('assetFaceId', 'in', assetFaceIds)
       .execute();
@@ -3112,9 +3134,11 @@ export class FaceIdentityRepository {
         }
       }
 
+      // D4a: an automatic merge's incoming source (e.g. 'shared-space-evidence') must not downgrade a
+      // manual placement that rode along with the merged-away identity.
       await trx
         .updateTable('face_identity_face')
-        .set({ identityId: input.targetIdentityId, source: input.source })
+        .set({ identityId: input.targetIdentityId, source: preserveManualSource(input.source) })
         .where('identityId', 'in', mergeableSourceIdentityIds)
         .execute();
 
@@ -3215,9 +3239,15 @@ export class FaceIdentityRepository {
       throw new Error('Cannot merge face identities with unresolved profile conflicts');
     }
 
+    // D4d/R1 (signed off): re-point identity but PRESERVE each face's prior source. `source` is
+    // intentionally OMITTED from this write, not written via a preserve-manual CASE — the human
+    // people-merge caller's incoming source is always the literal 'manual', so `CASE ... ELSE
+    // input.source` would degenerate to `ELSE 'manual'`, fabricating placements on faces a human never
+    // touched (identical to the bug this fixes). Omitting the key leaves each row's existing source column
+    // untouched. `input.source` is still used above for the cross-type merge gate.
     await db
       .updateTable('face_identity_face')
-      .set({ identityId: input.targetIdentityId, source: input.source })
+      .set({ identityId: input.targetIdentityId })
       .where('identityId', 'in', sourceIdentityIds)
       .execute();
 

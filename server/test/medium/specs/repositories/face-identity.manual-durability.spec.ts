@@ -4,6 +4,7 @@ import { FaceIdentityRepository } from 'src/repositories/face-identity.repositor
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { DB } from 'src/schema';
+import { FaceIdentityFaceSource } from 'src/schema/tables/face-identity-face.table';
 import { BaseService } from 'src/services/base.service';
 import { newMediumService } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
@@ -54,6 +55,12 @@ const linkRowFor = (assetFaceId: string) =>
 
 const linkRowsFor = (assetFaceId: string) =>
   db.selectFrom('face_identity_face').selectAll().where('assetFaceId', '=', assetFaceId).execute();
+
+// Direct-insert a face_identity_face row with an exact source, bypassing linkFace/replaceFaceIdentity so the
+// fixture can plant a state (e.g. a pre-existing 'manual' link on a face about to be swept up by an
+// automatic merge) that those methods would not themselves produce.
+const insertLinkRow = (assetFaceId: string, identityId: string, source: FaceIdentityFaceSource) =>
+  db.insertInto('face_identity_face').values({ assetFaceId, identityId, source }).execute();
 
 // Drain the personal backfill the way the job does — page until there is no cursor left.
 const runPersonalBackfill = async (faceIdentityRepository: FaceIdentityRepository) => {
@@ -179,5 +186,114 @@ describe('face_identity_face.source=manual durability (Slice 1 — load-bearing 
     const again = await linkRowsFor(faceId);
     expect(again).toHaveLength(1);
     expect(again[0].source).toBe('manual');
+  });
+});
+
+// Slice 4 of the face-review unification: D4. A positive verdict (source='manual') must survive every
+// non-human write path — an automatic shared-space-evidence merge (D4a), the recognition-race replace
+// (D4b), and a personal-identity backfill sweep (D4c). Each of these sites writes a non-'manual' incoming
+// source, so the fix is a `CASE WHEN existing='manual' THEN 'manual' ELSE <incoming> END` — NOT the
+// omit-source mechanism used on the human people-merge path (see identity-merge-propagation.service.spec.ts).
+describe('face_identity_face.source=manual durability (Slice 4 — D4a/b/c non-human write sites)', () => {
+  it('D4a: an automatic shared-space-evidence merge preserves a manual loser-link', async () => {
+    const { ctx, faceIdentityRepository } = setup();
+    const target = await db
+      .insertInto('face_identity')
+      .values({ type: 'person' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    const source = await db
+      .insertInto('face_identity')
+      .values({ type: 'person' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+    const { user } = await ctx.newUser();
+    const { asset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: manualFace } = await ctx.newAssetFace({
+      assetId: asset.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    const { assetFace: mlFace } = await ctx.newAssetFace({ assetId: asset.id, sourceType: SourceType.MachineLearning });
+    await insertLinkRow(manualFace.id, source.id, 'manual');
+    await insertLinkRow(mlFace.id, source.id, 'ml');
+
+    await faceIdentityRepository.mergeIdentities({
+      targetIdentityId: target.id,
+      sourceIdentityIds: [source.id],
+      source: 'shared-space-evidence',
+    });
+
+    const manualRow = await linkRowFor(manualFace.id);
+    const mlRow = await linkRowFor(mlFace.id);
+    // The human placement survives the automatic merge...
+    expect(manualRow?.identityId).toBe(target.id);
+    expect(manualRow?.source).toBe('manual');
+    // ...while a non-manual rode-along face is relabeled (NOT stamped manual) and stays cleanup-flaggable.
+    expect(mlRow?.identityId).toBe(target.id);
+    expect(mlRow?.source).toBe('shared-space-evidence');
+  });
+
+  it('D4b: replaceFaceIdentity cannot downgrade a manual link (control: a non-manual link still updates)', async () => {
+    const { ctx, faceIdentityRepository } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    const manualFaceId = await seedFace(ctx, user.id, person.id);
+    const mlFaceId = await seedFace(ctx, user.id, person.id);
+    await faceIdentityRepository.replaceFaceIdentity({
+      assetFaceId: manualFaceId,
+      identityId: identity.id,
+      source: 'manual',
+    });
+    await faceIdentityRepository.replaceFaceIdentity({ assetFaceId: mlFaceId, identityId: identity.id, source: 'ml' });
+
+    // The recognition-race value ('owner-person') must not downgrade an existing manual placement.
+    await faceIdentityRepository.replaceFaceIdentity({
+      assetFaceId: manualFaceId,
+      identityId: identity.id,
+      source: 'owner-person',
+    });
+    // Control: the same write on a non-manual link behaves as before (ELSE branch).
+    await faceIdentityRepository.replaceFaceIdentity({
+      assetFaceId: mlFaceId,
+      identityId: identity.id,
+      source: 'owner-person',
+    });
+
+    const manualRow = await linkRowFor(manualFaceId);
+    const mlRow = await linkRowFor(mlFaceId);
+    expect(manualRow?.source).toBe('manual');
+    expect(mlRow?.source).toBe('owner-person');
+  });
+
+  it("D4c: backfill's linkPersonFaces preserves a drifted manual link", async () => {
+    // repairRemainingPersonalIdentityFaceLinks calls `linkPersonFaces({ personId, identityId, source:
+    // 'backfill' })` with exactly this shape whenever a person's own faces are still linked to a stale
+    // identity after the rest of the personal backfill pass has run. Drive linkPersonFaces directly with the
+    // same arguments to pin the fix at the exact site the backfill caller uses.
+    const { ctx, faceIdentityRepository } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+    const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+    const staleIdentity = await db
+      .insertInto('face_identity')
+      .values({ type: 'person' })
+      .returningAll()
+      .executeTakeFirstOrThrow();
+
+    const manualFaceId = await seedFace(ctx, user.id, person.id);
+    const mlFaceId = await seedFace(ctx, user.id, person.id);
+    // Both faces are on `person` but their links have drifted onto a stale, unrelated identity.
+    await insertLinkRow(manualFaceId, staleIdentity.id, 'manual');
+    await insertLinkRow(mlFaceId, staleIdentity.id, 'ml');
+
+    await faceIdentityRepository.linkPersonFaces({ personId: person.id, identityId: identity.id, source: 'backfill' });
+
+    const manualRow = await linkRowFor(manualFaceId);
+    const mlRow = await linkRowFor(mlFaceId);
+    expect(manualRow?.identityId).toBe(identity.id);
+    expect(manualRow?.source).toBe('manual');
+    expect(mlRow?.identityId).toBe(identity.id);
+    expect(mlRow?.source).toBe('backfill');
   });
 });
