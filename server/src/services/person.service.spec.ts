@@ -121,6 +121,10 @@ describe(PersonService.name, () => {
     // Default: no stored preferences → getPreferences() falls back to minimumFaces = 3.
     mocks.user.getMetadata.mockResolvedValue([]);
     mocks.sharedSpace.getAssignedFaceIdsForSpace.mockResolvedValue([]);
+    // Default: no face has been manually linked or negatively verdicted — the suggestion-scan handlers'
+    // write-time exclusion (D3) becomes a no-op unless an individual test configures otherwise.
+    mocks.faceIdentity.getManualLinkedFaceIds.mockResolvedValue(new Set());
+    mocks.facePersonVerdict.getNegativeVerdictTokens.mockResolvedValue(new Map());
   });
 
   const expectNoFaceDetectionMutation = () => {
@@ -4148,6 +4152,41 @@ describe(PersonService.name, () => {
         { personId: 'p', assetFaceId: 'f-dismissed', distance: 0.7 },
       ]);
     });
+
+    it('drops a manually-linked or negatively-verdicted candidate before upserting (D3 write-time exclusion)', async () => {
+      mocks.systemMetadata.get.mockResolvedValue(enabled);
+      mocks.person.getById.mockResolvedValue({
+        id: 'p',
+        ownerId: 'u',
+        name: 'A',
+        isHidden: false,
+        type: 'person',
+        identityId: 'identity-p',
+      } as any);
+      mocks.person.getAssignedFaceEmbeddings.mockResolvedValue([{ embedding: 'e' }] as any);
+      mocks.search.searchFaces.mockResolvedValue([
+        { id: 'f-manual', personId: null, distance: 0.7 },
+        { id: 'f-negative-person', personId: null, distance: 0.7 },
+        { id: 'f-negative-identity', personId: null, distance: 0.7 },
+        { id: 'f-kept', personId: null, distance: 0.7 },
+      ] as any);
+      mocks.faceIdentity.getManualLinkedFaceIds.mockResolvedValue(new Set(['f-manual']));
+      mocks.facePersonVerdict.getNegativeVerdictTokens.mockResolvedValue(
+        new Map([
+          ['f-negative-person', new Set(['person:p'])],
+          ['f-negative-identity', new Set(['identity:identity-p'])],
+        ]),
+      );
+
+      await sut.handlePersonSuggestionScan({ id: 'p' });
+
+      expect(mocks.faceIdentity.getManualLinkedFaceIds).toHaveBeenCalledWith(
+        expect.arrayContaining(['f-manual', 'f-negative-person', 'f-negative-identity', 'f-kept']),
+      );
+      expect(mocks.facePersonVerdict.upsertPending).toHaveBeenCalledWith([
+        { personId: 'p', assetFaceId: 'f-kept', distance: 0.7 },
+      ]);
+    });
   });
 
   describe('handlePersonSuggestionScanQueueAll', () => {
@@ -4320,6 +4359,42 @@ describe(PersonService.name, () => {
       ]);
       expect(mocks.facePersonVerdict.upsertPendingForSpacePerson).toHaveBeenCalledWith([
         { spacePersonId: 'sp', assetFaceId: 'candidate', distance: 0.7 },
+      ]);
+    });
+
+    it('drops a manually-linked or negatively-verdicted candidate before upserting (D3 write-time exclusion)', async () => {
+      mocks.systemMetadata.get.mockResolvedValue(enabled);
+      mocks.sharedSpace.getPersonById.mockResolvedValue({
+        id: 'sp',
+        spaceId: 'space-1',
+        name: 'Alice',
+        isHidden: false,
+        type: 'person',
+        identityId: 'identity-sp',
+      } as any);
+      mocks.sharedSpace.getById.mockResolvedValue({ id: 'space-1', faceRecognitionEnabled: true } as any);
+      mocks.sharedSpace.getSpacePersonAssignedFaceEmbeddings.mockResolvedValue([{ embedding: 'e1' }] as any);
+      mocks.search.searchFaces.mockResolvedValue([
+        { id: 'f-manual', personId: null, distance: 0.7 },
+        { id: 'f-negative-space-person', personId: null, distance: 0.7 },
+        { id: 'f-negative-identity', personId: null, distance: 0.7 },
+        { id: 'f-kept', personId: null, distance: 0.7 },
+      ] as FaceSearchResult[]);
+      mocks.faceIdentity.getManualLinkedFaceIds.mockResolvedValue(new Set(['f-manual']));
+      mocks.facePersonVerdict.getNegativeVerdictTokens.mockResolvedValue(
+        new Map([
+          ['f-negative-space-person', new Set(['space-person:sp'])],
+          ['f-negative-identity', new Set(['identity:identity-sp'])],
+        ]),
+      );
+
+      await expect(sut.handleSpacePersonSuggestionScan({ id: 'sp' })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.faceIdentity.getManualLinkedFaceIds).toHaveBeenCalledWith(
+        expect.arrayContaining(['f-manual', 'f-negative-space-person', 'f-negative-identity', 'f-kept']),
+      );
+      expect(mocks.facePersonVerdict.upsertPendingForSpacePerson).toHaveBeenCalledWith([
+        { spacePersonId: 'sp', assetFaceId: 'f-kept', distance: 0.7 },
       ]);
     });
   });

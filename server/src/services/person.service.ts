@@ -881,6 +881,20 @@ export class PersonService extends BaseService {
       }
     }
 
+    // D3: exclude candidates a human has already settled — a manually-linked face (owner-agnostic), or a
+    // face a human has already said "not this person/identity" about, in ANY scope that shares the target's
+    // identity. The candidate set is bounded to this scan's own results (never an unscoped read).
+    const candidateFaceIds = [...bestByFace.keys()];
+    const { manualLinkedFaceIds, negativeFaceTargets } =
+      await this.faceVerdictService.getFaceSettlementInputs(candidateFaceIds);
+    const targetTokens = new Set([`person:${id}`, ...(person.identityId ? [`identity:${person.identityId}`] : [])]);
+    for (const faceId of candidateFaceIds) {
+      const negatives = negativeFaceTargets.get(faceId);
+      if (manualLinkedFaceIds.has(faceId) || (negatives && [...negatives].some((token) => targetTokens.has(token)))) {
+        bestByFace.delete(faceId);
+      }
+    }
+
     const rows = [...bestByFace].map(([assetFaceId, distance]) => ({ personId: id, assetFaceId, distance }));
     await this.facePersonVerdictRepository.upsertPending(rows);
     return JobStatus.Success;
@@ -957,6 +971,22 @@ export class PersonService extends BaseService {
     ]);
     for (const { assetFaceId } of assigned) {
       bestByFace.delete(assetFaceId);
+    }
+
+    // D3: same exclusion as the personal scan — a manually-linked face (owner-agnostic), or a face a human
+    // has already said "not this person/identity" about, in ANY scope that shares the target's identity.
+    const candidateFaceIds = [...bestByFace.keys()];
+    const { manualLinkedFaceIds, negativeFaceTargets } =
+      await this.faceVerdictService.getFaceSettlementInputs(candidateFaceIds);
+    const targetTokens = new Set([
+      `space-person:${id}`,
+      ...(person.identityId ? [`identity:${person.identityId}`] : []),
+    ]);
+    for (const faceId of candidateFaceIds) {
+      const negatives = negativeFaceTargets.get(faceId);
+      if (manualLinkedFaceIds.has(faceId) || (negatives && [...negatives].some((token) => targetTokens.has(token)))) {
+        bestByFace.delete(faceId);
+      }
     }
 
     const rows = [...bestByFace].map(([assetFaceId, distance]) => ({

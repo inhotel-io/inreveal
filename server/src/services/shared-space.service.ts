@@ -1333,6 +1333,10 @@ export class SharedSpaceService extends BaseService {
 
     await this.faceIdentityRepository.replaceFaceIdentity({ assetFaceId, identityId: identity.id, source: 'manual' });
     await this.facePersonVerdictRepository.resolveAssignedFace(assetFaceId);
+    // D3: write the space projection so getAssignedFaceIdsForSpace excludes this face from the same space's
+    // next scan, for every space person — not just this one. addPersonFaces is onConflict().doNothing(), so
+    // this is idempotent if a concurrent face-match backfill already wrote the same row.
+    await this.sharedSpaceRepository.addPersonFaces([{ personId: person.id, assetFaceId }]);
   }
 
   // D9/D2: reachability (RBAC — is this face's asset in the space at all), not pendingness, gates a space
