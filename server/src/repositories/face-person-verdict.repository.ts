@@ -329,10 +329,11 @@ export class FacePersonVerdictRepository {
       return { total: 0, items: [] };
     }
 
-    // Read gate: person must be scannable (named, not hidden, type='person')
+    // Read gate: person must be scannable (named, not hidden, type='person'). Also resolves identityId once
+    // here for the negative-verdict anti-join below, rather than a correlated subquery per row.
     const scannable = await this.db
       .selectFrom('person')
-      .select('person.id')
+      .select(['person.id', 'person.identityId'])
       .where('person.id', '=', personId)
       .where('person.name', '!=', '')
       .where('person.isHidden', '=', false)
@@ -354,7 +355,38 @@ export class FacePersonVerdictRepository {
       .where('fpv.distance', '>', opts.maxDistance)
       .where('fpv.distance', '<=', opts.suggestionMaxDistance)
       .where('af.personId', 'is', null)
-      .where('af.deletedAt', 'is', null);
+      .where('af.deletedAt', 'is', null)
+      // D3 self-heal: a face already placed by a human (any identity — owner-agnostic) never stays pending,
+      // even if the write path that settled it didn't drain this row.
+      .where((eb) =>
+        eb.not(
+          eb.exists((eb) =>
+            eb
+              .selectFrom('face_identity_face as fif')
+              .whereRef('fif.assetFaceId', '=', 'fpv.assetFaceId')
+              .where('fif.source', '=', 'manual'),
+          ),
+        ),
+      )
+      // D3 self-heal: a face a human has already said "not this person" about — matched identity-first (so
+      // a rejection recorded in another scope sharing this person's identity is honoured here too), with a
+      // personId fallback for verdicts recorded before an identity existed.
+      .where((eb) =>
+        eb.not(
+          eb.exists((eb) =>
+            eb
+              .selectFrom('face_person_verdict as neg')
+              .whereRef('neg.assetFaceId', '=', 'fpv.assetFaceId')
+              .where('neg.status', 'in', ['rejected', 'ignored'])
+              .where((inner) =>
+                inner.or([
+                  inner('neg.personId', '=', personId),
+                  ...(scannable.identityId ? [inner('neg.identityId', '=', scannable.identityId)] : []),
+                ]),
+              ),
+          ),
+        ),
+      );
 
     const totalRow = await base.select((eb) => eb.fn.countAll<string>().as('total')).executeTakeFirstOrThrow();
 
@@ -395,10 +427,12 @@ export class FacePersonVerdictRepository {
       return { total: 0, items: [] };
     }
 
+    // Also resolves identityId once here for the negative-verdict anti-join below, rather than a correlated
+    // subquery per row.
     const scannable = await this.db
       .selectFrom('shared_space_person')
       .innerJoin('shared_space', 'shared_space.id', 'shared_space_person.spaceId')
-      .select('shared_space_person.id')
+      .select(['shared_space_person.id', 'shared_space_person.identityId'])
       .where('shared_space_person.id', '=', spacePersonId)
       .where('shared_space_person.spaceId', '=', spaceId)
       .where(sql`BTRIM("shared_space_person"."name")`, '<>', '')
@@ -436,6 +470,37 @@ export class FacePersonVerdictRepository {
             correlateLibraryId: 'asset.libraryId',
             scope: { spaceId },
           }),
+        ),
+      )
+      // D3 self-heal: a face already placed by a human (any identity — owner-agnostic) never stays pending,
+      // even if the write path that settled it didn't drain this row.
+      .where((eb) =>
+        eb.not(
+          eb.exists((eb) =>
+            eb
+              .selectFrom('face_identity_face as fif')
+              .whereRef('fif.assetFaceId', '=', 'fpv.assetFaceId')
+              .where('fif.source', '=', 'manual'),
+          ),
+        ),
+      )
+      // D3 self-heal: a face a human has already said "not this space person" about — matched
+      // identity-first (so a rejection recorded in another scope sharing this space person's identity is
+      // honoured here too), with a spacePersonId fallback for verdicts recorded before an identity existed.
+      .where((eb) =>
+        eb.not(
+          eb.exists((eb) =>
+            eb
+              .selectFrom('face_person_verdict as neg')
+              .whereRef('neg.assetFaceId', '=', 'fpv.assetFaceId')
+              .where('neg.status', 'in', ['rejected', 'ignored'])
+              .where((inner) =>
+                inner.or([
+                  inner('neg.spacePersonId', '=', spacePersonId),
+                  ...(scannable.identityId ? [inner('neg.identityId', '=', scannable.identityId)] : []),
+                ]),
+              ),
+          ),
         ),
       );
 

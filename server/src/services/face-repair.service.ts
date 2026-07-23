@@ -107,28 +107,15 @@ export { RepairReport } from 'src/services/face-repair.summary';
 
 @Injectable()
 export class FaceRepairService extends BaseService {
-  // Assemble the shared exclusion inputs for a bounded set of flagged faces. Every source is scoped to the
-  // ids this scan actually produced — never an unscoped table read.
-  //
-  // This is the join point of the two face features: the suggestion side's negative verdicts and the
-  // human-placement record are consulted here, so a face a user confirmed or rejected is never re-proposed
-  // to an admin, and vice versa.
-  private async buildVerdictMaps(scope: {
+  // Delegates to the shared FaceVerdictService (Slice 3 extraction) — the suggestion engine's scan handlers
+  // consult the SAME method via `this.faceVerdictService`, so a face a user confirmed or rejected is never
+  // re-proposed to an admin, and vice versa. See FaceVerdictService.buildVerdictMaps for the implementation.
+  private buildVerdictMaps(scope: {
     assetFaceIds: string[];
     personIds: string[];
     suspectedOwnerIds: string[];
   }): Promise<VerdictMaps> {
-    const uniqueFaceIds = [...new Set(scope.assetFaceIds)];
-    const uniqueOwnerIds = [...new Set(scope.suspectedOwnerIds)];
-
-    const [manualLinkedFaceIds, negativeFaceTargets, ownerTokens, mutedPersons] = await Promise.all([
-      this.faceIdentityRepository.getManualLinkedFaceIds(uniqueFaceIds),
-      this.facePersonVerdictRepository.getNegativeVerdictTokens(uniqueFaceIds),
-      this.faceIdentityRepository.getPersonVerdictTokens(uniqueOwnerIds),
-      this.faceRepairDeclineRepository.getClusterMuteMap(scope.personIds),
-    ]);
-
-    return { manualLinkedFaceIds, negativeFaceTargets, ownerTokens, mutedPersons };
+    return this.faceVerdictService.buildVerdictMaps(scope);
   }
 
   async buildRepairPlan(
