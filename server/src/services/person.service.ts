@@ -365,7 +365,10 @@ export class PersonService extends BaseService {
     id: string,
     dto: PersonFaceSuggestionPageQueryDto,
   ): Promise<PersonFaceSuggestionPageResponseDto> {
-    await this.requireAccess({ auth, permission: Permission.PersonRead, ids: [id] });
+    // D6: owner-only. PersonRead also admits shared-space members (see access.ts), which would let a
+    // space member read the owner's whole-library pending review queue. PersonUpdate resolves via
+    // checkOwnerAccess alone (same idiom as confirm/reject/ignore below), so this stays owner-only.
+    await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [id] });
 
     const { machineLearning } = await this.getConfig({ withCache: true });
     const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;

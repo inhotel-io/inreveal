@@ -307,6 +307,53 @@ describe('FacePersonVerdictRepository', () => {
       // still ordered by distance ascending (Phase-1 contract preserved)
       expect(res.items.map((i) => i.distance)).toEqual([0.6, 0.7]);
     });
+
+    it('excludes pending rows on trashed / hidden / offline / locked assets and invisible faces (D11)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Bob', isHidden: false, type: 'person' });
+
+      const { asset: normalAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { asset: trashedAsset } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+      const { asset: hiddenAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Hidden });
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { asset: offlineAsset } = await ctx.newAsset({ ownerId: user.id, isOffline: true });
+
+      const { assetFace: normalFace } = await ctx.newAssetFace({ assetId: normalAsset.id, personId: null });
+      const { assetFace: trashedFace } = await ctx.newAssetFace({ assetId: trashedAsset.id, personId: null });
+      const { assetFace: hiddenFace } = await ctx.newAssetFace({ assetId: hiddenAsset.id, personId: null });
+      const { assetFace: lockedFace } = await ctx.newAssetFace({ assetId: lockedAsset.id, personId: null });
+      const { assetFace: offlineFace } = await ctx.newAssetFace({ assetId: offlineAsset.id, personId: null });
+      const { assetFace: invisibleFace } = await ctx.newAssetFace({ assetId: normalAsset.id, personId: null });
+      await defaultDatabase
+        .updateTable('asset_face')
+        .set({ isVisible: false })
+        .where('id', '=', invisibleFace.id)
+        .execute();
+
+      await sut.upsertPending([
+        { personId: person.id, assetFaceId: normalFace.id, distance: 0.6 },
+        { personId: person.id, assetFaceId: trashedFace.id, distance: 0.61 },
+        { personId: person.id, assetFaceId: hiddenFace.id, distance: 0.62 },
+        { personId: person.id, assetFaceId: lockedFace.id, distance: 0.63 },
+        { personId: person.id, assetFaceId: offlineFace.id, distance: 0.64 },
+        { personId: person.id, assetFaceId: invisibleFace.id, distance: 0.65 },
+      ]);
+
+      const result = await sut.getPendingForPerson(person.id, opts);
+
+      expect(result.total).toBe(1);
+      expect(result.items.map((item) => item.assetFaceId)).toEqual([normalFace.id]);
+
+      // Read-time gate: rows are never deleted, so restoring the trashed asset resurfaces its row.
+      await defaultDatabase.updateTable('asset').set({ deletedAt: null }).where('id', '=', trashedAsset.id).execute();
+
+      const afterUntrash = await sut.getPendingForPerson(person.id, opts);
+      expect(afterUntrash.total).toBe(2);
+      expect(afterUntrash.items.map((item) => item.assetFaceId)).toEqual(
+        expect.arrayContaining([normalFace.id, trashedFace.id]),
+      );
+    });
   });
 
   describe('claimPending / markRejected / markIgnored', () => {

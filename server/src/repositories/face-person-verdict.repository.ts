@@ -356,6 +356,10 @@ export class FacePersonVerdictRepository {
       .where('fpv.distance', '<=', opts.suggestionMaxDistance)
       .where('af.personId', 'is', null)
       .where('af.deletedAt', 'is', null)
+      .where('af.isVisible', 'is', true)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', 'is', false)
+      .where('asset.visibility', 'in', [AssetVisibility.Archive, AssetVisibility.Timeline])
       // D3 self-heal: a face already placed by a human (any identity — owner-agnostic) never stays pending,
       // even if the write path that settled it didn't drain this row.
       .where((eb) =>

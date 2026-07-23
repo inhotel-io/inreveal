@@ -6615,6 +6615,26 @@ describe(PersonService.name, () => {
       expect(mocks.facePersonVerdict.getPendingForPerson).not.toHaveBeenCalled();
     });
 
+    it('refuses a space member (non-owner) — suggestions are owner-only (D6)', async () => {
+      // Space member: NOT the owner, but space-reachable (would pass PersonRead).
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set());
+      mocks.access.person.checkSharedSpaceAccess.mockResolvedValue(new Set(['person-1']));
+
+      await expect(
+        sut.getFaceSuggestions(AuthFactory.create(), 'person-1', { page: 1, size: 10 }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mocks.facePersonVerdict.getPendingForPerson).not.toHaveBeenCalled();
+    });
+
+    it('refuses an admin who is not the owner — PersonUpdate has no admin carve-out (D6)', async () => {
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set());
+
+      await expect(
+        sut.getFaceSuggestions(AuthFactory.create({ isAdmin: true }), 'person-1', { page: 1, size: 10 }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mocks.facePersonVerdict.getPendingForPerson).not.toHaveBeenCalled();
+    });
+
     it('returns total + mapped items for the owner', async () => {
       mocks.systemMetadata.get.mockResolvedValue(enabled);
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
