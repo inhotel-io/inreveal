@@ -1597,7 +1597,10 @@ values
 on conflict ("assetFaceId") do update
 set
   "identityId" = $5,
-  "source" = $6,
+  "source" = CASE
+    WHEN "face_identity_face"."source" = 'manual' THEN 'manual'
+    ELSE $6
+  END,
   "confidence" = $7
 returning
   *
@@ -1659,7 +1662,10 @@ where
 on conflict ("assetFaceId") do update
 set
   "identityId" = $7,
-  "source" = $8,
+  "source" = CASE
+    WHEN "face_identity_face"."source" = 'manual' THEN 'manual'
+    ELSE $8
+  END,
   "confidence" = $9
 
 -- FaceIdentityRepository.updateRepresentativeFace
@@ -1680,7 +1686,10 @@ values
 on conflict ("assetFaceId") do update
 set
   "identityId" = $5,
-  "source" = $6,
+  "source" = CASE
+    WHEN "face_identity_face"."source" = 'manual' THEN 'manual'
+    ELSE $6
+  END,
   "confidence" = $7
 returning
   *

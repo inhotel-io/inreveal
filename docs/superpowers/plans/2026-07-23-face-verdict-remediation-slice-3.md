@@ -31,12 +31,19 @@
 - **Modify** `server/test/medium/specs/services/face-review-cross-flow.spec.ts` — add a `setupSpace` helper + the two defect-5 BDD scenarios.
 
 **Interfaces produced:**
+
 ```ts
 // face-verdict.service.ts
 class FaceVerdictService {
   constructor(deps: { faceIdentityRepository; facePersonVerdictRepository; faceRepairDeclineRepository; logger });
-  buildVerdictMaps(scope: { assetFaceIds: string[]; personIds: string[]; suspectedOwnerIds: string[] }): Promise<VerdictMaps>;
-  getFaceSettlementInputs(assetFaceIds: string[]): Promise<{ manualLinkedFaceIds: Set<string>; negativeFaceTargets: Map<string, Set<string>> }>;
+  buildVerdictMaps(scope: {
+    assetFaceIds: string[];
+    personIds: string[];
+    suspectedOwnerIds: string[];
+  }): Promise<VerdictMaps>;
+  getFaceSettlementInputs(
+    assetFaceIds: string[],
+  ): Promise<{ manualLinkedFaceIds: Set<string>; negativeFaceTargets: Map<string, Set<string>> }>;
 }
 ```
 
@@ -75,6 +82,7 @@ Drive REAL handlers on one DB: construct `PersonService` (for `handlePersonSugge
 **Files:** Create `server/src/services/face-verdict.service.ts`; Modify `base.service.ts`, `face-repair.service.ts`.
 
 - [ ] **Step 1:** Create the plain class. Move `buildVerdictMaps` verbatim (same repo calls, same `VerdictMaps` from `src/utils/face-repair`). Add the narrow method:
+
 ```ts
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
@@ -92,12 +100,18 @@ export interface FaceVerdictServiceDependencies {
 export class FaceVerdictService {
   constructor(private deps: FaceVerdictServiceDependencies) {}
 
-  async buildVerdictMaps(scope: { assetFaceIds: string[]; personIds: string[]; suspectedOwnerIds: string[] }): Promise<VerdictMaps> {
+  async buildVerdictMaps(scope: {
+    assetFaceIds: string[];
+    personIds: string[];
+    suspectedOwnerIds: string[];
+  }): Promise<VerdictMaps> {
     // ... moved verbatim from FaceRepairService, using this.deps.* ...
   }
 
   // Narrow inputs for the suggestion engine — no cluster-mute / owner-token machinery.
-  async getFaceSettlementInputs(assetFaceIds: string[]): Promise<{ manualLinkedFaceIds: Set<string>; negativeFaceTargets: Map<string, Set<string>> }> {
+  async getFaceSettlementInputs(
+    assetFaceIds: string[],
+  ): Promise<{ manualLinkedFaceIds: Set<string>; negativeFaceTargets: Map<string, Set<string>> }> {
     const unique = [...new Set(assetFaceIds)];
     if (unique.length === 0) {
       return { manualLinkedFaceIds: new Set(), negativeFaceTargets: new Map() };
@@ -110,7 +124,9 @@ export class FaceVerdictService {
   }
 }
 ```
+
 - [ ] **Step 2:** In `base.service.ts`, add the field + construct it in the constructor next to `identityMergePropagationService`:
+
 ```ts
 protected faceVerdictService: FaceVerdictService;
 // ... in the constructor, after the repos are assigned:
@@ -118,14 +134,19 @@ this.faceVerdictService = new FaceVerdictService({
   faceIdentityRepository, facePersonVerdictRepository, faceRepairDeclineRepository, logger: this.logger,
 });
 ```
+
 Confirm all three repos are already in the `BaseService` constructor scope (they are — `faceRepairDeclineRepository` too). Do NOT add to `BASE_SERVICE_DEPENDENCIES` / `BaseService.create` / `src/services/index.ts` — this is a plain member, not a repo/service dep.
+
 - [ ] **Step 3:** In `face-repair.service.ts`, replace the private `buildVerdictMaps` body with:
+
 ```ts
 private buildVerdictMaps(scope: { assetFaceIds: string[]; personIds: string[]; suspectedOwnerIds: string[] }): Promise<VerdictMaps> {
   return this.faceVerdictService.buildVerdictMaps(scope);
 }
 ```
+
 - [ ] **Step 4: Behaviour-neutral proof** — run the cleanup suites UNCHANGED, all green:
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.mjs --run src/services/face-repair.person.spec.ts
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
@@ -134,6 +155,7 @@ cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/face-repair.resolve.spec.ts \
   test/medium/specs/services/face-repair.merge-consistency.spec.ts
 ```
+
 If any needs editing, STOP — the extraction changed behaviour.
 
 ---
@@ -143,9 +165,11 @@ If any needs editing, STOP — the extraction changed behaviour.
 **Files:** Modify `server/src/services/person.service.ts`.
 
 - [ ] **Step 1:** In `handlePersonSuggestionScan`, after building `bestByFace` and before `upsertPending` (~844):
+
 ```ts
 const candidateFaceIds = [...bestByFace.keys()];
-const { manualLinkedFaceIds, negativeFaceTargets } = await this.faceVerdictService.getFaceSettlementInputs(candidateFaceIds);
+const { manualLinkedFaceIds, negativeFaceTargets } =
+  await this.faceVerdictService.getFaceSettlementInputs(candidateFaceIds);
 const targetTokens = new Set([`person:${id}`, ...(person.identityId ? [`identity:${person.identityId}`] : [])]);
 for (const faceId of candidateFaceIds) {
   const negatives = negativeFaceTargets.get(faceId);
@@ -156,12 +180,15 @@ for (const faceId of candidateFaceIds) {
 const rows = [...bestByFace].map(([assetFaceId, distance]) => ({ personId: id, assetFaceId, distance }));
 await this.facePersonVerdictRepository.upsertPending(rows);
 ```
+
 > Confirm the exact token strings `getNegativeVerdictTokens` emits (`person:`/`space-person:`/`identity:` prefixes) by reading `face-person-verdict.repository.ts:291-318`, and match them exactly. Personal scan target tokens are `person:<id>` and `identity:<person.identityId>`.
 
 - [ ] **Step 2:** In `handleSpacePersonSuggestionScan`, after the existing `getAssignedFaceIdsForSpace` exclusion and before `upsertPendingForSpacePerson` (~926), add the same manual-link + negative-verdict filter, with target tokens `space-person:${id}` and `identity:${person.identityId}`:
+
 ```ts
 const candidateFaceIds = [...bestByFace.keys()];
-const { manualLinkedFaceIds, negativeFaceTargets } = await this.faceVerdictService.getFaceSettlementInputs(candidateFaceIds);
+const { manualLinkedFaceIds, negativeFaceTargets } =
+  await this.faceVerdictService.getFaceSettlementInputs(candidateFaceIds);
 const targetTokens = new Set([`space-person:${id}`, ...(person.identityId ? [`identity:${person.identityId}`] : [])]);
 for (const faceId of candidateFaceIds) {
   const negatives = negativeFaceTargets.get(faceId);
@@ -170,6 +197,7 @@ for (const faceId of candidateFaceIds) {
   }
 }
 ```
+
 - [ ] **Step 3:** Run the personal-scan unit spec (`person.service.spec.ts` `handlePersonSuggestionScan` block) — update its mocks to stub `faceVerdictService.getFaceSettlementInputs` (or the underlying repo methods) returning empty maps so existing assertions hold, and add a case asserting a manual-linked/negatively-verdicted candidate is dropped. Run `cd server && pnpm exec vitest --config test/vitest.config.mjs --run src/services/person.service.spec.ts`.
 
 ---
@@ -179,6 +207,7 @@ for (const faceId of candidateFaceIds) {
 **Files:** Modify `server/src/repositories/face-person-verdict.repository.ts`.
 
 - [ ] **Step 1:** Add to the `base` query in `getPendingForPerson` (and mirror in `getPendingForSpacePerson`) two `NOT EXISTS` predicates. The negative-verdict anti-join must match identity-first: resolve the target's identity via the person/space-person row.
+
 ```ts
 .where((eb) => eb.not(eb.exists(
   eb.selectFrom('face_identity_face as fif')
@@ -200,9 +229,11 @@ for (const faceId of candidateFaceIds) {
     ])),
 )))
 ```
+
 > For `getPendingForSpacePerson`, swap `neg.personId = spacePersonId` and resolve the identity via `shared_space_person`. Adjust the exact `eb`/`sql` idioms to type-check (the digest confirms `face_identity_face_assetFaceId` + `face_person_verdict_*` indexes back these). Keep the existing self-heal (`af.personId IS NULL`) and RBAC/asset gates untouched.
 
 - [ ] **Step 2:** Run the verdict repo medium spec + the Task-1 self-heal scenario:
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/repositories/face-person-verdict.repository.spec.ts \
@@ -216,16 +247,20 @@ cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
 **Files:** Modify `server/src/services/shared-space.service.ts`.
 
 - [ ] **Step 1:** In `confirmSpacePersonFaceSuggestion`, after `replaceFaceIdentity` + `resolveAssignedFace` (~1323-1324):
+
 ```ts
 // D3: write the space projection so getAssignedFaceIdsForSpace excludes this face from the same space's next scan.
 await this.sharedSpaceRepository.addPersonFaces([{ personId: person.id, assetFaceId }]);
 ```
+
 - [ ] **Step 2:** Run the space suggestion + exclusion specs:
+
 ```
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/shared-space-face-suggestions.service.spec.ts \
   test/medium/specs/services/face-suggestion-exclusions.spec.ts
 ```
+
 Expected: scenario 4 (same-space re-scan skips) + the projection-row assertion pass.
 
 ---
@@ -234,6 +269,7 @@ Expected: scenario 4 (same-space re-scan skips) + the projection-row assertion p
 
 - [ ] **Step 1: Refactor check** — cleanup's three `buildVerdictMaps` call sites now delegate through `FaceVerdictService`; the private copy is deleted (Task 3). No duplicated exclusion logic remains. Re-run Task 3 Step 4 (cleanup suites) — still green.
 - [ ] **Step 2: Full done gate** (in full):
+
 ```
 cd server && pnpm check && pnpm lint
 cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
@@ -248,7 +284,9 @@ cd server && pnpm exec vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/face-verdict.merge-durability.spec.ts
 cd server && pnpm exec vitest --config test/vitest.config.mjs --run src/services/person.service.spec.ts src/services/face-repair.person.spec.ts
 ```
+
 - [ ] **Step 3: Commit:**
+
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/face-unified
 git add server/src/services/face-verdict.service.ts server/src/services/base.service.ts \
@@ -265,14 +303,14 @@ git commit -m "feat(server): suggestion engine consults the shared verdict layer
 
 ## Edge-case coverage map (spec §Slice 3 table → test)
 
-| Edge case | Covered by |
-| --- | --- |
-| Negative toward O only | Task 1 scenario 2 variant: F still proposable toward Q (target-scoped — assert a different person Q still gets F) |
-| Manual link to identity X, scan proposes person with identity X | Task 1 scenario 1 (excluded — already settled positively) |
-| Manual link to X, scan proposes person with identity Y | Task 1 scenario 1 (excluded — manual-link is owner-agnostic; `getFaceSettlementInputs` returns the face regardless of which identity) |
-| Scan config gate off / band empty | handlers `return JobStatus.Skipped` before the exclusion — no `getFaceSettlementInputs` call on the skip path (assert not called via a spy, or that no query runs) |
-| Provider scope discipline | `getFaceSettlementInputs` is called with exactly `candidateFaceIds` (the bestByFace set) — never unscoped; assert in the unit test |
-| Projection row already exists (face-match raced confirm) | `addPersonFaces` uses `onConflict().doNothing()` — idempotent; Task 6 test confirms no duplicate/throw |
+| Edge case                                                       | Covered by                                                                                                                                                         |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Negative toward O only                                          | Task 1 scenario 2 variant: F still proposable toward Q (target-scoped — assert a different person Q still gets F)                                                  |
+| Manual link to identity X, scan proposes person with identity X | Task 1 scenario 1 (excluded — already settled positively)                                                                                                          |
+| Manual link to X, scan proposes person with identity Y          | Task 1 scenario 1 (excluded — manual-link is owner-agnostic; `getFaceSettlementInputs` returns the face regardless of which identity)                              |
+| Scan config gate off / band empty                               | handlers `return JobStatus.Skipped` before the exclusion — no `getFaceSettlementInputs` call on the skip path (assert not called via a spy, or that no query runs) |
+| Provider scope discipline                                       | `getFaceSettlementInputs` is called with exactly `candidateFaceIds` (the bestByFace set) — never unscoped; assert in the unit test                                 |
+| Projection row already exists (face-match raced confirm)        | `addPersonFaces` uses `onConflict().doNothing()` — idempotent; Task 6 test confirms no duplicate/throw                                                             |
 
 ## Self-review (author)
 

@@ -4614,6 +4614,19 @@ export function declineFaceRepair({ faceRepairDeclineRequestDto }: {
     })));
 }
 /**
+ * Get an admin face-repair face thumbnail
+ */
+export function getFaceRepairFaceThumbnail({ assetFaceId }: {
+    assetFaceId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchBlob<{
+        status: 200;
+        data: Blob;
+    }>(`/admin/face-repair/faces/${encodeURIComponent(assetFaceId)}/thumbnail`, {
+        ...opts
+    }));
+}
+/**
  * Search an owner's people for the move-to-chosen-person picker
  */
 export function getFaceRepairOwnerPeople({ ownerId, page, query }: {
@@ -4648,7 +4661,7 @@ export function createFaceRepairOwnerPerson({ ownerId, faceRepairOwnerPersonCrea
     })));
 }
 /**
- * List face-repair resolutions (declines + locks)
+ * List face-repair resolutions (negative verdicts from both engines)
  */
 export function getFaceRepairResolutions(opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
