@@ -179,6 +179,7 @@ export type SystemConfig = {
     databaseCleanup: boolean;
     missingThumbnails: boolean;
     clusterNewFaces: boolean;
+    clusterNewPets: boolean;
     generateMemories: boolean;
     syncQuotaUsage: boolean;
   };
@@ -452,6 +453,7 @@ export const defaults = Object.freeze<SystemConfig>({
     syncQuotaUsage: true,
     missingThumbnails: true,
     clusterNewFaces: true,
+    clusterNewPets: true,
   },
   memories: {
     retentionDays: 365,
