@@ -180,6 +180,31 @@ const showModal = modalManager.show as unknown as ReturnType<
   typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | undefined>>
 >;
 
+// Face-grid pagination is scroll-driven (InfiniteScrollSentinel): a controllable IntersectionObserver lets the
+// "load more" test fire the sentinel explicitly, and getBoundingClientRect is parked below the fold in
+// beforeEach so the visibility fallback never auto-loads in the other tests.
+type ObserverEntry = Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>;
+const observerInstances: ControllableIntersectionObserver[] = [];
+class ControllableIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = '';
+  readonly scrollMargin = '';
+  readonly thresholds = [];
+  readonly disconnect = vi.fn();
+  readonly observe = vi.fn((target: Element) => {
+    this.observedTarget = target;
+  });
+  readonly takeRecords = vi.fn(() => []);
+  readonly unobserve = vi.fn();
+  observedTarget?: Element;
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    observerInstances.push(this);
+  }
+  trigger(entry: ObserverEntry) {
+    this.callback([entry as IntersectionObserverEntry], this);
+  }
+}
+
 describe('+page.svelte (manual face-review page)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -195,10 +220,17 @@ describe('+page.svelte (manual face-review page)', () => {
       skipped: 0,
     });
     showModal.mockResolvedValue(undefined);
+    observerInstances.length = 0;
+    vi.stubGlobal('IntersectionObserver', ControllableIntersectionObserver);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight + 1,
+    } as DOMRect);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   // ---- 1. loads all cluster faces with no scan in existence ----
@@ -400,7 +432,11 @@ describe('+page.svelte (manual face-review page)', () => {
       expect(tile).toHaveAttribute('data-state', 'lock');
     });
 
-    await fireEvent.click(screen.getByTestId('manual-review-load-more'));
+    // No "Load more" button — the sentinel entering the viewport is what loads the next page of faces.
+    expect(screen.queryByTestId('manual-review-load-more')).not.toBeInTheDocument();
+    await waitFor(() => expect(observerInstances.length).toBeGreaterThan(0));
+    const observer = observerInstances.at(-1)!;
+    observer.trigger({ target: observer.observedTarget!, isIntersecting: true });
 
     await waitFor(() => {
       expect(getFaceRepairClusterFaces).toHaveBeenCalledWith({

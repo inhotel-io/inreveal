@@ -82,6 +82,31 @@ vi.mock('$lib/utils/people-utils', () => ({
   getAdminFaceThumbnailUrl: (assetFaceId: string) => `/api/admin/face-repair/faces/${assetFaceId}/thumbnail`,
 }));
 
+// Pagination is scroll-driven (InfiniteScrollSentinel): a controllable IntersectionObserver lets the paging
+// test fire the sentinel explicitly, and getBoundingClientRect is parked below the fold in beforeEach so the
+// visibility fallback never auto-loads in the other tests.
+type ObserverEntry = Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>;
+const observerInstances: ControllableIntersectionObserver[] = [];
+class ControllableIntersectionObserver implements IntersectionObserver {
+  readonly root = null;
+  readonly rootMargin = '';
+  readonly scrollMargin = '';
+  readonly thresholds = [];
+  readonly disconnect = vi.fn();
+  readonly observe = vi.fn((target: Element) => {
+    this.observedTarget = target;
+  });
+  readonly takeRecords = vi.fn(() => []);
+  readonly unobserve = vi.fn();
+  observedTarget?: Element;
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    observerInstances.push(this);
+  }
+  trigger(entry: ObserverEntry) {
+    this.callback([entry as IntersectionObserverEntry], this);
+  }
+}
+
 // ---- helpers ----
 
 type OwnerPerson = FaceRepairOwnerPeopleResponseDto['people'][number];
@@ -120,11 +145,18 @@ const makePageData = (users: ReturnType<typeof makeUser>[]) => ({
 describe('+page.svelte (manual face-cleanup people browser)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    observerInstances.length = 0;
+    vi.stubGlobal('IntersectionObserver', ControllableIntersectionObserver);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: window.innerHeight + 1,
+    } as DOMRect);
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   // ---- 1. owner selector lists users from the load data ----
@@ -281,8 +313,8 @@ describe('+page.svelte (manual face-cleanup people browser)', () => {
     });
   });
 
-  // ---- 9. pagination appends, never replaces ----
-  it('shows Load more when hasMore is true; clicking it appends the next page instead of replacing', async () => {
+  // ---- 9. pagination appends, never replaces — scroll-driven, no button ----
+  it('appends the next page when the infinite-scroll sentinel scrolls into view, instead of replacing', async () => {
     const users = [makeUser('solo', 'Solo Admin')];
     vi.mocked(getFaceRepairOwnerPeople)
       .mockResolvedValueOnce(makeResponse([makePerson({ id: 'p1', name: 'Alice' })], { hasMore: true, total: 2 }))
@@ -292,8 +324,11 @@ describe('+page.svelte (manual face-cleanup people browser)', () => {
     await vi.advanceTimersByTimeAsync(0);
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
 
-    const loadMore = screen.getByTestId('people-load-more');
-    await fireEvent.click(loadMore);
+    // No "Load more" button — the sentinel entering the viewport is what loads the next page.
+    expect(screen.queryByTestId('people-load-more')).not.toBeInTheDocument();
+    await waitFor(() => expect(observerInstances.length).toBeGreaterThan(0));
+    const observer = observerInstances.at(-1)!;
+    observer.trigger({ target: observer.observedTarget!, isIntersecting: true });
 
     await waitFor(() => {
       expect(getFaceRepairOwnerPeople).toHaveBeenLastCalledWith({ ownerId: 'solo', page: 1, query: undefined });
@@ -301,7 +336,6 @@ describe('+page.svelte (manual face-cleanup people browser)', () => {
     // Appended, not replaced: both rows are present.
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('Bob')).toBeInTheDocument();
-    expect(screen.queryByTestId('people-load-more')).not.toBeInTheDocument();
   });
 
   // ---- switching owner resets page to 0 and clears the list (no interleaving) ----

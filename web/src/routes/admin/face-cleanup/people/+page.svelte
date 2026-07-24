@@ -1,5 +1,6 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
+  import InfiniteScrollSentinel from '$lib/components/shared-components/infinite-scroll-sentinel.svelte';
   import { getAdminFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { Route } from '$lib/route';
   import { getFaceRepairOwnerPeople, type FaceRepairOwnerPeopleResponseDto } from '@immich/sdk';
@@ -263,20 +264,15 @@
         {/each}
       </div>
 
-      {#if hasMore}
-        <div class="mt-6 flex justify-center">
-          <Button
-            color="secondary"
-            variant="outline"
-            size="small"
-            onclick={handleLoadMore}
-            disabled={loadingMore}
-            data-testid="people-load-more"
-          >
-            {$t('admin.face_cleanup_people_load_more')}
-          </Button>
-        </div>
-      {/if}
+      <!-- Scroll-driven pagination: the sentinel loads the next page as it enters the viewport, so the grid
+           grows as the admin scrolls instead of dead-ending on a "Load more" button. -->
+      <InfiniteScrollSentinel
+        {hasMore}
+        loading={loadingMore}
+        onLoadMore={handleLoadMore}
+        itemCount={people.length}
+        class="mt-6 flex h-10 w-full items-center justify-center"
+      />
     {/if}
   </div>
 </AdminPageLayout>

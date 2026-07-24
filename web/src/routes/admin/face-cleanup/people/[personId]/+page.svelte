@@ -1,5 +1,6 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
+  import InfiniteScrollSentinel from '$lib/components/shared-components/infinite-scroll-sentinel.svelte';
   import { Route } from '$lib/route';
   import { handleError } from '$lib/utils/handle-error';
   import { getAdminFaceThumbnailUrl } from '$lib/utils/people-utils';
@@ -543,19 +544,16 @@
           {/each}
         </div>
 
-        {#if hasMore}
-          <div class="border-t border-gray-200 px-4 py-3 text-center dark:border-gray-700">
-            <button
-              type="button"
-              onclick={handleLoadMore}
-              disabled={loadingMore}
-              class="text-sm font-semibold text-primary hover:underline disabled:opacity-40"
-              data-testid="manual-review-load-more"
-            >
-              {$t('admin.face_cleanup_review_load_more', { values: { count: vm.total - vm.loadedCount } })}
-            </button>
-          </div>
-        {/if}
+        <!-- Scroll-driven pagination: the sentinel loads the next page of faces as it enters the viewport,
+             appending through vm.appendFaces so staged marks and the current selection survive exactly as they
+             did under the old button (the §6.5 regression guard). -->
+        <InfiniteScrollSentinel
+          {hasMore}
+          loading={loadingMore}
+          onLoadMore={handleLoadMore}
+          itemCount={vm.loadedCount}
+          class="flex h-12 w-full items-center justify-center border-t border-gray-200 dark:border-gray-700"
+        />
       </div>
     {/if}
   </div>
