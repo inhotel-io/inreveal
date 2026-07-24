@@ -293,6 +293,8 @@
     "face_cleanup_review_help_title": "What do these actions do?",
     "face_cleanup_review_help_unknown_body": "It's a real face, it just isn't this person — and you don't know whose it is. The normal case when you tidy someone else's library: a friend of the family turns up in the cluster and there is nobody to send them to.",
     "face_cleanup_review_help_unknown_effect": "the selected faces move into a new unnamed cluster of their own and are locked there, so no future scan re-flags them. They stop polluting this person, and show up as an unnamed person on the People page — where the library's owner, or face recognition suggestions, can name them later. Select every face you believe is the same stranger before you apply: they are parked together, so they can be named in one go.",
+    "face_cleanup_review_lane_sub": "Named, large, or an uncertain owner — open each to decide. Nothing here is touched until you do.",
+    "face_cleanup_review_lane_title": "Needs your review",
     "face_cleanup_review_load_error": "Failed to load this review. Please try again.",
     "face_cleanup_review_load_more": "Load more ({count, number} remaining)",
     "face_cleanup_review_move_entire": "Move entire cluster",
