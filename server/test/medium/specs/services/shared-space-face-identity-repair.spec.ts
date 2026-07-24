@@ -752,4 +752,57 @@ describe('SharedSpaceService linked-library face identity repair', () => {
       unassignedFaceCount: 1,
     });
   });
+
+  // Regression for the user-reported crash: a person with multiple photos makes FaceIdentityBackfill
+  // fan out one SharedSpaceFaceMatchFromBackfill job per asset, all carrying the SAME identity. Run
+  // in parallel they each miss the not-yet-committed space person and race to INSERT it, tripping the
+  // `shared_space_person_spaceId_identityId_key` unique index — the losers crashed the handler and
+  // left the face-match/link chain half-done (the duplicate-person symptom).
+  it('links all faces to one space person when parallel backfill jobs race to create it', async () => {
+    const { ctx, sut, faceIdentityRepository, sharedSpaceRepository } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+    const { library } = await ctx.newLibrary({ ownerId: user.id });
+    await ctx.newSharedSpaceLibrary({ spaceId: space.id, libraryId: library.id, addedById: user.id });
+
+    // Four assets, all faces of the SAME identity — the reporter's four-photo case.
+    const first = await createIdentityFace(ctx, faceIdentityRepository, {
+      ownerId: user.id,
+      libraryId: library.id,
+      name: 'Brad',
+    });
+    const rest = await Promise.all(
+      [0, 1, 2].map(() =>
+        createIdentityFace(ctx, faceIdentityRepository, {
+          ownerId: user.id,
+          libraryId: library.id,
+          personId: first.person.id,
+          identityId: first.identity.id,
+        }),
+      ),
+    );
+    const faces = [first, ...rest];
+
+    // Fire every backfill job at once, exactly as the queue would.
+    const results = await Promise.all(
+      faces.map((f) => sut.handleSharedSpaceFaceMatchFromBackfill({ spaceId: space.id, assetId: f.asset.id })),
+    );
+    expect(results).toEqual(faces.map(() => JobStatus.Success));
+
+    // Exactly one space person for the identity, with every face assigned to it.
+    const people = await ctx.database
+      .selectFrom('shared_space_person')
+      .selectAll()
+      .where('spaceId', '=', space.id)
+      .where('identityId', '=', first.identity.id)
+      .execute();
+    expect(people).toHaveLength(1);
+
+    for (const f of faces) {
+      await expect(
+        sharedSpaceRepository.getPersonFaceAssignmentsForSpace(f.assetFace.id, space.id),
+      ).resolves.toEqual([{ personId: people[0].id, identityId: first.identity.id, type: 'person' }]);
+    }
+  });
 });

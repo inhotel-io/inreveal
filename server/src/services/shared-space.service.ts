@@ -2769,13 +2769,22 @@ export class SharedSpaceService extends BaseService {
       personalPersonId: input.personId,
     });
 
-    return this.sharedSpaceRepository.createPerson({
+    // Race-safe create: concurrent SharedSpaceFaceMatch* jobs carrying faces of this same identity
+    // may have created the space person between our getSpacePersonByIdentity check above and here.
+    // createOrGetPersonForIdentity returns the winner's row instead of crashing on the
+    // (spaceId, identityId) unique index; re-apply the type-compat check since the raced-in row may
+    // belong to a different type.
+    const spacePerson = await this.sharedSpaceRepository.createOrGetPersonForIdentity({
       spaceId: input.spaceId,
       identityId: input.identityId,
       name: '',
       representativeFaceId,
       type: input.type,
     });
+    if (spacePerson.type && spacePerson.type !== input.type) {
+      return undefined;
+    }
+    return spacePerson;
   }
 
   private isExactSelectedSpaceAssignment(

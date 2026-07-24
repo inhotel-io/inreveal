@@ -3960,7 +3960,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.isPersonFaceAssigned.mockResolvedValue(false);
       mocks.sharedSpace.getSpacePersonByIdentity.mockResolvedValue(void 0 as any);
       mocks.sharedSpace.findClosestSpacePerson.mockResolvedValue([]);
-      mocks.sharedSpace.createPerson.mockResolvedValue(
+      mocks.sharedSpace.createOrGetPersonForIdentity.mockResolvedValue(
         factory.sharedSpacePerson({ id: spacePersonId, spaceId, identityId }),
       );
       mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
@@ -3969,7 +3969,7 @@ describe(SharedSpaceService.name, () => {
       const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
       expect(result).toBe(JobStatus.Success);
-      expect(mocks.sharedSpace.createPerson).toHaveBeenCalledWith({
+      expect(mocks.sharedSpace.createOrGetPersonForIdentity).toHaveBeenCalledWith({
         spaceId,
         identityId,
         name: '',
@@ -4004,7 +4004,7 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.findClosestSpacePerson.mockResolvedValue([
         { personId: nearbySpacePersonId, name: '', distance: 0.1, identityId: nearbyIdentityId, type: 'person' },
       ]);
-      mocks.sharedSpace.createPerson.mockResolvedValue(
+      mocks.sharedSpace.createOrGetPersonForIdentity.mockResolvedValue(
         factory.sharedSpacePerson({ id: createdSpacePersonId, spaceId, identityId: sourceIdentityId }),
       );
       mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
@@ -4013,7 +4013,7 @@ describe(SharedSpaceService.name, () => {
       const result = await sut.handleSharedSpaceFaceMatch({ spaceId, assetId });
 
       expect(result).toBe(JobStatus.Success);
-      expect(mocks.sharedSpace.createPerson).toHaveBeenCalledWith({
+      expect(mocks.sharedSpace.createOrGetPersonForIdentity).toHaveBeenCalledWith({
         spaceId,
         identityId: sourceIdentityId,
         name: '',
@@ -4054,7 +4054,7 @@ describe(SharedSpaceService.name, () => {
         }),
       );
       mocks.sharedSpace.isFaceInSpace.mockResolvedValue(true);
-      mocks.sharedSpace.createPerson.mockResolvedValue(
+      mocks.sharedSpace.createOrGetPersonForIdentity.mockResolvedValue(
         factory.sharedSpacePerson({
           id: spacePersonId,
           spaceId,
@@ -4070,7 +4070,7 @@ describe(SharedSpaceService.name, () => {
       expect(result).toBe(JobStatus.Success);
       expect(mocks.person.getById).toHaveBeenCalledWith(personalPersonId);
       expect(mocks.sharedSpace.isFaceInSpace).toHaveBeenCalledWith(spaceId, personalRepresentativeFaceId);
-      expect(mocks.sharedSpace.createPerson).toHaveBeenCalledWith({
+      expect(mocks.sharedSpace.createOrGetPersonForIdentity).toHaveBeenCalledWith({
         spaceId,
         identityId,
         name: '',
