@@ -68,10 +68,11 @@ From `albums/[albumId]/…/+page.svelte:734-780` (the untouched reference):
 | Remove-from-album                                                                                | Album owner (`isOwned`) **or** own assets                                 |
 | Delete                                                                                           | Own assets only                                                           |
 
-¹ The album renders these buttons unconditionally; whether the **server** honours a
-create-shared-link / add-to-album call for a _non-owned_ asset is pinned by the API RBAC matrix
-(Slice 1). Whatever the album's real behaviour is, spaces mirror it — see the Share/Add-to-album note
-under Capability rules.
+¹ The album _page_ renders these buttons unconditionally, but Slice 1 proved the **server** honours
+create-shared-link / add-to-album only for **owned (∪ partner)** assets (`Permission.AssetShare`,
+`access.ts:127-131`). So our space toolbar owner-gates them (`isAllUserOwned`) to stay honest rather
+than reproduce the album page's unconditional-but-sometimes-400 buttons — see the Share/Add-to-album
+note under Capability rules.
 
 We deliberately mirror the **album's** metadata set (Rotate + date/description/location + Archive +
 Set-visibility), **not** the personal timeline's richer set (Stack, Link-live-photo, and library job
@@ -135,9 +136,9 @@ Predicates (the single rule set):
 
 ```
 canSelectAll       = sel !== null
-canDownload        = true            // mirror album; download-disable is a shared-link-only flag (out of scope)
-canShare           = true            // mirror album (see Share/Add-to-album note)
-canAddToAlbum      = true            // mirror album
+canDownload        = true            // download-disable is a shared-link-only flag (out of scope); auth toolbar downloads unconditionally
+canShare           = sel.isAllUserOwned   // RESOLVED Slice 1 Q1: server AssetShare = owner∪partner only (no space/album arm)
+canAddToAlbum      = sel.isAllUserOwned   // RESOLVED Slice 1 Q2: same owner∪partner gate (the #764 space-editor contribution is a separate flow, out of scope)
 canFavorite        = sel.isAllUserOwned
 canEditMetadata    = sel.isAllUserOwned
 canTag             = sel.isAllUserOwned && tagsEnabled
@@ -148,10 +149,22 @@ isEditorOfContext  = isRegularAlbum ? (ctx.album.isOwner || ctx.album.isEditor)
                    : /* personal */   false
 canSetCover        = isEditorOfContext && sel.selectedAssetIds.length === 1   // ROLE gate only; see cover note
 canRemoveFromAlbum = isRegularAlbum ? (ctx.album.isOwner || sel.isAllUserOwned)
-                   : isSpaceAlbum   ? (ctx.space.canWrite || ctx.album.isEditor || sel.isAllUserOwned)  // canManage OR own asset — see C
+                   : isSpaceAlbum   ? (ctx.space.canWrite || ctx.album.isEditor)   // RESOLVED Slice 1 Q3 (decision C): canManage ONLY — server AlbumAssetDelete is role-gated, ownership grants nothing
                    : false
 canRemoveFromSpace = isDirectSpace && ctx.space.canWrite
 ```
+
+**On owner-gating Share and Add-to-album (resolved Slice 1, Q1/Q2):** the server's `Permission.AssetShare`
+(used by both create-shared-link and the ordinary add-assets-to-album path) is **owner ∪ partner
+only** — it has no album or space arm (`server/src/utils/access.ts:127-131`, deliberate per the
+`shared-space.service.ts:669-671` comment). So a shared link or album-add referencing a non-owned
+space asset is refused server-side. Gating `canShare`/`canAddToAlbum` by `isAllUserOwned` keeps the
+toolbar **honest** (it never offers a button the server would 400). On the personal timeline and
+regular album this is always true, so those reference surfaces are unaffected; in a space the buttons
+appear only for your own selected assets. This is stricter than the album _page_'s unconditional
+buttons (a latent album quirk we deliberately do not reproduce), but it is exactly "show whatever the
+user is **able** to do." (Partner-shared assets are a rare extra the server also allows; the toolbar's
+`isAllUserOwned` signal conservatively omits them — acceptable, never offers a 400.)
 
 **Cover note (fixes a space-person over-grant):** `canSetCover` is only the _role+single_ gate — it is
 surface-agnostic. Not every surface has a cover: the **space-timeline** sets the space cover, a
@@ -161,13 +174,15 @@ renders Set-cover only when `caps.canSetCover && onSetCover != null`; the space-
 `onSetCover`, so cover never appears there even for an editor. `canSetCover` never returns true on the
 personal timeline because `isEditorOfContext` is false there.
 
-**Space-album Remove-from-album (decision C):** the regular album lets a member remove **their own**
-asset (`ctx.album.isOwner || sel.isAllUserOwned`). A space-album manager adds assets that may be owned
-by various members, so a non-manager member CAN have an own asset in the album — and under
-"mimic album" they should be able to remove it. Hence the `|| sel.isAllUserOwned` arm above. This is
-**pending server confirmation** (Slice 1 API row: can a non-manager remove their own asset from a
-space album?). If the server refuses, drop the arm to `canManage`-only and record that as an
-intentional space-album deviation; the parity guard (Slice 2) encodes whichever we land on.
+**Space-album Remove-from-album (decision C — RESOLVED Slice 1, Q3):** removing an asset from a space
+album goes through `Permission.AlbumAssetDelete`, whose server check is **strictly role-gated** —
+album owner/editor **or** space owner/editor of the linked space (`server/src/utils/access.ts:247-257`
+
+- `access.repository.ts:144-161`, which excludes a space Viewer's membership row). Asset **ownership
+  grants nothing**: a plain viewer/member is refused (403) before any per-asset logic runs, even for
+  their own asset. So `canRemoveFromAlbum` in a space album is `canManage` **only** — no `isAllUserOwned`
+  arm. This is a **server-enforced deviation** from the regular album (which does allow own-asset
+  removal); the parity guard (Slice 2) encodes this space-album exception explicitly.
 
 **Orthogonality invariant (critical):** _space role_ (Owner/Editor/Viewer, from
 `ctx.space.canWrite`/`isOwner`) and _asset ownership_ (`sel.isAllUserOwned`, i.e.
@@ -236,11 +251,11 @@ Each of the three fork space routes replaces its bespoke control-bar block with 
 
 Net result per surface:
 
-| Surface        | Before                                                           | After                                                                                                           |
-| -------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Space album    | Download + Remove-from-album only                                | Full album-equivalent toolbar; Remove-from-album gated `canManage \|\| own asset` (C); **no** Remove-from-space |
-| Space timeline | Select-all, Remove-from-space, Favorite, Download + partial menu | Full album-equivalent; adds Share, Add-to-album, Rotate, Set-visibility, Delete, Set-cover (space cover)        |
-| Space person   | same as space timeline                                           | same as space timeline **except no Set-cover** (page has no cover action)                                       |
+| Surface        | Before                                                           | After                                                                                                                                                              |
+| -------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Space album    | Download + Remove-from-album only                                | Full album-equivalent toolbar; Select-all + Download always; owner-gated actions on own assets; Remove-from-album gated `canManage` (Q3); **no** Remove-from-space |
+| Space timeline | Select-all, Remove-from-space, Favorite, Download + partial menu | Full album-equivalent; adds Share/Add-to-album (own assets only), Rotate, Set-visibility, Delete, Set-cover (space cover)                                          |
+| Space person   | same as space timeline                                           | same as space timeline **except no Set-cover** (page has no cover action)                                                                                          |
 
 ## RBAC safety invariants & verifications
 
@@ -255,32 +270,31 @@ Reversing the deliberate space-album strip (`rbac-5/albums-8` comment at
    (`shared-space-album-scope.guard.spec.ts`) remain valid and untouched.
 2. **Editor/owner-role actions** (Set-cover, Remove-from-album/space) are gated by container role and
    independently enforced server-side.
-3. **Share / Add-to-album** mirror the album (see note below); the server is the enforcement point.
+3. **Share / Add-to-album** are owner-gated (`isAllUserOwned`) to match the server's owner∪partner
+   `AssetShare` rule (Q1/Q2), so they too never fire on a non-owned asset.
 
-Two things are **verified by tests, not assumed**:
+Both verifications are now **resolved by Slice 1's server-code investigation** (evidence in the API
+matrix section) and re-asserted by tests:
 
-- **V1 — `TimelineAsset.ownerId` is correct on space-projected assets.** The entire owner-gate rests
-  on it. If ownerId were wrong/absent on the merged space timeline or space album, owner-gated
-  actions could appear on non-owned assets. Asserted by the web e2e owner/other cases (Slice 6) and,
-  if needed, a focused unit check.
-- **V2 — owner-scoped Share / Add-to-album / edit / delete endpoints accept space-accessed asset
-  IDs and enforce ownership/role.** Proven by the server/API RBAC matrix (Slice 1).
+- **V1 — `TimelineAsset.ownerId` is correct on space-projected assets.** RESOLVED (Q4): traced
+  end-to-end (`asset.repository.ts:1439/1502`, no mask/override), so the owner-gate is reliable. The
+  web e2e owner/other cases (Slice 6) re-assert it as a tripwire.
+- **V2 — owner-scoped Share / Add-to-album / edit / delete / remove endpoints enforce ownership/role
+  for space-accessed asset IDs.** RESOLVED (Q1–Q3): create-shared-link and add-to-album are
+  owner∪partner-only; metadata/favorite/delete are owner-only; remove-from-space-album is role-gated.
+  Codified by the server/API RBAC matrix (Slice 1).
 
-### Share / Add-to-album note
+### Share / Add-to-album note (RESOLVED — Slice 1, Q1/Q2)
 
-The capability defaults to unconditional (mirror the album). **Slice 1 (the API matrix) runs first**
-precisely so this is decided before the rule engine and web e2e depend on it. It pins the **actual**
-server behaviour for a non-owned asset:
-
-- If the server **owner-scopes** create-shared-link and/or add-to-album (rejects non-owned), then to
-  keep the toolbar honest we gate those two capabilities by `sel.isAllUserOwned` — which on the
-  personal timeline and regular album is always true, so those reference surfaces are unaffected,
-  and in a space the button appears only for your own selected assets. This is still "mimic album":
-  identical rule, made explicit.
-- If the server permits it (as the album UI implies), they stay unconditional.
-
-Either way the toolbar never offers a button the server would 400 — that equivalence is the property
-Slice 1 guarantees.
+The server's `Permission.AssetShare` (used by both create-shared-link and add-assets-to-album) is
+**owner ∪ partner only** — no album/space arm (`server/src/utils/access.ts:127-131`, deliberate per
+`shared-space.service.ts:669-671`). So we gate `canShare`/`canAddToAlbum` by `sel.isAllUserOwned`:
+always true on personal/regular-album (reference surfaces unaffected), and in a space the buttons
+appear only for your own selected assets. The toolbar therefore never offers a button the server would
+400 — stricter than the album _page_'s unconditional buttons (a latent quirk we intentionally do not
+reproduce), and exactly "show whatever the user is **able** to do." The fork's #764 cross-owner
+contribution (space Owner/Editor adding others' assets to a space-linked album) is a **separate
+existing flow**, not this generic toolbar button, and stays out of scope.
 
 ## Testing strategy (TDD + BDD)
 
@@ -309,11 +323,12 @@ the exact allowed/denied set. No scenario asserts more than one behaviour.
   cross-product `{personal, regular-album, space-timeline, space-album} × {owner, editor, viewer} ×
 {all-owned, mixed, none-owned} × {single, multi}`, plus asset-state axes (all-favorite,
   all-archived, tags on/off). Includes the **parity assertion**: for equivalent role+ownership, the
-  space capability set equals the album capability set with one substitution — on **direct-space**
-  surfaces (space timeline/person) `canRemoveFromAlbum` is replaced by `canRemoveFromSpace`; on a
-  **space album** the set matches the album under the role mapping (`canRemoveFromAlbum` via
-  `canManage || own asset`, mirroring the album's `owns-container || own asset`). This is what fails
-  CI if upstream restructures the album toolbar. The parity test encodes the resolved decision C.
+  space capability set equals the album capability set except for two documented, server-enforced
+  deviations — (i) on **direct-space** surfaces (space timeline/person) `canRemoveFromAlbum` is
+  replaced by `canRemoveFromSpace`; (ii) on a **space album** `canRemoveFromAlbum` is `canManage`
+  ONLY (no own-asset arm — Q3), unlike the regular album's `owns-container || own asset`. Share and
+  Add-to-album are `isAllUserOwned` on every surface (so album-context and space-context agree). This
+  is what fails CI if upstream restructures the album toolbar.
 - **b. Component — `<SelectionToolbar>`:** given a capability set, renders exactly the permitted
   buttons and no others (reuse the `register-selection-context-harness.svelte` pattern). Asserts
   the ⌘K provider is present so Add-to-album registers.
@@ -329,64 +344,70 @@ the exact allowed/denied set. No scenario asserts more than one behaviour.
 
 ### RBAC edge-case catalogue (must all be covered — unit at minimum)
 
-| #   | Scenario                                                                     | Expected                                                                                                                |
-| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| E1  | Space **viewer** selects an owner's (not their) asset — space timeline       | Select-all, Download, Share, Add-to-album ✓; Favorite/edit/Tag/Delete ✗; Remove-from-space ✗; Set-cover ✗               |
-| E2  | Space **editor** selects their **own** asset — space timeline                | all of E1 ✓ + Favorite/edit/Tag/Delete ✓ + Remove-from-space ✓ + Set-cover ✓ (if single)                                |
-| E3  | Space **editor** selects an owner's (not their) asset                        | E1 ✓ + Remove-from-space ✓ + Set-cover ✓; Favorite/edit/Tag/Delete ✗                                                    |
-| E4  | Space **owner** selects **another member's** asset                           | Remove-from-space ✓, Set-cover ✓ (role); Favorite/edit/Delete ✗ (**not** the asset owner) — the orthogonality invariant |
-| E5  | Space **viewer** who is the space album's **album-editor**, in a space album | Remove-from-album ✓ (canManage via `isAlbumEditor`) even though space viewer                                            |
-| E6  | Space **editor**, not an album member, in a space album                      | Remove-from-album ✓ (canManage via `isSpaceEditor`)                                                                     |
-| E7  | **Mixed** selection (some owned, some not)                                   | owner-gated all ✗ (`isAllUserOwned` false); always-set ✓                                                                |
-| E8  | **Multi** selection                                                          | Set-cover ✗ (single only); everything else per role/ownership                                                           |
-| E9  | All-favorite selection                                                       | Favorite renders as "remove from favorites"; else "favorite"                                                            |
-| E10 | All-archived selection                                                       | Archive renders as "unarchive"; else "archive"                                                                          |
-| E11 | Tags preference disabled                                                     | Tag ✗ even when `isAllUserOwned`                                                                                        |
-| E12 | Empty selection                                                              | toolbar not rendered (`sel === null`)                                                                                   |
-| E13 | Space **non-member** hits a space URL                                        | cannot reach the page (existing visibility specs); toolbar N/A — cross-referenced, not re-tested                        |
-| E14 | Regression: personal timeline unchanged                                      | full personal set unchanged (function returns personal answer; pages untouched)                                         |
-| E15 | Regression: regular album unchanged                                          | full album set unchanged                                                                                                |
-| E16 | Space **viewer** (non-manager) selects their **own** asset in a space album  | Remove-from-album ✓ via the own-asset arm (decision C); owner-gated ✓; Set-cover ✗ (not a manager)                      |
-| E17 | **Admin** (not the asset owner, not a space/album role) selects an asset     | no special power — owner/role gates apply exactly as for any user (`isAdmin` is never consulted by the rule engine)     |
+| #   | Scenario                                                                     | Expected                                                                                                                            |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | Space **viewer** selects an owner's (not their) asset — space timeline       | Select-all, Download ✓; Share/Add-to-album ✗ (not owner — Q1/Q2); Favorite/edit/Tag/Delete ✗; Remove-from-space ✗; Set-cover ✗      |
+| E2  | Space **editor** selects their **own** asset — space timeline                | Select-all, Download ✓ + Share, Add-to-album, Favorite, edit, Tag, Delete ✓ + Remove-from-space ✓ + Set-cover ✓ (if single)         |
+| E3  | Space **editor** selects an owner's (not their) asset                        | Select-all, Download ✓ + Remove-from-space ✓ + Set-cover ✓; Share/Add-to-album, Favorite/edit/Tag/Delete ✗ (not owner)              |
+| E4  | Space **owner** selects **another member's** asset                           | Remove-from-space ✓, Set-cover ✓ (role); Share/Add-to-album, Favorite/edit/Delete ✗ (**not** the asset owner) — orthogonality       |
+| E5  | Space **viewer** who is the space album's **album-editor**, in a space album | Remove-from-album ✓ (canManage via `isAlbumEditor`) even though space viewer                                                        |
+| E6  | Space **editor**, not an album member, in a space album                      | Remove-from-album ✓ (canManage via `isSpaceEditor`)                                                                                 |
+| E7  | **Mixed** selection (some owned, some not)                                   | owner-gated + Share/Add-to-album all ✗ (`isAllUserOwned` false); Select-all + Download ✓ (the only truly-always actions)            |
+| E8  | **Multi** selection                                                          | Set-cover ✗ (single only); everything else per role/ownership                                                                       |
+| E9  | All-favorite selection                                                       | Favorite renders as "remove from favorites"; else "favorite"                                                                        |
+| E10 | All-archived selection                                                       | Archive renders as "unarchive"; else "archive"                                                                                      |
+| E11 | Tags preference disabled                                                     | Tag ✗ even when `isAllUserOwned`                                                                                                    |
+| E12 | Empty selection                                                              | toolbar not rendered (`sel === null`)                                                                                               |
+| E13 | Space **non-member** hits a space URL                                        | cannot reach the page (existing visibility specs); toolbar N/A — cross-referenced, not re-tested                                    |
+| E14 | Regression: personal timeline unchanged                                      | full personal set unchanged (function returns personal answer; pages untouched)                                                     |
+| E15 | Regression: regular album unchanged                                          | full album set unchanged                                                                                                            |
+| E16 | Space **viewer** (non-manager) selects their **own** asset in a space album  | Remove-from-album ✗ (Q3: role-gated, viewer is not a manager); owner-gated (Favorite/edit/Delete/Share/Add-to-album) ✓; Set-cover ✗ |
+| E17 | **Admin** (not the asset owner, not a space/album role) selects an asset     | no special power — owner/role gates apply exactly as for any user (`isAdmin` is never consulted by the rule engine)                 |
 
 ### Web e2e matrix (subset of the catalogue that is reachable through the UI)
 
-| #   | Surface        | Actor              | Selection                   | Assert SHOW                                                 | Assert HIDE                                          | Catalogue |
-| --- | -------------- | ------------------ | --------------------------- | ----------------------------------------------------------- | ---------------------------------------------------- | --------- |
-| 1   | Space timeline | Viewer             | owner's asset               | Select-all, Download, Share, Add-to-album                   | Favorite, edit, Delete, Remove-from-space, Set-cover | E1        |
-| 2   | Space timeline | Editor             | own asset (editor adds it)  | + Favorite, edit, Tag, Delete, Remove-from-space, Set-cover | —                                                    | E2        |
-| 3   | Space timeline | Editor             | owner's asset               | Remove-from-space, Set-cover                                | Favorite, edit, Delete                               | E3        |
-| 4   | Space timeline | Owner              | own asset                   | everything                                                  | —                                                    | E2/E4     |
-| 5   | Space album    | Viewer/member      | album asset (not theirs)    | Select-all, Download, Share, Add-to-album                   | Remove-from-album, owner-gated                       | E1/E7     |
-| 6   | Space album    | Editor (canManage) | album asset                 | + Remove-from-album, Set-cover                              | —                                                    | E6        |
-| 7   | Space album    | member             | **own** asset in album      | owner-gated (Favorite/edit/Delete)                          | —                                                    | E2        |
-| 8   | Space person   | Viewer             | person's asset (not theirs) | Select-all, Download, Share, Add-to-album                   | owner-gated, Remove-from-space                       | smoke     |
+| #   | Surface        | Actor                | Selection                   | Assert SHOW                                                                                          | Assert HIDE                                                               | Catalogue |
+| --- | -------------- | -------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------- |
+| 1   | Space timeline | Viewer               | owner's asset               | Select-all, Download                                                                                 | Share, Add-to-album, Favorite, edit, Delete, Remove-from-space, Set-cover | E1        |
+| 2   | Space timeline | Editor               | own asset (editor adds it)  | Select-all, Download, Share, Add-to-album, Favorite, edit, Tag, Delete, Remove-from-space, Set-cover | —                                                                         | E2        |
+| 3   | Space timeline | Editor               | owner's asset               | Select-all, Download, Remove-from-space, Set-cover                                                   | Share, Add-to-album, Favorite, edit, Delete                               | E3        |
+| 4   | Space timeline | Owner                | own asset                   | everything                                                                                           | —                                                                         | E2/E4     |
+| 5   | Space album    | Viewer/member        | album asset (not theirs)    | Select-all, Download                                                                                 | Share, Add-to-album, Remove-from-album, owner-gated                       | E1/E7     |
+| 6   | Space album    | Editor (canManage)   | album asset (not theirs)    | Select-all, Download, Remove-from-album, Set-cover                                                   | Share, Add-to-album, Favorite, edit, Delete                               | E6        |
+| 7   | Space album    | member (non-manager) | **own** asset in album      | Select-all, Download, Share, Add-to-album, Favorite, edit, Tag, Delete                               | Remove-from-album, Set-cover                                              | E16       |
+| 8   | Space person   | Viewer               | person's asset (not theirs) | Select-all, Download                                                                                 | Share, Add-to-album, owner-gated, Remove-from-space                       | smoke     |
 
-Cases 1 and 5 are the reporter's exact regressions. **E16 and E17 are covered by the unit matrix
-(decision-parameterised) and the API matrix, not e2e:** whether a non-manager viewer can end up
-owning an asset that a manager added to a space/space-album is a contribution-model question that
-Slice 1 pins directly at the API level, so the fragile UI fixture is not worth building — the unit
-matrix asserts the capability logic for that `ctx` regardless of reachability, and the API matrix
-asserts the server truth.
+Cases 1 and 5 are the reporter's exact regressions (Select-all + Download were missing there). Case 7
+covers E16 and is reachable because a space Owner/Editor can add another member's asset to a
+space-linked album (fork #764 contribution). **E17** (admin has no special power) lives in the unit
+matrix only — there is no UI surface where admin-ness would change the toolbar, so an e2e fixture adds
+no signal.
 
-### Server/API RBAC matrix (Slice 1 — runs first, decides the gates)
+### Server/API RBAC matrix (Slice 1 — runs first, gates now RESOLVED)
 
 Using `buildSpaceContext()` (gives `spaceOwner`/`spaceEditor`/`spaceViewer`/`spaceNonMember` +
 `spaceAssetId` owned by owner) and `forEachActor()` (asserts a status per actor, names the failing
-actor):
+actor). The expected statuses below are the **resolved** server behaviour (evidence file:line noted);
+the e2e spec codifies them and is the regression tripwire:
 
 - **Download** of `spaceAssetId`: owner/editor/viewer → 200; non-member → 4xx.
-- **Create-shared-link** referencing `spaceAssetId`: pin the real status per actor → **decides the
-  `canShare` gate** (unconditional vs `isAllUserOwned`; see Share note).
-- **Add-to-album** of `spaceAssetId` into the actor's own album: pin per actor → **decides the
-  `canAddToAlbum` gate**.
+- **Create-shared-link** referencing a **non-owned** `spaceAssetId`: editor/viewer → **4xx** (owner →
+  200). `Permission.AssetShare` = owner∪partner only (`access.ts:127-131`). → `canShare =
+isAllUserOwned`.
+- **Add-to-album** of a **non-owned** `spaceAssetId` into the actor's own (non-space) album:
+  editor/viewer → **4xx** (owner → 200). Same `AssetShare` gate via `asset.util.ts` (`album.service.ts:253-262`).
+  → `canAddToAlbum = isAllUserOwned`.
 - **Favorite / metadata update / delete** of `spaceAssetId`: only the asset **owner** → 200; other
-  members → 4xx (proves owner-gate is real server-side, backs V1/V2).
-- **Remove-from-space**: editor/owner → 200; viewer/non-member → 4xx.
-- **Remove-from-space-album, own asset:** a non-manager member removing **their own** asset from a
-  space album → **decides decision C** (if 4xx, drop the `isAllUserOwned` arm from
-  `canRemoveFromAlbum`). Also assert: manager removing another member's asset → 200; non-manager
-  removing another member's asset → 4xx.
+  members → 4xx (owner-scoped `Permission.AssetUpdate`/`AssetDelete`, `access.ts:155-163`). **Q5
+  confirmed:** `AssetUpdate` runs `checkOwnerAccess` first and only applies `checkSpaceEditAccess` to
+  the leftover non-owned ids — it never _subtracts_ an owner's grant, so an owner is never 400'd for
+  their own asset just because it is album-path in a space. Owner-gated actions are therefore safe in
+  the space album (Slice 6).
+- **Remove-from-space** (`shared_space_asset`): editor/owner → 200; viewer/non-member → 4xx.
+- **Remove-from-space-album:** manager (space/album editor) removing any asset → 200; **non-manager
+  removing their own asset → 4xx** (decision C: `AlbumAssetDelete` is role-gated, `access.ts:247-257` +
+  `access.repository.ts:144-161`). → `canRemoveFromAlbum` (space album) `= canManage`, **no** own-asset
+  arm.
 
 ### Infra notes (folded in from prior e2e pain)
 
@@ -417,12 +438,18 @@ Slices 1–3.
   the "Server/API RBAC matrix" above (download, create-shared-link, add-to-album, favorite, metadata
   update, delete, remove-from-space, and **own-asset remove-from-space-album**) against
   space-accessed asset IDs.
-- **Decision gates recorded in this slice:** (i) `canShare`/`canAddToAlbum` — unconditional vs
-  `isAllUserOwned`, from the pinned create-shared-link / add-to-album statuses; (ii) **decision C** —
-  keep or drop the `isAllUserOwned` arm on `canRemoveFromAlbum` from the own-asset remove status.
-- **Acceptance:** matrix green; both gate decisions written down (they become constants the rule
-  engine encodes in Slice 2); V2 satisfied.
+- **Gate decisions (already resolved by server-code investigation; this slice codifies them as
+  executable assertions):** (i) `canShare = canAddToAlbum = isAllUserOwned` (`AssetShare` is
+  owner∪partner-only, Q1/Q2); (ii) **decision C** — `canRemoveFromAlbum` in a space album is
+  `canManage` ONLY, no own-asset arm (`AlbumAssetDelete` role-gated, Q3); (iii) owner mutations are
+  never album-path-blocked (Q5). If any assertion turns out red against a running server, the fix is
+  to correct the rule engine (Slice 2) — the e2e is the source of truth.
+- **Acceptance:** matrix green; the three findings stand as executable tests; V2 satisfied.
 - **Files:** `e2e/src/specs/server/api/spaces-selection-actions.e2e-spec.ts` (new).
+- **Note on local execution:** this suite needs the e2e API stack (testcontainers/Docker). The shared
+  e2e stack is a machine-wide singleton; if it is not safely available locally, push and let CI run it
+  — the gate decisions are already resolved from server code, so Slices 2–6 are not blocked on a local
+  red/green here.
 
 ### Slice 2 — `getSelectionCapabilities` rule engine + unit matrix + parity guard
 
@@ -453,8 +480,10 @@ Slices 1–3.
 
 ### Slice 4 — Wire space timeline page + web e2e cases 1–4
 
-- **Tests first:** new Playwright spec `spaces-selection-toolbar.e2e-spec.ts` cases 1–4 (fail today:
-  Share/Add-to-album/Delete/Set-cover absent).
+- **Tests first:** new Playwright spec `spaces-selection-toolbar.e2e-spec.ts` cases 1–4. The
+  own-asset cases (2, 4) fail today (Share/Add-to-album/Delete absent for owners); the others'-asset
+  cases (1, 3) assert the viewer/editor behaviour that must be preserved (mostly already correct — they
+  guard against regressions in the rewrite).
 - **Implement:** replace the control-bar block (`spaces/[spaceId]/…/+page.svelte:877-911`) with
   `<SelectionToolbar>`; pass space wiring (`spaceId`, `onRemove=handleRemoveAssets`,
   `onSetCover=handleSetAsCover`, `onFavorite`, `onArchive`). Toolbar Add-to-album comes from the
@@ -476,16 +505,19 @@ Slices 1–3.
 
 ### Slice 6 — Wire space album page (the reversal) + web e2e cases 5–7 + V1
 
-- **Tests first:** e2e cases 5–7 (fail today: Select-all/menu/Share absent in space album). Case 7
-  proves V1 (owner-gated actions appear on the member's **own** album asset and only then).
+- **Tests first:** e2e cases 5–7 (all fail today — space album shows only Download (+Remove for
+  managers); Select-all, the context menu, Share/Add, Favorite are all absent). Cases 5 (others'
+  asset → owner-gated hidden) vs 7 (own asset → owner-gated shown) together are the **V1 tripwire**;
+  case 7 also confirms decision C (Remove-from-album stays hidden for the non-manager owner).
 - **Implement:** replace the Download+Remove-only bar
   (`spaces/[spaceId]/albums/[albumId]/…/+page.svelte:412-419`) with `<SelectionToolbar>`; album wiring
-  (`album` DTO, `onRemove=handleRemoveAssets`, `onSetCover=`album cover); `canRemoveFromAlbum` per the
-  resolved decision C; **no** `spaceId`/Remove-from-space. Replace the `rbac-5/albums-8` comment to
-  document the new invariant (mutations gated via `isAllUserOwned`; space-editor cross-owner edit
-  still never offered). This page registers no selection context — do not add one.
-- **Acceptance:** cases 5–7 green; verify no owner-gated button shows on a non-owned album asset (V1);
-  web gate clean.
+  (`album` DTO, `onRemove=handleRemoveAssets`, `onSetCover=`album cover); `canRemoveFromAlbum` =
+  `canManage` only (resolved decision C — **no** own-asset arm); **no** `spaceId`/Remove-from-space.
+  Replace the `rbac-5/albums-8` comment to document the new invariant (owner-gated mutations are safe
+  via the owner path — Q5; space-editor cross-owner edit still never offered; remove stays role-gated
+  — Q3). This page registers no selection context — do not add one.
+- **Acceptance:** cases 5–7 green; verify no owner-gated button shows on a non-owned album asset and
+  no Remove-from-album shows for a non-manager (V1 + decision C); web gate clean.
 - **Files:** the space-album page, e2e spec (append).
 
 ### Slice 7 — Cleanup, i18n, parity guard confirmation, full verify
@@ -499,16 +531,23 @@ Slices 1–3.
 
 ## Risks & open questions
 
-- **R1 — Share/Add-to-album server behaviour (resolved by Slice 1).** If either is owner-scoped
-  server-side, the capability is gated by `isAllUserOwned`; no user-visible regression on album/
-  personal. Tracked, not blocking.
-- **R2 — `ownerId` fidelity on space-projected assets (V1).** If the merged space timeline supplies a
-  wrong/absent `ownerId`, owner-gated actions could mis-render. Slice 6 e2e (owner vs other) is the
-  tripwire; a focused unit check is the fallback.
+- **R1 — Share/Add-to-album server behaviour.** RESOLVED (Q1/Q2): `AssetShare` is owner∪partner-only,
+  so `canShare = canAddToAlbum = isAllUserOwned`. No user-visible regression on album/personal
+  (always all-owned there). Closed.
+- **R2 — `ownerId` fidelity on space-projected assets (V1).** RESOLVED (Q4): `ownerId` is the genuine
+  owner, never masked. Slice 6 e2e (owner vs other) re-asserts it as a tripwire. Closed.
 - **R3 — Drift from the untouched upstream album.** Mitigated by the Slice 2 parity guard: if upstream
   restructures the album toolbar, the assertion fails in CI rather than shipping silent divergence.
-- **R4 — Decision C (own-asset remove from a space album).** Resolved empirically in Slice 1; either
-  outcome is consistent (mimic-album if the server allows it, or a recorded space-album deviation if
-  not). Not blocking.
-- **R5 — `check:svelte` local blindness.** It has been observed to scan 0 files locally; rely on the
+  (Two deviations are encoded intentionally: Share/Add owner-gating, and the space-album `canManage`-only
+  remove.)
+- **R4 — Decision C (own-asset remove from a space album).** RESOLVED (Q3): `AlbumAssetDelete` is
+  role-gated, ownership grants nothing → `canManage`-only, no own-asset arm. Closed.
+- **R5 — Owner mutations on album-path assets.** RESOLVED (Q5): the owner path (`checkOwnerAccess`) is
+  never subtracted by `checkSpaceEditAccess`, so owner-gated actions are safe in the space album.
+  Closed.
+- **R6 — `check:svelte` local blindness.** It has been observed to scan 0 files locally; rely on the
   push-time CI gate for the svelte check, and don't treat a local 0-file run as proof.
+- **R7 — e2e stack is a shared machine-wide singleton.** The Slice 1 API suite and Slices 4–6
+  Playwright suites need the Docker e2e stack. To avoid clobbering other sessions, the loop validates
+  unit/component/typecheck/lint/svelte-check locally and relies on **CI (babysit)** to run the e2e
+  suites, rather than spinning the shared stack up locally.
