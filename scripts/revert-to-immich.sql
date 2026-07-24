@@ -135,6 +135,9 @@ DROP TABLE IF EXISTS "shared_space" CASCADE;
 DROP TABLE IF EXISTS "face_identity_face" CASCADE;
 DROP TABLE IF EXISTS "face_identity" CASCADE;
 
+-- Pet recognition embeddings
+DROP TABLE IF EXISTS "pet_search" CASCADE;
+
 -- User groups
 DROP TABLE IF EXISTS "user_group_member" CASCADE;
 DROP TABLE IF EXISTS "user_group" CASCADE;
@@ -386,6 +389,7 @@ DELETE FROM "kysely_migrations"
    '1783628194057-DisablePostgresJit',
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
+   '1785000000000-CreatePetSearchTable',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
@@ -458,7 +462,8 @@ BEGIN
        'face_identity_face', 'face_identity',
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
-       'storage_migration_log', 'asset_duplicate_checksum'
+       'storage_migration_log', 'asset_duplicate_checksum',
+       'pet_search'
      );
   IF fork_tables_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery table(s) still present after cleanup — aborting.', fork_tables_left;

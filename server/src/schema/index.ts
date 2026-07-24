@@ -71,6 +71,7 @@ import { PartnerAuditTable } from 'src/schema/tables/partner-audit.table';
 import { PartnerTable } from 'src/schema/tables/partner.table';
 import { PersonAuditTable } from 'src/schema/tables/person-audit.table';
 import { PersonTable } from 'src/schema/tables/person.table';
+import { PetSearchTable } from 'src/schema/tables/pet-search.table';
 import { PluginMethodTable } from 'src/schema/tables/plugin-method.table';
 import { PluginTable } from 'src/schema/tables/plugin.table';
 import { SessionTable } from 'src/schema/tables/session.table';
@@ -168,6 +169,7 @@ export class ImmichDatabase {
     PartnerTable,
     PersonTable,
     PersonAuditTable,
+    PetSearchTable,
     SessionTable,
     SharedLinkAssetTable,
     SharedLinkTable,
@@ -311,6 +313,8 @@ export interface DB {
 
   person: PersonTable;
   person_audit: PersonAuditTable;
+
+  pet_search: PetSearchTable;
 
   session: SessionTable;
   session_sync_checkpoint: SessionSyncCheckpointTable;
