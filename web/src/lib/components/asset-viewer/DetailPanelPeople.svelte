@@ -8,8 +8,8 @@
   import { createUrl, getAssetUrls, getPeopleThumbnailUrl } from '$lib/utils';
   import { zoomImageToBase64 } from '$lib/utils/people-utils';
   import { type AssetResponseDto } from '@immich/sdk';
-  import { IconButton, Text } from '@immich/ui';
-  import { mdiEye, mdiEyeOff, mdiPencil, mdiPlus } from '@mdi/js';
+  import { Icon, IconButton, Text } from '@immich/ui';
+  import { mdiEye, mdiEyeOff, mdiPaw, mdiPencil, mdiPlus } from '@mdi/js';
   import { DateTime } from 'luxon';
   import { t } from 'svelte-i18n';
 
@@ -137,7 +137,7 @@
         {@const isHighlighted = personFaces.some((f) => assetViewerManager.highlightedFaces.some((b) => b.id === f.id))}
         {@const fallbackThumbnailUrl = getPersonFallbackThumbnailUrl(person)}
         <a
-          class="group outline-none"
+          class="group relative outline-none"
           href={getPersonHref(person)}
           onfocus={() => assetViewerManager.setHighlightedFaces(personFaces)}
           onblur={() => assetViewerManager.clearHighlightedFaces()}
@@ -182,6 +182,15 @@
               highlighted={isHighlighted}
               class="outline-offset-2 outline-immich-primary group-focus-visible:outline-2 dark:outline-immich-dark-primary"
             />
+          {/if}
+          {#if person.type === 'pet'}
+            <div
+              class="absolute bottom-1 right-1 rounded-full bg-immich-primary p-1 text-white"
+              data-testid="pet-badge"
+              title={person.species ?? undefined}
+            >
+              <Icon icon={mdiPaw} size="16" class="text-white" />
+            </div>
           {/if}
           <p class="mt-1 truncate font-medium" title={person.name}>{person.name}</p>
           {#if person.birthDate && person.formattedAge}
