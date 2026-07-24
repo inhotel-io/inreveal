@@ -82,7 +82,7 @@ test.describe('Spaces — SelectionToolbar timeline control bar (Slice 4)', () =
   // belongs to `owner`, not `viewer`) and space.canWrite is false (Viewer role) — every
   // ownership-gated AND every role-gated action is hidden. Only the two always-on actions
   // (Select-all, Download) remain.
-  test('viewer selecting the owner\'s asset sees only Select-all and Download', async ({ context, page }) => {
+  test("viewer selecting the owner's asset sees only Select-all and Download", async ({ context, page }) => {
     const space = await createDirectSpaceFixture(
       owner.accessToken,
       [{ userId: viewer.userId, role: SharedSpaceRole.Viewer }],

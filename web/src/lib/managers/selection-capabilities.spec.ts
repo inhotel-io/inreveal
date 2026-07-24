@@ -82,7 +82,7 @@ const ALL_FALSE: SelectionCapabilities = {
 // ---------------------------------------------------------------------------
 
 describe('getSelectionCapabilities — space timeline (direct space)', () => {
-  it('E1: Given a space viewer selecting another member\'s asset, When capabilities resolve, Then only select-all and download are allowed', () => {
+  it("E1: Given a space viewer selecting another member's asset, When capabilities resolve, Then only select-all and download are allowed", () => {
     const ctx = makeCtx({
       space: makeSpace({ canWrite: false }),
       selection: makeSelection({ isAllUserOwned: false, selectedAssetIds: ['asset-1'] }),
@@ -116,7 +116,7 @@ describe('getSelectionCapabilities — space timeline (direct space)', () => {
     });
   });
 
-  it('E3: Given a space editor selecting another member\'s asset, When capabilities resolve, Then role actions (remove-from-space, set-cover) are allowed but owner-gated actions are denied', () => {
+  it("E3: Given a space editor selecting another member's asset, When capabilities resolve, Then role actions (remove-from-space, set-cover) are allowed but owner-gated actions are denied", () => {
     const ctx = makeCtx({
       space: makeSpace({ canWrite: true }),
       selection: makeSelection({ isAllUserOwned: false, selectedAssetIds: ['asset-1'] }),
@@ -137,7 +137,7 @@ describe('getSelectionCapabilities — space timeline (direct space)', () => {
     });
   });
 
-  it('E4: Given a space owner selecting another member\'s asset, When capabilities resolve, Then role actions are allowed but owner-gated actions are denied (orthogonality: space role is independent of asset ownership)', () => {
+  it("E4: Given a space owner selecting another member's asset, When capabilities resolve, Then role actions are allowed but owner-gated actions are denied (orthogonality: space role is independent of asset ownership)", () => {
     const ctx = makeCtx({
       space: makeSpace({ isOwner: true, canWrite: true }),
       selection: makeSelection({ isAllUserOwned: false, selectedAssetIds: ['asset-1'] }),
@@ -160,7 +160,7 @@ describe('getSelectionCapabilities — space timeline (direct space)', () => {
 // ---------------------------------------------------------------------------
 
 describe('getSelectionCapabilities — space album', () => {
-  it('E5: Given a space viewer who is the space album\'s album-editor, When capabilities resolve, Then canRemoveFromAlbum is allowed via album.isEditor even though the space role is a viewer', () => {
+  it("E5: Given a space viewer who is the space album's album-editor, When capabilities resolve, Then canRemoveFromAlbum is allowed via album.isEditor even though the space role is a viewer", () => {
     const ctx = makeCtx({
       space: makeSpace({ canWrite: false }),
       album: makeAlbum({ isOwner: false, isEditor: true }),
@@ -401,7 +401,7 @@ describe('getSelectionCapabilities — album/space parity guard', () => {
     expect(getSelectionCapabilities(spaceEditorCtx, true).canRemoveFromAlbum).toBe(false);
   });
 
-  it('deviation (b): a space album\'s canRemoveFromAlbum is canManage-only (decision C — no own-asset arm), unlike the regular album which also lets a non-manager remove their OWN asset', () => {
+  it("deviation (b): a space album's canRemoveFromAlbum is canManage-only (decision C — no own-asset arm), unlike the regular album which also lets a non-manager remove their OWN asset", () => {
     const ownAssetSel = makeSelection({ isAllUserOwned: true });
     const albumViewerOwnAssetCtx = makeCtx({
       album: makeAlbum({ isOwner: false, isEditor: false }),

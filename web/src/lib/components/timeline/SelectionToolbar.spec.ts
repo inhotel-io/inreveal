@@ -136,7 +136,7 @@ beforeEach(() => {
 });
 
 describe('SelectionToolbar', () => {
-  it('Given a space viewer browsing another member\'s asset in a direct space, When the toolbar renders, Then only Select-all and Download are shown', () => {
+  it("Given a space viewer browsing another member's asset in a direct space, When the toolbar renders, Then only Select-all and Download are shown", () => {
     renderToolbar({
       timelineManager: fakeTimelineManager,
       assetInteraction: makeAssetInteraction({
