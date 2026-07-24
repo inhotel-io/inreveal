@@ -800,9 +800,9 @@ describe('SharedSpaceService linked-library face identity repair', () => {
     expect(people).toHaveLength(1);
 
     for (const f of faces) {
-      await expect(
-        sharedSpaceRepository.getPersonFaceAssignmentsForSpace(f.assetFace.id, space.id),
-      ).resolves.toEqual([{ personId: people[0].id, identityId: first.identity.id, type: 'person' }]);
+      await expect(sharedSpaceRepository.getPersonFaceAssignmentsForSpace(f.assetFace.id, space.id)).resolves.toEqual([
+        { personId: people[0].id, identityId: first.identity.id, type: 'person' },
+      ]);
     }
   });
 });
