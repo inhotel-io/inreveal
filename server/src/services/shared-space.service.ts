@@ -1599,6 +1599,19 @@ export class SharedSpaceService extends BaseService {
     return JobStatus.Success;
   }
 
+  // Self-heal backstop (see queue.service.ts's handleNightlyJobs): re-queues identity reconciliation
+  // for every face-enabled space. A member's local person that was left unlinked from the space
+  // identity — by the pre-fix crash or the multi-face reconciliation bail — collapses into one tile
+  // on the next sweep, without the user doing anything.
+  @OnJob({ name: JobName.SharedSpaceIdentityReconciliationSweep, queue: QueueName.BackgroundTask })
+  async handleSharedSpaceIdentityReconciliationSweep(): Promise<JobStatus> {
+    const spaceIds = await this.sharedSpaceRepository.getFaceRecognitionEnabledSpaceIds();
+    for (const spaceId of spaceIds) {
+      await this.queueSpaceIdentityReconciliation({ spaceId });
+    }
+    return JobStatus.Success;
+  }
+
   // correctness-4: enqueue a post-commit reconciliation for the given albums. Idempotent
   // and deadlock-free — it runs after the triggering transaction commits, resolving the
   // TOCTOU race in the delete-side grant-revocation triggers. No-op for an empty set.
@@ -1839,7 +1852,10 @@ export class SharedSpaceService extends BaseService {
       hasPerson: true,
     });
 
-    const candidates: Array<{ identityId: string }> = [];
+    // Dedup by identity: the member's nearest faces (searchFaces returns raw face rows, not distinct
+    // people) are often several faces of their own single person. Those collapse to one candidate
+    // identity — only a genuinely ambiguous match against two *distinct* local identities should bail.
+    const candidateIdentityIds = new Set<string>();
     for (const match of matches) {
       if (!match.personId) {
         continue;
@@ -1855,25 +1871,26 @@ export class SharedSpaceService extends BaseService {
         return;
       }
 
-      candidates.push({ identityId: identity.id });
+      candidateIdentityIds.add(identity.id);
     }
 
-    if (candidates.length !== 1) {
+    if (candidateIdentityIds.size !== 1) {
       return;
     }
+    const [candidateIdentityId] = candidateIdentityIds;
 
     const { sourceIdentityId, targetIdentityId: selectedTargetIdentityId } = chooseAutomaticTargetIdentity({
       bridge: 'member-join',
-      localIdentityId: candidates[0].identityId,
+      localIdentityId: candidateIdentityId,
       spaceIdentityId: targetIdentityId,
     });
     const claim = buildAutomaticReconciliationClaim({
       bridge: 'member-join',
-      localIdentityId: candidates[0].identityId,
+      localIdentityId: candidateIdentityId,
       spaceIdentityId: targetIdentityId,
       sourceIdentityId,
       targetIdentityId: selectedTargetIdentityId,
-      sourceProfileKey: `user:${input.memberUserId}:${candidates[0].identityId}`,
+      sourceProfileKey: `user:${input.memberUserId}:${candidateIdentityId}`,
       targetProfileKey: `space-person:${input.spacePerson.id}`,
       hasAccessBridge: true,
       compatibleType: true,

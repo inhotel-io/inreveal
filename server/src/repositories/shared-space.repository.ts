@@ -1102,6 +1102,15 @@ export class SharedSpaceRepository {
     return rows.map((row) => row.albumId);
   }
 
+  async getFaceRecognitionEnabledSpaceIds(): Promise<string[]> {
+    const rows = await this.db
+      .selectFrom('shared_space')
+      .select('id')
+      .where('faceRecognitionEnabled', '=', true)
+      .execute();
+    return rows.map((row) => row.id);
+  }
+
   // Album sync fan-out: used by the AlbumAssetsAdd/Remove handlers to find every space
   // a linked album feeds, with its face-recognition flag. Mirrors getSpacesLinkedToLibrary.
   @GenerateSql({ params: [DummyValue.UUID] })

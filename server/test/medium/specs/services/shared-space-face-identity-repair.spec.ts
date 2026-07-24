@@ -805,4 +805,31 @@ describe('SharedSpaceService linked-library face identity repair', () => {
       ]);
     }
   });
+
+  // Self-heal backstop: existing duplicate people (created before the crash/dedup fixes) only
+  // collapse when reconciliation runs again for their space, and nothing retriggers it for
+  // already-assigned faces. The nightly sweep re-queues reconciliation for every face-enabled space
+  // so those duplicates heal without the user doing anything.
+  it('sweep queues identity reconciliation for every face-recognition-enabled space', async () => {
+    const { ctx, sut, jobs } = setup();
+    const { user } = await ctx.newUser();
+    const { space: enabled1 } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    const { space: enabled2 } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    const { space: disabled } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: false });
+
+    await expect(sut.handleSharedSpaceIdentityReconciliationSweep()).resolves.toBe(JobStatus.Success);
+
+    expect(jobs.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpaceIdentityReconciliation,
+      data: { spaceId: enabled1.id },
+    });
+    expect(jobs.queue).toHaveBeenCalledWith({
+      name: JobName.SharedSpaceIdentityReconciliation,
+      data: { spaceId: enabled2.id },
+    });
+    expect(jobs.queue).not.toHaveBeenCalledWith({
+      name: JobName.SharedSpaceIdentityReconciliation,
+      data: { spaceId: disabled.id },
+    });
+  });
 });
