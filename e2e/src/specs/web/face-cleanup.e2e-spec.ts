@@ -470,10 +470,10 @@ test.describe.serial('Face Cleanup', () => {
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
 
     // Wait for the dashboard to actually finish loading its (freshly refetched) scan snapshot before asserting
-    // an absence: the "Eligible faces" stat card only renders once `scan.status === 'completed'` and its
-    // (unconditionally-populated) totals have rendered. Without this, the absence check below could pass
-    // vacuously against a still-loading page rather than a genuinely drained one.
-    await expect(page.getByText('Eligible faces').first()).toBeVisible({ timeout: 15_000 });
+    // an absence: the header summary line ("… flagged faces across … people") only renders once
+    // `scan.status === 'completed'` with its totals, so its presence means the fresh (drained) snapshot has
+    // rendered — not a still-loading page the absence check could pass against vacuously.
+    await expect(page.getByText(/flagged faces across/).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(sourceName)).toHaveCount(0);
   });
 
