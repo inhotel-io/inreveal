@@ -1,13 +1,13 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import { Route } from '$lib/route';
-  import { createFaceCleanupModel, type FaceCleanupModel } from './face-cleanup.svelte';
-  import FaceCleanupTable from './FaceCleanupTable.svelte';
+  import { createScanTriageModel, type ScanTriageModel } from './scan-triage.svelte';
+  import ConfidentLane from './ConfidentLane.svelte';
   import { declineFaceRepair, getFaceRepairPersonFaces, getLatestScan, resolveFaces, triggerScan } from '@immich/sdk';
   import { Button, Icon, modalManager, toastManager } from '@immich/ui';
   import { mdiClose, mdiRefresh, mdiTune } from '@mdi/js';
   import AdvancedScanModal, { type AdvancedScanParams } from './AdvancedScanModal.svelte';
-  import ScanChecklist from './ScanChecklist.svelte';
+  import ReviewFirstLane from './ReviewFirstLane.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import { handleError } from '$lib/utils/handle-error';
@@ -71,48 +71,15 @@
   let applyError = $state<string | null>(null);
   let pollTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
-  // Filter / search state
-  let filter = $state<'all' | 'review-first' | 'confident' | 'named'>('all');
-
-  // Static literal key map — the typed $t() rejects a dynamically-built template-literal key.
-  const FILTER_LABEL_KEYS = {
-    all: 'admin.face_cleanup_filter_all',
-    'review-first': 'admin.face_cleanup_filter_review_first',
-    confident: 'admin.face_cleanup_filter_confident',
-    named: 'admin.face_cleanup_filter_named',
-  } as const;
-  let searchQuery = $state('');
-
-  // The view-model is rebuilt through setScan so user selections and the opened review-first gate are
-  // carried over across refetches/dismissals instead of resetting to the confident preselect.
-  let vm = $state<FaceCleanupModel | null>(null);
-
-  const openedStorageKey = (scanId: string) => `face-cleanup-opened:${scanId}`;
-
-  const readPersistedOpened = (scanId: string): string[] => {
-    try {
-      return JSON.parse(sessionStorage.getItem(openedStorageKey(scanId)) ?? '[]') as string[];
-    } catch {
-      return [];
-    }
-  };
-
-  const persistOpened = (scanId: string, opened: Iterable<string>) => {
-    try {
-      sessionStorage.setItem(openedStorageKey(scanId), JSON.stringify([...opened]));
-    } catch {
-      // sessionStorage unavailable — the gate just won't survive navigation
-    }
-  };
+  // The triage view-model is rebuilt through setScan; the admin's confident-lane exclusions carry over across
+  // refetches/dismissals (see createScanTriageModel's `prev`) instead of resetting.
+  let vm = $state<ScanTriageModel | null>(null);
 
   const setScan = (next: FaceCleanupScan | null) => {
     scan = next;
     vm =
       next?.persons && next.persons.length > 0
-        ? createFaceCleanupModel(next.persons as ScanPerson[], {
-            prev: vm,
-            restoredOpened: readPersistedOpened(next.id),
-          })
+        ? createScanTriageModel(next.persons as ScanPerson[], { prev: vm })
         : null;
   };
 
@@ -248,34 +215,27 @@
     await resolveFaces({ faceRepairResolveRequestDto: { personId, moveToPerson } });
   };
 
-  const handleApply = async () => {
-    if (!vm || vm.selectedCount === 0 || applying) {
+  // Bulk-approve the confident lane's non-excluded clusters — the same per-person resolve as before, now
+  // driven by the triage model's approvedIds (confident minus the admin's spot-check exclusions).
+  const handleApprove = async () => {
+    if (!vm || vm.approvedCount === 0 || applying) {
       return;
     }
     applying = true;
     applyError = null;
     try {
-      const approvedPersonIds = [...vm.selected];
-      await Promise.all(approvedPersonIds.map((personId) => resolvePersonToOwners(personId)));
-      toastManager.success($t('admin.face_cleanup_apply_success', { values: { count: approvedPersonIds.length } }));
+      const ids = vm.approvedIds;
+      await Promise.all(ids.map((personId) => resolvePersonToOwners(personId)));
+      toastManager.success($t('admin.face_cleanup_apply_success', { values: { count: ids.length } }));
     } catch (error: unknown) {
       const status = (error as { status?: number }).status;
       applyError = status === 409 ? $t('admin.face_cleanup_apply_conflict') : $t('admin.face_cleanup_apply_error');
     } finally {
       // Refetch even on a partial/total failure: Promise.all rejects on the FIRST rejection, but sibling
-      // resolves already in flight can still have landed server-side — skipping this on error left the table
+      // resolves already in flight can still have landed server-side — skipping this on error left the lanes
       // showing stale pre-apply state even though some persons genuinely resolved (D17).
       await fetchLatestScan();
       applying = false;
-    }
-  };
-
-  const handleOpen = (personId: string) => {
-    if (vm) {
-      vm.open(personId);
-    }
-    if (scan) {
-      persistOpened(scan.id, new Set([...readPersistedOpened(scan.id), personId]));
     }
   };
 
@@ -302,28 +262,21 @@
     }
     return new Date(dateStr).toLocaleString();
   };
-
-  const filterCounts = $derived.by(() => {
-    if (!vm) {
-      return { all: 0, reviewFirst: 0, confident: 0, named: 0 };
-    }
-    return {
-      all: vm.reviewFirst.length + vm.confident.length,
-      reviewFirst: vm.reviewFirst.length,
-      confident: vm.confident.length,
-      named: [...vm.reviewFirst, ...vm.confident].filter((p) => p.personName != null).length,
-    };
-  });
 </script>
 
 <AdminPageLayout breadcrumbs={[{ title: data.meta.title }]}>
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Header -->
     <div class="mb-6 flex flex-wrap items-start justify-between gap-6">
-      <!-- The description paragraph that used to sit here now lives as the checklist's subtitle: the page was
-           already dense, so guidance had to replace prose rather than pile on top of it. -->
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">{$t('admin.face_cleanup')}</h1>
+        {#if scan?.status === 'completed' && scan.totals}
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {$t('admin.face_cleanup_summary', {
+              values: { flagged: scan.totals.flaggedFaces, people: scan.totals.affectedPersons },
+            })}
+          </p>
+        {/if}
       </div>
       <div class="flex flex-none flex-col items-end gap-2">
         {#if scan?.finishedAt}
@@ -427,127 +380,15 @@
 
       <!-- Scan completed -->
     {:else if scan.status === 'completed'}
-      <!-- What to do now: the page is dense and, until this, said nothing about what the admin should DO — nor
-           that the confident clusters arrive pre-selected. Only worth showing when the scan actually flagged
-           someone; the "nothing to clean up" state below speaks for itself. -->
-      {#if vm && (vm.reviewFirst.length > 0 || vm.confident.length > 0)}
-        <div class="mb-6">
-          <ScanChecklist
-            reviewFirstTotal={vm.reviewFirst.length}
-            reviewFirstOpened={vm.reviewFirst.filter((person) => vm!.opened.has(person.personId)).length}
-            confidentTotal={vm.confident.length}
-            selectedCount={vm.selectedCount}
-          />
-        </div>
-      {/if}
-
-      <!-- Stat strip -->
-      {#if scan.totals}
-        {@const tot = scan.totals}
-        <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-gray-400">
-              <span class="size-2 rounded-full bg-gray-400"></span>
-              {$t('admin.face_cleanup_stat_eligible')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">{tot.eligibleFaces.toLocaleString()}</div>
-            <div class="mt-0.5 text-xs text-gray-400">{$t('admin.face_cleanup_stat_eligible_sub')}</div>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-amber-500">
-              <span class="size-2 rounded-full bg-amber-400"></span>
-              {$t('admin.face_cleanup_stat_flagged')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">{tot.flaggedFaces.toLocaleString()}</div>
-            <div class="mt-0.5 text-xs text-gray-400">
-              {$t('admin.face_cleanup_stat_flagged_sub', { values: { count: tot.affectedPersons } })}
-            </div>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-green-600">
-              <span class="size-2 rounded-full bg-green-500"></span>
-              {$t('admin.face_cleanup_stat_repaired')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">{tot.toRepair.toLocaleString()}</div>
-            <div class="mt-0.5 text-xs text-gray-400">{$t('admin.face_cleanup_stat_repaired_sub')}</div>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-primary">
-              <span class="size-2 rounded-full bg-primary"></span>
-              {$t('admin.face_cleanup_stat_needs_decision')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">{tot.reviewOnlyFaces.toLocaleString()}</div>
-            <div class="mt-0.5 text-xs text-gray-400">
-              {$t('admin.face_cleanup_stat_needs_decision_sub', { values: { count: tot.reviewOnlyPersons } })}
-            </div>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-red-500">
-              <span class="size-2 rounded-full bg-red-500"></span>
-              {$t('admin.face_cleanup_stat_unattributable')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">
-              {(tot.reviewOnlyByReason?.unAttributable ?? 0).toLocaleString()}
-            </div>
-            <div class="mt-0.5 text-xs text-gray-400">{$t('admin.face_cleanup_stat_unattributable_sub')}</div>
-          </div>
-        </div>
-      {/if}
-
-      <!-- Empty completed state: 0 flagged -->
-      {#if !vm || (vm.reviewFirst.length === 0 && vm.confident.length === 0)}
+      {#if !vm || (vm.confident.length === 0 && vm.reviewFirst.length === 0)}
+        <!-- Nothing flagged: a clean scan speaks for itself. -->
         <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
           <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_empty_clean')}</div>
           <p class="mt-2 text-sm text-gray-400">{$t('admin.face_cleanup_empty_clean_sub')}</p>
         </div>
       {:else}
-        <!-- Filter toolbar -->
-        <div class="mb-4 flex flex-wrap items-center gap-3">
-          <div
-            class="flex items-center gap-0.5 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800"
-          >
-            {#each ['all', 'review-first', 'confident', 'named'] as const as f (f)}
-              <button
-                type="button"
-                class={[
-                  'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold leading-none transition-colors',
-                  filter === f
-                    ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white'
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
-                ].join(' ')}
-                onclick={() => (filter = f)}
-              >
-                {$t(FILTER_LABEL_KEYS[f])}
-                <span class="text-gray-400">
-                  {#if f === 'all'}{filterCounts.all}{/if}
-                  {#if f === 'review-first'}{filterCounts.reviewFirst}{/if}
-                  {#if f === 'confident'}{filterCounts.confident}{/if}
-                  {#if f === 'named'}{filterCounts.named}{/if}
-                </span>
-              </button>
-            {/each}
-          </div>
-          <div
-            class="flex min-w-48 flex-1 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
-          >
-            <svg
-              class="size-4 flex-none text-gray-300"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" />
-            </svg>
-            <input
-              bind:value={searchQuery}
-              placeholder={$t('admin.face_cleanup_search_placeholder')}
-              class="flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none dark:text-gray-200"
-            />
-          </div>
-        </div>
-
-        <!-- Apply error banner -->
+        <!-- Apply error banner: a failed bulk-approve (most importantly a 409 — a scan started mid-apply)
+             surfaces here without discarding the lanes. -->
         {#if applyError}
           <div
             class="mb-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400"
@@ -559,43 +400,28 @@
           </div>
         {/if}
 
-        <!-- Selection bar -->
-        <div
-          class="mb-4 flex items-center gap-4 rounded-2xl border border-primary-100 bg-primary-50/60 px-4 py-3 dark:border-primary-900/30 dark:bg-primary-900/10"
-        >
-          <span class="text-base font-bold text-primary-600 dark:text-primary-400">
-            {$t('admin.face_cleanup_selected', { values: { count: vm.selectedCount } })}
-          </span>
-          <span class="text-xs text-gray-400 dark:text-gray-500">
-            {$t('admin.face_cleanup_selected_hint')}
-          </span>
-          <span class="flex-1"></span>
-          <button
-            type="button"
-            onclick={() => vm?.clear()}
-            class="rounded-xl border border-transparent px-3 py-1.5 text-sm font-semibold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            {$t('admin.face_cleanup_clear')}
-          </button>
-          <Button color="primary" disabled={vm.selectedCount === 0 || applying} onclick={handleApply}>
-            {$t('admin.face_cleanup_apply', { values: { count: vm.selectedCount } })}
-          </Button>
+        <!-- Two lanes: the safe confident bulk, and the clickable review-first list. -->
+        <div class="flex flex-col gap-4">
+          <ConfidentLane model={vm} {applying} onApprove={handleApprove} />
+          <ReviewFirstLane people={vm.reviewFirst} users={data.users} onDismiss={handleDismiss} />
         </div>
 
-        <!-- Table -->
-        <FaceCleanupTable
-          {vm}
-          {filter}
-          {searchQuery}
-          users={data.users}
-          onOpen={handleOpen}
-          onDismiss={handleDismiss}
-        />
-
-        <!-- Footnote -->
-        <p class="mt-4 max-w-3xl text-xs text-gray-400 dark:text-gray-500">
-          {$t('admin.face_cleanup_footnote')}
-        </p>
+        <!-- The two non-actionable numbers the stat cards used to carry, demoted to quiet footnotes. -->
+        {#if scan.totals}
+          {@const tot = scan.totals}
+          <div class="mt-4 flex flex-wrap gap-x-6 gap-y-1 px-1">
+            <span class="inline-flex items-center gap-2 text-xs text-gray-400">
+              <span class="size-1.5 rounded-full bg-green-500"></span>
+              {$t('admin.face_cleanup_footnote_repaired', { values: { count: tot.toRepair } })}
+            </span>
+            <span class="inline-flex items-center gap-2 text-xs text-gray-400">
+              <span class="size-1.5 rounded-full bg-red-500"></span>
+              {$t('admin.face_cleanup_footnote_unattributable', {
+                values: { count: tot.reviewOnlyByReason?.unAttributable ?? 0 },
+              })}
+            </span>
+          </div>
+        {/if}
       {/if}
     {/if}
   </div>

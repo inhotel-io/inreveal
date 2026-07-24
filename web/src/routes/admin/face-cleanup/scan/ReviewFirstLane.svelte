@@ -1,8 +1,8 @@
 <script lang="ts">
   import UserAvatar from '$lib/components/shared-components/UserAvatar.svelte';
   import { Route } from '$lib/route';
-  import { getAdminFaceThumbnailUrl, getPeopleThumbnailPath } from '$lib/utils/people-utils';
-  import type { UserAdminResponseDto } from '@immich/sdk';
+  import { getAdminFaceThumbnailUrl } from '$lib/utils/people-utils';
+  import { getPeopleThumbnailPath, type UserAdminResponseDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiAlertCircle, mdiArrowRight, mdiChevronRight, mdiClose, mdiMagnify } from '@mdi/js';
   import { t, type Translations } from 'svelte-i18n';
@@ -114,7 +114,7 @@
                 </span>
                 {#if owner}
                   <span class="inline-flex items-center gap-1 text-xs text-gray-400">
-                    <UserAvatar user={owner} size="tiny" />
+                    <UserAvatar user={owner} size="sm" />
                     {owner.name}
                   </span>
                 {/if}
