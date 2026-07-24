@@ -89,12 +89,13 @@
         {@const bad = person.reviewReasons.includes('bad-target')}
         {@const pct = Math.round(person.flaggedFraction * 100)}
         <div
-          class="relative border-b border-gray-200 transition-colors last:border-b-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/50 [&:hover_[data-dismiss]]:opacity-100"
+          class="group relative border-b border-gray-200 transition-colors last:border-b-0 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800/50"
         >
-          <!-- The whole row is the link; pr-20 leaves room for the absolute dismiss button + chevron. -->
+          <!-- The whole row navigates; pr-12 reserves the right slot shared by the chevron (default) and the
+               dismiss button (on hover), so a <button> is never nested inside the <a>. -->
           <a
             href={Route.viewFaceCleanupPerson({ id: person.personId })}
-            class="flex items-center gap-4 py-3 pr-20 pl-5"
+            class="flex items-center gap-4 py-3 pr-12 pl-5"
             data-testid={`review-row-${person.personId}`}
           >
             <img
@@ -125,7 +126,7 @@
               </div>
             </div>
 
-            <div class="hidden w-32 flex-none sm:block">
+            <div class="hidden w-28 flex-none sm:block">
               <div class="flex items-baseline justify-between">
                 <span class="text-sm font-bold tabular-nums">{pct}%</span>
                 <span class="text-xs text-gray-400 tabular-nums">{person.flagged}/{person.faceCount}</span>
@@ -152,30 +153,41 @@
               {/if}
             </div>
 
-            <div class="hidden max-w-40 flex-wrap justify-end gap-1 lg:flex">
-              {#each person.reviewReasons as reason (reason)}
+            <!-- One primary reason only (bad-target wins, else the first) + a "+N" — stacking every reason as
+                 its own pill overflowed the row and read as broken. Full reasons live on the review page. -->
+            {#if person.reviewReasons.length > 0}
+              {@const primaryReason = bad ? 'bad-target' : person.reviewReasons[0]}
+              <div class="hidden flex-none items-center gap-1.5 lg:flex">
                 <span
                   class={[
-                    'rounded-md px-1.5 py-0.5 text-[10px]',
-                    reason === 'bad-target'
+                    'rounded-md px-1.5 py-0.5 text-[10px] whitespace-nowrap',
+                    primaryReason === 'bad-target'
                       ? 'bg-red-50 text-red-500 dark:bg-red-900/20 dark:text-red-400'
                       : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
                   ].join(' ')}
                 >
-                  {reasonKeys[reason] ? $t(reasonKeys[reason] as Translations) : reason}
+                  {reasonKeys[primaryReason] ? $t(reasonKeys[primaryReason] as Translations) : primaryReason}
                 </span>
-              {/each}
-            </div>
-
-            <span class="flex-none text-gray-300"><Icon icon={mdiChevronRight} size="18" /></span>
+                {#if person.reviewReasons.length > 1}
+                  <span class="text-[10px] font-medium text-gray-400">+{person.reviewReasons.length - 1}</span>
+                {/if}
+              </div>
+            {/if}
           </a>
 
+          <!-- Right slot: chevron by default, dismiss on row hover — both absolute over the same spot, so the
+               row never widens for them. -->
+          <span
+            class="pointer-events-none absolute top-1/2 right-4 z-0 -translate-y-1/2 text-gray-300 transition-opacity group-hover:opacity-0"
+            aria-hidden="true"
+          >
+            <Icon icon={mdiChevronRight} size="18" />
+          </span>
           <button
             type="button"
-            class="absolute top-1/2 right-11 z-10 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 focus:opacity-100 dark:hover:bg-gray-700"
+            class="pointer-events-none absolute top-1/2 right-3 z-10 flex size-8 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-gray-100 hover:text-gray-600 focus:pointer-events-auto focus:opacity-100 dark:hover:bg-gray-700 dark:hover:text-gray-200"
             aria-label={$t('admin.face_cleanup_dismiss')}
             title={$t('admin.face_cleanup_dismiss')}
-            data-dismiss
             onclick={() => handleDismiss(person)}
             data-testid={`review-dismiss-${person.personId}`}
           >
