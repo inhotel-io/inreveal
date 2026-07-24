@@ -93,15 +93,17 @@
   // "one glyph means one thing across both pages"): `lock`/`unknown`/`detach` are worded identically. `move`
   // has no guided equivalent tied to a suspected owner, so it reuses guided's owner-agnostic "→ other" chip —
   // the same wording guided uses for a manually-picked destination.
-  // `satisfies` rather than a `Record<…, string>` annotation: the annotation widens each value to `string`,
-  // and `$t` only accepts known translation keys, so the lookup below stops type-checking. This keeps the
-  // exhaustiveness check on the keys while letting the values keep their literal types.
-  const TALLY_LABEL_KEY = {
-    move: 'admin.face_cleanup_review_tally_other',
-    lock: 'admin.face_cleanup_review_tally_lock',
-    unknown: 'admin.face_cleanup_review_tally_unknown',
-    detach: 'admin.face_cleanup_review_tally_detach',
-  } satisfies Record<Exclude<ManualFaceState, 'keep'>, string>;
+  // Only the key SUFFIX is mapped, so the call site can build the key with a template literal exactly as the
+  // guided dock does (`$t(\`admin.face_cleanup_review_tally_${...}\`)`). `$t` accepts a template-literal type
+  // but not a `string`, and an object holding whole keys always widens to `string` at the lookup — even with
+  // `satisfies` — which is what CI's check-svelte rejected. `move` maps to guided's existing `other` key
+  // rather than adding a near-duplicate.
+  const TALLY_KEY_SUFFIX = {
+    move: 'other',
+    lock: 'lock',
+    unknown: 'unknown',
+    detach: 'detach',
+  } as const satisfies Record<Exclude<ManualFaceState, 'keep'>, string>;
 
   // Admin cleanup renders clusters the admin does not own, and a face may have no person↔face join at all —
   // the person-scoped thumbnail routes 404/403 for those. Face-keyed, admin-gated, no join required. Same
@@ -588,7 +590,9 @@
                 >
                   <Icon icon={MANUAL_STATE_ICON[state]} size="13" color={MANUAL_STATE_COLOR[state]} />
                   <span>{count}</span>
-                  <span class="font-normal text-gray-500 dark:text-gray-400">{$t(TALLY_LABEL_KEY[state])}</span>
+                  <span class="font-normal text-gray-500 dark:text-gray-400"
+                    >{$t(`admin.face_cleanup_review_tally_${TALLY_KEY_SUFFIX[state]}`)}</span
+                  >
                 </span>
               {/each}
             </div>
