@@ -255,8 +255,8 @@ describe('Server/API RBAC matrix — selection-toolbar consistency (Slice 1)', (
   //      an asset inside a space-linked album — exactly the decision-C precondition.
   // ─────────────────────────────────────────────────────────────────────────
 
-  describe('Decision C — Remove-from-space-album (own-asset arm is DENIED; role/manager arm is GRANTED)', () => {
-    it('Given a space-linked album containing an asset owned by a downgraded (non-manager) member, When that member tries to remove their own asset, Then it is rejected (400); when a space Editor with no album role removes it, Then it succeeds (200)', async () => {
+  describe('Decision C — Remove-from-space-album is role-gated at the album level AND ownership-gated per asset', () => {
+    it('Given a space-linked album containing an asset owned by a downgraded (non-manager) member: the non-manager is refused at the album gate (400); a space Editor passes the album gate (200) but the per-asset removal of a not-owned asset is denied in the body (success:false); only the album owner actually removes it (success:true)', async () => {
       const album = await utils.createAlbum(ctx.spaceOwner.token!, { albumName: 'slice1-decision-c-album' });
 
       // Step 1: temporarily elevate spaceViewer to album Editor so they can add their own asset.
@@ -302,14 +302,35 @@ describe('Server/API RBAC matrix — selection-toolbar consistency (Slice 1)', (
         .send({ ids: [viewerAsset.id] });
       expect(deniedRes.status).toBe(400);
 
-      // Step 5b: a manager with NO album participant role at all — spaceEditor, a space
-      // Editor of the linked space — removes the SAME asset via the isSpaceLinked arm.
-      const managerRes = await request(app)
+      // Step 5b: a space Editor of the linked space with NO album participant role. The album-level
+      // `AlbumAssetDelete` gate passes via the isSpaceLinked arm (HTTP 200), but removal is applied
+      // per asset: the shared `removeAssets` util only bypasses per-asset ownership for a caller who
+      // holds `Permission.AlbumDelete` on the album (i.e. the album OWNER); otherwise each asset is
+      // re-checked against `Permission.AssetShare` (owner ∪ partner). The space Editor owns neither
+      // the album nor this asset, so the item is denied in the body (success:false / no_permission)
+      // even though the request is 200. This is why the web toolbar's `canRemoveFromAlbum = canManage`
+      // is a UI-affordance gate, not a promise that every selected asset is removable — the server is
+      // still the per-asset authority (same as the pre-existing space-album behaviour).
+      const spaceEditorRes = await request(app)
         .delete(`/albums/${album.id}/assets`)
         .set(authHeaders(ctx.spaceEditor))
         .send({ ids: [viewerAsset.id] });
-      expect(managerRes.status).toBe(200);
-      expect((managerRes.body as Array<{ id: string; success: boolean }>)[0]).toMatchObject({
+      expect(spaceEditorRes.status).toBe(200);
+      expect((spaceEditorRes.body as Array<{ id: string; success: boolean; error?: string }>)[0]).toMatchObject({
+        id: viewerAsset.id,
+        success: false,
+        error: BulkIdErrorReason.NoPermission,
+      });
+
+      // Step 5c: the album OWNER (spaceOwner) removes the SAME asset. Owning the album grants
+      // `Permission.AlbumDelete`, which bypasses the per-asset `AssetShare` check — so the item is
+      // actually removed (success:true). This is the arm that genuinely GRANTS removal.
+      const ownerRes = await request(app)
+        .delete(`/albums/${album.id}/assets`)
+        .set(authHeaders(ctx.spaceOwner))
+        .send({ ids: [viewerAsset.id] });
+      expect(ownerRes.status).toBe(200);
+      expect((ownerRes.body as Array<{ id: string; success: boolean }>)[0]).toMatchObject({
         id: viewerAsset.id,
         success: true,
       });

@@ -417,10 +417,17 @@ isAllUserOwned` (a non-owned add would silently no-op).
   the toolbar surfaces.
 - **Remove-from-space** (`shared_space_asset`, `requireRole(Editor)`): editor/owner → 200;
   viewer/non-member → **403** (role guard, not an access check).
-- **Remove-from-space-album:** manager (space/album editor) removing any asset → 200; **non-manager
-  removing their own asset → 4xx** (decision C: `AlbumAssetDelete` is role-gated, `access.ts:247-257` +
-  `access.repository.ts:144-161`). → `canRemoveFromAlbum` (space album) `= canManage`, **no** own-asset
-  arm.
+- **Remove-from-space-album (decision C — two-layer gate):** removal has an album-level gate AND a
+  per-asset gate. (1) Album-level `AlbumAssetDelete` (`access.ts:247-257` + `access.repository.ts:144-161`)
+  is role-gated: a **non-manager** (plain space/album Viewer) is refused outright → **400**, so a
+  non-manager can't remove even their **own** asset. (2) For a caller who passes the album gate, the
+  shared `removeAssets` util applies removal **per asset**: it bypasses per-asset ownership only for a
+  caller holding `Permission.AlbumDelete` (the **album owner**); otherwise each asset is re-checked
+  against `AssetShare` (owner ∪ partner). So a **space Editor** who owns neither the album nor the
+  asset passes the gate (**200**) but the item is denied in the body (`success:false`); only the
+  **album owner** (or the asset's owner, if they also clear the album gate) actually removes it. →
+  `canRemoveFromAlbum` (space album) `= canManage`, **no** own-asset arm — this is a UI-affordance gate
+  (matching the pre-existing space-album page); the server remains the per-asset authority.
 
 ### Infra notes (folded in from prior e2e pain)
 
