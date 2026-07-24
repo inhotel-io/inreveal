@@ -569,6 +569,10 @@ export type JobItem =
   | { name: JobName.PetDetectionQueueAll; data: IBaseJob }
   | { name: JobName.PetDetection; data: IEntityJob }
 
+  // Pet Recognition
+  | { name: JobName.PetRecognitionQueueAll; data: INightlyJob }
+  | { name: JobName.PetRecognition; data: IDeferrableJob & IEntityJob }
+
   // Workflow
   | { name: JobName.WorkflowAssetTrigger; data: { workflowId: string; assetId: string } }
 
@@ -719,6 +723,7 @@ export interface SystemMetadata extends Record<SystemMetadataKey, Record<string,
   [SystemMetadataKey.AdminOnboarding]: { isOnboarded: boolean };
   [SystemMetadataKey.ClassificationConfigState]: SystemConfig['classification'];
   [SystemMetadataKey.FacialRecognitionState]: { lastRun?: string };
+  [SystemMetadataKey.PetRecognitionState]: { lastRun?: string };
   [SystemMetadataKey.License]: { licenseKey: string; activationKey: string; activatedAt: Date };
   [SystemMetadataKey.MaintenanceMode]: MaintenanceModeState;
   [SystemMetadataKey.MediaLocation]: MediaLocation;

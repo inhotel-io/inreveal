@@ -51,6 +51,12 @@ describe(MachineLearningRepository.name, () => {
       modelName: 'yolo11s',
       minScore: 0.6,
     },
+    petRecognition: {
+      enabled: false,
+      modelName: 'pet-recognition-base',
+      maxDistance: 0.55,
+      minFaces: 1,
+    },
   };
 
   const setupConfig = () => {
