@@ -1129,3 +1129,14 @@ pnpm exec prettier --check "src/routes/admin/face-cleanup/**/*.{svelte,ts}"
 **Placeholder scan:** No TBD/TODO; every step has real code or a real command. i18n removals are gated behind a grep-first check (Task 4 Step 5) rather than a blind delete.
 
 **Type consistency:** `ScanTriageModel` members (`confident`, `reviewFirst`, `excluded`, `approvedIds`, `approvedCount`, `isExcluded`, `toggleExcluded`, `reset`) are used identically in Tasks 2 and 4. `FaceCleanupPerson` shape is shared from Task 1. `onApprove: () => void`, `onDismiss: (id) => void` match between the lanes (Tasks 2/3) and the page wiring (Task 4). `resolvePersonToOwners` is reused verbatim from the existing page.
+
+---
+
+## Corrections applied during execution
+
+Defects caught by the TDD/review gates and fixed in the landed code (this section supersedes the affected snippets above):
+
+1. **ConfidentLane approve button (Task 2):** the sibling `svelte-i18n` mock is a key-passthrough that drops `{values}`, so an assertable count can't live solely inside `$t()`. The button renders `model.approvedCount` as a **plain-text node** beside a static label, and the i18n key split into `face_cleanup_confident_approve_all` ("Approve all", nothing excluded) + `face_cleanup_confident_approve` ("Approve", some excluded).
+2. **ReviewFirstLane row (Task 3):** the whole-row `<a>` **wraps the content** (so the `review-row-<id>` element carries both `href` and the face-count text), with the dismiss `<button>` an absolute sibling on top — not an empty stretched overlay. The lane search is **always rendered** (the `>6` gate made it untestable). `getPeopleThumbnailPath` is imported from **`@immich/sdk`**, not `people-utils`. `UserAvatar` uses `size="sm"` (its `Size` has no `tiny`).
+3. **page.spec.ts (Task 4):** existing helper names are `makeScanPerson` / `makeCompletedScan` / `makeTotals` / `makePageData` (not the `makePerson`/`makeScan` used in the Task 4 snippet); the dismiss test drives a **review-first** person (dismiss lives on the review lane). The `PageData.error` svelte-check errors on `makePageData` are pre-existing (unchanged from the original spec; CI-green).
+4. **i18n prune (Task 4):** `face_cleanup_stat_flagged` / `_sub` are **kept** (used by the redesigned chooser), as is `face_cleanup_col_owner` (manual review page); 40 other checklist/filter/selection/stat/col/footnote keys removed after a grep-verified dead check.
