@@ -892,6 +892,67 @@ describe('People identity RBAC projection', () => {
     ]);
   });
 
+  it('reconciles a late member local person even when the member has multiple matching faces', async () => {
+    const fx = await createLinkedLibraryIdentityFixture({ memberInitiallyJoined: false });
+    const embeddingRow = await fx.ctx.database
+      .selectFrom('face_search')
+      .select('embedding')
+      .where('faceId', '=', fx.face.faceId)
+      .executeTakeFirstOrThrow();
+
+    const { result: memberPerson } = await fx.ctx.newPerson({
+      ownerId: fx.member.id,
+      name: 'Member Private Name',
+    });
+    const memberIdentity = await fx.faceIdentityRepository.ensurePersonIdentity(memberPerson.id);
+
+    // The member has TWO photos of the same person. This is the case that made
+    // findStrictSpacePersonLocalIdentityClaim bail: searchFaces(numResults: 2) returned the two
+    // nearest faces, both belonging to this one person, so it produced two same-identity candidates
+    // and `candidates.length !== 1` refused to link — leaving the member with a duplicate person.
+    for (let i = 0; i < 2; i++) {
+      const { asset: memberAsset } = await fx.ctx.newAsset({
+        ownerId: fx.member.id,
+        visibility: AssetVisibility.Timeline,
+      });
+      const { result: memberFace } = await fx.ctx.newAssetFace({ assetId: memberAsset.id, personId: memberPerson.id });
+      await fx.ctx.database
+        .insertInto('face_search')
+        .values({ faceId: memberFace, embedding: embeddingRow.embedding })
+        .execute();
+      await fx.faceIdentityRepository.linkFace({
+        assetFaceId: memberFace,
+        identityId: memberIdentity.id,
+        source: 'owner-person',
+      });
+    }
+
+    await fx.sharedSpaceService.addMember(authFor(fx.source), fx.space.id, {
+      userId: fx.member.id,
+      role: SharedSpaceRole.Viewer,
+    });
+    await fx.sharedSpaceService.handleSharedSpaceIdentityReconciliation({
+      spaceId: fx.space.id,
+      userId: fx.member.id,
+    });
+
+    // The member's own person is merged with the space identity into ONE unified tile:
+    // their two assets plus the owner's one asset.
+    const result = await fx.personService.getAll(authFor(fx.member), {
+      withHidden: false,
+      withSharedSpaces: true,
+      page: 1,
+      size: 50,
+    } as any);
+
+    expect(result.people).toEqual([
+      expect.objectContaining({
+        primaryProfile: { type: 'user-person', id: memberPerson.id },
+        numberOfAssets: 3,
+      }),
+    ]);
+  });
+
   it('does not expose raw face identity ids in people responses', async () => {
     const fx = await setupPeopleIdentityMatrix();
 

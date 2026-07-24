@@ -500,6 +500,11 @@ export class JobRepository {
         // harmless dedup, and removeOnFail keeps a hard failure from blocking the next run.
         return { jobId: 'space-album-grant-reconcile-sweep', removeOnComplete: true, removeOnFail: true };
       }
+      case JobName.SharedSpaceIdentityReconciliationSweep: {
+        // Single stable jobId — a nightly trigger while a previous sweep is still active dedups
+        // harmlessly, and removeOnFail keeps a hard failure from blocking the next run.
+        return { jobId: 'shared-space-identity-reconciliation-sweep', removeOnComplete: true, removeOnFail: true };
+      }
       case JobName.SharedSpaceFaceMatch: {
         const prefix =
           item.data.source === 'identity-backfill'
