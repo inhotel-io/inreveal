@@ -82,6 +82,8 @@ class JobName {
   static const ocr = JobName._(r'Ocr');
   static const petDetectionQueueAll = JobName._(r'PetDetectionQueueAll');
   static const petDetection = JobName._(r'PetDetection');
+  static const petRecognitionQueueAll = JobName._(r'PetRecognitionQueueAll');
+  static const petRecognition = JobName._(r'PetRecognition');
   static const workflowAssetTrigger = JobName._(r'WorkflowAssetTrigger');
   static const integrityUntrackedFilesQueueAll = JobName._(r'IntegrityUntrackedFilesQueueAll');
   static const integrityUntrackedFiles = JobName._(r'IntegrityUntrackedFiles');
@@ -107,7 +109,6 @@ class JobName {
   static const sharedSpaceBulkAddAssets = JobName._(r'SharedSpaceBulkAddAssets');
   static const sharedSpaceAlbumGrantReconcile = JobName._(r'SharedSpaceAlbumGrantReconcile');
   static const sharedSpaceAlbumGrantReconcileSweep = JobName._(r'SharedSpaceAlbumGrantReconcileSweep');
-  static const sharedSpaceIdentityReconciliationSweep = JobName._(r'SharedSpaceIdentityReconciliationSweep');
   static const assetClassifyQueueAll = JobName._(r'AssetClassifyQueueAll');
   static const assetClassify = JobName._(r'AssetClassify');
 
@@ -172,6 +173,8 @@ class JobName {
     ocr,
     petDetectionQueueAll,
     petDetection,
+    petRecognitionQueueAll,
+    petRecognition,
     workflowAssetTrigger,
     integrityUntrackedFilesQueueAll,
     integrityUntrackedFiles,
@@ -197,7 +200,6 @@ class JobName {
     sharedSpaceBulkAddAssets,
     sharedSpaceAlbumGrantReconcile,
     sharedSpaceAlbumGrantReconcileSweep,
-    sharedSpaceIdentityReconciliationSweep,
     assetClassifyQueueAll,
     assetClassify,
   ];
@@ -297,6 +299,8 @@ class JobNameTypeTransformer {
         case r'Ocr': return JobName.ocr;
         case r'PetDetectionQueueAll': return JobName.petDetectionQueueAll;
         case r'PetDetection': return JobName.petDetection;
+        case r'PetRecognitionQueueAll': return JobName.petRecognitionQueueAll;
+        case r'PetRecognition': return JobName.petRecognition;
         case r'WorkflowAssetTrigger': return JobName.workflowAssetTrigger;
         case r'IntegrityUntrackedFilesQueueAll': return JobName.integrityUntrackedFilesQueueAll;
         case r'IntegrityUntrackedFiles': return JobName.integrityUntrackedFiles;
@@ -322,7 +326,6 @@ class JobNameTypeTransformer {
         case r'SharedSpaceBulkAddAssets': return JobName.sharedSpaceBulkAddAssets;
         case r'SharedSpaceAlbumGrantReconcile': return JobName.sharedSpaceAlbumGrantReconcile;
         case r'SharedSpaceAlbumGrantReconcileSweep': return JobName.sharedSpaceAlbumGrantReconcileSweep;
-        case r'SharedSpaceIdentityReconciliationSweep': return JobName.sharedSpaceIdentityReconciliationSweep;
         case r'AssetClassifyQueueAll': return JobName.assetClassifyQueueAll;
         case r'AssetClassify': return JobName.assetClassify;
         default:

@@ -3265,6 +3265,8 @@ export type SystemConfigNewVersionCheckDto = {
 export type SystemConfigNightlyTasksDto = {
     /** Cluster new faces */
     clusterNewFaces: boolean;
+    /** Cluster new pets */
+    clusterNewPets: boolean;
     /** Database cleanup */
     databaseCleanup: boolean;
     /** Generate memories */

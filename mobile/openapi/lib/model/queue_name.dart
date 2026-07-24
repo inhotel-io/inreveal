@@ -41,6 +41,7 @@ class QueueName {
   static const backupDatabase = QueueName._(r'backupDatabase');
   static const ocr = QueueName._(r'ocr');
   static const petDetection = QueueName._(r'petDetection');
+  static const petRecognition = QueueName._(r'petRecognition');
   static const workflow = QueueName._(r'workflow');
   static const integrityCheck = QueueName._(r'integrityCheck');
   static const editor = QueueName._(r'editor');
@@ -67,6 +68,7 @@ class QueueName {
     backupDatabase,
     ocr,
     petDetection,
+    petRecognition,
     workflow,
     integrityCheck,
     editor,
@@ -128,6 +130,7 @@ class QueueNameTypeTransformer {
         case r'backupDatabase': return QueueName.backupDatabase;
         case r'ocr': return QueueName.ocr;
         case r'petDetection': return QueueName.petDetection;
+        case r'petRecognition': return QueueName.petRecognition;
         case r'workflow': return QueueName.workflow;
         case r'integrityCheck': return QueueName.integrityCheck;
         case r'editor': return QueueName.editor;
