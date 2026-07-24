@@ -42,7 +42,7 @@ vi.mock('$lib/managers/asset-viewer-manager.svelte', () => ({
   },
 }));
 
-const person = (name: string): PersonResponseDto =>
+const person = (name: string, overrides: Partial<PersonResponseDto> = {}): PersonResponseDto =>
   ({
     id: `person-${name}`,
     name,
@@ -51,6 +51,7 @@ const person = (name: string): PersonResponseDto =>
     isHidden: false,
     isFavorite: false,
     updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
   }) as unknown as PersonResponseDto;
 
 const asset = () => assetFactory.build({ id: 'asset-1', ownerId: 'owner-1' });
@@ -205,5 +206,41 @@ describe('DetailPanelPeople', () => {
 
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(screen.queryByText('Should Not Appear')).not.toBeInTheDocument();
+  });
+
+  // Slice 7 (pet recognition): a pet in a photo should read as a pet in the asset viewer, mirroring
+  // the paw-badge treatment already shipped on the People-page tile (person-tile.svelte:68-75).
+  it('renders the paw badge titled with the species for a pet', () => {
+    faceManagerMock.people = [person('Mochi', { type: 'pet', species: 'dog' })];
+
+    renderPanel({ isOwner: true });
+
+    expect(screen.getByTestId('pet-badge')).toHaveAttribute('title', 'dog');
+  });
+
+  it('renders no paw badge for a human person', () => {
+    faceManagerMock.people = [person('Alice', { type: 'person' })];
+
+    renderPanel({ isOwner: true });
+
+    expect(screen.queryByTestId('pet-badge')).not.toBeInTheDocument();
+  });
+
+  it('renders a person with an undefined type as a human, not a pet (older payloads)', () => {
+    faceManagerMock.people = [person('Alice')];
+
+    renderPanel({ isOwner: true });
+
+    expect(screen.queryByTestId('pet-badge')).not.toBeInTheDocument();
+  });
+
+  it('does not render title="null" for a pet with no recorded species', () => {
+    faceManagerMock.people = [person('Mochi', { type: 'pet', species: null })];
+
+    renderPanel({ isOwner: true });
+
+    const badge = screen.getByTestId('pet-badge');
+    expect(badge).not.toHaveAttribute('title', 'null');
+    expect(badge.getAttribute('title')).toBeNull();
   });
 });

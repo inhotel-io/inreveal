@@ -14,8 +14,8 @@
   } from '$lib/utils/filter-target';
   import { zoomImageToBase64 } from '$lib/utils/people-utils';
   import { type AssetResponseDto } from '@immich/sdk';
-  import { IconButton, Text } from '@immich/ui';
-  import { mdiEye, mdiEyeOff, mdiOpenInNew, mdiPencil, mdiPlus } from '@mdi/js';
+  import { Icon, IconButton, Text } from '@immich/ui';
+  import { mdiEye, mdiEyeOff, mdiOpenInNew, mdiPaw, mdiPencil, mdiPlus } from '@mdi/js';
   import { DateTime } from 'luxon';
   import { t } from 'svelte-i18n';
 
@@ -187,7 +187,7 @@
       -->
         <div class="relative">
           <a
-            class="group block outline-none"
+            class="group relative block outline-none"
             href={filterHref ?? personPageHref}
             aria-label={filterHref ? `${$t('filter_by_person')}: ${person.name}` : undefined}
             onclick={filterHref ? () => rememberPersonName(person, filterHref) : undefined}
@@ -234,6 +234,15 @@
                 highlighted={isHighlighted}
                 class="outline-offset-2 outline-immich-primary group-focus-visible:outline-2 dark:outline-immich-dark-primary"
               />
+            {/if}
+            {#if person.type === 'pet'}
+              <div
+                class="absolute bottom-1 right-1 rounded-full bg-immich-primary p-1 text-white"
+                data-testid="pet-badge"
+                title={person.species ?? undefined}
+              >
+                <Icon icon={mdiPaw} size="16" class="text-white" />
+              </div>
             {/if}
             <p class="mt-1 truncate font-medium" title={person.name}>{person.name}</p>
             {#if person.birthDate && person.formattedAge}
