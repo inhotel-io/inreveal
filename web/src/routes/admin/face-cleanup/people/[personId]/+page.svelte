@@ -93,12 +93,15 @@
   // "one glyph means one thing across both pages"): `lock`/`unknown`/`detach` are worded identically. `move`
   // has no guided equivalent tied to a suspected owner, so it reuses guided's owner-agnostic "→ other" chip —
   // the same wording guided uses for a manually-picked destination.
-  const TALLY_LABEL_KEY: Record<Exclude<ManualFaceState, 'keep'>, string> = {
+  // `satisfies` rather than a `Record<…, string>` annotation: the annotation widens each value to `string`,
+  // and `$t` only accepts known translation keys, so the lookup below stops type-checking. This keeps the
+  // exhaustiveness check on the keys while letting the values keep their literal types.
+  const TALLY_LABEL_KEY = {
     move: 'admin.face_cleanup_review_tally_other',
     lock: 'admin.face_cleanup_review_tally_lock',
     unknown: 'admin.face_cleanup_review_tally_unknown',
     detach: 'admin.face_cleanup_review_tally_detach',
-  };
+  } satisfies Record<Exclude<ManualFaceState, 'keep'>, string>;
 
   // Admin cleanup renders clusters the admin does not own, and a face may have no person↔face join at all —
   // the person-scoped thumbnail routes 404/403 for those. Face-keyed, admin-gated, no join required. Same
