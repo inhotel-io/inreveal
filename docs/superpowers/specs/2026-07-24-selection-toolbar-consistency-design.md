@@ -87,6 +87,11 @@ actions). Those are personal-library operations that do not belong inside a shar
   conflicts for no user-visible gain. They stay untouched. (A parity guard test — Slice 2 — protects
   against silent drift if upstream restructures the album toolbar.)
 - **New actions** beyond the album model (no Stack / Link-live-photo / library jobs in spaces).
+- **Exposing space-editor edits of non-owned _direct_ space assets.** The server permits an Editor to
+  favorite/edit assets in the space's direct pool even when they don't own them (Slice 1). We do NOT
+  surface this: the merged space timeline has no per-asset direct-vs-album-path origin signal, so
+  editor-edit on a mixed selection would partially 400. Owner-gating (`isAllUserOwned`) matches the
+  current behaviour and the album model. Revisiting this needs a per-asset origin signal — future work.
 - **Changing the ⌘K command palette itself.** We reuse its context; we do not alter its items.
 - **Trashed-asset actions (restore/permanent-delete).** Space timelines do not surface trash;
   `isAllTrashed` selections are not a reachable state here.
@@ -390,20 +395,28 @@ Using `buildSpaceContext()` (gives `spaceOwner`/`spaceEditor`/`spaceViewer`/`spa
 actor). The expected statuses below are the **resolved** server behaviour (evidence file:line noted);
 the e2e spec codifies them and is the regression tripwire:
 
-- **Download** of `spaceAssetId`: owner/editor/viewer → 200; non-member → 4xx.
-- **Create-shared-link** referencing a **non-owned** `spaceAssetId`: editor/viewer → **4xx** (owner →
-  200). `Permission.AssetShare` = owner∪partner only (`access.ts:127-131`). → `canShare =
-isAllUserOwned`.
-- **Add-to-album** of a **non-owned** `spaceAssetId` into the actor's own (non-space) album:
-  editor/viewer → **4xx** (owner → 200). Same `AssetShare` gate via `asset.util.ts` (`album.service.ts:253-262`).
-  → `canAddToAlbum = isAllUserOwned`.
-- **Favorite / metadata update / delete** of `spaceAssetId`: only the asset **owner** → 200; other
-  members → 4xx (owner-scoped `Permission.AssetUpdate`/`AssetDelete`, `access.ts:155-163`). **Q5
-  confirmed:** `AssetUpdate` runs `checkOwnerAccess` first and only applies `checkSpaceEditAccess` to
-  the leftover non-owned ids — it never _subtracts_ an owner's grant, so an owner is never 400'd for
-  their own asset just because it is album-path in a space. Owner-gated actions are therefore safe in
-  the space album (Slice 6).
-- **Remove-from-space** (`shared_space_asset`): editor/owner → 200; viewer/non-member → 4xx.
+- **Download** of `spaceAssetId`: owner/editor/viewer → 200; non-member → 400.
+- **Create-shared-link** referencing a **non-owned** `spaceAssetId`: owner → 201; editor/viewer/
+  non-member → **400**. `Permission.AssetShare` = owner∪partner only (`access.ts:127-131`). →
+  `canShare = isAllUserOwned`.
+- **Add-to-album** of a **non-owned** `spaceAssetId` into the actor's own (non-space) album: the
+  request is **HTTP 200 for everyone** (they own the target album), but the non-owned asset is denied
+  **per-item in the body** (`success:false, error:no_permission`) via the non-throwing `AssetShare`
+  check — only the owner's item is `success:true`. So the honest client gate is `canAddToAlbum =
+isAllUserOwned` (a non-owned add would silently no-op).
+- **Favorite / metadata update** of a **direct** `spaceAssetId`: owner **AND space editor** → 204;
+  viewer/non-member → 400. `Permission.AssetUpdate` = `isOwner ∪ checkSpaceEditAccess`
+  (`access.ts:155-159`); `checkSpaceEditAccess` grants an Editor/Owner write over the space's **direct**
+  pool (`shared_space_asset`) regardless of asset owner (visibility/livePhoto are the one owner-only
+  exception — rbac-3). **Delete** is owner-only (`AssetDelete` has no space arm, `access.ts:161-163`).
+  **Client note:** despite the server allowing an editor to edit a non-owned _direct_ asset, the rule
+  engine still gates `canFavorite`/`canEditMetadata`/`canTag` by `isAllUserOwned`. The merged space
+  timeline carries no per-asset direct-vs-album-path origin signal (rbac-5/albums-8), so exposing
+  editor-edit would produce partial 400/`success:false` on any mixed selection — matching the current
+  space-timeline behaviour and the album model. Owner-path edits are always safe (Q5), which is what
+  the toolbar surfaces.
+- **Remove-from-space** (`shared_space_asset`, `requireRole(Editor)`): editor/owner → 200;
+  viewer/non-member → **403** (role guard, not an access check).
 - **Remove-from-space-album:** manager (space/album editor) removing any asset → 200; **non-manager
   removing their own asset → 4xx** (decision C: `AlbumAssetDelete` is role-gated, `access.ts:247-257` +
   `access.repository.ts:144-161`). → `canRemoveFromAlbum` (space album) `= canManage`, **no** own-asset
