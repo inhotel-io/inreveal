@@ -1539,6 +1539,7 @@ export type QueuesResponseLegacyDto = {
     ocr: QueueResponseLegacyDto;
     peopleBackfill: QueueResponseLegacyDto;
     petDetection: QueueResponseLegacyDto;
+    petRecognition: QueueResponseLegacyDto;
     search: QueueResponseLegacyDto;
     sidecar: QueueResponseLegacyDto;
     smartSearch: QueueResponseLegacyDto;
@@ -3318,6 +3319,7 @@ export type SystemConfigJobDto = {
     ocr: JobSettingsDto;
     peopleBackfill: JobSettingsDto;
     petDetection: JobSettingsDto;
+    petRecognition: JobSettingsDto;
     search: JobSettingsDto;
     sidecar: JobSettingsDto;
     smartSearch: JobSettingsDto;
@@ -3403,6 +3405,16 @@ export type PetDetectionConfig = {
     /** Name of the model to use */
     modelName: string;
 };
+export type PetRecognitionConfig = {
+    /** Whether the task is enabled */
+    enabled: boolean;
+    /** Maximum distance threshold for pet recognition */
+    maxDistance: number;
+    /** Minimum number of faces required for recognition */
+    minFaces: number;
+    /** Name of the model to use */
+    modelName: string;
+};
 export type SystemConfigMachineLearningDto = {
     availabilityChecks: MachineLearningAvailabilityChecksDto;
     clip: ClipConfig;
@@ -3412,6 +3424,7 @@ export type SystemConfigMachineLearningDto = {
     facialRecognition: FacialRecognitionConfig;
     ocr: OcrConfig;
     petDetection: PetDetectionConfig;
+    petRecognition: PetRecognitionConfig;
     /** ML service URLs */
     urls: string[];
 };
@@ -10237,6 +10250,7 @@ export enum QueueName {
     BackupDatabase = "backupDatabase",
     Ocr = "ocr",
     PetDetection = "petDetection",
+    PetRecognition = "petRecognition",
     Workflow = "workflow",
     IntegrityCheck = "integrityCheck",
     Editor = "editor",
@@ -10340,6 +10354,8 @@ export enum JobName {
     Ocr = "Ocr",
     PetDetectionQueueAll = "PetDetectionQueueAll",
     PetDetection = "PetDetection",
+    PetRecognitionQueueAll = "PetRecognitionQueueAll",
+    PetRecognition = "PetRecognition",
     WorkflowAssetTrigger = "WorkflowAssetTrigger",
     IntegrityUntrackedFilesQueueAll = "IntegrityUntrackedFilesQueueAll",
     IntegrityUntrackedFiles = "IntegrityUntrackedFiles",
