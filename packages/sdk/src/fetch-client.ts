@@ -9704,6 +9704,7 @@ export enum JobName {
     SharedSpaceBulkAddAssets = "SharedSpaceBulkAddAssets",
     SharedSpaceAlbumGrantReconcile = "SharedSpaceAlbumGrantReconcile",
     SharedSpaceAlbumGrantReconcileSweep = "SharedSpaceAlbumGrantReconcileSweep",
+    SharedSpaceIdentityReconciliationSweep = "SharedSpaceIdentityReconciliationSweep",
     AssetClassifyQueueAll = "AssetClassifyQueueAll",
     AssetClassify = "AssetClassify"
 }
