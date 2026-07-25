@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
+import { Route } from '$lib/route';
 import ConfidentLane from './ConfidentLane.svelte';
 import { createScanTriageModel, type FaceCleanupPerson } from './scan-triage.svelte';
 
@@ -92,5 +93,21 @@ describe('ConfidentLane', () => {
     await fireEvent.click(screen.getByTestId('confident-toggle'));
     await fireEvent.click(screen.getByTestId('confident-exclude-c1'));
     expect(screen.getByTestId('confident-approve')).toBeDisabled();
+  });
+
+  it('each spot-check card is a link to the per-cluster review page', async () => {
+    const model = createScanTriageModel([conf('c1')]);
+    render(ConfidentLane, { props: { model, applying: false, onApprove: vi.fn() } });
+    await fireEvent.click(screen.getByTestId('confident-toggle'));
+    expect(screen.getByTestId('confident-open-c1')).toHaveAttribute('href', Route.viewFaceCleanupPerson({ id: 'c1' }));
+  });
+
+  it('excluding a cluster keeps its card clickable', async () => {
+    const model = createScanTriageModel([conf('c1')]);
+    render(ConfidentLane, { props: { model, applying: false, onApprove: vi.fn() } });
+    await fireEvent.click(screen.getByTestId('confident-toggle'));
+    await fireEvent.click(screen.getByTestId('confident-exclude-c1'));
+    expect(model.isExcluded('c1')).toBe(true);
+    expect(screen.getByTestId('confident-open-c1')).toHaveAttribute('href', Route.viewFaceCleanupPerson({ id: 'c1' }));
   });
 });

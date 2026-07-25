@@ -3,6 +3,7 @@
   import { Icon } from '@immich/ui';
   import { mdiArrowRight, mdiCheckCircle, mdiChevronDown, mdiClose } from '@mdi/js';
   import { t } from 'svelte-i18n';
+  import { Route } from '$lib/route';
   import type { ScanTriageModel } from './scan-triage.svelte';
 
   type Props = { model: ScanTriageModel; applying: boolean; onApprove: () => void };
@@ -76,29 +77,39 @@
           {#each model.confident as person (person.personId)}
             {@const excluded = model.isExcluded(person.personId)}
             {@const dest = person.suspectedOwners[0]}
+            <!-- Whole-chip link to the same per-cluster review page the review lane uses, so an admin can see
+                 exactly what the auto-fix will do to a cluster before approving it. The exclude button cannot nest
+                 inside the anchor, so it overlays the anchor's reserved right padding as an absolute sibling (same
+                 pattern as ReviewFirstLane's dismiss). Excluded chips stay clickable — dimmed, not dead. -->
             <div
               class={[
-                'flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white p-2.5 dark:border-gray-700 dark:bg-gray-800',
+                'relative rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800',
                 excluded ? 'opacity-40' : '',
               ].join(' ')}
             >
-              <img
-                src={getAdminFaceThumbnailUrl(person.thumbnailFaceId ?? '')}
-                alt=""
-                loading="lazy"
-                class="size-8 flex-none rounded-lg bg-gray-100 object-cover dark:bg-gray-700"
-              />
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-xs font-semibold text-gray-900 dark:text-white">
-                  {person.personName ?? $t('admin.face_cleanup_unnamed')} · {person.faceCount}
+              <a
+                href={Route.viewFaceCleanupPerson({ id: person.personId })}
+                class="flex items-center gap-2.5 rounded-xl p-2.5 pr-10 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                data-testid={`confident-open-${person.personId}`}
+              >
+                <img
+                  src={getAdminFaceThumbnailUrl(person.thumbnailFaceId ?? '')}
+                  alt=""
+                  loading="lazy"
+                  class="size-8 flex-none rounded-lg bg-gray-100 object-cover dark:bg-gray-700"
+                />
+                <div class="min-w-0 flex-1">
+                  <div class="truncate text-xs font-semibold text-gray-900 dark:text-white">
+                    {person.personName ?? $t('admin.face_cleanup_unnamed')} · {person.faceCount}
+                  </div>
+                  <div class="truncate text-[11px] text-gray-400">
+                    {Math.round(person.flaggedFraction * 100)}% → {dest?.ownerName ?? $t('admin.face_cleanup_unnamed')}
+                  </div>
                 </div>
-                <div class="truncate text-[11px] text-gray-400">
-                  {Math.round(person.flaggedFraction * 100)}% → {dest?.ownerName ?? $t('admin.face_cleanup_unnamed')}
-                </div>
-              </div>
+              </a>
               <button
                 type="button"
-                class="flex size-6 flex-none items-center justify-center rounded-md bg-gray-100 text-gray-400 hover:text-gray-600 dark:bg-gray-700 dark:hover:text-gray-200"
+                class="absolute top-1/2 right-2.5 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-md bg-gray-100 text-gray-400 hover:text-gray-600 dark:bg-gray-700 dark:hover:text-gray-200"
                 aria-pressed={excluded}
                 aria-label={$t('admin.face_cleanup_confident_exclude')}
                 title={$t('admin.face_cleanup_confident_exclude')}
