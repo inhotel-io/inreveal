@@ -1,5 +1,6 @@
 import { AssetTypeEnum, AssetVisibility, type AssetOrder } from '@immich/sdk';
 import { applyTextFilters, buildFilterContext, type FilterState } from '$lib/components/filter-panel/filter-panel';
+import { buildSpaceTimelineOptions } from '$lib/utils/space-filter-options';
 
 function applyCommonFilterFields(base: Record<string, unknown>, filters: FilterState): Record<string, unknown> {
   if (filters.personIds.length > 0) {
@@ -65,4 +66,21 @@ export function buildAlbumAssetPickerOptions(albumId: string, filters: FilterSta
     },
     filters,
   );
+}
+
+/**
+ * Picker options for a space album sourced from the SPACE pool rather than the caller's own
+ * timeline, so other members' photos can be added. The server accepts those through the #764
+ * contribution path (`album.service.tryContributeDeniedAssets`), which is what the space
+ * timeline's "+" already uses — this just makes the same operation reachable from the album.
+ *
+ * `timelineAlbumId` is deliberately kept: it is not the query scope (that is `spaceId`) but the
+ * marker query that greys out assets already in the album.
+ */
+export function buildSpaceAlbumAssetPickerOptions(
+  spaceId: string,
+  albumId: string,
+  filters: FilterState,
+): Record<string, unknown> {
+  return { ...buildSpaceTimelineOptions(spaceId, filters), timelineAlbumId: albumId };
 }

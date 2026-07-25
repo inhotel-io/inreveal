@@ -24,7 +24,11 @@
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineAsset, TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
   import { addAssetsToAlbums, getAlbumAssetsActions, handleDeleteAlbum } from '$lib/services/album.service';
-  import { buildAlbumAssetPickerOptions, buildAlbumTimelineOptions } from '$lib/utils/album-filter-options';
+  import {
+    buildAlbumAssetPickerOptions,
+    buildAlbumTimelineOptions,
+    buildSpaceAlbumAssetPickerOptions,
+  } from '$lib/utils/album-filter-options';
   import { buildAlbumAssetPickerFilterConfig, buildAlbumDetailFilterConfig } from '$lib/utils/album-filter-config';
   import { handlePhotosRemoveFilter } from '$lib/utils/photos-filter-options';
   import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
@@ -160,7 +164,26 @@
   );
   const pickerTimeBuckets = $derived(getTimelineManagerTimeBuckets(pickerTimelineManager));
 
-  const pickerOptions = $derived(buildAlbumAssetPickerOptions(album.id, pickerFilters));
+  // 'mine' = the caller's own timeline (the long-standing behaviour). 'space' = the space pool,
+  // which also surfaces other members' photos; adding those goes through the #764 contribution
+  // path, exactly like the space timeline's "+". Space Owner/Editor only — see pickerCanUseSpace.
+  let pickerSource = $state<'mine' | 'space'>('mine');
+  const pickerCanUseSpace = $derived(isSpaceEditor);
+  const pickerOptions = $derived(
+    pickerSource === 'space' && pickerCanUseSpace
+      ? buildSpaceAlbumAssetPickerOptions(space.id, album.id, pickerFilters)
+      : buildAlbumAssetPickerOptions(album.id, pickerFilters),
+  );
+
+  const setPickerSource = (source: 'mine' | 'space') => {
+    if (source === pickerSource) {
+      return;
+    }
+    // A selection must never span both pools: the two sources are different queries and the
+    // add call is built from whatever is selected when it fires.
+    pickerMultiSelectManager.clear();
+    pickerSource = source;
+  };
 
   const refreshAlbum = async () => {
     album = await getAlbumInfo({ id: album.id });
@@ -503,6 +526,43 @@
           />
         {/key}
         <div class="flex flex-1 flex-col overflow-hidden px-2 md:px-6">
+          {#if pickerCanUseSpace}
+            <!-- Source switch: the picker has always browsed the caller's own photos, which meant
+                 a space album could not pull in another member's photo even though the space
+                 timeline's "+" can push that same photo into that same album. -->
+            <div
+              class="mb-3 flex shrink-0 items-center gap-1 self-start rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
+              role="group"
+              aria-label={$t('space_album_picker_source')}
+              data-testid="picker-source-toggle"
+            >
+              <button
+                type="button"
+                data-testid="picker-source-mine"
+                aria-pressed={pickerSource === 'mine'}
+                class="rounded-md px-3 py-1 text-sm transition-colors"
+                class:bg-white={pickerSource === 'mine'}
+                class:dark:bg-gray-900={pickerSource === 'mine'}
+                class:font-semibold={pickerSource === 'mine'}
+                onclick={() => setPickerSource('mine')}
+              >
+                {$t('space_album_picker_source_mine')}
+              </button>
+              <button
+                type="button"
+                data-testid="picker-source-space"
+                aria-pressed={pickerSource === 'space'}
+                class="rounded-md px-3 py-1 text-sm transition-colors"
+                class:bg-white={pickerSource === 'space'}
+                class:dark:bg-gray-900={pickerSource === 'space'}
+                class:font-semibold={pickerSource === 'space'}
+                onclick={() => setPickerSource('space')}
+              >
+                {$t('space_album_picker_source_space')}
+              </button>
+            </div>
+          {/if}
+
           {#if pickerActive > 0}
             <div class="mb-4 shrink-0">
               <ActiveFiltersBar

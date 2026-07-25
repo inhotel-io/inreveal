@@ -85,7 +85,8 @@ vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
   featureFlagsManager: { value: { trash: true } },
 }));
 
-const { mockAssetMultiSelectManager } = vi.hoisted(() => ({
+const { mockAssetMultiSelectManager, pickerMultiSelectClear } = vi.hoisted(() => ({
+  pickerMultiSelectClear: vi.fn(),
   mockAssetMultiSelectManager: {
     selectionActive: false,
     assets: [] as { id: string }[],
@@ -106,7 +107,8 @@ vi.mock('$lib/managers/asset-multi-select-manager.svelte', () => ({
   AssetMultiSelectManager: class {
     selectionActive = false;
     assets: { id: string }[] = [];
-    clear = vi.fn();
+    // Shared across instances so a test can assert the picker cleared its selection.
+    clear = pickerMultiSelectClear;
     isAllFavorite = false;
     isAllArchived = false;
     isAllUserOwned = true;
@@ -471,6 +473,74 @@ describe('Space album detail page', () => {
     expect(screen.getByTestId('download-action')).toBeInTheDocument();
     // But RemoveFromAlbumAction is NOT rendered
     expect(screen.queryByTestId('album-remove-from-album')).not.toBeInTheDocument();
+  });
+
+  // ── Picker source toggle ────────────────────────────────────────────────────
+  // The picker has always browsed the caller's OWN timeline, so a space album could
+  // not pull in another member's photo even though the space timeline's "+" can push
+  // the very same photo into the very same album (#764 contribution). The Space tab
+  // closes that asymmetry by sourcing the picker from the space pool.
+  describe('picker source toggle', () => {
+    const openPicker = async () => {
+      await fireEvent.click(screen.getByTestId('add-photos-button'));
+      await waitFor(() => expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-mode', 'add'));
+    };
+    const pickerOptions = () => JSON.parse(screen.getByTestId('timeline-options').textContent ?? '{}');
+
+    it('defaults to the caller’s own photos — unchanged from today', async () => {
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+      await openPicker();
+
+      expect(pickerOptions()).toMatchObject({ timelineAlbumId: 'album-1' });
+      expect(pickerOptions().spaceId).toBeUndefined();
+    });
+
+    it('switching to Space sources the picker from the space pool while keeping the already-in-album marker', async () => {
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+      await openPicker();
+
+      await fireEvent.click(screen.getByTestId('picker-source-space'));
+
+      await waitFor(() => expect(pickerOptions().spaceId).toBe(BASE_SPACE.id));
+      // timelineAlbumId must survive: it is what greys out assets already in the album.
+      expect(pickerOptions()).toMatchObject({ timelineAlbumId: 'album-1' });
+    });
+
+    it('switching back to My photos drops the space scope again', async () => {
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+      await openPicker();
+
+      await fireEvent.click(screen.getByTestId('picker-source-space'));
+      await waitFor(() => expect(pickerOptions().spaceId).toBe(BASE_SPACE.id));
+      await fireEvent.click(screen.getByTestId('picker-source-mine'));
+
+      await waitFor(() => expect(pickerOptions().spaceId).toBeUndefined());
+    });
+
+    it('clears the pending selection when the source changes, so a selection never spans both pools', async () => {
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+      await openPicker();
+
+      await fireEvent.click(screen.getByTestId('picker-source-space'));
+
+      await waitFor(() => expect(pickerMultiSelectClear).toHaveBeenCalled());
+    });
+
+    // The default album fixture makes the current user its OWNER, so the picker still opens
+    // for a space Viewer — but contributing another member's photo is Owner/Editor-only.
+    it('is hidden from a space viewer — only an Owner/Editor may contribute another member’s photo', async () => {
+      renderPage({ members: [makeMember(SharedSpaceRole.Viewer)], album: makeAlbum({ id: 'album-1' }) });
+      await openPicker();
+
+      expect(screen.queryByTestId('picker-source-toggle')).not.toBeInTheDocument();
+    });
+
+    it('is shown to a space editor', async () => {
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+      await openPicker();
+
+      expect(screen.getByTestId('picker-source-toggle')).toBeInTheDocument();
+    });
   });
 
   it('add mode shows picker control bar (no add-photos button visible while in add mode)', async () => {
