@@ -68,6 +68,33 @@ reintroduces overwriting. Three guards, all fail-closed:
 3. Request the registry token with `GITHUB_TOKEN` (job needs `packages: read`) rather than
    anonymously, so resolution keeps working if the package is ever made private.
 
+### Concurrency grouping (bug found during live validation)
+
+The per-PR group `pr-rc-<number>` with `cancel-in-progress: true` was cancelling builds it had
+no business cancelling. **Concurrency is evaluated at workflow level, before any job `if:` gate**,
+so a run triggered by an unrelated label — `changelog:chore`, say — joined the group and killed an
+in-flight RC build, even though every job in that run then skipped. Observed live: adding
+`changelog:chore` to PR #845 cancelled its running `rc.0` build, and because the comment job
+correctly declines to run on `cancelled`, the PR was left with no build and no comment.
+
+This predates the change, but numbered tags make it worse: builds die silently instead of producing
+their number, so the visible history has holes with no explanation.
+
+Fix: only RC-relevant events share the per-PR group. Everything else gets a unique group keyed on
+`github.run_id`, so it cancels nothing.
+
+```yaml
+group: >-
+  ${{ (github.event.action == 'synchronize' ||
+       github.event.label.name == 'rc' ||
+       github.event.label.name == 'rc-ml')
+      && format('pr-rc-{0}', github.event.pull_request.number)
+      || format('pr-rc-ignored-{0}', github.run_id) }}
+```
+
+`github.event.label` is absent on `synchronize`; a missing property evaluates to `null`, so the
+comparisons are simply false rather than an error.
+
 ### Races and cancellation
 
 - Two rapid pushes: the caller's `concurrency: pr-rc-<number>, cancel-in-progress: true` cancels the

@@ -17,7 +17,17 @@ on:
     types: [labeled, synchronize]
 
 concurrency:
-  group: pr-rc-${{ github.event.pull_request.number }}
+  # Concurrency is evaluated at workflow level, BEFORE any job `if:` gate — so a run
+  # triggered by an unrelated label (`changelog:chore`, …) would join the per-PR group
+  # and cancel an in-flight RC build, even though every one of its jobs then skips.
+  # Only RC-relevant events share the per-PR group; everything else gets a group of its
+  # own keyed on run id, so it can never cancel anything.
+  group: >-
+    ${{ (github.event.action == 'synchronize' ||
+         github.event.label.name == 'rc' ||
+         github.event.label.name == 'rc-ml')
+        && format('pr-rc-{0}', github.event.pull_request.number)
+        || format('pr-rc-ignored-{0}', github.run_id) }}
   cancel-in-progress: true
 
 permissions: {}
