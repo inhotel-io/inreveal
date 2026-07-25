@@ -23,7 +23,7 @@
   import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineAsset, TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import { addAssetsToAlbums, getAlbumAssetsActions, handleDeleteAlbum } from '$lib/services/album.service';
+  import { addAssetsToAlbumWithOutcome, getAlbumAssetsActions, handleDeleteAlbum } from '$lib/services/album.service';
   import {
     buildAlbumAssetPickerOptions,
     buildAlbumTimelineOptions,
@@ -621,12 +621,21 @@
           action={{
             ...AddAssets,
             onAction: () => {
-              const added = pickerMultiSelectManager.assets;
-              void addAssetsToAlbums(
-                [album.id],
-                added.map(({ id }) => id),
+              const selected = pickerMultiSelectManager.assets;
+              void addAssetsToAlbumWithOutcome(
+                album.id,
+                selected.map(({ id }) => id),
                 { notify: true },
-              ).then((ok) => (ok ? handleAddAssetsSuccess(added) : undefined));
+              ).then(({ ok, addedIds }) => {
+                // The server answers 200 with per-asset outcomes, so only paint in what it
+                // actually accepted — a denied asset would otherwise appear and then vanish on
+                // reload. Nothing accepted ⇒ stay in the picker (the toast already explains).
+                if (!ok || addedIds.length === 0) {
+                  return;
+                }
+                const accepted = new Set(addedIds);
+                return handleAddAssetsSuccess(selected.filter(({ id }) => accepted.has(id)));
+              });
             },
           }}
         />

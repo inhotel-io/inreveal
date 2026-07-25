@@ -14,7 +14,7 @@ import { init, register, waitLocale } from 'svelte-i18n';
 import { getAnimateMock } from '$lib/__mocks__/animate.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
-import { addAssetsToAlbums, getAlbumAssetsActions } from '$lib/services/album.service';
+import { addAssetsToAlbumWithOutcome, getAlbumAssetsActions } from '$lib/services/album.service';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import SpaceAlbumDetailPage from './+page.svelte';
@@ -85,8 +85,10 @@ vi.mock('$lib/managers/feature-flags-manager.svelte', () => ({
   featureFlagsManager: { value: { trash: true } },
 }));
 
-const { mockAssetMultiSelectManager, pickerMultiSelectClear } = vi.hoisted(() => ({
+const { mockAssetMultiSelectManager, pickerMultiSelectClear, pickerSelectedAssets } = vi.hoisted(() => ({
   pickerMultiSelectClear: vi.fn(),
+  // Shared so a test can give the PICKER (not the browse bar) a selection to add.
+  pickerSelectedAssets: [] as { id: string }[],
   mockAssetMultiSelectManager: {
     selectionActive: false,
     assets: [] as { id: string }[],
@@ -106,7 +108,9 @@ vi.mock('$lib/managers/asset-multi-select-manager.svelte', () => ({
   assetMultiSelectManager: mockAssetMultiSelectManager,
   AssetMultiSelectManager: class {
     selectionActive = false;
-    assets: { id: string }[] = [];
+    get assets() {
+      return pickerSelectedAssets;
+    }
     // Shared across instances so a test can assert the picker cleared its selection.
     clear = pickerMultiSelectClear;
     isAllFavorite = false;
@@ -144,6 +148,7 @@ vi.mock('$lib/services/album.service', async (importOriginal) => {
       },
     }),
     addAssetsToAlbums: vi.fn().mockResolvedValue(true),
+    addAssetsToAlbumWithOutcome: vi.fn().mockResolvedValue({ ok: true, addedIds: [] }),
   };
 });
 
@@ -255,6 +260,10 @@ describe('Space album detail page', () => {
     // test ordering). Mirror the global-album route spec.
     Element.prototype.animate = getAnimateMock();
     resetMockTimelineState();
+    // The picker selection is a shared array (see the AssetMultiSelectManager mock) - reset it
+    // so a test that seeds a selection cannot leak into the next one.
+    pickerSelectedAssets.length = 0;
+    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: [] });
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
     // Slice 6: a handful of tests below flip these to exercise ownership/manager gating
@@ -615,7 +624,8 @@ describe('Space album detail page', () => {
   it('firing AddAssets action in add mode returns to browse and refreshes album', async () => {
     const refreshedAlbum = makeAlbum({ id: 'album-1', albumName: 'Refreshed', assetCount: 5 });
     vi.mocked(getAlbumInfo).mockResolvedValue(refreshedAlbum);
-    vi.mocked(addAssetsToAlbums).mockResolvedValue(true);
+    pickerSelectedAssets.splice(0, pickerSelectedAssets.length, { id: 'a-1' });
+    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['a-1'] });
 
     // Provide AddAssets whose onAction resolves immediately
     const addAssetsOnAction = vi.fn().mockResolvedValue(undefined);
@@ -658,8 +668,9 @@ describe('Space album detail page', () => {
   });
 
   it('does not insert photos into the album grid when the add call fails', async () => {
-    // The service never rejects — on 5xx/network it toasts and resolves false.
-    vi.mocked(addAssetsToAlbums).mockResolvedValue(false);
+    // The service never rejects - on 5xx/network it toasts and resolves ok:false.
+    pickerSelectedAssets.splice(0, pickerSelectedAssets.length, { id: 'a-1' });
+    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: false, addedIds: [] });
     renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
 
     // Enter add mode and fire the header Add action, exactly as the success test does.
@@ -670,6 +681,49 @@ describe('Space album detail page', () => {
     // The picker stays open (retry) and nothing was optimistically upserted into the browse timeline.
     expect(screen.getByTestId('add-photos-overlay')).toBeInTheDocument();
     expect(mockTimelineState.upsertAssets).not.toHaveBeenCalled();
+  });
+
+  // The add endpoint returns HTTP 200 with PER-ASSET outcomes, so "the call did not throw" is not
+  // the same as "every photo landed". Cross-owner adds (the Space tab) make partial denial routine:
+  // an asset visible through the space is not necessarily one the contribution path will accept.
+  describe('partial add outcomes', () => {
+    const fireAdd = async () => {
+      await fireEvent.click(screen.getByTestId('add-photos-button'));
+      await waitFor(() => expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-mode', 'add'));
+      await fireEvent.click(screen.getByRole('button', { name: /add assets/i }));
+    };
+
+    beforeEach(() => {
+      pickerSelectedAssets.splice(0, pickerSelectedAssets.length, { id: 'mine' }, { id: 'theirs' });
+      // A successful add returns to browse via refreshAlbum(); without this the page would
+      // re-render with `album` undefined.
+      vi.mocked(getAlbumInfo).mockResolvedValue(makeAlbum({ id: 'album-1' }));
+      vi.mocked(getAlbumAssetsActions).mockReturnValue({
+        AddAssets: { title: 'Add assets', icon: '', onAction: vi.fn(), $if: () => true },
+        Upload: { title: 'Upload', icon: '', onAction: vi.fn() },
+      } as never);
+    });
+
+    it('inserts only the assets the server actually accepted, not the whole selection', async () => {
+      vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['mine'] });
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+
+      await fireAdd();
+
+      await waitFor(() => expect(mockTimelineState.upsertAssets).toHaveBeenCalled());
+      // 'theirs' was denied per-asset; painting it in would show a photo that vanishes on reload.
+      expect(mockTimelineState.upsertAssets).toHaveBeenCalledWith([{ id: 'mine' }]);
+    });
+
+    it('keeps the picker open and inserts nothing when every asset was denied', async () => {
+      vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: [] });
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+
+      await fireAdd();
+
+      expect(mockTimelineState.upsertAssets).not.toHaveBeenCalled();
+      expect(screen.getByTestId('add-photos-overlay')).toBeInTheDocument();
+    });
   });
 
   it('browse mode renders the FilterPanel', () => {
@@ -787,7 +841,8 @@ describe('Space album detail page', () => {
   it('picker filters are reset after a successful add (returns to browse with no active filters)', async () => {
     const refreshedAlbum = makeAlbum({ id: 'album-1', albumName: 'Refreshed', assetCount: 5 });
     vi.mocked(getAlbumInfo).mockResolvedValue(refreshedAlbum);
-    vi.mocked(addAssetsToAlbums).mockResolvedValue(true);
+    pickerSelectedAssets.splice(0, pickerSelectedAssets.length, { id: 'a-1' });
+    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['a-1'] });
     const addAssetsOnAction = vi.fn().mockResolvedValue(undefined);
     vi.mocked(getAlbumAssetsActions).mockReturnValue({
       AddAssets: { title: 'Add assets', icon: '', onAction: addAssetsOnAction, $if: () => true },
