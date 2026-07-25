@@ -362,4 +362,50 @@ describe('space [spaceId] +layout.svelte', () => {
     // The cover (SpaceHero) is gated by the same showChrome flag.
     expect(screen.queryByTestId('hero-title')).not.toBeInTheDocument();
   });
+
+  describe('edit space', () => {
+    it('offers Edit space to an owner', async () => {
+      renderLayout(SharedSpaceRole.Owner);
+      await openOverflow();
+      expect(await screen.findByText('spaces_edit')).toBeInTheDocument();
+    });
+
+    it('offers Edit space to an editor', async () => {
+      renderLayout(SharedSpaceRole.Editor);
+      await openOverflow();
+      expect(await screen.findByText('spaces_edit')).toBeInTheDocument();
+    });
+
+    it('does NOT offer Edit space to a viewer', async () => {
+      renderLayout(SharedSpaceRole.Viewer);
+      await openOverflow();
+      expect(screen.queryByText('spaces_edit')).not.toBeInTheDocument();
+    });
+
+    it('opens the modal with the current space and revalidates after a saved edit', async () => {
+      vi.mocked(modalManager.show).mockResolvedValue(true as never);
+      renderLayout(SharedSpaceRole.Editor);
+
+      await clickOverflowOption('spaces_edit');
+
+      await waitFor(() => {
+        expect(modalManager.show).toHaveBeenCalledWith(expect.anything(), {
+          space: expect.objectContaining({ id: 's1' }),
+        });
+      });
+      expect(invalidateAllMock).toHaveBeenCalled();
+    });
+
+    it('does not revalidate when the edit is cancelled', async () => {
+      vi.mocked(modalManager.show).mockResolvedValue(undefined as never);
+      renderLayout(SharedSpaceRole.Editor);
+
+      await clickOverflowOption('spaces_edit');
+
+      await waitFor(() => {
+        expect(modalManager.show).toHaveBeenCalled();
+      });
+      expect(invalidateAllMock).not.toHaveBeenCalled();
+    });
+  });
 });
