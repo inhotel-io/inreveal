@@ -113,4 +113,68 @@ describe('ReviewFirstLane', () => {
     });
     expect(screen.getByTestId('review-row-r1')).toHaveTextContent('admin.face_cleanup_bad_target');
   });
+
+  it('renders a header row naming every column', () => {
+    render(ReviewFirstLane, { props: { people: [rev({ personId: 'r1' })], users, onDismiss: vi.fn() } });
+    const header = screen.getByTestId('review-header');
+    expect(header).toHaveTextContent('admin.face_cleanup_col_cluster');
+    expect(header).toHaveTextContent('admin.face_cleanup_col_flagged');
+    expect(header).toHaveTextContent('admin.face_cleanup_col_destination');
+    expect(header).toHaveTextContent('admin.face_cleanup_col_reasons');
+  });
+
+  it('a multi-reason row shows the primary pill plus "+N" and lists every reason in the tooltip', () => {
+    render(ReviewFirstLane, {
+      props: {
+        people: [rev({ personId: 'r1', reviewReasons: ['large-cluster', 'named'] })],
+        users,
+        onDismiss: vi.fn(),
+      },
+    });
+    const reasons = screen.getByTestId('review-reasons-r1');
+    expect(reasons).toHaveTextContent('admin.face_cleanup_reason_large_cluster');
+    expect(reasons).toHaveTextContent('+1');
+    expect(reasons).not.toHaveTextContent('admin.face_cleanup_reason_named');
+    expect(reasons).toHaveAttribute('title', 'admin.face_cleanup_reason_large_cluster · admin.face_cleanup_reason_named');
+  });
+
+  it('bad-target wins the primary pill regardless of its position in the reason list', () => {
+    render(ReviewFirstLane, {
+      props: {
+        people: [rev({ personId: 'r1', reviewReasons: ['large-cluster', 'bad-target'] })],
+        users,
+        onDismiss: vi.fn(),
+      },
+    });
+    const reasons = screen.getByTestId('review-reasons-r1');
+    expect(reasons).toHaveTextContent('admin.face_cleanup_reason_bad_target');
+    expect(reasons).toHaveTextContent('+1');
+  });
+
+  it('an unknown reason id falls back to its raw id in pill and tooltip', () => {
+    render(ReviewFirstLane, {
+      props: { people: [rev({ personId: 'r1', reviewReasons: ['mystery-reason'] })], users, onDismiss: vi.fn() },
+    });
+    const reasons = screen.getByTestId('review-reasons-r1');
+    expect(reasons).toHaveTextContent('mystery-reason');
+    expect(reasons).toHaveAttribute('title', 'mystery-reason');
+  });
+
+  it('a row with no reasons still reserves an empty reasons cell', () => {
+    render(ReviewFirstLane, {
+      props: { people: [rev({ personId: 'r1', reviewReasons: [] })], users, onDismiss: vi.fn() },
+    });
+    expect(screen.getByTestId('review-reasons-r1')).toBeEmptyDOMElement();
+  });
+
+  // Regression guard, not a red test: this PASSES before and after the change. It pins the row content of
+  // the % and destination cells so a botched class-constant repoint in Step 4c (e.g. a lost `sm:block`)
+  // can't silently blank a column — no other test asserts these cells at all.
+  it('keeps the flagged share and destination visible in their fixed columns', () => {
+    render(ReviewFirstLane, { props: { people: [rev({ personId: 'r1' })], users, onDismiss: vi.fn() } });
+    const row = screen.getByTestId('review-row-r1');
+    expect(row).toHaveTextContent('57%');
+    expect(row).toHaveTextContent('20/35');
+    expect(row).toHaveTextContent('Pierre');
+  });
 });

@@ -29,6 +29,14 @@
     'bad-target': 'admin.face_cleanup_reason_bad_target',
   };
 
+  // Column layout shared by the header row and every cluster row — width + responsive visibility live in one
+  // place so the header cannot drift out of alignment with the rows it labels. The reasons column is
+  // fixed-width on purpose: content truncates inside it instead of pushing the % / destination columns around.
+  const COL_FLAGGED = 'hidden w-28 flex-none sm:block';
+  const COL_DEST = 'hidden w-36 flex-none md:flex';
+  const COL_REASONS = 'hidden w-28 flex-none lg:flex';
+  const COL_HEADING = 'text-[11px] font-semibold tracking-wide text-gray-400 uppercase';
+
   const matches = (p: FaceCleanupPerson) => {
     const q = query.trim().toLowerCase();
     if (!q) {
@@ -83,6 +91,16 @@
     </div>
 
     <div class="border-t border-gray-200 dark:border-gray-700">
+      <div
+        class="hidden items-center gap-4 border-b border-gray-200 bg-gray-50/60 py-2 pr-12 pl-5 sm:flex dark:border-gray-700 dark:bg-gray-900/30"
+        data-testid="review-header"
+      >
+        <div class="w-10 flex-none" aria-hidden="true"></div>
+        <div class="min-w-0 flex-1 {COL_HEADING}">{$t('admin.face_cleanup_col_cluster')}</div>
+        <div class="{COL_FLAGGED} {COL_HEADING}">{$t('admin.face_cleanup_col_flagged')}</div>
+        <div class="{COL_DEST} {COL_HEADING}">{$t('admin.face_cleanup_col_destination')}</div>
+        <div class="{COL_REASONS} {COL_HEADING}">{$t('admin.face_cleanup_col_reasons')}</div>
+      </div>
       {#each visible as person (person.personId)}
         {@const dest = person.suspectedOwners[0]}
         {@const owner = usersById.get(person.ownerId)}
@@ -126,7 +144,7 @@
               </div>
             </div>
 
-            <div class="hidden w-28 flex-none sm:block">
+            <div class={COL_FLAGGED}>
               <div class="flex items-baseline justify-between">
                 <span class="text-sm font-bold tabular-nums">{pct}%</span>
                 <span class="text-xs text-gray-400 tabular-nums">{person.flagged}/{person.faceCount}</span>
@@ -139,7 +157,7 @@
               </div>
             </div>
 
-            <div class="hidden w-36 flex-none items-center gap-2 md:flex">
+            <div class="{COL_DEST} items-center gap-2">
               {#if dest}
                 <Icon icon={mdiArrowRight} size="16" class="flex-none text-gray-300" />
                 <div class="min-w-0">
@@ -153,14 +171,20 @@
               {/if}
             </div>
 
-            <!-- One primary reason only (bad-target wins, else the first) + a "+N" — stacking every reason as
-                 its own pill overflowed the row and read as broken. Full reasons live on the review page. -->
+            <!-- Fixed-width reasons column: one primary pill (bad-target wins) truncating inside it plus a "+N",
+                 with EVERY reason spelled out in the title tooltip. The width is constant — including the
+                 no-reason placeholder — so this column can never push % / destination out of line across rows. -->
             {#if person.reviewReasons.length > 0}
               {@const primaryReason = bad ? 'bad-target' : person.reviewReasons[0]}
-              <div class="hidden flex-none items-center gap-1.5 lg:flex">
+              {@const reasonLabels = person.reviewReasons.map((r) => (reasonKeys[r] ? $t(reasonKeys[r] as Translations) : r))}
+              <div
+                class="{COL_REASONS} items-center gap-1.5"
+                title={reasonLabels.join(' · ')}
+                data-testid={`review-reasons-${person.personId}`}
+              >
                 <span
                   class={[
-                    'rounded-md px-1.5 py-0.5 text-[10px] whitespace-nowrap',
+                    'min-w-0 truncate rounded-md px-1.5 py-0.5 text-[10px]',
                     primaryReason === 'bad-target'
                       ? 'bg-red-50 text-red-500 dark:bg-red-900/20 dark:text-red-400'
                       : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
@@ -169,9 +193,11 @@
                   {reasonKeys[primaryReason] ? $t(reasonKeys[primaryReason] as Translations) : primaryReason}
                 </span>
                 {#if person.reviewReasons.length > 1}
-                  <span class="text-[10px] font-medium text-gray-400">+{person.reviewReasons.length - 1}</span>
+                  <span class="flex-none text-[10px] font-medium text-gray-400">+{person.reviewReasons.length - 1}</span>
                 {/if}
               </div>
+            {:else}
+              <div class={COL_REASONS} aria-hidden="true" data-testid={`review-reasons-${person.personId}`}></div>
             {/if}
           </a>
 
