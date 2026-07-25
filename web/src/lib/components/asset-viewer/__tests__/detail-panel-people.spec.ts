@@ -191,8 +191,10 @@ describe('DetailPanelPeople filter grammar (R8)', () => {
 
     await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
     expect(screen.queryByLabelText(/^filter_by_person/)).not.toBeInTheDocument();
-    // The person page link is still reachable — the row does not go dead.
-    expect(screen.getByRole('link')).toBeInTheDocument();
+    // …and there is no person page to fall back to either: #796 renders a non-owner's person as
+    // plain text rather than a link into the owner-gated `/people/{id}`, which would 404. The row
+    // still shows the person — it just carries no navigation.
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 });
 
