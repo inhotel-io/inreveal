@@ -356,7 +356,10 @@ describe('SharedSpaceUpdateDto', () => {
 cd server && pnpm vitest --config test/vitest.config.mjs run src/dtos/shared-space.dto.spec.ts
 ```
 
-Expected: PASS immediately — this is characterization coverage of behaviour that already exists, not a driver for new code. If any test FAILS, the schema does not do what the spec claims; **stop and report** rather than changing the schema to match the test.
+Expected: PASS immediately — this is characterization coverage of behaviour that already exists, not a driver for new code. **Never edit the schema to make one of these pass.** If one fails, sort it into one of two buckets:
+
+- **A rejection test fails** (whitespace-only, empty, or over-length is _accepted_). That contradicts the spec and undermines the modal's guard rationale — **stop and report**, do not proceed to later tasks.
+- **Only the trimmed-value assertion fails** (`result.data?.name` is `'  Padded  '` rather than `'Padded'`, i.e. Zod applies `.trim()` differently than assumed). That is a cosmetic detail, not a contract break — correct the test to match observed behaviour, leave a comment noting it, and continue.
 
 - [ ] **Step 3: Commit**
 
@@ -404,7 +407,7 @@ Create `e2e/src/specs/server/api/spaces-update.e2e-spec.ts`:
  */
 
 import { authHeaders, buildSpaceContext, forEachActor, type SpaceContext } from 'src/actors';
-import { app, asBearerAuth, utils } from 'src/utils';
+import { app, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -447,27 +450,25 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
     it('an editor rename actually persists', async () => {
       const { status, body } = await request(app)
         .put(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceEditor.token as string))
+        .set(authHeaders(ctx.spaceEditor))
         .send({ name: 'Editor Renamed This' });
 
       expect(status).toBe(200);
       expect((body as { name: string }).name).toBe('Editor Renamed This');
 
-      const readBack = await request(app)
-        .get(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceOwner.token as string));
+      const readBack = await request(app).get(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(ctx.spaceOwner));
       expect((readBack.body as { name: string }).name).toBe('Editor Renamed This');
     });
 
     it('an editor can clear the description with an empty string', async () => {
       await request(app)
         .put(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceEditor.token as string))
+        .set(authHeaders(ctx.spaceEditor))
         .send({ description: 'Temporary' });
 
       const { status, body } = await request(app)
         .put(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceEditor.token as string))
+        .set(authHeaders(ctx.spaceEditor))
         .send({ description: '' });
 
       expect(status).toBe(200);
@@ -514,21 +515,17 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
 
   describe('mixed payloads', () => {
     it('rejects an editor mixing a permitted name with a forbidden setting, and writes neither', async () => {
-      const before = await request(app)
-        .get(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceOwner.token as string));
+      const before = await request(app).get(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(ctx.spaceOwner));
       const nameBefore = (before.body as { name: string }).name;
 
       const { status } = await request(app)
         .put(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceEditor.token as string))
+        .set(authHeaders(ctx.spaceEditor))
         .send({ name: 'Should Not Persist', petsEnabled: true });
 
       expect(status).toBe(403);
 
-      const after = await request(app)
-        .get(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceOwner.token as string));
+      const after = await request(app).get(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(ctx.spaceOwner));
       expect((after.body as { name: string }).name).toBe(nameBefore);
     });
   });
@@ -537,7 +534,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
     it('rejects a whitespace-only name with 400', async () => {
       const { status } = await request(app)
         .put(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceEditor.token as string))
+        .set(authHeaders(ctx.spaceEditor))
         .send({ name: '   ' });
 
       expect(status).toBe(400);
@@ -546,7 +543,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
     it('rejects a name over 100 characters with 400', async () => {
       const { status } = await request(app)
         .put(`/shared-spaces/${ctx.spaceId}`)
-        .set(asBearerAuth(ctx.spaceEditor.token as string))
+        .set(authHeaders(ctx.spaceEditor))
         .send({ name: 'a'.repeat(101) });
 
       expect(status).toBe(400);
@@ -749,6 +746,9 @@ Create `web/src/lib/modals/SpaceEditModal.spec.ts`:
 import { UserAvatarColor, type SharedSpaceResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+// userEvent (not fireEvent) for the submit button: it dispatches the full pointer/click sequence
+// that actually triggers form submission in happy-dom. PersonEditBirthDateModal.spec does the same.
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SpaceEditModal from './SpaceEditModal.svelte';
 
@@ -764,9 +764,15 @@ const space = (o: Partial<SharedSpaceResponseDto> = {}): SharedSpaceResponseDto 
     ...o,
   }) as never;
 
-const nameInput = () => screen.getByLabelText('name') as HTMLInputElement;
-const descriptionInput = () => screen.getByLabelText('description') as HTMLTextAreaElement;
-const saveButton = () => screen.getByRole('button', { name: 'save' });
+// Queries pinned to data-testid, not labels: @immich/ui's Field/Label wiring uses
+// aria-labelledby, which happy-dom does not reliably associate (PersonEditBirthDateModal.spec
+// resorts to a raw document.querySelector for the same reason).
+const nameInput = () => screen.getByTestId('space-edit-name') as HTMLInputElement;
+const descriptionInput = () => screen.getByTestId('space-edit-description') as HTMLTextAreaElement;
+// "Save" is capitalised because FormModal's submitText comes from @immich/ui's OWN translation
+// service (dist/services/translation.svelte.js → `save: 'Save'`), not svelte-i18n — so it is real
+// English here, unlike the raw i18n keys ('spaces_edit', 'name') that svelte-i18n yields in tests.
+const saveButton = () => screen.getByRole('button', { name: 'Save' });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -793,7 +799,7 @@ describe('SpaceEditModal', () => {
     render(SpaceEditModal, { space: space(), onClose });
 
     await fireEvent.input(nameInput(), { target: { value: 'Renamed Trip' } });
-    await fireEvent.click(saveButton());
+    await userEvent.click(saveButton());
 
     await waitFor(() => {
       expect(updateSpaceDetailsMock).toHaveBeenCalledWith('s1', {
@@ -809,7 +815,7 @@ describe('SpaceEditModal', () => {
     render(SpaceEditModal, { space: space(), onClose: vi.fn() });
 
     await fireEvent.input(nameInput(), { target: { value: '  Padded Name  ' } });
-    await fireEvent.click(saveButton());
+    await userEvent.click(saveButton());
 
     await waitFor(() => {
       expect(updateSpaceDetailsMock).toHaveBeenCalledWith('s1', expect.objectContaining({ name: 'Padded Name' }));
@@ -820,7 +826,7 @@ describe('SpaceEditModal', () => {
     render(SpaceEditModal, { space: space(), onClose: vi.fn() });
 
     await fireEvent.input(descriptionInput(), { target: { value: '' } });
-    await fireEvent.click(saveButton());
+    await userEvent.click(saveButton());
 
     await waitFor(() => {
       expect(updateSpaceDetailsMock).toHaveBeenCalledWith('s1', expect.objectContaining({ description: '' }));
@@ -833,7 +839,7 @@ describe('SpaceEditModal', () => {
     // Targeted by data-testid, not aria-label: the ColorPicker's labels are raw lowercase
     // enum values, a pre-existing a11y wart this component does not own.
     await fireEvent.click(screen.getByTestId('color-swatch-green'));
-    await fireEvent.click(saveButton());
+    await userEvent.click(saveButton());
 
     await waitFor(() => {
       expect(updateSpaceDetailsMock).toHaveBeenCalledWith(
@@ -847,7 +853,7 @@ describe('SpaceEditModal', () => {
     const onClose = vi.fn();
     render(SpaceEditModal, { space: space(), onClose });
 
-    await fireEvent.click(saveButton());
+    await userEvent.click(saveButton());
 
     await waitFor(() => {
       expect(updateSpaceDetailsMock).toHaveBeenCalledWith('s1', {
@@ -907,7 +913,7 @@ describe('SpaceEditModal', () => {
     const onClose = vi.fn();
     render(SpaceEditModal, { space: space(), onClose });
 
-    await fireEvent.click(saveButton());
+    await userEvent.click(saveButton());
 
     await waitFor(() => {
       expect(updateSpaceDetailsMock).toHaveBeenCalled();
@@ -917,10 +923,7 @@ describe('SpaceEditModal', () => {
 });
 ```
 
-**Two notes for the implementer:**
-
-1. `svelte-i18n` returns raw keys in this test setup, so `getByLabelText('name')` matches the `name` i18n key verbatim — that is why the queries use lowercase key strings rather than "Name". If `getByLabelText` does not resolve because `@immich/ui`'s `Field`/`Label` wiring uses `aria-labelledby` in a way happy-dom does not associate, fall back to `screen.getByTestId(...)` and add matching `data-testid` attributes to the two inputs.
-2. The `selectionStart`/`selectionEnd` assertion depends on happy-dom implementing `HTMLInputElement.select()`. If it does not, replace that test with one asserting the input has focus and leave a comment; do **not** delete the select-on-focus behaviour from the component.
+**One note for the implementer:** the `selectionStart`/`selectionEnd` assertion depends on happy-dom implementing `HTMLInputElement.select()`. If it does not, replace that single test with one asserting the input has focus, and leave a comment saying why. Do **not** delete the select-on-focus behaviour from the component to make a test go away.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -985,10 +988,10 @@ Create `web/src/lib/modals/SpaceEditModal.svelte`:
 >
   <div class="flex flex-col gap-4 m-4">
     <Field label={$t('name')} required>
-      <Input bind:value={name} maxlength={100} autofocus onfocus={selectNameOnce} />
+      <Input bind:value={name} maxlength={100} autofocus onfocus={selectNameOnce} data-testid="space-edit-name" />
     </Field>
     <Field label={$t('description')}>
-      <Textarea bind:value={description} maxlength={500} />
+      <Textarea bind:value={description} maxlength={500} data-testid="space-edit-description" />
     </Field>
     <Field label={$t('color')}>
       <ColorPicker value={color} onchange={(c) => (color = c)} />
@@ -1171,7 +1174,7 @@ The existing top-left "Set cover photo" button (`canEdit && !hasCover`) **stays*
 
 - [ ] **Step 2: Rename the testid in the three existing tests, and invert the no-cover one**
 
-In `space-hero.spec.ts`, replace every `hero-edit-cover` with `hero-edit-menu` (4 occurrences, at lines 116, 121, 128, 133, 146). Then **replace** the test at lines 131-134 — it currently asserts the menu is absent without a cover, which is exactly the behaviour being fixed:
+In `space-hero.spec.ts`, replace every `hero-edit-cover` with `hero-edit-menu` (5 occurrences, at lines 116, 121, 128, 133, 146). Then **replace** the test at lines 131-134 — it currently asserts the menu is absent without a cover, which is exactly the behaviour being fixed:
 
 ```ts
 it('shows the edit menu even when there is no cover, so renaming stays reachable', () => {
@@ -1255,11 +1258,11 @@ it('offers Reposition when there IS a cover', async () => {
   expect(await screen.findByText('reposition')).toBeInTheDocument();
 });
 
-it('shows no edit menu for a viewer, with or without a cover', () => {
+it('shows no edit menu for a viewer, with or without a cover', async () => {
   const { rerender } = render(SpaceHero, { space: makeSpace({ thumbnailAssetId: 'a1' }), canEdit: false });
   expect(screen.queryByTestId('hero-edit-menu')).not.toBeInTheDocument();
 
-  void rerender({ space: makeSpace({ thumbnailAssetId: null }), canEdit: false });
+  await rerender({ space: makeSpace({ thumbnailAssetId: null }), canEdit: false });
   expect(screen.queryByTestId('hero-edit-menu')).not.toBeInTheDocument();
 });
 
