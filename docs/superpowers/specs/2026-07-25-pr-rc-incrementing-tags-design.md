@@ -105,8 +105,9 @@ resolve:
 ```
 
 `build` then gains `needs: resolve` and passes `rc_tag: ${{ needs.resolve.outputs.rc_tag }}`
-instead of the literal `pr-<number>`. Its own `if:` gate stays as-is; adding `needs` makes it skip
-automatically when `resolve` is skipped.
+instead of the literal `pr-<number>`. Its own `if:` gate is **removed** rather than duplicated: a
+job whose `needs` was skipped or failed is skipped by default, so the single gate on `resolve` now
+controls the whole chain and there is only one place to get it wrong.
 
 The PR number reaches the script through `env:`, never interpolated into the `run:` body
 (template-injection / zizmor).
