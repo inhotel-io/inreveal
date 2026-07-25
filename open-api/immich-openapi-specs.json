@@ -6513,12 +6513,7 @@
             "name": "description",
             "required": false,
             "in": "query",
-<<<<<<< HEAD
-            "description": "Filter by description text",
-||||||| parent of e13beb08bd5 (fix(map): sync timeline-panel temporal chip to URL + forward text filters to map markers (#767))
-=======
             "description": "Filter by asset description (substring, case/accent-insensitive)",
->>>>>>> e13beb08bd5 (fix(map): sync timeline-panel temporal chip to URL + forward text filters to map markers (#767))
             "schema": {
               "type": "string"
             }
@@ -6581,19 +6576,6 @@
             "name": "ocr",
             "required": false,
             "in": "query",
-<<<<<<< HEAD
-            "description": "Filter by text recognised in the image",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "originalFileName",
-            "required": false,
-            "in": "query",
-            "description": "Filter by original file name",
-||||||| parent of e13beb08bd5 (fix(map): sync timeline-panel temporal chip to URL + forward text filters to map markers (#767))
-=======
             "description": "Filter by OCR text content (substring, case/accent-insensitive)",
             "schema": {
               "type": "string"
@@ -6604,7 +6586,6 @@
             "required": false,
             "in": "query",
             "description": "Filter by original filename (substring, case/accent-insensitive)",
->>>>>>> e13beb08bd5 (fix(map): sync timeline-panel temporal chip to URL + forward text filters to map markers (#767))
             "schema": {
               "type": "string"
             }
