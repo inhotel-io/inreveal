@@ -74,11 +74,36 @@ This is existing behaviour and must be locked down by a test.
 No DTO, controller, permission, migration, or SDK change. `Permission.SharedSpaceUpdate` and the route are
 untouched.
 
-### 2. Web — `SpaceEditModal.svelte`
+### 2. Web — service layer
+
+The API call does **not** live in the modal. `web/src/lib/services/space.service.ts` already exists, and
+both comparable edit modals in the codebase route through a service handler that returns a boolean:
+
+```
+ApiKeyUpdateModal  → handleUpdateApiKey(...) → boolean → if (success) onClose()
+TagEditModal       → handleUpdateTag(...)    → boolean → if (success) onClose()
+```
+
+The handler owns the `updateSpace` call, the success toast, and `handleError`; the modal only closes on
+success. This matches the existing `addAssetsToSpace` shape in `space.service.ts:10-32`
+(`try { … return true } catch { handleError(…); return false }`).
+
+Add to `web/src/lib/services/space.service.ts`:
+
+```ts
+export const updateSpaceDetails = async (
+  spaceId: string,
+  dto: { name: string; description: string; color: UserAvatarColor },
+) => { … };
+```
+
+Tests go in the existing `web/src/lib/services/space.service.spec.ts`.
+
+### 3. Web — `SpaceEditModal.svelte`
 
 New `web/src/lib/modals/SpaceEditModal.svelte`, mirroring `SpaceCreateModal.svelte`: `FormModal` wrapping
 `Field` + `Input` (name), `Field` + `Textarea` (description), `Field` + `ColorPicker` (color). Prefilled
-from the passed space, calls `updateSpace` on submit, resolves with the updated space.
+from the passed space, calls `updateSpaceDetails` on submit, closes on success.
 
 ```
 ┌─ Edit space ──────────────────┐
@@ -107,7 +132,23 @@ empty input but happily submits `"   "` — which the server then rejects with a
 `z.string().trim().min(1)`. `FormModal` takes a `disabled` prop for its submit button, so the modal binds
 `disabled={name.trim().length === 0}` to catch both cases before a request is made.
 
-### 3. Web — entry point
+This is a **deliberate deviation** — no other `FormModal` in the codebase disables its submit button. It
+earns its keep because whitespace-only names are otherwise a real, reachable 400.
+
+**Length caps.** `name` is capped at 100 and `description` at 500 server-side. Without client caps, pasting
+an over-long description yields a 400 surfaced as a generic toast that names neither the field nor the
+limit. Both `Input` and `Textarea` spread `{...restProps}` onto the underlying element, so `maxlength={100}`
+and `maxlength={500}` pass straight through and make that error unreachable.
+
+**Autofocus and select.** Renaming is the dominant path. The name input autofocuses _with its existing text
+selected_, so typing replaces it immediately rather than requiring a manual select-all.
+
+### 4. Web — entry points
+
+Rename is reachable from **two** places, because the reported bug is a discoverability failure, not a
+missing capability.
+
+#### 4a. Header overflow menu
 
 `web/src/routes/(user)/spaces/[spaceId]/+layout.svelte`, inside the existing `{#if isEditor}` block of the
 header overflow menu, above "Add all photos":
@@ -127,15 +168,33 @@ header overflow menu, above "Add all photos":
      └───────────────────────┘
 ```
 
-Chosen over the hero pencil menu because that pencil only renders when `canEdit && hasCover`
-(`space-hero.svelte:169`) — a space with no cover photo would have no way to rename. The overflow menu is
-always present and already hosts the other space-level actions.
-
 Handler follows the established pattern in this file — `modalManager.show(SpaceEditModal, { space })`,
-then `invalidateAll()` and a success toast, `handleError` otherwise. `invalidateAll()` refreshes the hero
-title, the page title, and the tab counts. The rename appears in the activity feed with no extra work.
+then `invalidateAll()`. `invalidateAll()` refreshes the hero title, the page title, and the tab counts. The
+rename appears in the activity feed with no extra work.
 
-### 4. i18n
+#### 4b. Hero pencil menu
+
+The ✎ button on the space hero is where a user hunting for "rename" looks **first** — and today it contains
+only "Change cover photo" and "Reposition". A user who clicks it concludes renaming is impossible, which is
+verbatim what discussion #856 reports. Shipping rename only into the ⋮ menu would leave that trap intact,
+so "Edit space" is added to the hero menu too.
+
+The pencil's gate also changes. It currently renders on `canEdit && hasCover` (`space-hero.svelte:169`), so
+a space with no cover photo shows no pencil at all. Since the menu now hosts a non-cover action, the gate
+drops to `canEdit` — but the **cover-specific items stay conditional**, because "Reposition" is meaningless
+without a cover image to drag:
+
+| Menu item          | Condition             |
+| ------------------ | --------------------- |
+| Edit space         | `canEdit`             |
+| Change cover photo | `canEdit`             |
+| Reposition         | `canEdit && hasCover` |
+
+The existing top-left "Set cover photo" button (`canEdit && !hasCover`) stays. It duplicates "Change cover
+photo" for cover-less spaces, which is accepted: it is a deliberate empty-state call to action, and removing
+it would regress cover discoverability to fix a redundancy nobody has complained about.
+
+### 5. i18n
 
 Reuses the existing `name`, `description`, and `color` keys. New keys in `i18n/en.json` only (web and
 mobile share one `i18n/` directory; new keys only need `en.json`):
@@ -191,23 +250,40 @@ already exists for this.
 
 ### Web
 
+`space.service.spec.ts` (extends the existing file):
+
+- `updateSpaceDetails` calls `updateSpace` with the right payload and returns `true`.
+- Emits the success toast on success.
+- On API failure, calls `handleError` with `errors.unable_to_update_space` and returns `false`.
+
 `SpaceEditModal` spec:
 
 - Prefills all three fields from the passed space.
-- Saves the edited name via `updateSpace` with the right payload shape.
+- Saves the edited name via `updateSpaceDetails` with the right payload shape.
 - Emptying description sends `''`, **not** `undefined` — the regression this design calls out.
 - Submitting unchanged sends the current values without error.
 - Save is disabled for an empty name **and** for a whitespace-only name (`"   "`), which native `required`
   would let through.
-- A name at exactly 100 chars is accepted by the modal (the server bound, not a stricter client one).
-- API failure surfaces through `handleError` and does not close the modal.
+- Name and description inputs carry `maxlength` 100 / 500.
+- The name input is focused with its text selected on open.
+- A `false` return from the service leaves the modal open; a `true` return closes it.
+- Color swatches are targeted by `data-testid="color-swatch-{value}"`, **not** by `aria-label` — those are
+  raw lowercase enum values (`primary`, `amber`), a pre-existing wart this PR does not fix.
 
 `space-layout.spec.ts`:
 
-- Owner sees "Edit space".
-- Editor sees "Edit space".
+- Owner sees "Edit space" in the ⋮ menu.
+- Editor sees it.
 - Viewer does **not**.
-- Clicking it opens the modal; a resolved edit triggers `invalidateAll` and a success toast.
+- Clicking it opens the modal; a resolved edit triggers `invalidateAll`.
+
+`space-hero` spec:
+
+- Editor sees the ✎ menu on a space **with** a cover, containing all three items.
+- Editor sees the ✎ menu on a space with **no** cover — the regression the gate change fixes — containing
+  "Edit space" and "Change cover photo" but **not** "Reposition".
+- Viewer sees no ✎ menu in either case.
+- The empty-state "Set cover photo" button still renders for an editor on a cover-less space.
 
 ### e2e
 
@@ -220,3 +296,7 @@ is rejected when toggling `faceRecognitionEnabled`.
   activity feed already recording renames with old and new names, so the change is visible and attributable.
 - **The four inverted tests.** They encode the old rule deliberately, so flipping them is the point — but
   each must be flipped to a positive assertion (editor _succeeds_, with the payload checked), not deleted.
+- **The hero pencil gate change touches shipped behaviour.** Dropping `hasCover` makes the ✎ appear on
+  cover-less spaces where it previously did not. That is the intended fix, but it is a visual change to an
+  existing surface rather than purely additive, so the hero spec must pin both the with-cover and
+  without-cover menus.
