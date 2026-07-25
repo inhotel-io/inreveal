@@ -46,7 +46,7 @@
   {onClose}
   {onSubmit}
 >
-  <div class="flex flex-col gap-4 m-4">
+  <div class="m-4 flex flex-col gap-4">
     <Field label={$t('name')} required>
       <Input bind:value={name} maxlength={100} autofocus onfocus={selectNameOnce} data-testid="space-edit-name" />
     </Field>
