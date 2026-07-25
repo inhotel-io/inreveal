@@ -51,7 +51,10 @@ export class ImmichRedirectResponse {
 export class ImmichStreamResponse {
   public readonly stream!: Readable;
   public readonly contentType!: string;
+  /** Byte count of `stream` — the partial length when `contentRange` is set, the full object otherwise. */
   public readonly length?: number;
+  /** Set only for a partial read (e.g. `bytes 0-1023/1048576`); turns the response into a 206. */
+  public readonly contentRange?: string;
   public readonly cacheControl!: CacheControl;
   public readonly fileName?: string;
   public readonly disposition?: ContentDisposition;
@@ -112,6 +115,14 @@ export const sendFile = async (
         res.set('Cache-Control', cacheControlHeader);
       }
       res.header('Content-Type', file.contentType);
+      // matches what express' res.sendFile advertises for the disk backend, so a
+      // proxied object is range-capable to clients regardless of the backend
+      res.header('Accept-Ranges', 'bytes');
+      if (file.contentRange) {
+        // the backend served a partial read; WebKit refuses to play <video> without a 206
+        res.status(206);
+        res.header('Content-Range', file.contentRange);
+      }
       if (file.length !== undefined) {
         res.header('Content-Length', String(file.length));
       }

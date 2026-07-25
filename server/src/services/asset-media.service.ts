@@ -173,7 +173,12 @@ export class AssetMediaService extends BaseService {
     }
   }
 
-  async downloadOriginal(auth: AuthDto, id: string, dto: AssetDownloadOriginalDto): Promise<ImmichMediaResponse> {
+  async downloadOriginal(
+    auth: AuthDto,
+    id: string,
+    dto: AssetDownloadOriginalDto,
+    range?: string,
+  ): Promise<ImmichMediaResponse> {
     await this.requireAccess({ auth, permission: Permission.AssetDownload, ids: [id] });
 
     if (auth.sharedLink) {
@@ -193,6 +198,7 @@ export class AssetMediaService extends BaseService {
       CacheControl.PrivateWithCache,
       getFileNameWithoutExtension(originalFileName) + getFilenameExtension(path),
       dto.download ? 'attachment' : 'inline',
+      { range },
     );
   }
 
@@ -240,7 +246,7 @@ export class AssetMediaService extends BaseService {
     return this.serveFromBackend(path, mimeTypes.lookup(path), CacheControl.PrivateWithCache, fileName);
   }
 
-  async playbackVideo(auth: AuthDto, id: string): Promise<ImmichMediaResponse> {
+  async playbackVideo(auth: AuthDto, id: string, range?: string): Promise<ImmichMediaResponse> {
     await this.requireAccess({ auth, permission: Permission.AssetView, ids: [id] });
 
     const asset = await this.assetRepository.getForVideo(id);
@@ -251,7 +257,16 @@ export class AssetMediaService extends BaseService {
 
     const filepath = asset.encodedVideoPath || asset.originalPath;
 
-    return this.serveFromBackend(filepath, mimeTypes.lookup(filepath), CacheControl.PrivateWithCache);
+    return this.serveFromBackend(
+      filepath,
+      mimeTypes.lookup(filepath),
+      CacheControl.PrivateWithCache,
+      undefined,
+      'inline',
+      {
+        range,
+      },
+    );
   }
 
   async bulkUploadCheck(auth: AuthDto, dto: AssetBulkUploadCheckDto): Promise<AssetBulkUploadCheckResponseDto> {

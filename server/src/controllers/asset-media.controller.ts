@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Next,
@@ -103,8 +104,9 @@ export class AssetMediaController {
     @Query() dto: AssetDownloadOriginalDto,
     @Res() res: Response,
     @Next() next: NextFunction,
+    @Headers('range') range?: string,
   ) {
-    await sendFile(res, next, () => this.service.downloadOriginal(auth, id, dto), this.logger);
+    await sendFile(res, next, () => this.service.downloadOriginal(auth, id, dto, range), this.logger);
   }
 
   @Get(':id/thumbnail')
@@ -177,8 +179,9 @@ export class AssetMediaController {
     @Param() { id }: UUIDParamDto,
     @Res() res: Response,
     @Next() next: NextFunction,
+    @Headers('range') range?: string,
   ) {
-    await sendFile(res, next, () => this.service.playbackVideo(auth, id), this.logger);
+    await sendFile(res, next, () => this.service.playbackVideo(auth, id, range), this.logger);
   }
 
   @Post('bulk-upload-check')

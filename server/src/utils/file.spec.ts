@@ -1,8 +1,10 @@
 import { HttpException } from '@nestjs/common';
+import express from 'express';
 import { Readable } from 'node:stream';
 import { CacheControl } from 'src/enum';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { ImmichFileResponse, ImmichRedirectResponse, ImmichStreamResponse, sendFile } from 'src/utils/file';
+import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('node:fs/promises', () => ({
@@ -90,6 +92,68 @@ describe('sendFile with ImmichMediaResponse', () => {
 
     expect(res.header).toHaveBeenCalledWith('Content-Type', 'image/jpeg');
     expect(res.header).toHaveBeenCalledWith('Content-Length', '8');
+  });
+
+  it('should advertise Accept-Ranges but stay 200 for a rangeless stream response', async () => {
+    const stream = Readable.from([Buffer.from('streamed')]);
+    const res = {
+      set: vi.fn(),
+      header: vi.fn(),
+      headersSent: false,
+      status: vi.fn().mockReturnThis(),
+    } as any;
+    stream.pipe = vi.fn().mockReturnValue(res);
+    const next = vi.fn();
+
+    await sendFile(
+      res,
+      next,
+      () =>
+        new ImmichStreamResponse({
+          stream,
+          contentType: 'video/mp4',
+          length: 1_048_576,
+          cacheControl: CacheControl.PrivateWithCache,
+        }),
+      mockLogger,
+    );
+
+    expect(res.header).toHaveBeenCalledWith('Accept-Ranges', 'bytes');
+    expect(res.header).toHaveBeenCalledWith('Content-Length', '1048576');
+    expect(res.header).not.toHaveBeenCalledWith('Content-Range', expect.anything());
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('should send 206 with Content-Range for a partial stream response', async () => {
+    const stream = Readable.from([Buffer.from('a'.repeat(1024))]);
+    const res = {
+      set: vi.fn(),
+      header: vi.fn(),
+      headersSent: false,
+      status: vi.fn().mockReturnThis(),
+    } as any;
+    stream.pipe = vi.fn().mockReturnValue(res);
+    const next = vi.fn();
+
+    await sendFile(
+      res,
+      next,
+      () =>
+        new ImmichStreamResponse({
+          stream,
+          contentType: 'video/mp4',
+          length: 1024,
+          contentRange: 'bytes 0-1023/1048576',
+          cacheControl: CacheControl.PrivateWithCache,
+        }),
+      mockLogger,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(206);
+    expect(res.header).toHaveBeenCalledWith('Accept-Ranges', 'bytes');
+    expect(res.header).toHaveBeenCalledWith('Content-Range', 'bytes 0-1023/1048576');
+    expect(res.header).toHaveBeenCalledWith('Content-Length', '1024');
+    expect(stream.pipe).toHaveBeenCalledWith(res);
   });
 
   it('should pipe stream response with fileName header', async () => {
@@ -400,5 +464,58 @@ describe('sendFile with ImmichMediaResponse', () => {
     await sendFile(res, next, () => Promise.reject(error), mockLogger);
 
     expect(next).not.toHaveBeenCalled();
+  });
+});
+
+describe('sendFile stream responses over real HTTP', () => {
+  const mockLogger = { error: vi.fn(), setContext: vi.fn() } as unknown as LoggingRepository;
+  const object = Buffer.from('0123456789'.repeat(200)); // 2000 bytes
+
+  const appServing = (response: () => ImmichStreamResponse) => {
+    const app = express();
+    app.get('/media', (_req, res, next) => void sendFile(res, next, response, mockLogger));
+    return app;
+  };
+
+  it('should answer a range request with 206 and the requested bytes', async () => {
+    const partial = object.subarray(0, 1024);
+    const app = appServing(
+      () =>
+        new ImmichStreamResponse({
+          stream: Readable.from([partial]),
+          contentType: 'video/mp4',
+          length: partial.length,
+          contentRange: `bytes 0-1023/${object.length}`,
+          cacheControl: CacheControl.PrivateWithCache,
+        }),
+    );
+
+    const response = await request(app).get('/media').set('Range', 'bytes=0-1023');
+
+    expect(response.status).toBe(206);
+    expect(response.headers['content-range']).toBe(`bytes 0-1023/${object.length}`);
+    expect(response.headers['accept-ranges']).toBe('bytes');
+    expect(response.headers['content-length']).toBe('1024');
+    expect(response.body.length).toBe(1024);
+  });
+
+  it('should answer a rangeless request with 200 and the whole object', async () => {
+    const app = appServing(
+      () =>
+        new ImmichStreamResponse({
+          stream: Readable.from([object]),
+          contentType: 'video/mp4',
+          length: object.length,
+          cacheControl: CacheControl.PrivateWithCache,
+        }),
+    );
+
+    const response = await request(app).get('/media');
+
+    expect(response.status).toBe(200);
+    expect(response.headers['accept-ranges']).toBe('bytes');
+    expect(response.headers['content-range']).toBeUndefined();
+    expect(response.headers['content-length']).toBe(String(object.length));
+    expect(response.body.length).toBe(object.length);
   });
 });

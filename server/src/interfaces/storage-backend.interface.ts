@@ -2,17 +2,36 @@ import { Readable } from 'node:stream';
 import { CacheControl } from 'src/enum';
 import type { ContentDisposition } from 'src/utils/file';
 
+/**
+ * Thrown by a backend when the client's `Range` header cannot be satisfied, so
+ * the HTTP layer can answer 416 instead of masking it as a 404. Kept here (and
+ * not as a Nest `HttpException`) so backends stay free of HTTP framework types.
+ */
+export class RangeNotSatisfiableError extends Error {
+  constructor(key: string) {
+    super(`Requested range is not satisfiable for ${key}`);
+    this.name = 'RangeNotSatisfiableError';
+  }
+}
+
 export type ServeOptions = {
   contentType: string;
   cacheControl: CacheControl;
   fileName?: string;
   disposition?: ContentDisposition;
+  /**
+   * The client's raw `Range` header, forwarded verbatim. Backends that support
+   * ranges pass it straight through rather than parsing it; the ones that don't
+   * ignore it and serve the whole object.
+   */
+  range?: string;
 };
 
 export type ServeStrategy =
   | { type: 'file'; path: string }
   | { type: 'redirect'; url: string }
-  | { type: 'stream'; stream: Readable; length?: number };
+  /** `contentRange` is set only when the backend honored a requested range, and drives the 206 response. */
+  | { type: 'stream'; stream: Readable; length?: number; contentRange?: string };
 
 export interface StorageBackend {
   /** Write content to the given key */
