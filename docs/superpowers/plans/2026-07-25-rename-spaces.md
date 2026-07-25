@@ -4,7 +4,7 @@
 
 **Goal:** Let space owners **and editors** rename a shared space (plus edit its description and color) from the web app.
 
-**Architecture:** The server endpoint `PUT /shared-spaces/:id` already exists and already logs renames to the activity feed — only its RBAC gate changes, from "all metadata is owner-only" to "only the processing settings are owner-only". On the web, a new `updateSpaceDetails` service function wraps the SDK call (toast + error handling), a new `SpaceEditModal` collects the three fields, and two entry points open it: the space header's ⋮ overflow menu and the hero's ✎ menu.
+**Architecture:** The server endpoint `PATCH /shared-spaces/:id` already exists and already logs renames to the activity feed — only its RBAC gate changes, from "all metadata is owner-only" to "only the processing settings are owner-only". On the web, a new `updateSpaceDetails` service function wraps the SDK call (toast + error handling), a new `SpaceEditModal` collects the three fields, and two entry points open it: the space header's ⋮ overflow menu and the hero's ✎ menu.
 
 **Tech Stack:** NestJS 11 + Kysely + Zod (server), SvelteKit + Svelte 5 runes + `@immich/ui` (web), Vitest everywhere, supertest for e2e API.
 
@@ -72,7 +72,7 @@ The server's vitest config lives at `test/vitest.config.mjs`, **not** the packag
 **Interfaces:**
 
 - Consumes: nothing from earlier tasks.
-- Produces: the runtime rule every later task depends on — `PUT /shared-spaces/:id` requires `Owner` if and only if the DTO contains `faceRecognitionEnabled` or `petsEnabled`; otherwise `Editor`.
+- Produces: the runtime rule every later task depends on — `PATCH /shared-spaces/:id` requires `Owner` if and only if the DTO contains `faceRecognitionEnabled` or `petsEnabled`; otherwise `Editor`.
 
 **Background:** `update()` currently computes `isMetadataUpdate` over five fields and demands `Owner` for all of them. Naming and appearance move to `Editor`; the cover fields were already `Editor`. That leaves only the two settings fields on `Owner`, so the condition inverts and collapses to a single check.
 
@@ -391,7 +391,7 @@ Create `e2e/src/specs/server/api/spaces-update.e2e-spec.ts`:
 
 ```ts
 /**
- * RBAC matrix for PUT /shared-spaces/:id.
+ * RBAC matrix for PATCH /shared-spaces/:id.
  *
  * The endpoint splits its DTO into three field groups with two different role floors
  * (shared-space.service.ts, `update`):
@@ -411,7 +411,7 @@ import { app, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
+describe('PATCH /shared-spaces/:id — rename and edit RBAC', () => {
   let ctx: SpaceContext;
   const anon = { id: 'anon' as const };
 
@@ -574,7 +574,7 @@ If you cannot start the stack, **say so explicitly** in your report rather than 
 
 ```bash
 git add e2e/src/specs/server/api/spaces-update.e2e-spec.ts
-git commit -m "test(e2e): RBAC matrix for PUT /shared-spaces/:id"
+git commit -m "test(e2e): RBAC matrix for PATCH /shared-spaces/:id"
 ```
 
 ---

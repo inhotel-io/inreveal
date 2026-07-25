@@ -11,7 +11,7 @@ has never shipped a way to edit a space's name, description, or color after crea
 
 The gap is almost entirely UI. The server endpoint already exists and works:
 
-- `PUT /shared-spaces/:id` accepts `name`, `description`, `color`, `thumbnailAssetId`, `thumbnailCropY`,
+- `PATCH /shared-spaces/:id` accepts `name`, `description`, `color`, `thumbnailAssetId`, `thumbnailCropY`,
   `faceRecognitionEnabled`, `petsEnabled` (`SharedSpaceUpdateSchema`, `server/src/dtos/shared-space.dto.ts:16`).
 - Renames are already recorded as `SharedSpaceActivityType.SpaceRename` (`server/src/enum.ts:87`) and
   already rendered in the space activity feed (`web/src/lib/components/spaces/space-activity-feed.svelte:69`).
