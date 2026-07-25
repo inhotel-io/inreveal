@@ -33,13 +33,16 @@ export const addAssetsToSpace = async (spaceId: string, assetIds: string[], { no
 
 export const updateSpaceDetails = async (
   spaceId: string,
-  dto: { name: string; description: string; color: UserAvatarColor },
+  dto: { name: string; description?: string; color: UserAvatarColor },
 ) => {
   const $t = get(t);
 
   try {
-    // `description` is passed through verbatim — an empty string clears it server-side,
-    // whereas `undefined` would be dropped from the update payload and keep the old value.
+    // `description` is omitted entirely when unchanged (SpaceEditModal decides this) so a pure
+    // rename doesn't clobber an untouched `null` description with `''`. When the caller DOES
+    // include `description` — e.g. the user cleared it — it must be sent verbatim: an empty
+    // string clears it server-side, whereas `undefined` would be dropped from the update
+    // payload and keep the old value.
     await updateSpace({ id: spaceId, sharedSpaceUpdateDto: dto });
     toastManager.primary($t('spaces_edit_success'));
 

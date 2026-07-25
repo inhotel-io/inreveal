@@ -49,7 +49,7 @@ describe('SpaceEditModal', () => {
     expect(descriptionInput()).toHaveValue('');
   });
 
-  it('saves the edited name and closes with true', async () => {
+  it('saves the edited name and closes with true, omitting the untouched description', async () => {
     const onClose = vi.fn();
     render(SpaceEditModal, { space: space(), onClose });
 
@@ -59,11 +59,27 @@ describe('SpaceEditModal', () => {
     await waitFor(() => {
       expect(updateSpaceDetailsMock).toHaveBeenCalledWith('s1', {
         name: 'Renamed Trip',
-        description: 'Our holiday photos',
         color: UserAvatarColor.Blue,
       });
     });
     expect(onClose).toHaveBeenCalledWith(true);
+  });
+
+  it('omits the description key on a pure rename of a space whose description is null', async () => {
+    const onClose = vi.fn();
+    render(SpaceEditModal, { space: space({ description: null }), onClose });
+
+    await fireEvent.input(nameInput(), { target: { value: 'Renamed Trip' } });
+    await userEvent.click(saveButton());
+
+    await waitFor(() => {
+      expect(updateSpaceDetailsMock).toHaveBeenCalledWith('s1', {
+        name: 'Renamed Trip',
+        color: UserAvatarColor.Blue,
+      });
+    });
+    const [, dto] = updateSpaceDetailsMock.mock.calls[0];
+    expect(dto).not.toHaveProperty('description');
   });
 
   it('trims surrounding whitespace from the name before sending', async () => {
@@ -104,7 +120,7 @@ describe('SpaceEditModal', () => {
     });
   });
 
-  it('submits unchanged values without error', async () => {
+  it('submits unchanged values without error, omitting the untouched description', async () => {
     const onClose = vi.fn();
     render(SpaceEditModal, { space: space(), onClose });
 
@@ -113,7 +129,6 @@ describe('SpaceEditModal', () => {
     await waitFor(() => {
       expect(updateSpaceDetailsMock).toHaveBeenCalledWith('s1', {
         name: 'Family Trip',
-        description: 'Our holiday photos',
         color: UserAvatarColor.Blue,
       });
     });
@@ -174,5 +189,28 @@ describe('SpaceEditModal', () => {
       expect(updateSpaceDetailsMock).toHaveBeenCalled();
     });
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('disables the submit button while a save is in flight, guarding against a double-click', async () => {
+    let resolveUpdate: (value: boolean) => void = () => {};
+    updateSpaceDetailsMock.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveUpdate = resolve;
+        }),
+    );
+    const onClose = vi.fn();
+    render(SpaceEditModal, { space: space(), onClose });
+
+    await userEvent.click(saveButton());
+
+    await waitFor(() => {
+      expect(saveButton()).toBeDisabled();
+    });
+
+    resolveUpdate(true);
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledWith(true);
+    });
   });
 });

@@ -13,9 +13,12 @@
 
   let { space, onClose }: Props = $props();
 
+  const originalDescription = space.description ?? '';
+
   let name = $state(space.name);
-  let description = $state(space.description ?? '');
+  let description = $state(originalDescription);
   let color = $state<UserAvatarColor>(space.color ?? UserAvatarColor.Primary);
+  let isSubmitting = $state(false);
 
   // Renaming is the dominant path, so the autofocused name arrives pre-selected and typing
   // replaces it. Only on the FIRST focus — otherwise clicking to place the caret mid-word
@@ -30,10 +33,23 @@
   };
 
   const onSubmit = async () => {
-    // `description` goes through verbatim — '' clears it server-side, `undefined` would not.
-    const success = await updateSpaceDetails(space.id, { name: name.trim(), description, color });
-    if (success) {
-      onClose(true);
+    try {
+      isSubmitting = true;
+
+      // Only send `description` when it actually changed. A space created without one stores
+      // `null` server-side; always sending '' would clobber it on a pure rename. When the user
+      // DOES change it (including clearing it to ''), send that verbatim — '' clears it
+      // server-side, whereas omitting the key (or `undefined`) would leave the old value.
+      const success = await updateSpaceDetails(space.id, {
+        name: name.trim(),
+        ...(description === originalDescription ? {} : { description }),
+        color,
+      });
+      if (success) {
+        onClose(true);
+      }
+    } finally {
+      isSubmitting = false;
     }
   };
 </script>
@@ -42,16 +58,23 @@
   icon={mdiAccountGroup}
   title={$t('spaces_edit')}
   size="small"
-  disabled={name.trim().length === 0}
+  disabled={name.trim().length === 0 || isSubmitting}
   {onClose}
   {onSubmit}
 >
   <div class="m-4 flex flex-col gap-4">
     <Field label={$t('name')} required>
-      <Input bind:value={name} maxlength={100} autofocus onfocus={selectNameOnce} data-testid="space-edit-name" />
+      <Input
+        bind:value={name}
+        maxlength={100}
+        autofocus
+        onfocus={selectNameOnce}
+        disabled={isSubmitting}
+        data-testid="space-edit-name"
+      />
     </Field>
     <Field label={$t('description')}>
-      <Textarea bind:value={description} maxlength={500} data-testid="space-edit-description" />
+      <Textarea bind:value={description} maxlength={500} disabled={isSubmitting} data-testid="space-edit-description" />
     </Field>
     <Field label={$t('color')}>
       <ColorPicker value={color} onchange={(c) => (color = c)} />

@@ -106,14 +106,16 @@ describe('SpaceHero component', () => {
 
   // --- Edit control (✎) ---
 
-  it('shows the edit control without requiring hover (always visible for editors)', () => {
+  it('shows the edit control immediately for an editor with a cover, with no hover interaction', () => {
     render(SpaceHero, {
       space: makeSpace({ thumbnailAssetId: 'a1' }),
       canEdit: true,
       onChangeCover: () => {},
       onReposition: () => {},
     });
-    expect(screen.getByTestId('hero-edit-menu')).not.toHaveClass('opacity-0');
+    const menu = screen.getByTestId('hero-edit-menu');
+    expect(menu).toBeInTheDocument();
+    expect(within(menu).getByLabelText('edit')).toBeEnabled();
   });
 
   it('shows the edit control only when canEdit', async () => {
