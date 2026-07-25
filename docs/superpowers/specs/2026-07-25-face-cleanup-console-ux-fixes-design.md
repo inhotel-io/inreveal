@@ -29,8 +29,13 @@ every flagged face, change destinations, keep faces, or commit. Structure mirror
 - The exclude-X becomes an absolutely positioned sibling over that slot — **always visible**, same
   `toggleExcluded` behavior, same testid.
 - Excluded (dimmed) chips stay clickable: a cluster pulled out of the batch can still be inspected.
-- No extra state handling: returning from the review page remounts the scan page, which refetches the
-  latest scan, so a cluster resolved on the detail page drops out of the lane by itself.
+- Returning from the review page remounts the scan page, which refetches the latest scan, so a cluster
+  resolved on the detail page drops out of the lane by itself — no extra handling needed for that case.
+  Spot-check exclusions, however, live in the client-only triage view-model, which the remount rebuilds
+  from scratch; without help, that would silently re-include every cluster the admin had excluded before
+  clicking through. To survive the round-trip, excluded ids are persisted to `sessionStorage` keyed by scan
+  id (`face-cleanup-scan-exclusions:{scanId}`) and reseeded into the rebuilt model on a fresh mount — keyed
+  by scan id so a new scan starts clean rather than inheriting a stale exclusion set (final-review finding).
 
 ## Fix 2 — ReviewFirstLane fixed columns + header row
 

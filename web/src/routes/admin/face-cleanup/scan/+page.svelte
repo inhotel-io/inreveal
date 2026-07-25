@@ -75,13 +75,58 @@
   // refetches/dismissals (see createScanTriageModel's `prev`) instead of resetting.
   let vm = $state<ScanTriageModel | null>(null);
 
+  // The confident-lane spot-check chips are links to the per-cluster review page (Route.viewFaceCleanupPerson).
+  // Clicking one and coming back is a forward navigation to this route, which remounts the page — `vm` starts
+  // over as null, so without help the exclusions above would silently reset (final-review finding: "exclude
+  // two, inspect a third, come back" would re-include the excluded two). Persist the excluded ids in
+  // sessionStorage keyed by scan id so they survive that round-trip; keying by scan id means a new scan (new id)
+  // always starts clean rather than inheriting a stale exclusion set.
+  const EXCLUSIONS_STORAGE_PREFIX = 'face-cleanup-scan-exclusions:';
+
+  const readStoredExclusions = (scanId: string): string[] => {
+    try {
+      const raw = sessionStorage.getItem(`${EXCLUSIONS_STORAGE_PREFIX}${scanId}`);
+      if (!raw) {
+        return [];
+      }
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed) && parsed.every((id) => typeof id === 'string') ? parsed : [];
+    } catch {
+      // Malformed/foreign value under our key, or JSON.parse throwing on garbage: treat as "no exclusions"
+      // rather than let a storage quirk break the page.
+      return [];
+    }
+  };
+
+  const persistExclusions = (scanId: string, ids: string[]) => {
+    try {
+      sessionStorage.setItem(`${EXCLUSIONS_STORAGE_PREFIX}${scanId}`, JSON.stringify(ids));
+    } catch {
+      // Storage disabled/full (e.g. private browsing): losing the persisted exclusions is a minor UX
+      // regression, not a functional break, so swallow rather than crash the page.
+    }
+  };
+
   const setScan = (next: FaceCleanupScan | null) => {
     scan = next;
     vm =
       next?.persons && next.persons.length > 0
-        ? createScanTriageModel(next.persons as ScanPerson[], { prev: vm })
+        ? createScanTriageModel(next.persons as ScanPerson[], {
+            // `vm` is only null on a fresh mount (first load, or after a click-through remount) — within a
+            // mount, refetches/dismissals keep chaining off the live `vm` exactly as before. Only the
+            // fresh-mount case seeds from sessionStorage.
+            prev: vm ?? { excluded: new Set(readStoredExclusions(next.id)) },
+          })
         : null;
   };
+
+  // Write-through: whenever the exclusion set changes (toggle, or a seed/rebuild above), persist it under the
+  // current scan's id. `vm.excluded` is a SvelteSet, so this effect re-runs on every toggle.
+  $effect(() => {
+    if (vm && scan?.id) {
+      persistExclusions(scan.id, [...vm.excluded]);
+    }
+  });
 
   const isActive = (status: string | undefined) => status === 'pending' || status === 'running';
 

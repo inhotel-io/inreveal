@@ -161,6 +161,7 @@ const makePageData = () => ({ users: [], meta: { title: 'Face cleanup' } });
 describe('+page.svelte (face cleanup)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     vi.useFakeTimers();
     vi.mocked(getLatestScan).mockResolvedValue(null as unknown as object);
     vi.mocked(triggerScan).mockResolvedValue({ scanId: 'new-scan' });
@@ -182,6 +183,7 @@ describe('+page.svelte (face cleanup)', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    sessionStorage.clear();
   });
 
   // ---- empty states ----
@@ -359,6 +361,63 @@ describe('+page.svelte (face cleanup)', () => {
     expect(resolveFaces).toHaveBeenCalledWith(
       expect.objectContaining({ faceRepairResolveRequestDto: expect.objectContaining({ personId: 'c2' }) }),
     );
+  });
+
+  // ---- persisted exclusions across a chip click-through remount (final-review finding) ----
+
+  it('persists a confident-lane exclusion across a remount for the same scan id', async () => {
+    const persons = [
+      makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
+      makeScanPerson({ personId: 'c2', recommendation: 'confident', ownerId: 'owner2' }),
+    ];
+    vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+
+    const { unmount } = render(Page, { props: { data: makePageData() } });
+    await waitFor(() => expect(screen.getByTestId('confident-toggle')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('confident-toggle'));
+    await fireEvent.click(screen.getByTestId('confident-exclude-c1'));
+
+    await waitFor(() => expect(screen.getByTestId('confident-approve')).toHaveTextContent('1'));
+    unmount();
+
+    // Simulates navigating to the per-cluster review page and clicking back: the scan page remounts and
+    // refetches the same completed scan (same id), so the exclusion must survive.
+    render(Page, { props: { data: makePageData() } });
+    await waitFor(() => expect(screen.getByTestId('confident-toggle')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('confident-toggle'));
+
+    await waitFor(() => expect(screen.getByTestId('confident-exclude-c1')).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByTestId('confident-approve')).toHaveTextContent('1');
+  });
+
+  it('a different scan id starts clean (does not inherit exclusions stored for a previous scan)', async () => {
+    sessionStorage.setItem('face-cleanup-scan-exclusions:scan-old', JSON.stringify(['c1']));
+    const persons = [
+      makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
+      makeScanPerson({ personId: 'c2', recommendation: 'confident', ownerId: 'owner2' }),
+    ];
+    const scan = { ...makeCompletedScan(persons), id: 'scan-new' };
+    vi.mocked(getLatestScan).mockResolvedValue(scan as unknown as object);
+
+    render(Page, { props: { data: makePageData() } });
+    await waitFor(() => expect(screen.getByTestId('confident-toggle')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('confident-toggle'));
+
+    await waitFor(() => expect(screen.getByTestId('confident-exclude-c1')).toHaveAttribute('aria-pressed', 'false'));
+    expect(screen.getByTestId('confident-approve')).toHaveTextContent('2');
+  });
+
+  it('ignores a malformed stored exclusions value and renders with nothing excluded', async () => {
+    sessionStorage.setItem('face-cleanup-scan-exclusions:scan-1', 'not-json');
+    const persons = [makeScanPerson({ personId: 'c1', recommendation: 'confident' })];
+    vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+
+    render(Page, { props: { data: makePageData() } });
+    await waitFor(() => expect(screen.getByTestId('confident-toggle')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('confident-toggle'));
+
+    await waitFor(() => expect(screen.getByTestId('confident-exclude-c1')).toHaveAttribute('aria-pressed', 'false'));
+    expect(screen.getByTestId('confident-approve')).toHaveTextContent('1');
   });
 
   it('Approve all 409 shows a non-destructive error and keeps the lanes', async () => {

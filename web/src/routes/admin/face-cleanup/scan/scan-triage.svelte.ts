@@ -30,8 +30,11 @@ export interface ScanTriageModel {
 export interface ScanTriageModelOptions {
   // The previous model, when rebuilding after a refetch/dismiss: the admin's exclusions carry over,
   // intersected with the confident clusters that survived, so a dismissed/re-homed cluster leaves no
-  // dangling exclusion.
-  prev?: ScanTriageModel | null;
+  // dangling exclusion. Widened to `Pick<..., 'excluded'>` (rather than a full ScanTriageModel) because the
+  // factory only ever reads `.excluded` — this lets the scan page seed a pseudo-prev from persisted
+  // sessionStorage exclusions on a fresh mount (see scan/+page.svelte's setScan), not just from a real prior
+  // model held in memory.
+  prev?: Pick<ScanTriageModel, 'excluded'> | null;
 }
 
 export function createScanTriageModel(persons: FaceCleanupPerson[], options?: ScanTriageModelOptions): ScanTriageModel {
