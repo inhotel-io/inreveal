@@ -92,12 +92,23 @@ it('a row with no reasons still reserves an empty reasons cell', () => {
   });
   expect(screen.getByTestId('review-reasons-r1')).toBeEmptyDOMElement();
 });
+
+// Regression guard, not a red test: this PASSES before and after the change. It pins the row content of
+// the % and destination cells so a botched class-constant repoint in Step 4c (e.g. a lost `sm:block`)
+// can't silently blank a column — no other test asserts these cells at all.
+it('keeps the flagged share and destination visible in their fixed columns', () => {
+  render(ReviewFirstLane, { props: { people: [rev({ personId: 'r1' })], users, onDismiss: vi.fn() } });
+  const row = screen.getByTestId('review-row-r1');
+  expect(row).toHaveTextContent('57%');
+  expect(row).toHaveTextContent('20/35');
+  expect(row).toHaveTextContent('Pierre');
+});
 ```
 
 - [ ] **Step 2: Run the spec file to verify the new tests fail**
 
 Run: `cd web && pnpm exec vitest run src/routes/admin/face-cleanup/scan/ReviewFirstLane.spec.ts`
-Expected: the 5 new tests FAIL (`Unable to find an element by: [data-testid="review-header"]` / `…review-reasons-r1`); the 6 pre-existing tests still PASS.
+Expected: 5 of the 6 new tests FAIL (`Unable to find an element by: [data-testid="review-header"]` / `…review-reasons-r1`); the regression-guard test (`keeps the flagged share…`) and the 6 pre-existing tests PASS.
 
 - [ ] **Step 3: Add the four i18n keys**
 
@@ -187,7 +198,7 @@ Notes for the implementer: the old pill's `whitespace-nowrap` is replaced by `tr
 - [ ] **Step 5: Run the spec file to verify all tests pass**
 
 Run: `cd web && pnpm exec vitest run src/routes/admin/face-cleanup/scan/ReviewFirstLane.spec.ts`
-Expected: all 11 tests PASS.
+Expected: all 12 tests PASS.
 
 - [ ] **Step 6: Commit**
 
