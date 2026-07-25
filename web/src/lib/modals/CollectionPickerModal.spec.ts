@@ -205,6 +205,16 @@ describe('CollectionPickerModal — restricted to a space', () => {
     expect(onClose).toHaveBeenCalledWith([expect.objectContaining({ kind: 'album', id: 'sa1' })]);
   });
 
+  it('explains the empty state in space terms when the space has no linked albums', async () => {
+    sdkMock.getSharedSpaceAlbums.mockResolvedValue([]);
+    renderRestricted();
+
+    // Rendered as the raw i18n key in unit tests. The default wording ("no albums or spaces")
+    // names a collection type that is never on offer in this mode.
+    await waitFor(() => expect(screen.getByText('no_albums_in_space_yet')).toBeTruthy());
+    expect(screen.queryByText('no_albums_or_spaces_yet')).toBeNull();
+  });
+
   it('reports an error when the space albums fail to load', async () => {
     sdkMock.getSharedSpaceAlbums.mockRejectedValue(new Error('boom'));
     renderRestricted();

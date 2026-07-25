@@ -2493,6 +2493,7 @@
   "shared_link_individual_shared": "Individuell geteilt",
   "shared_link_info_chip_metadata": "EXIF",
   "shared_link_manage_links": "Geteilte Links verwalten",
+  "shared_link_nothing_owned_to_share": "Du kannst nur Fotos teilen, die dir gehören, und keines der ausgewählten Fotos gehört dir.",
   "shared_link_options": "Optionen für geteilten Link",
   "shared_link_password_description": "Für den Zugriff auf diesen freigegebenen Link ist ein Passwort erforderlich",
   "shared_links": "Geteilte Links",

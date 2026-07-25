@@ -1976,6 +1976,7 @@
   "shared_link_individual_shared": "个人共享",
   "shared_link_info_chip_metadata": "EXIF",
   "shared_link_manage_links": "管理共享链接",
+  "shared_link_nothing_owned_to_share": "您只能分享自己的照片，而所选照片均不属于您。",
   "shared_link_options": "共享链接选项",
   "shared_link_password_description": "需要密码才能访问此共享链接",
   "shared_links": "共享链接",

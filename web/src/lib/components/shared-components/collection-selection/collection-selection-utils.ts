@@ -81,7 +81,7 @@ export class CollectionModalRowConverter {
     all: PickerCollection[],
     selectedRowIndex: number,
     multiSelectedKeys: string[],
-    options: { showSpaces: boolean; allowCreate?: boolean; emptyText?: string },
+    options: { showSpaces: boolean; allowCreate?: boolean; emptyText?: string; noMatchText?: string },
   ): CollectionModalRow[] {
     const $t = get(t);
     // Restricted mode passes allowCreate:false — a freshly created album is not linked to the
@@ -105,7 +105,7 @@ export class CollectionModalRowConverter {
         type: CollectionModalRowType.MESSAGE,
         text:
           visible.length > 0
-            ? $t('no_albums_or_spaces_with_name')
+            ? (options.noMatchText ?? $t('no_albums_or_spaces_with_name'))
             : (options.emptyText ?? $t('no_albums_or_spaces_yet')),
       });
       return rows;

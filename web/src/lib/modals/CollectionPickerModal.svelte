@@ -74,7 +74,10 @@
     converter.toModalRows(search, recentCollections, allCollections, selectedRowIndex, multiSelectedKeys, {
       showSpaces,
       allowCreate: !restricted,
+      // Restricted mode never lists spaces, so the default "no albums or spaces" wording
+      // would name a collection type that was never on offer.
       emptyText: restricted ? $t('no_albums_in_space_yet') : undefined,
+      noMatchText: restricted ? $t('no_albums_found') : undefined,
     }),
   );
   const selectableRowCount = $derived(rows.filter((row) => isSelectableRowType(row.type)).length);
