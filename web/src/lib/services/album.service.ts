@@ -119,7 +119,7 @@ export const addAssetsToAlbumWithOutcome = async (
   albumId: string,
   assetIds: string[],
   { notify }: { notify: boolean },
-): Promise<{ ok: boolean; addedIds: string[] }> => {
+): Promise<{ ok: boolean; addedIds: string[]; deniedIds: string[] }> => {
   const $t = await getFormatter();
 
   try {
@@ -128,10 +128,19 @@ export const addAssetsToAlbumWithOutcome = async (
       notifyAddToAlbum($t, albumId, assetIds, results);
     }
     eventManager.emit('AlbumAddAssets', { assetIds, albumIds: [albumId] });
-    return { ok: true, addedIds: results.filter(({ success }) => success).map(({ id }) => id) };
+    return {
+      ok: true,
+      addedIds: results.filter(({ success }) => success).map(({ id }) => id),
+      // An asset already in the album comes back `success:false, error:duplicate`. That is not a
+      // refusal — the photo is already where the caller wanted it and there is nothing to retry —
+      // so it must not be lumped in with a genuine permission denial.
+      deniedIds: results
+        .filter(({ success, error }) => !success && error !== BulkIdErrorReason.Duplicate)
+        .map(({ id }) => id),
+    };
   } catch (error) {
     handleError(error, $t('errors.error_adding_assets_to_album'));
-    return { ok: false, addedIds: [] };
+    return { ok: false, addedIds: [], deniedIds: [] };
   }
 };
 

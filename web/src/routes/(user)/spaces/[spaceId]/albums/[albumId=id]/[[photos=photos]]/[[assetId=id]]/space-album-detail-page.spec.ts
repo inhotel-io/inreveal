@@ -148,7 +148,7 @@ vi.mock('$lib/services/album.service', async (importOriginal) => {
       },
     }),
     addAssetsToAlbums: vi.fn().mockResolvedValue(true),
-    addAssetsToAlbumWithOutcome: vi.fn().mockResolvedValue({ ok: true, addedIds: [] }),
+    addAssetsToAlbumWithOutcome: vi.fn().mockResolvedValue({ ok: true, addedIds: [], deniedIds: [] }),
   };
 });
 
@@ -263,7 +263,7 @@ describe('Space album detail page', () => {
     // The picker selection is a shared array (see the AssetMultiSelectManager mock) - reset it
     // so a test that seeds a selection cannot leak into the next one.
     pickerSelectedAssets.length = 0;
-    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: [] });
+    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: [], deniedIds: [] });
     mockAssetMultiSelectManager.selectionActive = false;
     mockAssetMultiSelectManager.assets = [];
     // Slice 6: a handful of tests below flip these to exercise ownership/manager gating
@@ -625,7 +625,7 @@ describe('Space album detail page', () => {
     const refreshedAlbum = makeAlbum({ id: 'album-1', albumName: 'Refreshed', assetCount: 5 });
     vi.mocked(getAlbumInfo).mockResolvedValue(refreshedAlbum);
     pickerSelectedAssets.splice(0, pickerSelectedAssets.length, { id: 'a-1' });
-    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['a-1'] });
+    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['a-1'], deniedIds: [] });
 
     // Provide AddAssets whose onAction resolves immediately
     const addAssetsOnAction = vi.fn().mockResolvedValue(undefined);
@@ -670,7 +670,7 @@ describe('Space album detail page', () => {
   it('does not insert photos into the album grid when the add call fails', async () => {
     // The service never rejects - on 5xx/network it toasts and resolves ok:false.
     pickerSelectedAssets.splice(0, pickerSelectedAssets.length, { id: 'a-1' });
-    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: false, addedIds: [] });
+    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: false, addedIds: [], deniedIds: [] });
     renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
 
     // Enter add mode and fire the header Add action, exactly as the success test does.
@@ -705,7 +705,7 @@ describe('Space album detail page', () => {
     });
 
     it('inserts only the assets the server actually accepted, not the whole selection', async () => {
-      vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['mine'] });
+      vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['mine'], deniedIds: [] });
       renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
 
       await fireAdd();
@@ -716,13 +716,30 @@ describe('Space album detail page', () => {
     });
 
     it('keeps the picker open and inserts nothing when every asset was denied', async () => {
-      vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: [] });
+      vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({
+        ok: true,
+        addedIds: [],
+        deniedIds: ['mine', 'theirs'],
+      });
       renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
 
       await fireAdd();
 
       expect(mockTimelineState.upsertAssets).not.toHaveBeenCalled();
       expect(screen.getByTestId('add-photos-overlay')).toBeInTheDocument();
+    });
+
+    // A duplicate is not a refusal: the photo is already where the user wanted it, so there is
+    // nothing to retry. Trapping them in the picker would be a regression against the old
+    // behaviour, which returned to browse on any non-throwing call.
+    it('closes the picker when every asset was already in the album', async () => {
+      vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: [], deniedIds: [] });
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+
+      await fireAdd();
+
+      await waitFor(() => expect(screen.queryByTestId('add-photos-overlay')).not.toBeInTheDocument());
+      expect(mockTimelineState.upsertAssets).toHaveBeenCalledWith([]);
     });
   });
 
@@ -842,7 +859,7 @@ describe('Space album detail page', () => {
     const refreshedAlbum = makeAlbum({ id: 'album-1', albumName: 'Refreshed', assetCount: 5 });
     vi.mocked(getAlbumInfo).mockResolvedValue(refreshedAlbum);
     pickerSelectedAssets.splice(0, pickerSelectedAssets.length, { id: 'a-1' });
-    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['a-1'] });
+    vi.mocked(addAssetsToAlbumWithOutcome).mockResolvedValue({ ok: true, addedIds: ['a-1'], deniedIds: [] });
     const addAssetsOnAction = vi.fn().mockResolvedValue(undefined);
     vi.mocked(getAlbumAssetsActions).mockReturnValue({
       AddAssets: { title: 'Add assets', icon: '', onAction: addAssetsOnAction, $if: () => true },

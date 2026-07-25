@@ -534,7 +534,7 @@
                  not shrink, so on a narrow viewport this column can be ~120px wide, and the parent
                  is overflow-hidden — a fixed-width segmented control would simply be cut in half. -->
             <div
-              class="mb-3 flex max-w-full flex-wrap items-center gap-1 self-start rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
+              class="mb-3 flex max-w-full shrink-0 flex-wrap items-center gap-1 self-start rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
               role="group"
               aria-label={$t('space_album_picker_source')}
               data-testid="picker-source-toggle"
@@ -626,11 +626,13 @@
                 album.id,
                 selected.map(({ id }) => id),
                 { notify: true },
-              ).then(({ ok, addedIds }) => {
+              ).then(({ ok, addedIds, deniedIds }) => {
                 // The server answers 200 with per-asset outcomes, so only paint in what it
                 // actually accepted — a denied asset would otherwise appear and then vanish on
-                // reload. Nothing accepted ⇒ stay in the picker (the toast already explains).
-                if (!ok || addedIds.length === 0) {
+                // reload. Stay in the picker only when the server genuinely REFUSED something and
+                // nothing landed; a selection that was entirely duplicates has nothing left to do,
+                // so it closes like any other success rather than trapping the user.
+                if (!ok || (addedIds.length === 0 && deniedIds.length > 0)) {
                   return;
                 }
                 const accepted = new Set(addedIds);
