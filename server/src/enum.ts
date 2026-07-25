@@ -406,6 +406,7 @@ export enum SystemMetadataKey {
   License = 'license',
   IntegrityChecksumCheckpoint = 'integrity-checksum-checkpoint',
   ClassificationConfigState = 'classification-config-state',
+  SharedSpaceFaceJobCleanupState = 'shared-space-face-job-cleanup-state',
 }
 
 export enum UserMetadataKey {

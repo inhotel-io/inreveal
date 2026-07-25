@@ -832,4 +832,27 @@ describe('SharedSpaceService linked-library face identity repair', () => {
       data: { spaceId: disabled.id },
     });
   });
+
+  // One-time recovery for the pre-idempotency-fix crashes: those failed jobs occupy their stable
+  // dedup jobIds forever (removeOnFail unset), silently blocking the post-fix re-queue of exactly
+  // the crashed work. The bootstrap sweep must run once per install — the flag persists in
+  // system_metadata, so a second bootstrap (each instance here simulates a fresh process after a
+  // restart) must not sweep or kick identity maintenance again, even if new jobs failed since.
+  it('sweeps blocked failed face jobs on the first bootstrap only', async () => {
+    const firstBoot = setup();
+    firstBoot.jobs.removeFailedJobsByJobIdPrefix.mockResolvedValue(3);
+
+    await firstBoot.sut.onBootstrap();
+
+    expect(firstBoot.jobs.removeFailedJobsByJobIdPrefix).toHaveBeenCalledTimes(2);
+    expect(firstBoot.jobs.queue).toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+
+    const secondBoot = setup();
+    secondBoot.jobs.removeFailedJobsByJobIdPrefix.mockResolvedValue(3);
+
+    await secondBoot.sut.onBootstrap();
+
+    expect(secondBoot.jobs.removeFailedJobsByJobIdPrefix).not.toHaveBeenCalled();
+    expect(secondBoot.jobs.queue).not.toHaveBeenCalled();
+  });
 });

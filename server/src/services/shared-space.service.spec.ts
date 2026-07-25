@@ -21,6 +21,7 @@ import {
   QueueName,
   SharedSpaceActivityType,
   SharedSpaceRole,
+  SystemMetadataKey,
   UserAvatarColor,
 } from 'src/enum';
 import { SHARED_SPACE_DEDUP_MAX_PASSES, SharedSpaceService } from 'src/services/shared-space.service';
@@ -5180,6 +5181,50 @@ describe(SharedSpaceService.name, () => {
 
       expect(result).toBe(JobStatus.Success);
       expect(mocks.sharedSpace.reconcileAlbumGrants).toHaveBeenCalledWith([]);
+    });
+  });
+
+  describe('onBootstrap', () => {
+    it('clears blocked failed face jobs from both pipeline queues and kicks identity maintenance', async () => {
+      mocks.systemMetadata.get.mockResolvedValue(null);
+      mocks.job.removeFailedJobsByJobIdPrefix.mockResolvedValueOnce(1).mockResolvedValueOnce(2);
+
+      await sut.onBootstrap();
+
+      expect(mocks.job.removeFailedJobsByJobIdPrefix).toHaveBeenCalledWith(QueueName.PeopleBackfill, [
+        'shared-space-face-match',
+        'space-identity-reconcile-',
+      ]);
+      expect(mocks.job.removeFailedJobsByJobIdPrefix).toHaveBeenCalledWith(QueueName.FacialRecognition, [
+        'shared-space-face-match',
+        'space-identity-reconcile-',
+      ]);
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+      expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.SharedSpaceFaceJobCleanupState, {
+        cleanedAt: expect.any(String),
+      });
+    });
+
+    it('does not kick identity maintenance when no blocked jobs were removed', async () => {
+      mocks.systemMetadata.get.mockResolvedValue(null);
+      mocks.job.removeFailedJobsByJobIdPrefix.mockResolvedValue(0);
+
+      await sut.onBootstrap();
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+      expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.SharedSpaceFaceJobCleanupState, {
+        cleanedAt: expect.any(String),
+      });
+    });
+
+    it('skips the cleanup entirely once it has already run', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({ cleanedAt: '2026-07-25T00:00:00.000Z' });
+
+      await sut.onBootstrap();
+
+      expect(mocks.job.removeFailedJobsByJobIdPrefix).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+      expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
     });
   });
 

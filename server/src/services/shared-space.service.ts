@@ -44,6 +44,7 @@ import {
   AssetType,
   AssetVisibility,
   CacheControl,
+  ImmichWorker,
   JobName,
   JobStatus,
   NotificationLevel,
@@ -52,6 +53,7 @@ import {
   QueueName,
   SharedSpaceActivityType,
   SharedSpaceRole,
+  SystemMetadataKey,
   UserAvatarColor,
 } from 'src/enum';
 import { AlbumAssetCount } from 'src/repositories/album.repository';
@@ -1597,6 +1599,38 @@ export class SharedSpaceService extends BaseService {
     const albumIds = await this.sharedSpaceRepository.getAllGrantedAlbumIds();
     await this.sharedSpaceRepository.reconcileAlbumGrants(albumIds);
     return JobStatus.Success;
+  }
+
+  // One-time recovery for the pre-idempotency-fix crashes: the duplicate-key failures left
+  // SharedSpaceFaceMatch*/reconciliation jobs in the failed set with `removeOnFail` unset, where
+  // they permanently occupy their stable dedup jobIds — BullMQ silently ignores any later add()
+  // with the same id, so identity maintenance could never re-queue exactly the crashed work.
+  // Deliberately NOT `removeOnFail: true` on the job options: jobs that fail *after* this cleanup
+  // should park visibly in the failed set instead of being retried on every trigger forever.
+  // The flag is written after the sweep so a crash mid-cleanup retries on the next boot
+  // (removals are idempotent), and only a non-zero cleanup kicks identity maintenance.
+  @OnEvent({ name: 'AppBootstrap', workers: [ImmichWorker.Microservices] })
+  async onBootstrap(): Promise<void> {
+    const state = await this.systemMetadataRepository.get(SystemMetadataKey.SharedSpaceFaceJobCleanupState);
+    if (state?.cleanedAt) {
+      return;
+    }
+
+    const prefixes = ['shared-space-face-match', 'space-identity-reconcile-'];
+    const removed =
+      (await this.jobRepository.removeFailedJobsByJobIdPrefix(QueueName.PeopleBackfill, prefixes)) +
+      (await this.jobRepository.removeFailedJobsByJobIdPrefix(QueueName.FacialRecognition, prefixes));
+
+    if (removed > 0) {
+      this.logger.log(
+        `Removed ${removed} failed shared-space face job(s) that were blocking their dedup jobIds; queueing face identity maintenance`,
+      );
+      await this.jobRepository.queue({ name: JobName.FaceIdentityBackfill, data: {} });
+    }
+
+    await this.systemMetadataRepository.set(SystemMetadataKey.SharedSpaceFaceJobCleanupState, {
+      cleanedAt: new Date().toISOString(),
+    });
   }
 
   // Self-heal backstop (see queue.service.ts's handleNightlyJobs): re-queues identity reconciliation
