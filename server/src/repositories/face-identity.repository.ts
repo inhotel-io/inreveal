@@ -1289,7 +1289,12 @@ export class FaceIdentityRepository {
       return;
     }
 
-    const people = await this.hydrateAccessiblePeople({ userId, identityIds: [identityId], withHidden: false });
+    const people = await this.hydrateAccessiblePeople({
+      userId,
+      identityIds: [identityId],
+      withHidden: false,
+      preferProfileId: profileId,
+    });
     return people[0];
   }
 
@@ -1875,12 +1880,21 @@ export class FaceIdentityRepository {
   }
 
   @GenerateSql({
-    params: [{ userId: DummyValue.UUID, identityIds: [DummyValue.UUID], withHidden: true }],
+    params: [
+      { userId: DummyValue.UUID, identityIds: [DummyValue.UUID], withHidden: true, preferProfileId: DummyValue.UUID },
+    ],
   })
   async hydrateAccessiblePeople(input: {
     userId: string;
     identityIds: string[];
     withHidden: boolean;
+    /**
+     * The profile the caller explicitly addressed, when there is one. Ranked directly below the
+     * caller's own person so a deep link resolves to the profile it names instead of whatever the
+     * alias/name/updatedAt tiebreakers happen to elect. Omitted by the list paths, which have no
+     * single requested profile and keep the existing ranking.
+     */
+    preferProfileId?: string;
   }): Promise<PersonResponseDto[]> {
     if (input.identityIds.length === 0) {
       return [];
@@ -2013,7 +2027,8 @@ export class FaceIdentityRepository {
             ORDER BY
               CASE
                 WHEN profiles."profileType" = 'user-person' THEN 0
-                ELSE profiles."profileRank"
+                WHEN profiles."profileId" = ${input.preferProfileId ?? null}::uuid THEN 1
+                ELSE profiles."profileRank" + 1
               END,
               NULLIF(profiles.name, '') IS NULL,
               lower(profiles.name),
