@@ -300,6 +300,7 @@
           currentRole={currentMember?.role}
           canEdit={isEditor}
           onChangeCover={handleChangeCover}
+          onEditSpace={handleEditSpace}
           onReposition={() => (repositioning = true)}
           {repositioning}
           onSavePosition={handleSavePosition}
