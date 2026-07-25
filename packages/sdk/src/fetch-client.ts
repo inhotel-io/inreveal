@@ -1907,6 +1907,8 @@ export type MetadataSearchDto = {
     originalFileName?: string;
     /** Filter by original file path */
     originalPath?: string;
+    /** Filter by asset owner (contributor). Narrows within the current scope; never widens it. */
+    ownerId?: string;
     /** Page number */
     page?: number;
     /** Filter by person IDs */
@@ -2030,6 +2032,8 @@ export type RandomSearchDto = {
     model?: string | null;
     /** Filter by OCR text content */
     ocr?: string;
+    /** Filter by asset owner (contributor). Narrows within the current scope; never widens it. */
+    ownerId?: string;
     /** Filter by person IDs */
     personIds?: string[];
     /** Filter by rating [1-5], or null for unrated */
@@ -2106,6 +2110,8 @@ export type SmartSearchDto = {
     ocr?: string;
     /** Sort order (omit for relevance) */
     order?: AssetOrder;
+    /** Filter by asset owner (contributor). Narrows within the current scope; never widens it. */
+    ownerId?: string;
     /** Page number */
     page?: number;
     /** Filter by person IDs */
@@ -2265,6 +2271,8 @@ export type StatisticsSearchDto = {
     model?: string | null;
     /** Filter by OCR text content */
     ocr?: string;
+    /** Filter by asset owner (contributor). Narrows within the current scope; never widens it. */
+    ownerId?: string;
     /** Filter by person IDs */
     personIds?: string[];
     /** Filter by rating [1-5], or null for unrated */
@@ -5762,15 +5770,8 @@ export function reassignFacesById({ id, faceDto }: {
 /**
  * Get filtered map markers
  */
-<<<<<<< HEAD
-export function getFilteredMapMarkers({ city, country, description, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, model, ocr, originalFileName, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
-||||||| parent of e13beb08bd5 (fix(map): sync timeline-panel temporal chip to URL + forward text filters to map markers (#767))
-export function getFilteredMapMarkers({ albumId, city, country, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, model, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
-    albumId?: string;
-=======
 export function getFilteredMapMarkers({ albumId, city, country, description, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, model, ocr, originalFileName, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
     albumId?: string;
->>>>>>> e13beb08bd5 (fix(map): sync timeline-panel temporal chip to URL + forward text filters to map markers (#767))
     city?: string;
     country?: string;
     description?: string;
@@ -5797,6 +5798,7 @@ export function getFilteredMapMarkers({ albumId, city, country, description, isF
         status: 200;
         data: MapMarkerResponseDto[];
     }>(`/gallery/map/markers${QS.query(QS.explode({
+        albumId,
         city,
         country,
         description,
@@ -6842,7 +6844,7 @@ export function getExploreData(opts?: Oazapfts.RequestOpts) {
 /**
  * Search large assets
  */
-export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isInAlbum, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif, withSharedSpaces }: {
+export function searchLargeAssets({ albumIds, city, country, createdAfter, createdBefore, isEncoded, isFavorite, isInAlbum, isMotion, isNotInAlbum, isOffline, lensModel, libraryId, make, minFileSize, model, ocr, ownerId, personIds, rating, size, spaceId, spacePersonIds, state, tagIds, takenAfter, takenBefore, trashedAfter, trashedBefore, $type, updatedAfter, updatedBefore, visibility, withDeleted, withExif, withSharedSpaces }: {
     albumIds?: string[];
     city?: string | null;
     country?: string | null;
@@ -6860,6 +6862,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
     minFileSize?: number;
     model?: string | null;
     ocr?: string;
+    ownerId?: string;
     personIds?: string[];
     rating?: number | null;
     size?: number;
@@ -6900,6 +6903,7 @@ export function searchLargeAssets({ albumIds, city, country, createdAfter, creat
         minFileSize,
         model,
         ocr,
+        ownerId,
         personIds,
         rating,
         size,

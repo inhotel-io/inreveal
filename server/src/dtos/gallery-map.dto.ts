@@ -46,12 +46,6 @@ const FilteredMapMarkerSchema = z
     ocr: boundedTextFilter().optional().describe('Filter by OCR text content (substring, case/accent-insensitive)'),
     city: z.string().optional().describe('Filter by city'),
     country: z.string().optional().describe('Filter by country'),
-    // The Map filter panel renders the same "Text" section as every other surface (#802), so
-    // markers accept the same three predicates the map timeline (TimeBucketDto) already does.
-    // searchAssetBuilder already implements all three.
-    description: z.string().optional().describe('Filter by description text'),
-    originalFileName: z.string().optional().describe('Filter by original file name'),
-    ocr: z.string().optional().describe('Filter by text recognised in the image'),
     lensModel: z.string().optional().describe('Camera lens model'),
     state: z.string().optional().describe('Filter by state/province'),
     ownerId: z
