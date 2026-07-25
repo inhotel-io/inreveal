@@ -1,6 +1,5 @@
 import { AssetTypeEnum, AssetVisibility, type AssetOrder } from '@immich/sdk';
 import { applyTextFilters, buildFilterContext, type FilterState } from '$lib/components/filter-panel/filter-panel';
-import { buildSpaceTimelineOptions } from '$lib/utils/space-filter-options';
 
 function applyCommonFilterFields(base: Record<string, unknown>, filters: FilterState): Record<string, unknown> {
   if (filters.personIds.length > 0) {
@@ -76,11 +75,27 @@ export function buildAlbumAssetPickerOptions(albumId: string, filters: FilterSta
  *
  * `timelineAlbumId` is deliberately kept: it is not the query scope (that is `spaceId`) but the
  * marker query that greys out assets already in the album.
+ *
+ * Deliberately NOT built on `buildSpaceTimelineOptions`, despite the overlap:
+ *
+ * - that builder rewrites `filters.personIds` into `spacePersonIds`, which the server validates as
+ *   bare `uuidv4`. This picker's filter panel is the personal one, so its person ids are scoped
+ *   *tokens* (`person:<uuid>`) and the rewrite would 400 every bucket request. `personIds` accepts
+ *   tokens and `TimelineService` resolves them against `scope.spaceId`, so they are passed through.
+ * - it sets no visibility, letting the server default to Archive|Timeline. The picker pins
+ *   `Timeline` so the Space tab does not quietly offer archived photos the My-photos tab hides.
  */
 export function buildSpaceAlbumAssetPickerOptions(
   spaceId: string,
   albumId: string,
   filters: FilterState,
 ): Record<string, unknown> {
-  return { ...buildSpaceTimelineOptions(spaceId, filters), timelineAlbumId: albumId };
+  return applyCommonFilterFields(
+    {
+      spaceId,
+      visibility: AssetVisibility.Timeline,
+      timelineAlbumId: albumId,
+    },
+    filters,
+  );
 }

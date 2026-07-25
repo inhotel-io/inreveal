@@ -520,10 +520,24 @@ describe('Space album detail page', () => {
     it('clears the pending selection when the source changes, so a selection never spans both pools', async () => {
       renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
       await openPicker();
+      // Opening the picker already calls clear() via resetPicker, and the mock class shares one
+      // spy across instances — so asserting "has been called" would pass even with the clear in
+      // setPickerSource deleted. Baseline here and assert the toggle adds a call of its own.
+      const callsBeforeToggle = pickerMultiSelectClear.mock.calls.length;
 
       await fireEvent.click(screen.getByTestId('picker-source-space'));
 
-      await waitFor(() => expect(pickerMultiSelectClear).toHaveBeenCalled());
+      await waitFor(() => expect(pickerMultiSelectClear.mock.calls.length).toBeGreaterThan(callsBeforeToggle));
+    });
+
+    it('does not clear when the already-active source is re-clicked', async () => {
+      renderPage({ members: [makeMember(SharedSpaceRole.Editor)], album: makeAlbum({ id: 'album-1' }) });
+      await openPicker();
+      const callsBeforeToggle = pickerMultiSelectClear.mock.calls.length;
+
+      await fireEvent.click(screen.getByTestId('picker-source-mine'));
+
+      expect(pickerMultiSelectClear.mock.calls.length).toBe(callsBeforeToggle);
     });
 
     // The default album fixture makes the current user its OWNER, so the picker still opens
