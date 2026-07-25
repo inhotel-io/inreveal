@@ -135,7 +135,10 @@ describe('ReviewFirstLane', () => {
     expect(reasons).toHaveTextContent('admin.face_cleanup_reason_large_cluster');
     expect(reasons).toHaveTextContent('+1');
     expect(reasons).not.toHaveTextContent('admin.face_cleanup_reason_named');
-    expect(reasons).toHaveAttribute('title', 'admin.face_cleanup_reason_large_cluster · admin.face_cleanup_reason_named');
+    expect(reasons).toHaveAttribute(
+      'title',
+      'admin.face_cleanup_reason_large_cluster · admin.face_cleanup_reason_named',
+    );
   });
 
   it('bad-target wins the primary pill regardless of its position in the reason list', () => {
