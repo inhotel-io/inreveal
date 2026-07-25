@@ -25529,6 +25529,7 @@
           "SharedSpaceBulkAddAssets",
           "SharedSpaceAlbumGrantReconcile",
           "SharedSpaceAlbumGrantReconcileSweep",
+          "SharedSpaceIdentityReconciliationSweep",
           "AssetClassifyQueueAll",
           "AssetClassify"
         ],
