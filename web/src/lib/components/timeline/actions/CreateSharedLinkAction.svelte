@@ -6,7 +6,14 @@
   import { t } from 'svelte-i18n';
 
   const handleClick = async () => {
-    await modalManager.show(SharedLinkCreateModal, { assetIds: assetMultiSelectManager.assets.map(({ id }) => id) });
+    // `Permission.AssetShare` is owner ∪ partner only and rejects the ENTIRE request if it names
+    // one asset the caller does not own, so send the owned subset rather than the raw selection.
+    // The excluded count is surfaced in the modal so the narrowing is never silent.
+    const ownedAssetIds = assetMultiSelectManager.ownedAssets.map(({ id }) => id);
+    await modalManager.show(SharedLinkCreateModal, {
+      assetIds: ownedAssetIds,
+      excludedCount: assetMultiSelectManager.assets.length - ownedAssetIds.length,
+    });
   };
 </script>
 

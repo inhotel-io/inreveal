@@ -1,0 +1,67 @@
+import { modalManager } from '@immich/ui';
+import { render, screen } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import CreateSharedLinkAction from '$lib/components/timeline/actions/create-shared-link-action.test-wrapper.svelte';
+import { assetMultiSelectManager } from '$lib/managers/asset-multi-select-manager.svelte';
+import type { TimelineAsset } from '$lib/managers/timeline-manager/types';
+
+const { mockUser } = vi.hoisted(() => ({ mockUser: { current: { id: 'me', isAdmin: false } } }));
+vi.mock('$lib/managers/auth-manager.svelte', () => ({
+  authManager: {
+    get authenticated() {
+      return mockUser.current !== null;
+    },
+    get user() {
+      return mockUser.current;
+    },
+  },
+}));
+
+const asset = (id: string, ownerId: string) => ({ id, ownerId }) as TimelineAsset;
+
+describe('CreateSharedLinkAction', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // `show`'s result type is inferred from the modal component, so a bare spy widens to `never`.
+    vi.spyOn(modalManager, 'show').mockResolvedValue(undefined as never);
+    mockUser.current = { id: 'me', isAdmin: false };
+    assetMultiSelectManager.clear();
+  });
+
+  const clickShare = async () => {
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /share/i }));
+  };
+
+  it('shares every asset when the whole selection is the user’s own', async () => {
+    assetMultiSelectManager.selectAssets([asset('a1', 'me'), asset('a2', 'me')]);
+    render(CreateSharedLinkAction);
+
+    await clickShare();
+
+    expect(modalManager.show).toHaveBeenCalledWith(expect.anything(), { assetIds: ['a1', 'a2'], excludedCount: 0 });
+  });
+
+  it('sends only the owned subset on a mixed selection — Permission.AssetShare rejects the whole request otherwise', async () => {
+    assetMultiSelectManager.selectAssets([asset('mine', 'me'), asset('theirs', 'someone-else')]);
+    render(CreateSharedLinkAction);
+
+    await clickShare();
+
+    expect(modalManager.show).toHaveBeenCalledWith(expect.anything(), { assetIds: ['mine'], excludedCount: 1 });
+  });
+
+  it('reports how many assets were left out so the subsetting is visible before the link is made', async () => {
+    assetMultiSelectManager.selectAssets([
+      asset('mine', 'me'),
+      asset('theirs-1', 'other-1'),
+      asset('theirs-2', 'other-2'),
+    ]);
+    render(CreateSharedLinkAction);
+
+    await clickShare();
+
+    expect(modalManager.show).toHaveBeenCalledWith(expect.anything(), { assetIds: ['mine'], excludedCount: 2 });
+  });
+});
