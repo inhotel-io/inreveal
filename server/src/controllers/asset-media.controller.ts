@@ -2,7 +2,6 @@ import {
   Body,
   Controller,
   Get,
-  Headers,
   HttpCode,
   HttpStatus,
   Next,
@@ -102,11 +101,13 @@ export class AssetMediaController {
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,
     @Query() dto: AssetDownloadOriginalDto,
+    @Req() req: Request,
     @Res() res: Response,
     @Next() next: NextFunction,
-    @Headers('range') range?: string,
   ) {
-    await sendFile(res, next, () => this.service.downloadOriginal(auth, id, dto, range), this.logger);
+    // read the header off the request rather than with @Headers(), which @nestjs/swagger
+    // would publish as a *required* header parameter in the OpenAPI spec
+    await sendFile(res, next, () => this.service.downloadOriginal(auth, id, dto, req.headers.range), this.logger);
   }
 
   @Get(':id/thumbnail')
@@ -177,11 +178,12 @@ export class AssetMediaController {
   async playAssetVideo(
     @Auth() auth: AuthDto,
     @Param() { id }: UUIDParamDto,
+    @Req() req: Request,
     @Res() res: Response,
     @Next() next: NextFunction,
-    @Headers('range') range?: string,
   ) {
-    await sendFile(res, next, () => this.service.playbackVideo(auth, id, range), this.logger);
+    // see downloadAsset: @Headers() would leak a required `range` param into the OpenAPI spec
+    await sendFile(res, next, () => this.service.playbackVideo(auth, id, req.headers.range), this.logger);
   }
 
   @Post('bulk-upload-check')

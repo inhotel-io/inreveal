@@ -1058,6 +1058,37 @@ describe(AssetMediaService.name, () => {
       }
     });
 
+    it('should not claim range support for proxied thumbnails, which ignore the Range header', async () => {
+      const asset = AssetFactory.from()
+        .file({ type: AssetFileType.Thumbnail, path: 'thumbs/admin/aa/bb/thumb.jpg' })
+        .build();
+      const path = asset.files[0].path;
+      const s3Backend = {
+        getServeStrategy: vi.fn().mockResolvedValue({
+          type: 'stream',
+          stream: Readable.from([Buffer.from('thumb')]),
+          length: 5,
+        }),
+      };
+
+      mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([asset.id]));
+      mocks.asset.getForThumbnail.mockResolvedValue({ ...asset, path });
+      const previousS3Backend = (StorageService as any).s3Backend;
+      (StorageService as any).s3Backend = s3Backend;
+
+      try {
+        const response = (await sut.viewThumbnail(authStub.admin, asset.id, {
+          size: AssetMediaSize.THUMBNAIL,
+        })) as ImmichStreamResponse;
+
+        // Accept-Ranges must stay off for endpoints that drop the header, so a resuming
+        // client is never told it can range-request this URL
+        expect(response.acceptsRanges).toBeUndefined();
+      } finally {
+        (StorageService as any).s3Backend = previousS3Backend;
+      }
+    });
+
     it('should get preview file', async () => {
       const asset = AssetFactory.from().file({ type: AssetFileType.Preview }).build();
       mocks.access.asset.checkOwnerAccess.mockResolvedValue(new Set([asset.id]));
@@ -1254,6 +1285,7 @@ describe(AssetMediaService.name, () => {
             contentType: 'video/mp4',
             length: 1024,
             contentRange: 'bytes 0-1023/1048576',
+            acceptsRanges: true,
             cacheControl: CacheControl.PrivateWithCache,
           }),
         );

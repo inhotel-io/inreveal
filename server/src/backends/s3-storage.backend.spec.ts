@@ -49,6 +49,9 @@ describe('S3StorageBackend', () => {
   });
 
   afterEach(() => {
+    // clearAllMocks resets call history but leaves queued `mockResolvedValueOnce` values on
+    // the shared `send` mock, so an unconsumed one would bleed into the next test
+    mockSend.mockReset();
     vi.clearAllMocks();
   });
 
@@ -423,9 +426,10 @@ describe('S3StorageBackend', () => {
         cacheControl: CacheControl.PrivateWithCache,
       });
 
-      expect(GetObjectCommand).toHaveBeenCalledWith(
-        expect.not.objectContaining({ Range: expect.anything() as unknown as string }),
-      );
+      // assert the value, not just the absence of the key: the backend always passes
+      // `Range`, and the AWS SDK omits the header only because the value is undefined
+      const [[commandInput]] = (GetObjectCommand as unknown as ReturnType<typeof vi.fn>).mock.calls;
+      expect(commandInput.Range).toBeUndefined();
       expect(strategy).toMatchObject({ type: 'stream', length: 12 });
       expect((strategy as { contentRange?: string }).contentRange).toBeUndefined();
     });
@@ -473,9 +477,10 @@ describe('S3StorageBackend', () => {
       });
 
       expect(strategy.type).toBe('redirect');
-      expect(GetObjectCommand).toHaveBeenCalledWith(
-        expect.not.objectContaining({ Range: expect.anything() as unknown as string }),
-      );
+      // the presigned command must carry no Range at all: the client replays its own
+      // Range header against S3, which answers it natively
+      const [[commandInput]] = (GetObjectCommand as unknown as ReturnType<typeof vi.fn>).mock.calls;
+      expect('Range' in commandInput).toBe(false);
       expect(mockSend).not.toHaveBeenCalled();
     });
 

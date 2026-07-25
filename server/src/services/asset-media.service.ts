@@ -198,7 +198,7 @@ export class AssetMediaService extends BaseService {
       CacheControl.PrivateWithCache,
       getFileNameWithoutExtension(originalFileName) + getFilenameExtension(path),
       dto.download ? 'attachment' : 'inline',
-      { range },
+      { range, acceptsRanges: true },
     );
   }
 
@@ -263,9 +263,7 @@ export class AssetMediaService extends BaseService {
       CacheControl.PrivateWithCache,
       undefined,
       'inline',
-      {
-        range,
-      },
+      { range, acceptsRanges: true },
     );
   }
 

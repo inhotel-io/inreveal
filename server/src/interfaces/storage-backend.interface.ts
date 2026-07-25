@@ -20,9 +20,11 @@ export type ServeOptions = {
   fileName?: string;
   disposition?: ContentDisposition;
   /**
-   * The client's raw `Range` header, forwarded verbatim. Backends that support
-   * ranges pass it straight through rather than parsing it; the ones that don't
-   * ignore it and serve the whole object.
+   * The client's raw `Range` header, forwarded verbatim: S3 resolves `bytes=a-b`,
+   * `bytes=a-` and `bytes=-n` for us, so nothing here parses it. Only the S3 proxy
+   * strategy reads this — the disk backend ignores it because express' `sendFile`
+   * already honors the request's own `Range`, and the S3 redirect strategy ignores
+   * it because the client replays the header to S3 on the presigned URL.
    */
   range?: string;
 };

@@ -338,10 +338,12 @@ export class BaseService {
   }
 
   /**
-   * @param options.range the client's raw `Range` header. Only endpoints that can
-   *        serve partial content pass it; the backend decides whether to honor it.
-   *        Disk serves ranges through express, and S3 in redirect mode leaves them
-   *        to S3 — so this only changes the S3 proxy stream path.
+   * @param options.acceptsRanges set by callers whose route forwards the client's `Range`
+   *        header, so the response may advertise `Accept-Ranges: bytes`.
+   * @param options.range the client's raw `Range` header, when the route forwards one.
+   *        The backend decides whether to honor it: disk serves ranges through express,
+   *        and S3 in redirect mode leaves them to S3 — so it only changes the S3 proxy
+   *        stream path, which previously ignored ranges entirely.
    */
   protected async serveFromBackend(
     filePath: string,
@@ -349,7 +351,7 @@ export class BaseService {
     cacheControl: CacheControl,
     fileName?: string,
     disposition: ContentDisposition = 'inline',
-    options: { range?: string } = {},
+    options: { range?: string; acceptsRanges?: boolean } = {},
   ): Promise<ImmichMediaResponse> {
     // lazy import to avoid circular dependency (StorageService extends BaseService)
     const { StorageService } = await import('./storage.service.js');
@@ -393,6 +395,7 @@ export class BaseService {
           contentType,
           length: strategy.length,
           contentRange: strategy.contentRange,
+          acceptsRanges: options.acceptsRanges,
           cacheControl,
           fileName,
           disposition: responseDisposition,
