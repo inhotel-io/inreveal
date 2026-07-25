@@ -1,5 +1,5 @@
 /**
- * RBAC matrix for PUT /shared-spaces/:id.
+ * RBAC matrix for PATCH /shared-spaces/:id.
  *
  * The endpoint splits its DTO into three field groups with two different role floors
  * (shared-space.service.ts, `update`):
@@ -19,7 +19,7 @@ import { app, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
+describe('PATCH /shared-spaces/:id — rename and edit RBAC', () => {
   let ctx: SpaceContext;
   const anon = { id: 'anon' as const };
 
@@ -33,7 +33,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
       await forEachActor(
         [ctx.spaceOwner, ctx.spaceEditor, ctx.spaceViewer, ctx.spaceNonMember, anon],
         (actor) =>
-          request(app).put(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(actor)).send({ name: 'Renamed Space' }),
+          request(app).patch(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(actor)).send({ name: 'Renamed Space' }),
         { spaceOwner: 200, spaceEditor: 200, spaceViewer: 403, spaceNonMember: 403, anon: 401 },
       );
     });
@@ -42,7 +42,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
       await forEachActor(
         [ctx.spaceOwner, ctx.spaceEditor, ctx.spaceViewer, ctx.spaceNonMember, anon],
         (actor) =>
-          request(app).put(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(actor)).send({ description: 'Edited' }),
+          request(app).patch(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(actor)).send({ description: 'Edited' }),
         { spaceOwner: 200, spaceEditor: 200, spaceViewer: 403, spaceNonMember: 403, anon: 401 },
       );
     });
@@ -50,14 +50,14 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
     it('owner and editor may edit the color', async () => {
       await forEachActor(
         [ctx.spaceOwner, ctx.spaceEditor, ctx.spaceViewer, ctx.spaceNonMember, anon],
-        (actor) => request(app).put(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(actor)).send({ color: 'blue' }),
+        (actor) => request(app).patch(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(actor)).send({ color: 'blue' }),
         { spaceOwner: 200, spaceEditor: 200, spaceViewer: 403, spaceNonMember: 403, anon: 401 },
       );
     });
 
     it('an editor rename actually persists', async () => {
       const { status, body } = await request(app)
-        .put(`/shared-spaces/${ctx.spaceId}`)
+        .patch(`/shared-spaces/${ctx.spaceId}`)
         .set(authHeaders(ctx.spaceEditor))
         .send({ name: 'Editor Renamed This' });
 
@@ -70,12 +70,12 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
 
     it('an editor can clear the description with an empty string', async () => {
       await request(app)
-        .put(`/shared-spaces/${ctx.spaceId}`)
+        .patch(`/shared-spaces/${ctx.spaceId}`)
         .set(authHeaders(ctx.spaceEditor))
         .send({ description: 'Temporary' });
 
       const { status, body } = await request(app)
-        .put(`/shared-spaces/${ctx.spaceId}`)
+        .patch(`/shared-spaces/${ctx.spaceId}`)
         .set(authHeaders(ctx.spaceEditor))
         .send({ description: '' });
 
@@ -90,7 +90,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
         [ctx.spaceOwner, ctx.spaceEditor, ctx.spaceViewer, ctx.spaceNonMember, anon],
         (actor) =>
           request(app)
-            .put(`/shared-spaces/${ctx.spaceId}`)
+            .patch(`/shared-spaces/${ctx.spaceId}`)
             .set(authHeaders(actor))
             .send({ thumbnailAssetId: ctx.spaceAssetId }),
         { spaceOwner: 200, spaceEditor: 200, spaceViewer: 403, spaceNonMember: 403, anon: 401 },
@@ -104,7 +104,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
         [ctx.spaceOwner, ctx.spaceEditor, ctx.spaceViewer, ctx.spaceNonMember, anon],
         (actor) =>
           request(app)
-            .put(`/shared-spaces/${ctx.spaceId}`)
+            .patch(`/shared-spaces/${ctx.spaceId}`)
             .set(authHeaders(actor))
             .send({ faceRecognitionEnabled: true }),
         { spaceOwner: 200, spaceEditor: 403, spaceViewer: 403, spaceNonMember: 403, anon: 401 },
@@ -115,7 +115,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
       await forEachActor(
         [ctx.spaceOwner, ctx.spaceEditor, ctx.spaceViewer, ctx.spaceNonMember, anon],
         (actor) =>
-          request(app).put(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(actor)).send({ petsEnabled: true }),
+          request(app).patch(`/shared-spaces/${ctx.spaceId}`).set(authHeaders(actor)).send({ petsEnabled: true }),
         { spaceOwner: 200, spaceEditor: 403, spaceViewer: 403, spaceNonMember: 403, anon: 401 },
       );
     });
@@ -127,7 +127,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
       const nameBefore = (before.body as { name: string }).name;
 
       const { status } = await request(app)
-        .put(`/shared-spaces/${ctx.spaceId}`)
+        .patch(`/shared-spaces/${ctx.spaceId}`)
         .set(authHeaders(ctx.spaceEditor))
         .send({ name: 'Should Not Persist', petsEnabled: true });
 
@@ -141,7 +141,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
   describe('validation', () => {
     it('rejects a whitespace-only name with 400', async () => {
       const { status } = await request(app)
-        .put(`/shared-spaces/${ctx.spaceId}`)
+        .patch(`/shared-spaces/${ctx.spaceId}`)
         .set(authHeaders(ctx.spaceEditor))
         .send({ name: '   ' });
 
@@ -150,7 +150,7 @@ describe('PUT /shared-spaces/:id — rename and edit RBAC', () => {
 
     it('rejects a name over 100 characters with 400', async () => {
       const { status } = await request(app)
-        .put(`/shared-spaces/${ctx.spaceId}`)
+        .patch(`/shared-spaces/${ctx.spaceId}`)
         .set(authHeaders(ctx.spaceEditor))
         .send({ name: 'a'.repeat(101) });
 
