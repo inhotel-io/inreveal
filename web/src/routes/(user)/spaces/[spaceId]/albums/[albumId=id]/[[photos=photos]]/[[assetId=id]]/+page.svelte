@@ -530,8 +530,11 @@
             <!-- Source switch: the picker has always browsed the caller's own photos, which meant
                  a space album could not pull in another member's photo even though the space
                  timeline's "+" can push that same photo into that same album. -->
+            <!-- Wraps and truncates rather than clipping: the filter panel is a fixed w-64 that does
+                 not shrink, so on a narrow viewport this column can be ~120px wide, and the parent
+                 is overflow-hidden — a fixed-width segmented control would simply be cut in half. -->
             <div
-              class="mb-3 flex shrink-0 items-center gap-1 self-start rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
+              class="mb-3 flex max-w-full flex-wrap items-center gap-1 self-start rounded-lg bg-gray-100 p-1 dark:bg-gray-800"
               role="group"
               aria-label={$t('space_album_picker_source')}
               data-testid="picker-source-toggle"
@@ -540,7 +543,7 @@
                 type="button"
                 data-testid="picker-source-mine"
                 aria-pressed={pickerSource === 'mine'}
-                class="rounded-md px-3 py-1 text-sm transition-colors"
+                class="min-w-0 truncate rounded-md px-3 py-1 text-sm transition-colors"
                 class:bg-white={pickerSource === 'mine'}
                 class:dark:bg-gray-900={pickerSource === 'mine'}
                 class:font-semibold={pickerSource === 'mine'}
@@ -552,7 +555,7 @@
                 type="button"
                 data-testid="picker-source-space"
                 aria-pressed={pickerSource === 'space'}
-                class="rounded-md px-3 py-1 text-sm transition-colors"
+                class="min-w-0 truncate rounded-md px-3 py-1 text-sm transition-colors"
                 class:bg-white={pickerSource === 'space'}
                 class:dark:bg-gray-900={pickerSource === 'space'}
                 class:font-semibold={pickerSource === 'space'}
