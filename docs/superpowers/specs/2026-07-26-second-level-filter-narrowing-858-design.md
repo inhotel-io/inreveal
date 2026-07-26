@@ -144,6 +144,13 @@ Notes:
 when set and not in `exclude`; `mediaType` maps `'image' | 'video'` → `AssetTypeEnum.Image | .Video` and is
 omitted for `'all'`.
 
+The `mediaType` guard must be `state.mediaType && state.mediaType !== 'all'`, not just `!== 'all'`.
+`filter-panel.svelte`'s temporal re-fetch effect builds a **partial** state —
+`buildFilterContext({ dateAfter, dateBefore, selectedYear, selectedMonth } as FilterState)` — where
+`mediaType` is `undefined`. A bare `!== 'all'` is true for `undefined` and would inject a spurious
+`mediaType: Video` into every temporal re-fetch. (Found while implementing Slice 4: it turned nine
+previously-green `contextual-refetch` tests red.)
+
 The two dependent contexts already exclude the right things and need no edit:
 
 ```ts
