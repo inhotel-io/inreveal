@@ -253,6 +253,34 @@ describe('createManualReviewModel — pagination stability (the reason this mode
     expect(vm.total).toBe(1204);
     expect(vm.loadedCount).toBe(3);
   });
+
+  // The counterpart to idempotent appending (case 12): that idempotence is exactly why a REFRESH cannot go
+  // through appendFaces alone. After a successful apply the page refetches page 0, and every face the resolve
+  // moved away has to leave the grid — appending would skip the ids it already holds and keep them on screen.
+  it('13b. clear() empties the model so a refetch replaces the cluster instead of merging into it', () => {
+    const vm = createManualReviewModel('person-1');
+    vm.appendFaces([face('f1'), face('f2'), face('f3')], 3);
+    vm.toggle('f1');
+    vm.applyToSelection('lock');
+    vm.toggle('f2');
+
+    vm.clear();
+
+    expect(vm.faces).toEqual([]);
+    expect(vm.loadedCount).toBe(0);
+    expect(vm.total).toBe(0);
+    expect(vm.selectedCount).toBe(0);
+    expect(vm.hasStagedWork).toBe(false);
+    expect(vm.buildResolveRequest()).toBeNull();
+
+    // f1 was moved out by the resolve; f2/f3 remain. Re-appending must NOT resurrect f1, and must not carry
+    // f1's staged `lock` forward onto anything.
+    vm.appendFaces([face('f2'), face('f3')], 2);
+    expect(vm.faces.map((f) => f.assetFaceId)).toEqual(['f2', 'f3']);
+    expect(vm.stateOf('f2')).toBe('keep');
+    expect(vm.stateOf('f3')).toBe('keep');
+    expect(vm.total).toBe(2);
+  });
 });
 
 describe('createManualReviewModel — selection', () => {
