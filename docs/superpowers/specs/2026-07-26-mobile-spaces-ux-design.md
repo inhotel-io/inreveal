@@ -4,6 +4,8 @@
 **Branch:** `worktree-feat+mobile-spaces-ux`
 **Follows on from:** `2026-07-25-rename-spaces-design.md` (web rename/edit) and
 `2026-07-25-space-add-to-collection-design.md` (web contribution mode).
+**Review status:** revised 2026-07-26 after two adversarial reviews; every code claim below was verified
+against the tree.
 
 ## Problem
 
@@ -11,17 +13,17 @@ Two gaps make Spaces awkward to use from the phone.
 
 1. **A space cannot be renamed on mobile.** `SharedSpaceApiRepository` has `create` and `delete` but no
    `update`, so there is no client path at all. The space detail kebab is wrapped in `if (_isOwner)` and
-   holds exactly one item, "Delete Space" (`space_detail.page.dart:459`) — which also means **editors see
-   no kebab whatsoever**, even though the server has permitted editors to rename since the server half of
-   the web rename design shipped.
+   holds exactly one item, "Delete Space" (`space_detail.page.dart:458-464`) — which also means **editors
+   see no kebab whatsoever**, even though the server has permitted editors to rename since the server half
+   of the web rename design shipped.
 2. **Photos can only be added to a space from inside that space.** The flow today is inside-out: open the
    space → tap the 🖼️+ icon → pick assets (`space_detail.page.dart:123`). Space albums have the same
    shape via their kebab's "Add photos". The outside-in flow — select photos anywhere in the library, then
    send them to a space — does not exist. The main timeline's multi-select sheet mounts only `AlbumSelector`
-   (`general_bottom_sheet.widget.dart:118`), so albums are the sole possible destination.
+   (`general_bottom_sheet.widget.dart:118-121`), so albums are the sole possible destination.
 
-The web app closed both of these. This spec is the mobile counterpart, and it is the follow-up PR that
-`2026-07-25-rename-spaces-design.md` explicitly deferred:
+This spec is the mobile counterpart, and it is the follow-up PR that `2026-07-25-rename-spaces-design.md`
+explicitly deferred:
 
 > **Mobile.** `mobile/lib/repositories/shared_space_api.repository.dart` has no `updateSpace` call at all.
 > Adding one means a repository method, a bottom-sheet action, a dialog, and a local Drift write — its own PR.
@@ -37,187 +39,228 @@ The web app closed both of these. This spec is the mobile counterpart, and it is
 
 - **Server work of any kind.** `PATCH /shared-spaces/:id` already accepts `name` / `description` / `color`
   and already gates naming at Editor (`shared-space.service.ts:274-282`, shipped with the web rename design).
-  The Dart SDK already generates `updateSpace` and `SharedSpaceUpdateDto`.
-- **Cross-owner contribution mode.** Deferred deliberately — see Risks R1.
+- **Cross-owner contribution mode.** Deferred deliberately — see R1.
 - **Cover photo editing on mobile.** Mobile has no asset-picker-plus-crop surface; that is its own slice.
 - **Target multi-select in the picker.** Tapping a row adds immediately, matching today's album behaviour.
-  Web needs multi-select because it has a CTRL key; on mobile it would nest a selection mode inside the
-  asset selection mode the user is already in.
 - **A full i18n sweep of mobile Spaces.** Only strings on surfaces this work already modifies get keyed.
 
 ## What already exists
 
-Everything below is load-bearing for the design and none of it needs changing.
-
 | Piece                                       | Where                                                                        | Why it matters                                                               |
 | ------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `PATCH /shared-spaces/:id`, Editor for name | `shared-space.service.ts:274-282`                                            | No server work; editors may already rename                                   |
-| `updateSpace` + `SharedSpaceUpdateDto`      | `mobile/openapi/lib/api/shared_spaces_api.dart:2499`                         | Every field is `Optional<T?>`; absent ≠ null                                 |
-| `sharedSpacesProvider`                      | `mobile/lib/providers/shared_space.provider.dart`                            | Network `getAll()`, carries `members` for role gating                        |
+| `updateSpace`                               | `mobile/openapi/lib/api/shared_spaces_api.dart:2499`                         | Returns `SharedSpaceResponseDto?` — **nullable**                             |
+| `SharedSpaceUpdateDto`                      | `mobile/openapi/lib/model/shared_space_update_dto.dart`                      | All seven fields are `Optional<T?>`                                          |
+| `sharedSpacesProvider`                      | `mobile/lib/providers/shared_space.provider.dart:6`                          | Network `getAll()`; carries `members` and `albumCount`                       |
 | `spaceAlbumsProvider(spaceId)`              | `mobile/lib/providers/infrastructure/space_album.provider.dart`              | **Local Drift stream** per space — lazy expansion is cheap and works offline |
-| `SpaceAlbumActions.addAssets`               | `mobile/lib/providers/infrastructure/space_album_actions.dart:65`            | Routes around the absorbed-album foreign-key trap; fires its own sync nudge  |
-| `actionProvider.addToAlbum`                 | `mobile/lib/providers/infrastructure/action.provider.dart:384`               | Existing remote+local dispatch, incl. upload-then-link for local assets      |
+| `SpaceAlbumActions.addAssets`               | `mobile/lib/providers/infrastructure/space_album_actions.dart:67`            | `Future<int>`; routes around the absorbed-album FK trap; nudges sync         |
+| `actionProvider.addToAlbum`                 | `mobile/lib/providers/infrastructure/action.provider.dart:384`               | Existing remote+local dispatch, incl. upload-then-link                       |
 | `RemoteAlbumService.categorizeCandidates`   | called from `action.provider.dart:390`                                       | Splits a selection into remote ids and local assets needing upload           |
+| `MultiSelectState.lockedSelectionAssets`    | `mobile/lib/providers/timeline/multiselect.provider.dart:14`                 | Locked-folder assets that must never leave the device's private scope        |
+| `SpaceAlbumKebab`                           | `mobile/lib/presentation/widgets/spaces/space_album_kebab.widget.dart`       | The repo's precedent for extracting a kebab so it can be widget-tested       |
 | `SpaceLinkPickerSheet.show`                 | `mobile/lib/presentation/widgets/remote_album/space_link_picker.widget.dart` | Precedent for a static-`show` bottom sheet instead of an `auto_route` page   |
 | `spaceGradientColors`                       | `mobile/lib/widgets/spaces/space_collage.dart:7`                             | The ten space colours mobile already renders                                 |
 
-**i18n.** Web and mobile share one `i18n/` directory, and **every key this work needs already exists there**,
-so no new keys are added and everything ships already translated into all seven locales:
+### Five corrections that shape the design
 
-| Key                                     | Used for                                    |
-| --------------------------------------- | ------------------------------------------- |
-| `add_to_album_or_space`                 | Picker header                               |
-| `add_to_space`                          | The pool child row inside an expanded space |
-| `add_to_collection_restricted_to_space` | Non-owned-selection notice                  |
-| `spaces_hidden_too_many_assets`         | Over-50 000-selection notice                |
-| `added_to_space_count`                  | Success toast for a space-pool add          |
-| `space_album_add_photos_success`        | Success toast for a space-album add         |
-| `spaces_edit`                           | Edit sheet title and both menu items        |
-| `spaces_edit_success`                   | Edit success toast                          |
-| `errors.unable_to_update_space`         | Edit failure toast                          |
-| `name`, `description`, `color`          | Edit sheet field labels                     |
+Each of these overturned an earlier assumption and is load-bearing.
 
-Keying the hardcoded English on the two surfaces this work touches (Slice 8) needs no new keys either —
-`spaces_delete` ("Delete Space") and `spaces_delete_confirmation` already exist.
-
-`spaces_no_writable_spaces` is deliberately **not** used: web shows it as an empty state, whereas this design
-omits the whole section when there is nothing writable (§3), so nothing would ever render it.
-
-**Translation coverage — audited 2026-07-26, all present and genuinely localised** (not English fallbacks) in
-every one of `de`, `fr`, `it`, `es`, `nl`, `pl`, `ru`, `zh_Hans`, `zh_Hant`, for all thirteen keys above plus
-`spaces_delete` / `spaces_delete_confirmation`. Verified by value, e.g.:
-
-| Key                                     | de                                              | ru                                               | zh_Hans                     |
-| --------------------------------------- | ----------------------------------------------- | ------------------------------------------------ | --------------------------- |
-| `spaces_edit`                           | Space bearbeiten                                | Изменить Space                                   | 编辑 Space                  |
-| `add_to_space`                          | Zum Space hinzufügen                            | Добавить в Space                                 | 添加到 Space                |
-| `spaces_delete`                         | Space löschen                                   | Удалить Space                                    | 删除 Space                  |
-| `add_to_collection_restricted_to_space` | Deine Auswahl enthält Fotos anderer Mitglieder… | Ваш выбор содержит фотографии других участников… | 您的选择包含其他成员的照片… |
-
-This is a direct consequence of reusing web's keys: the fork convention is that new keys land in `en.json`
-only and are translated later, so **inventing a key here would ship an untranslated string into nine locales**.
-That is the concrete reason §3 reuses `add_to_space` for the pool child rather than minting an
-"Add to {space}" variant, and why the toasts in Slice 8 do not name their destination. If a future change does
-need a new key, it must add all nine translations in the same PR.
+1. **`addAssets` returns nothing.** `POST /shared-spaces/:id/assets` is `@HttpCode(NO_CONTENT)` returning
+   `Promise<void>`; the Dart repository is `Future<void>` (`shared_space_api.repository.dart:114`). There is
+   **no server count** for a space-pool add. Web itself falls back to the request length
+   (`web/src/lib/services/space.service.ts:20`). Only the space-**album** path yields a true count
+   (`space_album_actions.dart:71`, `result.added.length`).
+2. **`sharedSpaceProvider` has zero consumers** anywhere in `mobile/lib`, so invalidating it after a rename
+   is a no-op. The space detail app bar renders `_space!.name` (`space_detail.page.dart:440`) from local
+   `State` populated by a network `get()`. The Drift `shared_space_entity.name` column is written by sync
+   (`sync_stream.repository.dart:643-658`) but **never read for display**, so a sync nudge does not refresh
+   the title either. Only re-fetching the page's own metadata does.
+3. **`Optional.present(null)` is a 400, not a clear.** `name`, `description` and `color` are `.optional()`
+   but **not** `.nullable()` in `SharedSpaceUpdateSchema` (`shared-space.dto.ts:16-32`), so an explicit
+   `null` is rejected by the zod pipe before reaching `updatePayload`. Only absent-vs-present matters.
+4. **`Optional.value` throws on an absent value** (`mobile/openapi/lib/optional.dart:66`,
+   `StateError('No value present')`). Any predicate reading `space.members` must go through `isPresent` /
+   `orElse`, never bare `.value`.
+5. **`AddToAlbumHeader` lives inside the upstream `album_selector.widget.dart`** (`:742`) and hardcodes
+   `"add_to_album"` (`:768`). The picker therefore cannot reuse it and still say "Add to album or space".
 
 ## Design
 
 ### 1. Structure — compose, do not modify
 
-`album_selector.widget.dart` and `general_bottom_sheet.widget.dart` are **pure upstream files**: every
-commit touching either is an upstream PR (`206992605e2`, `cb1af3a8ec0`, `14aff51da9d`, …). They are also
-850 and 124 lines respectively, and `AlbumSelector`'s search / quick-filter / sort / grid machinery is
-album-specific.
+`album_selector.widget.dart` and `general_bottom_sheet.widget.dart` are **pure upstream** (every commit
+touching them is an upstream PR; neither appears in the squashed fork commit `e0950535c36`).
+`space_bottom_sheet.widget.dart` is **fork-only** (it exists solely in `e0950535c36`) and may be edited
+freely.
 
-So `AlbumSelector` stays byte-identical and gets composed rather than extended:
+`AlbumSelector` is not touched at all. It is composed:
 
 ```
 CollectionPicker (MultiSliver)
-├── AlbumSelector            ← upstream, untouched
+├── CollectionPickerHeader   ← new; renders `add_to_album_or_space` (see correction 5)
+├── AlbumSelector            ← upstream, byte-identical
 └── SpaceCollectionSection   ← new
 ```
 
-Each upstream file takes a one-line diff swapping `AlbumSelector` for `CollectionPicker`, keeping future
-rebases trivial. Album search, quick filters, sort, grid/list toggle and swipe-to-delete all keep working
-because that code is not touched.
+`general_bottom_sheet.widget.dart` takes a **two-line** diff: drop `const AddToAlbumHeader()` and swap
+`AlbumSelector` for `CollectionPicker` (`:119-120`). That is the only upstream edit in this work.
 
-The cost is two search affordances in one sheet — album search at the top, the spaces section below it.
-Accepted: the spaces list is short, grouped, and lives under its own header.
+The cost is two search affordances in one sheet — album search inside `AlbumSelector`, and the spaces
+section below it. Accepted: the spaces list is short, grouped, and under its own header.
 
-### 2. `CollectionTarget`
+### 2. `CollectionTarget` and the dispatch table
 
-New sealed class in `mobile/lib/domain/models/collection_target.dart`, the Dart cousin of web's
-`PickerCollection`. Its whole job is to make the dispatch table total and checked by the compiler.
+New sealed class in `mobile/lib/domain/models/collection_target.dart`.
 
-| Variant            | Payload                  | Dispatch                               |
-| ------------------ | ------------------------ | -------------------------------------- |
-| `AlbumTarget`      | `RemoteAlbum`            | `actionProvider.addToAlbum` (existing) |
-| `SpacePoolTarget`  | `SharedSpaceResponseDto` | `actionProvider.addToSpace` (new)      |
-| `SpaceAlbumTarget` | `spaceId` + `SpaceAlbum` | `spaceAlbumActionsProvider.addAssets`  |
+| Variant            | Payload                  | Dispatch                                   |
+| ------------------ | ------------------------ | ------------------------------------------ |
+| `AlbumTarget`      | `RemoteAlbum`            | `actionProvider.addToAlbum` (existing)     |
+| `SpacePoolTarget`  | `SharedSpaceResponseDto` | `actionProvider.addToSpace` (**new**)      |
+| `SpaceAlbumTarget` | `spaceId` + `SpaceAlbum` | `actionProvider.addToSpaceAlbum` (**new**) |
+
+Both new methods live on `ActionNotifier` and return the usual `ActionResult(count, success, error)`,
+because upload, `multiSelectProvider` reset and `ActionSource` all live there.
+`SpaceAlbumActions.addAssets` stays the low-level call underneath `addToSpaceAlbum` — it takes only
+`(albumId, assetIds)`, returns `Future<int>`, and knows nothing about selection state.
 
 **`SpaceAlbumTarget` must never route through `addToAlbum`.** A linked album may be _absorbed_ — present
 only in `shared_space_album` with no local `remote_album` row — and `addToAlbum` also writes the local
 `remote_album_asset` junction, which would hit a foreign-key violation. `SpaceAlbumActions.addAssets`
-exists precisely to avoid this and documents it at `space_album_actions.dart:56-64`. A test pins it.
+exists precisely to avoid this (`space_album_actions.dart:57-62`). A test pins it.
+
+`SpaceAlbumTarget` carries `spaceId` even though `addAssets` does not need it: it is used to invalidate
+`spaceAlbumsProvider(spaceId)` after the add, and to exclude the current space in the space sheet (§3).
 
 ### 3. `SpaceCollectionSection`
 
 New `mobile/lib/presentation/widgets/collection/space_collection_section.widget.dart`.
 
-Watches `sharedSpacesProvider`, filters to spaces the user can write to, and renders one row per space
-under a "Spaces" header.
+Watches `sharedSpacesProvider`, filters to writable spaces, renders one row per space under a header.
+
+**Expandable vs plain.** Whether a row is expandable is decided by `SharedSpaceResponseDto.albumCount`,
+because the local Drift stream cannot be consulted without subscribing to it. The server does populate it on
+this exact path (`shared-space.service.ts:143` and `:190`, inside `getAll`), which is what
+`sharedSpacesProvider` calls.
+
+Two traps: it is typed `Optional<num?>` (`shared_space_response_dto.dart:48`), so it must be read through
+`isPresent` / `orElse` like `members` (correction 4), and it is a `num`, not an `int`. It is also used
+**nowhere in `mobile/lib` today**, so this is its first consumer and it carries no existing coverage. An
+absent `albumCount` is treated as 0 — a plain row, which still reaches the pool.
+
+The count can disagree with the Drift stream, and both directions are handled explicitly:
+
+- `albumCount > 0` but the Drift stream is empty (not yet synced) → the expanded row shows an empty-albums
+  hint, and the pool child still works.
+- `albumCount == 0` but an album was just linked → the row is plain; the pool child still works and the
+  album becomes reachable after the next sync. Accepted staleness.
 
 **Row behaviour.**
 
-- A space **with** linked albums expands on tap. Its children are "Add to space" (the pool) followed by each
-  linked album. The child label needs no space name — the parent row it is nested under already carries it,
-  which is what lets the existing `add_to_space` key be reused verbatim.
-- A space with **no** linked albums has nothing to expand into, so it renders as a plain row that adds to
-  the pool on a single tap.
+- Expandable row: tapping toggles expansion. Children are the pool child, then each linked album.
+- Plain row: a single tap emits `SpacePoolTarget`.
+- Only one row is expanded at a time (accordion), which bounds concurrent Drift subscriptions to one.
 
-This costs one extra tap for the common case versus tap-to-add. That is the right trade on a _shared_
-surface: an accidental add is visible to every member and writes an activity-feed entry for each of them,
-so the destination must never be ambiguous.
+The pool child is labelled `add_to_space` ("Add to space"). It needs no space name — the parent row it is
+nested under already carries it — which is what lets the existing key be reused verbatim.
 
-Linked albums come from `spaceAlbumsProvider(spaceId)`, watched **only while a row is expanded**. It is a
-local Drift stream, so expansion is cheap and works offline, and collapsed spaces subscribe to nothing.
+Linked albums come from `spaceAlbumsProvider(spaceId)`, watched **only while a row is expanded**.
 
-**Gating.** The section renders in exactly one of four states:
+**Row ordering** is by space name, case-insensitive, matching `SpaceLinkPickerSheet`. Names render with
+`maxLines: 1, overflow: ellipsis` for long and RTL names, matching `space_link_picker.widget.dart:72`.
 
-| Condition                                                     | Rendering                                                        |
-| ------------------------------------------------------------- | ---------------------------------------------------------------- |
-| No owner/editor space                                         | Section omitted entirely                                         |
-| Selection contains an asset the user does not own             | Header + `add_to_collection_restricted_to_space` notice, no rows |
-| Selection larger than `MAX_SPACE_ASSETS_PER_REQUEST` (50 000) | Header + `spaces_hidden_too_many_assets` notice, no rows         |
-| Otherwise                                                     | Header + one row per writable space                              |
+**Gating.** The section renders in exactly one of six states:
 
-Local-only assets do **not** count as non-owned: they will be uploaded as the current user's.
+| Condition                                                                                     | Rendering                                                     |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `sharedSpacesProvider` loading                                                                | Header + skeleton rows (reserves height, avoids layout shift) |
+| `sharedSpacesProvider` error (offline)                                                        | Section omitted — the album half of the picker still works    |
+| No writable space                                                                             | Section omitted entirely                                      |
+| Selection contains an asset the user does not own                                             | Header + `spaces_hidden_non_owned_selection` notice, no rows  |
+| Selection contains a locked-folder asset, **or** exceeds `kMaxSpaceAssetsPerRequest` (50 000) | Header + the matching notice, no rows                         |
+| Otherwise                                                                                     | Header + one row per writable space                           |
+
+- **Locked-folder assets are excluded** from every space target. Sending an asset the user deliberately
+  placed in the locked folder into a shared space would be a privacy leak.
+- Local-only assets do **not** count as non-owned: they will be uploaded as the current user's.
+- The **non-owned predicate** is a new derived selector over `multiSelectProvider`, comparing
+  `RemoteAsset.ownerId` against `currentUserProvider`. When `currentUserProvider` is null it returns
+  "contains non-owned" (fail-closed), so a logged-out edge never offers space targets.
+- `kMaxSpaceAssetsPerRequest = 50000` is a **new Dart constant** in
+  `mobile/lib/constants/collection.dart`, mirroring `shared-space.dto.ts:176` and `web/src/lib/constants.ts:85`.
+  The cap is inclusive: 50 000 is allowed, 50 001 is not. It gates only the pool path server-side, but the
+  section hides wholesale for simplicity, and that over-broadness is noted in R7.
+- **In the space sheet, the space being viewed is excluded** from its own list — adding a space's assets
+  back into itself is a no-op that would still fire an activity entry.
+
+**Re-entrancy.** Rows are disabled while an add is in flight, so a double-tap cannot dispatch twice.
 
 ### 4. `space_permissions.dart`
 
-The owner/editor predicate exists twice today — `SpaceLinkPickerSheet._canWrite` and
-`space_detail.page.dart`'s `_canEdit` / `_isOwner`. New `mobile/lib/utils/space_permissions.dart` holds one
-implementation and all three sites point at it:
+The predicate exists in **four** places today: `SpaceLinkPickerSheet._canWrite`, `space_detail.page.dart`'s
+`_canEdit` and `_isOwner`, and `space_bottom_sheet.widget.dart:38`'s `_canEdit`. New
+`mobile/lib/utils/space_permissions.dart`:
 
 ```dart
 bool spaceIsWritable(SharedSpaceResponseDto space, String? currentUserId);
 bool spaceIsOwned(SharedSpaceResponseDto space, String? currentUserId);
+bool roleIsWritable(SharedSpaceRole? role); // for space_bottom_sheet, which holds a role, not a DTO
 ```
 
-Creator-implies-owner is kept (`space.createdById == currentUserId` short-circuits), because the members
-list does not always contain the creator. `members` is `Optional`, so an absent list degrades to the
-`createdById` check rather than throwing.
+`members` is read via `isPresent` / `orElse`, never bare `.value` (correction 4).
 
-### 5. Dispatch
+**This is a deliberate behaviour change, not a pure refactor.** `space_detail.page.dart:100-121` derives
+both predicates _only_ from the separately-fetched `_members` list, with no creator short-circuit, and
+returns `false` while `_members == null`. Adopting the helper means a creator absent from the members list
+becomes an owner. That is the correct reading — `getAll` does not guarantee the creator appears as a member
+— but it changes who sees "Delete Space", so Slice 1 tests it as a change rather than claiming parity. The
+loading default stays fail-closed: while members are unknown, nothing is editable.
 
-New `actionProvider.addToSpace(ActionSource source, SharedSpaceResponseDto space)`, sitting beside
-`addToAlbum` and returning the same `ActionResult(count, success, error)`.
+### 5. Dispatch semantics
 
-Both space paths handle local assets by uploading first. **Unlike `addToAlbum`**, which links each asset as
-it lands (it must, because it also writes the local Drift junction), the space paths collect the uploaded
-remote ids and issue **one** add call at the end — otherwise `SpaceAlbumActions.addAssets` would fire its
-`syncRemote()` nudge once per photo.
+**Counts.** `addToSpace` reports the **request length**, because the endpoint returns no body (correction 1);
+this matches web. `addToSpaceAlbum` reports the **server's** `added.length`, which correctly excludes
+duplicates — so re-adding 20 assets already in an album truthfully says 0.
 
-**Failure semantics.** Selection resets **only on success**, leaving the photos selected for retry after a
-failure. This matches `addToAlbum`, which returns before its reset on the error path
-(`action.provider.dart:398-404`). A space-pool add is all-or-nothing server-side —
-`POST /shared-spaces/:id/assets` requires `AssetShare` on every id and rejects the whole request otherwise —
-so a partial-success toast would be a lie. On failure: `scaffold_body_error_occurred` and nothing else. On
-success: sync nudge, then the count toast.
+**Local assets.** Both new methods upload first, then issue **one** add call with all resulting remote ids —
+not one per asset, which would fire `SpaceAlbumActions`' `syncRemote()` nudge once per photo.
+
+**Partial upload.** `upload()` reports `successCount` and `success == successCount == total`
+(`action.provider.dart:565-640`). When some assets upload and others fail, the successful ids **are** added
+and the result is a partial: `count = uploaded + remote`, `success = false`. Dropping the successful ones
+would strand photos in the library that the user asked to file.
+
+**Selection reset.** Reset happens **only on full success**. This is a **deliberate divergence** from
+`addToAlbum`, which resets after the remote add and _before_ the upload (`action.provider.dart:404-406`) and
+so clears the selection even when the upload later fails. Retrying is the point of keeping it.
+
+**Failure.** A space-pool add is all-or-nothing server-side — `requireAccess(AssetShare)` throws unless the
+allowed set equals the requested set — so `scaffold_body_error_occurred` and no count. The space-**album**
+path is per-asset on the server and does not throw on individual denials, so it reports its true count and
+never claims more than landed.
 
 ### 6. `SpaceEditSheet`
 
 New `mobile/lib/presentation/widgets/spaces/space_edit_sheet.widget.dart` with a static
-`SpaceEditSheet.show(context, space) → Future<bool?>`, following the `SpaceLinkPickerSheet.show` precedent
-rather than adding an `auto_route` page for a three-field form.
+`SpaceEditSheet.show(context, space) → Future<bool?>`, following `SpaceLinkPickerSheet.show`.
 
 Fields mirror web's `SpaceEditModal`: **name** (required, `maxLength` 100), **description**
 (`maxLength` 500), **colour** (the ten `spaceGradientColors` swatches).
 
-- **Empty-name guard.** Save is disabled when `name.trim().isEmpty`, catching both the empty and the
-  whitespace-only case before a request that `z.string().trim().min(1)` would reject with a 400.
-- **Autofocus and select-once.** The name field autofocuses with its text selected, so typing replaces it.
-  Only on the **first** focus — otherwise tapping to place the caret mid-word would re-select everything.
+- **Empty-name guard.** Save is disabled when `name.trim().isEmpty`, catching both empty and
+  whitespace-only before a request that `z.string().trim().min(1)` would reject.
+- **In-flight guard.** Save is disabled while a save is running, so a double-tap cannot send two PATCHes.
+- **Autofocus and select-once.** The name autofocuses with its text selected; only on the **first** focus,
+  so tapping to place the caret mid-word does not re-select.
+- **Prefill longer than the cap.** A name created via API can exceed 100 chars. The field renders it in
+  full rather than truncating silently, and Save stays enabled — truncating a user's existing name because
+  they opened a sheet would be data loss. The server rejects it only if they save it unchanged, which is
+  surfaced as the normal error.
+- **Grapheme mismatch is accepted.** Flutter's `maxLength` counts UTF-16 code units while the server's
+  `z.string().max(100)` counts code points, so an emoji-heavy name can hit the client cap early. Noted, not
+  worked around — the failure mode is a stricter client, which is safe.
+- **Colour with no value.** `space.color` may be absent; the sheet defaults to `primary`, matching web's
+  `space.color ?? UserAvatarColor.Primary`. Colour cannot be unset.
+- **Dismissal mid-save.** Every post-await use of `context` is `mounted`-guarded.
 
 ### 7. `SharedSpaceApiRepository.update`
 
@@ -230,47 +273,69 @@ Future<SharedSpaceResponseDto> update(
 });
 ```
 
-Two things it must get right, both mirroring the web service:
-
-- Every `SharedSpaceUpdateDto` field is `Optional<T?>`. Unchanged fields must be `Optional.absent()`, never
-  `Optional.present(null)` — the latter clears them server-side.
-- **Description is sent only when it changed.** A space created without one stores `null`; always sending
-  `''` would clobber it on a pure rename, while omitting it when the user _did_ clear it would silently keep
-  the old text. The caller decides "changed", the repository sends verbatim.
+- `updateSpace` returns `SharedSpaceResponseDto?`; the repository uses the existing `checkNull` helper, as
+  every sibling method does, so a null body throws rather than propagating.
+- Unchanged fields are `Optional.absent()`. `Optional.present(null)` must never be sent — it is a **400**,
+  not a clear (correction 3).
+- The four fields this design never touches — `faceRecognitionEnabled`, `petsEnabled`, `thumbnailAssetId`,
+  `thumbnailCropY` — must stay `Optional.absent()`. A stray `present(null)` on `faceRecognitionEnabled`
+  would 400; a stray `present(false)` would silently disable face recognition for the whole space on every
+  rename. Tested explicitly.
+- **Description is sent only when it changed.** The caller decides "changed"; the repository sends verbatim.
+  `''` clears it server-side; absent leaves it.
+- `name` is trimmed before sending. `description` is **not** trimmed — a user may legitimately want
+  trailing structure, and the server does not trim it either.
 
 ### 8. Entry points and RBAC
-
-Naming and appearance are Editor-level server-side, but mobile's kebab is owner-gated today, so editors see
-no kebab at all. Both entry points use `space_permissions.dart`:
 
 |              | Viewer | Editor | Owner |
 | ------------ | ------ | ------ | ----- |
 | Edit space   | —      | ✅     | ✅    |
 | Delete space | —      | —      | ✅    |
 
-- **Space detail kebab** — gate flips from `_isOwner` to `_canEdit`, gaining "Edit space"; "Delete Space"
-  stays owner-only _inside_ the menu.
-- **Space card long-press** — `SpaceCard` gains `onLongPress`, opening a compact sheet with the same two
-  role-gated items. A viewer long-pressing gets no sheet, since every item would be hidden.
+**Extraction first.** `space_detail.page.dart` is 480 lines, is an `@RoutePage()` `ConsumerStatefulWidget`
+that loads network metadata and members, mounts a Drift-backed `Timeline` and a `SpaceBottomSheet`, and has
+**no test at all** today. Its kebab is therefore extracted into
+`mobile/lib/presentation/widgets/spaces/space_detail_kebab.widget.dart` as
+`SpaceDetailKebab({required bool canEdit, required bool canDelete, required onEdit, required onDelete})`,
+exactly mirroring the existing `SpaceAlbumKebab`. This is what makes the RBAC table testable without
+pumping the page.
 
-**After a successful save**, invalidate `sharedSpacesProvider` and `sharedSpaceProvider(id)`, then fire the
-`backgroundSyncProvider.syncRemote()` nudge every other space mutation already uses. The Drift
-`shared_space_entity` stores `name`, `description` and `color` locally
-(`shared_space.entity.dart:16-20`), so without the nudge the local row keeps the old name and the space
-timeline's app bar stays stale until the next app start.
+- **Space detail kebab** — gate flips from `_isOwner` to `canEdit`; "Delete Space" stays owner-only inside
+  the menu. While `_space` or `_members` is still loading, no kebab renders.
+- **Space card long-press** — `SpaceCard` gains `onLongPress` alongside its existing
+  `GestureDetector(onTap:)` (`space_card.dart:16`); the long-press must **not** also fire `onTap` and
+  navigate into the space behind the sheet. A viewer's long-press opens nothing.
+- Delete from the card sheet reuses `spaces_delete_confirmation`, like the kebab path.
+
+**After a successful save** (correction 2): invalidate `sharedSpacesProvider` so the grid re-renders, and
+call the page's existing `_refreshSpaceMetadata()` so the app bar title updates. **No sync nudge** — nothing
+reads the Drift name column for display, so it would be cargo cult.
 
 ### 9. Surfaces
 
-`CollectionPicker` is mounted in two bottom sheets:
-
-- **`general_bottom_sheet.widget.dart`** — main timeline multi-select. Replaces the `AlbumSelector` sliver.
-- **`space_bottom_sheet.widget.dart`** — space timeline multi-select, which today offers only
-  share / download / favourite / remove-from-space. Gains the picker's slivers.
+- **`general_bottom_sheet.widget.dart`** (upstream) — two-line diff, per §1.
+- **`space_bottom_sheet.widget.dart`** (fork-only) — gains a `slivers:` argument. Its
+  `maxChildSize` is **0.55** today (`:49`), which would leave the spaces section permanently below the fold;
+  it is raised to 0.85 to match `GeneralBottomSheet`, and a test pins that the section is reachable.
 
 ## Implementation slices
 
 Test-first throughout: write the failing test, confirm it fails for the right reason, then implement.
-Each slice is independently landable and leaves the tree green.
+
+**Standing rule for every slice:** the slice is not done until the **whole** mobile suite is green
+(`flutter test`), plus `dart analyze --fatal-infos lib test` and `dart format --set-exit-if-changed`. This
+is what "leaves the tree green" means.
+
+**Test locations follow the repo's actual convention**, verified against the tree: widgets under
+`lib/presentation/widgets/**` are tested under `mobile/test/presentation/widgets/**` (e.g.
+`mobile/test/presentation/widgets/spaces/space_album_bottom_sheet_test.dart`); providers under
+`mobile/test/providers/infrastructure/`; repositories under `mobile/test/repositories/`; pure helpers under
+`mobile/test/utils/` (**not** `utils_legacy/`). `mobile/test/widgets/` holds only `backup/`, `common/` and
+`settings/` and is **not** used here.
+
+Where a widget shows a still-running spinner, use `pumpConsumerWidgetRaw` — the fork added it precisely
+because `pumpConsumerWidget` calls `pumpAndSettle()` and would hang.
 
 Dependency order: 1 → {2 → 3 → 4} and 1 → {5 → 6 → 7} → 8.
 
@@ -278,24 +343,30 @@ Dependency order: 1 → {2 → 3 → 4} and 1 → {5 → 6 → 7} → 8.
 
 ### Slice 1 — `space_permissions.dart`
 
-**Goal.** One implementation of the writable/owned predicates; three call sites repointed.
+**Goal.** One implementation of the role predicates; four call sites repointed.
 
-**Files.** New `mobile/lib/utils/space_permissions.dart`. New
-`mobile/test/utils/space_permissions_test.dart`. Edit `space_link_picker.widget.dart` and
-`space_detail.page.dart` to delegate.
+**Files.** New `mobile/lib/utils/space_permissions.dart`, new `mobile/test/utils/space_permissions_test.dart`.
+Edit `space_link_picker.widget.dart`, `space_detail.page.dart`, `space_bottom_sheet.widget.dart`.
 
 **Tests first (BDD).**
 
-- Given a space whose `createdById` is me and whose members list omits me, when I ask if it is writable,
-  then it is — and it is also owned.
-- Given I am a member with role `owner` / `editor`, then writable is true.
-- Given I am a member with role `viewer`, then writable is false and owned is false.
-- Given I am not a member and did not create it, then both are false.
-- Given `members` is `Optional.absent()`, then it falls back to the `createdById` check and does not throw.
-- Given `currentUserId` is null (logged out), then both are false, even for a space with a matching creator id.
+- Given a space whose `createdById` is me and whose members list omits me, then it is writable and owned.
+- Given I am a member with role `owner` but am **not** the creator, then it is writable **and owned** — the
+  Delete gating in Slice 4 depends on this.
+- Given I am a member with role `editor`, then writable is true and owned is false.
+- Given I am a member with role `viewer`, then both are false.
+- Given I am neither member nor creator, then both are false.
+- Given `members` is `Optional.absent()`, then the creator check still decides and **nothing throws** —
+  `Optional.value` raises `StateError` on absent, so this pins the `isPresent`/`orElse` access.
+- Given `members` is `Optional.present(null)`, then it behaves as an empty list.
+- Given duplicate membership rows for my user id, then the first is used deterministically.
+- Given `currentUserId` is null, then both are false even when `createdById` is also null.
+- Given I created the space but my member row says `viewer` (ownership transferred), then the creator
+  short-circuit wins — pinned so the precedence is a decision, not an accident.
+- Given `roleIsWritable`, then owner and editor are true, viewer and null are false.
 
-**Done when.** Both predicates are pure, `SpaceLinkPickerSheet._canWrite` and `space_detail.page.dart`'s
-`_canEdit` / `_isOwner` are gone in favour of the helper, and behaviour on those two screens is unchanged.
+**Done when.** All four call sites delegate; the two behaviour changes at `space_detail.page.dart`
+(creator-implies-owner, and fail-closed while members load) each have a test asserting the **new** result.
 
 ---
 
@@ -305,21 +376,23 @@ Dependency order: 1 → {2 → 3 → 4} and 1 → {5 → 6 → 7} → 8.
 
 **Files.** Edit `mobile/lib/repositories/shared_space_api.repository.dart`. New
 `mobile/test/repositories/shared_space_api_repository_test.dart` — no test file exists for this repository
-today, so it is created here alongside the siblings in `mobile/test/repositories/`.
+today; it follows the mocktail-over-`SharedSpacesApi` pattern of `person_api_repository_test.dart`.
 
 **Tests first (BDD).**
 
-- Given only a new name, when update is called, then the DTO carries `Optional.present(name)` and
-  `Optional.absent()` for description and colour.
-- Given a description changed from text to `''`, then the DTO carries `Optional.present('')` — the clobber
-  regression this design calls out.
+- Given only a new name, then the DTO carries `Optional.present(name)` and `absent()` for the rest.
+- Given a description changed from text to `''`, then `Optional.present('')` — the clobber regression.
 - Given a description changed from `null` to text, then `Optional.present(text)`.
-- Given description is not passed at all, then `Optional.absent()` — **never** `Optional.present(null)`.
-- Given a colour change, then `Optional.present(color)`.
-- Given a name with surrounding whitespace, then it is trimmed before sending.
-- Given the API throws, then the exception propagates to the caller unchanged.
-
-**Done when.** The method exists, is covered, and no other field of the DTO is ever populated.
+- Given description is not passed, then `Optional.absent()` — **never** `Optional.present(null)`, which the
+  non-nullable zod schema rejects with a 400.
+- Given any call, then `faceRecognitionEnabled`, `petsEnabled`, `thumbnailAssetId` and `thumbnailCropY` are
+  all `Optional.absent()` — the silent-disable guard.
+- Given a name with surrounding whitespace, then it is trimmed; given a description with whitespace, then it
+  is **not**.
+- Given the API returns `null` (empty body), then it throws, matching every sibling repository method.
+- Given the API throws, then the exception propagates unchanged.
+- Given the endpoint is resolved lazily, then a client swapped after first read is picked up — mirroring
+  `test/repositories/api_repository_lazy_resolution_test.dart`.
 
 ---
 
@@ -328,76 +401,94 @@ today, so it is created here alongside the siblings in `mobile/test/repositories
 **Goal.** The three-field form, with validation, in isolation from its entry points.
 
 **Files.** New `mobile/lib/presentation/widgets/spaces/space_edit_sheet.widget.dart`. New
-`mobile/test/widgets/spaces/space_edit_sheet_test.dart`.
+`mobile/test/presentation/widgets/spaces/space_edit_sheet_test.dart`.
 
 **Tests first (BDD).**
 
-- Given a space, when the sheet opens, then name, description and colour are prefilled from it.
-- Given an empty name, then Save is disabled.
-- Given a whitespace-only name `"   "`, then Save is disabled — the case a `required` flag would let through.
-- Given the sheet just opened, then the name field is focused with its text selected; and given the user
-  taps the field again, then the selection is **not** reapplied.
-- Given name and description fields, then they enforce `maxLength` 100 and 500.
-- Given only the name was edited, when saved, then the repository is called **without** a description.
-- Given the description was cleared, when saved, then the repository is called with `''`.
-- Given the user taps a colour swatch, then the selection moves and is sent on save.
-- Given the save succeeds, then the sheet resolves `true`.
-- Given the save throws, then the sheet stays open, resolves nothing, and shows
+- Given a space, then name, description and colour are prefilled.
+- Given a space whose `color` is absent, then `primary` is preselected.
+- Given an empty name, then Save is disabled; given `"   "`, then Save is disabled.
+- Given the sheet just opened, then the name is focused with its text selected; and given the user taps the
+  field again (via `tester.tapAt` with an offset, not `tester.tap`), then the selection is not reapplied.
+- Given 150 characters are pasted into the name, then only 100 remain in the field; likewise 500 for the
+  description.
+- Given a prefilled name of 120 characters, then it renders in full and Save stays enabled — no silent
+  truncation of existing data.
+- Given only the name was edited, then `update` is called **without** a description.
+- Given the description was cleared, then `update` is called with `''`.
+- Given nothing was edited and Save is tapped, then `update` is called with all fields absent and the sheet
+  closes — a no-op save is not an error.
+- Given Save is tapped twice in quick succession, then `update` is called **exactly once**.
+- Given the sheet is dismissed while a save is in flight, then no pop or toast is attempted and nothing
+  throws — the `context.mounted` guard.
+- Given the save fails with a 403 (role revoked mid-edit), then the sheet stays open and shows
   `errors.unable_to_update_space`.
-- Given the user cancels, then no repository call is made and it resolves `null`.
-
-**Done when.** The sheet is fully covered and not yet reachable from any screen.
+- Given the save succeeds, then it resolves `true`; given cancel, then `null` and no call.
+- Given the colour swatches, then each carries a `Semantics` label naming its colour — ten unlabelled
+  colour-only targets are unusable by a screen reader — and each meets the minimum tap target, asserted with
+  the existing `expectTapTargetMin` helper in `mobile/test/widget_tester_extensions.dart`.
 
 ---
 
-### Slice 4 — Edit entry points
+### Slice 4 — `SpaceDetailKebab` extraction and entry points
 
-**Goal.** Make the sheet reachable, and fix the editors-see-no-kebab bug.
+**Goal.** Make the sheet reachable and fix the editors-see-no-kebab bug, with the RBAC testable.
 
-**Files.** Edit `space_detail.page.dart` (kebab regate) and `mobile/lib/widgets/spaces/space_card.dart`
-(`onLongPress`). New compact role-gated sheet for the card. Tests in
-`mobile/test/pages/spaces/space_detail_kebab_test.dart` and `mobile/test/widgets/spaces/space_card_test.dart`.
+**Files.** New `mobile/lib/presentation/widgets/spaces/space_detail_kebab.widget.dart` (extraction). Edit
+`space_detail.page.dart` to use it; edit `mobile/lib/widgets/spaces/space_card.dart` for `onLongPress` plus
+its role-gated sheet. New `mobile/test/presentation/widgets/spaces/space_detail_kebab_test.dart` and
+`mobile/test/widgets/spaces/space_card_test.dart`.
 
 **Tests first (BDD).**
 
-- Given I am the owner, then the kebab shows "Edit space" and "Delete Space".
-- Given I am an editor, then the kebab shows "Edit space" but **not** "Delete Space" — the regression fix.
-- Given I am a viewer, then no kebab renders at all.
-- Given I long-press a space card as owner, then a sheet offers Edit and Delete.
-- Given I long-press as an editor, then it offers Edit only.
-- Given I long-press as a viewer, then no sheet opens.
-- Given a save returns `true`, then `sharedSpacesProvider` and `sharedSpaceProvider(id)` are invalidated and
-  `syncRemote()` is called exactly once.
-- Given a save returns `null` (cancelled), then nothing is invalidated and no sync nudge fires.
-
-**Done when.** Editing works end to end from both entry points, and the RBAC table in §8 is pinned by tests.
+- Given `canEdit && canDelete`, then the kebab shows `spaces_edit` and `spaces_delete`.
+- Given `canEdit && !canDelete` (editor), then it shows `spaces_edit` only — the regression fix.
+- Given `!canEdit`, then no kebab renders at all.
+- Given metadata is still loading, then no kebab renders (fail-closed).
+- Given a long-press on a space card as owner, then a sheet offers Edit and Delete **and no navigation
+  occurs** — the `onTap`-must-not-also-fire guard.
+- Given a long-press as editor, then Edit only; as viewer, then no sheet opens.
+- Given Delete is chosen from the card sheet, then `spaces_delete_confirmation` is shown first.
+- Given a save resolves `true`, then `sharedSpacesProvider` is invalidated and the space metadata is
+  re-fetched, and the observable outcome is that **the app bar shows the new name**.
+- Given a save resolves `null`, then nothing is invalidated and no re-fetch occurs.
+- Given the space was deleted by another member mid-flow, then the edit surfaces the error and does not
+  crash on the missing space.
 
 ---
 
 ### Slice 5 — `CollectionTarget` and dispatch
 
-**Goal.** The routing table, tested without any UI.
+**Goal.** The routing table, tested at the provider level.
 
-**Files.** New `mobile/lib/domain/models/collection_target.dart`. Edit
-`mobile/lib/providers/infrastructure/action.provider.dart` (add `addToSpace`). New
-`mobile/test/providers/collection_dispatch_test.dart`.
+**Files.** New `mobile/lib/domain/models/collection_target.dart`, new
+`mobile/lib/constants/collection.dart` (`kMaxSpaceAssetsPerRequest`). Edit `action.provider.dart` to add
+`addToSpace` and `addToSpaceAlbum`. New `mobile/test/providers/infrastructure/collection_dispatch_test.dart`,
+following the `ProviderContainer` + `overrideWithValue` pattern of
+`test/providers/infrastructure/space_album_actions_test.dart`.
 
 **Tests first (BDD).**
 
-- Given an `AlbumTarget`, then `addToAlbum` is called and neither space path is touched.
-- Given a `SpacePoolTarget` with remote-only assets, then `SharedSpaceApiRepository.addAssets` is called
-  once with every id.
-- Given a `SpaceAlbumTarget`, then `SpaceAlbumActions.addAssets` is called and **`addToAlbum` is never
-  called** — the absorbed-album foreign-key guard.
+- Given an `AlbumTarget`, then `addToAlbum` runs and neither space path is touched.
+- Given a `SpacePoolTarget` with remote-only assets, then `addAssets` is called **once** with every id.
+- Given a `SpaceAlbumTarget`, then `SpaceAlbumActions.addAssets` runs and **`addToAlbum` is never called** —
+  the absorbed-album FK guard (R4).
+- Given a `SpacePoolTarget`, then the reported count is the **request length**, because the endpoint returns
+  no body; given a `SpaceAlbumTarget`, then it is the **server's** `added.length`.
+- Given a space-album add where every asset is already present, then the count is 0 and the result is a
+  success — no "added 20" lie.
 - Given a space target with local assets, then upload runs first and the add call is made **exactly once**
-  with all resulting remote ids — not once per asset.
-- Given an empty selection, then no API call is made and the result is a success with count 0.
-- Given the upload fails, then no add call is made and the result is a failure.
-- Given the add call throws, then the result is a failure **and the selection is not reset**.
-- Given the add succeeds, then the selection is reset, `syncRemote()` fires, and the count comes from the
-  server response rather than the request length.
-
-**Done when.** Every row of the §2 dispatch table is covered, including the two never-call assertions.
+  with all resulting remote ids.
+- Given an upload where 3 of 5 assets succeed, then those 3 **are** added and the result is
+  `count == 3, success == false` — successful uploads are never stranded.
+- Given the upload is cancelled, then no add call is made.
+- Given an empty selection, then no API call and a success with count 0.
+- Given the add throws, then the result is a failure **and the selection is not reset**.
+- Given full success, then the selection is reset for `ActionSource.timeline`, and the reset is asserted for
+  both the main and space sheets since both pass `timeline`.
+- Given a `SpaceAlbumTarget` add succeeds, then `spaceAlbumsProvider(spaceId)` is invalidated — which is
+  what `SpaceAlbumTarget.spaceId` is for.
+- Given a second target is tapped while the first add is in flight, then the second is ignored.
 
 ---
 
@@ -405,95 +496,137 @@ today, so it is created here alongside the siblings in `mobile/test/repositories
 
 **Goal.** The spaces half of the picker, in isolation.
 
-**Files.** New `mobile/lib/presentation/widgets/collection/space_collection_section.widget.dart`. New
-`mobile/test/widgets/collection/space_collection_section_test.dart`.
+**Files.** New `mobile/lib/presentation/widgets/collection/space_collection_section.widget.dart`, plus the
+non-owned selector. New `mobile/test/presentation/widgets/collection/space_collection_section_test.dart`.
 
-**Tests first (BDD).**
+**Tests first (BDD).** One per row of the §3 gating table, plus:
 
-- Given no writable spaces, then the section renders nothing at all — not an empty header.
-- Given a mix of writable and viewer-only spaces, then only the writable ones are listed.
-- Given a space with linked albums, when I tap its row, then it expands to show the `add_to_space` pool child
-  followed by each album; tapping again collapses it.
-- Given a space with **no** linked albums, then it renders as a plain row and a single tap emits a
-  `SpacePoolTarget`.
-- Given a collapsed space, then `spaceAlbumsProvider` for it is never watched.
-- Given an expanded space whose album stream is still loading, then a loading affordance shows and the pool
-  child remains tappable.
-- Given an expanded space whose album stream errors, then the pool child still works and the album list
-  shows an error rather than taking the section down.
-- Given the selection contains a non-owned asset, then no space rows render and the restricted notice shows.
-- Given the selection exceeds 50 000 assets, then no space rows render and `spaces_hidden_too_many_assets`
-  shows.
-- Given `sharedSpacesProvider` fails (offline), then the section hides rather than surfacing an error into
-  a sheet whose album half still works.
-- Given a tap on an album child, then a `SpaceAlbumTarget` carrying the **owning space's id** is emitted.
-
-**Done when.** All four gating states from §3 and both row behaviours are covered.
+- Given no writable spaces, then nothing renders — not an empty header.
+- Given writable and viewer-only spaces, then only the writable ones list, ordered by name.
+- Given `sharedSpacesProvider` is loading, then skeleton rows render (pumped with `pumpConsumerWidgetRaw`).
+- Given `sharedSpacesProvider` errors, then the section hides and the album half still renders.
+- Given `albumCount > 0`, when I tap the row, then it expands to the pool child followed by each album;
+  tapping again collapses it.
+- Given `albumCount == 0`, then the row is plain and one tap emits `SpacePoolTarget`.
+- Given `albumCount > 0` but the Drift stream is empty, then the empty-albums hint shows and the pool child
+  still works.
+- Given a collapsed row, then no Drift query is issued for it.
+- Given a second row is expanded, then the first collapses and its subscription is released.
+- Given a double-tap on a plain row, then exactly one `SpacePoolTarget` is emitted.
+- Given an add is in flight, then rows are disabled.
+- Given a tap on an album child, then a `SpaceAlbumTarget` carrying the owning space's id is emitted.
+- Given a selection containing a non-owned asset, then the `spaces_hidden_non_owned_selection` notice shows
+  and no rows render.
+- Given `currentUserProvider` is null, then the section behaves as "contains non-owned" (fail-closed).
+- Given a selection containing a locked-folder asset, then no rows render.
+- Given a selection of exactly 50 000, then rows render; given 50 001, then the
+  `spaces_hidden_too_many_assets` notice shows — both boundaries.
+- Given the space sheet for space X, then X is absent from its own list.
+- Given a very long or RTL space name, then it ellipsises on one line.
+- Given a space row, then it exposes `Semantics(button: true)` with its expanded/collapsed state announced,
+  and children meet the minimum tap target.
 
 ---
 
-### Slice 7 — `CollectionPicker` and the two sheets
+### Slice 7 — `CollectionPicker`, header, and the two sheets
 
 **Goal.** Compose and mount, without regressing the album flow.
 
-**Files.** New `mobile/lib/presentation/widgets/collection/collection_picker.widget.dart`. A one-line swap in
-the upstream `general_bottom_sheet.widget.dart` (`AlbumSelector` → `CollectionPicker`). A slightly larger edit
-to the fork-only `space_bottom_sheet.widget.dart`, which passes no `slivers:` today and so gains that argument
-plus the `AddToAlbumHeader`/picker pair — still small, and unconstrained by rebase risk. New
-`mobile/test/widgets/collection/collection_picker_test.dart` plus additions to the two sheet tests.
+**Files.** New `collection_picker.widget.dart` and `collection_picker_header.widget.dart`. Two-line diff to
+the upstream `general_bottom_sheet.widget.dart`; `slivers:` plus `maxChildSize` 0.55 → 0.85 in the fork-only
+`space_bottom_sheet.widget.dart`. New
+`mobile/test/presentation/widgets/collection/collection_picker_test.dart` plus additions to the two sheet
+tests.
 
 **Tests first (BDD).**
 
-- Given the picker, then it renders the album selector above the spaces section.
-- Given an album row is tapped, then the existing add-to-album behaviour runs unchanged — the regression guard.
+- Given the picker, then the header reads `add_to_album_or_space`, above the album selector, above the
+  spaces section — the header being new is what makes that string reachable at all (correction 5).
+- Given an album row is tapped, then the existing add-to-album behaviour runs unchanged.
 - Given the album search, sort, quick-filter and grid/list controls, then they all still work.
-- Given the keyboard-expand callback, then it is still threaded through to the album selector.
-- Given the main timeline sheet, then it mounts the picker and spaces are offered.
-- Given the space timeline sheet, then it mounts the picker alongside the existing
-  share / download / favourite / remove-from-space actions.
-- Given `AlbumSelector`, then its file is unchanged in this diff — asserted by review, not by test.
-
-**Done when.** Both sheets offer all three target kinds and the album path is provably untouched.
+- Given the keyboard-expand callback, then it is still threaded to the album selector, and the spaces
+  section is not left behind the IME.
+- Given the space sheet at its default extent, then the spaces section is reachable by dragging to
+  `maxChildSize` — the 0.55 regression guard.
+- Given the space sheet, then the picker sits alongside share / download / favourite / remove-from-space.
+- Given a viewer on the space sheet, then the album half renders and the spaces section does not.
+- Given `AlbumSelector`, then `git diff` reports its file unchanged — a `Done when` command, not a test.
 
 ---
 
 ### Slice 8 — i18n, toasts and gates
 
-**Goal.** Ship-quality strings and a green CI.
+**Goal.** Ship-quality strings, fully translated, and a green CI.
 
-**Files.** No `i18n/en.json` change — every key is already present (see the table in "What already exists").
-Keying of the hardcoded English on the two surfaces this work touched: the space detail kebab and the space
-card.
+**One new key is required.** The reused `add_to_collection_restricted_to_space` reads "…so only albums in
+this space can accept them", which is **web's contribution-mode message**: it promises a destination that
+mobile deliberately does not offer (R1). Using it would tell the user to look for something that is not on
+screen. So a new key is added — and, per the fork rule that a new key must not ship untranslated, **with all
+nine translations in the same commit**:
+
+| Locale    | `spaces_hidden_non_owned_selection`                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------------------- |
+| `en`      | Your selection includes photos owned by other members, so it can't be added to a space.                         |
+| `de`      | Deine Auswahl enthält Fotos anderer Mitglieder und kann daher nicht zu einem Space hinzugefügt werden.          |
+| `fr`      | Votre sélection contient des photos appartenant à d'autres membres ; elle ne peut pas être ajoutée à un espace. |
+| `it`      | La tua selezione include foto di altri membri, quindi non può essere aggiunta a uno Space.                      |
+| `es`      | Tu selección incluye fotos de otros miembros, por lo que no se puede añadir a un Space.                         |
+| `nl`      | Je selectie bevat foto's van andere leden en kan daarom niet aan een Space worden toegevoegd.                   |
+| `pl`      | Twój wybór zawiera zdjęcia należące do innych członków, więc nie można go dodać do Space.                       |
+| `ru`      | Ваш выбор содержит фотографии других участников, поэтому его нельзя добавить в Space.                           |
+| `zh_Hans` | 您的选择包含其他成员的照片，因此无法添加到 Space。                                                              |
+| `zh_Hant` | 您的選擇包含其他成員的照片，因此無法新增至 Space。                                                              |
+
+Terminology matches each locale's existing Spaces strings: "Space" stays untranslated everywhere except
+French, which uses "espace" (cf. the existing `add_to_space` values).
+
+**Every other key already exists and is already translated** in all nine locales, verified by value on
+2026-07-26: `add_to_album_or_space`, `add_to_space`, `spaces_hidden_too_many_assets`, `added_to_space_count`,
+`space_album_add_photos_success`, `spaces_edit`, `spaces_edit_success`, `errors.unable_to_update_space`,
+`spaces_delete`, `spaces_delete_confirmation`, `name`, `description`, `color`.
+
+`spaces_no_writable_spaces` is deliberately **not** used: web shows it as an empty state, whereas this design
+omits the whole section when there is nothing writable (§3).
+
+**Files.** `i18n/en.json` plus the nine locale files, for the one new key only. Keying of the hardcoded
+English on the two surfaces this work touches: the space detail kebab and the space card sheet.
 
 **Tests first (BDD).**
 
-- Given a successful add of N photos to a space, then `added_to_space_count` shows with the server's count.
-- Given a successful add to a space album, then `space_album_add_photos_success` shows with the server's count.
-  Neither toast names the destination, because neither existing key takes a name argument and adding one would
-  ship an untranslated string into seven locales for marginal gain.
+- Given a successful pool add of N photos, then `added_to_space_count` shows with N (the request length).
+- Given a successful space-album add, then `space_album_add_photos_success` shows the server's count.
+- Given a count of 1, then the singular plural form renders; and given `ru` and `pl` — both of which have
+  three plural forms and are both in the committed locale set — then the correct form is selected.
 - Given a failed add, then `scaffold_body_error_occurred` shows and no count is claimed.
-- Given every new widget, then no user-visible literal English string remains.
-- Given the space detail kebab and the space card sheet, then the delete items render `spaces_delete` and
+- Given the space detail kebab and card sheet, then delete renders `spaces_delete` /
   `spaces_delete_confirmation` rather than hardcoded English.
-- Given the whole diff, then **no file under `i18n/` is modified at all** — the guard against quietly
-  inventing a key, which would ship untranslated text into the nine locales this design commits to.
 
-**Done when.** `dart analyze --fatal-infos lib test` and `dart format --set-exit-if-changed` both pass, and
-`flutter test` is green.
+**Done when.** All of these commands pass:
+
+```bash
+dart analyze --fatal-infos lib test
+dart format --set-exit-if-changed .
+flutter test
+# exactly one key added, in exactly ten files, and nothing else under i18n/ changed:
+git diff --stat origin/main -- ../i18n/ | tail -1
+git diff origin/main -- ../lib/presentation/widgets/album/album_selector.widget.dart   # must be empty
+```
 
 Strings left hardcoded elsewhere in mobile Spaces — "Create Space", "Add Photos", "Remove from space",
-"Members", "Space deleted", the spaces empty state — are **out of scope** and recorded as a follow-up rather
-than swept up here.
+"Members", "Space deleted", the spaces empty state — are **out of scope** and recorded as a follow-up.
+
+**Convention note.** Sibling widget tests in this repo assert English literals
+(`find.text('Show in timeline')`, `space_album_kebab_test.dart:79`). New tests follow that convention and
+assert the rendered English; the "no hardcoded English" requirement is about `lib/`, not `test/`.
 
 ## Running the tests
 
-Per the repo's mobile notes: Flutter **3.41.7** (the pinned SDK — `mise.toml` may symlink an older patch).
-From `mobile/`:
+Flutter **3.41.7** (the pinned SDK — `mise.toml` may symlink an older patch). From `mobile/`:
 
 ```bash
 flutter pub get
 dart run easy_localization:generate -S ../i18n && dart run bin/generate_keys.dart
-flutter test test/...
+flutter test
 ```
 
 Drift and OpenAPI generated code is committed, so `build_runner` is not needed. CI runs **two** Dart gates:
@@ -503,34 +636,42 @@ Drift and OpenAPI generated code is committed, so `build_runner` is not needed. 
 ## Risks
 
 **R1 — Contribution-mode parity gap with web.** `2026-07-25-space-add-to-collection-design.md` lets a space
-Owner/Editor contribute _other members'_ photos into albums linked to that space. Mobile deliberately does
+Owner/Editor contribute other members' photos into albums linked to that space. Mobile deliberately does
 not: when the selection contains a non-owned asset, space targets are hidden behind a notice. This is an
-informed deferral, not an oversight — mobile has zero contribution plumbing today, and the honest-notice
-behaviour is strictly better than the alternative failure, where
+informed deferral — mobile has zero contribution plumbing, and the honest notice beats the alternative, where
 `POST /shared-spaces/:id/assets` rejects the entire batch over one non-owned id and the user gets nothing
-added plus a vague error. Closing the gap is a follow-up slice that would port `restrictToSpaceId`.
+plus a vague error. It is also why Slice 8 mints a new string rather than reusing web's, which describes a
+capability mobile does not have.
 
 **R2 — The spaces section is network-backed while albums are local-first.** `sharedSpacesProvider` calls
-`getAll()`, so offline the section hides while the album half of the picker keeps working. Acceptable
-because the section is purely additive, but it means the picker's contents differ online and offline.
-Expansion is unaffected — linked albums come from Drift.
+`getAll()`, so offline the section hides while the album half keeps working. Acceptable because the section
+is additive, but the picker's contents differ online and offline. Expansion is unaffected — linked albums
+come from Drift.
 
-**R3 — One upstream file is touched.** `general_bottom_sheet.widget.dart` is pure upstream and takes a
-one-line diff swapping `AlbumSelector` for `CollectionPicker`. `space_bottom_sheet.widget.dart` is
-**fork-only** (it exists solely in the squashed fork commit `e0950535c36`) and so may be edited freely.
-`album_selector.widget.dart` is upstream and is not touched at all. Any temptation to grow the
-`general_bottom_sheet` edit into a refactor should be resisted — it converts a trivial rebase into a
-conflicting one.
+**R3 — One upstream file is touched.** `general_bottom_sheet.widget.dart`, two lines.
+`album_selector.widget.dart` is upstream and untouched — pinned by a `git diff` check in Slice 8's Done-when.
+`space_bottom_sheet.widget.dart` is fork-only and unconstrained.
 
 **R4 — The absorbed-album foreign-key trap.** Routing a `SpaceAlbumTarget` through `addToAlbum` throws on an
-absorbed album. This is exactly the sort of thing a well-meaning "unify the two add paths" refactor would
-reintroduce, so Slice 5 pins it with an explicit never-called assertion rather than relying on the comment
-at `space_album_actions.dart:56`.
+absorbed album. Exactly what a well-meaning "unify the two add paths" refactor would reintroduce, so Slice 5
+pins it with an explicit never-called assertion rather than relying on the comment at
+`space_album_actions.dart:57`.
 
-**R5 — Rename staleness in Drift.** The local `shared_space_entity` caches `name`, so a rename without the
-`syncRemote()` nudge leaves the space timeline's app bar showing the old name until the next app start.
-Slice 4 tests the nudge fires exactly once.
+**R5 — Rename freshness depends on a re-fetch, not on sync.** The obvious-looking fix (invalidate
+`sharedSpaceProvider`, nudge `syncRemote()`) is a **no-op**: that provider has no consumers, and no display
+code reads the Drift name column. Slice 4 asserts the observable — the app bar shows the new name — rather
+than the mechanism, so a future refactor of how the page loads metadata cannot silently break it.
 
-**R6 — One extra tap to reach a space pool.** Spaces with linked albums need expand-then-tap. Chosen
-deliberately for safety on a shared surface (§3). If it proves annoying in use, the fix is a trailing
-"add here" affordance on the space row itself, not making the whole row tap-to-add.
+**R6 — `space_permissions` changes gating on an untested page.** Adopting the shared helper makes a
+creator-not-in-members an owner on `space_detail.page.dart`, where today they are not. That is the correct
+reading, but it changes who sees "Delete Space" on a page with no test coverage. Slice 1 pins the new
+behaviour and Slice 4's extraction gives the page its first tests.
+
+**R7 — The 50 000 cap is applied more broadly than the server requires.** The cap is real only for the pool
+endpoint; `PUT /albums/{id}/assets` has no such max. Hiding the whole section — including album children —
+above 50 000 is therefore over-broad. Accepted for simplicity: a >50 000 selection is already pathological
+on a phone, and the alternative is a per-row gate whose rules the user cannot see.
+
+**R8 — One extra tap to reach a space pool.** Spaces with linked albums need expand-then-tap. Chosen for
+safety on a shared surface (§3). If it proves annoying, the fix is a trailing "add here" affordance on the
+row, not making the whole row tap-to-add.
