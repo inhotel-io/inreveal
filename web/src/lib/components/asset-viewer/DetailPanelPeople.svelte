@@ -6,6 +6,7 @@
   import { faceManager } from '$lib/stores/face.svelte';
   import { locale } from '$lib/stores/preferences.store';
   import { createUrl, getAssetUrls, getPeopleThumbnailUrl } from '$lib/utils';
+  import { getPetSpeciesI18nKey } from '$lib/utils/pet-species';
   import { zoomImageToBase64 } from '$lib/utils/people-utils';
   import { type AssetResponseDto } from '@immich/sdk';
   import { Icon, IconButton, Text } from '@immich/ui';
@@ -184,10 +185,13 @@
             />
           {/if}
           {#if person.type === 'pet'}
+            {@const petSpeciesLabel = person.species ? $t(getPetSpeciesI18nKey(person.species)) : undefined}
             <div
               class="absolute bottom-1 right-1 rounded-full bg-immich-primary p-1 text-white"
               data-testid="pet-badge"
-              title={person.species ?? undefined}
+              role="img"
+              aria-label={petSpeciesLabel}
+              title={petSpeciesLabel}
             >
               <Icon icon={mdiPaw} size="16" class="text-white" />
             </div>
