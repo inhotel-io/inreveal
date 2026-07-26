@@ -44,6 +44,12 @@ class JobName {
   static const facialRecognition = JobName._(r'FacialRecognition');
   static const faceIdentityBackfill = JobName._(r'FaceIdentityBackfill');
   static const faceIdentityMaintenanceAfterRecognition = JobName._(r'FaceIdentityMaintenanceAfterRecognition');
+  static const faceRepairScan = JobName._(r'FaceRepairScan');
+  static const faceSuggestionMaintenance = JobName._(r'FaceSuggestionMaintenance');
+  static const personSuggestionScanQueueAll = JobName._(r'PersonSuggestionScanQueueAll');
+  static const personSuggestionScan = JobName._(r'PersonSuggestionScan');
+  static const spacePersonSuggestionScanQueueAll = JobName._(r'SpacePersonSuggestionScanQueueAll');
+  static const spacePersonSuggestionScan = JobName._(r'SpacePersonSuggestionScan');
   static const fileDelete = JobName._(r'FileDelete');
   static const fileMigrationQueueAll = JobName._(r'FileMigrationQueueAll');
   static const libraryDeleteCheck = JobName._(r'LibraryDeleteCheck');
@@ -134,6 +140,12 @@ class JobName {
     facialRecognition,
     faceIdentityBackfill,
     faceIdentityMaintenanceAfterRecognition,
+    faceRepairScan,
+    faceSuggestionMaintenance,
+    personSuggestionScanQueueAll,
+    personSuggestionScan,
+    spacePersonSuggestionScanQueueAll,
+    spacePersonSuggestionScan,
     fileDelete,
     fileMigrationQueueAll,
     libraryDeleteCheck,
@@ -259,6 +271,12 @@ class JobNameTypeTransformer {
         case r'FacialRecognition': return JobName.facialRecognition;
         case r'FaceIdentityBackfill': return JobName.faceIdentityBackfill;
         case r'FaceIdentityMaintenanceAfterRecognition': return JobName.faceIdentityMaintenanceAfterRecognition;
+        case r'FaceRepairScan': return JobName.faceRepairScan;
+        case r'FaceSuggestionMaintenance': return JobName.faceSuggestionMaintenance;
+        case r'PersonSuggestionScanQueueAll': return JobName.personSuggestionScanQueueAll;
+        case r'PersonSuggestionScan': return JobName.personSuggestionScan;
+        case r'SpacePersonSuggestionScanQueueAll': return JobName.spacePersonSuggestionScanQueueAll;
+        case r'SpacePersonSuggestionScan': return JobName.spacePersonSuggestionScan;
         case r'FileDelete': return JobName.fileDelete;
         case r'FileMigrationQueueAll': return JobName.fileMigrationQueueAll;
         case r'LibraryDeleteCheck': return JobName.libraryDeleteCheck;
