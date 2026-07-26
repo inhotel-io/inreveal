@@ -41,5 +41,4 @@ bool spaceIsOwned(SharedSpaceResponseDto space, String? currentUserId) {
 
 /// The role-only overload, for callers holding a resolved [SharedSpaceRole]
 /// rather than a whole DTO (e.g. `SpaceBottomSheet`).
-bool roleIsWritable(SharedSpaceRole? role) =>
-    role == SharedSpaceRole.owner || role == SharedSpaceRole.editor;
+bool roleIsWritable(SharedSpaceRole? role) => role == SharedSpaceRole.owner || role == SharedSpaceRole.editor;

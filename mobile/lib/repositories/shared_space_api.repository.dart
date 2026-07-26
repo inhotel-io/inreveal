@@ -2,6 +2,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/providers/api.provider.dart';
 import 'package:immich_mobile/repositories/api.repository.dart';
 import 'package:immich_mobile/services/api.service.dart';
+import 'package:immich_mobile/utils/space_permissions.dart';
 import 'package:openapi/api.dart';
 
 final sharedSpaceApiRepositoryProvider = Provider((ref) => SharedSpaceApiRepository(ref.watch(apiServiceProvider)));
@@ -62,7 +63,7 @@ class SharedSpaceApiRepository extends ApiRepository {
       final members = await getMembers(spaceId);
       for (final member in members) {
         if (member.userId == userId) {
-          return member.role == SharedSpaceRole.owner || member.role == SharedSpaceRole.editor;
+          return roleIsWritable(member.role);
         }
       }
       return false;
