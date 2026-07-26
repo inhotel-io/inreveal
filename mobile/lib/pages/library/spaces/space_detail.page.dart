@@ -6,6 +6,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/space_bottom_sheet.widget.dart';
+import 'package:immich_mobile/presentation/widgets/spaces/space_detail_kebab.widget.dart';
+import 'package:immich_mobile/presentation/widgets/spaces/space_edit_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_top_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
@@ -196,6 +198,21 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
         }
       }
     }
+  }
+
+  Future<void> _editSpace() async {
+    final space = _space;
+    if (space == null) return;
+
+    final saved = await SpaceEditSheet.show(context, space);
+    if (saved != true) return;
+
+    // The grid reads sharedSpacesProvider; the app bar reads this page's own
+    // `_space`, which is network-loaded rather than Drift-backed. A sync nudge would
+    // NOT refresh the title -- nothing reads the local shared_space name column for
+    // display -- so re-fetch the metadata explicitly.
+    ref.invalidate(sharedSpacesProvider);
+    await _refreshSpaceMetadata();
   }
 
   bool get _showInTimeline {
@@ -456,13 +473,7 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
                 tooltip: 'Add Photos',
               ),
             IconButton(icon: const Icon(Icons.people_outline), onPressed: _navigateToMembers, tooltip: 'Members'),
-            if (_isOwner)
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'delete') _deleteSpace();
-                },
-                itemBuilder: (context) => [const PopupMenuItem(value: 'delete', child: Text('Delete Space'))],
-              ),
+            SpaceDetailKebab(canEdit: _canEdit, canDelete: _isOwner, onEdit: _editSpace, onDelete: _deleteSpace),
           ],
         ),
         bottomSheet: SpaceBottomSheet(
