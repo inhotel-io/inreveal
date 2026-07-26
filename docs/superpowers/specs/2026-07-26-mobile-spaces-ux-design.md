@@ -56,7 +56,7 @@ explicitly deferred:
 | `SpaceAlbumActions.addAssets`               | `mobile/lib/providers/infrastructure/space_album_actions.dart:67`            | `Future<int>`; routes around the absorbed-album FK trap; nudges sync         |
 | `actionProvider.addToAlbum`                 | `mobile/lib/providers/infrastructure/action.provider.dart:384`               | Existing remote+local dispatch, incl. upload-then-link                       |
 | `RemoteAlbumService.categorizeCandidates`   | called from `action.provider.dart:390`                                       | Splits a selection into remote ids and local assets needing upload           |
-| `MultiSelectState.lockedSelectionAssets`    | `mobile/lib/providers/timeline/multiselect.provider.dart:14`                 | Locked-folder assets that must never leave the device's private scope        |
+| `AssetVisibility.locked`                    | `mobile/lib/domain/models/asset/base_asset.model.dart`                       | Locked-folder assets, which must never be pushed into a shared space         |
 | `SpaceAlbumKebab`                           | `mobile/lib/presentation/widgets/spaces/space_album_kebab.widget.dart`       | The repo's precedent for extracting a kebab so it can be widget-tested       |
 | `SpaceLinkPickerSheet.show`                 | `mobile/lib/presentation/widgets/remote_album/space_link_picker.widget.dart` | Precedent for a static-`show` bottom sheet instead of an `auto_route` page   |
 | `spaceGradientColors`                       | `mobile/lib/widgets/spaces/space_collage.dart:7`                             | The ten space colours mobile already renders                                 |
