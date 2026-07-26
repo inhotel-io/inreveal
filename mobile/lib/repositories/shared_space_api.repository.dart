@@ -36,6 +36,29 @@ class SharedSpaceApiRepository extends ApiRepository {
     return await checkNull(_api.createSpace(dto));
   }
 
+  /// Update a space's name, description and/or colour (PATCH /shared-spaces/{id}).
+  ///
+  /// A `null` argument means **absent** — the field is left untouched. A non-null
+  /// argument is sent verbatim, so `description: ''` clears the description while
+  /// `description: null` leaves the existing text alone. That distinction is how a
+  /// pure rename avoids clobbering a description it never showed the user.
+  ///
+  /// Never sends `Optional.present(null)`: `name`, `description` and `color` are
+  /// `.optional()` but not `.nullable()` server-side, so an explicit null is a 400
+  /// rather than a field-clear. The four fields this feature does not own
+  /// (faceRecognitionEnabled, petsEnabled, thumbnailAssetId, thumbnailCropY) are
+  /// left at their `Optional.absent()` defaults.
+  ///
+  /// Naming and appearance are editor-level server-side; the role is enforced there.
+  Future<SharedSpaceResponseDto> update(String id, {String? name, String? description, UserAvatarColor? color}) async {
+    final dto = SharedSpaceUpdateDto(
+      name: name == null ? const Optional.absent() : Optional.present(name.trim()),
+      description: description == null ? const Optional.absent() : Optional.present(description),
+      color: color == null ? const Optional.absent() : Optional.present(color),
+    );
+    return await checkNull(_api.updateSpace(id, dto));
+  }
+
   Future<void> delete(String id) async {
     await _api.removeSpace(id);
   }
