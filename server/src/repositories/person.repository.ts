@@ -10,7 +10,7 @@ import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { PetSearchTable } from 'src/schema/tables/pet-search.table';
-import { dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
+import { dummy, petFacePredicate, removeUndefinedKeys, withFilePath } from 'src/utils/database';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
 import {
   spaceAssetPathBranches,
@@ -72,6 +72,12 @@ const isBlank = (value: string | null | undefined) => !value || value.trim().len
 
 export interface DeleteFacesOptions {
   sourceType: SourceType;
+  /**
+   * Human-pipeline callers set this so pet faces survive their resets. Pet faces share
+   * `sourceType: 'machine-learning'` with human faces, so a plain sourceType filter reaches them
+   * (F1/F3) — {@link petFacePredicate} is the only thing that tells the two apart.
+   */
+  excludePetFaces?: boolean;
 }
 
 export interface GetAllPeopleOptions {
@@ -85,6 +91,8 @@ export interface GetAllFacesOptions {
   personId?: string | null;
   assetId?: string;
   sourceType?: SourceType;
+  /** See {@link DeleteFacesOptions.excludePetFaces} — keeps pet faces out of human fan-outs (F2). */
+  excludePetFaces?: boolean;
 }
 
 export interface RepresentativeFaceListOptions {
@@ -238,11 +246,12 @@ export class PersonRepository {
     await db.updateTable('person').set({ identityId: input.identityId }).where('id', '=', input.personId).execute();
   }
 
-  async unassignFaces({ sourceType }: UnassignFacesOptions): Promise<void> {
+  async unassignFaces({ sourceType, excludePetFaces }: UnassignFacesOptions): Promise<void> {
     await this.db
       .updateTable('asset_face')
       .set({ personId: null })
       .where('asset_face.sourceType', '=', sourceType)
+      .$if(!!excludePetFaces, (qb) => qb.where((eb) => eb.not(petFacePredicate(eb))))
       .execute();
   }
 
@@ -256,8 +265,12 @@ export class PersonRepository {
     await this.db.deleteFrom('person').where('person.id', 'in', ids).execute();
   }
 
-  async deleteFaces({ sourceType }: DeleteFacesOptions): Promise<void> {
-    await this.db.deleteFrom('asset_face').where('asset_face.sourceType', '=', sourceType).execute();
+  async deleteFaces({ sourceType, excludePetFaces }: DeleteFacesOptions): Promise<void> {
+    await this.db
+      .deleteFrom('asset_face')
+      .where('asset_face.sourceType', '=', sourceType)
+      .$if(!!excludePetFaces, (qb) => qb.where((eb) => eb.not(petFacePredicate(eb))))
+      .execute();
   }
 
   async deleteAllPets(): Promise<void> {
@@ -305,6 +318,7 @@ export class PersonRepository {
       .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
       .$if(!!options.sourceType, (qb) => qb.where('asset_face.sourceType', '=', options.sourceType!))
       .$if(!!options.assetId, (qb) => qb.where('asset_face.assetId', '=', options.assetId!))
+      .$if(!!options.excludePetFaces, (qb) => qb.where((eb) => eb.not(petFacePredicate(eb))))
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
       .stream();
