@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import { AssetType } from 'src/enum';
 import { MemoryPeriodAsset } from 'src/repositories/asset.repository';
 import { FavoritesThrowbackMemoryRule } from 'src/services/memory-rules/favorites-throwback.rule';
 
@@ -12,6 +13,8 @@ const favoritesForYear = (year: number, count: number, month = 7): MemoryPeriodA
     country: null,
     city: null,
     isFavorite: true,
+    type: AssetType.Image,
+    duration: null,
   }));
 
 const ruleWith = (assets: MemoryPeriodAsset[]) => {

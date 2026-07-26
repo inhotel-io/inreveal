@@ -1,4 +1,5 @@
 import { DateTime } from 'luxon';
+import { AssetType } from 'src/enum';
 import { MemoryPeriodAsset } from 'src/repositories/asset.repository';
 import { SeasonRecapMemoryRule } from 'src/services/memory-rules/season-recap.rule';
 
@@ -16,6 +17,8 @@ const assetsIn = (year: number, month: number, count: number): MemoryPeriodAsset
     country: null,
     city: null,
     isFavorite: false,
+    type: AssetType.Image,
+    duration: null,
   }));
 
 const ruleWith = (assets: MemoryPeriodAsset[]) => {
