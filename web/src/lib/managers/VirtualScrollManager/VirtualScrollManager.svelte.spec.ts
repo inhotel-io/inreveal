@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BROWSER_MAX_SCROLL_DEVICE_PX,
   maxScrollHeightForDevicePixelRatio,
+  SCROLL_CEILING_FIREFOX_PX,
   VirtualScrollManager,
 } from './VirtualScrollManager.svelte';
 
@@ -155,6 +156,32 @@ describe('VirtualScrollManager HiDPI scroll cap', () => {
 
     expect(s.maxScrollHeight).toBe(maxScrollHeightForDevicePixelRatio(2));
     expect(s.domHeight * 2).toBeLessThanOrEqual(BROWSER_MAX_SCROLL_DEVICE_PX);
+  });
+
+  // Firefox is a separate ceiling, not a dpr problem. It happily lays out an element up to
+  // nscoord_MAX (17,895,697px) but caps the *scrollable range* at half that. Measured on a 750k
+  // library at dpr 1: a 17,537,784px element reported scrollHeight 8,947,850 and refused to
+  // scroll past 8,946,658 — so domScrollMax was ~2x the range the browser would actually give,
+  // stranding the timeline at ~51% exactly like the Chrome HiDPI case.
+  it('14. keeps the request inside Firefox’s scrollable range, not its layout ceiling', () => {
+    const s = new TestScroller();
+    s.bodySectionHeight = 62_760_582; // the reported Firefox library
+    s.viewportHeight = 1192;
+    // set last: the geometry setters re-derive the cap from the running engine
+    s.maxScrollHeight = maxScrollHeightForDevicePixelRatio(1, SCROLL_CEILING_FIREFOX_PX);
+
+    expect(s.domHeight).toBeLessThanOrEqual(SCROLL_CEILING_FIREFOX_PX);
+
+    s.setDomScrollTop(s.domScrollMax);
+    s.updateSlidingWindow();
+    expect(s.scrollTop).toBeCloseTo(s.logicalScrollMax, 6);
+  });
+
+  it('15. never exceeds the Firefox scroll ceiling at any dpr', () => {
+    for (const dpr of [1, 1.5, 2, 3]) {
+      const cssPx = maxScrollHeightForDevicePixelRatio(dpr, SCROLL_CEILING_FIREFOX_PX);
+      expect(cssPx * dpr).toBeLessThanOrEqual(SCROLL_CEILING_FIREFOX_PX);
+    }
   });
 
   it('12. maps the logical tail into a DOM range the 2x browser can actually deliver', () => {

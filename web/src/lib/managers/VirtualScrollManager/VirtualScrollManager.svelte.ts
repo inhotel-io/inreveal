@@ -1,11 +1,22 @@
 import { debounce } from 'lodash-es';
 
-// Largest element height the browser lays out before clamping the scroll container, in DEVICE
-// pixels: Chrome/Safari saturate LayoutUnit at 2^31/64, Firefox nscoord at 2^30/60. The Firefox
-// check is inlined (not imported from asset-utils's `isFirefox`) to avoid the circular import
-// asset-utils → TimelineManager → VirtualScrollManager.
+// Largest *scrollable range* the engine will actually deliver. This is not the same as the
+// largest element it will lay out, and the two engines differ in both value and unit:
+//
+//   Chromium/WebKit — saturates LayoutUnit at 2^31/64 = 33,554,428 DEVICE pixels, and scrolls the
+//     full element. On a 2x display a 33,000,000px CSS request becomes 66,000,000 device pixels
+//     and the element comes back silently halved, hence the dpr division below.
+//   Firefox — lays out up to nscoord_MAX (2^30/60 = 17,895,697px) but caps the scrollable range
+//     at half of it. Measured on a 750k-asset library at dpr 1: a 17,537,784px element reported
+//     scrollHeight 8,947,850 and would not scroll past 8,946,658. Using the layout ceiling here
+//     leaves domScrollMax ~2x the range the browser grants, stranding the tail at ~51%.
+//
+// The Firefox check is inlined (not imported from asset-utils's `isFirefox`) to avoid the
+// circular import asset-utils → TimelineManager → VirtualScrollManager.
 const IS_FIREFOX = typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox');
-export const BROWSER_MAX_SCROLL_DEVICE_PX = IS_FIREFOX ? 17_895_697 : 33_554_428;
+export const SCROLL_CEILING_FIREFOX_PX = 8_947_848; // nscoord_MAX / 2
+export const SCROLL_CEILING_CHROMIUM_PX = 33_554_428; // LayoutUnit saturation, device px
+export const BROWSER_MAX_SCROLL_DEVICE_PX = IS_FIREFOX ? SCROLL_CEILING_FIREFOX_PX : SCROLL_CEILING_CHROMIUM_PX;
 
 // Headroom below the ceiling so the browser's own layout rounding never trips it.
 const SCROLL_HEIGHT_SAFETY = 0.98;
@@ -19,13 +30,16 @@ const SCROLL_HEIGHT_SAFETY = 0.98;
  * value, so `domToLogical` divides by a scroll range that does not exist and the tail of the
  * list becomes unreachable. Dividing here keeps the request under the ceiling so nothing clamps.
  *
- * Firefox's nscoord limit is nominally in CSS pixels rather than device pixels; dividing anyway
- * is deliberately conservative — it only shrinks the DOM range (slightly more compression), and
+ * Firefox's ceiling is nominally in CSS pixels rather than device pixels (only measured at dpr 1
+ * so far); dividing anyway is deliberately conservative — it only shrinks the DOM range, and
  * never lets the request exceed the real ceiling on either engine.
  */
-export function maxScrollHeightForDevicePixelRatio(dpr: number): number {
+export function maxScrollHeightForDevicePixelRatio(
+  dpr: number,
+  ceiling: number = BROWSER_MAX_SCROLL_DEVICE_PX,
+): number {
   const ratio = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
-  return Math.floor((BROWSER_MAX_SCROLL_DEVICE_PX * SCROLL_HEIGHT_SAFETY) / ratio);
+  return Math.floor((ceiling * SCROLL_HEIGHT_SAFETY) / ratio);
 }
 
 type LayoutOptions = {
