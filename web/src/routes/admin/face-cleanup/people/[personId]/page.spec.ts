@@ -10,6 +10,8 @@ import { modalManager, toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { goto } from '$app/navigation';
+import { Route } from '$lib/route';
 import Page from './+page.svelte';
 import ManualActionsHelpModal from './ManualActionsHelpModal.svelte';
 import { createManualReviewModel, type ManualReviewModel } from './manual-review.svelte';
@@ -969,6 +971,100 @@ describe('+page.svelte (manual face-review page)', () => {
         expect(getFaceRepairPersonMetadata).toHaveBeenCalledTimes(2);
         expect(getFaceRepairClusterFaces).toHaveBeenCalledTimes(2);
       });
+    });
+  });
+
+  // ==== Emptying a cluster leaves the page (bug: success toast immediately followed by a 404) ====
+  // Moving/parking/detaching the last faces out of a cluster leaves nothing to review here. Worse, the server
+  // DELETES an emptied cluster that was never named ("Empty-unnamed cleanup" in face-repair.service.ts), so
+  // the post-apply refresh chased a person that no longer existed and stacked a "person not found" error toast
+  // straight on top of the success one. Both shapes of emptied — deleted, or a named cluster left with zero
+  // faces — end the same way: back on the manual review list, success toast intact.
+  describe('emptied cluster returns to the manual review list', () => {
+    it('leaves without an error state when the refresh 404s because the emptied cluster was deleted', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      vi.mocked(resolveFaces).mockResolvedValueOnce({
+        moved: 3,
+        declined: 0,
+        locked: 0,
+        detached: 0,
+        unknown: 0,
+        skipped: 0,
+      });
+      const notFound = () => Object.assign(new Error('Person not found'), { status: 404 });
+      vi.mocked(getFaceRepairPersonMetadata).mockRejectedValueOnce(notFound());
+      vi.mocked(getFaceRepairClusterFaces).mockRejectedValueOnce(notFound());
+
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false });
+      await fireEvent.click(screen.getByTestId('manual-review-select-all-loaded'));
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
+      await waitFor(() => expect(screen.getByTestId('manual-review-apply-btn')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+      await waitFor(() => expect(goto).toHaveBeenCalledWith(Route.faceCleanupPeople()));
+      // The success toast still stands — the 404 is the expected shape of "the cluster is gone", not a failure.
+      expect(toastManager.primary).toHaveBeenCalledWith(
+        expect.stringContaining('admin.face_cleanup_manual_review_apply_summary'),
+      );
+      expect(toastManager.danger).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('manual-review-load-error')).not.toBeInTheDocument();
+    });
+
+    it('leaves when a NAMED cluster survives the emptying but comes back with zero faces', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      vi.mocked(resolveFaces).mockResolvedValueOnce({
+        moved: 0,
+        declined: 0,
+        locked: 0,
+        detached: 3,
+        unknown: 0,
+        skipped: 0,
+      });
+      vi.mocked(getFaceRepairPersonMetadata).mockResolvedValueOnce(makeMetadata({ faceCount: 0 }));
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValueOnce(makeFacesResponse([], 0));
+
+      await fireEvent.click(screen.getByTestId('manual-review-select-all-loaded'));
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-detach'));
+      await waitFor(() => expect(screen.getByTestId('manual-review-apply-btn')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+      await waitFor(() => expect(screen.getByTestId('manual-review-detach-confirm')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('manual-review-detach-confirm-cta'));
+
+      await waitFor(() => expect(goto).toHaveBeenCalledWith(Route.faceCleanupPeople()));
+      expect(toastManager.danger).not.toHaveBeenCalled();
+    });
+
+    it('stays put after a PARTIAL apply, and stops rendering the faces the resolve moved away', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      vi.mocked(resolveFaces).mockResolvedValueOnce({
+        moved: 1,
+        declined: 0,
+        locked: 0,
+        detached: 0,
+        unknown: 0,
+        skipped: 0,
+      });
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValueOnce(makeFacesResponse([face('f2'), face('f3')], 2));
+
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false });
+      await selectTile(0);
+      await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
+      await waitFor(() => expect(screen.getByTestId('manual-review-apply-btn')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
+
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(2));
+      // f1 now belongs to another person. appendFaces is idempotent by assetFaceId, so a refresh that merely
+      // appended page 0 back into the populated model would skip every id it already held and leave f1 on
+      // screen forever — the refresh has to REPLACE what the page holds, not merge into it.
+      expect(tileFor('f1')).toBeNull();
+      expect(goto).not.toHaveBeenCalled();
     });
   });
 

@@ -65,6 +65,11 @@ export interface ManualReviewModel {
    *  present (by assetFaceId) is skipped, so re-fetching an overlapping page is a no-op. `total` is always
    *  refreshed from the server value passed in. */
   appendFaces(faces: ManualFace[], total: number): void;
+  /** Drops every loaded face, every staged state, and the selection — back to the model's just-constructed
+   *  state. The counterpart `appendFaces` needs: appending is idempotent by assetFaceId, so REFETCHING the
+   *  cluster (as the page does after a successful apply) into a populated model skips every id it already
+   *  holds and keeps rendering the faces the resolve just moved away. A refresh has to replace, not merge. */
+  clear(): void;
   stateOf(assetFaceId: string): ManualFaceState;
   /** Only meaningful when stateOf(id) === 'move' (the picked destination); null otherwise. */
   destinationOf(assetFaceId: string): string | null;
@@ -94,8 +99,8 @@ export interface ManualReviewModel {
 export function createManualReviewModel(personId: string): ManualReviewModel {
   // $state (not $derived over an input array — see the file-level note above): THIS is what lets appendFaces
   // grow the list in place without discarding anything staged on the faces already loaded. `faces` is only
-  // ever mutated in place (push) — never reassigned — so it stays `const`; `total` is reassigned on every
-  // appendFaces call, so it stays `let`.
+  // ever mutated in place (push in appendFaces, `length = 0` in clear) — never reassigned — so it stays
+  // `const`; `total` is reassigned on every appendFaces call, so it stays `let`.
   const faces = $state<ManualFace[]>([]);
   let total = $state(0);
 
@@ -161,6 +166,17 @@ export function createManualReviewModel(personId: string): ManualReviewModel {
         faces.push(f);
       }
       total = newTotal;
+    },
+
+    clear(): void {
+      // In place (`length = 0`), never a reassignment — `faces` is the array the page's `{#each}` is bound to,
+      // same invariant `appendFaces`' push relies on.
+      faces.length = 0;
+      indexById.clear();
+      states.clear();
+      destinations.clear();
+      clearSelectionState();
+      total = 0;
     },
 
     stateOf(assetFaceId: string): ManualFaceState {

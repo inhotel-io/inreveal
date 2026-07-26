@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation';
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import InfiniteScrollSentinel from '$lib/components/shared-components/infinite-scroll-sentinel.svelte';
   import { Route } from '$lib/route';
@@ -137,7 +138,13 @@
     }
   };
 
-  const loadPersonData = async () => {
+  // Fetches the person's metadata plus the first page of faces, REPLACING everything this page holds.
+  //
+  // `allowMissing` is for the post-apply refresh alone: an emptied cluster that was never named is DELETED
+  // server-side ("Empty-unnamed cleanup" in face-repair.service.ts), so a 404 there is the expected shape of
+  // "this cluster is gone" and the caller navigates away instead. Every other caller (mount, Retry) still
+  // treats a 404 as an ordinary load failure.
+  const loadPersonData = async ({ allowMissing = false } = {}): Promise<'ok' | 'missing' | 'error'> => {
     loading = true;
     loadError = false;
     try {
@@ -149,19 +156,28 @@
         }),
       ]);
       metadata = metadataResult;
+      // clear() before appendFaces, because appending is idempotent by assetFaceId: merging page 0 back into a
+      // populated model would skip every id it already holds and leave the faces a resolve just moved away
+      // rendered in the grid. A refresh replaces what the page holds; only the scroll sentinel appends.
+      vm.clear();
       vm.appendFaces(facesResult.faces, facesResult.total);
       page = 0;
+      return 'ok';
     } catch (error) {
+      if (allowMissing && (error as { status?: number }).status === 404) {
+        return 'missing';
+      }
       // D17 on the guided page: a failed load is not the same as "this person genuinely has no faces" (a
       // graceful empty state) — render a distinct error state with Retry instead.
       loadError = true;
       handleError(error, $t('admin.face_cleanup_review_load_error'));
+      return 'error';
     } finally {
       loading = false;
     }
   };
 
-  onMount(loadPersonData);
+  onMount(() => void loadPersonData());
 
   const handleLoadMore = async () => {
     if (loadingMore || !hasMore) {
@@ -275,12 +291,13 @@
   };
 
   // Every resolve funnels through here, mirroring guided's commitResolve so a failure — most importantly the
-  // 409 a scan-in-progress produces (design §7) — can never be swallowed. Unlike guided, success does NOT
-  // navigate away: this page has no terminal "every face accounted for" state to leave (most faces are
-  // expected to stay `keep` forever), so a successful apply instead refreshes the cluster (some faces just
-  // moved/locked/detached/parked away) and resets the model, since every mark it held has now either been
-  // submitted or is stale. Widened to the SDK's own request type (rather than the narrower ManualResolveRequest)
-  // so the same function also carries the entire-cluster request, which has no per-face buckets at all.
+  // 409 a scan-in-progress produces (design §7) — can never be swallowed. Unlike guided, success does not
+  // ALWAYS navigate away: this page has no terminal "every face accounted for" state (most faces are expected
+  // to stay `keep` forever), so a partial apply refreshes the cluster in place and resets the model, since
+  // every mark it held has now either been submitted or is stale. It leaves only once the cluster is empty —
+  // see the refresh below. Widened to the SDK's own request type (rather than the narrower
+  // ManualResolveRequest) so the same function also carries the entire-cluster request, which has no per-face
+  // buckets at all.
   const commitResolve = async (request: FaceRepairResolveRequestDto) => {
     if (applying) {
       return;
@@ -301,7 +318,20 @@
         }),
       );
       vm.reset();
-      await loadPersonData();
+      // A resolve can empty the cluster outright — a whole-cluster move always does, and so does moving,
+      // parking or detaching the last faces out of it — and an emptied cluster has nothing left to review
+      // here. Both shapes of "emptied" end the same way, back on the manual review list with the success toast
+      // above still standing:
+      //   - never named: the server DELETED it ("Empty-unnamed cleanup" in face-repair.service.ts), so this
+      //     refresh 404s. Chasing it unconditionally is what used to stack a "person not found" error toast
+      //     straight on top of the success one.
+      //   - named: the person survives and simply comes back with zero faces.
+      const outcome = await loadPersonData({ allowMissing: true });
+      // `void`, not `await`, exactly as the guided page navigates: a rejected navigation must not fall into the
+      // catch below and relabel a resolve that already committed as a failed apply.
+      if (outcome === 'missing' || (outcome === 'ok' && vm.total === 0)) {
+        void goto(Route.faceCleanupPeople());
+      }
     } catch (error: unknown) {
       // 409: a scan started mid-review. Staged work must survive this — losing it to a conflict is exactly
       // what the chooser's disabled-manual card exists to prevent (design §7), and discarding the review on
@@ -401,7 +431,12 @@
         data-testid="manual-review-load-error"
       >
         <span class="flex-1">{$t('admin.face_cleanup_review_load_error')}</span>
-        <Button color="secondary" size="small" onclick={loadPersonData} data-testid="manual-review-load-error-retry">
+        <Button
+          color="secondary"
+          size="small"
+          onclick={() => void loadPersonData()}
+          data-testid="manual-review-load-error-retry"
+        >
           {$t('retry')}
         </Button>
       </div>
