@@ -374,9 +374,11 @@ Edit `space_link_picker.widget.dart`, `space_detail.page.dart`, `space_bottom_sh
 
 **Goal.** The rename call, with correct `Optional` semantics.
 
-**Files.** Edit `mobile/lib/repositories/shared_space_api.repository.dart`. New
-`mobile/test/repositories/shared_space_api_repository_test.dart` — no test file exists for this repository
-today; it follows the mocktail-over-`SharedSpacesApi` pattern of `person_api_repository_test.dart`.
+**Files.** Edit `mobile/lib/repositories/shared_space_api.repository.dart`. **Extend the existing
+`mobile/test/modules/spaces/shared_space_api_repository_test.dart`** — a 512-line suite already covering
+`getAll` / `get` / `create` / `delete` / `getMembers` / `isSpaceEditor` / `updateSpacePerson` / member CRUD,
+with `MockSharedSpacesApi` + `MockApiService` and `registerFallbackValue` already set up. Add an `update`
+group alongside them; do **not** create a file under `test/repositories/`.
 
 **Tests first (BDD).**
 
@@ -389,10 +391,12 @@ today; it follows the mocktail-over-`SharedSpacesApi` pattern of `person_api_rep
   all `Optional.absent()` — the silent-disable guard.
 - Given a name with surrounding whitespace, then it is trimmed; given a description with whitespace, then it
   is **not**.
-- Given the API returns `null` (empty body), then it throws, matching every sibling repository method.
+- Given the API returns `null` (empty body), then it throws, matching the existing
+  `getAll`/`updateSpacePerson` "throws when API returns null" cases in the same file.
 - Given the API throws, then the exception propagates unchanged.
-- Given the endpoint is resolved lazily, then a client swapped after first read is picked up — mirroring
-  `test/repositories/api_repository_lazy_resolution_test.dart`.
+
+Lazy `_api` resolution is **already covered** by the existing `lazy SharedSpacesApi resolution` group at the
+top of that file and needs no new scenario.
 
 ---
 
