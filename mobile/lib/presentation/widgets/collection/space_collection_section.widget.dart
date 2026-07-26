@@ -49,6 +49,17 @@ class _SpaceCollectionSectionState extends ConsumerState<SpaceCollectionSection>
   }
 
   @override
+  void didUpdateWidget(covariant SpaceCollectionSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The latch exists to swallow a double-tap while a dispatch is starting. Once the
+    // parent reports it is no longer busy the dispatch has finished -- including when it
+    // FAILED and left the sheet open -- so the section must accept taps again.
+    if (oldWidget.isBusy && !widget.isBusy) {
+      _emitted = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final spacesAsync = ref.watch(sharedSpacesProvider);
     final userId = ref.watch(currentUserProvider.select((user) => user?.id));

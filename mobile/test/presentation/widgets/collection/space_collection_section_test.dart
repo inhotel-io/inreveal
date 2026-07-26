@@ -289,4 +289,47 @@ void main() {
 
     expect(find.byKey(const Key('space-collection-header')), findsNothing);
   });
+
+  testWidgets('the double-tap latch clears once the parent is no longer busy', (tester) async {
+    final targets = <CollectionTarget>[];
+    var busy = false;
+    late StateSetter setOuter;
+
+    await tester.pumpConsumerWidget(
+      StatefulBuilder(
+        builder: (context, setState) {
+          setOuter = setState;
+          return SpaceCollectionSection(
+            onTargetSelected: (target) {
+              targets.add(target);
+              setState(() => busy = true);
+            },
+            isBusy: busy,
+          );
+        },
+      ),
+      overrides: [
+        sharedSpacesProvider.overrideWith((ref) async => [space('s1', albums: 0)]),
+        currentUserOverride('user-1'),
+        multiSelectProvider.overrideWith(
+          () => MultiSelectNotifier(
+            MultiSelectState(selectedAssets: {asset('a')}, lockedSelectionAssets: const {}),
+          ),
+        ),
+      ],
+    );
+
+    await tester.tap(find.byKey(const Key('space-row-s1')));
+    await tester.pumpAndSettle();
+    expect(targets, hasLength(1));
+
+    // The add failed: the parent clears busy and the sheet stays open.
+    setOuter(() => busy = false);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('space-row-s1')));
+    await tester.pumpAndSettle();
+
+    expect(targets, hasLength(2), reason: 'a failed add must not leave the section permanently inert');
+  });
 }
