@@ -1,10 +1,32 @@
 import { debounce } from 'lodash-es';
 
-// Largest element height the browser renders before clamping the scroll container: Firefox ≈ 17.9M,
-// Chrome/Safari ≈ 33.5M. The Firefox check is inlined (not imported from asset-utils's `isFirefox`)
-// to avoid the circular import asset-utils → TimelineManager → VirtualScrollManager.
-const MAX_SCROLL_HEIGHT =
-  typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox') ? 17_000_000 : 33_000_000;
+// Largest element height the browser lays out before clamping the scroll container, in DEVICE
+// pixels: Chrome/Safari saturate LayoutUnit at 2^31/64, Firefox nscoord at 2^30/60. The Firefox
+// check is inlined (not imported from asset-utils's `isFirefox`) to avoid the circular import
+// asset-utils → TimelineManager → VirtualScrollManager.
+const IS_FIREFOX = typeof navigator !== 'undefined' && navigator.userAgent.includes('Firefox');
+export const BROWSER_MAX_SCROLL_DEVICE_PX = IS_FIREFOX ? 17_895_697 : 33_554_428;
+
+// Headroom below the ceiling so the browser's own layout rounding never trips it.
+const SCROLL_HEIGHT_SAFETY = 0.98;
+
+/**
+ * CSS-pixel height budget for the scroll container on a display of the given devicePixelRatio.
+ *
+ * The ceiling above is a *device*-pixel limit, so on a HiDPI screen each CSS pixel spends `dpr`
+ * of it. Asking for a flat CSS-pixel height gets silently clamped — the element comes back
+ * ~`1/dpr` of what was requested while `domScrollMax` keeps being derived from the requested
+ * value, so `domToLogical` divides by a scroll range that does not exist and the tail of the
+ * list becomes unreachable. Dividing here keeps the request under the ceiling so nothing clamps.
+ *
+ * Firefox's nscoord limit is nominally in CSS pixels rather than device pixels; dividing anyway
+ * is deliberately conservative — it only shrinks the DOM range (slightly more compression), and
+ * never lets the request exceed the real ceiling on either engine.
+ */
+export function maxScrollHeightForDevicePixelRatio(dpr: number): number {
+  const ratio = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+  return Math.floor((BROWSER_MAX_SCROLL_DEVICE_PX * SCROLL_HEIGHT_SAFETY) / ratio);
+}
 
 type LayoutOptions = {
   headerHeight: number;
@@ -25,7 +47,7 @@ export abstract class VirtualScrollManager {
   #viewportHeight = $state(0);
   #viewportWidth = $state(0);
   #scrollTop = $state(0);
-  maxScrollHeight = $state(MAX_SCROLL_HEIGHT);
+  maxScrollHeight = $state(maxScrollHeightForDevicePixelRatio(globalThis.devicePixelRatio));
   #cachedDomScrollTop = $state(0);
   #rowHeight = $state(235);
   #headerHeight = $state(48);
@@ -153,10 +175,22 @@ export abstract class VirtualScrollManager {
     return this.#suspendTransitions;
   }
 
+  // dpr changes when the window moves between displays of different density (or on browser zoom).
+  // There is no dedicated event for it, but such a move always lands as a geometry update here,
+  // so re-derive the budget then — otherwise the cap stays at the old display's value and the
+  // browser clamps the element behind our back again.
+  #refreshScrollCap() {
+    const next = maxScrollHeightForDevicePixelRatio(globalThis.devicePixelRatio);
+    if (this.maxScrollHeight !== next) {
+      this.maxScrollHeight = next;
+    }
+  }
+
   set viewportWidth(value: number) {
     const changed = value !== this.#viewportWidth;
     this.#viewportWidth = value;
     this.suspendTransitions = true;
+    this.#refreshScrollCap();
     void this.updateViewportGeometry(changed);
   }
 
@@ -167,6 +201,7 @@ export abstract class VirtualScrollManager {
   set viewportHeight(value: number) {
     this.#viewportHeight = value;
     this.#suspendTransitions = true;
+    this.#refreshScrollCap();
     void this.updateViewportGeometry(false);
   }
 

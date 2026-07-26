@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { VirtualScrollManager } from './VirtualScrollManager.svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  BROWSER_MAX_SCROLL_DEVICE_PX,
+  maxScrollHeightForDevicePixelRatio,
+  VirtualScrollManager,
+} from './VirtualScrollManager.svelte';
 
 class TestScroller extends VirtualScrollManager {
   #dom = 0;
@@ -94,5 +98,77 @@ describe('VirtualScrollManager scaling', () => {
     expect(s.renderOffset).toBe(0); // cached state not yet refreshed
     s.updateSlidingWindow();
     expect(s.renderOffset).toBeCloseTo(-90_000, 6);
+  });
+});
+
+// Regression: #713 follow-up. The browser's element-height ceiling is expressed in DEVICE
+// pixels, but the cap was a flat CSS-pixel constant. On a HiDPI display every CSS pixel costs
+// `devicePixelRatio` device pixels, so a 33,000,000px CSS request asks for 66,000,000 device
+// pixels on a 2x screen. The browser silently clamps the element to ~16,777,214px while
+// domScrollMax keeps being computed from the *requested* 33,000,000 — so domToLogical divides
+// by a scroll range that does not exist and the tail of the timeline becomes unreachable
+// (observed: 750k assets stuck at ~2023, exactly 50.8% of the library).
+describe('VirtualScrollManager HiDPI scroll cap', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('9. keeps the requested height under the browser device-pixel ceiling at every dpr', () => {
+    for (const dpr of [1, 1.25, 1.5, 2, 2.5, 3]) {
+      const cssPx = maxScrollHeightForDevicePixelRatio(dpr);
+      expect(cssPx * dpr).toBeLessThanOrEqual(BROWSER_MAX_SCROLL_DEVICE_PX);
+      expect(cssPx).toBeGreaterThan(0);
+    }
+  });
+
+  it('10. falls back to a 1x budget for absent or nonsensical devicePixelRatio values', () => {
+    const oneX = maxScrollHeightForDevicePixelRatio(1);
+    for (const bogus of [0, -2, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(maxScrollHeightForDevicePixelRatio(bogus)).toBe(oneX);
+    }
+  });
+
+  it('11. a manager built on a 2x display caps at half the 1x budget', () => {
+    vi.stubGlobal('devicePixelRatio', 1);
+    const oneX = new TestScroller().maxScrollHeight;
+
+    vi.stubGlobal('devicePixelRatio', 2);
+    const twoX = new TestScroller().maxScrollHeight;
+
+    expect(twoX).toBe(maxScrollHeightForDevicePixelRatio(2));
+    expect(twoX).toBeLessThan(oneX);
+    expect(twoX * 2).toBeLessThanOrEqual(BROWSER_MAX_SCROLL_DEVICE_PX);
+  });
+
+  it('13. re-derives the cap when the display dpr changes under a live manager', () => {
+    vi.stubGlobal('devicePixelRatio', 1);
+    const s = new TestScroller();
+    s.bodySectionHeight = 75_520_000;
+    s.viewportHeight = 941;
+    expect(s.maxScrollHeight).toBe(maxScrollHeightForDevicePixelRatio(1));
+
+    // Dragging the window onto a 2x monitor changes dpr; the accompanying geometry update is
+    // the manager's only signal. Without re-deriving, the cap stays at the 1x budget and the
+    // browser clamps the element right back to half of it.
+    vi.stubGlobal('devicePixelRatio', 2);
+    s.viewportHeight = 940;
+
+    expect(s.maxScrollHeight).toBe(maxScrollHeightForDevicePixelRatio(2));
+    expect(s.domHeight * 2).toBeLessThanOrEqual(BROWSER_MAX_SCROLL_DEVICE_PX);
+  });
+
+  it('12. maps the logical tail into a DOM range the 2x browser can actually deliver', () => {
+    vi.stubGlobal('devicePixelRatio', 2);
+    const s = new TestScroller();
+    s.bodySectionHeight = 75_520_000; // the reported 750k-asset library
+    s.viewportHeight = 941;
+
+    // The element the browser will actually lay out, in device pixels.
+    expect(s.domHeight * 2).toBeLessThanOrEqual(BROWSER_MAX_SCROLL_DEVICE_PX);
+
+    // Scrolling to the real bottom must land on the last logical pixel, not ~50% of it.
+    s.setDomScrollTop(s.domScrollMax);
+    s.updateSlidingWindow();
+    expect(s.scrollTop).toBeCloseTo(s.logicalScrollMax, 6);
   });
 });
