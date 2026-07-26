@@ -6,7 +6,8 @@ import { medianTime, monthName, recencyBonus, sampleAssetsByTime } from 'src/ser
 import { MemoryRule, MemoryRuleCandidate, MemoryRuleContext } from 'src/services/memory-rules/memory-rule.interface';
 
 export const TRIGGER_DAY = 13;
-export const DORMANCY_MONTHS = 12;
+/** Fallback when `memories.personThrowbackDormancyMonths` is absent (see `config.ts`). */
+export const DEFAULT_DORMANCY_MONTHS = 6;
 export const MIN_TOTAL_ASSETS = 10;
 export const MIN_CHAPTER_ASSETS = 6;
 export const CANDIDATE_POOL = 10;
@@ -24,10 +25,11 @@ interface RankedCandidate {
 }
 
 /**
- * "Times with Anna" — a person who hasn't appeared in the user's photos for a year or more,
- * resurfaced via their densest chapter (D4/D9). Gap length is never shown and never scored
- * (D1/D5); ranking rewards chapter richness, with a mild `recencyBonus` nudge (D6). Returns up
- * to `MAX_CANDIDATES` so the engine's per-key dedup can skip an already-fired person (D8).
+ * "Times with Anna" — a person who hasn't appeared in the user's photos for
+ * `dormancyMonths` or more, resurfaced via their densest chapter (D4/D9). Gap length is never
+ * shown and never scored (D1/D5); ranking rewards chapter richness, with a mild `recencyBonus`
+ * nudge (D6). Returns up to `MAX_CANDIDATES` so the engine's per-key dedup can skip an
+ * already-fired person (D8).
  */
 export class PersonThrowbackMemoryRule implements MemoryRule {
   readonly id = 'person_throwback';
@@ -35,6 +37,7 @@ export class PersonThrowbackMemoryRule implements MemoryRule {
   constructor(
     private personRepository: Pick<PersonRepository, 'getDormantPeople'>,
     private assetRepository: Pick<AssetRepository, 'getMemoryPersonDailyCounts' | 'getMemoryAssetsForPersonWindow'>,
+    private dormancyMonths: number = DEFAULT_DORMANCY_MONTHS,
   ) {}
 
   async evaluate({ ownerId, target }: MemoryRuleContext): Promise<MemoryRuleCandidate[]> {
@@ -42,7 +45,7 @@ export class PersonThrowbackMemoryRule implements MemoryRule {
       return [];
     }
 
-    const lastSeenBefore = target.startOf('day').minus({ months: DORMANCY_MONTHS }).toJSDate();
+    const lastSeenBefore = target.startOf('day').minus({ months: this.dormancyMonths }).toJSDate();
 
     const people = await this.personRepository.getDormantPeople(ownerId, {
       lastSeenBefore,

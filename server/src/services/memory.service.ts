@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DateTime } from 'luxon';
+import { SystemConfig } from 'src/config';
 import { Memory } from 'src/database';
 import { OnJob } from 'src/decorators';
 import { BulkIdResponseDto, BulkIdsDto } from 'src/dtos/asset-ids.response.dto';
@@ -135,12 +136,13 @@ export class MemoryService extends BaseService {
     return this.themeSearchPort;
   }
 
-  private getMemoryRules(enabledKeys: Iterable<string>): MemoryRule[] {
+  private getMemoryRules(enabledKeys: Iterable<string>, memories: SystemConfig['memories']): MemoryRule[] {
     return createMemoryRules(enabledKeys, {
       personRepository: this.personRepository,
       assetRepository: this.assetRepository,
       memoryRepository: this.memoryRepository,
       themeSearchPort: this.getThemeSearchPort(),
+      memories,
     });
   }
 
@@ -223,8 +225,9 @@ export class MemoryService extends BaseService {
     enabledRuleKeys: Iterable<string>,
   ): Promise<MemoryRuleCandidate[]> {
     const candidates: MemoryRuleCandidate[] = [];
+    const { memories } = await this.getConfig({ withCache: true });
 
-    for (const rule of this.getMemoryRules(enabledRuleKeys)) {
+    for (const rule of this.getMemoryRules(enabledRuleKeys, memories)) {
       try {
         candidates.push(...(await rule.evaluate({ ownerId, target })));
       } catch (error) {

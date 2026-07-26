@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import { MemoryAsset, MemoryPersonDayCount } from 'src/repositories/asset.repository';
 import { DormantPerson } from 'src/repositories/person.repository';
-import { PersonThrowbackMemoryRule } from 'src/services/memory-rules/person-throwback.rule';
+import { DEFAULT_DORMANCY_MONTHS, PersonThrowbackMemoryRule } from 'src/services/memory-rules/person-throwback.rule';
 
 const target = DateTime.fromISO('2026-08-13', { zone: 'utc' });
 
@@ -33,6 +33,7 @@ const ruleWith = (
   people: DormantPerson[],
   counts: MemoryPersonDayCount[],
   assetsOrFn: MemoryAsset[] | WindowAssetsFn,
+  dormancyMonths?: number,
 ) => {
   const personRepository = { getDormantPeople: vi.fn().mockResolvedValue(people) };
   const resolveAssets: WindowAssetsFn =
@@ -42,7 +43,7 @@ const ruleWith = (
     getMemoryAssetsForPersonWindow: vi.fn((_ownerId: string, personId: string) => resolveAssets(personId)),
   };
   return {
-    rule: new PersonThrowbackMemoryRule(personRepository as never, assetRepository as never),
+    rule: new PersonThrowbackMemoryRule(personRepository as never, assetRepository as never, dormancyMonths),
     personRepository,
     assetRepository,
   };
@@ -88,12 +89,21 @@ describe(PersonThrowbackMemoryRule.name, () => {
     });
   });
 
-  it('given any run reaching the dormant-person query, then lastSeenBefore is exactly 12 months before the trigger day', async () => {
+  it('given any run reaching the dormant-person query, then lastSeenBefore is exactly the default 6 months before the trigger day', async () => {
     const { rule, personRepository } = ruleWith([], [], []);
     await rule.evaluate({ ownerId: 'user-1', target });
     const [, options] = personRepository.getDormantPeople.mock.calls[0]!;
     expect((options as { lastSeenBefore: Date }).lastSeenBefore).toEqual(
-      target.startOf('day').minus({ months: 12 }).toJSDate(),
+      target.startOf('day').minus({ months: DEFAULT_DORMANCY_MONTHS }).toJSDate(),
+    );
+  });
+
+  it('given a configured dormancy window, then lastSeenBefore honours it instead of the default', async () => {
+    const { rule, personRepository } = ruleWith([], [], [], 18);
+    await rule.evaluate({ ownerId: 'user-1', target });
+    const [, options] = personRepository.getDormantPeople.mock.calls[0]!;
+    expect((options as { lastSeenBefore: Date }).lastSeenBefore).toEqual(
+      target.startOf('day').minus({ months: 18 }).toJSDate(),
     );
   });
 
@@ -118,7 +128,7 @@ describe(PersonThrowbackMemoryRule.name, () => {
     const { rule, personRepository } = ruleWith([], [], []);
     await rule.evaluate({ ownerId: 'user-1', target });
     expect(personRepository.getDormantPeople).toHaveBeenCalledWith('user-1', {
-      lastSeenBefore: target.startOf('day').minus({ months: 12 }).toJSDate(),
+      lastSeenBefore: target.startOf('day').minus({ months: DEFAULT_DORMANCY_MONTHS }).toJSDate(),
       minAssets: 10,
       limit: 10,
     });

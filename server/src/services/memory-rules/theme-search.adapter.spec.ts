@@ -19,7 +19,7 @@ const buildConfig = (
       },
     },
     memories: {
-      themeMaxDistance: overrides.themeMaxDistance ?? 0.3,
+      themeMaxDistance: overrides.themeMaxDistance ?? 0.75,
     },
   }) as SystemConfig;
 
@@ -120,7 +120,7 @@ describe(MemoryThemeSearchAdapter.name, () => {
 
   describe('searchByEmbedding', () => {
     it('forwards to searchSmart with the expected options and a 2-day-widened window', async () => {
-      const { adapter, searchRepository } = buildAdapter(buildConfig({ themeMaxDistance: 0.3 }));
+      const { adapter, searchRepository } = buildAdapter(buildConfig({ themeMaxDistance: 0.75 }));
 
       const takenAfter = new Date('2023-01-01T00:00:00.000Z');
       const takenBefore = new Date('2023-12-31T23:59:59.999Z');
@@ -142,7 +142,7 @@ describe(MemoryThemeSearchAdapter.name, () => {
           userIds: ['owner-1'],
           type: AssetType.Image,
           visibility: AssetVisibility.Timeline,
-          maxDistance: 0.3,
+          maxDistance: 0.75,
           takenAfter: new Date('2022-12-30T00:00:00.000Z'),
           takenBefore: new Date('2024-01-02T23:59:59.999Z'),
         },

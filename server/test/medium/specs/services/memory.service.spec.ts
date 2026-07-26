@@ -81,7 +81,7 @@ const seedRuleAsset = async (
  * A dormant person with a qualifying chapter: 4 assets in Jan 2020 (padding the lifetime total to
  * MIN_TOTAL_ASSETS (10) without competing for chapter density) plus a 6-day, one-photo-per-day
  * chapter in Aug 2023 (exactly MIN_CHAPTER_ASSETS (6), the only dense window). Both clusters sit
- * well before any 12-month dormancy cutoff used in this file's target dates (2025-08-13 or later).
+ * well before any dormancy cutoff used in this file's target dates (2026-02-13 or later).
  */
 const seedDormantPersonChapter = async (
   ctx: ReturnType<typeof setup>['ctx'],
@@ -1191,8 +1191,8 @@ describe(MemoryService.name, () => {
   });
 
   describe('onMemoriesCreate — person_throwback (end-to-end generation)', () => {
-    // Trigger day 13, per §3.5. Dormancy cutoff = 12 months before this, strictly before
-    // 2025-08-13 -- every fixture's assets below (Jan 2020, Aug 2023) sit well before that.
+    // Trigger day 13, per §3.5. Dormancy cutoff = personThrowbackDormancyMonths (default 6) before
+    // this, i.e. 2026-02-13 -- every fixture's assets below (Jan 2020, Aug 2023) sit well before that.
     const target = DateTime.fromObject({ year: 2026, month: 8, day: 13 }, { zone: 'utc' }) as DateTime<true>;
 
     it('creates a person_throwback rule memory for a dormant named person with a dense chapter', async () => {
