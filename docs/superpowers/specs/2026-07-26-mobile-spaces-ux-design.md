@@ -629,6 +629,19 @@ git diff origin/main -- ../lib/presentation/widgets/album/album_selector.widget.
 Strings left hardcoded elsewhere in mobile Spaces — "Create Space", "Add Photos", "Remove from space",
 "Members", "Space deleted", the spaces empty state — are **out of scope** and recorded as a follow-up.
 
+### Follow-up found during implementation (not fixed here)
+
+`SpaceCard.build` reads **seven** `Optional` fields via bare `.value` — `newAssetCount`,
+`recentAssetIds`, `recentAssetThumbhashes`, `color`, `members`, `assetCount`, `memberCount`
+(`space_card.dart:14` onwards). `Absent.value` throws `StateError`, so any one of them being absent
+crashes the whole Spaces grid render. `spaces_page_test.dart:27-32` documents this explicitly and
+works around it by always populating them in the fixture, which means the test suite cannot catch a
+regression here. This is the same defect class as the `space.members.value ?? const []` crash that
+Slice 1 removed from `SpaceLinkPickerSheet`. Hardening it is a small, self-contained follow-up:
+swap each to `.orElse(null) ?? <default>` and add a "renders with every optional absent" test.
+Deliberately **not** bundled into Slice 4 — it is a separate defect on a separate surface, and
+folding it in would widen a slice that already changes RBAC gating.
+
 **Convention note.** Sibling widget tests in this repo assert English literals
 (`find.text('Show in timeline')`, `space_album_kebab_test.dart:79`). New tests follow that convention and
 assert the rendered English; the "no hardcoded English" requirement is about `lib/`, not `test/`.
