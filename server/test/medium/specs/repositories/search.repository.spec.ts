@@ -835,6 +835,312 @@ describe(SearchRepository.name, () => {
     });
   });
 
+  describe('getCameraMakes (#858)', () => {
+    it('narrows makes by an active tag filter', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: canonAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: canonAsset.id, make: 'Canon' });
+
+      const { asset: nikonAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: nikonAsset.id, make: 'Nikon' });
+
+      const [nature] = await upsertTags(ctx.get(TagRepository), { userId: user.id, tags: ['nature'] });
+      await ctx.newTagAsset({ tagIds: [nature.id], assetIds: [canonAsset.id] });
+
+      const makes = await sut.getCameraMakes([user.id], { tagIds: [nature.id] });
+
+      expect(makes).toEqual(['Canon']);
+    });
+
+    it('narrows makes by rating and the favourite filter', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: canonAsset } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      await ctx.newExif({ assetId: canonAsset.id, make: 'Canon', rating: 5 });
+
+      const { asset: nikonAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: nikonAsset.id, make: 'Nikon', rating: 2 });
+
+      const makes = await sut.getCameraMakes([user.id], { rating: 4, isFavorite: true });
+
+      expect(makes).toEqual(['Canon']);
+    });
+
+    it('does not self-narrow when a make is already selected', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: canonAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: canonAsset.id, make: 'Canon' });
+
+      const { asset: nikonAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: nikonAsset.id, make: 'Nikon' });
+
+      const makes = await sut.getCameraMakes([user.id], { make: 'Canon' });
+
+      expect(makes).toEqual(['Canon', 'Nikon']);
+    });
+
+    it('still narrows by the sibling model', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: canonAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: canonAsset.id, make: 'Canon', model: 'Canon EOS R5' });
+
+      const { asset: nikonAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: nikonAsset.id, make: 'Nikon', model: 'Nikon Z8' });
+
+      const makes = await sut.getCameraMakes([user.id], { model: 'Nikon Z8' });
+
+      expect(makes).toEqual(['Nikon']);
+    });
+
+    it('returns nothing when forceEmptyResult is set', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: canonAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: canonAsset.id, make: 'Canon' });
+
+      const makes = await sut.getCameraMakes([user.id], { forceEmptyResult: true });
+
+      expect(makes).toEqual([]);
+    });
+
+    it('keeps the not-locked visibility semantics', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: timelineAsset.id, make: 'Sony' });
+
+      const { asset: archivedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      await ctx.newExif({ assetId: archivedAsset.id, make: 'ArchivedMake' });
+
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      await ctx.newExif({ assetId: lockedAsset.id, make: 'LockedMake' });
+
+      const makes = await sut.getCameraMakes([user.id], { visibility: 'not-locked' });
+
+      expect(makes).toEqual(['ArchivedMake', 'Sony']);
+      expect(makes).not.toContain('LockedMake');
+    });
+
+    it('returns distinct makes when several assets share a make', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: asset1 } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: asset1.id, make: 'Canon' });
+
+      const { asset: asset2 } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: asset2.id, make: 'Canon' });
+
+      const { asset: asset3 } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: asset3.id, make: 'Canon' });
+
+      const makes = await sut.getCameraMakes([user.id], {});
+
+      expect(makes).toEqual(['Canon']);
+    });
+  });
+
+  describe('getCountries (#858)', () => {
+    it('narrows countries by an active tag filter', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: germanyAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: germanyAsset.id, country: 'Germany' });
+
+      const { asset: franceAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: franceAsset.id, country: 'France' });
+
+      const [nature] = await upsertTags(ctx.get(TagRepository), { userId: user.id, tags: ['nature'] });
+      await ctx.newTagAsset({ tagIds: [nature.id], assetIds: [germanyAsset.id] });
+
+      const countries = await sut.getCountries([user.id], { tagIds: [nature.id] });
+
+      expect(countries).toEqual(['Germany']);
+    });
+
+    it('does not self-narrow when a country is already selected', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: germanyAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: germanyAsset.id, country: 'Germany' });
+
+      const { asset: franceAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: franceAsset.id, country: 'France' });
+
+      const countries = await sut.getCountries([user.id], { country: 'Germany' });
+
+      expect(countries).toEqual(['France', 'Germany']);
+    });
+
+    it('does not self-narrow when a city is already selected', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: berlinAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: berlinAsset.id, country: 'Germany', city: 'Berlin' });
+
+      const { asset: parisAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: parisAsset.id, country: 'France', city: 'Paris' });
+
+      const countries = await sut.getCountries([user.id], { city: 'Berlin' });
+
+      expect(countries).toEqual(['France', 'Germany']);
+    });
+
+    it('keeps the not-locked visibility semantics', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: timelineAsset.id, country: 'Germany' });
+
+      const { asset: archivedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      await ctx.newExif({ assetId: archivedAsset.id, country: 'Austria' });
+
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      await ctx.newExif({ assetId: lockedAsset.id, country: 'Spain' });
+
+      const countries = await sut.getCountries([user.id], { visibility: 'not-locked' });
+
+      expect(countries).toEqual(['Austria', 'Germany']);
+      expect(countries).not.toContain('Spain');
+    });
+  });
+
+  describe('getStates (#858)', () => {
+    it('narrows states by an active tag filter', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: berlinAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: berlinAsset.id, country: 'Germany', state: 'Berlin' });
+
+      const { asset: bavariaAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: bavariaAsset.id, country: 'Germany', state: 'Bavaria' });
+
+      const [nature] = await upsertTags(ctx.get(TagRepository), { userId: user.id, tags: ['nature'] });
+      await ctx.newTagAsset({ tagIds: [nature.id], assetIds: [berlinAsset.id] });
+
+      const states = await sut.getStates([user.id], { tagIds: [nature.id] });
+
+      expect(states).toEqual(['Berlin']);
+    });
+
+    it('still narrows by the parent country', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: berlinAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: berlinAsset.id, country: 'Germany', state: 'Berlin' });
+
+      const { asset: idfAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: idfAsset.id, country: 'France', state: 'Ile-de-France' });
+
+      const states = await sut.getStates([user.id], { country: 'Germany' });
+
+      expect(states).toEqual(['Berlin']);
+    });
+
+    it('does not self-narrow when a city is already selected', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: berlinAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: berlinAsset.id, country: 'Germany', state: 'Berlin', city: 'Berlin' });
+
+      const { asset: munichAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: munichAsset.id, country: 'Germany', state: 'Bavaria', city: 'Munich' });
+
+      const states = await sut.getStates([user.id], { country: 'Germany', city: 'Berlin' });
+
+      expect(states).toEqual(['Bavaria', 'Berlin']);
+    });
+
+    it('keeps the not-locked visibility semantics', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: timelineAsset.id, state: 'Bavaria' });
+
+      const { asset: archivedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      await ctx.newExif({ assetId: archivedAsset.id, state: 'ArchivedState' });
+
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      await ctx.newExif({ assetId: lockedAsset.id, state: 'LockedState' });
+
+      const states = await sut.getStates([user.id], { visibility: 'not-locked' });
+
+      expect(states).toEqual(['ArchivedState', 'Bavaria']);
+      expect(states).not.toContain('LockedState');
+    });
+  });
+
+  describe('getCameraLensModels (#858)', () => {
+    it('narrows lens models by an active tag filter', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: rfAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: rfAsset.id, make: 'Canon', lensModel: 'RF 24-70' });
+
+      const { asset: efAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: efAsset.id, make: 'Canon', lensModel: 'EF 50' });
+
+      const [nature] = await upsertTags(ctx.get(TagRepository), { userId: user.id, tags: ['nature'] });
+      await ctx.newTagAsset({ tagIds: [nature.id], assetIds: [rfAsset.id] });
+
+      const lensModels = await sut.getCameraLensModels([user.id], { tagIds: [nature.id] });
+
+      expect(lensModels).toEqual(['RF 24-70']);
+    });
+
+    it('still narrows by make and model', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: r5Asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: r5Asset.id, make: 'Canon', model: 'Canon EOS R5', lensModel: 'RF 24-70' });
+
+      const { asset: sevenDAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: sevenDAsset.id, make: 'Canon', model: 'Canon EOS 7D', lensModel: 'EF 50' });
+
+      const lensModels = await sut.getCameraLensModels([user.id], { make: 'Canon', model: 'Canon EOS 7D' });
+
+      expect(lensModels).toEqual(['EF 50']);
+    });
+
+    it('keeps the not-locked visibility semantics', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: timelineAsset.id, lensModel: 'RF 24-70mm' });
+
+      const { asset: archivedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Archive });
+      await ctx.newExif({ assetId: archivedAsset.id, lensModel: 'Archived 24mm' });
+
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      await ctx.newExif({ assetId: lockedAsset.id, lensModel: 'Locked 50mm' });
+
+      const lensModels = await sut.getCameraLensModels([user.id], { visibility: 'not-locked' });
+
+      expect(lensModels).toEqual(['Archived 24mm', 'RF 24-70mm']);
+      expect(lensModels).not.toContain('Locked 50mm');
+    });
+  });
+
   describe('getAccessibleTags (LOW #7)', () => {
     it('includes tags from archived assets under not-locked, excludes locked-only tags', async () => {
       const { ctx, sut } = setup();
