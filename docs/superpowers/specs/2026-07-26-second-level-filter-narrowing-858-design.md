@@ -180,8 +180,9 @@ A regression test locks this in so a later refactor cannot silently change the d
 
 **Generated clients**
 
-- `open-api/immich-openapi-specs.json`, `open-api/typescript-sdk/src/fetch-client.ts`,
-  `mobile/openapi/**` — regenerated.
+- `open-api/immich-openapi-specs.json`, `packages/sdk/src/fetch-client.ts`,
+  `mobile/openapi/**` — regenerated. (`open-api/typescript-sdk/` is a stale pre-move leftover — not
+  regenerated, not imported, out of scope.)
 
 **Web**
 
@@ -552,7 +553,7 @@ mise open-api        # TypeScript SDK + Dart client (Dart generation needs Java)
 ### Done gate
 
 - `cd server && pnpm exec vitest run --config test/vitest.config.mjs src/dtos/search.dto.spec.ts src/controllers/search.controller.spec.ts src/services/search.service.spec.ts` green
-- `open-api/immich-openapi-specs.json`, `open-api/typescript-sdk/src/fetch-client.ts`, `mobile/openapi/**`
+- `open-api/immich-openapi-specs.json`, `packages/sdk/src/fetch-client.ts`, `mobile/openapi/**`
   regenerated and committed
 - `cd server && pnpm check` green
 

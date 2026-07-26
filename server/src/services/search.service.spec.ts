@@ -296,11 +296,21 @@ describe(SearchService.name, () => {
         tagIds,
         rating: 4,
         isFavorite: true,
+        city: 'Berlin',
+        mediaType: AssetType.Image,
       });
 
       expect(mocks.search.getCameraModels).toHaveBeenCalledWith(
         [authStub.user1.user.id],
-        expect.objectContaining({ make: 'Canon', personIds, tagIds, rating: 4, isFavorite: true }),
+        expect.objectContaining({
+          make: 'Canon',
+          personIds,
+          tagIds,
+          rating: 4,
+          isFavorite: true,
+          city: 'Berlin',
+          mediaType: AssetType.Image,
+        }),
       );
     });
 
