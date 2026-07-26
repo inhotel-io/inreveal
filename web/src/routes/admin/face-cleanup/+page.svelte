@@ -1,27 +1,15 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import { Route } from '$lib/route';
-  import { createFaceCleanupModel, type FaceCleanupModel } from './face-cleanup.svelte';
-  import FaceCleanupTable from './FaceCleanupTable.svelte';
-  import { declineFaceRepair, getFaceRepairPersonFaces, getLatestScan, resolveFaces, triggerScan } from '@immich/sdk';
-  import { Button, Icon, modalManager, toastManager } from '@immich/ui';
-  import { mdiClose, mdiRefresh, mdiTune } from '@mdi/js';
-  import AdvancedScanModal, { type AdvancedScanParams } from './AdvancedScanModal.svelte';
-  import ScanChecklist from './ScanChecklist.svelte';
-  import { onDestroy, onMount } from 'svelte';
+  import { Button, Icon } from '@immich/ui';
+  import { mdiAccountSearch, mdiArrowRight, mdiRadar } from '@mdi/js';
   import { t } from 'svelte-i18n';
-  import { handleError } from '$lib/utils/handle-error';
   import type { PageData } from './$types';
 
-  // Local types for the loosely-typed SDK response
+  // Local types for the loosely-typed SDK response (mirrors scan/+page.svelte).
   interface ScanTotals {
-    eligibleFaces: number;
     flaggedFaces: number;
-    toRepair: number;
-    reviewOnlyFaces: number;
-    reviewOnlyPersons: number;
     affectedPersons: number;
-    reviewOnlyByReason: { overCap: number; badTarget: number; unAttributable: number };
   }
 
   interface ScanProgress {
@@ -29,574 +17,311 @@
     total: number;
   }
 
-  interface ScanPerson {
-    personId: string;
-    ownerId: string;
-    personName: string | null;
-    faceCount: number;
-    thumbnailFaceId: string | null;
-    eligible: number;
-    flagged: number;
-    flaggedFraction: number;
-    suspectedOwners: {
-      ownerPersonId: string;
-      ownerName: string | null;
-      thumbnailFaceId: string | null;
-      count: number;
-    }[];
-    recommendation: 'confident' | 'review-first';
-    reviewReasons: string[];
-  }
-
   interface FaceCleanupScan {
-    id: string;
     status: 'pending' | 'running' | 'completed' | 'failed';
     progress: ScanProgress | null;
     totals: ScanTotals | null;
-    persons: ScanPerson[];
     error: string | null;
-    startedAt: string | null;
     finishedAt: string | null;
-    createdAt: string;
   }
 
   type Props = { data: PageData };
   const { data }: Props = $props();
 
-  let scan = $state<FaceCleanupScan | null>(null);
-  let loading = $state(true);
-  let loadError = $state(false);
-  let scanning = $state(false);
-  let applying = $state(false);
-  let applyError = $state<string | null>(null);
-  let pollTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+  const scan = $derived(data.scan as unknown as FaceCleanupScan | null);
 
-  // Filter / search state
-  let filter = $state<'all' | 'review-first' | 'confident' | 'named'>('all');
+  // Two presentations (§6.2): first visit has never had a scan; returning has one, in whichever state.
+  const firstVisit = $derived(!scan);
+  // 409-guard UI half (§7): resolveFaces rejects while a scan runs, so the manual card must be genuinely
+  // unusable — not just faded — for the whole time the scan is pending or running.
+  const scanRunning = $derived(scan?.status === 'pending' || scan?.status === 'running');
+  const scanFailed = $derived(scan?.status === 'failed');
+  const flagged = $derived(scan?.totals?.flaggedFaces ?? 0);
+  const affectedPersons = $derived(scan?.totals?.affectedPersons ?? 0);
+  const userCount = $derived(data.users.length);
 
-  // Static literal key map — the typed $t() rejects a dynamically-built template-literal key.
-  const FILTER_LABEL_KEYS = {
-    all: 'admin.face_cleanup_filter_all',
-    'review-first': 'admin.face_cleanup_filter_review_first',
-    confident: 'admin.face_cleanup_filter_confident',
-    named: 'admin.face_cleanup_filter_named',
+  // One label for the guided card's live state — drives both the status well and its CTA, so the five
+  // §6.2 states are described in a single place rather than drifting between two parallel branch chains.
+  const guidedState = $derived(
+    firstVisit ? 'first' : scanRunning ? 'running' : scanFailed ? 'failed' : flagged > 0 ? 'flagged' : 'clean',
+  );
+
+  const scanProgressPct = $derived(
+    scan?.progress && scan.progress.total > 0 ? Math.round((scan.progress.scanned / scan.progress.total) * 100) : 0,
+  );
+
+  const formatDate = (dateStr: string | null | undefined) => (dateStr ? new Date(dateStr).toLocaleString() : null);
+
+  // Tinted status-chip palette (background + text + dot) keyed by semantic tone. Kept as literal class
+  // strings so Tailwind's source scanner emits every variant even though the tone is chosen at runtime.
+  const tone = {
+    gray: { chip: 'bg-gray-100 text-gray-600 dark:bg-gray-700/60 dark:text-gray-300', dot: 'bg-gray-400' },
+    primary: { chip: 'bg-primary-50 text-primary dark:bg-primary-500/15 dark:text-primary-300', dot: 'bg-primary' },
+    amber: { chip: 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300', dot: 'bg-amber-500' },
+    red: { chip: 'bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300', dot: 'bg-red-500' },
+    green: { chip: 'bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-300', dot: 'bg-green-500' },
+    teal: { chip: 'bg-teal-50 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300', dot: 'bg-teal-500' },
   } as const;
-  let searchQuery = $state('');
-
-  // The view-model is rebuilt through setScan so user selections and the opened review-first gate are
-  // carried over across refetches/dismissals instead of resetting to the confident preselect.
-  let vm = $state<FaceCleanupModel | null>(null);
-
-  const openedStorageKey = (scanId: string) => `face-cleanup-opened:${scanId}`;
-
-  const readPersistedOpened = (scanId: string): string[] => {
-    try {
-      return JSON.parse(sessionStorage.getItem(openedStorageKey(scanId)) ?? '[]') as string[];
-    } catch {
-      return [];
-    }
-  };
-
-  const persistOpened = (scanId: string, opened: Iterable<string>) => {
-    try {
-      sessionStorage.setItem(openedStorageKey(scanId), JSON.stringify([...opened]));
-    } catch {
-      // sessionStorage unavailable — the gate just won't survive navigation
-    }
-  };
-
-  const setScan = (next: FaceCleanupScan | null) => {
-    scan = next;
-    vm =
-      next?.persons && next.persons.length > 0
-        ? createFaceCleanupModel(next.persons as ScanPerson[], {
-            prev: vm,
-            restoredOpened: readPersistedOpened(next.id),
-          })
-        : null;
-  };
-
-  const isActive = (status: string | undefined) => status === 'pending' || status === 'running';
-
-  const fetchLatestScan = async () => {
-    try {
-      const result = await getLatestScan();
-      setScan(result as unknown as FaceCleanupScan | null);
-    } catch {
-      // Transient poll/network error: keep the current state. A genuine "no scan yet" arrives as a
-      // successful null result (handled above), so wiping `scan` here would flash the empty state and
-      // re-enable Re-scan mid-scan.
-    }
-  };
-
-  const POLL_MIN_MS = 2000;
-  const POLL_MAX_MS = 15_000;
-  let pollDelay = POLL_MIN_MS;
-
-  // Self-rescheduling poll with capped backoff (N3): a fixed 2s interval fired hundreds of near-identical status
-  // requests across a long scan. Each successful poll grows the delay toward POLL_MAX_MS; it stops as soon as the
-  // scan is no longer active. fetchLatestScan swallows its own transient errors, so polling keeps going on a blip.
-  const scheduleNextPoll = () => {
-    pollTimer = setTimeout(() => {
-      void fetchLatestScan().then(() => {
-        if (scan && !isActive(scan.status)) {
-          stopPolling();
-          return;
-        }
-        pollDelay = Math.min(Math.round(pollDelay * 1.5), POLL_MAX_MS);
-        scheduleNextPoll();
-      });
-    }, pollDelay);
-  };
-
-  const startPolling = () => {
-    if (pollTimer) {
-      return;
-    }
-    pollDelay = POLL_MIN_MS;
-    scheduleNextPoll();
-  };
-
-  const stopPolling = () => {
-    if (pollTimer) {
-      clearTimeout(pollTimer);
-      pollTimer = null;
-    }
-  };
-
-  // The INITIAL load is kept separate from fetchLatestScan's swallow-everything poll idiom above (D17): a
-  // failed first fetch must render as a distinct error state with a Retry, not the reassuring "no scan yet"
-  // empty state — but once that first fetch has succeeded, a later poll blip should keep showing the
-  // last-known scan state, not flash into an error banner. Retry re-runs this same function.
-  const loadInitial = async () => {
-    loading = true;
-    loadError = false;
-    try {
-      const result = await getLatestScan();
-      setScan(result as unknown as FaceCleanupScan | null);
-    } catch (error) {
-      loadError = true;
-      handleError(error, $t('admin.face_cleanup_load_error'));
-    } finally {
-      loading = false;
-    }
-    if (scan && isActive(scan.status)) {
-      startPolling();
-    }
-  };
-
-  onMount(loadInitial);
-
-  onDestroy(() => stopPolling());
-
-  const runScan = async (params?: AdvancedScanParams) => {
-    scanning = true;
-    applyError = null;
-    try {
-      await triggerScan({ faceRepairScanTriggerRequestDto: params ? { params } : {} });
-      await fetchLatestScan();
-      startPolling();
-    } catch (error: unknown) {
-      const status = (error as { status?: number }).status;
-      if (status === 409) {
-        toastManager.danger($t('admin.face_cleanup_scan_conflict'));
-      } else {
-        toastManager.danger($t('admin.face_cleanup_scan_error'));
-      }
-    } finally {
-      scanning = false;
-    }
-  };
-
-  const handleRescan = () => runScan();
-
-  const handleAdvanced = () => {
-    void modalManager.show(AdvancedScanModal, {
-      onRun: (params: AdvancedScanParams) => {
-        void runScan(params);
-      },
-    });
-  };
-
-  // Bulk-approve migrated off the old single-call `apply` onto a per-person zero-override `resolve`
-  // (Slice 6, web part B): a mixed cluster can flag its faces toward different owners, so each person's
-  // flagged faces are grouped into `moveToPerson` buckets by their own `suspectedOwnerId` before resolving.
-  const resolvePersonToOwners = async (personId: string) => {
-    const result = await getFaceRepairPersonFaces({ personId });
-    const flaggedFaces =
-      (result as unknown as { flaggedFaces: { assetFaceId: string; suspectedOwnerId: string }[] }).flaggedFaces ?? [];
-    if (flaggedFaces.length === 0) {
-      // An empty resolve 400s (E16) — a person can end up with zero flagged faces between scan and apply
-      // (e.g. already resolved elsewhere), so skip it rather than fail the whole batch.
-      return;
-    }
-    // Plain Map: local bookkeeping scoped to this single call, discarded on return.
-    // eslint-disable-next-line svelte/prefer-svelte-reactivity
-    const moveGroups = new Map<string, string[]>();
-    for (const face of flaggedFaces) {
-      const group = moveGroups.get(face.suspectedOwnerId);
-      if (group) {
-        group.push(face.assetFaceId);
-      } else {
-        moveGroups.set(face.suspectedOwnerId, [face.assetFaceId]);
-      }
-    }
-    const moveToPerson = [...moveGroups.entries()].map(([destinationPersonId, faceIds]) => ({
-      destinationPersonId,
-      faceIds,
-    }));
-    await resolveFaces({ faceRepairResolveRequestDto: { personId, moveToPerson } });
-  };
-
-  const handleApply = async () => {
-    if (!vm || vm.selectedCount === 0 || applying) {
-      return;
-    }
-    applying = true;
-    applyError = null;
-    try {
-      const approvedPersonIds = [...vm.selected];
-      await Promise.all(approvedPersonIds.map((personId) => resolvePersonToOwners(personId)));
-      toastManager.success($t('admin.face_cleanup_apply_success', { values: { count: approvedPersonIds.length } }));
-    } catch (error: unknown) {
-      const status = (error as { status?: number }).status;
-      applyError = status === 409 ? $t('admin.face_cleanup_apply_conflict') : $t('admin.face_cleanup_apply_error');
-    } finally {
-      // Refetch even on a partial/total failure: Promise.all rejects on the FIRST rejection, but sibling
-      // resolves already in flight can still have landed server-side — skipping this on error left the table
-      // showing stale pre-apply state even though some persons genuinely resolved (D17).
-      await fetchLatestScan();
-      applying = false;
-    }
-  };
-
-  const handleOpen = (personId: string) => {
-    if (vm) {
-      vm.open(personId);
-    }
-    if (scan) {
-      persistOpened(scan.id, new Set([...readPersistedOpened(scan.id), personId]));
-    }
-  };
-
-  const handleDismiss = async (personId: string) => {
-    const person = scan?.persons.find((p) => p.personId === personId);
-    if (!person) {
-      return;
-    }
-    const suspectedOwnerIds = person.suspectedOwners.map((o) => o.ownerPersonId);
-    try {
-      await declineFaceRepair({ faceRepairDeclineRequestDto: { persons: [{ personId, suspectedOwnerIds }] } });
-      // The server drains the dismissed person from the latest scan snapshot (createDeclines's persons
-      // branch), so trust that snapshot via a refetch rather than only mutating the client-held list.
-      await fetchLatestScan();
-      toastManager.success($t('admin.face_cleanup_dismiss'));
-    } catch {
-      toastManager.danger($t('admin.face_cleanup_dismiss_error'));
-    }
-  };
-
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) {
-      return null;
-    }
-    return new Date(dateStr).toLocaleString();
-  };
-
-  const filterCounts = $derived.by(() => {
-    if (!vm) {
-      return { all: 0, reviewFirst: 0, confident: 0, named: 0 };
-    }
-    return {
-      all: vm.reviewFirst.length + vm.confident.length,
-      reviewFirst: vm.reviewFirst.length,
-      confident: vm.confident.length,
-      named: [...vm.reviewFirst, ...vm.confident].filter((p) => p.personName != null).length,
-    };
-  });
 </script>
 
+{#snippet statusChip(toneKey: keyof typeof tone, label: string)}
+  <span class={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${tone[toneKey].chip}`}>
+    <span class={`size-1.5 rounded-full ${tone[toneKey].dot}`}></span>
+    {label}
+  </span>
+{/snippet}
+
 <AdminPageLayout breadcrumbs={[{ title: data.meta.title }]}>
-  <div class="mx-auto max-w-screen-xl p-6">
-    <!-- Header -->
-    <div class="mb-6 flex flex-wrap items-start justify-between gap-6">
-      <!-- The description paragraph that used to sit here now lives as the checklist's subtitle: the page was
-           already dense, so guidance had to replace prose rather than pile on top of it. -->
-      <div>
-        <h1 class="text-2xl font-semibold tracking-tight">{$t('admin.face_cleanup')}</h1>
-      </div>
-      <div class="flex flex-none flex-col items-end gap-2">
-        {#if scan?.finishedAt}
-          <span class="text-xs text-gray-400">
-            {$t('admin.face_cleanup_last_scan')} · {formatDate(scan.finishedAt)}
-          </span>
+  <div class="mx-auto max-w-screen-xl p-6 sm:p-8">
+    <!-- Header: first visit gets its own explanatory intro; returning shows a last-scan chip instead. -->
+    <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div class="max-w-2xl">
+        <h1 class="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">{$t('admin.face_cleanup')}</h1>
+        {#if firstVisit}
+          <p class="mt-2 text-sm/relaxed text-gray-500 dark:text-gray-400">
+            {$t('admin.face_cleanup_mode_first_visit_intro')}
+          </p>
         {/if}
-        <div class="flex items-center gap-2">
-          <Button color="secondary" variant="ghost" size="small" href={Route.faceCleanupResolutions()}>
-            {$t('admin.face_cleanup_view_resolutions')}
-          </Button>
-          <div class="mx-0.5 h-5 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true"></div>
-          <Button
-            color="secondary"
-            variant="outline"
-            size="small"
-            disabled={scanning || (!!scan && isActive(scan.status))}
-            onclick={handleAdvanced}
-            class="gap-2"
+      </div>
+      {#if !firstVisit && scan?.finishedAt}
+        <span
+          class="inline-flex flex-none items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+        >
+          <span class="size-1.5 rounded-full bg-gray-400"></span>
+          {$t('admin.face_cleanup_last_scan')} · {formatDate(scan.finishedAt)}
+        </span>
+      {/if}
+    </div>
+
+    <!-- Two equal-weight doors, identical footprint. Neither is marked "recommended" (§6.2): we don't know
+         which mode a given admin lives in — some triage scans, others spend all their time in manual review. -->
+    <div class="grid gap-5 lg:grid-cols-2">
+      <!-- Guided card: a status board that happens to be a fork — it carries the scan's live state so an
+           admin can see whether guided work is waiting without clicking in. Always reachable. -->
+      <div
+        class="group relative flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary-200 hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:hover:border-primary-500/40"
+        data-testid="chooser-card-guided"
+      >
+        <div
+          class="pointer-events-none absolute -top-14 -right-14 size-40 rounded-full bg-primary-100/70 blur-3xl dark:bg-primary-500/10"
+          aria-hidden="true"
+        ></div>
+
+        <div class="relative flex items-start gap-3.5">
+          <div
+            class="flex size-12 flex-none items-center justify-center rounded-xl bg-primary-50 text-primary ring-1 ring-primary-100 ring-inset dark:bg-primary-500/15 dark:text-primary-300 dark:ring-primary-400/25"
           >
-            <Icon icon={mdiTune} size="16" />
-            {$t('admin.face_cleanup_advanced')}
-          </Button>
-          <Button
-            color="primary"
-            size="small"
-            disabled={scanning || (!!scan && isActive(scan.status))}
-            onclick={handleRescan}
-            class="gap-2"
+            <Icon icon={mdiRadar} size="24" />
+          </div>
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+              {$t('admin.face_cleanup_mode_guided')}
+            </h2>
+            <p class="mt-0.5 text-sm/snug text-gray-500 dark:text-gray-400">
+              {$t('admin.face_cleanup_mode_guided_sub')}
+            </p>
+          </div>
+        </div>
+
+        <!-- Live status well: recolours across the five scan states. -->
+        <div
+          class="relative mt-5 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100 ring-inset dark:bg-gray-900/40 dark:ring-white/5"
+        >
+          {#if guidedState === 'first'}
+            {@render statusChip('gray', $t('admin.face_cleanup_mode_needs_scan'))}
+            <p class="mt-2 text-xs/relaxed text-gray-500 dark:text-gray-400">
+              {$t('admin.face_cleanup_mode_needs_scan_sub')}
+            </p>
+          {:else if guidedState === 'running'}
+            {@render statusChip(
+              'primary',
+              scan?.status === 'pending'
+                ? $t('admin.face_cleanup_scan_pending')
+                : $t('admin.face_cleanup_scan_running'),
+            )}
+            {#if scan?.progress}
+              <div class="mt-3 flex items-baseline gap-1.5">
+                <span class="text-3xl font-semibold tracking-tight text-gray-900 tabular-nums dark:text-white">
+                  {scan.progress.scanned.toLocaleString()}
+                </span>
+                <span class="text-sm text-gray-400 tabular-nums">
+                  / {scan.progress.total.toLocaleString()} · {$t('admin.face_cleanup_faces')}
+                </span>
+              </div>
+              <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+                <div
+                  class="h-full rounded-full bg-primary transition-all duration-500"
+                  style={`width:${scanProgressPct}%`}
+                ></div>
+              </div>
+            {:else}
+              <p class="mt-2 text-xs text-gray-400">{$t('admin.face_cleanup_scan_preparing')}</p>
+            {/if}
+          {:else if guidedState === 'failed'}
+            {@render statusChip('red', $t('admin.face_cleanup_scan_failed'))}
+            {#if scan?.error}
+              <p class="mt-2 truncate font-mono text-xs text-red-600 dark:text-red-400">{scan.error}</p>
+            {/if}
+          {:else if guidedState === 'flagged'}
+            {@render statusChip('amber', $t('admin.face_cleanup_stat_flagged'))}
+            <div class="mt-3 text-3xl font-semibold tracking-tight text-gray-900 tabular-nums dark:text-white">
+              {flagged.toLocaleString()}
+            </div>
+            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {$t('admin.face_cleanup_stat_flagged_sub', { values: { count: affectedPersons } })}
+            </div>
+          {:else}
+            {@render statusChip('green', $t('admin.face_cleanup_mode_nothing_flagged'))}
+          {/if}
+        </div>
+
+        <!-- CTA pinned to the card foot so both doors' actions align regardless of well height. -->
+        <div class="relative mt-auto pt-6">
+          {#if guidedState === 'first'}
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              fullWidth
+              trailingIcon={mdiArrowRight}
+              href={Route.faceCleanupScan()}
+              data-testid="chooser-guided-cta"
+            >
+              {$t('admin.face_cleanup_mode_run_first_scan')}
+            </Button>
+          {:else if guidedState === 'running'}
+            <Button
+              color="secondary"
+              variant="outline"
+              size="medium"
+              fullWidth
+              trailingIcon={mdiArrowRight}
+              href={Route.faceCleanupScan()}
+              data-testid="chooser-guided-cta"
+            >
+              {$t('admin.face_cleanup_mode_view_progress')}
+            </Button>
+          {:else if guidedState === 'failed'}
+            <Button
+              color="secondary"
+              variant="filled"
+              size="medium"
+              fullWidth
+              trailingIcon={mdiArrowRight}
+              href={Route.faceCleanupScan()}
+              data-testid="chooser-guided-cta"
+            >
+              {$t('admin.face_cleanup_mode_view_details')}
+            </Button>
+          {:else if guidedState === 'flagged'}
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              fullWidth
+              trailingIcon={mdiArrowRight}
+              href={Route.faceCleanupScan()}
+              data-testid="chooser-guided-cta"
+            >
+              {$t('admin.face_cleanup_mode_continue')}
+            </Button>
+          {:else}
+            <Button
+              color="secondary"
+              variant="outline"
+              size="medium"
+              fullWidth
+              trailingIcon={mdiArrowRight}
+              href={Route.faceCleanupScan()}
+              data-testid="chooser-guided-cta"
+            >
+              {$t('admin.face_cleanup_rescan')}
+            </Button>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Manual card: disabled while a scan runs (§7 — resolveFaces 409s), otherwise always reachable —
+           including on a brand-new instance with no scan at all. Teal identity keeps it distinct from the
+           primary-blue guided door without implying a recommendation. -->
+      <div
+        class={[
+          'group relative flex flex-col overflow-hidden rounded-2xl border p-6 shadow-sm transition duration-200',
+          scanRunning
+            ? 'pointer-events-none border-gray-200 bg-gray-50/60 opacity-60 dark:border-gray-700/60 dark:bg-gray-800/40'
+            : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-teal-200 hover:shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:hover:border-teal-500/40',
+        ].join(' ')}
+        aria-disabled={scanRunning ? 'true' : undefined}
+        data-testid="chooser-card-manual"
+      >
+        <div
+          class="pointer-events-none absolute -top-14 -right-14 size-40 rounded-full bg-teal-100/70 blur-3xl dark:bg-teal-500/10"
+          aria-hidden="true"
+        ></div>
+
+        <div class="relative flex items-start gap-3.5">
+          <div
+            class="flex size-12 flex-none items-center justify-center rounded-xl bg-teal-50 text-teal-600 ring-1 ring-teal-100 ring-inset dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-400/25"
           >
-            <Icon icon={mdiRefresh} size="16" />
-            {$t('admin.face_cleanup_rescan')}
-          </Button>
+            <Icon icon={mdiAccountSearch} size="24" />
+          </div>
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+              {$t('admin.face_cleanup_mode_manual')}
+            </h2>
+            <p class="mt-0.5 text-sm/snug text-gray-500 dark:text-gray-400">
+              {$t('admin.face_cleanup_mode_manual_sub')}
+            </p>
+          </div>
+        </div>
+
+        <div
+          class="relative mt-5 rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100 ring-inset dark:bg-gray-900/40 dark:ring-white/5"
+        >
+          {#if firstVisit}
+            {@render statusChip('teal', $t('admin.face_cleanup_mode_manual_no_scan_needed'))}
+          {:else}
+            {@render statusChip(
+              'gray',
+              $t('admin.face_cleanup_mode_manual_user_count', { values: { count: userCount } }),
+            )}
+          {/if}
+          {#if scanRunning}
+            <p class="mt-2 text-xs/relaxed text-amber-600 dark:text-amber-400">
+              {$t('admin.face_cleanup_mode_manual_blocked_scanning')}
+            </p>
+          {/if}
+        </div>
+
+        <div class="relative mt-auto pt-6">
+          {#if scanRunning}
+            <!-- Genuinely not activatable: no href (so it's never a real link), native `disabled` (so it
+                 can't be reached by keyboard either) — not just faded with opacity. -->
+            <Button
+              color="secondary"
+              variant="outline"
+              size="medium"
+              fullWidth
+              disabled
+              data-testid="chooser-manual-cta"
+            >
+              {$t('admin.face_cleanup_mode_browse_people')}
+            </Button>
+          {:else}
+            <Button
+              color="primary"
+              variant="filled"
+              size="medium"
+              fullWidth
+              trailingIcon={mdiArrowRight}
+              href={Route.faceCleanupPeople()}
+              data-testid="chooser-manual-cta"
+            >
+              {$t('admin.face_cleanup_mode_browse_people')}
+            </Button>
+          {/if}
         </div>
       </div>
     </div>
-
-    <!-- Loading -->
-    {#if loading}
-      <div class="flex items-center justify-center py-20 text-gray-400">
-        <span>{$t('loading')}</span>
-      </div>
-
-      <!-- Initial load failed (D17): distinct from "no scan yet" — a network/server error is not the same as
-           a clean instance that has never scanned, and rendering it as the latter hides the failure. -->
-    {:else if loadError}
-      <div
-        class="mb-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400"
-        data-testid="load-error-banner"
-      >
-        <span class="flex-1">{$t('admin.face_cleanup_load_error')}</span>
-        <Button color="secondary" size="small" onclick={loadInitial} data-testid="load-error-retry">
-          {$t('retry')}
-        </Button>
-      </div>
-
-      <!-- No scan yet -->
-    {:else if !scan}
-      <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
-        <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_empty_no_scan')}</div>
-        <p class="mt-2 text-sm text-gray-400">{$t('admin.face_cleanup_empty_no_scan_sub')}</p>
-      </div>
-
-      <!-- Scan running / pending: show progress -->
-    {:else if isActive(scan.status)}
-      <div
-        class="rounded-2xl border border-primary-100 bg-primary-50/50 p-8 text-center dark:border-primary-900/30 dark:bg-primary-900/10"
-      >
-        <div class="mb-3 text-base font-semibold text-primary">
-          {scan.status === 'pending' ? $t('admin.face_cleanup_scan_pending') : $t('admin.face_cleanup_scan_running')}
-        </div>
-        {#if scan.progress}
-          <div class="mb-3 text-sm text-gray-500">
-            {scan.progress.scanned.toLocaleString()} / {scan.progress.total.toLocaleString()}
-            {$t('admin.face_cleanup_faces')}
-          </div>
-          <div class="mx-auto h-2 max-w-xs overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
-            <div
-              class="h-full rounded-full bg-primary transition-all"
-              style={`width:${scan.progress.total > 0 ? Math.round((scan.progress.scanned / scan.progress.total) * 100) : 0}%`}
-            ></div>
-          </div>
-        {:else}
-          <div class="text-sm text-gray-400">{$t('admin.face_cleanup_scan_preparing')}</div>
-        {/if}
-      </div>
-
-      <!-- Scan failed -->
-    {:else if scan.status === 'failed'}
-      <div class="rounded-2xl border border-red-200 bg-red-50 p-6 dark:border-red-900/30 dark:bg-red-900/10">
-        <div class="font-semibold text-red-700 dark:text-red-400">{$t('admin.face_cleanup_scan_failed')}</div>
-        {#if scan.error}
-          <p class="mt-1 font-mono text-xs text-red-500">{scan.error}</p>
-        {/if}
-        <div class="mt-3">
-          <Button color="secondary" onclick={handleRescan} disabled={scanning}>
-            {$t('admin.face_cleanup_retry_scan')}
-          </Button>
-        </div>
-      </div>
-
-      <!-- Scan completed -->
-    {:else if scan.status === 'completed'}
-      <!-- What to do now: the page is dense and, until this, said nothing about what the admin should DO — nor
-           that the confident clusters arrive pre-selected. Only worth showing when the scan actually flagged
-           someone; the "nothing to clean up" state below speaks for itself. -->
-      {#if vm && (vm.reviewFirst.length > 0 || vm.confident.length > 0)}
-        <div class="mb-6">
-          <ScanChecklist
-            reviewFirstTotal={vm.reviewFirst.length}
-            reviewFirstOpened={vm.reviewFirst.filter((person) => vm!.opened.has(person.personId)).length}
-            confidentTotal={vm.confident.length}
-            selectedCount={vm.selectedCount}
-          />
-        </div>
-      {/if}
-
-      <!-- Stat strip -->
-      {#if scan.totals}
-        {@const tot = scan.totals}
-        <div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-gray-400">
-              <span class="size-2 rounded-full bg-gray-400"></span>
-              {$t('admin.face_cleanup_stat_eligible')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">{tot.eligibleFaces.toLocaleString()}</div>
-            <div class="mt-0.5 text-xs text-gray-400">{$t('admin.face_cleanup_stat_eligible_sub')}</div>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-amber-500">
-              <span class="size-2 rounded-full bg-amber-400"></span>
-              {$t('admin.face_cleanup_stat_flagged')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">{tot.flaggedFaces.toLocaleString()}</div>
-            <div class="mt-0.5 text-xs text-gray-400">
-              {$t('admin.face_cleanup_stat_flagged_sub', { values: { count: tot.affectedPersons } })}
-            </div>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-green-600">
-              <span class="size-2 rounded-full bg-green-500"></span>
-              {$t('admin.face_cleanup_stat_repaired')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">{tot.toRepair.toLocaleString()}</div>
-            <div class="mt-0.5 text-xs text-gray-400">{$t('admin.face_cleanup_stat_repaired_sub')}</div>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-primary">
-              <span class="size-2 rounded-full bg-primary"></span>
-              {$t('admin.face_cleanup_stat_needs_decision')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">{tot.reviewOnlyFaces.toLocaleString()}</div>
-            <div class="mt-0.5 text-xs text-gray-400">
-              {$t('admin.face_cleanup_stat_needs_decision_sub', { values: { count: tot.reviewOnlyPersons } })}
-            </div>
-          </div>
-          <div class="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <div class="flex items-center gap-2 text-xs font-medium text-red-500">
-              <span class="size-2 rounded-full bg-red-500"></span>
-              {$t('admin.face_cleanup_stat_unattributable')}
-            </div>
-            <div class="mt-2 text-2xl font-semibold tabular-nums">
-              {(tot.reviewOnlyByReason?.unAttributable ?? 0).toLocaleString()}
-            </div>
-            <div class="mt-0.5 text-xs text-gray-400">{$t('admin.face_cleanup_stat_unattributable_sub')}</div>
-          </div>
-        </div>
-      {/if}
-
-      <!-- Empty completed state: 0 flagged -->
-      {#if !vm || (vm.reviewFirst.length === 0 && vm.confident.length === 0)}
-        <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
-          <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_empty_clean')}</div>
-          <p class="mt-2 text-sm text-gray-400">{$t('admin.face_cleanup_empty_clean_sub')}</p>
-        </div>
-      {:else}
-        <!-- Filter toolbar -->
-        <div class="mb-4 flex flex-wrap items-center gap-3">
-          <div
-            class="flex items-center gap-0.5 rounded-xl border border-gray-200 bg-gray-100 p-1 dark:border-gray-700 dark:bg-gray-800"
-          >
-            {#each ['all', 'review-first', 'confident', 'named'] as const as f (f)}
-              <button
-                type="button"
-                class={[
-                  'inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold leading-none transition-colors',
-                  filter === f
-                    ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white'
-                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
-                ].join(' ')}
-                onclick={() => (filter = f)}
-              >
-                {$t(FILTER_LABEL_KEYS[f])}
-                <span class="text-gray-400">
-                  {#if f === 'all'}{filterCounts.all}{/if}
-                  {#if f === 'review-first'}{filterCounts.reviewFirst}{/if}
-                  {#if f === 'confident'}{filterCounts.confident}{/if}
-                  {#if f === 'named'}{filterCounts.named}{/if}
-                </span>
-              </button>
-            {/each}
-          </div>
-          <div
-            class="flex min-w-48 flex-1 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 dark:border-gray-700 dark:bg-gray-800"
-          >
-            <svg
-              class="size-4 flex-none text-gray-300"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <circle cx="11" cy="11" r="7" /><path d="m20 20-3.2-3.2" />
-            </svg>
-            <input
-              bind:value={searchQuery}
-              placeholder={$t('admin.face_cleanup_search_placeholder')}
-              class="flex-1 bg-transparent text-sm text-gray-700 placeholder:text-gray-300 focus:outline-none dark:text-gray-200"
-            />
-          </div>
-        </div>
-
-        <!-- Apply error banner -->
-        {#if applyError}
-          <div
-            class="mb-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400"
-          >
-            <span class="flex-1">{applyError}</span>
-            <button type="button" onclick={() => (applyError = null)} class="flex-none text-red-400 hover:text-red-600">
-              <Icon icon={mdiClose} size="16" />
-            </button>
-          </div>
-        {/if}
-
-        <!-- Selection bar -->
-        <div
-          class="mb-4 flex items-center gap-4 rounded-2xl border border-primary-100 bg-primary-50/60 px-4 py-3 dark:border-primary-900/30 dark:bg-primary-900/10"
-        >
-          <span class="text-base font-bold text-primary-600 dark:text-primary-400">
-            {$t('admin.face_cleanup_selected', { values: { count: vm.selectedCount } })}
-          </span>
-          <span class="text-xs text-gray-400 dark:text-gray-500">
-            {$t('admin.face_cleanup_selected_hint')}
-          </span>
-          <span class="flex-1"></span>
-          <button
-            type="button"
-            onclick={() => vm?.clear()}
-            class="rounded-xl border border-transparent px-3 py-1.5 text-sm font-semibold text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-          >
-            {$t('admin.face_cleanup_clear')}
-          </button>
-          <Button color="primary" disabled={vm.selectedCount === 0 || applying} onclick={handleApply}>
-            {$t('admin.face_cleanup_apply', { values: { count: vm.selectedCount } })}
-          </Button>
-        </div>
-
-        <!-- Table -->
-        <FaceCleanupTable
-          {vm}
-          {filter}
-          {searchQuery}
-          users={data.users}
-          onOpen={handleOpen}
-          onDismiss={handleDismiss}
-        />
-
-        <!-- Footnote -->
-        <p class="mt-4 max-w-3xl text-xs text-gray-400 dark:text-gray-500">
-          {$t('admin.face_cleanup_footnote')}
-        </p>
-      {/if}
-    {/if}
   </div>
 </AdminPageLayout>

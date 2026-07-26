@@ -339,6 +339,51 @@ describe(FaceRepairAdminController.name, () => {
     });
   });
 
+  // Slice 3 (manual face review, docs/superpowers/plans/2026-07-23-manual-face-review-slice-3.md): the manual
+  // review page has no scan to read personName/ownerId off, so it needs a dedicated admin-gated lookup.
+  describe('GET /admin/face-repair/person/:personId', () => {
+    const personId = '00000000-0000-4000-a000-000000000050';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get(`/admin/face-repair/person/${personId}`);
+      expect(ctx.authenticate).toHaveBeenCalled();
+    });
+
+    it('is admin-only', async () => {
+      ctx.authenticate.mockRejectedValue(new ForbiddenException('Forbidden'));
+      const { status } = await request(ctx.getHttpServer())
+        .get(`/admin/face-repair/person/${personId}`)
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(403);
+      expect(service.getPersonMetadata).not.toHaveBeenCalled();
+    });
+
+    it('validates the personId is a uuid', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/person/not-a-uuid')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(400);
+      expect(service.getPersonMetadata).not.toHaveBeenCalled();
+    });
+
+    it('returns the service result', async () => {
+      const metadata = {
+        id: personId,
+        name: 'Alice',
+        ownerId: '00000000-0000-4000-a000-000000000051',
+        faceCount: 4,
+        thumbnailFaceId: '00000000-0000-4000-a000-000000000052',
+      };
+      service.getPersonMetadata.mockResolvedValue(metadata);
+      const { status, body } = await request(ctx.getHttpServer())
+        .get(`/admin/face-repair/person/${personId}`)
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(service.getPersonMetadata).toHaveBeenCalledWith(personId);
+      expect(body).toEqual(metadata);
+    });
+  });
+
   describe('POST /admin/face-repair/resolve', () => {
     const personId = '00000000-0000-4000-a000-000000000030';
     const ownerA = '00000000-0000-4000-a000-000000000031';

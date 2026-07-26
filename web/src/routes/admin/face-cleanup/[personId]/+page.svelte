@@ -275,7 +275,7 @@
   };
 
   const handleCancel = () => {
-    void goto(Route.faceCleanup());
+    void goto(Route.faceCleanupScan());
   };
 
   // Every resolve on this page funnels through here, so a failure can never again be swallowed: the whole-cluster
@@ -302,7 +302,7 @@
           },
         }),
       );
-      void goto(Route.faceCleanup());
+      void goto(Route.faceCleanupScan());
     } catch (error: unknown) {
       const status = (error as { status?: number }).status;
       applyError =
@@ -344,11 +344,13 @@
   };
 </script>
 
-<AdminPageLayout breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanup() }, { title: personName }]}>
+<AdminPageLayout
+  breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanupScan() }, { title: personName }]}
+>
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Back link -->
     <a
-      href={Route.faceCleanup()}
+      href={Route.faceCleanupScan()}
       class="mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
     >
       <Icon icon={mdiArrowLeft} size="16" />
@@ -704,70 +706,50 @@
                 : $t('admin.face_cleanup_review_apply_label', { values: { count: vm.total } })}
             </Button>
           {:else}
-            <!-- Bulk-bar state — only the move-to-owner path is wired this slice (RF1/Slice 1). -->
+            <!-- Bulk-bar state: the routing choices for the selected faces. The previous text-xs buttons on the
+                 dark bar read as small/hidden (reported) — these are larger, each with a defining inset ring and
+                 a bigger hit area; the destructive "not a face" is tinted red, apart from the routine routes. -->
+            {@const bulkBtn =
+              'inline-flex items-center gap-2 rounded-lg bg-white/10 px-3.5 py-2 text-sm font-semibold text-white ring-1 ring-white/15 ring-inset transition-colors hover:bg-white/20'}
             <div
-              class="flex flex-1 flex-wrap items-center gap-2.5 rounded-xl bg-gray-900 px-3.5 py-2.5 text-white"
+              class="flex flex-1 flex-wrap items-center gap-2 rounded-2xl bg-gray-900 px-4 py-3 text-white dark:bg-gray-950"
               data-testid="bulk-bar"
             >
-              <span class="text-sm font-bold whitespace-nowrap">
+              <span class="mr-1 text-base font-bold whitespace-nowrap">
                 {vm.selectedCount}
                 {$t('admin.face_cleanup_review_bulk_selected_suffix')}
               </span>
-              <span class="h-5 w-px bg-white/15"></span>
-              <button
-                type="button"
-                onclick={handleBulkOwner}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-              >
-                <Icon icon={STATE_ICON.owner} size="13" />
+              <span class="h-6 w-px bg-white/15"></span>
+              <button type="button" onclick={handleBulkOwner} class={bulkBtn}>
+                <Icon icon={STATE_ICON.owner} size="16" />
                 {$t('admin.face_cleanup_review_bulk_owner')}
               </button>
-              <button
-                type="button"
-                onclick={handleBulkStay}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="bulk-stay"
-              >
-                <Icon icon={STATE_ICON.stay} size="13" />
+              <button type="button" onclick={handleBulkStay} class={bulkBtn} data-testid="bulk-stay">
+                <Icon icon={STATE_ICON.stay} size="16" />
                 {$t('admin.face_cleanup_review_bulk_stay')}
               </button>
-              <button
-                type="button"
-                onclick={handleBulkLock}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="bulk-lock"
-              >
-                <Icon icon={STATE_ICON.lock} size="13" />
+              <button type="button" onclick={handleBulkLock} class={bulkBtn} data-testid="bulk-lock">
+                <Icon icon={STATE_ICON.lock} size="16" />
                 {$t('admin.face_cleanup_review_bulk_lock')}
               </button>
-              <button
-                type="button"
-                onclick={handleBulkOther}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="bulk-other"
-              >
-                <Icon icon={STATE_ICON.other} size="13" />
+              <button type="button" onclick={handleBulkOther} class={bulkBtn} data-testid="bulk-other">
+                <Icon icon={STATE_ICON.other} size="16" />
                 {$t('admin.face_cleanup_review_bulk_other')}
               </button>
               <!-- Sits next to "Move to…" because it is the same decision one step further: the admin knows the
                  face does not belong here but has nobody to route it to. Without it the only honest-looking exits
                  are all wrong, and the review cannot be finished. -->
-              <button
-                type="button"
-                onclick={handleBulkUnknown}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="bulk-unknown"
-              >
-                <Icon icon={STATE_ICON.unknown} size="13" />
+              <button type="button" onclick={handleBulkUnknown} class={bulkBtn} data-testid="bulk-unknown">
+                <Icon icon={STATE_ICON.unknown} size="16" />
                 {$t('admin.face_cleanup_review_bulk_unknown')}
               </button>
               <button
                 type="button"
                 onclick={handleBulkDetach}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
+                class="inline-flex items-center gap-2 rounded-lg bg-red-500/15 px-3.5 py-2 text-sm font-semibold text-red-100 ring-1 ring-red-400/30 transition-colors ring-inset hover:bg-red-500/25"
                 data-testid="bulk-detach"
               >
-                <Icon icon={STATE_ICON.detach} size="13" />
+                <Icon icon={STATE_ICON.detach} size="16" />
                 {$t('admin.face_cleanup_review_bulk_detach')}
               </button>
               <!-- Same modal as the banner's (i). A plain button rather than <IconButton>: the bar is a dark
@@ -777,15 +759,15 @@
                 onclick={handleOpenHelp}
                 aria-label={$t('admin.face_cleanup_review_help_open')}
                 title={$t('admin.face_cleanup_review_help_open')}
-                class="inline-flex items-center rounded-md border border-white/15 bg-white/10 p-1.5 hover:bg-white/20"
+                class="inline-flex items-center rounded-lg bg-white/10 p-2 ring-1 ring-white/15 ring-inset hover:bg-white/20"
                 data-testid="bulk-help"
               >
-                <Icon icon={mdiInformationOutline} size="15" />
+                <Icon icon={mdiInformationOutline} size="16" />
               </button>
               <button
                 type="button"
                 onclick={() => vm.clearSelection()}
-                class="ml-auto text-xs font-bold text-gray-300 hover:text-white"
+                class="ml-auto text-sm font-bold text-gray-300 hover:text-white"
                 data-testid="clear"
               >
                 {$t('admin.face_cleanup_review_bulk_clear')}

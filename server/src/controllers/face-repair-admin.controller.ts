@@ -16,6 +16,7 @@ import {
   FaceRepairOwnerPersonCreatedResponseDto,
   FaceRepairOwnerPersonCreateRequestDto,
   FaceRepairPersonFacesDto,
+  FaceRepairPersonMetadataResponseDto,
   FaceRepairRequestDto,
   FaceRepairResolutionsListDto,
   FaceRepairResolutionsRemovedDto,
@@ -97,6 +98,18 @@ export class FaceRepairAdminController {
     @Body() dto: FaceRepairClusterFacesRequestDto,
   ): Promise<FaceRepairClusterFacesResponseDto> {
     return this.service.getClusterFaces(personId, dto) as Promise<FaceRepairClusterFacesResponseDto>;
+  }
+
+  // Slice 3 (manual face review): the manual review page has no scan to read personName/ownerId off. Does not
+  // collide with `scan/person/:personId` above — the two routes have different literal prefixes
+  // (`scan/person/...` vs `person/...`), so route order doesn't matter here.
+  @Get('person/:personId')
+  @Authenticated({ admin: true })
+  @Endpoint({ summary: 'Get a person for manual review', history: new HistoryBuilder().added('v1') })
+  getFaceRepairPersonMetadata(
+    @Param('personId', new ParseUUIDPipe({ version: '4' })) personId: string,
+  ): Promise<FaceRepairPersonMetadataResponseDto> {
+    return this.service.getPersonMetadata(personId) as Promise<FaceRepairPersonMetadataResponseDto>;
   }
 
   @Post('resolve')

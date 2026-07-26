@@ -4,7 +4,7 @@ import { OnJob } from 'src/decorators';
 import { FaceRepairResolveRequest, FaceRepairResolveResponse, FaceRepairScanParams } from 'src/dtos/face-repair.dto';
 import { JobName, JobStatus, QueueName } from 'src/enum';
 import { RepairScanPerson, RepairScanRow, ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
-import { OwnerPersonRow } from 'src/repositories/face-repair.repository';
+import { OwnerPersonRow, PersonMetadataRow } from 'src/repositories/face-repair.repository';
 import { BaseService } from 'src/services/base.service';
 import { RepairReport, summarizeRepairPlan } from 'src/services/face-repair.summary';
 import { JobOf } from 'src/types';
@@ -666,6 +666,17 @@ export class FaceRepairService extends BaseService {
     return { personId, flaggedFaces };
   }
 
+  // Slice 3 (manual face review): the manual review page has no scan to derive personName/ownerId from, and
+  // ownerId is what scopes the move-picker. Admin-gated at the controller; not owner-scoped here by design —
+  // an admin must be able to look up any person, not just their own.
+  async getPersonMetadata(personId: string): Promise<PersonMetadataRow> {
+    const person = await this.faceRepairRepository.getPersonMetadata(personId);
+    if (!person) {
+      throw new NotFoundException('Person not found');
+    }
+    return person;
+  }
+
   async createDeclines(input: {
     persons?: { personId: string; suspectedOwnerIds: string[] }[];
     declinedBy: string;
@@ -831,10 +842,26 @@ export class FaceRepairService extends BaseService {
     applyVerdictFilters(byPerson, verdictMaps);
     const resolvable = new Set((byPerson.get(personId) ?? []).map((face) => face.assetFaceId));
 
-    // stay/lock/detach/unknown (E15) act only on this person's raw flagged snapshot.
-    const unresolvable = findUnresolvableIds([...stay, ...lock, ...detach, ...unknown], flaggedIds);
+    // E15: only `stay` is snapshot-gated. It writes a negative verdict against the face's SUSPECTED owner,
+    // read from the snapshot via snapshotOwnerByFace.get(id)! — with no snapshot row there is no owner to
+    // record against, and the non-null assertion would yield undefined (500 / FK violation). lock, detach
+    // and unknown are all meaningful for any face on this person (manual review): lock is gated on
+    // eligibility instead (slice 1), and detach/unknown are person-scoped at the write layer.
+    const unresolvable = findUnresolvableIds([...stay], flaggedIds);
     if (unresolvable.length > 0) {
       throw new BadRequestException('Some faces are not in the flagged snapshot for this person');
+    }
+
+    // `lock` writes through replaceFaceIdentities, which is keyed only by assetFaceId — no person scope and
+    // an unconditional ON CONFLICT DO UPDATE. Snapshot membership used to prove the face was on this person;
+    // with that gate lifted the check must be explicit, or a lock could re-point any face in the database
+    // (including another user's) onto this person's identity.
+    if (lock.length > 0) {
+      const eligible = await this.faceRepairRepository.getEligibleFaceIdsForPerson(personId, lock);
+      const ineligible = lock.filter((id) => !eligible.has(id));
+      if (ineligible.length > 0) {
+        throw new BadRequestException('Some faces are not eligible for this person');
+      }
     }
 
     // moveToPerson: a requested face no longer flagged here — moved off since the scan, or declined since

@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Kysely } from 'kysely';
+import { randomUUID } from 'node:crypto';
 import { JobName, SourceType } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -1223,6 +1224,20 @@ describe('FaceRepairService.resolveFaces: stay on a non-flagged face (M14, E15)'
     const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
     expect(snapshotPersonIds).toContain(source.id);
   });
+
+  it('throws BadRequestException for a stay id when no scan has ever run', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    // No seedFlaggedSnapshot call at all — there is no scan, so no snapshot and no suspected owner.
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [f1], detach: [], lock: [], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+  });
 });
 
 describe('FaceRepairService.resolveFaces: re-soft-stay is idempotent (M22, E20)', () => {
@@ -1369,30 +1384,192 @@ describe('FaceRepairService.resolveFaces: confirm/lock (M5, E2)', () => {
   });
 });
 
-describe('FaceRepairService.resolveFaces: lock on a non-flagged face (M14, E15)', () => {
-  it('throws BadRequestException when a lock id is not in the flagged snapshot for this person', async () => {
+describe('FaceRepairService.resolveFaces: lock eligibility (manual review, E15 relaxed)', () => {
+  // 2a: inverts the old M14/E15 assertion — a non-flagged face that is currently ON this person now
+  // succeeds, because `lock` is no longer gated on flagged-snapshot membership.
+  it('locks a non-flagged face that is currently on this person', async () => {
     const { sut, ctx, scanRepo } = setup();
     const { user } = await ctx.newUser();
     const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
     const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
     const f1 = await seedFace(ctx, user.id, source.id);
-    // A rest-of-cluster face on the same person that was never part of the flagged snapshot.
     const notFlagged = await seedFace(ctx, user.id, source.id);
-
     await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [notFlagged], detach: [], unknown: [] },
+      user.id,
+    );
+
+    expect(result.locked).toBe(1);
+    const rows = await manualLinkFor(notFlagged);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe('manual');
+  });
+
+  // 2b: the actual manual-review path — no scan has ever run, so there is no snapshot at all.
+  it('locks a face when no scan has ever run', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+      user.id,
+    );
+
+    expect(result.locked).toBe(1);
+    const rows = await manualLinkFor(f1);
+    expect(rows).toHaveLength(1);
+  });
+
+  // 2c: §5.3 hazard — a face flagged for `source` at scan time but reassigned to a DIFFERENT person since
+  // (e.g. a concurrent manual move, mirroring the "skip stale moves" M9/E1 pattern) must be rejected.
+  // NOTE on pre-slice-1 behaviour: this does NOT go red against unmodified source. getScanFlaggedFacesForPersons
+  // re-validates `asset_face.personId = ff.personId` (i.e. current personId) at snapshot-read time — its own
+  // comment calls this out: "a face moved off its recorded person since the scan is silently dropped". So the
+  // pre-existing combined stay/lock/detach/unknown snapshot-membership gate already (coincidentally) rejects
+  // this shape today. The eligibility check is still required going forward: once `lock` is dropped from that
+  // combined gate (3b) it is the ONLY thing standing between a `lock` id and the unscoped
+  // `replaceFaceIdentities` upsert — this test pins that the swap does not quietly drop the guarantee.
+  it('rejects a lock id that belongs to a different person', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: other } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+    // f1 moved to a different person after the scan flagged it — still in the raw flagged snapshot, but no
+    // longer actually on `source`.
+    await db.updateTable('asset_face').set({ personId: other.id }).where('id', '=', f1).execute();
 
     await expect(
       sut.resolveFaces(
-        { personId: source.id, moveToPerson: [], stay: [], lock: [notFlagged], detach: [], unknown: [] },
+        { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
         user.id,
       ),
-    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+    ).rejects.toThrow(BadRequestException);
 
-    const rows = await manualLinkFor(notFlagged);
-    expect(rows).toHaveLength(0);
-    const latest = await scanRepo.getLatestScan();
-    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
-    expect(snapshotPersonIds).toContain(source.id);
+    expect(await manualLinkFor(f1)).toHaveLength(0);
+  });
+
+  // 2d: the cross-tenant arm of the same hazard — the face was reassigned to a person owned by a DIFFERENT
+  // user. This is what makes the missing check a security issue rather than a correctness nit. Same pre-slice-1
+  // caveat as 2c: getScanFlaggedFacesForPersons' current-personId re-check already rejects this shape today.
+  it('rejects a lock id that belongs to a different person owned by a different user', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { user: otherUser } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: otherUsersPerson } = await ctx.newPerson({ ownerId: otherUser.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+    await db.updateTable('asset_face').set({ personId: otherUsersPerson.id }).where('id', '=', f1).execute();
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(await manualLinkFor(f1)).toHaveLength(0);
+  });
+
+  // 2e: a nonexistent face id is rejected. Pre-slice-1 caveat as 2c/2d: getScanFlaggedFacesForPersons'
+  // INNER JOIN to asset_face means a nonexistent id can never appear in the flagged snapshot either, so
+  // today's combined gate already 400s this (via "not in the flagged snapshot"), not via an unhandled
+  // FK-violation crash. The eligibility read must still reject it once `lock` no longer goes through that gate.
+  it('rejects a lock id that does not exist', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [], lock: [randomUUID()], detach: [], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  // 2f: a soft-deleted face is rejected — it is no longer "listed on the manual review page". Flagged while
+  // alive, then soft-deleted (the row still physically exists). Same pre-slice-1 caveat: the snapshot read's own
+  // `asset_face.deletedAt IS NULL` filter already excludes it from the flagged snapshot today, so the combined
+  // gate already rejects it — the write never actually runs pre-slice-1 either.
+  it('rejects a lock id for a soft-deleted face', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+    await db.updateTable('asset_face').set({ deletedAt: new Date() }).where('id', '=', f1).execute();
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(await manualLinkFor(f1)).toHaveLength(0);
+  });
+
+  // 2g: once eligibility constrains the face to this person, re-pointing a face already linked to another
+  // identity is the upsert's DO UPDATE behaviour — correct, but must be pinned so nobody later mistakes it
+  // for a no-op.
+  it('re-points a face already linked to another identity onto this person (upsert, not no-op)', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: otherIdentityPerson } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, otherIdentityPerson.id);
+
+    await sut.resolveFaces(
+      { personId: otherIdentityPerson.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+      user.id,
+    );
+    const beforeRows = await manualLinkFor(f1);
+    expect(beforeRows).toHaveLength(1);
+    const otherIdentity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(otherIdentityPerson.id);
+    expect(beforeRows[0].identityId).toBe(otherIdentity.id);
+
+    // Move the face onto `source` (outside resolveFaces, simulating the face currently sitting there) and
+    // lock it there.
+    await db.updateTable('asset_face').set({ personId: source.id }).where('id', '=', f1).execute();
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+      user.id,
+    );
+
+    expect(result.locked).toBe(1);
+    const afterRows = await manualLinkFor(f1);
+    expect(afterRows).toHaveLength(1);
+    const sourceIdentity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(source.id);
+    expect(afterRows[0].identityId).toBe(sourceIdentity.id);
+  });
+
+  // 2h: guided regression — a flagged face still locks (the pre-existing, still-supported path).
+  it('locks a flagged face as before', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+      user.id,
+    );
+
+    expect(result.locked).toBe(1);
+    const rows = await manualLinkFor(f1);
+    expect(rows).toHaveLength(1);
   });
 });
 
@@ -1464,8 +1641,10 @@ describe('FaceRepairService.resolveFaces: detach (M6, E4, E15)', () => {
   });
 });
 
-describe('FaceRepairService.resolveFaces: detach on a non-flagged face (M14, E15)', () => {
-  it('throws BadRequestException when a detach id is not in the flagged snapshot for this person', async () => {
+describe('FaceRepairService.resolveFaces: detach on a non-flagged face (E15 relaxed)', () => {
+  // 1a: inverts the old M14/E15 assertion — a non-flagged face currently on this person now succeeds,
+  // because `detach` is no longer gated on flagged-snapshot membership.
+  it('detaches a non-flagged face that is currently on this person', async () => {
     const { sut, ctx, scanRepo } = setup();
     const { user } = await ctx.newUser();
     const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
@@ -1474,21 +1653,76 @@ describe('FaceRepairService.resolveFaces: detach on a non-flagged face (M14, E15
     // A rest-of-cluster face on the same person that was never part of the flagged snapshot.
     const notFlagged = await seedFace(ctx, user.id, source.id);
 
+    // notFlagged already carries an identity link (as a genuinely-resolved ML face normally would) — proves
+    // detach actually strips it, rather than the assertion trivially passing because no link ever existed.
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const sourceIdentity = await faceIdentityRepo.ensurePersonIdentity(source.id);
+    await faceIdentityRepo.linkFace({ assetFaceId: notFlagged, identityId: sourceIdentity.id, source: 'backfill' });
+    expect(await identityLinkRowsFor(notFlagged)).toHaveLength(1);
+
     await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
 
-    await expect(
-      sut.resolveFaces(
-        { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [notFlagged], unknown: [] },
-        user.id,
-      ),
-    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [notFlagged], unknown: [] },
+      user.id,
+    );
 
-    // No side effects: untouched, no identity link stripped, person still in the scan snapshot.
+    expect(result.detached).toBe(1);
     const byId = await personIdsOf([notFlagged]);
-    expect(byId[notFlagged]).toBe(source.id);
-    const latest = await scanRepo.getLatestScan();
-    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
-    expect(snapshotPersonIds).toContain(source.id);
+    expect(byId[notFlagged]).toBeNull();
+    const row = await db
+      .selectFrom('asset_face')
+      .select('deletedAt')
+      .where('id', '=', notFlagged)
+      .executeTakeFirstOrThrow();
+    expect(row.deletedAt).not.toBeNull();
+    expect(await identityLinkRowsFor(notFlagged)).toHaveLength(0);
+  });
+
+  // 1b: the actual manual-review path — no scan has ever run, so there is no snapshot at all.
+  it('detaches a face when no scan has ever run', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [f1], unknown: [] },
+      user.id,
+    );
+
+    expect(result.detached).toBe(1);
+  });
+
+  // 1c — LOAD-BEARING: proves detach is person-scoped at the write layer (detachFaces filters `personId`),
+  // now that the flagged-snapshot gate no longer stands in front of it. A foreign face must become an inert
+  // no-op: no throw, `detached: 0`, and the foreign face completely untouched.
+  it('is an inert no-op for a face that belongs to a DIFFERENT person', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: other } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const foreignFace = await seedFace(ctx, user.id, other.id);
+
+    const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+    const otherIdentity = await faceIdentityRepo.ensurePersonIdentity(other.id);
+    await faceIdentityRepo.linkFace({ assetFaceId: foreignFace, identityId: otherIdentity.id, source: 'backfill' });
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [foreignFace], unknown: [] },
+      user.id,
+    );
+
+    expect(result.detached).toBe(0);
+    const byId = await personIdsOf([foreignFace]);
+    expect(byId[foreignFace]).toBe(other.id);
+    const row = await db
+      .selectFrom('asset_face')
+      .select('deletedAt')
+      .where('id', '=', foreignFace)
+      .executeTakeFirstOrThrow();
+    expect(row.deletedAt).toBeNull();
+    expect(await identityLinkRowsFor(foreignFace)).toHaveLength(1);
   });
 });
 
@@ -2000,7 +2234,11 @@ describe('FaceRepairService.resolveFaces: unknown person (state 6)', () => {
     expect(snapshotPersonIds).not.toContain(source.id);
   });
 
-  it('creates no unnamed cluster when the unknown face went stale (rejected before anything is written)', async () => {
+  // 1d — §5.4 behaviour change: the flagged-snapshot gate no longer stands in front of `unknown`, so a face
+  // that moved off `source` since the scan is no longer rejected outright. executeRepair's still-on-source
+  // re-check silently skips it instead, `movedFaceIds` ends up empty, and the freshly created cluster (created
+  // BEFORE the move, per the park implementation) is cleaned up as an empty, nameless person.
+  it('returns success with unknown: 0 for a face that left this person since the scan', async () => {
     const { sut, ctx, scanRepo } = setup();
     const { user } = await ctx.newUser();
     const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
@@ -2011,8 +2249,8 @@ describe('FaceRepairService.resolveFaces: unknown person (state 6)', () => {
     await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
 
     // The face moved off `source` between the scan and this resolve. getScanFlaggedFacesForPersons only returns
-    // faces STILL on the person, so f1 drops out of the flagged snapshot and the E15 membership guard rejects
-    // the whole resolve — the same rule stay/lock/detach follow.
+    // faces STILL on the person, so f1 drops out of the flagged snapshot — but that snapshot is no longer a
+    // gate for `unknown`.
     await db.updateTable('asset_face').set({ personId: elsewhere.id }).where('id', '=', f1).execute();
 
     const peopleBefore = await db
@@ -2021,15 +2259,15 @@ describe('FaceRepairService.resolveFaces: unknown person (state 6)', () => {
       .where('ownerId', '=', user.id)
       .executeTakeFirstOrThrow();
 
-    await expect(
-      sut.resolveFaces(
-        { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [], unknown: [f1] },
-        user.id,
-      ),
-    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [], unknown: [f1] },
+      user.id,
+    );
 
-    // The guard runs before the park, so no empty, nameless person is left littering the owner's People page,
-    // and the face is untouched where it now lives.
+    expect(result.unknown).toBe(0);
+
+    // No new person was created — the freshly created empty cluster was cleaned up, and the face is untouched
+    // where it now lives.
     const peopleAfter = await db
       .selectFrom('person')
       .select((eb) => eb.fn.countAll<string>().as('count'))
@@ -2039,6 +2277,135 @@ describe('FaceRepairService.resolveFaces: unknown person (state 6)', () => {
     const byId = await personIdsOf([f1]);
     expect(byId[f1]).toBe(elsewhere.id);
     expect(await manualLinkFor(f1)).toHaveLength(0);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: unknown on a non-flagged face (E15 relaxed)', () => {
+  // 1e: a genuine rest-of-cluster face (currently on `source`, never flagged) can be parked too.
+  it('parks a non-flagged face into a new unnamed person with a manual link', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const notFlagged = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [], unknown: [notFlagged] },
+      user.id,
+    );
+
+    expect(result.unknown).toBe(1);
+    const byId = await personIdsOf([notFlagged]);
+    expect(byId[notFlagged]).not.toBeNull();
+    expect(byId[notFlagged]).not.toBe(source.id);
+
+    const cluster = await db
+      .selectFrom('person')
+      .select(['id', 'name'])
+      .where('id', '=', byId[notFlagged]!)
+      .executeTakeFirstOrThrow();
+    expect(cluster.name).toBe('');
+
+    const rows = await manualLinkFor(notFlagged);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe('manual');
+  });
+});
+
+describe('FaceRepairService.resolveFaces: unknown empties the source person (E15 relaxed)', () => {
+  // 1f: parking EVERY one of source's faces empties it — a mix of one flagged and one non-flagged face,
+  // so this only goes green once `unknown` is relaxed. Mirrors the moveToPerson M8/E6 cleanup, gated on
+  // countAllFaces (not just countEligibleFaces) and on the source being unnamed.
+  it('deletes the drained UNNAMED source person once every face (flagged + non-flagged) is parked', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const notFlagged = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [], unknown: [f1, notFlagged] },
+      user.id,
+    );
+    expect(result.unknown).toBe(2);
+
+    const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
+    expect(sourceRow).toBeUndefined();
+  });
+
+  it('keeps a drained NAMED source person after every face (flagged + non-flagged) is parked', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Jane Doe' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const notFlagged = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [], unknown: [f1, notFlagged] },
+      user.id,
+    );
+    expect(result.unknown).toBe(2);
+
+    const sourceRow = await db
+      .selectFrom('person')
+      .select(['id', 'name'])
+      .where('id', '=', source.id)
+      .executeTakeFirst();
+    expect(sourceRow).toBeDefined();
+    expect(sourceRow?.name).toBe('Jane Doe');
+  });
+});
+
+describe('FaceRepairService.resolveFaces: stay is the ONLY snapshot-gated bucket (E15 final shape)', () => {
+  // 1g — regression/contrast: stay still throws on a non-flagged face, while lock/detach/unknown (all
+  // relaxed by this slice, lock by slice 1) succeed on the very same shape of face. Pins the final gate
+  // shape so a future refactor cannot silently re-widen it.
+  it('rejects stay but accepts lock/detach/unknown for faces that were never flagged', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const notFlaggedStay = await seedFace(ctx, user.id, source.id);
+    const notFlaggedLock = await seedFace(ctx, user.id, source.id);
+    const notFlaggedDetach = await seedFace(ctx, user.id, source.id);
+    const notFlaggedUnknown = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [notFlaggedStay], lock: [], detach: [], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+
+    const lockResult = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [notFlaggedLock], detach: [], unknown: [] },
+      user.id,
+    );
+    expect(lockResult.locked).toBe(1);
+
+    const detachResult = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [notFlaggedDetach], unknown: [] },
+      user.id,
+    );
+    expect(detachResult.detached).toBe(1);
+
+    const unknownResult = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [], unknown: [notFlaggedUnknown] },
+      user.id,
+    );
+    expect(unknownResult.unknown).toBe(1);
   });
 });
 
