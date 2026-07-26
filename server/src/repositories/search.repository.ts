@@ -256,8 +256,7 @@ export interface GetCitiesOptions extends SuggestionScopeOptions, FilterSuggesti
   state?: string;
 }
 
-export interface GetCameraModelsOptions extends ExifSuggestionScopeOptions {
-  make?: string;
+export interface GetCameraModelsOptions extends SuggestionScopeOptions, FilterSuggestionFilterOptions {
   lensModel?: string;
 }
 
@@ -1077,9 +1076,18 @@ export class SearchRepository {
 
   @GenerateSql({ params: [[DummyValue.UUID], DummyValue.STRING, DummyValue.STRING] })
   async getCameraModels(userIds: string[], options: GetCameraModelsOptions): Promise<string[]> {
-    const res = await this.getExifField('model', userIds, options)
-      .$if(!!options.make, (qb) => qb.where('make', '=', options.make!))
+    // #858: every other active filter must narrow the model list, exactly like getCities. Only the
+    // model itself is excluded — a selected model must not collapse its own list to one row.
+    const filteredIds = this.buildFilteredAssetIds(userIds, without(options, 'model'));
+    const res = await this.db
+      .selectFrom('asset_exif')
+      .select('model')
+      .distinct()
+      .where('assetId', 'in', filteredIds)
+      .where('model', 'is not', null)
+      .where('model', '!=', '')
       .$if(!!options.lensModel, (qb) => qb.where('lensModel', '=', options.lensModel!))
+      .orderBy('model')
       .execute();
 
     return res.map((row) => row.model!);

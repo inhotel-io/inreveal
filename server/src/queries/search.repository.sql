@@ -1037,15 +1037,23 @@ where
 
 -- SearchRepository.getCameraModels
 select distinct
-  on ("model") "model"
+  "model"
 from
   "asset_exif"
-  inner join "asset" on "asset"."id" = "asset_exif"."assetId"
 where
-  "deletedAt" is null
+  "assetId" in (
+    select
+      "asset"."id"
+    from
+      "asset"
+    where
+      "asset"."deletedAt" is null
+      and "asset"."ownerId" = any ($1::uuid[])
+  )
   and "model" is not null
-  and "model" != $1
-  and "asset"."ownerId" = any ($2::uuid[])
+  and "model" != $2
+order by
+  "model"
 
 -- SearchRepository.getCameraLensModels
 select distinct
