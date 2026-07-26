@@ -498,6 +498,11 @@ following the `ProviderContainer` + `overrideWithValue` pattern of
 
 **Files.** New `mobile/lib/presentation/widgets/collection/space_collection_section.widget.dart`, plus the
 non-owned selector. New `mobile/test/presentation/widgets/collection/space_collection_section_test.dart`.
+**Also adds the new i18n key `spaces_hidden_non_owned_selection` to `i18n/en.json` and all nine locale
+files** — the full translation table is in Slice 8, but the key must land _here_, in the slice that first
+renders it. `easy_localization` renders a missing key as the raw key name, so deferring it to Slice 8 would
+let this slice's notice test pass trivially against the literal string `spaces_hidden_non_owned_selection`
+while the shipped app displayed that same gibberish for two slices.
 
 **Tests first (BDD).** One per row of the §3 gating table, plus:
 
@@ -558,11 +563,15 @@ tests.
 
 **Goal.** Ship-quality strings, fully translated, and a green CI.
 
-**One new key is required.** The reused `add_to_collection_restricted_to_space` reads "…so only albums in
-this space can accept them", which is **web's contribution-mode message**: it promises a destination that
-mobile deliberately does not offer (R1). Using it would tell the user to look for something that is not on
-screen. So a new key is added — and, per the fork rule that a new key must not ship untranslated, **with all
-nine translations in the same commit**:
+**One new key is required, and it is added in Slice 6, not here** — Slice 6 is its first consumer, and a key
+must exist in the slice that renders it. This table is the authoritative wording for that Slice 6 change; no
+i18n edit happens in Slice 8.
+
+The reused `add_to_collection_restricted_to_space` reads "…so only albums in this space can accept them",
+which is **web's contribution-mode message**: it promises a destination that mobile deliberately does not
+offer (R1). Using it would tell the user to look for something that is not on screen. So a new key is
+added — and, per the fork rule that a new key must not ship untranslated, **with all nine translations in the
+same commit**:
 
 | Locale    | `spaces_hidden_non_owned_selection`                                                                             |
 | --------- | --------------------------------------------------------------------------------------------------------------- |
@@ -588,8 +597,9 @@ French, which uses "espace" (cf. the existing `add_to_space` values).
 `spaces_no_writable_spaces` is deliberately **not** used: web shows it as an empty state, whereas this design
 omits the whole section when there is nothing writable (§3).
 
-**Files.** `i18n/en.json` plus the nine locale files, for the one new key only. Keying of the hardcoded
-English on the two surfaces this work touches: the space detail kebab and the space card sheet.
+**Files.** No `i18n/` edit in this slice — the one new key landed in Slice 6. This slice only keys the
+hardcoded English on the two surfaces this work touches: the space detail kebab and the space card sheet,
+both of which use keys that already exist.
 
 **Tests first (BDD).**
 
