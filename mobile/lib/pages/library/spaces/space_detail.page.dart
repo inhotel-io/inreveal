@@ -171,14 +171,17 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Space'),
-        content: Text('Are you sure you want to delete "${_space?.name}"? This cannot be undone.'),
+        title: Text('spaces_delete'.t(context: ctx)),
+        content: Text('spaces_delete_confirmation'.t(context: ctx, args: {'name': _space?.name ?? ''})),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('cancel'.t(context: ctx)),
+          ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
-            child: const Text('Delete'),
+            child: Text('delete'.t(context: ctx)),
           ),
         ],
       ),

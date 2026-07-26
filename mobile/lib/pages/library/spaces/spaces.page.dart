@@ -91,7 +91,10 @@ class SpacesPage extends HookConsumerWidget {
           title: Text('spaces_delete'.t(context: ctx)),
           content: Text('spaces_delete_confirmation'.t(context: ctx, args: {'name': space.name})),
           actions: [
-            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text('cancel'.t(context: ctx))),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('cancel'.t(context: ctx)),
+            ),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
               style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
