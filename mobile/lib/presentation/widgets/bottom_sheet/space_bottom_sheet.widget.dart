@@ -7,6 +7,7 @@ import 'package:immich_mobile/presentation/widgets/action_buttons/remove_from_sp
 import 'package:immich_mobile/presentation/widgets/action_buttons/share_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/base_bottom_sheet.widget.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
+import 'package:immich_mobile/utils/space_permissions.dart';
 import 'package:openapi/api.dart';
 
 class SpaceBottomSheet extends ConsumerStatefulWidget {
@@ -35,8 +36,7 @@ class _SpaceBottomSheetState extends ConsumerState<SpaceBottomSheet> {
     super.dispose();
   }
 
-  bool get _canEdit =>
-      widget.currentUserRole == SharedSpaceRole.owner || widget.currentUserRole == SharedSpaceRole.editor;
+  bool get _canEdit => roleIsWritable(widget.currentUserRole);
 
   @override
   Widget build(BuildContext context) {
