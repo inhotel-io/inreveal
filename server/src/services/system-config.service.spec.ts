@@ -166,7 +166,8 @@ const updatedConfig = Object.freeze<SystemConfig>({
     birthday: true,
     recentTrips: true,
     types: {},
-    themeMaxDistance: 0.3,
+    themeMaxDistance: 0.75,
+    personThrowbackDormancyMonths: 6,
   },
   reverseGeocoding: {
     enabled: true,
@@ -452,11 +453,19 @@ describe(SystemConfigService.name, () => {
       });
     });
 
-    it('should default themeMaxDistance to 0.3', async () => {
+    it('should default themeMaxDistance to 0.75', async () => {
       mocks.systemMetadata.get.mockResolvedValue({});
 
       await expect(sut.getSystemConfig()).resolves.toMatchObject({
-        memories: { themeMaxDistance: 0.3 },
+        memories: { themeMaxDistance: 0.75 },
+      });
+    });
+
+    it('should default personThrowbackDormancyMonths to 6', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({});
+
+      await expect(sut.getSystemConfig()).resolves.toMatchObject({
+        memories: { personThrowbackDormancyMonths: 6 },
       });
     });
 

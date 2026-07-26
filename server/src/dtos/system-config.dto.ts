@@ -274,8 +274,15 @@ const SystemConfigMemoriesSchema = z
       .number()
       .min(0)
       .max(2)
-      .default(0.3)
+      .default(0.75)
       .describe('Max CLIP cosine distance for themed memories'),
+    personThrowbackDormancyMonths: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(120)
+      .default(6)
+      .describe('Months a person must be absent from photos before person_throwback resurfaces them'),
   })
   .meta({ id: 'SystemConfigMemoriesDto' });
 

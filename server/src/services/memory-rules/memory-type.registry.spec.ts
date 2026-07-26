@@ -36,6 +36,12 @@ describe('createMemoryRules', () => {
     expect(rules[0].id).toBe('themed');
   });
 
+  it('instantiates person_throwback by key', () => {
+    const rules = createMemoryRules(['person_throwback'], deps);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe('person_throwback');
+  });
+
   it('returns nothing for a non-rule key', () => {
     expect(createMemoryRules(['on_this_day'], deps)).toEqual([]);
   });

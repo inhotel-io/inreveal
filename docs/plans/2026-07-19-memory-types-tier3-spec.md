@@ -459,8 +459,18 @@ Deterministic for a given calendar month, forever. Each theme recurs twice a yea
 - `searchByEmbedding`: `searchSmart({ page: 1, size }, { embedding, userIds: [ownerId], takenAfter: takenAfter - 2d, takenBefore: takenBefore + 2d, type: AssetType.Image, visibility: AssetVisibility.Timeline, maxDistance })`,
   mapping rows to `{ id, localDateTime }`.
 
-**Threshold.** `memories.themeMaxDistance` in system config, default **`0.30`**, tunable without a
-deploy. Slice 8 gates merge on calibration.
+**Threshold.** `memories.themeMaxDistance` in system config, tunable without a deploy and exposed in
+**Administration → Settings → Memories**.
+
+> **Corrected after calibration (2026-07-26).** This shipped at `0.30`, which emits **zero** themed
+> memories on a real library: calibration against 65,685 embeddings found `0.30` and `0.50` both
+> return nothing, while `0.75` returns genuine matches. `0.30` was picked on the scale of the
+> _image-to-image_ thresholds used elsewhere (`duplicateDetection` `0.01`, `facialRecognition`
+> `0.5`), but this is a **text-to-image** distance — CLIP's modality gap floors it near `~0.6` even
+> for a perfect match, so `0.30` is unreachable. The default is now **`0.75`**, matching the value
+> the admin UI already recommends for `machineLearning.clip.maxDistance` (the same metric over the
+> same embeddings). The Slice 8 calibration grid (`0.22 / 0.26 / 0.30 / 0.34`) was likewise on the
+> wrong scale; a corrected sweep should span `0.55`–`0.95`.
 
 > **Accepted edge:** `searchSmart` inner-joins `smart_search`, so only ML-processed assets are
 > reachable, and it does not verify a Preview `asset_file` (unlike the other memory queries). In

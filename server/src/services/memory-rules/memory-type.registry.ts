@@ -1,3 +1,4 @@
+import { SystemConfig } from 'src/config';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { MemoryRepository } from 'src/repositories/memory.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
@@ -8,6 +9,7 @@ import { MEMORY_TYPE_METADATA } from 'src/services/memory-rules/memory-type.meta
 import { MonthRecapMemoryRule } from 'src/services/memory-rules/month-recap.rule';
 import { OnThisDayPlaceMemoryRule } from 'src/services/memory-rules/on-this-day-place.rule';
 import { PeopleTogetherMemoryRule } from 'src/services/memory-rules/people-together.rule';
+import { DEFAULT_DORMANCY_MONTHS, PersonThrowbackMemoryRule } from 'src/services/memory-rules/person-throwback.rule';
 import { RecentTripMemoryRule } from 'src/services/memory-rules/recent-trip.rule';
 import { SeasonRecapMemoryRule } from 'src/services/memory-rules/season-recap.rule';
 import { ThemeSearchPort } from 'src/services/memory-rules/theme-search.port';
@@ -20,6 +22,11 @@ export interface MemoryRuleDeps {
   assetRepository: AssetRepository;
   memoryRepository: MemoryRepository;
   themeSearchPort: ThemeSearchPort;
+  /**
+   * Admin-tunable knobs from `SystemConfig['memories']`. Optional so callers that construct rules
+   * without config (tests, tooling) fall back to each rule's own default.
+   */
+  memories?: Pick<SystemConfig['memories'], 'personThrowbackDormancyMonths'>;
 }
 
 /** per rule-kind key, how to construct its MemoryRule */
@@ -34,6 +41,12 @@ const RULE_FACTORIES: Record<string, (deps: MemoryRuleDeps) => MemoryRule> = {
   video_moments: (deps) => new VideoMomentsMemoryRule(deps.assetRepository),
   trip_anniversary: (deps) => new TripAnniversaryMemoryRule(deps.assetRepository),
   themed: (deps) => new ThemedMemoryRule(deps.themeSearchPort),
+  person_throwback: (deps) =>
+    new PersonThrowbackMemoryRule(
+      deps.personRepository,
+      deps.assetRepository,
+      deps.memories?.personThrowbackDormancyMonths ?? DEFAULT_DORMANCY_MONTHS,
+    ),
 };
 
 /** instantiate the rule-kind memory rules whose key is in `enabledKeys` (in registry order, deduped) */

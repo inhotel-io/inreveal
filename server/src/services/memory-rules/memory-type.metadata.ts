@@ -24,6 +24,7 @@ export const MEMORY_TYPE_METADATA: MemoryTypeMetadata[] = [
   { key: 'video_moments', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
   { key: 'trip_anniversary', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
   { key: 'themed', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+  { key: 'person_throwback', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
 ];
 
 export const MEMORY_TYPE_KEYS = MEMORY_TYPE_METADATA.map((m) => m.key);

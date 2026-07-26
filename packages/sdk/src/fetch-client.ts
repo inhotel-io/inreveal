@@ -3226,6 +3226,8 @@ export type SystemConfigMapDto = {
 export type SystemConfigMemoriesDto = {
     /** Birthday memories */
     birthday: boolean;
+    /** Months a person must be absent from photos before person_throwback resurfaces them */
+    personThrowbackDormancyMonths?: number;
     /** Recent trip memories */
     recentTrips: boolean;
     /** Retention days */

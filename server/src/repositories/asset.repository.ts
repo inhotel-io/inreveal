@@ -161,6 +161,12 @@ export interface MemoryAsset {
   localDateTime: Date;
 }
 
+export interface MemoryPersonDayCount {
+  personId: string;
+  day: Date;
+  count: number;
+}
+
 export interface MemoryLocationCluster {
   country: string | null;
   city: string | null;
@@ -1027,6 +1033,94 @@ export class AssetRepository {
             .where('asset_file.type', '=', AssetFileType.Preview),
         ),
       )
+      .orderBy('asset.localDateTime', 'asc')
+      .execute();
+  }
+
+  /**
+   * One row per (person, calendar day) among `personIds`, with the distinct asset count that day.
+   * Predicates mirror `getMemoryFacesForPeriod` — Timeline visibility, not deleted, previewable —
+   * so a person's density is never skewed by archived or preview-less assets.
+   */
+  @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID], { takenBefore: DummyValue.DATE }] })
+  getMemoryPersonDailyCounts(
+    ownerId: string,
+    personIds: string[],
+    { takenBefore }: { takenBefore: Date },
+  ): Promise<MemoryPersonDayCount[]> {
+    return this.db
+      .selectFrom('asset')
+      .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
+      .select('asset_face.personId')
+      .select(sql<Date>`date_trunc('day', asset."localDateTime" at time zone 'UTC')`.as('day'))
+      .select((eb) =>
+        eb.fn
+          .count(eb.fn('distinct', ['asset.id']))
+          .$castTo<number>()
+          .as('count'),
+      )
+      .$narrowType<{ personId: NotNull }>()
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.localDateTime', '<=', takenBefore)
+      .where('asset_face.personId', 'in', personIds)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_file')
+            .select('asset_file.assetId')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', AssetFileType.Preview),
+        ),
+      )
+      .groupBy(['asset_face.personId', 'day'])
+      .orderBy('asset_face.personId')
+      .orderBy('day', 'asc')
+      .execute();
+  }
+
+  /**
+   * Assets of one person inside an inclusive `[from, to]` day window (`to` is a calendar day, so
+   * the upper bound is exclusive of the following day). Bounded by a ≤14-day window — no `LIMIT`.
+   * Do not copy `getMemoryAssetsForPerson`'s `ORDER BY asset.id … LIMIT 60` — that returns the 60
+   * lowest UUIDs, an arbitrary sample, not the most recent assets.
+   */
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, { from: DummyValue.DATE, to: DummyValue.DATE }] })
+  getMemoryAssetsForPersonWindow(
+    ownerId: string,
+    personId: string,
+    { from, to }: { from: Date; to: Date },
+  ): Promise<MemoryAsset[]> {
+    // `to` is the chapter's last day at UTC midnight, so the upper bound must be exclusive of the
+    // following day — otherwise assets later on the final day (after `to`'s midnight) are dropped.
+    const toExclusive = new Date(to.getTime() + 24 * 60 * 60 * 1000);
+
+    return this.db
+      .selectFrom('asset')
+      .select(['asset.id', 'asset.localDateTime'])
+      .innerJoin('asset_face', 'asset_face.assetId', 'asset.id')
+      .where('asset.ownerId', '=', ownerId)
+      .where('asset_face.personId', '=', personId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', '=', true)
+      .where('asset.visibility', '=', AssetVisibility.Timeline)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.localDateTime', '>=', from)
+      .where('asset.localDateTime', '<', toExclusive)
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_file')
+            .select('asset_file.assetId')
+            .whereRef('asset_file.assetId', '=', 'asset.id')
+            .where('asset_file.type', '=', AssetFileType.Preview),
+        ),
+      )
+      .distinctOn(['asset.id'])
+      .orderBy('asset.id')
       .orderBy('asset.localDateTime', 'asc')
       .execute();
   }

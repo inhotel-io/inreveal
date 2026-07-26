@@ -73,23 +73,29 @@ A user receives a memory type only when it is **both** globally available **and*
 
 The built-in types each have a stable key used in configuration:
 
-| Type key              | Setting label           | Controls                                                                |
-| --------------------- | ----------------------- | ----------------------------------------------------------------------- |
-| `on_this_day`         | On this day             | "N years ago" photo memories                                            |
-| `birthday`            | Birthdays               | Birthday rule memories for named people                                 |
-| `recent_trip`         | Recent trips            | Recent trip rule memories                                               |
-| `month_recap`         | This month              | A past year's photos from this calendar month, shown early in the month |
-| `favorites_throwback` | Favorite moments        | Your favorite photos from this calendar month in a past year            |
-| `on_this_day_place`   | On this day, in a place | A past year's on-this-day photos when they cluster in one place         |
-| `season_recap`        | Season recap            | A past meteorological season, shown when the new season begins          |
-| `people_together`     | People together         | Two people or pets often photographed together in a past year           |
-| `video_moments`       | Video moments           | Videos you filmed in this month of a past year                          |
-| `trip_anniversary`    | Trip anniversaries      | A past trip resurfaced on the anniversary of the day it began           |
-| `themed`              | Themes                  | Photo themes like sunsets, food, and beach days, found automatically    |
+| Type key              | Setting label           | Controls                                                                    |
+| --------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| `on_this_day`         | On this day             | "N years ago" photo memories                                                |
+| `birthday`            | Birthdays               | Birthday rule memories for named people                                     |
+| `recent_trip`         | Recent trips            | Recent trip rule memories                                                   |
+| `month_recap`         | This month              | A past year's photos from this calendar month, shown early in the month     |
+| `favorites_throwback` | Favorite moments        | Your favorite photos from this calendar month in a past year                |
+| `on_this_day_place`   | On this day, in a place | A past year's on-this-day photos when they cluster in one place             |
+| `season_recap`        | Season recap            | A past meteorological season, shown when the new season begins              |
+| `people_together`     | People together         | Two people or pets often photographed together in a past year               |
+| `video_moments`       | Video moments           | Videos you filmed in this month of a past year                              |
+| `trip_anniversary`    | Trip anniversaries      | A past trip resurfaced on the anniversary of the day it began               |
+| `themed`              | Themes                  | Photo themes like sunsets, food, and beach days, found automatically        |
+| `person_throwback`    | Times with someone      | A warm chapter with someone who has not appeared in your photos for a while |
 
 All default to **on**.
 
 `themed` (Themes) additionally requires [Smart Search](/features/searching) to be enabled — it matches photos to a rotating monthly theme (sunsets, food, beach days, etc.) via CLIP embeddings. If smart search is disabled or the machine learning service is unavailable, Gallery simply skips the rule for that night; it does not surface an error.
+
+Two of these types are tunable in **Administration → Settings → Memories**, or via the [config file](/install/config-file):
+
+- **Theme match threshold** (`memories.themeMaxDistance`, default `0.75`) — how close a photo must be to the month's theme. This is a text-to-image CLIP distance, so it is much larger than a face-matching threshold; values under `0.5` usually yield no themed memories at all.
+- **Person throwback dormancy** (`memories.personThrowbackDormancyMonths`, default `6`) — how long someone must be absent from your photos before `person_throwback` can resurface them.
 
 ### Per-user toggles
 
