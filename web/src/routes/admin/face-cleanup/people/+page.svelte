@@ -1,8 +1,10 @@
 <script lang="ts">
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import InfiniteScrollSentinel from '$lib/components/shared-components/infinite-scroll-sentinel.svelte';
+  import { authManager } from '$lib/managers/auth-manager.svelte';
   import { getAdminFaceThumbnailUrl } from '$lib/utils/people-utils';
   import { Route } from '$lib/route';
+  import { manualReviewOwnerId } from '$lib/stores/face-cleanup-manual-review.store';
   import { getFaceRepairOwnerPeople, type FaceRepairOwnerPeopleResponseDto } from '@immich/sdk';
   import { Button, Icon } from '@immich/ui';
   import { mdiAccountCircleOutline, mdiMagnify } from '@mdi/js';
@@ -21,11 +23,22 @@
 
   const users = data.users;
 
-  // Default to the first user regardless of count: a single-user instance never shows the selector at all
-  // (no pointless "pick an owner" step on a one-user install), and a multi-user instance still shows the
-  // selector but doesn't dead-end on an empty "nobody selected yet" screen — it starts on the first owner
-  // and lets the admin switch from there.
-  let selectedOwnerId = $state<string | null>(users.length > 0 ? users[0].id : null);
+  // Default to the last owner the admin browsed (persisted across navigation and reloads — /people and
+  // /people/[personId] share no layout, so this component fully remounts on the way back from reviewing a
+  // person), then to the admin's own account, then to the first user — never to whichever user happens to
+  // sort first alphabetically. A single-user instance never shows the selector at all (no pointless "pick an
+  // owner" step on a one-user install); a multi-user instance still starts somewhere useful.
+  const resolveInitialOwnerId = () => {
+    const persistedId = $manualReviewOwnerId;
+    if (persistedId && users.some((user) => user.id === persistedId)) {
+      return persistedId;
+    }
+    if (users.some((user) => user.id === authManager.user.id)) {
+      return authManager.user.id;
+    }
+    return users.length > 0 ? users[0].id : null;
+  };
+  let selectedOwnerId = $state<string | null>(resolveInitialOwnerId());
   let query = $state('');
   let people = $state<OwnerPerson[]>([]);
   let total = $state(0);
@@ -98,6 +111,7 @@
   // owners interleave in the same grid.
   const loadOwner = (ownerId: string) => {
     selectedOwnerId = ownerId;
+    $manualReviewOwnerId = ownerId;
     query = '';
     people = [];
     total = 0;

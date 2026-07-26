@@ -2,7 +2,10 @@ import { getFaceRepairOwnerPeople, type FaceRepairOwnerPeopleResponseDto } from 
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { authManager } from '$lib/managers/auth-manager.svelte';
 import { Route } from '$lib/route';
+import { manualReviewOwnerId } from '$lib/stores/face-cleanup-manual-review.store';
+import { userAdminFactory } from '@test-data/factories/user-factory';
 import Page from './+page.svelte';
 
 // Manual people browser at /admin/face-cleanup/people (Slice 6, §6.3 of
@@ -151,12 +154,19 @@ describe('+page.svelte (manual face-cleanup people browser)', () => {
       top: window.innerHeight + 1,
     } as DOMRect);
     vi.useFakeTimers();
+    // An id that never coincides with a test's mocked owner ids (they use 'solo', 'u1', 'u2', 'u3'), so
+    // pre-existing tests keep exercising the alphabetical-fallback path unchanged; tests for the "defaults
+    // to my own account" behavior override this explicitly.
+    authManager.setUser(userAdminFactory.build({ id: 'current-admin-not-in-owner-list' }));
+    localStorage.clear();
+    manualReviewOwnerId.reset();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    authManager.reset();
   });
 
   // ---- 1. owner selector lists users from the load data ----
@@ -336,6 +346,50 @@ describe('+page.svelte (manual face-cleanup people browser)', () => {
     // Appended, not replaced: both rows are present.
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('Bob')).toBeInTheDocument();
+  });
+
+  // ---- defaults to the admin's own account, not whichever owner sorts first alphabetically ----
+  it("defaults to the admin's own account when it is among the owners, instead of the alphabetically-first owner", async () => {
+    const users = [makeUser('u1', 'Alice Owner'), makeUser('u2', 'Bob Owner')];
+    authManager.setUser(userAdminFactory.build({ id: 'u2' }));
+    vi.mocked(getFaceRepairOwnerPeople).mockResolvedValue(makeResponse([makePerson({ id: 'p1', name: 'From Bob' })]));
+
+    render(Page, { props: { data: makePageData(users) } });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await waitFor(() => {
+      expect(getFaceRepairOwnerPeople).toHaveBeenCalledWith({ ownerId: 'u2', page: 0, query: undefined });
+    });
+    expect(screen.getByTestId('owner-select')).toHaveValue('u2');
+  });
+
+  // ---- the owner selection survives a remount (e.g. reviewing a person and navigating back) ----
+  it('remembers the previously selected owner across a remount instead of resetting to the default', async () => {
+    const users = [makeUser('u1', 'Alice Owner'), makeUser('u2', 'Bob Owner')];
+    vi.mocked(getFaceRepairOwnerPeople)
+      .mockResolvedValueOnce(makeResponse([makePerson({ id: 'p1', name: 'From U1' })]))
+      .mockResolvedValueOnce(makeResponse([makePerson({ id: 'p2', name: 'From U2' })]));
+
+    const { unmount } = render(Page, { props: { data: makePageData(users) } });
+    await vi.advanceTimersByTimeAsync(0);
+    await waitFor(() => expect(screen.getByText('From U1')).toBeInTheDocument());
+
+    await fireEvent.change(screen.getByTestId('owner-select'), { target: { value: 'u2' } });
+    await waitFor(() => expect(screen.getByText('From U2')).toBeInTheDocument());
+
+    // Simulates navigating away (e.g. into a person's review page) and back: the page fully remounts,
+    // since /people and /people/[personId] share no layout and thus no component state.
+    unmount();
+    vi.mocked(getFaceRepairOwnerPeople).mockResolvedValueOnce(
+      makeResponse([makePerson({ id: 'p2', name: 'From U2' })]),
+    );
+    render(Page, { props: { data: makePageData(users) } });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await waitFor(() => {
+      expect(getFaceRepairOwnerPeople).toHaveBeenLastCalledWith({ ownerId: 'u2', page: 0, query: undefined });
+    });
+    expect(screen.getByTestId('owner-select')).toHaveValue('u2');
   });
 
   // ---- switching owner resets page to 0 and clears the list (no interleaving) ----
