@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
+import 'package:immich_mobile/widgets/common/immich_toast.dart';
 import 'package:immich_mobile/widgets/spaces/space_collage.dart';
 import 'package:openapi/api.dart';
 
@@ -90,16 +91,25 @@ class _SpaceEditSheetState extends ConsumerState<SpaceEditSheet> {
       // disabled forever would be a real (if latent) bug on any caller that doesn't
       // immediately tear the sheet down.
       setState(() => _isSaving = false);
+      ImmichToast.show(
+        context: context,
+        msg: 'spaces_edit_success'.t(context: context),
+        toastType: ToastType.success,
+      );
       widget.onClose(true);
     } catch (_) {
       if (!mounted) return;
-      // No ImmichToast here: it schedules a real (non-frame) fluttertoast Timer that a
-      // plain `pumpAndSettle()` cannot be relied on to flush before test teardown --
-      // confirmed by reproduction, not assumption. The error is still surfaced: the
-      // sheet stays open and save re-enables so the user can retry. Wiring an
-      // errors.unable_to_update_space toast is left to whichever caller (Slice 4)
-      // controls a real Scaffold/routed context.
       setState(() => _isSaving = false);
+      // The sheet staying open is not, on its own, feedback: the user taps Save and sees
+      // nothing change. A revoked role (403) has to say so. `ImmichToast` schedules a
+      // 3s fluttertoast Timer outside the frame scheduler, so any widget test that
+      // reaches this path must pump past it (see the test's `settleToast` helper) or
+      // teardown reports a pending timer.
+      ImmichToast.show(
+        context: context,
+        msg: 'errors.unable_to_update_space'.t(context: context),
+        toastType: ToastType.error,
+      );
     }
   }
 

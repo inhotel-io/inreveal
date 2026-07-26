@@ -52,6 +52,15 @@ void main() {
 
   bool saveEnabled(WidgetTester tester) => tester.widget<FilledButton>(saveButton()).onPressed != null;
 
+  /// `ImmichToast` schedules a 3s fluttertoast Timer outside the frame scheduler, so a
+  /// plain `pumpAndSettle()` leaves it pending and teardown fails with "A Timer is still
+  /// pending". Pump past its lifetime instead of dropping the toast from the widget.
+  Future<void> settleToast(WidgetTester tester) async {
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+  }
+
   setUpAll(() {
     registerFallbackValue(UserAvatarColor.primary);
   });
@@ -140,7 +149,7 @@ void main() {
     await tester.enterText(nameField(), 'Renamed');
     await tester.pump();
     await tester.tap(saveButton());
-    await tester.pumpAndSettle();
+    await settleToast(tester);
 
     verify(() => repo.update('space-1', name: 'Renamed', description: null, color: UserAvatarColor.blue)).called(1);
   });
@@ -151,7 +160,7 @@ void main() {
     await tester.enterText(descriptionField(), '');
     await tester.pump();
     await tester.tap(saveButton());
-    await tester.pumpAndSettle();
+    await settleToast(tester);
 
     verify(() => repo.update('space-1', name: 'Family Photos', description: '', color: UserAvatarColor.blue)).called(1);
   });
@@ -160,7 +169,7 @@ void main() {
     final closes = await pumpSheet(tester);
 
     await tester.tap(saveButton());
-    await tester.pumpAndSettle();
+    await settleToast(tester);
 
     verify(
       () => repo.update('space-1', name: 'Family Photos', description: null, color: UserAvatarColor.blue),
@@ -174,7 +183,7 @@ void main() {
     await tester.tap(find.byKey(const Key('space-edit-color-amber')));
     await tester.pump();
     await tester.tap(saveButton());
-    await tester.pumpAndSettle();
+    await settleToast(tester);
 
     verify(
       () => repo.update('space-1', name: 'Family Photos', description: null, color: UserAvatarColor.amber),
@@ -200,7 +209,7 @@ void main() {
     await tester.pump();
 
     completer.complete(saved());
-    await tester.pumpAndSettle();
+    await settleToast(tester);
 
     verify(
       () => repo.update(
@@ -216,12 +225,12 @@ void main() {
     final closes = await pumpSheet(tester);
 
     await tester.tap(saveButton());
-    await tester.pumpAndSettle();
+    await settleToast(tester);
     expect(closes, [true]);
 
     final cancels = await pumpSheet(tester);
     await tester.tap(find.byKey(const Key('space-edit-cancel')));
-    await tester.pumpAndSettle();
+    await settleToast(tester);
     expect(cancels, [null]);
     verifyNever(() => repo.update('space-2', name: any(named: 'name')));
   });
@@ -240,6 +249,12 @@ void main() {
 
     await tester.tap(saveButton());
     await tester.pumpAndSettle();
+
+    // Asserted before settleToast pumps past the toast's 3s lifetime. The sheet merely
+    // staying open is not feedback -- a revoked role has to say so out loud.
+    expect(find.text('Unable to update space'), findsOneWidget);
+
+    await settleToast(tester);
 
     expect(closes, isEmpty, reason: 'a revoked role must not look like a successful save');
     expect(nameField(), findsOneWidget);
