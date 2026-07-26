@@ -18,6 +18,7 @@ import 'package:immich_mobile/providers/sync_status.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
+import 'package:immich_mobile/utils/space_permissions.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
 import 'package:immich_mobile/widgets/spaces/sync_status_banner.dart';
 import 'package:openapi/api.dart';
@@ -103,15 +104,15 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
   }
 
   bool get _isOwner {
-    final member = _currentMember;
-    if (member == null) return false;
-    return member.role == SharedSpaceRole.owner;
+    final space = _space;
+    if (space == null) return false;
+    return spaceIsOwned(space, ref.read(currentUserProvider)?.id);
   }
 
   bool get _canEdit {
-    final member = _currentMember;
-    if (member == null) return false;
-    return member.role == SharedSpaceRole.owner || member.role == SharedSpaceRole.editor;
+    final space = _space;
+    if (space == null) return false;
+    return spaceIsWritable(space, ref.read(currentUserProvider)?.id);
   }
 
   SharedSpaceRole get _currentRole {
