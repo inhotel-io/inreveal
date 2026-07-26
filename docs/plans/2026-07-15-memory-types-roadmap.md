@@ -51,28 +51,30 @@ Spec: [`2026-07-15-memory-types-tier1-spec.md`](./2026-07-15-memory-types-tier1-
 
 ### 🟡 Tier 2 — Easy (planned)
 
-| #   | Idea                    | Surfaces                                                 | Effort | Impact     | Notes                                                         |
-| --- | ----------------------- | -------------------------------------------------------- | ------ | ---------- | ------------------------------------------------------------- |
-| 5   | You & [person]          | Two named people who co-occur often                      | 🟡     | High       | Self-join `asset_face` on `assetId`, two `personId`s          |
-| 6   | Trip anniversary        | A _past_ trip resurfaced on its anniversary              | 🟡     | High       | Reuse location-cluster logic anchored to the on-this-day date |
-| 7   | Themed / classification | "Sunsets", "Food", "Beach days" from auto-classification | 🟡     | High       | Query `tag_asset`; depends on classification being enabled    |
-| 8   | Shot on [camera/lens]   | Gear nostalgia grouped by `make`/`model`                 | 🟡     | Low-medium | Niche; photographers only                                     |
+| #   | Idea                    | Surfaces                                                 | Effort | Impact     | Notes                                                                                |
+| --- | ----------------------- | -------------------------------------------------------- | ------ | ---------- | ------------------------------------------------------------------------------------ |
+| 5   | You & [person]          | Two named people who co-occur often                      | 🟡     | High       | **Shipped** — `people_together` (reframed to a pair, month-anchored)                 |
+| 6   | Trip anniversary        | A _past_ trip resurfaced on its anniversary              | 🟡     | High       | **Shipped** — `trip_anniversary`                                                     |
+| 7   | Themed / classification | "Sunsets", "Food", "Beach days" from auto-classification | 🟡     | High       | **Shipped** — `themed` (reframed onto smart-search CLIP embeddings, not `tag_asset`) |
+| 8   | Shot on [camera/lens]   | Gear nostalgia grouped by `make`/`model`                 | 🟡     | Low-medium | Niche; photographers only                                                            |
+
+Spec (#5): [`2026-07-16-memory-types-tier2-people-together-spec.md`](./2026-07-16-memory-types-tier2-people-together-spec.md)
 
 ### 🟠 Tier 3 — Medium (planned)
 
-| #   | Idea                     | Surfaces                                           | Effort | Impact         | Notes                                                     |
-| --- | ------------------------ | -------------------------------------------------- | ------ | -------------- | --------------------------------------------------------- |
-| 9   | Someone you haven't seen | A person whose most-recent photo is > N months old | 🟠     | High but risky | Sensitivity risk (deceased people); needs a careful frame |
-| 10  | Your pet [name]          | Leverages Gallery's pet detection                  | 🟠     | High           | Fork differentiator; needs a look at how pets are stored  |
-| 11  | Video moments            | Memorable videos, not just stills                  | 🟠     | Medium         | Query easy; memory viewer must play video well            |
+| #   | Idea                     | Surfaces                                           | Effort | Impact         | Notes                                                                              |
+| --- | ------------------------ | -------------------------------------------------- | ------ | -------------- | ---------------------------------------------------------------------------------- |
+| 9   | Someone you haven't seen | A person whose most-recent photo is > N months old | 🟠     | High but risky | **Shipped** — `person_throwback` (reframed: gap is a silent selector, never shown) |
+| 10  | Your pet [name]          | Leverages Gallery's pet detection                  | 🟠     | High           | Fork differentiator; needs a look at how pets are stored                           |
+| 11  | Video moments            | Memorable videos, not just stills                  | 🟠     | Medium         | **Shipped** — `video_moments`                                                      |
 
 ### 🔴 Tier 4 — Hard (north star)
 
-| #   | Idea                     | Surfaces                                                    | Effort | Impact    | Notes                                                           |
-| --- | ------------------------ | ----------------------------------------------------------- | ------ | --------- | --------------------------------------------------------------- |
-| 12  | Semantic themes (CLIP)   | "Time in nature", "City lights" with no tag, via embeddings | 🔴     | Very high | The real Apple/Google magic; keep the rule interface plug-ready |
-| 13  | "Best of" aesthetic rank | Auto-picks your most beautiful shots                        | 🔴     | High      | Needs an aesthetic-scoring model (none today)                   |
-| 14  | Named trip stories       | Full trip recap with map + day-by-day route                 | 🔴     | High      | A feature, not a rule                                           |
+| #   | Idea                     | Surfaces                                                    | Effort | Impact    | Notes                                                                                                                                                                                                                                           |
+| --- | ------------------------ | ----------------------------------------------------------- | ------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 12  | Semantic themes (CLIP)   | "Time in nature", "City lights" with no tag, via embeddings | 🔴     | Very high | The real Apple/Google magic; keep the rule interface plug-ready. Note: `themed` (PR #812) already rides smart-search CLIP embeddings — the remaining work here is vocabulary breadth and `themeMaxDistance` calibration, not new infrastructure |
+| 13  | "Best of" aesthetic rank | Auto-picks your most beautiful shots                        | 🔴     | High      | Needs an aesthetic-scoring model (none today)                                                                                                                                                                                                   |
+| 14  | Named trip stories       | Full trip recap with map + day-by-day route                 | 🔴     | High      | A feature, not a rule                                                                                                                                                                                                                           |
 
 ## Sequencing
 

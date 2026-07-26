@@ -1,6 +1,12 @@
 import { DateTime } from 'luxon';
+import { AssetType } from 'src/enum';
 import { MemoryPeriodAsset } from 'src/repositories/asset.repository';
-import { OnThisDayPlaceMemoryRule } from 'src/services/memory-rules/on-this-day-place.rule';
+import { recencyBonus } from 'src/services/memory-rules/curation.util';
+import {
+  MAX_COUNT_BONUS,
+  OnThisDayPlaceMemoryRule,
+  SCORE_BASE,
+} from 'src/services/memory-rules/on-this-day-place.rule';
 
 const target = DateTime.fromISO('2026-06-10', { zone: 'utc' });
 
@@ -20,6 +26,8 @@ const cityAssets = (
     country,
     city,
     isFavorite: false,
+    type: AssetType.Image,
+    duration: null,
   }));
 
 const ruleWith = (assets: MemoryPeriodAsset[]) => {
@@ -45,7 +53,7 @@ describe(OnThisDayPlaceMemoryRule.name, () => {
       ruleId: 'on_this_day_place',
       title: 'On this day in Lisbon',
       subtitle: '6 photos from 2023',
-      dedupeKey: 'on_this_day_place:2023-06-10:france:lisbon',
+      dedupeKey: 'place_day:2023-06-10:france:lisbon',
       score: 125, // 100 + 6*3 + recencyBonus(2023,2026)=7
       context: { year: 2023, city: 'Lisbon', country: 'France', count: 6 },
     });
@@ -125,6 +133,18 @@ describe(OnThisDayPlaceMemoryRule.name, () => {
 
   // Note: a two-city *tie* can never pass the 60% majority gate (each side is <= 50%), so the
   // deterministic tie-break lives in and is tested by dominantBy (curation.util.spec).
+
+  it('caps the count bonus so 40 photos score the same as 30 (score cap)', async () => {
+    const { rule: ruleAt40 } = ruleWith(cityAssets(2023, 'Lisbon', 40));
+    const { rule: ruleAt30 } = ruleWith(cityAssets(2023, 'Lisbon', 30));
+
+    const [at40] = await ruleAt40.evaluate({ ownerId: 'user-1', target });
+    const [at30] = await ruleAt30.evaluate({ ownerId: 'user-1', target });
+
+    const expectedScore = SCORE_BASE + MAX_COUNT_BONUS * 3 + recencyBonus(2023, 2026);
+    expect(at40.score).toBe(expectedScore);
+    expect(at30.score).toBe(expectedScore);
+  });
 
   it('emits nothing when only current-year photos exist', async () => {
     const { rule } = ruleWith(cityAssets(2026, 'Lisbon', 8));
