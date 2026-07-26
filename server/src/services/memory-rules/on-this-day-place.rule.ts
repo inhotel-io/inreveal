@@ -1,8 +1,14 @@
 import { AssetRepository, MemoryPeriodAsset } from 'src/repositories/asset.repository';
 import { dominantBy, recencyBonus, sampleAssetsByTime } from 'src/services/memory-rules/curation.util';
 import { MemoryRule, MemoryRuleCandidate, MemoryRuleContext } from 'src/services/memory-rules/memory-rule.interface';
+import { placeKeyOf } from 'src/services/memory-rules/trip.util';
 
-const placeKeyOf = (asset: MemoryPeriodAsset): string => `${asset.country ?? ''}:${asset.city}`.toLowerCase();
+export const MIN_ASSETS = 4;
+export const MIN_DOMINANCE = 0.6;
+export const MAX_YEARS = 3;
+export const ASSET_CAP = 8;
+export const SCORE_BASE = 100;
+export const MAX_COUNT_BONUS = 30;
 
 /** A usable place needs a non-blank city (EXIF city is usually null when absent, but can be ''). */
 const hasCity = (asset: MemoryPeriodAsset): boolean => asset.city !== null && asset.city.trim() !== '';
@@ -10,10 +16,6 @@ const hasCity = (asset: MemoryPeriodAsset): boolean => asset.city !== null && as
 /** "On this day in Lisbon" — a past year's on-this-day photos dominated by a single city. */
 export class OnThisDayPlaceMemoryRule implements MemoryRule {
   readonly id = 'on_this_day_place';
-  private static readonly MIN_ASSETS = 4;
-  private static readonly MIN_DOMINANCE = 0.6;
-  private static readonly MAX_YEARS = 3;
-  private static readonly ASSET_CAP = 8;
 
   constructor(private assetRepository: Pick<AssetRepository, 'getMemoryAssetsForPeriod'>) {}
 
@@ -39,11 +41,8 @@ export class OnThisDayPlaceMemoryRule implements MemoryRule {
     const candidates: MemoryRuleCandidate[] = [];
 
     for (const [year, geotagged] of byYear) {
-      const dominant = dominantBy(geotagged, placeKeyOf);
-      if (
-        dominant.items.length < OnThisDayPlaceMemoryRule.MIN_ASSETS ||
-        dominant.ratio < OnThisDayPlaceMemoryRule.MIN_DOMINANCE
-      ) {
+      const dominant = dominantBy(geotagged, (asset) => placeKeyOf(asset.country, asset.city));
+      if (dominant.items.length < MIN_ASSETS || dominant.ratio < MIN_DOMINANCE) {
         continue;
       }
 
@@ -51,16 +50,16 @@ export class OnThisDayPlaceMemoryRule implements MemoryRule {
       const count = dominant.items.length;
       candidates.push({
         ruleId: this.id,
-        dedupeKey: `on_this_day_place:${year}-${mm}-${dd}:${dominant.key}`,
+        dedupeKey: `place_day:${year}-${mm}-${dd}:${dominant.key}`,
         title: `On this day in ${city}`,
         subtitle: `${count} photos from ${year}`,
-        score: 100 + count * 3 + recencyBonus(year, target.year),
-        assetIds: sampleAssetsByTime(dominant.items, OnThisDayPlaceMemoryRule.ASSET_CAP),
+        score: SCORE_BASE + Math.min(count, MAX_COUNT_BONUS) * 3 + recencyBonus(year, target.year),
+        assetIds: sampleAssetsByTime(dominant.items, ASSET_CAP),
         memoryAt: target.set({ year }),
         context: { year, city, country: dominant.items[0]!.country, count },
       });
     }
 
-    return candidates.toSorted((left, right) => right.score - left.score).slice(0, OnThisDayPlaceMemoryRule.MAX_YEARS);
+    return candidates.toSorted((left, right) => right.score - left.score).slice(0, MAX_YEARS);
   }
 }

@@ -21,6 +21,10 @@ export const MEMORY_TYPE_METADATA: MemoryTypeMetadata[] = [
   { key: 'on_this_day_place', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
   { key: 'season_recap', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
   { key: 'people_together', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+  { key: 'video_moments', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+  { key: 'trip_anniversary', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+  { key: 'themed', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+  { key: 'person_throwback', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
 ];
 
 export const MEMORY_TYPE_KEYS = MEMORY_TYPE_METADATA.map((m) => m.key);

@@ -202,6 +202,10 @@ describe(ServerService.name, () => {
           'on_this_day_place',
           'season_recap',
           'people_together',
+          'video_moments',
+          'trip_anniversary',
+          'themed',
+          'person_throwback',
         ],
       });
       expect(mocks.systemMetadata.get).toHaveBeenCalled();
@@ -225,6 +229,10 @@ describe(ServerService.name, () => {
         'on_this_day_place',
         'season_recap',
         'people_together',
+        'video_moments',
+        'trip_anniversary',
+        'themed',
+        'person_throwback',
       ]);
     });
 

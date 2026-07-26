@@ -26,6 +26,10 @@ describe('memory-type.metadata', () => {
         { key: 'on_this_day_place', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'season_recap', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
         { key: 'people_together', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'video_moments', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'trip_anniversary', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'themed', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
+        { key: 'person_throwback', kind: 'rule', defaultEnabled: true, adminConfigurable: true },
       ]);
     });
 
@@ -46,6 +50,10 @@ describe('memory-type.metadata', () => {
         'on_this_day_place',
         'season_recap',
         'people_together',
+        'video_moments',
+        'trip_anniversary',
+        'themed',
+        'person_throwback',
       ]);
     });
   });
@@ -61,6 +69,10 @@ describe('memory-type.metadata', () => {
         on_this_day_place: true,
         season_recap: true,
         people_together: true,
+        video_moments: true,
+        trip_anniversary: true,
+        themed: true,
+        person_throwback: true,
       });
     });
   });
@@ -107,6 +119,10 @@ describe('memory-type.metadata', () => {
           'on_this_day_place',
           'season_recap',
           'people_together',
+          'video_moments',
+          'trip_anniversary',
+          'themed',
+          'person_throwback',
         ]),
       );
     });
@@ -150,6 +166,10 @@ describe('memory-type.metadata', () => {
           'on_this_day_place',
           'season_recap',
           'people_together',
+          'video_moments',
+          'trip_anniversary',
+          'themed',
+          'person_throwback',
         ]),
       );
     });

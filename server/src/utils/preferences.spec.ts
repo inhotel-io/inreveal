@@ -24,6 +24,10 @@ const getDefaultPreferences = (): UserPreferences => ({
       on_this_day_place: true,
       season_recap: true,
       people_together: true,
+      video_moments: true,
+      trip_anniversary: true,
+      themed: true,
+      person_throwback: true,
     },
   },
   people: {
@@ -179,6 +183,10 @@ describe('getPreferences', () => {
       on_this_day_place: true,
       season_recap: true,
       people_together: true,
+      video_moments: true,
+      trip_anniversary: true,
+      themed: true,
+      person_throwback: true,
     });
   });
 

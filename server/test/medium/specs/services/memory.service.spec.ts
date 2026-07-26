@@ -1,6 +1,6 @@
 import { Kysely } from 'kysely';
 import { DateTime } from 'luxon';
-import { AssetFileType, MemoryType } from 'src/enum';
+import { AssetFileType, AssetType, AssetVisibility, MemoryType, UserMetadataKey } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
@@ -12,6 +12,7 @@ import { PersonRepository } from 'src/repositories/person.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
+import { ThemeSearchAsset, ThemeSearchPort } from 'src/services/memory-rules/theme-search.port';
 import { MemoryService } from 'src/services/memory.service';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
@@ -46,24 +47,79 @@ const seedRuleAsset = async (
     city = null,
     country = null,
     isFavorite = false,
-  }: { ownerId: string; localDateTime: string; city?: string | null; country?: string | null; isFavorite?: boolean },
+    type = AssetType.Image,
+    duration = null,
+    visibility = AssetVisibility.Timeline,
+    withPreview = true,
+  }: {
+    ownerId: string;
+    localDateTime: string;
+    city?: string | null;
+    country?: string | null;
+    isFavorite?: boolean;
+    type?: AssetType;
+    duration?: number | null;
+    visibility?: AssetVisibility;
+    withPreview?: boolean;
+  },
 ) => {
   const assetRepo = ctx.get(AssetRepository);
-  const { asset } = await ctx.newAsset({ ownerId, localDateTime, isFavorite });
+  const { asset } = await ctx.newAsset({ ownerId, localDateTime, isFavorite, type, duration, visibility });
+  const files = [{ assetId: asset.id, type: AssetFileType.Thumbnail, path: `/thumb-${asset.id}.jpg` }];
+  if (withPreview) {
+    files.push({ assetId: asset.id, type: AssetFileType.Preview, path: `/preview-${asset.id}.jpg` });
+  }
   await Promise.all([
     ctx.newExif({ assetId: asset.id, city, country }),
     ctx.newJobStatus({ assetId: asset.id }),
-    assetRepo.upsertFiles([
-      { assetId: asset.id, type: AssetFileType.Preview, path: `/preview-${asset.id}.jpg` },
-      { assetId: asset.id, type: AssetFileType.Thumbnail, path: `/thumb-${asset.id}.jpg` },
-    ]),
+    assetRepo.upsertFiles(files),
   ]);
   return asset;
+};
+
+/**
+ * A dormant person with a qualifying chapter: 4 assets in Jan 2020 (padding the lifetime total to
+ * MIN_TOTAL_ASSETS (10) without competing for chapter density) plus a 6-day, one-photo-per-day
+ * chapter in Aug 2023 (exactly MIN_CHAPTER_ASSETS (6), the only dense window). Both clusters sit
+ * well before any dormancy cutoff used in this file's target dates (2026-02-13 or later).
+ */
+const seedDormantPersonChapter = async (
+  ctx: ReturnType<typeof setup>['ctx'],
+  {
+    ownerId,
+    name,
+    overrides = {},
+  }: { ownerId: string; name: string; overrides?: { type?: string; isHidden?: boolean } },
+) => {
+  const { person } = await ctx.newPerson({ ownerId, name, ...overrides });
+
+  for (let hour = 10; hour < 14; hour++) {
+    const asset = await seedRuleAsset(ctx, { ownerId, localDateTime: `2020-01-10T${hour}:00:00Z` });
+    await ctx.newAssetFace({ assetId: asset.id, personId: person.id, isVisible: true });
+  }
+
+  const chapterAssetIds: string[] = [];
+  for (let day = 5; day <= 10; day++) {
+    const asset = await seedRuleAsset(ctx, { ownerId, localDateTime: `2023-08-${day}T12:00:00Z` });
+    await ctx.newAssetFace({ assetId: asset.id, personId: person.id, isVisible: true });
+    chapterAssetIds.push(asset.id);
+  }
+
+  return { person, chapterAssetIds };
 };
 
 describe(MemoryService.name, () => {
   beforeEach(async () => {
     defaultDatabase = await getKyselyDB();
+  });
+
+  // Each test opens its own connection pool (up to 10 conns) via getKyselyDB() and nothing
+  // previously closed it, so pools accumulated for the lifetime of the whole file. With enough
+  // tests in one file that exhausts Postgres's max_connections ("sorry, too many clients
+  // already"). Close the pool after every test so at most one test's connections are open at a
+  // time.
+  afterEach(async () => {
+    await defaultDatabase.destroy();
   });
 
   describe('create', () => {
@@ -828,6 +884,607 @@ describe(MemoryService.name, () => {
 
       const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
       expect(memories.some((memory) => (memory.data as { ruleId?: string }).ruleId === 'people_together')).toBe(false);
+    });
+  });
+
+  describe('onMemoriesCreate — Tier 3 rules (end-to-end generation)', () => {
+    it('creates a video_moments rule memory for videos in the target month of a past year (day 8)', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 8 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // 3 videos in the 3s-180s duration band, filmed in July of a past year (2023).
+      const videoIds: string[] = [];
+      for (const day of [5, 10, 15]) {
+        const asset = await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2023-07-${day}T12:00:00Z`,
+          type: AssetType.Video,
+          duration: 5000,
+        });
+        videoIds.push(asset.id);
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          type: MemoryType.Rule,
+          data: expect.objectContaining({
+            ruleId: 'video_moments',
+            title: 'Video moments from July 2023',
+            subtitle: '3 videos',
+            context: expect.objectContaining({ year: 2023, month: 7, count: 3, favoriteCount: 0 }),
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...videoIds].toSorted());
+    });
+
+    it('does not create a video_moments rule memory the day before the trigger day', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 7 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // Identical to the positive case above (band-qualifying videos), but evaluated on day 7 --
+      // proves the TRIGGER_DAY gate, not the duration band.
+      for (const day of [5, 10, 15]) {
+        await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2023-07-${day}T12:00:00Z`,
+          type: AssetType.Video,
+          duration: 5000,
+        });
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories).toEqual([]);
+    });
+
+    it('does not create a video_moments rule memory for videos outside the duration band', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 8 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // Same day (8) and month/year pattern as the positive case, but every video is below
+      // MIN_DURATION_MS -- proves the duration band, not the trigger day.
+      for (const day of [5, 10, 15]) {
+        await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2023-07-${day}T12:00:00Z`,
+          type: AssetType.Video,
+          duration: 1000,
+        });
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories).toEqual([]);
+    });
+
+    it('creates a trip_anniversary rule memory for a multi-day away cluster starting on the anniversary', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 15 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // Home baseline: a dominant Berlin/Germany cluster >=90 days before the anniversary
+      // (2024-07-15), ending well before the GAP_DAYS pre-window.
+      for (const localDateTime of [
+        '2024-05-01T12:00:00Z',
+        '2024-05-15T12:00:00Z',
+        '2024-06-01T12:00:00Z',
+        '2024-06-15T12:00:00Z',
+        '2024-07-01T12:00:00Z',
+      ]) {
+        await seedRuleAsset(ctx, { ownerId: user.id, localDateTime, city: 'Berlin', country: 'Germany' });
+      }
+
+      // Away cluster: Paris/France, first day exactly on the anniversary, across 2 distinct days,
+      // 7 assets total (meets MIN_TRIP_ASSETS/MIN_TRIP_DAYS exactly). The 3 day-1 assets also
+      // satisfy the cheap on-this-day probe (>=3 geotagged, single dominant city).
+      const parisIds: string[] = [];
+      for (const localDateTime of ['2024-07-15T12:00:00Z', '2024-07-15T13:00:00Z', '2024-07-15T14:00:00Z']) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime, city: 'Paris', country: 'France' });
+        parisIds.push(asset.id);
+      }
+      for (const localDateTime of [
+        '2024-07-16T12:00:00Z',
+        '2024-07-16T13:00:00Z',
+        '2024-07-16T14:00:00Z',
+        '2024-07-16T15:00:00Z',
+      ]) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime, city: 'Paris', country: 'France' });
+        parisIds.push(asset.id);
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          type: MemoryType.Rule,
+          data: expect.objectContaining({
+            ruleId: 'trip_anniversary',
+            title: 'Your trip to Paris, France',
+            subtitle: '2 years ago · 7 photos over 2 days',
+            context: expect.objectContaining({
+              year: 2024,
+              country: 'France',
+              city: 'Paris',
+              assetCount: 7,
+              dayCount: 2,
+            }),
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...parisIds].toSorted());
+    });
+
+    it('does not create a trip_anniversary rule memory when the away cluster spans a single day', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 15 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // Identical home baseline to the positive case above.
+      for (const localDateTime of [
+        '2024-05-01T12:00:00Z',
+        '2024-05-15T12:00:00Z',
+        '2024-06-01T12:00:00Z',
+        '2024-06-15T12:00:00Z',
+        '2024-07-01T12:00:00Z',
+      ]) {
+        await seedRuleAsset(ctx, { ownerId: user.id, localDateTime, city: 'Berlin', country: 'Germany' });
+      }
+
+      // Same 7-asset away cluster and same first day as the positive case, but ALL 7 assets fall
+      // on that single day -> dayCount 1. Proves the MIN_TRIP_DAYS gate, not asset count or home.
+      for (const localDateTime of [
+        '2024-07-15T09:00:00Z',
+        '2024-07-15T10:00:00Z',
+        '2024-07-15T11:00:00Z',
+        '2024-07-15T12:00:00Z',
+        '2024-07-15T13:00:00Z',
+        '2024-07-15T14:00:00Z',
+        '2024-07-15T15:00:00Z',
+      ]) {
+        await seedRuleAsset(ctx, { ownerId: user.id, localDateTime, city: 'Paris', country: 'France' });
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories.some((memory) => (memory.data as { ruleId?: string }).ruleId === 'trip_anniversary')).toBe(false);
+    });
+
+    it('creates a themed rule memory from a stubbed theme search port (day 22)', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 22 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // 8 assets in the target year (2025), spread across months that never land on month=7/day=22
+      // so the place-based rules' on-this-day probe stays empty and doesn't compete for slots.
+      const themeAssets: ThemeSearchAsset[] = [];
+      for (const localDateTime of [
+        '2025-01-10T12:00:00Z',
+        '2025-03-05T12:00:00Z',
+        '2025-05-20T12:00:00Z',
+        '2025-06-11T12:00:00Z',
+        '2025-08-02T12:00:00Z',
+        '2025-09-14T12:00:00Z',
+        '2025-11-03T12:00:00Z',
+        '2025-12-25T12:00:00Z',
+      ]) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime });
+        themeAssets.push({ id: asset.id, localDateTime: new Date(localDateTime) });
+      }
+
+      const searchByEmbedding = vi.fn().mockResolvedValue(themeAssets);
+      const stub: ThemeSearchPort = {
+        resolveEmbedding: vi.fn().mockResolvedValue('embedding-stub'),
+        searchByEmbedding,
+      };
+      // Instance-override of the protected factory seam: getThemeSearchPort() memoizes lazily on
+      // first use, so the override must land before the first onMemoriesCreate() call.
+      (sut as unknown as { createThemeSearchPort: () => ThemeSearchPort }).createThemeSearchPort = () => stub;
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          type: MemoryType.Rule,
+          data: expect.objectContaining({
+            ruleId: 'themed',
+            title: 'Sunsets from 2025',
+            subtitle: '8 photos',
+            context: expect.objectContaining({ year: 2025, theme: 'sunset', count: 8 }),
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual(themeAssets.map(({ id }) => id).toSorted());
+    });
+
+    it('does not create a themed rule memory when the theme search port resolves no embedding', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 22 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      const searchByEmbedding = vi.fn();
+      const stub: ThemeSearchPort = {
+        resolveEmbedding: vi.fn().mockResolvedValue(null),
+        searchByEmbedding,
+      };
+      (sut as unknown as { createThemeSearchPort: () => ThemeSearchPort }).createThemeSearchPort = () => stub;
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories.some((memory) => (memory.data as { ruleId?: string }).ruleId === 'themed')).toBe(false);
+      expect(searchByEmbedding).not.toHaveBeenCalled();
+    });
+
+    it('does not insert a third rule memory when the daily slot budget is already full', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 8 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // Data that would otherwise qualify for a video_moments memory today (see the positive
+      // video_moments case above).
+      for (const day of [5, 10, 15]) {
+        await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2023-07-${day}T12:00:00Z`,
+          type: AssetType.Video,
+          duration: 5000,
+        });
+      }
+
+      // Fill both daily slots with pre-existing rule memories already visible today.
+      const showAt = now.startOf('day').toJSDate();
+      const hideAt = now.endOf('day').toJSDate();
+      await ctx.newMemory({
+        ownerId: user.id,
+        type: MemoryType.Rule,
+        data: { ruleId: 'dummy_a', dedupeKey: 'dummy_a:x', title: 'Dummy A', subtitle: '', score: 1, context: {} },
+        memoryAt: now.toJSDate(),
+        showAt,
+        hideAt,
+      });
+      await ctx.newMemory({
+        ownerId: user.id,
+        type: MemoryType.Rule,
+        data: { ruleId: 'dummy_b', dedupeKey: 'dummy_b:x', title: 'Dummy B', subtitle: '', score: 1, context: {} },
+        memoryAt: now.toJSDate(),
+        showAt,
+        hideAt,
+      });
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(memories).toHaveLength(2);
+      expect(memories.map((memory) => (memory.data as { ruleId?: string }).ruleId).toSorted()).toEqual([
+        'dummy_a',
+        'dummy_b',
+      ]);
+    });
+  });
+
+  describe('onMemoriesCreate — person_throwback (end-to-end generation)', () => {
+    // Trigger day 13, per §3.5. Dormancy cutoff = personThrowbackDormancyMonths (default 6) before
+    // this, i.e. 2026-02-13 -- every fixture's assets below (Jan 2020, Aug 2023) sit well before that.
+    const target = DateTime.fromObject({ year: 2026, month: 8, day: 13 }, { zone: 'utc' }) as DateTime<true>;
+
+    it('creates a person_throwback rule memory for a dormant named person with a dense chapter', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+      const { person, chapterAssetIds } = await seedDormantPersonChapter(ctx, { ownerId: user.id, name: 'Anna' });
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          type: MemoryType.Rule,
+          memoryAt: expect.any(Date),
+          showAt: target.startOf('day').toJSDate(),
+          hideAt: target.startOf('day').plus({ days: 6 }).endOf('day').toJSDate(),
+          data: expect.objectContaining({
+            ruleId: 'person_throwback',
+            title: `Times with ${person.name}`,
+            subtitle: '6 photos · August 2023',
+            context: expect.objectContaining({ personId: person.id, count: 6 }),
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...chapterAssetIds].toSorted());
+    });
+
+    it('does not create a person_throwback memory when the person is a pet', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+      // Identical dormant-chapter fixture to the positive case above (10 total / 6-asset chapter),
+      // except `person.type = 'pet'` -- proves the D7 pet exclusion, not some unrelated gap.
+      await seedDormantPersonChapter(ctx, { ownerId: user.id, name: 'Rex', overrides: { type: 'pet' } });
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories.some((memory) => (memory.data as { ruleId?: string }).ruleId === 'person_throwback')).toBe(false);
+    });
+
+    it('does not create a person_throwback memory when the person is hidden', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+      // Same otherwise-qualifying fixture, `person.isHidden = true` only.
+      await seedDormantPersonChapter(ctx, { ownerId: user.id, name: 'Anna', overrides: { isHidden: true } });
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories.some((memory) => (memory.data as { ruleId?: string }).ruleId === 'person_throwback')).toBe(false);
+    });
+
+    it('does not create a person_throwback memory when the person has no name', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+      // Same otherwise-qualifying fixture, `person.name = ''` only.
+      await seedDormantPersonChapter(ctx, { ownerId: user.id, name: '' });
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories.some((memory) => (memory.data as { ruleId?: string }).ruleId === 'person_throwback')).toBe(false);
+    });
+
+    it('still creates a person_throwback memory when recent photos exist but are archived', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+      const { person, chapterAssetIds } = await seedDormantPersonChapter(ctx, { ownerId: user.id, name: 'Anna' });
+
+      // A recent (2026), otherwise-qualifying photo of Anna that is Archived, not Timeline. If the
+      // dormancy query didn't filter visibility, this would push her last-seen date past the
+      // cutoff and she would no longer look dormant.
+      const recentArchived = await seedRuleAsset(ctx, {
+        ownerId: user.id,
+        localDateTime: '2026-07-01T12:00:00Z',
+        visibility: AssetVisibility.Archive,
+      });
+      await ctx.newAssetFace({ assetId: recentArchived.id, personId: person.id, isVisible: true });
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ruleId: 'person_throwback',
+            subtitle: '6 photos · August 2023',
+            context: expect.objectContaining({ count: 6 }),
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...chapterAssetIds].toSorted());
+    });
+
+    it('excludes assets with no Preview file from both the dormancy count and the chapter', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+
+      // Anna qualifies on real (preview-bearing) data alone -- the standard 10-total/6-chapter
+      // fixture. 6 no-preview decoys land on the SAME 6 chapter days (a different hour), so a
+      // regression in either the density query (getMemoryPersonDailyCounts) or the final window
+      // fetch (getMemoryAssetsForPersonWindow) would inflate the subtitle count and/or the
+      // attached asset list past the real 6 -- both queries scan that identical date range.
+      const { person: anna, chapterAssetIds } = await seedDormantPersonChapter(ctx, { ownerId: user.id, name: 'Anna' });
+      for (const day of [5, 6, 7, 8, 9, 10]) {
+        const asset = await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2023-08-${day}T18:00:00Z`,
+          withPreview: false,
+        });
+        await ctx.newAssetFace({ assetId: asset.id, personId: anna.id, isVisible: true });
+      }
+
+      // Ben's only real (preview-bearing) history is a 6-asset chapter with no padding -- below
+      // MIN_TOTAL_ASSETS (10) on its own. 8 more no-preview assets, on one day far from the
+      // chapter, would push his lifetime total over 10 if getDormantPeople's own preview filter
+      // didn't exclude them -- the chapter query still finds his real 6-asset Aug chapter either
+      // way, so this isolates the dormancy-count filter specifically.
+      const { person: ben } = await ctx.newPerson({ ownerId: user.id, name: 'Ben' });
+      for (const day of [5, 6, 7, 8, 9, 10]) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-08-${day}T12:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: ben.id, isVisible: true });
+      }
+      for (let hour = 10; hour < 18; hour++) {
+        const asset = await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2020-01-10T${hour}:00:00Z`,
+          withPreview: false,
+        });
+        await ctx.newAssetFace({ assetId: asset.id, personId: ben.id, isVisible: true });
+      }
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ruleId: 'person_throwback',
+            title: `Times with ${anna.name}`,
+            subtitle: '6 photos · August 2023',
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...chapterAssetIds].toSorted());
+    });
+
+    it('excludes assets whose face is soft-deleted or invisible from the chapter', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+
+      // Anna qualifies on real (visible-face) data alone. 6 decoy assets land on the SAME 6
+      // chapter days, each with a real Preview file but a face that is invisible or soft-deleted
+      // for Anna -- if either the density query or the final window fetch wrongly counted them,
+      // the subtitle count and/or attached asset list would balloon past the real 6.
+      const { person: anna, chapterAssetIds } = await seedDormantPersonChapter(ctx, { ownerId: user.id, name: 'Anna' });
+      for (const day of [5, 6, 7]) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-08-${day}T18:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: anna.id, isVisible: false });
+      }
+      for (const day of [8, 9, 10]) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-08-${day}T18:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: anna.id, isVisible: true, deletedAt: new Date() });
+      }
+
+      // Ben's only real (visible-face) history is a 6-asset chapter with no padding -- below
+      // MIN_TOTAL_ASSETS on its own. 8 more assets far from the chapter, split between invisible
+      // and soft-deleted faces, would push his lifetime total over 10 if getDormantPeople's own
+      // face filters didn't exclude them.
+      const { person: ben } = await ctx.newPerson({ ownerId: user.id, name: 'Ben' });
+      for (const day of [5, 6, 7, 8, 9, 10]) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-08-${day}T12:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: ben.id, isVisible: true });
+      }
+      for (let hour = 10; hour < 14; hour++) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2020-01-10T${hour}:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: ben.id, isVisible: false });
+      }
+      for (let hour = 14; hour < 18; hour++) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2020-01-10T${hour}:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: ben.id, isVisible: true, deletedAt: new Date() });
+      }
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({
+            ruleId: 'person_throwback',
+            title: `Times with ${anna.name}`,
+            subtitle: '6 photos · August 2023',
+          }),
+        }),
+      ]);
+      expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...chapterAssetIds].toSorted());
+    });
+
+    it('does not create a person_throwback memory when the user has the type toggled off', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+      await seedDormantPersonChapter(ctx, { ownerId: user.id, name: 'Anna' });
+      await ctx.get(UserRepository).upsertMetadata(user.id, {
+        key: UserMetadataKey.Preferences,
+        value: { memories: { types: { person_throwback: false } } },
+      });
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories.some((memory) => (memory.data as { ruleId?: string }).ruleId === 'person_throwback')).toBe(false);
+    });
+
+    it('skips a person whose person_throwback already fired and uses a different dormant person instead', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const { user } = await ctx.newUser();
+
+      // Anna's chapter (9 assets) is deliberately bigger than Ben's (6, the standard fixture), so
+      // her score is STRICTLY higher (110 + 9*3 + 7 = 144 vs 110 + 6*3 + 7 = 135) -- deterministic
+      // regardless of the two people's random UUID order, so the engine always considers Anna
+      // first. That pins the dedupe skip on Anna specifically, rather than leaving the outcome to
+      // coincide with the (unrelated) one-slot-per-multi-day-rule cap depending on which of two
+      // equally-scored candidates happened to sort first.
+      const { person: anna } = await ctx.newPerson({ ownerId: user.id, name: 'Anna' });
+      for (let hour = 10; hour < 14; hour++) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2020-01-10T${hour}:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: anna.id, isVisible: true });
+      }
+      for (const day of [5, 6, 7, 8, 9, 10, 11, 12, 13]) {
+        const asset = await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-08-${day}T12:00:00Z` });
+        await ctx.newAssetFace({ assetId: asset.id, personId: anna.id, isVisible: true });
+      }
+
+      const { person: ben } = await seedDormantPersonChapter(ctx, { ownerId: user.id, name: 'Ben' });
+
+      // Anna's person_throwback already fired a year before `target`. Dates sit well outside
+      // `target`'s search window, so this pre-existing memory doesn't itself occupy one of
+      // today's two rule slots -- the test isolates the dedupeKey skip (D8), not the slot cap.
+      const dedupeKeyAnna = `person_throwback:${anna.id}`;
+      const priorShowAt = DateTime.fromObject({ year: 2025, month: 8, day: 13 }, { zone: 'utc' });
+      await ctx.newMemory({
+        ownerId: user.id,
+        type: MemoryType.Rule,
+        data: {
+          ruleId: 'person_throwback',
+          dedupeKey: dedupeKeyAnna,
+          title: `Times with ${anna.name}`,
+          subtitle: '9 photos · August 2023',
+          score: 144,
+          context: { personId: anna.id, count: 9 },
+        },
+        memoryAt: priorShowAt.plus({ days: 2 }).toJSDate(),
+        showAt: priorShowAt.toJSDate(),
+        hideAt: priorShowAt.plus({ days: 6 }).endOf('day').toJSDate(),
+      });
+
+      vi.setSystemTime(target.toJSDate());
+      await sut.onMemoriesCreate();
+
+      // Only Ben's fresh memory shows up today -- Anna's dedupeKey already fired, so the engine
+      // skips her (score-sorted first, since her chapter is bigger) and falls through to the next
+      // dormant candidate the rule returned (D8).
+      const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: target.toJSDate() });
+      expect(memories).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({ ruleId: 'person_throwback', title: `Times with ${ben.name}` }),
+        }),
+      ]);
+
+      // Anna's original memory is still there, and only there -- exactly one, not a second copy.
+      const priorMemories = await memoryRepo.search(user.id, {
+        type: MemoryType.Rule,
+        for: priorShowAt.plus({ days: 2 }).toJSDate(),
+      });
+      expect(priorMemories.map((memory) => (memory.data as { dedupeKey?: string }).dedupeKey)).toEqual([dedupeKeyAnna]);
     });
   });
 
