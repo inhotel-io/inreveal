@@ -925,6 +925,55 @@
         ]
       }
     },
+    "/admin/face-repair/person/{personId}": {
+      "get": {
+        "operationId": "getFaceRepairPersonMetadata",
+        "parameters": [
+          {
+            "name": "personId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceRepairPersonMetadataResponseDto"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Get a person for manual review",
+        "tags": [
+          "Faces"
+        ],
+        "x-immich-admin-only": true,
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          }
+        ]
+      }
+    },
     "/admin/face-repair/resolutions": {
       "get": {
         "operationId": "getFaceRepairResolutions",
@@ -26759,6 +26808,34 @@
         "required": [
           "flaggedFaces",
           "personId"
+        ],
+        "type": "object"
+      },
+      "FaceRepairPersonMetadataResponseDto": {
+        "properties": {
+          "faceCount": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "thumbnailFaceId": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "faceCount",
+          "id",
+          "name",
+          "ownerId",
+          "thumbnailFaceId"
         ],
         "type": "object"
       },

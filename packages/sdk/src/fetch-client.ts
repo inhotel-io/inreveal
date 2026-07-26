@@ -172,6 +172,13 @@ export type FaceRepairOwnerPersonCreateRequestDto = {
 export type FaceRepairOwnerPersonCreatedResponseDto = {
     id: string;
 };
+export type FaceRepairPersonMetadataResponseDto = {
+    faceCount: number;
+    id: string;
+    name: string;
+    ownerId: string;
+    thumbnailFaceId: string | null;
+};
 export type FaceRepairResolutionsListDto = {
     resolutions: {
         actorId: string | null;
@@ -4659,6 +4666,19 @@ export function createFaceRepairOwnerPerson({ ownerId, faceRepairOwnerPersonCrea
         method: "POST",
         body: faceRepairOwnerPersonCreateRequestDto
     })));
+}
+/**
+ * Get a person for manual review
+ */
+export function getFaceRepairPersonMetadata({ personId }: {
+    personId: string;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceRepairPersonMetadataResponseDto;
+    }>(`/admin/face-repair/person/${encodeURIComponent(personId)}`, {
+        ...opts
+    }));
 }
 /**
  * List face-repair resolutions (negative verdicts from both engines)

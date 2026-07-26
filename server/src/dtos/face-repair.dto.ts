@@ -349,3 +349,17 @@ export const FaceRepairOwnerPersonCreatedResponseSchema = z
   .object({ id: z.string() })
   .meta({ id: 'FaceRepairOwnerPersonCreatedResponseDto' });
 export class FaceRepairOwnerPersonCreatedResponseDto extends createZodDto(FaceRepairOwnerPersonCreatedResponseSchema) {}
+
+// Slice 3 (manual face review): the manual review page has no scan to read personName/ownerId off, and the
+// user-scoped GET /people/:id does not admin-bypass for a person the admin does not own. `name` is returned
+// raw (empty string for an unnamed person) — the client applies its own display fallback.
+export const FaceRepairPersonMetadataResponseSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    ownerId: z.string(),
+    faceCount: z.number(),
+    thumbnailFaceId: z.string().nullable(),
+  })
+  .meta({ id: 'FaceRepairPersonMetadataResponseDto' });
+export class FaceRepairPersonMetadataResponseDto extends createZodDto(FaceRepairPersonMetadataResponseSchema) {}

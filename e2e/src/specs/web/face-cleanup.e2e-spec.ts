@@ -1,6 +1,6 @@
 /**
  * Face Cleanup admin page — smoke + decline/undo + full-resolution flow (X1/X2) + temporal-consistency
- * hardening (Consistency X1/X2) tests.
+ * hardening (Consistency X1/X2) + manual review mode (Slice 11) tests.
  *
  * Scope: the dashboard/empty-state/decline smoke tests below are a reduced fallback — a real face-repair
  * SCAN JOB requires live CLIP embeddings, which are unavailable in this ML-disabled e2e stack
@@ -28,6 +28,12 @@
  *      predate and cover the full-resolution feature) — see the test bodies for what each proves and the
  *      "re-scan" proxy technique both use (a real, live-embeddings scan job isn't available in this
  *      ML-disabled stack, same constraint as X1/X2 above).
+ *   8. Slice 11 (manual review mode, design docs/superpowers/specs/2026-07-23-manual-face-review-mode-design.md
+ *      §7/§8) — the manual flow end to end: a never-scanned person is reviewed through
+ *      /admin/face-cleanup/people/[personId], routing faces into move/lock/detach and asserting the durable DB
+ *      state each writes. Then the cross-engine invariant: a later (seeded) scan must honour every one of
+ *      those manual decisions exactly as it would a guided one — the locked face is never re-flagged, the
+ *      detached face stays gone, the moved face is not re-proposed.
  *
  * The tests follow the proven `rebase-smoke-pages` canary pattern (admin-page-header landmark,
  * `.first()`, explicit timeout).
@@ -136,8 +142,89 @@ const seedFlaggedScan = async (
   return scanId;
 };
 
+/**
+ * Like seedFlaggedScan, but flags faces across MULTIPLE persons within a SINGLE scan (one `face_repair_scan`
+ * row). The Slice 11 cross-engine invariant test below needs this: seeding two SEPARATE scans (one per person)
+ * would each stamp `now()`, and `getFaceRepairPersonFaces` reads only `getLatestScan()` — a documented
+ * nondeterminism trap on this feature (two scans stamped the same `now()` make the "latest" tie-break
+ * unreliable). Worse, with two scans only the second seed's snapshot is ever read back, so a naive two-scan
+ * seed would pass its "not re-flagged" assertions vacuously (the face simply isn't mentioned in whichever scan
+ * happens to be "latest") rather than because the manual decision was actually honoured. One scan, multiple
+ * persons, sidesteps the whole class of flake.
+ */
+const seedFlaggedScanMulti = async (
+  db: PgClient,
+  args: {
+    ownerUserId: string;
+    groups: { personId: string; suspectedOwnerId: string; faceIds: string[]; preserveSource?: boolean }[];
+  },
+): Promise<string> => {
+  const totalFaces = args.groups.reduce((sum, group) => sum + group.faceIds.length, 0);
+  const totals = {
+    eligibleFaces: totalFaces,
+    flaggedFaces: totalFaces,
+    toRepair: 0,
+    reviewOnlyFaces: totalFaces,
+    reviewOnlyPersons: args.groups.length,
+    affectedPersons: args.groups.length,
+    reviewOnlyByReason: { overCap: 0, badTarget: 0, unAttributable: 0 },
+  };
+  const persons = args.groups.map((group) => ({
+    personId: group.personId,
+    ownerId: args.ownerUserId,
+    personName: null,
+    faceCount: group.faceIds.length,
+    thumbnailFaceId: null,
+    eligible: group.faceIds.length,
+    flagged: group.faceIds.length,
+    flaggedFraction: 1,
+    suspectedOwners: [
+      { ownerPersonId: group.suspectedOwnerId, ownerName: null, thumbnailFaceId: null, count: group.faceIds.length },
+    ],
+    recommendation: 'review-first',
+    reviewReasons: [],
+  }));
+
+  const { rows } = await db.query(
+    `INSERT INTO "face_repair_scan" ("status", "requestedBy", "totals", "persons", "startedAt", "finishedAt")
+     VALUES ('completed', $1, $2::jsonb, $3::jsonb, now(), now())
+     RETURNING id`,
+    [args.ownerUserId, JSON.stringify(totals), JSON.stringify(persons)],
+  );
+  const scanId = rows[0].id as string;
+
+  for (const group of args.groups) {
+    for (const faceId of group.faceIds) {
+      await seedFaceSearch(db, faceId);
+      // Same downgrade seedFlaggedScan performs above, and the same preserveSource escape hatch — see its
+      // comment for the full rationale.
+      if (!group.preserveSource) {
+        await db.query(`UPDATE "face_identity_face" SET "source" = 'ml' WHERE "assetFaceId" = $1`, [faceId]);
+      }
+      await db.query(
+        `INSERT INTO "face_repair_scan_flagged_face" ("scanId", "assetFaceId", "personId", "suspectedOwnerId")
+         VALUES ($1, $2, $3, $4)`,
+        [scanId, faceId, group.personId, group.suspectedOwnerId],
+      );
+    }
+  }
+
+  return scanId;
+};
+
 test.describe.serial('Face Cleanup', () => {
   let admin: LoginResponseDto;
+
+  // Slice 11 (manual review mode, design §7/§8): the manual-flow test populates this so the cross-engine
+  // invariant test that follows can read what it wrote. A `.serial` failure in the manual-flow test skips the
+  // invariant test automatically, so there is no risk of the latter running against a stale/absent fixture.
+  let manualFlow: {
+    source: Awaited<ReturnType<typeof utils.createPerson>>;
+    destination: Awaited<ReturnType<typeof utils.createPerson>>;
+    faceMove: string;
+    faceLock: string;
+    faceDetach: string;
+  } | null = null;
 
   test.beforeAll(async () => {
     utils.initSdk();
@@ -145,10 +232,31 @@ test.describe.serial('Face Cleanup', () => {
     admin = await utils.adminSetup();
   });
 
+  /**
+   * Seeds one face on `personId` that looks machine-clustered rather than human-placed. `utils.createFace`
+   * always links a face source='manual' (utils.ts:529-530) — its shortcut for a full face→identity link — but
+   * a face a REAL scan would cluster is, by definition, an ML attribution, not a human placement. Left as
+   * 'manual' it would already read as "settled" to the verdict layer (manualLinkedFaceIds is owner-agnostic —
+   * see face-verdict.service.ts), making the cross-engine invariant test's "not re-flagged" assertions vacuous
+   * rather than meaningful — the exact trap seedFlaggedScan's downgrade above exists to avoid, reproduced here
+   * for a cluster with NO scan at all (seedFlaggedScan can't be reused directly for that — it always creates a
+   * face_repair_scan row, and the manual-flow test's whole point is a review with none).
+   *
+   * Also seeds a `face_search` row: both getClusterFacePage (the manual review page's face listing) and
+   * getEligibleFaceIdsForPerson (the `lock` bulk action's eligibility check) inner-join it, so a face with no
+   * embedding row would silently vanish from the review grid and 400 out of "lock" as ineligible.
+   */
+  const seedMlClusterFace = async (db: PgClient, args: { assetId: string; personId: string }): Promise<string> => {
+    const faceId = await utils.createFace(args);
+    await seedFaceSearch(db, faceId);
+    await db.query(`UPDATE "face_identity_face" SET "source" = 'ml' WHERE "assetFaceId" = $1`, [faceId]);
+    return faceId;
+  };
+
   test('admin can reach the face-cleanup page and it renders', async ({ context, page }) => {
     await utils.setAuthCookies(context, admin.accessToken);
 
-    await page.goto('/admin/face-cleanup');
+    await page.goto('/admin/face-cleanup/scan');
 
     // AdminPageLayout → BreadcrumbActionPage landmark — confirms the page mounted without error.
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
@@ -292,7 +400,7 @@ test.describe.serial('Face Cleanup', () => {
     });
 
     // Confirm the seeded person shows up on the dashboard before it's resolved.
-    await page.goto('/admin/face-cleanup');
+    await page.goto('/admin/face-cleanup/scan');
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(sourceName).first()).toBeVisible({ timeout: 10_000 });
 
@@ -358,8 +466,14 @@ test.describe.serial('Face Cleanup', () => {
     expect(moveGroups.get(other.id)).toEqual([faceOther]);
 
     // Apply navigates back to the dashboard on success; the person must have drained from the console.
-    await page.waitForURL('**/admin/face-cleanup', { timeout: 15_000 });
+    await page.waitForURL('**/admin/face-cleanup/scan', { timeout: 15_000 });
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+
+    // Wait for the dashboard to actually finish loading its (freshly refetched) scan snapshot before asserting
+    // an absence: the header summary line ("… flagged faces across … people") only renders once
+    // `scan.status === 'completed'` with its totals, so its presence means the fresh (drained) snapshot has
+    // rendered — not a still-loading page the absence check could pass against vacuously.
+    await expect(page.getByText(/flagged faces across/).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(sourceName)).toHaveCount(0);
   });
 
@@ -538,7 +652,7 @@ test.describe.serial('Face Cleanup', () => {
     expect(chosenGroup?.faceIds).toEqual([faceId]);
     expect(chosenGroup?.lock).toBe(true);
 
-    await page.waitForURL('**/admin/face-cleanup', { timeout: 15_000 });
+    await page.waitForURL('**/admin/face-cleanup/scan', { timeout: 15_000 });
 
     // The face actually moved to `other`, and its human placement is recorded as a manual identity link on
     // `other`'s identity (there is no separate lock table any more).
@@ -720,5 +834,237 @@ test.describe.serial('Face Cleanup', () => {
     await expect(rowImg).toHaveAttribute('src', /.+/);
     const rowNaturalWidth = await rowImg.evaluate((img: HTMLImageElement) => img.naturalWidth);
     expect(rowNaturalWidth).toBeGreaterThan(0);
+  });
+
+  /**
+   * Slice 11 (manual review mode, design §7/§8 of
+   * docs/superpowers/specs/2026-07-23-manual-face-review-mode-design.md) — manual flow end to end.
+   *
+   * Seeds a person with faces and NO scan at all — the chooser must still treat manual mode as reachable
+   * (design §6.2: "manual must be reachable on a brand-new instance"), and the manual review page must list
+   * every one of the person's faces rather than a scan-flagged subset (manual mode ignores scan state
+   * entirely, §7). Drives all three write-bearing bulk actions this page has (move-to-chosen-person, lock,
+   * "not a face") plus a fourth face left untouched at the default `keep`, then asserts the DURABLE DB STATE
+   * each action produced — not UI text, per plan instructions — since that state is what the cross-engine
+   * invariant test below depends on and re-verifies after a later scan.
+   */
+  test('manual review: reviewing a never-scanned person applies move/lock/not-a-face and writes durable state', async ({
+    context,
+    page,
+  }) => {
+    await utils.setAuthCookies(context, admin.accessToken);
+    const db = await utils.connectDatabase();
+
+    const sourceName = 'ManualFlowE2E Source Person';
+    const destinationName = 'ManualFlowE2E Destination Person';
+
+    const source = await utils.createPerson(admin.accessToken, { name: sourceName });
+    const destination = await utils.createPerson(admin.accessToken, { name: destinationName });
+    const asset = await utils.createAsset(admin.accessToken);
+
+    const faceMove = await seedMlClusterFace(db, { assetId: asset.id, personId: source.id });
+    const faceLock = await seedMlClusterFace(db, { assetId: asset.id, personId: source.id });
+    const faceDetach = await seedMlClusterFace(db, { assetId: asset.id, personId: source.id });
+    const faceKeep = await seedMlClusterFace(db, { assetId: asset.id, personId: source.id });
+
+    // 1. Chooser: manual mode is reachable even though this person — and, by this point in the suite, most
+    // others too — has never been scanned. The manual card's CTA must be a genuine link (an `href`), not the
+    // disabled stub the scan-running state renders with no `href` at all (design §6.2/§7).
+    await page.goto('/admin/face-cleanup');
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="chooser-card-manual"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="chooser-manual-cta"]')).toHaveAttribute(
+      'href',
+      '/admin/face-cleanup/people',
+    );
+
+    // 2. Browse people: pick the owner, click the person. The owner selector only renders once more than one
+    // user exists — this suite has already created a second user by this point in the file — so select admin
+    // explicitly rather than relying on default ordering; on a single-owner instance there is no selector to
+    // interact with at all, and the default selection is already correct.
+    await page.goto('/admin/face-cleanup/people');
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+    const ownerSelect = page.locator('[data-testid="owner-select"]');
+    if ((await ownerSelect.count()) > 0) {
+      await ownerSelect.selectOption(admin.userId);
+    }
+    // Filter to this test's own person by name — many other tests in this `.serial` file have already created
+    // admin-owned people, so the plain (unfiltered, paginated) grid offers no guarantee this row is on page 0.
+    await page.locator('[data-testid="people-search-input"]').fill(sourceName);
+    await expect(page.locator(`[data-testid="person-tile-${source.id}"]`)).toBeVisible({ timeout: 15_000 });
+    await page.locator(`[data-testid="person-tile-${source.id}"]`).click();
+
+    await page.waitForURL(`**/admin/face-cleanup/people/${source.id}`, { timeout: 15_000 });
+    await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-testid="manual-review-heading"]')).toHaveText(sourceName, { timeout: 15_000 });
+
+    // 3. The manual review page lists ALL of the person's faces — no scan, so no flagged-only subset.
+    await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(4, { timeout: 15_000 });
+
+    const tile = (faceId: string) => page.locator(`[data-testid="face-tile"][data-faceid="${faceId}"]`);
+
+    // Move to another person.
+    await tile(faceMove).click();
+    await page.locator('[data-testid="manual-review-bulk-move"]').click();
+    await expect(page.locator('[data-testid="person-picker"]')).toBeVisible({ timeout: 10_000 });
+    // Same defensive search as the people browser above — this picker's own admin-scale people list is not
+    // guaranteed to show a freshly created destination on its unfiltered first page either.
+    await page.locator('[data-testid="person-picker-search"]').fill(destinationName);
+    await page.locator(`[data-testid="person-picker-row-${destination.id}"]`).click();
+    await expect(tile(faceMove)).toHaveAttribute('data-state', 'move');
+
+    // Lock in place.
+    await tile(faceLock).click();
+    await page.locator('[data-testid="manual-review-bulk-lock"]').click();
+    await expect(tile(faceLock)).toHaveAttribute('data-state', 'lock');
+
+    // Not a face.
+    await tile(faceDetach).click();
+    await page.locator('[data-testid="manual-review-bulk-detach"]').click();
+    await expect(tile(faceDetach)).toHaveAttribute('data-state', 'detach');
+
+    // faceKeep is left untouched — still the default `keep`, proving the grid really did list all four faces
+    // and that "keep" writes nothing (design §3.1).
+    await expect(tile(faceKeep)).toHaveAttribute('data-state', 'keep');
+
+    // "Not a face" is irreversible, so Apply confirms before sending anything.
+    await page.locator('[data-testid="manual-review-apply-btn"]').click();
+    await expect(page.locator('[data-testid="manual-review-detach-confirm"]')).toBeVisible({ timeout: 10_000 });
+
+    const [resolveRequest, resolveResponse] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes('/admin/face-repair/resolve') && req.method() === 'POST'),
+      page.waitForResponse(
+        (res) => res.url().includes('/admin/face-repair/resolve') && res.request().method() === 'POST',
+      ),
+      page.locator('[data-testid="manual-review-detach-confirm-cta"]').click(),
+    ]);
+    expect(resolveResponse.ok()).toBe(true);
+
+    const payload = resolveRequest.postDataJSON() as {
+      personId: string;
+      moveToPerson: { destinationPersonId: string; faceIds: string[]; lock: boolean }[];
+      stay: string[];
+      lock: string[];
+      detach: string[];
+      unknown: string[];
+    };
+    expect(payload.personId).toBe(source.id);
+    expect(payload.stay).toEqual([]);
+    expect(payload.lock).toEqual([faceLock]);
+    expect(payload.detach).toEqual([faceDetach]);
+    expect(payload.unknown).toEqual([]);
+    const moveGroup = payload.moveToPerson.find((group) => group.destinationPersonId === destination.id);
+    expect(moveGroup).toBeDefined();
+    expect(moveGroup?.faceIds).toEqual([faceMove]);
+
+    // ---- Durable DB state, not UI text ----
+
+    // Moved face: re-attributed to the destination, and its identity link now records the human placement.
+    const { rows: moveFaceRows } = await db.query(`SELECT "personId" FROM "asset_face" WHERE id = $1`, [faceMove]);
+    expect(moveFaceRows[0].personId).toBe(destination.id);
+    const { rows: moveLinkRows } = await db.query(`SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`, [
+      faceMove,
+    ]);
+    expect(moveLinkRows).toHaveLength(1);
+    expect(moveLinkRows[0].source).toBe('manual');
+
+    // Locked face: still on `source`; its identity link now records the confirmed placement (there is no
+    // separate lock table — that link IS the lock, design §5.3).
+    const { rows: lockFaceRows } = await db.query(`SELECT "personId" FROM "asset_face" WHERE id = $1`, [faceLock]);
+    expect(lockFaceRows[0].personId).toBe(source.id);
+    const { rows: lockLinkRows } = await db.query(`SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`, [
+      faceLock,
+    ]);
+    expect(lockLinkRows).toHaveLength(1);
+    expect(lockLinkRows[0].source).toBe('manual');
+
+    // Detached face: unassigned and soft-deleted, identity link stripped entirely.
+    const { rows: detachFaceRows } = await db.query(`SELECT "personId", "deletedAt" FROM "asset_face" WHERE id = $1`, [
+      faceDetach,
+    ]);
+    expect(detachFaceRows[0].personId).toBeNull();
+    expect(detachFaceRows[0].deletedAt).not.toBeNull();
+    const { rows: detachLinkRows } = await db.query(
+      `SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`,
+      [faceDetach],
+    );
+    expect(detachLinkRows).toHaveLength(0);
+
+    manualFlow = { source, destination, faceMove, faceLock, faceDetach };
+  });
+
+  /**
+   * Slice 11 — cross-engine invariant (design §7, "the point of the feature").
+   *
+   * After the manual-flow test's decisions, simulate a LATER scan re-deriving the surviving faces as
+   * candidates and proposing them flagged again — toward an owner neither face has ever been associated with
+   * before, so there is no way a stale pairing could accidentally save this assertion — and confirm the manual
+   * decisions are honoured exactly as guided ones would be: the locked face is not re-flagged, the moved face
+   * is not re-proposed, and the detached face stays gone. Asserts durable DB state (identity-link source, plus
+   * the flagged-snapshot read every review page and dashboard already goes through), never re-scan ordering —
+   * two scans stamped the same `now()` make getLatestScan nondeterministic, a flake this feature has already
+   * produced once (see seedFlaggedScanMulti's docstring above for why this seeds ONE scan, not two).
+   */
+  test('manual review: a later scan honours every manual decision exactly as a guided one (cross-engine invariant)', async () => {
+    if (!manualFlow) {
+      throw new Error('manual review fixture is missing — the preceding test must have run and passed first');
+    }
+    const { source, destination, faceMove, faceLock, faceDetach } = manualFlow;
+    const db = await utils.connectDatabase();
+
+    const bystander = await utils.createPerson(admin.accessToken, { name: 'ManualFlowE2E Rescan Bystander' });
+
+    // One scan, two persons — see seedFlaggedScanMulti's docstring for why this must not be two separate calls.
+    await seedFlaggedScanMulti(db, {
+      ownerUserId: admin.userId,
+      groups: [
+        { personId: source.id, suspectedOwnerId: bystander.id, faceIds: [faceLock], preserveSource: true },
+        { personId: destination.id, suspectedOwnerId: bystander.id, faceIds: [faceMove], preserveSource: true },
+      ],
+    });
+
+    // Locked face: never re-flagged on the person it was locked to, regardless of who the new scan suspects —
+    // the manual link is owner-agnostic (design §5.3).
+    const sourceFlagged = await getFaceRepairPersonFaces(
+      { personId: source.id },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    expect(sourceFlagged.flaggedFaces.some((f) => f.assetFaceId === faceLock)).toBe(false);
+
+    // Moved face: not re-proposed on its new person either.
+    const destinationFlagged = await getFaceRepairPersonFaces(
+      { personId: destination.id },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    expect(destinationFlagged.flaggedFaces.some((f) => f.assetFaceId === faceMove)).toBe(false);
+
+    // Durable confirmation underneath the read-path filters above: the identity links a real scan's verdict
+    // layer keys off are still exactly what the manual review wrote — running another scan did not touch them.
+    const { rows: lockLinkRows } = await db.query(`SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`, [
+      faceLock,
+    ]);
+    expect(lockLinkRows).toHaveLength(1);
+    expect(lockLinkRows[0].source).toBe('manual');
+
+    const { rows: moveLinkRows } = await db.query(`SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`, [
+      faceMove,
+    ]);
+    expect(moveLinkRows).toHaveLength(1);
+    expect(moveLinkRows[0].source).toBe('manual');
+
+    // Detached face stays gone. A real scan cannot even see it — every eligibility predicate this feature uses
+    // (getClusterFacePage, getEligibleFaceIdsForPerson, streamEligibleFaces) requires deletedAt IS NULL and a
+    // live personId, both of which the detach cleared — so there is nothing here for a scan to resurrect; this
+    // simply re-confirms the durable state the manual-flow test wrote still holds.
+    const { rows: detachFaceRows } = await db.query(`SELECT "personId", "deletedAt" FROM "asset_face" WHERE id = $1`, [
+      faceDetach,
+    ]);
+    expect(detachFaceRows[0].personId).toBeNull();
+    expect(detachFaceRows[0].deletedAt).not.toBeNull();
+    const { rows: detachLinkRows } = await db.query(
+      `SELECT source FROM "face_identity_face" WHERE "assetFaceId" = $1`,
+      [faceDetach],
+    );
+    expect(detachLinkRows).toHaveLength(0);
   });
 });

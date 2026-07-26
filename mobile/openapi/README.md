@@ -179,6 +179,7 @@ Class | Method | HTTP request | Description
 *FacesApi* | [**getFaceRepairFaceThumbnail**](doc//FacesApi.md#getfacerepairfacethumbnail) | **GET** /admin/face-repair/faces/{assetFaceId}/thumbnail | Get an admin face-repair face thumbnail
 *FacesApi* | [**getFaceRepairOwnerPeople**](doc//FacesApi.md#getfacerepairownerpeople) | **GET** /admin/face-repair/owner/{ownerId}/people | Search an owner's people for the move-to-chosen-person picker
 *FacesApi* | [**getFaceRepairPersonFaces**](doc//FacesApi.md#getfacerepairpersonfaces) | **GET** /admin/face-repair/scan/person/{personId} | Get a person's flagged faces for review
+*FacesApi* | [**getFaceRepairPersonMetadata**](doc//FacesApi.md#getfacerepairpersonmetadata) | **GET** /admin/face-repair/person/{personId} | Get a person for manual review
 *FacesApi* | [**getFaceRepairResolutions**](doc//FacesApi.md#getfacerepairresolutions) | **GET** /admin/face-repair/resolutions | List face-repair resolutions (negative verdicts from both engines)
 *FacesApi* | [**getFaceRepairScanDefaults**](doc//FacesApi.md#getfacerepairscandefaults) | **GET** /admin/face-repair/scan/defaults | Get effective face-repair scan defaults
 *FacesApi* | [**getFaces**](doc//FacesApi.md#getfaces) | **GET** /faces | Retrieve faces for asset
@@ -563,6 +564,7 @@ Class | Method | HTTP request | Description
  - [FaceRepairOwnerPersonCreatedResponseDto](doc//FaceRepairOwnerPersonCreatedResponseDto.md)
  - [FaceRepairPersonFacesDto](doc//FaceRepairPersonFacesDto.md)
  - [FaceRepairPersonFacesDtoFlaggedFacesInner](doc//FaceRepairPersonFacesDtoFlaggedFacesInner.md)
+ - [FaceRepairPersonMetadataResponseDto](doc//FaceRepairPersonMetadataResponseDto.md)
  - [FaceRepairRequestDto](doc//FaceRepairRequestDto.md)
  - [FaceRepairResolutionsListDto](doc//FaceRepairResolutionsListDto.md)
  - [FaceRepairResolutionsListDtoResolutionsInner](doc//FaceRepairResolutionsListDtoResolutionsInner.md)

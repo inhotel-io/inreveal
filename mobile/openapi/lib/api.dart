@@ -196,6 +196,7 @@ part 'model/face_repair_owner_person_create_request_dto.dart';
 part 'model/face_repair_owner_person_created_response_dto.dart';
 part 'model/face_repair_person_faces_dto.dart';
 part 'model/face_repair_person_faces_dto_flagged_faces_inner.dart';
+part 'model/face_repair_person_metadata_response_dto.dart';
 part 'model/face_repair_request_dto.dart';
 part 'model/face_repair_resolutions_list_dto.dart';
 part 'model/face_repair_resolutions_list_dto_resolutions_inner.dart';
