@@ -390,6 +390,7 @@ DELETE FROM "kysely_migrations"
    '1783700000000-FixSharedSpaceMemberJoinGrantCreateId',
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
    '1785000000000-CreatePetSearchTable',
+   '1785200000000-AddSpeciesToPetSearch',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
