@@ -45,6 +45,7 @@ import {
   SystemMetadataKey,
   VectorIndex,
 } from 'src/enum';
+import { ArgOf } from 'src/repositories/event.repository';
 import type {
   AccessibleIdentityFaceMatch,
   SharedSpaceFaceMatchBackfillTarget,
@@ -107,6 +108,16 @@ export class PersonService extends BaseService {
     }
 
     await this.jobRepository.queue({ name: JobName.FaceIdentityBackfill, data: {} });
+  }
+
+  @OnEvent({ name: 'ConfigValidate' })
+  onConfigValidate({ newConfig }: ArgOf<'ConfigValidate'>) {
+    const { maxDistance, suggestions } = newConfig.machineLearning.facialRecognition;
+    if (suggestions.enabled && suggestions.maxDistance <= maxDistance) {
+      throw new Error(
+        `Face suggestion max distance (${suggestions.maxDistance}) must be greater than the maximum recognition distance (${maxDistance}), otherwise no faces can ever be suggested.`,
+      );
+    }
   }
 
   /**

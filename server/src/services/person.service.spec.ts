@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { Reflector } from '@nestjs/core';
 import { writeFile } from 'node:fs/promises';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
+import { SystemConfig } from 'src/config';
 import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
 import { mapFaces, mapPerson } from 'src/dtos/person.dto';
 import { QueueStatisticsDto } from 'src/dtos/queue.dto';
@@ -78,6 +79,13 @@ const planWith = (overrides: {
   unrepairableSpaceCollapseIds: [],
   ...overrides,
 });
+
+const configValidateTestConfig = (enabled: boolean, maxDistance: number, suggestionMaxDistance: number) =>
+  ({
+    machineLearning: {
+      facialRecognition: { maxDistance, suggestions: { enabled, maxDistance: suggestionMaxDistance } },
+    },
+  }) as SystemConfig;
 
 describe(PersonService.name, () => {
   let sut: PersonService;
@@ -7007,6 +7015,35 @@ describe(PersonService.name, () => {
       expect(mocks.facePersonVerdict.markIgnored).not.toHaveBeenCalled();
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
       expect(mocks.person.reassignFaces).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onConfigValidate', () => {
+    it('rejects an enabled band at or below the recognition distance', () => {
+      expect(() =>
+        sut.onConfigValidate({
+          newConfig: configValidateTestConfig(true, 0.5, 0.5),
+          oldConfig: configValidateTestConfig(false, 0.5, 0.7),
+        }),
+      ).toThrow(/must be greater than the maximum recognition distance/);
+    });
+
+    it('accepts an enabled band above the recognition distance', () => {
+      expect(() =>
+        sut.onConfigValidate({
+          newConfig: configValidateTestConfig(true, 0.5, 0.7),
+          oldConfig: configValidateTestConfig(false, 0.5, 0.7),
+        }),
+      ).not.toThrow();
+    });
+
+    it('ignores the band when suggestions are disabled', () => {
+      expect(() =>
+        sut.onConfigValidate({
+          newConfig: configValidateTestConfig(false, 0.5, 0.3),
+          oldConfig: configValidateTestConfig(false, 0.5, 0.7),
+        }),
+      ).not.toThrow();
     });
   });
 });
