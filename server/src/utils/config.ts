@@ -74,14 +74,55 @@ const loadFromFile = async ({ metadataRepo, logger }: RepoDeps, filepath: string
   }
 };
 
+// Typed as `string` rather than left as an inferred literal: lodash's `get` overload resolution
+// picks a path-walking `GetFieldType<TObject, TPath>` for literal `TPath` string types, which
+// resolves to `undefined` against the generic `object` type `_.isObject` narrows to below. Widening
+// to `string` matches the dynamic-path call further down in this file and falls back to the `any`
+// overload instead.
+const LEGACY_SUGGESTION_PATH: string = 'machineLearning.facialRecognition.suggestionMaxDistance';
+const SUGGESTIONS_PATH: string = 'machineLearning.facialRecognition.suggestions';
+
+/**
+ * Folds the pre-rename `facialRecognition.suggestionMaxDistance` sentinel into the nested
+ * `facialRecognition.suggestions` block. Runs against the user-supplied partial (database or config
+ * file) before it merges over defaults, so both config sources migrate identically. Without this,
+ * the renamed key would land in the unknown-keys warn path and be silently dropped, switching the
+ * feature off on every instance already running it.
+ */
+export const foldLegacyFaceSuggestionConfig = (partial: unknown): unknown => {
+  if (!_.isObject(partial) || _.get(partial, LEGACY_SUGGESTION_PATH) === undefined) {
+    return partial;
+  }
+
+  const folded = _.cloneDeep(partial);
+  const legacy = _.get(folded, LEGACY_SUGGESTION_PATH) as number;
+  unsetDeep(folded, LEGACY_SUGGESTION_PATH);
+
+  if (_.get(folded, SUGGESTIONS_PATH) === undefined) {
+    const maxDistance =
+      (_.get(folded, 'machineLearning.facialRecognition.maxDistance') as number | undefined) ??
+      defaults.machineLearning.facialRecognition.maxDistance;
+
+    _.set(folded, SUGGESTIONS_PATH, {
+      enabled: legacy > maxDistance,
+      // The new field's minimum is 0.1, so a legacy 0 (or any sub-minimum value) must fall back to
+      // the default rather than fold through into a config that fails its own schema.
+      maxDistance: legacy >= 0.1 ? legacy : defaults.machineLearning.facialRecognition.suggestions.maxDistance,
+    });
+  }
+
+  return folded;
+};
+
 const buildConfig = async (repos: RepoDeps) => {
   const { configRepo, metadataRepo, logger } = repos;
   const { configFile } = configRepo.getEnv();
 
   // load partial
-  const partial = configFile
+  const rawPartial = configFile
     ? await loadFromFile(repos, configFile)
     : await metadataRepo.get(SystemMetadataKey.SystemConfig);
+  const partial = foldLegacyFaceSuggestionConfig(rawPartial);
 
   // merge with defaults. Enumerate the user-supplied partial WITHOUT emptyObjectsAsLeaves: an empty
   // object in the partial must yield no path so it can't `_.set` over (and wipe) a populated default
