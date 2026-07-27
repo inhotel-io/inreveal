@@ -27370,6 +27370,26 @@
         ],
         "type": "object"
       },
+      "FaceSuggestionConfig": {
+        "properties": {
+          "enabled": {
+            "description": "Whether face suggestions are enabled",
+            "type": "boolean"
+          },
+          "maxDistance": {
+            "description": "Maximum embedding distance for a face to be surfaced as a suggestion on a named person",
+            "format": "double",
+            "maximum": 2,
+            "minimum": 0.1,
+            "type": "number"
+          }
+        },
+        "required": [
+          "enabled",
+          "maxDistance"
+        ],
+        "type": "object"
+      },
       "FacialRecognitionConfig": {
         "properties": {
           "enabled": {
@@ -27401,12 +27421,8 @@
             "minLength": 1,
             "type": "string"
           },
-          "suggestionMaxDistance": {
-            "description": "Maximum distance for face suggestions; 0 disables the suggestion feature",
-            "format": "double",
-            "maximum": 2,
-            "minimum": 0,
-            "type": "number"
+          "suggestions": {
+            "$ref": "#/components/schemas/FaceSuggestionConfig"
           }
         },
         "required": [
@@ -27415,7 +27431,7 @@
           "minFaces",
           "minScore",
           "modelName",
-          "suggestionMaxDistance"
+          "suggestions"
         ],
         "type": "object"
       },

@@ -3348,6 +3348,12 @@ export type DuplicateDetectionConfig = {
     /** Maximum distance threshold for duplicate detection */
     maxDistance: number;
 };
+export type FaceSuggestionConfig = {
+    /** Whether face suggestions are enabled */
+    enabled: boolean;
+    /** Maximum embedding distance for a face to be surfaced as a suggestion on a named person */
+    maxDistance: number;
+};
 export type FacialRecognitionConfig = {
     /** Whether the task is enabled */
     enabled: boolean;
@@ -3359,8 +3365,7 @@ export type FacialRecognitionConfig = {
     minScore: number;
     /** Name of the model to use */
     modelName: string;
-    /** Maximum distance for face suggestions; 0 disables the suggestion feature */
-    suggestionMaxDistance: number;
+    suggestions: FaceSuggestionConfig;
 };
 export type OcrConfig = {
     /** Whether the task is enabled */

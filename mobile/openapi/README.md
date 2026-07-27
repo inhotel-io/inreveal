@@ -586,6 +586,7 @@ Class | Method | HTTP request | Description
  - [FaceRepairScanTriggerRequestDtoParams](doc//FaceRepairScanTriggerRequestDtoParams.md)
  - [FaceRepairScanTriggerResponseDto](doc//FaceRepairScanTriggerResponseDto.md)
  - [FaceRepairUnconfirmRequestDto](doc//FaceRepairUnconfirmRequestDto.md)
+ - [FaceSuggestionConfig](doc//FaceSuggestionConfig.md)
  - [FacialRecognitionConfig](doc//FacialRecognitionConfig.md)
  - [FilterSuggestionsPersonDto](doc//FilterSuggestionsPersonDto.md)
  - [FilterSuggestionsResponseDto](doc//FilterSuggestionsResponseDto.md)
