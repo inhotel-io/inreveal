@@ -87,6 +87,14 @@ const configValidateTestConfig = (enabled: boolean, maxDistance: number, suggest
     },
   }) as SystemConfig;
 
+const onConfigUpdateTestConfig = (enabled: boolean) =>
+  ({
+    machineLearning: {
+      enabled: true,
+      facialRecognition: { enabled: true, maxDistance: 0.5, suggestions: { enabled, maxDistance: 0.7 } },
+    },
+  }) as SystemConfig;
+
 describe(PersonService.name, () => {
   let sut: PersonService;
   let mocks: ServiceMocks;
@@ -7044,6 +7052,44 @@ describe(PersonService.name, () => {
           oldConfig: configValidateTestConfig(false, 0.5, 0.7),
         }),
       ).not.toThrow();
+    });
+  });
+
+  describe('onConfigUpdate', () => {
+    it('queues the maintenance scan on the false to true transition', async () => {
+      await sut.onConfigUpdate({
+        newConfig: onConfigUpdateTestConfig(true),
+        oldConfig: onConfigUpdateTestConfig(false),
+      });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
+    });
+
+    it('does not queue when it was already enabled', async () => {
+      await sut.onConfigUpdate({
+        newConfig: onConfigUpdateTestConfig(true),
+        oldConfig: onConfigUpdateTestConfig(true),
+      });
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('does not queue when the feature is switched off', async () => {
+      await sut.onConfigUpdate({
+        newConfig: onConfigUpdateTestConfig(false),
+        oldConfig: onConfigUpdateTestConfig(true),
+      });
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('does not queue when suggestions are untouched', async () => {
+      await sut.onConfigUpdate({
+        newConfig: onConfigUpdateTestConfig(false),
+        oldConfig: onConfigUpdateTestConfig(false),
+      });
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
     });
   });
 });

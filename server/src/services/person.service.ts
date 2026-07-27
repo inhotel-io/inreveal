@@ -120,6 +120,15 @@ export class PersonService extends BaseService {
     }
   }
 
+  @OnEvent({ name: 'ConfigUpdate', workers: [ImmichWorker.Microservices], server: true })
+  async onConfigUpdate({ oldConfig, newConfig }: ArgOf<'ConfigUpdate'>) {
+    // Transition-only: re-saving settings must not re-queue a library-wide sweep. Widening the band
+    // while already enabled is picked up by running the maintenance job manually.
+    if (!isFaceSuggestionEnabled(oldConfig.machineLearning) && isFaceSuggestionEnabled(newConfig.machineLearning)) {
+      await this.jobRepository.queue({ name: JobName.FaceSuggestionMaintenance, data: {} });
+    }
+  }
+
   /**
    * Resolve the caller's People face threshold. The per-user `people.minimumFaces` preference
    * (default 3 via `getPreferences`) takes precedence over the ML config default. This keeps the
