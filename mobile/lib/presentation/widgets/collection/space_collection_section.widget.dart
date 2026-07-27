@@ -21,7 +21,13 @@ import 'package:openapi/api.dart';
 /// linked albums come from the local Drift `spaceAlbumsProvider`, watched ONLY while that
 /// row is expanded, so collapsed spaces subscribe to nothing.
 class SpaceCollectionSection extends ConsumerStatefulWidget {
-  const SpaceCollectionSection({super.key, required this.onTargetSelected, this.excludeSpaceId, this.isBusy = false});
+  const SpaceCollectionSection({
+    super.key,
+    required this.onTargetSelected,
+    this.excludeSpaceId,
+    this.isBusy = false,
+    this.searchQuery = '',
+  });
 
   final void Function(CollectionTarget target) onTargetSelected;
 
@@ -30,6 +36,10 @@ class SpaceCollectionSection extends ConsumerStatefulWidget {
 
   /// Disables every row while an add is in flight.
   final bool isBusy;
+
+  /// Narrows the rows to spaces whose name contains this query — supplied by the picker so
+  /// its single search field covers both halves of the sheet.
+  final String searchQuery;
 
   @override
   ConsumerState<SpaceCollectionSection> createState() => _SpaceCollectionSectionState();
@@ -70,8 +80,16 @@ class _SpaceCollectionSectionState extends ConsumerState<SpaceCollectionSection>
     // the way rather than surfacing an error into someone else's sheet.
     if (spaces == null) return const SizedBox.shrink();
 
+    final query = widget.searchQuery.trim().toLowerCase();
     final writable =
-        spaces.where((space) => spaceIsWritable(space, userId) && space.id != widget.excludeSpaceId).toList()
+        spaces
+            .where(
+              (space) =>
+                  spaceIsWritable(space, userId) &&
+                  space.id != widget.excludeSpaceId &&
+                  (query.isEmpty || space.name.toLowerCase().contains(query)),
+            )
+            .toList()
           ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     if (writable.isEmpty) return const SizedBox.shrink();
 

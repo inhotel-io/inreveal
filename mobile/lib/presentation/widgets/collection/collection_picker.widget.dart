@@ -13,7 +13,8 @@ import 'package:sliver_tools/sliver_tools.dart';
 
 /// "Add to album or space" — the album selector plus the spaces section.
 ///
-/// `AlbumSelector` is upstream and is composed, never modified. Its own
+/// `AlbumSelector` is upstream and is composed, with two additive fork hooks
+/// (`onSearchChanged`, `searchHint`) so its search field can cover the spaces section too. Its own
 /// `AddToAlbumHeader` is not reused because it hardcodes the `add_to_album` key; this
 /// picker supplies its own header so the sheet can honestly say "album or space".
 class CollectionPicker extends ConsumerStatefulWidget {
@@ -31,6 +32,7 @@ class CollectionPicker extends ConsumerStatefulWidget {
 
 class _CollectionPickerState extends ConsumerState<CollectionPicker> {
   bool _isBusy = false;
+  String _searchQuery = '';
 
   Future<void> _addToAlbum(RemoteAlbum album) async {
     if (_isBusy) return;
@@ -110,12 +112,18 @@ class _CollectionPickerState extends ConsumerState<CollectionPicker> {
             ),
           ),
         ),
-        AlbumSelector(onAlbumSelected: _addToAlbum, onKeyboardExpanded: widget.onKeyboardExpanded),
+        AlbumSelector(
+          onAlbumSelected: _addToAlbum,
+          onKeyboardExpanded: widget.onKeyboardExpanded,
+          onSearchChanged: (query) => setState(() => _searchQuery = query),
+          searchHint: 'search_albums_and_spaces'.t(context: context),
+        ),
         SliverToBoxAdapter(
           child: SpaceCollectionSection(
             onTargetSelected: _addToTarget,
             excludeSpaceId: widget.excludeSpaceId,
             isBusy: _isBusy,
+            searchQuery: _searchQuery,
           ),
         ),
       ],

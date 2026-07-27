@@ -41,16 +41,20 @@ void main() {
     showInTimeline: true,
   );
 
-  SharedSpaceResponseDto space(String id, {SharedSpaceRole role = SharedSpaceRole.owner, int albums = 0}) =>
-      SharedSpaceResponseDto(
-        id: id,
-        name: 'Space $id',
-        createdAt: '2026-01-01T00:00:00Z',
-        updatedAt: '2026-01-01T00:00:00Z',
-        createdById: 'someone-else',
-        members: Optional.present([member('user-1', role)]),
-        albumCount: Optional.present(albums),
-      );
+  SharedSpaceResponseDto space(
+    String id, {
+    SharedSpaceRole role = SharedSpaceRole.owner,
+    int albums = 0,
+    String? name,
+  }) => SharedSpaceResponseDto(
+    id: id,
+    name: name ?? 'Space $id',
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    createdById: 'someone-else',
+    members: Optional.present([member('user-1', role)]),
+    albumCount: Optional.present(albums),
+  );
 
   SpaceAlbum album(String id, String name) => SpaceAlbum(
     id: id,
@@ -86,6 +90,7 @@ void main() {
     List<RemoteAsset>? selection,
     String? excludeSpaceId,
     String? userId = 'user-1',
+    String searchQuery = '',
     bool raw = false,
   }) async {
     final targets = <CollectionTarget>[];
@@ -105,7 +110,11 @@ void main() {
       for (final entry in albums.entries)
         spaceAlbumsProvider(entry.key).overrideWith((ref) => Stream.value(entry.value)),
     ];
-    final widget = SpaceCollectionSection(onTargetSelected: targets.add, excludeSpaceId: excludeSpaceId);
+    final widget = SpaceCollectionSection(
+      onTargetSelected: targets.add,
+      excludeSpaceId: excludeSpaceId,
+      searchQuery: searchQuery,
+    );
     if (raw) {
       await tester.pumpConsumerWidgetRaw(widget, overrides: overrides);
     } else {
@@ -247,6 +256,41 @@ void main() {
     expect(targets, hasLength(1), reason: 'two adds would fire two activity entries');
   });
 
+  testWidgets('the search query narrows the rows to spaces whose name contains it', (tester) async {
+    await pump(
+      tester,
+      spaces: [
+        space('s1', name: 'Family Vacation'),
+        space('s2', name: 'Photography Club'),
+      ],
+      searchQuery: 'famil',
+    );
+
+    expect(find.byKey(const Key('space-row-s1')), findsOneWidget);
+    expect(find.byKey(const Key('space-row-s2')), findsNothing);
+  });
+
+  testWidgets('the search query matches case-insensitively, ignoring surrounding whitespace', (tester) async {
+    await pump(
+      tester,
+      spaces: [space('s1', name: 'Family Vacation')],
+      searchQuery: '  FAMILY  ',
+    );
+
+    expect(find.byKey(const Key('space-row-s1')), findsOneWidget);
+  });
+
+  testWidgets('a query matching no space hides the section entirely', (tester) async {
+    await pump(
+      tester,
+      spaces: [space('s1', name: 'Family Vacation')],
+      searchQuery: 'zzz',
+    );
+
+    expect(find.byKey(const Key('space-collection-header')), findsNothing);
+    expect(find.byKey(const Key('space-row-s1')), findsNothing);
+  });
+
   testWidgets('a non-owned selection hides every row behind a notice', (tester) async {
     await pump(
       tester,
@@ -312,9 +356,7 @@ void main() {
         sharedSpacesProvider.overrideWith((ref) async => [space('s1', albums: 0)]),
         currentUserOverride('user-1'),
         multiSelectProvider.overrideWith(
-          () => MultiSelectNotifier(
-            MultiSelectState(selectedAssets: {asset('a')}, lockedSelectionAssets: const {}),
-          ),
+          () => MultiSelectNotifier(MultiSelectState(selectedAssets: {asset('a')}, lockedSelectionAssets: const {})),
         ),
       ],
     );
