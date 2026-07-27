@@ -11,12 +11,27 @@
   import { Button, IconButton } from '@immich/ui';
   import { mdiPlus, mdiTrashCanOutline } from '@mdi/js';
   import { isEqual } from 'lodash-es';
+  import { untrack } from 'svelte';
   import { t } from 'svelte-i18n';
   import { fade } from 'svelte/transition';
 
   const disabled = $derived(featureFlagsManager.value.configFile);
   const config = $derived(systemConfigManager.value);
   let configToEdit = $state(systemConfigManager.cloneValue());
+
+  $effect(() => {
+    const enabled = configToEdit.machineLearning.facialRecognition.suggestions.enabled;
+    if (!enabled) {
+      return;
+    }
+
+    untrack(() => {
+      const { maxDistance, suggestions } = configToEdit.machineLearning.facialRecognition;
+      if (suggestions.maxDistance <= maxDistance) {
+        suggestions.maxDistance = Math.min(Math.round((maxDistance + 0.2) * 100) / 100, 2);
+      }
+    });
+  });
 </script>
 
 <div class="mt-2">
@@ -250,19 +265,29 @@
               config.machineLearning.facialRecognition.maxDistance}
           />
 
+          <SettingSwitch
+            title={$t('admin.machine_learning_face_suggestions_setting')}
+            subtitle={$t('admin.machine_learning_face_suggestions_setting_description')}
+            bind:checked={configToEdit.machineLearning.facialRecognition.suggestions.enabled}
+            disabled={disabled ||
+              !configToEdit.machineLearning.enabled ||
+              !configToEdit.machineLearning.facialRecognition.enabled}
+          />
+
           <SettingInputField
             inputType={SettingInputFieldType.NUMBER}
             label={$t('admin.machine_learning_suggestion_max_distance')}
             description={$t('admin.machine_learning_suggestion_max_distance_description')}
-            bind:value={configToEdit.machineLearning.facialRecognition.suggestionMaxDistance}
+            bind:value={configToEdit.machineLearning.facialRecognition.suggestions.maxDistance}
             step="0.01"
-            min={0}
+            min={0.1}
             max={2}
             disabled={disabled ||
               !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.facialRecognition.enabled}
-            isEdited={configToEdit.machineLearning.facialRecognition.suggestionMaxDistance !==
-              config.machineLearning.facialRecognition.suggestionMaxDistance}
+              !configToEdit.machineLearning.facialRecognition.enabled ||
+              !configToEdit.machineLearning.facialRecognition.suggestions.enabled}
+            isEdited={configToEdit.machineLearning.facialRecognition.suggestions.maxDistance !==
+              config.machineLearning.facialRecognition.suggestions.maxDistance}
           />
 
           <SettingInputField
