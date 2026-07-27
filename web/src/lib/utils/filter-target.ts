@@ -3,6 +3,7 @@ import { page } from '$app/state';
 import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
 import { Route } from '$lib/route';
 import { clearFilterParams, decodeFilterParams, encodeFilterParams } from '$lib/utils/filter-url';
+import { storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 
 export type FilterTarget =
   | { kind: 'photos'; basePath: '/photos' }
@@ -119,9 +120,17 @@ export function applyContextualFilter(patch: Partial<FilterState>, opts?: { glob
  * `spacePersonId`. The owner's person uuid is not a space_person row, so filtering the Space by it
  * would silently return an empty timeline. Callers must not render the affordance when this is null.
  *
- * Do NOT reach for `getPhotosPersonFilterId` here — it is built for the filter-suggestion DTO shape
- * (`filterId` / `primaryProfile`), neither of which `mapPerson` sets on an asset-viewer person, so it
- * falls through to the owner's `person.id`.
+ * Off the Space the token is ALWAYS scoped — `person:<uuid>` for an own person, never the bare uuid.
+ * The server accepts all three forms (`ScopedPersonTokenSchema`), so a bare uuid narrows the timeline
+ * correctly; but it is not the id the surface's own filter options are keyed by. /photos, an album,
+ * the global map and Recently Added all build their people options — and the `personNames` map the
+ * chip reads — with `getPhotosPersonFilterId`, which emits `person:<uuid>`. A bare uuid therefore
+ * matches no option: the chip degrades to a raw UUID and the panel renders a SECOND, orphaned UUID
+ * row beside the named one it should have ticked.
+ *
+ * Do NOT reach for `getPhotosPersonFilterId` itself here — it is built for the filter-suggestion DTO
+ * shape (`filterId` / `primaryProfile`), neither of which `mapPerson` sets on an asset-viewer person,
+ * so it would fall through to the bare `person.id`. This mirrors its OUTPUT, not its input.
  */
 export function buildPersonFilterPatch(
   url: URL,
@@ -134,7 +143,39 @@ export function buildPersonFilterPatch(
     return person.spacePersonId ? { personIds: [person.spacePersonId] } : null;
   }
 
-  return { personIds: [person.spacePersonId ? `space-person:${person.spacePersonId}` : person.id] };
+  return {
+    personIds: [person.spacePersonId ? `space-person:${person.spacePersonId}` : `person:${person.id}`],
+  };
+}
+
+/**
+ * Bank the label of a contextual person filter against the URL it navigates to, so the destination
+ * can NAME the chip (and tick the right panel row) the moment it hydrates.
+ *
+ * Without this the label is at the mercy of the filter-suggestions response, which is a network
+ * round-trip late — and which never carries this token at all when the viewer also owns a person for
+ * the same identity: the suggestion ranks the user-person first and emits `person:<own uuid>`, so a
+ * `space-person:<uuid>` chip would show its raw token forever. Both render an id where a name
+ * belongs, which is the reported bug.
+ *
+ * Reuses typed search's session-scoped cache because every filter surface already drains it on
+ * navigation (`consumeTypedSearchNamesInto`) — there is no second mechanism to keep in sync. Like
+ * typed search's own hand-off it is one-shot and best-effort: a middle-click into a new tab, or a
+ * second visit to the same URL, simply falls back to the suggestions response.
+ *
+ * `destination` is keyed on pathname + search, dropping any hash: the map keeps its viewport in the
+ * hash, and every consumer keys on `page.url.pathname + page.url.search`.
+ */
+export function rememberContextualPersonName(destination: string, personId: string, name: string): void {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  storeTypedSearchNames(destination.split('#')[0], {
+    personNames: new Map([[personId, trimmed]]),
+    tagNames: new Map(),
+  });
 }
 
 /**

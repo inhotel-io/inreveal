@@ -3,6 +3,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildContextualFilterUrl } from '$lib/utils/filter-target';
+import { consumeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 import { renderWithTooltips } from '$tests/helpers';
 import { assetFactory } from '@test-data/factories/asset-factory';
 import { reactivePageMock as mockPage } from '@test-data/mocks/reactive-page.mock.svelte';
@@ -85,6 +86,7 @@ const buildAsset = (people: AssetResponseDto['people'] = []): AssetResponseDto =
 
 beforeEach(() => {
   vi.clearAllMocks();
+  sessionStorage.clear();
   gotoMock.mockResolvedValue(undefined);
   zoomImageToBase64Mock.mockResolvedValue(undefined);
   faceManagerMock.data = [];
@@ -156,7 +158,7 @@ describe('DetailPanelPeople filter grammar (R8)', () => {
     expect(href.startsWith('/photos')).toBe(true);
   });
 
-  it('on /photos: an OWN person filters by the plain person id', async () => {
+  it('on /photos: an OWN person filters by the scoped `person:<uuid>` token', async () => {
     faceManagerMock.people = [
       { id: PERSON_UUID, name: 'Bob', birthDate: null, isHidden: false, thumbnailPath: '/t' } as PersonResponseDto,
     ];
@@ -172,8 +174,10 @@ describe('DetailPanelPeople filter grammar (R8)', () => {
     const href = chip.getAttribute('href') ?? '';
     const people = new URLSearchParams(href.split('?')[1]).get('people') ?? '';
 
-    expect(people).toBe(PERSON_UUID);
-    expect(people).toMatch(UUID);
+    // Scoped, not bare: this is the id `getPhotosPersonFilterId` derives for the same person, and
+    // therefore the key the chip's `personNames` map and the panel's people options are stored under.
+    expect(people).toBe(`person:${PERSON_UUID}`);
+    expect(people.slice('person:'.length)).toMatch(UUID);
   });
 
   // R8/R9 — no bare space-person uuid means there is nothing honest to filter a Space by: the
@@ -195,6 +199,93 @@ describe('DetailPanelPeople filter grammar (R8)', () => {
     // plain text rather than a link into the owner-gated `/people/{id}`, which would 404. The row
     // still shows the person — it just carries no navigation.
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+});
+
+// The token the chip navigates with is only half the story: the destination has to be able to NAME
+// it. The `personNames` map the chip and the panel read is fed by the filter-suggestions response,
+// which lands a few hundred ms after the navigation — and never carries this exact token when the
+// viewer also owns a person for the same identity (the suggestion then ranks the user-person first
+// and emits `person:<own uuid>`). Both cases render a raw token where a name belongs, which is what
+// was reported. So the click banks the name against its destination, the same session-scoped cache
+// typed search uses; every filter surface already drains it on navigation.
+describe('DetailPanelPeople name hand-off', () => {
+  it('banks the person name against the destination URL when the chip is clicked', async () => {
+    faceManagerMock.people = [
+      { id: PERSON_UUID, name: 'Bob', birthDate: null, isHidden: false, thumbnailPath: '/t' } as PersonResponseDto,
+    ];
+
+    renderWithTooltips(DetailPanelPeople, {
+      asset: buildAsset(),
+      isOwner: true,
+      previousRoute: '/photos',
+      canFilter: true,
+    });
+
+    const chip = await screen.findByLabelText('filter_by_person: Bob');
+    const href = chip.getAttribute('href') ?? '';
+    await fireEvent.click(chip);
+
+    const names = consumeTypedSearchNames(href);
+    expect(names.personNames.get(`person:${PERSON_UUID}`)).toBe('Bob');
+  });
+
+  it('banks the SPACE person name under the bare id the Space filters by', async () => {
+    mockPage.reset('https://gallery.test/spaces/space-1/photos/asset-1');
+
+    renderWithTooltips(DetailPanelPeople, {
+      asset: buildAsset([spacePerson()]),
+      isOwner: false,
+      previousRoute: '/photos',
+      spaceId: 'space-1',
+      canFilter: true,
+    });
+
+    const chip = await screen.findByLabelText('filter_by_person: Alice');
+    const href = chip.getAttribute('href') ?? '';
+    await fireEvent.click(chip);
+
+    const names = consumeTypedSearchNames(href);
+    expect(names.personNames.get(SPACE_PERSON_UUID)).toBe('Alice');
+  });
+
+  // The map keeps its viewport in the URL hash, but every consumer keys the cache on
+  // `pathname + search` — banking it under the hashed URL would silently never be read.
+  it('keys the hand-off on pathname + search, ignoring the map hash', async () => {
+    mockPage.reset('https://gallery.test/map/photos/asset-1#12/50.08/14.43');
+    faceManagerMock.people = [
+      { id: PERSON_UUID, name: 'Bob', birthDate: null, isHidden: false, thumbnailPath: '/t' } as PersonResponseDto,
+    ];
+
+    renderWithTooltips(DetailPanelPeople, {
+      asset: buildAsset(),
+      isOwner: true,
+      previousRoute: '/photos',
+      canFilter: true,
+    });
+
+    const chip = await screen.findByLabelText('filter_by_person: Bob');
+    const href = chip.getAttribute('href') ?? '';
+    expect(href).toContain('#12/50.08/14.43');
+    await fireEvent.click(chip);
+
+    const names = consumeTypedSearchNames(href.split('#')[0]);
+    expect(names.personNames.get(`person:${PERSON_UUID}`)).toBe('Bob');
+  });
+
+  it('does not bank anything when there is no filter affordance', async () => {
+    mockPage.reset('https://gallery.test/spaces/space-1/photos/asset-1');
+
+    renderWithTooltips(DetailPanelPeople, {
+      asset: buildAsset([spacePerson({ spacePersonId: undefined })]),
+      isOwner: false,
+      previousRoute: '/photos',
+      spaceId: 'space-1',
+      canFilter: true,
+    });
+
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
+    expect(sessionStorage.length).toBe(0);
   });
 });
 
