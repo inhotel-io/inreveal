@@ -218,6 +218,7 @@ part 'model/face_repair_scan_trigger_request_dto.dart';
 part 'model/face_repair_scan_trigger_request_dto_params.dart';
 part 'model/face_repair_scan_trigger_response_dto.dart';
 part 'model/face_repair_unconfirm_request_dto.dart';
+part 'model/face_suggestion_config.dart';
 part 'model/facial_recognition_config.dart';
 part 'model/filter_suggestions_person_dto.dart';
 part 'model/filter_suggestions_response_dto.dart';
