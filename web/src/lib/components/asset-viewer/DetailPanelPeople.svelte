@@ -7,7 +7,11 @@
   import { faceManager } from '$lib/stores/face.svelte';
   import { locale } from '$lib/stores/preferences.store';
   import { createUrl, getAssetUrls, getPeopleThumbnailUrl } from '$lib/utils';
-  import { buildContextualFilterUrl, buildPersonFilterPatch } from '$lib/utils/filter-target';
+  import {
+    buildContextualFilterUrl,
+    buildPersonFilterPatch,
+    rememberContextualPersonName,
+  } from '$lib/utils/filter-target';
   import { zoomImageToBase64 } from '$lib/utils/people-utils';
   import { type AssetResponseDto } from '@immich/sdk';
   import { IconButton, Text } from '@immich/ui';
@@ -67,6 +71,20 @@
 
     const patch = buildPersonFilterPatch(page.url, person);
     return patch ? buildContextualFilterUrl(page.url, patch) : undefined;
+  };
+
+  /**
+   * The destination's chip and filter panel resolve a person id to a name through the
+   * filter-suggestions response, which is a round-trip late and does not always carry THIS token
+   * (see rememberContextualPersonName). Bank the name we already have on the way out, so the chip
+   * never renders a raw id.
+   */
+  const rememberPersonName = (person: AssetPerson, href: string) => {
+    const patch = buildPersonFilterPatch(page.url, person);
+    const personId = patch?.personIds?.[0];
+    if (personId) {
+      rememberContextualPersonName(href, personId, person.name);
+    }
   };
   const visiblePeople = $derived(
     people
@@ -172,6 +190,7 @@
             class="group block outline-none"
             href={filterHref ?? personPageHref}
             aria-label={filterHref ? `${$t('filter_by_person')}: ${person.name}` : undefined}
+            onclick={filterHref ? () => rememberPersonName(person, filterHref) : undefined}
             onfocus={() => assetViewerManager.setHighlightedFaces(personFaces)}
             onblur={() => assetViewerManager.clearHighlightedFaces()}
             onpointerenter={() => assetViewerManager.setHighlightedFaces(personFaces)}

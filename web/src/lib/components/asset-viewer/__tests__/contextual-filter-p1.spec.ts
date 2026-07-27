@@ -610,8 +610,12 @@ describe('P1 under merge semantics (§5.6, E25)', () => {
 
 /**
  * The other half of the person story (R8): an OWN person on an OWN asset. There is no space person
- * to scope to, so the query must carry the plain person uuid — and P1 says that uuid has to be one
+ * to scope to, so the query carries the `person:<uuid>` token — and P1 says that uuid has to be one
  * the asset actually has a face for.
+ *
+ * The token is scoped rather than bare so it matches what `getPhotosPersonFilterId` derives for the
+ * same person, which is what the chip's `personNames` map and the panel's people options are keyed
+ * by; the server accepts both forms.
  */
 describe('P1 — an own person on an own asset', () => {
   const ownedSurfaces = SURFACES.filter((s) => s.label === '/photos' || s.label === 'an album');
@@ -633,7 +637,7 @@ describe('P1 — an own person on an own asset', () => {
     ];
   });
 
-  it.each(ownedSurfaces)('carries the plain person uuid on $label', async (surface) => {
+  it.each(ownedSurfaces)('carries the scoped person token on $label', async (surface) => {
     mockPage.reset(surface.url);
 
     renderWithTooltips(DetailPanel, { asset: subject.asset, currentAlbum: CURRENT_ALBUM });
@@ -641,7 +645,7 @@ describe('P1 — an own person on an own asset', () => {
     const url = await filterUrlFromLink(`filter_by_person: ${PERSON_NAME}`);
     const options = optionsFor(surface, url);
 
-    expect(options.personIds).toEqual([PERSON_ID]);
+    expect(options.personIds).toEqual([`person:${PERSON_ID}`]);
     expectServerIdShapes(options);
     expectOptionsToMatchSubject(options, subject);
   });

@@ -9,6 +9,7 @@ import {
   isFilterStateUrlUnchanged,
   resolveFilterTarget,
 } from '$lib/utils/filter-target';
+import { getPhotosPersonFilterId } from '$lib/utils/photos-filter-options';
 import { reactivePageMock as mockPage } from '@test-data/mocks/reactive-page.mock.svelte';
 
 const { gotoMock } = vi.hoisted(() => ({ gotoMock: vi.fn().mockResolvedValue(undefined) }));
@@ -333,11 +334,39 @@ describe('buildPersonFilterPatch', () => {
     expect(buildPersonFilterPatch(u('/map/photos/asset-1'), SPACE_ASSET_PERSON)).toEqual({ personIds: [scoped] });
   });
 
-  it('emits the plain person id for an own person off the Space', () => {
-    expect(buildPersonFilterPatch(u('/photos/asset-1'), OWN_PERSON)).toEqual({ personIds: [OWN_PERSON.id] });
+  // The bare uuid the server ACCEPTS is not the id the surface's own filter options are keyed by:
+  // /photos, an album, the global map and Recently Added all build their people options — and their
+  // personNames map — with `getPhotosPersonFilterId`, which emits `person:<uuid>`. A bare uuid
+  // therefore filters correctly but matches no option: the chip degrades to a raw UUID and the panel
+  // renders a SECOND, orphaned UUID row next to the named one it should have ticked.
+  it('emits the SCOPED person token for an own person off the Space (so the chip and panel can name it)', () => {
+    const scoped = `person:${OWN_PERSON.id}`;
+
+    expect(buildPersonFilterPatch(u('/photos/asset-1'), OWN_PERSON)).toEqual({ personIds: [scoped] });
     expect(buildPersonFilterPatch(u('/albums/album-1/photos/asset-1'), OWN_PERSON)).toEqual({
-      personIds: [OWN_PERSON.id],
+      personIds: [scoped],
     });
+    expect(buildPersonFilterPatch(u('/map/photos/asset-1'), OWN_PERSON)).toEqual({ personIds: [scoped] });
+    expect(buildPersonFilterPatch(u('/recently-added/photos/asset-1'), OWN_PERSON)).toEqual({ personIds: [scoped] });
+  });
+
+  it('emits the token that getPhotosPersonFilterId derives for the SAME person', () => {
+    const patch = buildPersonFilterPatch(u('/photos/asset-1'), OWN_PERSON)!;
+
+    expect(patch.personIds).toEqual([
+      getPhotosPersonFilterId({ id: OWN_PERSON.id, primaryProfile: { type: 'user-person', id: OWN_PERSON.id } }),
+    ]);
+  });
+
+  it('emits the token that getPhotosPersonFilterId derives for the same SPACE person', () => {
+    const patch = buildPersonFilterPatch(u('/photos/asset-1'), SPACE_ASSET_PERSON)!;
+
+    expect(patch.personIds).toEqual([
+      getPhotosPersonFilterId({
+        id: SPACE_ASSET_PERSON.id,
+        primaryProfile: { type: 'space-person', id: SPACE_ASSET_PERSON.spacePersonId, spaceId: 'space-1' },
+      }),
+    ]);
   });
 
   // A non-filterable surface falls back to /photos (buildContextualFilterUrl's own fallback), so it
@@ -354,8 +383,8 @@ describe('buildPersonFilterPatch', () => {
     const url = new URL('https://g.test/photos/asset-1?people=other-person');
     const patch = buildPersonFilterPatch(url, OWN_PERSON)!;
 
-    expect(patch.personIds).toEqual([OWN_PERSON.id]);
-    expect(buildContextualFilterUrl(url, patch)).toContain(`people=${OWN_PERSON.id}`);
+    expect(patch.personIds).toEqual([`person:${OWN_PERSON.id}`]);
+    expect(buildContextualFilterUrl(url, patch)).toContain(`people=person%3A${OWN_PERSON.id}`);
     expect(buildContextualFilterUrl(url, patch)).not.toContain('other-person');
   });
 });
