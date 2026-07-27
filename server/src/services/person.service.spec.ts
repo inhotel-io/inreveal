@@ -1407,7 +1407,7 @@ describe(PersonService.name, () => {
               enabled: true,
               maxDistance: 0.5,
               minFaces: 3,
-              suggestions: { enabled: true, maxDistance: 0 },
+              suggestions: { enabled: false, maxDistance: 0.7 },
             },
           },
         });
@@ -3832,7 +3832,7 @@ describe(PersonService.name, () => {
             enabled: true,
             maxDistance: 0.5,
             minFaces: 3,
-            suggestions: { enabled: true, maxDistance: 0 },
+            suggestions: { enabled: false, maxDistance: 0.7 },
           },
         },
       });
@@ -4033,7 +4033,7 @@ describe(PersonService.name, () => {
       expect(config).toEqual(expect.objectContaining({ queue: 'peopleBackfill' }));
     });
 
-    it('skips when the feature is disabled (suggestionMaxDistance <= maxDistance)', async () => {
+    it('skips when suggestions are enabled but the band is inverted (suggestions.maxDistance <= maxDistance)', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
         machineLearning: {
           enabled: true,
@@ -4251,7 +4251,7 @@ describe(PersonService.name, () => {
             enabled: true,
             maxDistance: 0.5,
             minFaces: 3,
-            suggestions: { enabled: true, maxDistance: 0 },
+            suggestions: { enabled: false, maxDistance: 0.7 },
           },
         },
       });
@@ -4493,7 +4493,7 @@ describe(PersonService.name, () => {
             enabled: true,
             maxDistance: 0.5,
             minFaces: 3,
-            suggestions: { enabled: true, maxDistance: 0 },
+            suggestions: { enabled: false, maxDistance: 0.7 },
           },
         },
       });
@@ -6785,7 +6785,10 @@ describe(PersonService.name, () => {
             enabled: true,
             maxDistance: 0.5,
             minFaces: 3,
-            suggestions: { enabled: true, maxDistance: 0 },
+            // Suggestions are explicitly ON (enabled: true) but misconfigured with a distance at/below
+            // maxDistance — a schema-valid (>= 0.1) yet inverted band, distinct from the toggle-off case
+            // covered by the next test below.
+            suggestions: { enabled: true, maxDistance: 0.3 },
           },
         },
       });
