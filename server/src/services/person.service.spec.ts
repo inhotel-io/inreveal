@@ -87,11 +87,21 @@ const configValidateTestConfig = (enabled: boolean, maxDistance: number, suggest
     },
   }) as SystemConfig;
 
-const onConfigUpdateTestConfig = (enabled: boolean) =>
+const onConfigUpdateTestConfig = (
+  suggestionsEnabled: boolean,
+  machineLearningEnabled: boolean = true,
+  facialRecognitionEnabled: boolean = true,
+  recognitionMaxDistance: number = 0.5,
+  suggestionsMaxDistance: number = 0.7,
+) =>
   ({
     machineLearning: {
-      enabled: true,
-      facialRecognition: { enabled: true, maxDistance: 0.5, suggestions: { enabled, maxDistance: 0.7 } },
+      enabled: machineLearningEnabled,
+      facialRecognition: {
+        enabled: facialRecognitionEnabled,
+        maxDistance: recognitionMaxDistance,
+        suggestions: { enabled: suggestionsEnabled, maxDistance: suggestionsMaxDistance },
+      },
     },
   }) as SystemConfig;
 
@@ -7090,6 +7100,42 @@ describe(PersonService.name, () => {
       });
 
       expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('does not queue when band widens while already enabled', async () => {
+      await sut.onConfigUpdate({
+        newConfig: onConfigUpdateTestConfig(true, true, true, 0.5, 0.9),
+        oldConfig: onConfigUpdateTestConfig(true, true, true, 0.5, 0.7),
+      });
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('does not queue when suggestions.enabled flips true while machine learning is disabled', async () => {
+      await sut.onConfigUpdate({
+        newConfig: onConfigUpdateTestConfig(true, false, true, 0.5, 0.7),
+        oldConfig: onConfigUpdateTestConfig(false, false, true, 0.5, 0.7),
+      });
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('does not queue when suggestions.enabled flips true while facial recognition is disabled', async () => {
+      await sut.onConfigUpdate({
+        newConfig: onConfigUpdateTestConfig(true, true, false, 0.5, 0.7),
+        oldConfig: onConfigUpdateTestConfig(false, true, false, 0.5, 0.7),
+      });
+
+      expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    it('queues when band becomes valid from invalid transition', async () => {
+      await sut.onConfigUpdate({
+        newConfig: onConfigUpdateTestConfig(true, true, true, 0.5, 0.7),
+        oldConfig: onConfigUpdateTestConfig(true, true, true, 0.5, 0.4),
+      });
+
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
     });
   });
 });
