@@ -7892,7 +7892,7 @@ describe(SharedSpaceService.name, () => {
       ]);
     });
 
-    it('should not queue suggestion scans for non-name edits, cleared names, hidden people, pets, disabled spaces, or disabled suggestion bands', async () => {
+    it('should not queue suggestion scans for non-name edits, cleared names, hidden people, pets, disabled spaces, disabled suggestion bands, or suggestions toggled off', async () => {
       const auth = factory.auth();
       const spaceId = newUuid();
       const cases: Array<{
@@ -7901,6 +7901,7 @@ describe(SharedSpaceService.name, () => {
         dto: Parameters<typeof sut.updateSpacePerson>[3];
         spaceFaceRecognitionEnabled?: boolean;
         suggestionMaxDistance?: number;
+        suggestionsEnabled?: boolean;
       }> = [
         {
           name: 'birth date only',
@@ -7939,6 +7940,12 @@ describe(SharedSpaceService.name, () => {
           dto: { name: 'Alice' },
           suggestionMaxDistance: 0.5,
         },
+        {
+          name: 'suggestions toggled off (valid band)',
+          prior: { name: '', isHidden: false, type: 'person' },
+          dto: { name: 'Alice' },
+          suggestionsEnabled: false,
+        },
       ];
 
       for (const testCase of cases) {
@@ -7969,7 +7976,10 @@ describe(SharedSpaceService.name, () => {
               enabled: true,
               maxDistance: 0.5,
               minFaces: 3,
-              suggestions: { enabled: true, maxDistance: testCase.suggestionMaxDistance ?? 0.8 },
+              suggestions: {
+                enabled: testCase.suggestionsEnabled ?? true,
+                maxDistance: testCase.suggestionMaxDistance ?? 0.8,
+              },
             },
           },
         });
@@ -8740,11 +8750,23 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.SpacePersonSuggestionScanQueueAll, data: {} });
     });
 
-    it('should not queue scans for inherited name changes when the suggestion band or space face recognition is disabled', async () => {
-      for (const testCase of [
+    it('should not queue scans for inherited name changes when the suggestion band, space face recognition, or the suggestions toggle is disabled', async () => {
+      const cases: Array<{
+        name: string;
+        faceRecognitionEnabled: boolean;
+        suggestionMaxDistance: number;
+        suggestionsEnabled?: boolean;
+      }> = [
         { name: 'disabled suggestion band', faceRecognitionEnabled: true, suggestionMaxDistance: 0.5 },
         { name: 'disabled space', faceRecognitionEnabled: false, suggestionMaxDistance: 0.8 },
-      ]) {
+        {
+          name: 'suggestions toggled off (valid band)',
+          faceRecognitionEnabled: true,
+          suggestionMaxDistance: 0.8,
+          suggestionsEnabled: false,
+        },
+      ];
+      for (const testCase of cases) {
         vi.clearAllMocks();
         const spaceId = newUuid();
         const person = makeSpacePersonMetadataBackfillScanCandidate(newUuid(), spaceId);
@@ -8774,7 +8796,10 @@ describe(SharedSpaceService.name, () => {
               enabled: true,
               maxDistance: 0.5,
               minFaces: 3,
-              suggestions: { enabled: true, maxDistance: testCase.suggestionMaxDistance },
+              suggestions: {
+                enabled: testCase.suggestionsEnabled ?? true,
+                maxDistance: testCase.suggestionMaxDistance,
+              },
             },
           },
         });
