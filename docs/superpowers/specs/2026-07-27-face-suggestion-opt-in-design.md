@@ -78,6 +78,16 @@ The eight service-level sites collapse to `!isFaceSuggestionEnabled(machineLearn
 | `services/job.service.ts`                        | `:101` `handleFaceSuggestionMaintenance`                                                                                                                                                                                                          |
 | `repositories/face-person-verdict.repository.ts` | `:332`, `:434`, `:551` short-circuits stay as defence in depth, reading the band from their opts                                                                                                                                                  |
 
+**The three read paths need their own guard — this is load-bearing.** Today "disabled" _is_ an inverted band, so the repository short-circuits make every read path return empty for free. After this change the two states decouple: toggling off retains the distance value (§6), so `enabled: false` coexists with a valid band, the short-circuits stop firing, and the read paths would keep serving pending suggestions to a UI that believes the feature is off. Each read path therefore gains an explicit `isFaceSuggestionEnabled` check that returns the empty result **before** calling the repository:
+
+| Read path                                                        | Empty result              |
+| ---------------------------------------------------------------- | ------------------------- |
+| `person.service.ts:372` `getFaceSuggestions`                     | `{ total: 0, items: [] }` |
+| `shared-space.service.ts:1280` space suggestion page             | `{ total: 0, items: [] }` |
+| `shared-space.service.ts:1312` `hasPendingForSpacePerson` caller | `false`                   |
+
+The repository short-circuits are not a substitute: they only know the band, and the band no longer encodes enablement.
+
 **Approved behaviour change.** The current guards check only the distance band. They never consult `machineLearning.enabled` or `facialRecognition.enabled`, so suggestions keep running when facial recognition is switched off — suggestions are a pure vector query over embeddings that already exist and never call the ML service. Routing through `isFacialRecognitionEnabled` means an admin who scanned their library and later disabled facial recognition also loses suggestions. This is intended: it is a facial-recognition feature, it lives under that accordion, and the admin UI already disables its fields when facial recognition is off. Call it out in the PR description — it is the one change here that alters behaviour for an existing working configuration.
 
 ### 3. Validation rejects impossible configurations
@@ -159,6 +169,7 @@ New coverage:
 - Legacy fold: legacy above threshold → enabled; legacy `0` → disabled with default `0.7`; legacy below `maxDistance` → disabled retaining the legacy value; legacy alongside an existing `suggestions` block → block wins, legacy dropped; legacy with a non-default stored `maxDistance` → threshold uses the override.
 - `onConfigValidate` rejects `enabled` with an inverted band, and accepts it with a valid one.
 - `onConfigUpdate` queues on false → true only: no queue on true → true, true → false, or an unrelated config change.
+- Each of the three read paths returns its empty result, without touching the repository, when `suggestions.enabled` is false **while the band is still valid** — the state that the repository short-circuits cannot catch.
 
 Updated for the nested shape: `person.service.spec.ts`, `job.service.spec.ts`, `shared-space.service.spec.ts`, `system-config.service.spec.ts`, `model-config.dto.spec.ts`, `machine-learning.repository.spec.ts`; medium specs `face-person-verdict.repository.spec.ts`, `face-review-cross-flow.spec.ts`, `face-suggestion-exclusions.spec.ts`, `shared-space-face-suggestions.service.spec.ts`; e2e `person-face-suggestions` (api + web) and `space-person-face-suggestions`.
 
@@ -171,3 +182,4 @@ Manual verification on an RC: fresh install shows the toggle off; enabling it au
 | Fold misfires and disables the feature on upgrade                    | Unit-tested against the five cases above; manual RC check against a real upgraded instance before merge                           |
 | Auto-scan surprises an admin with library-wide work on settings save | Transition-only; `FaceSuggestionMaintenance` runs on the `PeopleBackfill` queue and is visible and pausable in the Jobs dashboard |
 | Gating on facial recognition removes suggestions for someone         | Intended and approved; called out in the PR description and release notes                                                         |
+| Toggling off leaves suggestions visible because the band stays valid | The three read-path guards in §2, each with a test for the enabled-false-band-valid state                                         |
