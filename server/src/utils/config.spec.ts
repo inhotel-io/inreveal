@@ -32,9 +32,24 @@ describe('foldLegacyFaceSuggestionConfig', () => {
     expect(result.machineLearning.facialRecognition.suggestions).toEqual({ enabled: false, maxDistance: 0.7 });
   });
 
+  it('keeps the legacy value exactly at the 0.1 schema minimum instead of falling back to the default', () => {
+    const result = foldLegacyFaceSuggestionConfig(legacy(0.1)) as any;
+    expect(result.machineLearning.facialRecognition.suggestions).toEqual({ enabled: false, maxDistance: 0.1 });
+  });
+
   it('compares against an overridden recognition distance, not the default', () => {
     const result = foldLegacyFaceSuggestionConfig(legacy(0.7, 0.8)) as any;
     expect(result.machineLearning.facialRecognition.suggestions).toEqual({ enabled: false, maxDistance: 0.7 });
+  });
+
+  it('disables suggestions when the legacy value exactly equals the default recognition distance', () => {
+    const result = foldLegacyFaceSuggestionConfig(legacy(0.5)) as any;
+    expect(result.machineLearning.facialRecognition.suggestions).toEqual({ enabled: false, maxDistance: 0.5 });
+  });
+
+  it('disables suggestions when the legacy value exactly equals an overridden recognition distance', () => {
+    const result = foldLegacyFaceSuggestionConfig(legacy(0.8, 0.8)) as any;
+    expect(result.machineLearning.facialRecognition.suggestions).toEqual({ enabled: false, maxDistance: 0.8 });
   });
 
   it('lets an existing suggestions block win and drops the legacy key', () => {
