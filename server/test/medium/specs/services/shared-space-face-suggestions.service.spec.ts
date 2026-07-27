@@ -38,7 +38,10 @@ const authFor = (user: { id: string; name: string; email: string; isAdmin?: bool
 
 const enableSuggestionBand = async (ctx: ReturnType<typeof setup>['ctx']) => {
   await ctx.get(SystemMetadataRepository).set(SystemMetadataKey.SystemConfig, {
-    machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8 } },
+    machineLearning: {
+      enabled: true,
+      facialRecognition: { enabled: true, maxDistance: 0.5, suggestions: { enabled: true, maxDistance: 0.8 } },
+    },
   } as any);
 };
 

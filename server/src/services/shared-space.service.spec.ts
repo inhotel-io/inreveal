@@ -7169,7 +7169,15 @@ describe(SharedSpaceService.name, () => {
 
   describe('getSpacePersonFaceSuggestions', () => {
     const enabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     it('returns an empty page for viewers and does not query suggestions', async () => {
@@ -7261,29 +7269,56 @@ describe(SharedSpaceService.name, () => {
       });
     });
 
-    it('passes disabled suggestion bands through so the repository read-gate returns empty', async () => {
+    it('returns an empty page without querying the repository when the band is inverted', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Owner }));
       mocks.sharedSpace.getPersonById.mockResolvedValue({ spaceId: 'space-1' } as any);
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.5, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.5 },
+          },
+        },
       });
-      mocks.facePersonVerdict.getPendingForSpacePerson.mockResolvedValue({ total: 0, items: [] });
 
       await expect(
         sut.getSpacePersonFaceSuggestions(factory.auth(), 'space-1', 'space-person-1', { page: 1, size: 50 }),
       ).resolves.toEqual({ total: 0, items: [] });
-      expect(mocks.facePersonVerdict.getPendingForSpacePerson).toHaveBeenCalledWith('space-1', 'space-person-1', {
-        maxDistance: 0.5,
-        suggestionMaxDistance: 0.5,
-        page: 1,
-        size: 50,
+      expect(mocks.facePersonVerdict.getPendingForSpacePerson).not.toHaveBeenCalled();
+    });
+
+    it('returns an empty page without querying when suggestions are disabled but the band is still valid', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue({ spaceId: 'space-1' } as any);
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          facialRecognition: { enabled: true, maxDistance: 0.5, suggestions: { enabled: false, maxDistance: 0.7 } },
+        },
       });
+
+      await expect(
+        sut.getSpacePersonFaceSuggestions(factory.auth(), 'space-1', 'space-person-1', { page: 1, size: 10 }),
+      ).resolves.toEqual({ total: 0, items: [] });
+
+      expect(mocks.facePersonVerdict.getPendingForSpacePerson).not.toHaveBeenCalled();
     });
   });
 
   describe('confirmSpacePersonFaceSuggestion', () => {
     const enabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     beforeEach(() => {
@@ -7409,11 +7444,33 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.facePersonVerdict.resolveAssignedFace).not.toHaveBeenCalled();
     });
+
+    it('does not confirm a space suggestion when suggestions are disabled but the band is still valid', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          facialRecognition: { enabled: true, maxDistance: 0.5, suggestions: { enabled: false, maxDistance: 0.7 } },
+        },
+      });
+
+      await sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1');
+
+      expect(mocks.facePersonVerdict.hasPendingForSpacePerson).not.toHaveBeenCalled();
+    });
   });
 
   describe('rejectSpacePersonFaceSuggestion, ignoreSpacePersonFaceSuggestion, dismissSpacePersonFaceSuggestion', () => {
     const enabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     beforeEach(() => {
@@ -7561,7 +7618,15 @@ describe(SharedSpaceService.name, () => {
 
   describe('updateSpacePerson', () => {
     const suggestionsEnabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     it('should require editor role', async () => {
@@ -7899,10 +7964,12 @@ describe(SharedSpaceService.name, () => {
         );
         mocks.systemMetadata.get.mockResolvedValue({
           machineLearning: {
+            enabled: true,
             facialRecognition: {
+              enabled: true,
               maxDistance: 0.5,
-              suggestionMaxDistance: testCase.suggestionMaxDistance ?? 0.8,
               minFaces: 3,
+              suggestions: { enabled: true, maxDistance: testCase.suggestionMaxDistance ?? 0.8 },
             },
           },
         });
@@ -7991,7 +8058,15 @@ describe(SharedSpaceService.name, () => {
 
   describe('backfillSpacePersonMetadata', () => {
     const suggestionsEnabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     it('should run metadata backfill on the people backfill queue', () => {
@@ -8694,7 +8769,13 @@ describe(SharedSpaceService.name, () => {
         );
         mocks.systemMetadata.get.mockResolvedValue({
           machineLearning: {
-            facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: testCase.suggestionMaxDistance, minFaces: 3 },
+            enabled: true,
+            facialRecognition: {
+              enabled: true,
+              maxDistance: 0.5,
+              minFaces: 3,
+              suggestions: { enabled: true, maxDistance: testCase.suggestionMaxDistance },
+            },
           },
         });
         mocks.sharedSpace.updatePerson.mockResolvedValue(person);

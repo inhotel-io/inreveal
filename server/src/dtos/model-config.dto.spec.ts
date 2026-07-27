@@ -2,7 +2,7 @@ import { defaults } from 'src/config';
 import { FacialRecognitionConfigSchema } from 'src/dtos/model-config.dto';
 import { describe, expect, it } from 'vitest';
 
-describe('FacialRecognitionConfigSchema suggestionMaxDistance', () => {
+describe('FacialRecognitionConfigSchema suggestions', () => {
   const base = {
     enabled: true,
     modelName: 'buffalo_l',
@@ -11,20 +11,22 @@ describe('FacialRecognitionConfigSchema suggestionMaxDistance', () => {
     minFaces: 3,
   };
 
-  it('accepts a valid suggestionMaxDistance', () => {
-    const parsed = FacialRecognitionConfigSchema.parse({ ...base, suggestionMaxDistance: 0.7 });
-    expect(parsed.suggestionMaxDistance).toBe(0.7);
+  it('accepts a valid suggestions block', () => {
+    const parsed = FacialRecognitionConfigSchema.parse({ ...base, suggestions: { enabled: true, maxDistance: 0.7 } });
+    expect(parsed.suggestions).toEqual({ enabled: true, maxDistance: 0.7 });
   });
 
-  it('accepts 0 (feature disabled)', () => {
-    expect(FacialRecognitionConfigSchema.parse({ ...base, suggestionMaxDistance: 0 }).suggestionMaxDistance).toBe(0);
+  it('rejects a suggestion distance below the 0.1 minimum', () => {
+    expect(() =>
+      FacialRecognitionConfigSchema.parse({ ...base, suggestions: { enabled: false, maxDistance: 0 } }),
+    ).toThrow();
   });
 
-  it('rejects a negative value', () => {
-    expect(() => FacialRecognitionConfigSchema.parse({ ...base, suggestionMaxDistance: -1 })).toThrow();
+  it('rejects a missing suggestions block', () => {
+    expect(() => FacialRecognitionConfigSchema.parse(base)).toThrow();
   });
 
-  it('defaults suggestionMaxDistance to 0 (disabled)', () => {
-    expect(defaults.machineLearning.facialRecognition.suggestionMaxDistance).toBe(0);
+  it('defaults to disabled with a 0.7 band', () => {
+    expect(defaults.machineLearning.facialRecognition.suggestions).toEqual({ enabled: false, maxDistance: 0.7 });
   });
 });

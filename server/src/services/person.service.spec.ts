@@ -1314,7 +1314,15 @@ describe(PersonService.name, () => {
 
     describe('suggestion on-name trigger', () => {
       const enabled = {
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.8 },
+          },
+        },
       };
 
       it('enqueues a scan when an unnamed cluster is named (edge 5)', async () => {
@@ -1393,7 +1401,15 @@ describe(PersonService.name, () => {
 
       it('does NOT enqueue when the feature is disabled', async () => {
         mocks.systemMetadata.get.mockResolvedValue({
-          machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
+          machineLearning: {
+            enabled: true,
+            facialRecognition: {
+              enabled: true,
+              maxDistance: 0.5,
+              minFaces: 3,
+              suggestions: { enabled: true, maxDistance: 0 },
+            },
+          },
         });
         const auth = AuthFactory.create();
         const prior = PersonFactory.create({ name: '', isHidden: false });
@@ -3759,7 +3775,15 @@ describe(PersonService.name, () => {
 
     it('chains PersonSuggestionScanQueueAll when backfill completes and the feature is enabled (edge 19)', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.8 },
+          },
+        },
       });
       mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 0 });
       mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
@@ -3776,7 +3800,15 @@ describe(PersonService.name, () => {
 
     it('chains SpacePersonSuggestionScanQueueAll when backfill completes and the feature is enabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.8 },
+          },
+        },
       });
       mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 0 });
       mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
@@ -3794,7 +3826,15 @@ describe(PersonService.name, () => {
 
     it('does NOT chain PersonSuggestionScanQueueAll when the feature is disabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0 },
+          },
+        },
       });
       mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 0 });
       mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
@@ -3812,7 +3852,15 @@ describe(PersonService.name, () => {
 
     it('does NOT chain PersonSuggestionScanQueueAll while cursor pages remain (edge 19 — strictly after)', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.8 },
+          },
+        },
       });
       mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 1000, nextCursor: 'c' });
       mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
@@ -3969,7 +4017,15 @@ describe(PersonService.name, () => {
 
   describe('handlePersonSuggestionScan', () => {
     const enabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     it('runs on the people backfill queue, not facial recognition', () => {
@@ -3979,7 +4035,15 @@ describe(PersonService.name, () => {
 
     it('skips when the feature is disabled (suggestionMaxDistance <= maxDistance)', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.5, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.5 },
+          },
+        },
       });
 
       await expect(sut.handlePersonSuggestionScan({ id: 'person-1' })).resolves.toBe(JobStatus.Skipped);
@@ -4095,7 +4159,15 @@ describe(PersonService.name, () => {
 
     it('never resurrects a resolved decision — delegates the guarantee to upsertPending (edge 1, 2)', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.8 },
+          },
+        },
       });
       mocks.person.getById.mockResolvedValue({
         id: 'p',
@@ -4155,7 +4227,15 @@ describe(PersonService.name, () => {
 
   describe('handlePersonSuggestionScanQueueAll', () => {
     const enabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     it('runs on the people backfill queue', () => {
@@ -4165,7 +4245,15 @@ describe(PersonService.name, () => {
 
     it('skips and enumerates nothing when the feature is disabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0 },
+          },
+        },
       });
 
       await expect(sut.handlePersonSuggestionScanQueueAll({})).resolves.toBe(JobStatus.Skipped);
@@ -4201,7 +4289,15 @@ describe(PersonService.name, () => {
 
   describe('handleSpacePersonSuggestionScan', () => {
     const enabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     it('runs on the people backfill queue', () => {
@@ -4211,7 +4307,15 @@ describe(PersonService.name, () => {
 
     it('skips when feature is disabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.5, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.5 },
+          },
+        },
       });
 
       await expect(sut.handleSpacePersonSuggestionScan({ id: 'space-person-1' })).resolves.toBe(JobStatus.Skipped);
@@ -4365,7 +4469,15 @@ describe(PersonService.name, () => {
 
   describe('handleSpacePersonSuggestionScanQueueAll', () => {
     const enabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     it('runs on the people backfill queue', () => {
@@ -4375,7 +4487,15 @@ describe(PersonService.name, () => {
 
     it('skips enumeration when feature is disabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0 },
+          },
+        },
       });
 
       await expect(sut.handleSpacePersonSuggestionScanQueueAll({})).resolves.toBe(JobStatus.Skipped);
@@ -6568,7 +6688,15 @@ describe(PersonService.name, () => {
 
   describe('getFaceSuggestions', () => {
     const enabled = {
-      machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
     };
 
     it('denies a non-owner with no state change (edge 18 absence)', async () => {
@@ -6649,22 +6777,41 @@ describe(PersonService.name, () => {
       });
     });
 
-    it('passes the feature-off config through so the repository read-gate returns empty (edge 7)', async () => {
+    it('returns an empty page without querying the repository when the band is inverted (edge 7)', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0 },
+          },
+        },
       });
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
-      mocks.facePersonVerdict.getPendingForPerson.mockResolvedValue({ total: 0, items: [] });
 
       const res = await sut.getFaceSuggestions(AuthFactory.create(), 'person-1', { page: 1, size: 50 });
 
-      expect(mocks.facePersonVerdict.getPendingForPerson).toHaveBeenCalledWith('person-1', {
-        maxDistance: 0.5,
-        suggestionMaxDistance: 0,
-        page: 1,
-        size: 50,
-      });
+      expect(mocks.facePersonVerdict.getPendingForPerson).not.toHaveBeenCalled();
       expect(res).toEqual({ total: 0, items: [] });
+    });
+
+    it('returns an empty page without querying when suggestions are disabled but the band is still valid', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          facialRecognition: { enabled: true, maxDistance: 0.5, suggestions: { enabled: false, maxDistance: 0.7 } },
+        },
+      });
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set(['person-1']));
+
+      await expect(sut.getFaceSuggestions(authStub.admin, 'person-1', { page: 1, size: 10 })).resolves.toEqual({
+        total: 0,
+        items: [],
+      });
+
+      expect(mocks.facePersonVerdict.getPendingForPerson).not.toHaveBeenCalled();
     });
   });
 
