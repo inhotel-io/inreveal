@@ -108,7 +108,15 @@ describe(JobService.name, () => {
 
     it('should queue personal and shared-space suggestion fanout jobs when suggestions are enabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: true, maxDistance: 0.8 },
+          },
+        },
       });
 
       await expect(sut.handleFaceSuggestionMaintenance()).resolves.toBe(JobStatus.Success);
@@ -121,7 +129,15 @@ describe(JobService.name, () => {
 
     it('should skip without queueing child fanout jobs when suggestions are disabled', async () => {
       mocks.systemMetadata.get.mockResolvedValue({
-        machineLearning: { facialRecognition: { maxDistance: 0.5, suggestionMaxDistance: 0.5, minFaces: 3 } },
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: false, maxDistance: 0.8 },
+          },
+        },
       });
 
       await expect(sut.handleFaceSuggestionMaintenance()).resolves.toBe(JobStatus.Skipped);

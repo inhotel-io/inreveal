@@ -111,6 +111,10 @@ export const isPetDetectionEnabled = (machineLearning: SystemConfig['machineLear
   isMachineLearningEnabled(machineLearning) && machineLearning.petDetection.enabled;
 export const isFacialRecognitionEnabled = (machineLearning: SystemConfig['machineLearning']) =>
   isMachineLearningEnabled(machineLearning) && machineLearning.facialRecognition.enabled;
+export const isFaceSuggestionEnabled = (machineLearning: SystemConfig['machineLearning']) =>
+  isFacialRecognitionEnabled(machineLearning) &&
+  machineLearning.facialRecognition.suggestions.enabled &&
+  machineLearning.facialRecognition.suggestions.maxDistance > machineLearning.facialRecognition.maxDistance;
 export const isDuplicateDetectionEnabled = (machineLearning: SystemConfig['machineLearning']) =>
   isSmartSearchEnabled(machineLearning) && machineLearning.duplicateDetection.enabled;
 export const isFaceImportEnabled = (metadata: SystemConfig['metadata']) => metadata.faces.import;

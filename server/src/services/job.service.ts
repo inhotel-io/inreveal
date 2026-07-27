@@ -7,6 +7,7 @@ import { ArgsOf } from 'src/repositories/event.repository';
 import { BaseService } from 'src/services/base.service';
 import { JobItem } from 'src/types';
 import { hexOrBufferToBase64 } from 'src/utils/bytes';
+import { isFaceSuggestionEnabled } from 'src/utils/misc';
 
 const asJobItem = (dto: JobCreateDto): JobItem => {
   switch (dto.name) {
@@ -97,8 +98,7 @@ export class JobService extends BaseService {
   @OnJob({ name: JobName.FaceSuggestionMaintenance, queue: QueueName.PeopleBackfill })
   async handleFaceSuggestionMaintenance(): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: false });
-    const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
-    if (suggestionMaxDistance <= maxDistance) {
+    if (!isFaceSuggestionEnabled(machineLearning)) {
       return JobStatus.Skipped;
     }
 

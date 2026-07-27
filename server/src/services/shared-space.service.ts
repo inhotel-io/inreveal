@@ -74,6 +74,7 @@ import { asDateString, asDateTimeString } from 'src/utils/date';
 import { ImmichMediaResponse } from 'src/utils/file';
 import { createCrossOwnerMergeAuthorizer } from 'src/utils/merge-policy';
 import { mimeTypes } from 'src/utils/mime-types';
+import { isFaceSuggestionEnabled } from 'src/utils/misc';
 
 const ROLE_HIERARCHY: Record<SharedSpaceRole, number> = {
   [SharedSpaceRole.Viewer]: 0,
@@ -1280,6 +1281,10 @@ export class SharedSpaceService extends BaseService {
 
     await this.requireSpacePersonInSpace(spaceId, personId);
 
+    if (!(await this.areSpacePersonSuggestionsEnabled({ withCache: true }))) {
+      return { total: 0, items: [] };
+    }
+
     const distanceConfig = await this.getFaceSuggestionDistanceConfig();
     const result = await this.facePersonVerdictRepository.getPendingForSpacePerson(spaceId, personId, {
       ...distanceConfig,
@@ -1312,6 +1317,11 @@ export class SharedSpaceService extends BaseService {
   ): Promise<void> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     const person = await this.requireSpacePersonInSpace(spaceId, personId);
+
+    if (!(await this.areSpacePersonSuggestionsEnabled({ withCache: true }))) {
+      return;
+    }
+
     const distanceConfig = await this.getFaceSuggestionDistanceConfig();
     const isPending = await this.facePersonVerdictRepository.hasPendingForSpacePerson(
       spaceId,
@@ -3234,8 +3244,7 @@ export class SharedSpaceService extends BaseService {
 
   private async areSpacePersonSuggestionsEnabled({ withCache }: { withCache: boolean }): Promise<boolean> {
     const { machineLearning } = await this.getConfig({ withCache });
-    const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
-    return suggestionMaxDistance > maxDistance;
+    return isFaceSuggestionEnabled(machineLearning);
   }
 
   private async isSpaceFaceRecognitionEnabled(spaceId: string, cache = new Map<string, boolean>()): Promise<boolean> {
@@ -3351,7 +3360,7 @@ export class SharedSpaceService extends BaseService {
     const { machineLearning } = await this.getConfig({ withCache: false });
     return {
       maxDistance: machineLearning.facialRecognition.maxDistance,
-      suggestionMaxDistance: machineLearning.facialRecognition.suggestionMaxDistance,
+      suggestionMaxDistance: machineLearning.facialRecognition.suggestions.maxDistance,
     };
   }
 

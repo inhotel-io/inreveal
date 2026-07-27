@@ -44,7 +44,7 @@ describe(MachineLearningRepository.name, () => {
       minScore: 0.7,
       maxDistance: 0.5,
       minFaces: 1,
-      suggestionMaxDistance: 0,
+      suggestions: { enabled: false, maxDistance: 0.7 },
     },
     ocr: {
       enabled: false,

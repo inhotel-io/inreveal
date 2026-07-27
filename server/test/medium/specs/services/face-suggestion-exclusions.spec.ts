@@ -44,7 +44,15 @@ const ANCHOR = bipolarEmbedding(0);
 const CANDIDATE = bipolarEmbedding(180);
 
 const BAND = { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 1 };
-const CONFIG = { machineLearning: { facialRecognition: BAND } };
+const CONFIG = {
+  machineLearning: {
+    facialRecognition: {
+      maxDistance: BAND.maxDistance,
+      minFaces: BAND.minFaces,
+      suggestions: { enabled: true, maxDistance: BAND.suggestionMaxDistance },
+    },
+  },
+};
 const bandOpts = {
   maxDistance: BAND.maxDistance,
   suggestionMaxDistance: BAND.suggestionMaxDistance,

@@ -114,11 +114,11 @@ const setupPerson = () => {
 };
 
 // D3 (defect 5) — the suggestion side of the cross-flow: PersonService's suggestion-scan handlers read
-// `machineLearning.facialRecognition.{maxDistance,suggestionMaxDistance}` via cached getConfig(), which
+// `machineLearning.facialRecognition.{maxDistance,suggestions.maxDistance}` via cached getConfig(), which
 // setupPerson's mock doesn't provide (it only stubs minFaces, for reassign/confirm's preference lookup).
 // Wraps setupPerson unmodified with a full suggestion-band config and a cleared module-level config cache
 // so it can't pick up a stale value from a preceding test's mock/DB config.
-const SUGGESTION_BAND = { maxDistance: 0.5, suggestionMaxDistance: 0.8, minFaces: 1 };
+const SUGGESTION_BAND = { maxDistance: 0.5, minFaces: 1, suggestions: { enabled: true, maxDistance: 0.8 } };
 
 const setupSuggestionPerson = () => {
   clearConfigCache();

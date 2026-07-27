@@ -64,7 +64,7 @@ import { asDateTimeString } from 'src/utils/date';
 import { ImmichMediaResponse } from 'src/utils/file';
 import { createCrossOwnerMergeAuthorizer } from 'src/utils/merge-policy';
 import { mimeTypes } from 'src/utils/mime-types';
-import { isFacialRecognitionEnabled } from 'src/utils/misc';
+import { isFaceSuggestionEnabled, isFacialRecognitionEnabled } from 'src/utils/misc';
 import { applyResolvedIdentityMetadata } from 'src/utils/person-identity';
 import { getPreferences } from 'src/utils/preferences';
 import { Point, transformPoints } from 'src/utils/transform';
@@ -371,11 +371,14 @@ export class PersonService extends BaseService {
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [id] });
 
     const { machineLearning } = await this.getConfig({ withCache: true });
-    const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
+    if (!isFaceSuggestionEnabled(machineLearning)) {
+      return { total: 0, items: [] };
+    }
 
+    const { maxDistance, suggestions } = machineLearning.facialRecognition;
     const { total, items } = await this.facePersonVerdictRepository.getPendingForPerson(id, {
       maxDistance,
-      suggestionMaxDistance,
+      suggestionMaxDistance: suggestions.maxDistance,
       page: dto.page,
       size: dto.size,
     });
@@ -701,8 +704,7 @@ export class PersonService extends BaseService {
     }
 
     const { machineLearning } = await this.getConfig({ withCache: true });
-    const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
-    const featureEnabled = suggestionMaxDistance > maxDistance;
+    const featureEnabled = isFaceSuggestionEnabled(machineLearning);
     const nowScannable = person.name !== '' && !person.isHidden && person.type === 'person';
     if (featureEnabled && nowScannable && prior && prior.name !== person.name) {
       await this.jobRepository.queue({ name: JobName.PersonSuggestionScan, data: { id } });
@@ -865,8 +867,7 @@ export class PersonService extends BaseService {
       this.logger.debug('FaceIdentityBackfill peopleBackfill complete; queuedSpacePersonMetadataBackfill=true');
 
       const { machineLearning } = await this.getConfig({ withCache: true });
-      const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
-      if (suggestionMaxDistance > maxDistance) {
+      if (isFaceSuggestionEnabled(machineLearning)) {
         await this.jobRepository.queue({ name: JobName.PersonSuggestionScanQueueAll, data: {} });
         await this.jobRepository.queue({ name: JobName.SpacePersonSuggestionScanQueueAll, data: {} });
       }
@@ -882,10 +883,11 @@ export class PersonService extends BaseService {
   @OnJob({ name: JobName.PersonSuggestionScan, queue: QueueName.PeopleBackfill })
   async handlePersonSuggestionScan({ id }: JobOf<JobName.PersonSuggestionScan>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: true });
-    const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
-    if (suggestionMaxDistance <= maxDistance) {
+    if (!isFaceSuggestionEnabled(machineLearning)) {
       return JobStatus.Skipped;
     }
+    const { maxDistance, suggestions } = machineLearning.facialRecognition;
+    const suggestionMaxDistance = suggestions.maxDistance;
 
     const person = await this.personRepository.getById(id);
     if (!person || person.name === '' || person.isHidden || person.type !== 'person') {
@@ -939,8 +941,7 @@ export class PersonService extends BaseService {
   @OnJob({ name: JobName.PersonSuggestionScanQueueAll, queue: QueueName.PeopleBackfill })
   async handlePersonSuggestionScanQueueAll(_data: JobOf<JobName.PersonSuggestionScanQueueAll>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: false });
-    const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
-    if (suggestionMaxDistance <= maxDistance) {
+    if (!isFaceSuggestionEnabled(machineLearning)) {
       return JobStatus.Skipped;
     }
 
@@ -959,10 +960,11 @@ export class PersonService extends BaseService {
   @OnJob({ name: JobName.SpacePersonSuggestionScan, queue: QueueName.PeopleBackfill })
   async handleSpacePersonSuggestionScan({ id }: JobOf<JobName.SpacePersonSuggestionScan>): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: true });
-    const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
-    if (suggestionMaxDistance <= maxDistance) {
+    if (!isFaceSuggestionEnabled(machineLearning)) {
       return JobStatus.Skipped;
     }
+    const { maxDistance, suggestions } = machineLearning.facialRecognition;
+    const suggestionMaxDistance = suggestions.maxDistance;
 
     const person = await this.sharedSpaceRepository.getPersonById(id);
     if (!person || person.name.trim() === '' || person.isHidden || person.type !== 'person') {
@@ -1039,8 +1041,7 @@ export class PersonService extends BaseService {
     _data: JobOf<JobName.SpacePersonSuggestionScanQueueAll>,
   ): Promise<JobStatus> {
     const { machineLearning } = await this.getConfig({ withCache: false });
-    const { maxDistance, suggestionMaxDistance } = machineLearning.facialRecognition;
-    if (suggestionMaxDistance <= maxDistance) {
+    if (!isFaceSuggestionEnabled(machineLearning)) {
       return JobStatus.Skipped;
     }
 
