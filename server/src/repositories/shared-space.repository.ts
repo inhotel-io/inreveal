@@ -22,7 +22,7 @@ import { SharedSpacePersonAliasTable } from 'src/schema/tables/shared-space-pers
 import { SharedSpacePersonFaceTable } from 'src/schema/tables/shared-space-person-face.table';
 import { SharedSpacePersonTable } from 'src/schema/tables/shared-space-person.table';
 import { SharedSpaceTable } from 'src/schema/tables/shared-space.table';
-import { anyUuid, searchAssetBuilder } from 'src/utils/database';
+import { anyUuid, retryOnDeadlock, searchAssetBuilder } from 'src/utils/database';
 import {
   spaceAlbumAssetExists,
   spaceContributedAssetExists,
@@ -3240,10 +3240,16 @@ export class SharedSpaceRepository {
     // rows sorted by id first so every caller agrees on one global lock order.  The claim only
     // holds for the enclosing transaction, so open one when the caller did not supply it.
     if (db.isTransaction) {
+      // A deadlock aborts the caller's entire transaction, so retrying inside it would only raise
+      // "current transaction is aborted". Surfacing it lets the caller re-drive its own transaction.
       return this.recountPersonsLocked(personIds, db);
     }
 
-    return db.transaction().execute((trx) => this.recountPersonsLocked(personIds, trx));
+    // Ordering the claim removes recount-vs-recount cycles but cannot remove every cycle: deleting
+    // an asset makes Postgres lock these same rows to satisfy the representativeFaceId ON DELETE
+    // SET NULL cascade, in face-deletion order, so a recount can still be picked as the victim.
+    // Measured on the library-unmap repro at ~8.7k assets: 418 recount failures without this.
+    return retryOnDeadlock(() => db.transaction().execute((trx) => this.recountPersonsLocked(personIds, trx)));
   }
 
   private async recountPersonsLocked(personIds: string[], db: Kysely<DB> | Transaction<DB>) {
