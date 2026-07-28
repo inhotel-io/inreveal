@@ -20,6 +20,10 @@
   let configToEdit = $state(systemConfigManager.cloneValue());
 
   $effect(() => {
+    if (disabled) {
+      return;
+    }
+
     const enabled = configToEdit.machineLearning.facialRecognition.suggestions.enabled;
     if (!enabled) {
       return;
