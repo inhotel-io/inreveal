@@ -455,8 +455,11 @@ describe('isFaceSuggestionEnabled', () => {
     expect(isFaceSuggestionEnabled(build({}))).toBe(true);
   });
 
-  it('is false when machine learning is disabled', () => {
-    expect(isFaceSuggestionEnabled(build({ ml: false }))).toBe(false);
+  // Suggestions never call the machine learning service — they are a vector query over embeddings
+  // that already exist — so turning the ML master switch off (a supported way to reclaim resources
+  // once a library is scanned) must leave them working.
+  it('is true when the machine learning master switch is off but facial recognition is on', () => {
+    expect(isFaceSuggestionEnabled(build({ ml: false }))).toBe(true);
   });
 
   it('is false when facial recognition is disabled', () => {

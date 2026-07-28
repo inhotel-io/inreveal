@@ -7111,13 +7111,15 @@ describe(PersonService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalled();
     });
 
-    it('does not queue when suggestions.enabled flips true while machine learning is disabled', async () => {
+    // Suggestions never call the machine learning service, so the ML master switch does not gate
+    // them — flipping them on while it is off is a real transition and must queue the scan.
+    it('queues when suggestions.enabled flips true while the machine learning master switch is off', async () => {
       await sut.onConfigUpdate({
         newConfig: onConfigUpdateTestConfig(true, false, true, 0.5, 0.7),
         oldConfig: onConfigUpdateTestConfig(false, false, true, 0.5, 0.7),
       });
 
-      expect(mocks.job.queue).not.toHaveBeenCalled();
+      expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
     });
 
     it('does not queue when suggestions.enabled flips true while facial recognition is disabled', async () => {
