@@ -2765,33 +2765,50 @@ export class FaceIdentityRepository {
     toPersonId: string;
     identityId: string;
   }): Promise<void> {
-    const identityFaceIds = this.db
-      .selectFrom('shared_space_person_face')
-      .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
-      .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
-      .select('shared_space_person_face.assetFaceId')
-      .where('shared_space_person_face.personId', '=', input.fromPersonId)
-      .where('face_identity_face.identityId', '=', input.identityId)
-      .where('asset_face.deletedAt', 'is', null)
-      .where('asset_face.isVisible', '=', true);
+    await this.db.transaction().execute(async (trx) => {
+      // Orphan cleanup runs concurrently with the backfill during a library unmap and can delete
+      // the target person between the caller resolving it and this move. Claim the row first so it
+      // cannot disappear mid-move, and skip entirely if it is already gone — reassigning faces onto
+      // a missing person violates shared_space_person_face_personId_fkey and kills the job (#864).
+      const target = await trx
+        .selectFrom('shared_space_person')
+        .select('id')
+        .where('id', '=', input.toPersonId)
+        .forUpdate()
+        .executeTakeFirst();
 
-    await this.db
-      .deleteFrom('shared_space_person_face')
-      .where('personId', '=', input.fromPersonId)
-      .where('assetFaceId', 'in', identityFaceIds)
-      .where(
-        'assetFaceId',
-        'in',
-        this.db.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', input.toPersonId),
-      )
-      .execute();
+      if (!target) {
+        return;
+      }
 
-    await this.db
-      .updateTable('shared_space_person_face')
-      .set({ personId: input.toPersonId })
-      .where('personId', '=', input.fromPersonId)
-      .where('assetFaceId', 'in', identityFaceIds)
-      .execute();
+      const identityFaceIds = trx
+        .selectFrom('shared_space_person_face')
+        .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+        .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
+        .select('shared_space_person_face.assetFaceId')
+        .where('shared_space_person_face.personId', '=', input.fromPersonId)
+        .where('face_identity_face.identityId', '=', input.identityId)
+        .where('asset_face.deletedAt', 'is', null)
+        .where('asset_face.isVisible', '=', true);
+
+      await trx
+        .deleteFrom('shared_space_person_face')
+        .where('personId', '=', input.fromPersonId)
+        .where('assetFaceId', 'in', identityFaceIds)
+        .where(
+          'assetFaceId',
+          'in',
+          trx.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', input.toPersonId),
+        )
+        .execute();
+
+      await trx
+        .updateTable('shared_space_person_face')
+        .set({ personId: input.toPersonId })
+        .where('personId', '=', input.fromPersonId)
+        .where('assetFaceId', 'in', identityFaceIds)
+        .execute();
+    });
   }
 
   private spacePersonFaceCount(eb: ExpressionBuilder<DB, 'shared_space_person'>) {
