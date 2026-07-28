@@ -56,13 +56,13 @@ test.describe('Space person face suggestions (web)', () => {
 
     const config = await utils.getSystemConfig(admin.accessToken);
     config.machineLearning.facialRecognition.maxDistance = 0.5;
-    config.machineLearning.facialRecognition.suggestionMaxDistance = 0.8;
+    config.machineLearning.facialRecognition.suggestions = { enabled: true, maxDistance: 0.8 };
     await updateConfig({ systemConfigDto: config }, { headers: asBearerAuth(admin.accessToken) });
   });
 
   test.afterAll(async () => {
     const config = await utils.getSystemConfig(admin.accessToken);
-    config.machineLearning.facialRecognition.suggestionMaxDistance = 0;
+    config.machineLearning.facialRecognition.suggestions = { enabled: false, maxDistance: 0.7 };
     await updateConfig({ systemConfigDto: config }, { headers: asBearerAuth(admin.accessToken) });
   });
 

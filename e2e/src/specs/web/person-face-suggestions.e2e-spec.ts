@@ -12,9 +12,9 @@ test.describe('Person face suggestions (web)', () => {
     await utils.resetDatabase();
     admin = await utils.adminSetup();
 
-    // open the read-gate: suggestionMaxDistance (0.8) > maxDistance (0.5)
+    // open the read-gate: suggestions.maxDistance (0.8) > maxDistance (0.5)
     const config = await utils.getSystemConfig(admin.accessToken);
-    config.machineLearning.facialRecognition.suggestionMaxDistance = 0.8;
+    config.machineLearning.facialRecognition.suggestions = { enabled: true, maxDistance: 0.8 };
     await updateConfig({ systemConfigDto: config }, { headers: asBearerAuth(admin.accessToken) });
 
     const person = await utils.createPerson(admin.accessToken, { name: 'E2E Suggest Target' });
@@ -42,7 +42,7 @@ test.describe('Person face suggestions (web)', () => {
 
   test.afterAll(async () => {
     const cfg = await utils.getSystemConfig(admin.accessToken);
-    cfg.machineLearning.facialRecognition.suggestionMaxDistance = 0;
+    cfg.machineLearning.facialRecognition.suggestions = { enabled: false, maxDistance: 0.7 };
     await updateConfig({ systemConfigDto: cfg }, { headers: asBearerAuth(admin.accessToken) });
   });
 
