@@ -75,4 +75,54 @@ describe(`${SharedSpaceRepository.name}.recountPersons (#864)`, () => {
     );
     expect(deadlocked).toEqual([]);
   });
+
+  it('recounts stale counters down to zero when the person has no visible faces', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    const { id } = await database
+      .insertInto('shared_space_person')
+      .values({ spaceId: space.id, faceCount: 99, assetCount: 99 })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    await sut.recountPersons([id]);
+
+    await expect(
+      database
+        .selectFrom('shared_space_person')
+        .select(['faceCount', 'assetCount'])
+        .where('id', '=', id)
+        .executeTakeFirst(),
+    ).resolves.toEqual({ faceCount: 0, assetCount: 0 });
+  });
+
+  // The isTransaction branch must join the caller's transaction rather than opening its own —
+  // otherwise the recount would commit independently and survive the caller's rollback.
+  it('joins a caller-supplied transaction instead of committing on its own', async () => {
+    const { ctx, sut } = setup();
+    const { user } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+    const { id } = await database
+      .insertInto('shared_space_person')
+      .values({ spaceId: space.id, faceCount: 99, assetCount: 99 })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    const rollback = new Error('rollback');
+    await expect(
+      database.transaction().execute(async (trx) => {
+        await sut.recountPersons([id], trx);
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+
+    await expect(
+      database
+        .selectFrom('shared_space_person')
+        .select(['faceCount', 'assetCount'])
+        .where('id', '=', id)
+        .executeTakeFirst(),
+    ).resolves.toEqual({ faceCount: 99, assetCount: 99 });
+  });
 });
