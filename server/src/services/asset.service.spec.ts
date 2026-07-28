@@ -1581,16 +1581,21 @@ describe(AssetService.name, () => {
       expect(mocks.job.queue).toHaveBeenCalledTimes(1);
     });
 
-    it('fails the job when every retry is also a deadlock victim', async () => {
+    // Losing a deletion is the one genuinely harmful outcome here: the asset is already
+    // soft-deleted, so without a re-queue it lingers until the trash sweep runs, days later.
+    // Measured on the unmap repro — even a 5-attempt budget was exhausted once under load.
+    it('re-queues the deletion instead of losing it when every retry deadlocks', async () => {
       const asset = AssetFactory.from().build();
       mocks.assetJob.getForAssetDeletion.mockResolvedValue(getForAssetDeletion(asset));
       mocks.asset.remove.mockRejectedValue(Object.assign(new Error('deadlock detected'), { code: '40P01' }));
 
-      await expect(sut.handleAssetDeletion({ id: asset.id, deleteOnDisk: true })).rejects.toMatchObject({
-        code: '40P01',
-      });
+      await expect(sut.handleAssetDeletion({ id: asset.id, deleteOnDisk: true })).resolves.toBe(JobStatus.Skipped);
 
-      // the deletion is never silently reported as done
+      expect(mocks.job.queue).toHaveBeenCalledWith({
+        name: JobName.AssetDelete,
+        data: { id: asset.id, deleteOnDisk: true },
+      });
+      // the deletion is never reported as done
       expect(mocks.event.emit).not.toHaveBeenCalled();
     });
 
