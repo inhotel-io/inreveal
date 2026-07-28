@@ -429,7 +429,7 @@
     "machine_learning_enabled": "Enable machine learning",
     "machine_learning_enabled_description": "If disabled, all ML features will be disabled regardless of the below settings.",
     "machine_learning_face_suggestions_setting": "Enable face suggestions",
-    "machine_learning_face_suggestions_setting_description": "Surface likely matches on a named person's page for one-tap review. Enabling this starts a scan of your library.",
+    "machine_learning_face_suggestions_setting_description": "Surface likely matches on a named person's page for quick review. Enabling this starts a scan of your library.",
     "machine_learning_facial_recognition": "Facial Recognition",
     "machine_learning_facial_recognition_description": "Detect, recognize and group faces in images",
     "machine_learning_facial_recognition_model": "Facial recognition model",
