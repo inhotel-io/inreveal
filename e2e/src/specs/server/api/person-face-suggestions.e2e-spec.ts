@@ -9,8 +9,9 @@
 // - face_person_verdict rows are seeded via raw SQL (the background job that
 //   would normally create them is not triggered in the e2e stack).
 // - Unassigned asset_face rows are seeded via a minimal INSERT (personId = NULL).
-// - The system config machineLearning.facialRecognition.suggestionMaxDistance is
-//   updated to 0.8 (> default maxDistance 0.5) so the read gate opens.
+// - The system config machineLearning.facialRecognition.suggestions toggle is set to
+//   { enabled: true, maxDistance: 0.8 } (0.8 > default maxDistance 0.5) so the read gate
+//   opens.
 // - The config is restored to defaults in afterAll.
 
 import { LoginResponseDto, PersonResponseDto, updateConfig } from '@immich/sdk';
@@ -75,9 +76,9 @@ describe('/people/:id/face-suggestions', () => {
       utils.userSetup(admin.accessToken, createUserDto.create('fsugg-stranger')),
     ]);
 
-    // Enable suggestions: set suggestionMaxDistance > maxDistance (0.5)
+    // Enable suggestions: maxDistance (0.8) must be > recognition maxDistance (0.5)
     const config = await utils.getSystemConfig(admin.accessToken);
-    config.machineLearning.facialRecognition.suggestionMaxDistance = 0.8;
+    config.machineLearning.facialRecognition.suggestions = { enabled: true, maxDistance: 0.8 };
     await updateConfig({ systemConfigDto: config }, { headers: asBearerAuth(admin.accessToken) });
 
     // Create persons owned by owner
@@ -112,7 +113,7 @@ describe('/people/:id/face-suggestions', () => {
   afterAll(async () => {
     // Restore system config to defaults so we don't leak state into other specs
     const defaults = await utils.getSystemConfig(admin.accessToken);
-    defaults.machineLearning.facialRecognition.suggestionMaxDistance = 0;
+    defaults.machineLearning.facialRecognition.suggestions = { enabled: false, maxDistance: 0.7 };
     await updateConfig({ systemConfigDto: defaults }, { headers: asBearerAuth(admin.accessToken) });
   });
 
@@ -302,13 +303,13 @@ describe('GET /people/:id/face-suggestions — space-member read scope (D6)', ()
     ctx = await buildSpaceContext();
 
     const config = await utils.getSystemConfig(ctx.admin.token!);
-    config.machineLearning.facialRecognition.suggestionMaxDistance = 0.8;
+    config.machineLearning.facialRecognition.suggestions = { enabled: true, maxDistance: 0.8 };
     await updateConfig({ systemConfigDto: config }, { headers: asBearerAuth(ctx.admin.token!) });
   });
 
   afterAll(async () => {
     const defaults = await utils.getSystemConfig(ctx.admin.token!);
-    defaults.machineLearning.facialRecognition.suggestionMaxDistance = 0;
+    defaults.machineLearning.facialRecognition.suggestions = { enabled: false, maxDistance: 0.7 };
     await updateConfig({ systemConfigDto: defaults }, { headers: asBearerAuth(ctx.admin.token!) });
   });
 
@@ -338,5 +339,57 @@ describe('GET /people/:id/face-suggestions — space-member read scope (D6)', ()
       .set(asBearerAuth(ctx.spaceOwner.token!));
     expect(ownerResponse.status).toBe(200);
     expect(ownerResponse.body.total).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// --------------------------------------------------------------------------
+// GET /people/:id/face-suggestions — disabled toggle with a still-valid band
+// --------------------------------------------------------------------------
+//
+// Regression coverage for the decoupled `suggestions.enabled` / `suggestions.maxDistance`
+// shape. Under the old flat sentinel, "disabled" was encoded as an inverted distance band
+// (suggestionMaxDistance <= maxDistance), so the repository's own band short-circuit
+// returned empty for free — there was no way to observe a disabled toggle with a valid
+// band. With the nested shape, `enabled: false` and a perfectly valid band (0.8 > the
+// default recognition maxDistance of 0.5) can coexist, so that repository short-circuit
+// no longer fires. Only the service-level `suggestions.enabled` guard added alongside this
+// change stops the endpoint from serving suggestions here — this test pins that guard.
+describe('GET /people/:id/face-suggestions — disabled toggle with a valid band', () => {
+  let admin: LoginResponseDto;
+  let owner: LoginResponseDto;
+  let person: PersonResponseDto;
+
+  beforeAll(async () => {
+    await utils.resetDatabase();
+    admin = await utils.adminSetup({ onboarding: false });
+    owner = await utils.userSetup(admin.accessToken, createUserDto.create('fsugg-disabled-owner'));
+
+    // Disabled, but the band itself is still valid (0.8 > 0.5) — the repository's own
+    // band short-circuit cannot catch this; it takes the service-level enabled guard.
+    const config = await utils.getSystemConfig(admin.accessToken);
+    config.machineLearning.facialRecognition.suggestions = { enabled: false, maxDistance: 0.8 };
+    await updateConfig({ systemConfigDto: config }, { headers: asBearerAuth(admin.accessToken) });
+
+    person = await utils.createPerson(owner.accessToken, { name: 'FaceSuggTest Disabled' });
+    const asset = await utils.createAsset(owner.accessToken);
+
+    const db = await utils.connectDatabase();
+    const faceId = await insertUnassignedFace(db, asset.id);
+    await insertSuggestion(db, person.id, faceId, 0.6); // well within the 0.8 band
+  });
+
+  afterAll(async () => {
+    const defaults = await utils.getSystemConfig(admin.accessToken);
+    defaults.machineLearning.facialRecognition.suggestions = { enabled: false, maxDistance: 0.7 };
+    await updateConfig({ systemConfigDto: defaults }, { headers: asBearerAuth(admin.accessToken) });
+  });
+
+  it('returns { total: 0, items: [] } when disabled even though the band is valid', async () => {
+    const { status, body } = await request(app)
+      .get(`/people/${person.id}/face-suggestions`)
+      .set(asBearerAuth(owner.accessToken));
+
+    expect(status).toBe(200);
+    expect(body).toEqual({ total: 0, items: [] });
   });
 });
