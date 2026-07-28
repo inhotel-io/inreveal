@@ -35,6 +35,53 @@ describe(`${SharedSpaceRepository.name}.recountPersons deadlock retry (#864)`, (
     expect(execute).toHaveBeenCalledTimes(3);
   });
 
+  it('gives up and surfaces the deadlock once the attempt budget is spent', async () => {
+    const execute = vitest.fn(() => Promise.reject(deadlock()));
+    const transaction = vitest.fn(() => ({ execute }));
+    const db = { isTransaction: false, transaction } as unknown as Kysely<DB>;
+
+    await expect(new SharedSpaceRepository(db).recountPersons(ids, db)).rejects.toMatchObject({ code: '40P01' });
+
+    // bounded — a permanently contended row must not spin forever
+    expect(transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('opens exactly one transaction when the first attempt succeeds', async () => {
+    const execute = vitest.fn(() => Promise.resolve(void 0));
+    const transaction = vitest.fn(() => ({ execute }));
+    const db = { isTransaction: false, transaction } as unknown as Kysely<DB>;
+
+    await new SharedSpaceRepository(db).recountPersons(ids, db);
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens no transaction at all for an empty id list', async () => {
+    const transaction = vitest.fn();
+    const db = { isTransaction: false, transaction } as unknown as Kysely<DB>;
+
+    await expect(new SharedSpaceRepository(db).recountPersons([], db)).resolves.toBeUndefined();
+
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it('runs the recount work inside each attempt, not just around it', async () => {
+    const callbacks: unknown[] = [];
+    let attempts = 0;
+    const execute = vitest.fn((cb: unknown) => {
+      callbacks.push(cb);
+      attempts++;
+      return attempts < 2 ? Promise.reject(deadlock()) : Promise.resolve(void 0);
+    });
+    const transaction = vitest.fn(() => ({ execute }));
+    const db = { isTransaction: false, transaction } as unknown as Kysely<DB>;
+
+    await new SharedSpaceRepository(db).recountPersons(ids, db);
+
+    expect(callbacks).toHaveLength(2);
+    expect(callbacks.every((cb) => typeof cb === 'function')).toBe(true);
+  });
+
   it('does not retry failures that are not deadlocks', async () => {
     const execute = vitest.fn(() => Promise.reject(Object.assign(new Error('nope'), { code: '23503' })));
     const transaction = vitest.fn(() => ({ execute }));
