@@ -48,7 +48,7 @@ describe(`${SharedSpaceRepository.name}.recountPersons deadlock retry (#864)`, (
     await expect(new SharedSpaceRepository(db).recountPersons(ids, db)).rejects.toMatchObject({ code: '40P01' });
 
     // bounded — a permanently contended row must not spin forever
-    expect(transaction).toHaveBeenCalledTimes(3);
+    expect(transaction).toHaveBeenCalledTimes(5);
   });
 
   it('opens exactly one transaction when the first attempt succeeds', async () => {
@@ -144,7 +144,7 @@ describe(`${SharedSpaceRepository.name} orphan cleanup deadlock safety (#864)`, 
     await expect(new SharedSpaceRepository(db).deleteOrphanedPersons(spaceId)).rejects.toMatchObject({
       code: '40P01',
     });
-    expect(transaction).toHaveBeenCalledTimes(3);
+    expect(transaction).toHaveBeenCalledTimes(5);
   });
 
   it('does not retry deleteOrphanedPersons on non-deadlock failures', async () => {

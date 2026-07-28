@@ -210,7 +210,7 @@ describe('FaceIdentityRepository space-person maintenance deadlock safety (#864)
       const { db, transaction } = spaceMaintenanceDb(() => Promise.reject(spaceMaintenanceDeadlock()));
 
       await expect(invoke(db, method)).rejects.toMatchObject({ code: '40P01' });
-      expect(transaction).toHaveBeenCalledTimes(3);
+      expect(transaction).toHaveBeenCalledTimes(5);
     });
 
     it(`${method} does not retry non-deadlock failures`, async () => {

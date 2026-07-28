@@ -419,6 +419,18 @@ describe('retryOnDeadlock', () => {
     expect(attempts).toBe(1);
   });
 
+  it('defaults to a budget deep enough to ride out a real delete storm', async () => {
+    let attempts = 0;
+    const operation = () => {
+      attempts++;
+      return Promise.reject(deadlockError());
+    };
+
+    await expect(retryOnDeadlock(operation, { delayMs: 0 })).rejects.toMatchObject({ code: '40P01' });
+    // measured: at ~8.7k concurrent asset deletes a budget of 3 still let one delete through
+    expect(attempts).toBe(5);
+  });
+
   it('gives up and rethrows once the attempt budget is spent', async () => {
     let attempts = 0;
     const operation = () => {

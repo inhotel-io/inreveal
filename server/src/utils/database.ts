@@ -119,7 +119,9 @@ export const retryOnDeadlock = async <T>(
   operation: () => Promise<T>,
   options?: { attempts?: number; delayMs?: number },
 ): Promise<T> => {
-  const attempts = options?.attempts ?? 3;
+  // 5, not 3: measured on the library-unmap repro at ~8.7k concurrent asset deletes, a budget of 3
+  // still let one delete exhaust its attempts and lose the deletion.
+  const attempts = options?.attempts ?? 5;
   const delayMs = options?.delayMs ?? 50;
 
   for (let attempt = 1; ; attempt++) {
