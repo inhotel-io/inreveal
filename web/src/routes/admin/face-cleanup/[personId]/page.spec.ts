@@ -24,8 +24,16 @@ vi.mock('@immich/sdk', async (importOriginal) => {
     getFaceRepairPersonFaces: vi.fn(),
     getFaceRepairClusterFaces: vi.fn(),
     getPeopleThumbnailPath: (id: string) => `/people/${id}/thumbnail`,
+    // `getServerErrorMessage` gates on `isHttpError`, whose real implementation is an `instanceof HttpError`
+    // check against a class the web package cannot import (it is a transitive dep of the SDK). Same marker
+    // stand-in the other web specs that exercise server-error text use.
+    isHttpError: (error: unknown) => !!(error as { __http?: boolean })?.__http,
   };
 });
+
+// An API failure shaped the way the server actually returns one, tagged for the `isHttpError` stand-in above.
+const httpError = (status: number, data: Record<string, unknown>) =>
+  Object.assign(new Error(`HTTP ${status}`), { __http: true, status, data });
 
 vi.mock('@immich/ui', async (original) => {
   const mod = await original<typeof import('@immich/ui')>();
@@ -45,6 +53,13 @@ vi.mock('@immich/ui', async (original) => {
   };
 });
 
+// Every (key, options) pair the page asked to translate, so a test can assert which STRING was chosen and what
+// was interpolated into it — the difference between "shows a translated reason" and "echoes English server text"
+// is invisible otherwise, since the mock below renders keys verbatim.
+const { translations } = vi.hoisted(() => ({
+  translations: [] as { key: string; values?: Record<string, unknown> }[],
+}));
+
 // Mock svelte-i18n: return the key as the translation
 vi.mock('svelte-i18n', async (orig) => {
   const actual = await orig<typeof import('svelte-i18n')>();
@@ -52,12 +67,19 @@ vi.mock('svelte-i18n', async (orig) => {
     ...actual,
     t: {
       subscribe: (run: (fn: (key: string, opts?: unknown) => string) => void) => {
-        run((key: string) => key);
+        run((key: string, opts?: unknown) => {
+          translations.push({ key, values: (opts as { values?: Record<string, unknown> })?.values });
+          return key;
+        });
         return () => {};
       },
     },
   };
 });
+
+// The reason interpolated into the apply banner, or undefined if the banner was never rendered.
+const bannerReason = () =>
+  translations.findLast((entry) => entry.key === 'admin.face_cleanup_review_apply_error_reason')?.values?.reason;
 
 // Mock $app/navigation
 vi.mock('$app/navigation', () => ({
@@ -162,6 +184,7 @@ const showModal = modalManager.show as unknown as ReturnType<
 describe('+page.svelte (face-cleanup review — Model B)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    translations.length = 0;
     vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan() as unknown as object);
     vi.mocked(getFaceRepairPersonFaces).mockResolvedValue({
       personId: PERSON_ID,
@@ -373,6 +396,99 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
         expect(screen.getByText('admin.face_cleanup_review_apply_conflict')).toBeInTheDocument();
       });
       expect(screen.getAllByTestId('face-tile')).toHaveLength(3);
+    });
+
+    // Every non-409 failure used to collapse into one reason-less sentence, so a PERMANENT failure (the resolve
+    // DTO's face ceiling, which no retry can ever satisfy) was indistinguishable from a transient one. A real
+    // 2382-face cluster hit exactly that and the admin was left retrying a request that could never succeed.
+    it('surfaces the server validation reason on a 400 instead of the reason-less banner', async () => {
+      vi.mocked(resolveFaces).mockRejectedValueOnce(
+        httpError(400, {
+          message: 'Validation failed',
+          statusCode: 400,
+          errors: [
+            {
+              code: 'too_big',
+              maximum: 25_000,
+              path: ['moveToPerson', 0, 'faceIds'],
+              message: 'Too big: expected array to have <=25000 items',
+            },
+          ],
+        }),
+      );
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByText('admin.face_cleanup_review_apply_error_reason')).toBeInTheDocument();
+      });
+      // The reason is a translation key, NOT the server's English Zod text — this is exactly what makes a
+      // German admin see a German sentence. The server's own limit is carried through as a value.
+      expect(bannerReason()).toBe('admin.face_cleanup_review_apply_reason_too_many');
+      expect(
+        translations.find((entry) => entry.key === 'admin.face_cleanup_review_apply_reason_too_many')?.values,
+      ).toEqual({ max: 25_000 });
+      expect(screen.queryByText('admin.face_cleanup_review_apply_error')).not.toBeInTheDocument();
+      expect(goto).not.toHaveBeenCalled();
+    });
+
+    // A stale page is the likeliest 400 in normal use, so its reason must be translated rather than echoed as
+    // the server's developer-facing English. The `code` is the stable contract that makes that possible.
+    it.each([
+      ['face-repair:faces-not-in-snapshot', 'Some faces are not in the flagged snapshot for this person'],
+      ['face-repair:faces-not-eligible', 'Some faces are not eligible for this person'],
+      ['face-repair:person-not-found', 'Reviewed person not found'],
+      ['face-repair:destination-missing', 'Destination person x does not exist'],
+    ])('translates the %s failure instead of echoing the server text', async (code, message) => {
+      vi.mocked(resolveFaces).mockRejectedValueOnce(httpError(400, { message, code, statusCode: 400 }));
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByText('admin.face_cleanup_review_apply_error_reason')).toBeInTheDocument();
+      });
+      // A translation key, not the server's English sentence: the code is what buys the translated banner.
+      expect(bannerReason()).toMatch(/^admin\.face_cleanup_review_apply_reason_/);
+      expect(bannerReason()).not.toBe(message);
+    });
+
+    // No code and no recognisable issue: the raw server message is still better than a reason-less banner, even
+    // though it stays English. Reachable only via failures the UI itself cannot produce.
+    it('falls back to the raw server message when the failure carries no code', async () => {
+      const message = 'entireCluster cannot be combined with per-face resolution buckets';
+      vi.mocked(resolveFaces).mockRejectedValueOnce(httpError(400, { message, statusCode: 400 }));
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByText('admin.face_cleanup_review_apply_error_reason')).toBeInTheDocument();
+      });
+      expect(bannerReason()).toBe(message);
+    });
+
+    // A failure the server did not explain (a dropped connection, a proxy 502) has no reason to show, so the
+    // generic banner has to stay reachable rather than rendering an empty "…: ." sentence.
+    it('falls back to the generic banner when the failure carries no server message', async () => {
+      vi.mocked(resolveFaces).mockRejectedValueOnce(new Error('network down'));
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByText('admin.face_cleanup_review_apply_error')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('admin.face_cleanup_review_apply_error_reason')).not.toBeInTheDocument();
     });
   });
 

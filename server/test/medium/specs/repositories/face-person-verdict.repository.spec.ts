@@ -575,6 +575,115 @@ describe('FacePersonVerdictRepository', () => {
     });
   });
 
+  // The set-at-a-time form the cleanup console's "keep here" bucket uses. It replaced a per-face loop once the
+  // resolve DTO's ceiling rose to 25 000 faces, so what has to hold is that batching changed only the number of
+  // round-trips — never the per-row semantics the loop had.
+  describe('markRejectedMany', () => {
+    it('writes one rejected row per pair and matches what the per-face path would have written', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { user: admin } = await ctx.newUser();
+      const { person: p1 } = await ctx.newPerson({ ownerId: user.id, name: 'Bulk P1' });
+      const { person: p2 } = await ctx.newPerson({ ownerId: user.id, name: 'Bulk P2' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: fA } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const { assetFace: fB } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const identity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(p1.id);
+
+      const written = await sut.markRejectedMany(
+        [
+          { personId: p1.id, assetFaceId: fA.id, identityId: identity.id },
+          { personId: p2.id, assetFaceId: fB.id },
+        ],
+        { source: 'cleanup', actorId: admin.id },
+      );
+
+      expect(written).toBe(2);
+      expect(await getRow(p1.id, fA.id)).toMatchObject({
+        identityId: identity.id,
+        status: 'rejected',
+        source: 'cleanup',
+        actorId: admin.id,
+      });
+      expect(await getRow(p2.id, fB.id)).toMatchObject({ identityId: null, status: 'rejected', source: 'cleanup' });
+    });
+
+    // Postgres refuses an ON CONFLICT DO UPDATE that touches the same row twice in one statement. The per-face
+    // loop absorbed a repeated face silently (two upserts), so the batch must too — otherwise a client that
+    // sends a face twice turns a working resolve into a 500.
+    it('tolerates a repeated (person, face) pair instead of failing the whole statement', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Bulk Dup' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      const written = await sut.markRejectedMany(
+        [
+          { personId: person.id, assetFaceId: assetFace.id },
+          { personId: person.id, assetFaceId: assetFace.id },
+        ],
+        { source: 'cleanup' },
+      );
+
+      expect(written).toBe(1);
+      expect(await getRow(person.id, assetFace.id)).toMatchObject({ status: 'rejected' });
+    });
+
+    it('upserts over a pending row and preserves a stronger existing identityId (D10)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Bulk Coalesce' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const identity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(person.id);
+
+      await sut.upsertPending([{ personId: person.id, assetFaceId: assetFace.id, distance: 0.6 }]);
+      await sut.markRejectedMany([{ personId: person.id, assetFaceId: assetFace.id, identityId: identity.id }], {
+        source: 'cleanup',
+      });
+      // A later batch WITHOUT an identity must not null the stronger existing key.
+      await sut.markRejectedMany([{ personId: person.id, assetFaceId: assetFace.id }], { source: 'cleanup' });
+
+      const rows = await defaultDatabase
+        .selectFrom('face_person_verdict')
+        .selectAll()
+        .where('personId', '=', person.id)
+        .where('assetFaceId', '=', assetFace.id)
+        .execute();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ status: 'rejected', identityId: identity.id });
+    });
+
+    it('is a no-op on an empty bucket', async () => {
+      const { sut } = setup();
+      expect(await sut.markRejectedMany([], { source: 'cleanup' })).toBe(0);
+    });
+
+    // The chunking guard: past 1000 rows this must span multiple statements and still write every row. A cluster
+    // this size is exactly the case the DTO ceiling was raised for.
+    it('writes every row when the bucket spans more than one chunk', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Bulk Chunked' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const faces: string[] = [];
+      for (let index = 0; index < 1200; index++) {
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        faces.push(assetFace.id);
+      }
+
+      const written = await sut.markRejectedMany(
+        faces.map((assetFaceId) => ({ personId: person.id, assetFaceId })),
+        { source: 'cleanup' },
+      );
+
+      expect(written).toBe(1200);
+      expect(await countRows(faces[0], 'rejected')).toBe(1);
+      expect(await countRows(faces.at(-1)!, 'rejected')).toBe(1);
+    });
+  });
+
   describe('drainPendingForFaces', () => {
     it('deletes pending rows for the given faces across all targets, keeps verdicts, ignores other faces', async () => {
       const { ctx, sut } = setup();

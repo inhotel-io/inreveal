@@ -23,6 +23,11 @@ export interface NegativeVerdictListRow {
   actorName: string | null;
 }
 
+// Rows (or ids) per statement for the bulk paths below. Matches the chunk size every other face bulk path in
+// the codebase uses; the widest of these writes 7 columns, so a chunk is ~7 000 bind parameters — comfortably
+// under Postgres's 65 535 ceiling.
+const BULK_CHUNK_SIZE = 1000;
+
 @Injectable()
 export class FacePersonVerdictRepository {
   constructor(@InjectKysely() private db: Kysely<DB>) {}
@@ -66,12 +71,20 @@ export class FacePersonVerdictRepository {
     if (assetFaceIds.length === 0) {
       return 0;
     }
-    const result = await db
-      .deleteFrom('face_person_verdict')
-      .where('assetFaceId', 'in', assetFaceIds)
-      .where('status', '=', 'pending')
-      .executeTakeFirst();
-    return Number(result.numDeletedRows ?? 0n);
+    // Chunked like every other bulk face path (reattributeFaces, detachFaces, replaceFaceIdentities): one id is
+    // one bind parameter, so an unchunked IN-list breaks at Postgres's 65 535-parameter ceiling. That was
+    // unreachable while the resolve DTO capped a bucket at 1000; it is reachable now that the cap is 25 000.
+    // Callers pass `db` when they need this inside their own transaction, so chunks stay atomic with the move.
+    let deleted = 0;
+    for (let index = 0; index < assetFaceIds.length; index += BULK_CHUNK_SIZE) {
+      const result = await db
+        .deleteFrom('face_person_verdict')
+        .where('assetFaceId', 'in', assetFaceIds.slice(index, index + BULK_CHUNK_SIZE))
+        .where('status', '=', 'pending')
+        .executeTakeFirst();
+      deleted += Number(result.numDeletedRows ?? 0n);
+    }
+    return deleted;
   }
 
   @GenerateSql({ params: [[{ spacePersonId: DummyValue.UUID, assetFaceId: DummyValue.UUID, distance: 0.6 }]] })
@@ -174,6 +187,66 @@ export class FacePersonVerdictRepository {
     opts?: { identityId?: string | null; source?: FacePersonVerdictSource; actorId?: string | null },
   ): Promise<number> {
     return this.recordPersonalVerdict({ personId, assetFaceId, status: 'rejected', ...opts });
+  }
+
+  // Set-at-a-time form of markRejected, for the cleanup console's "keep here" bucket. That bucket used to loop
+  // markRejected once per face — one round-trip each, which the 1000-face DTO cap kept merely slow and the
+  // 25 000-face cap would turn into a timeout on the exact large cluster the raise exists to serve.
+  //
+  // `status`, `source` and `actorId` are uniform per call (one admin, one action), so only `personId`,
+  // `assetFaceId` and `identityId` vary per row and the whole bucket collapses into chunked multi-row upserts.
+  // Rows are deduplicated on (personId, assetFaceId) FIRST: Postgres refuses an ON CONFLICT DO UPDATE that
+  // would touch the same row twice in one statement ("cannot affect row a second time"), and a client may
+  // legitimately repeat a face — the per-face loop absorbed that silently, so this must too.
+  @GenerateSql({
+    params: [
+      [{ personId: DummyValue.UUID, assetFaceId: DummyValue.UUID, identityId: DummyValue.UUID }],
+      { source: 'cleanup' },
+    ],
+  })
+  async markRejectedMany(
+    rows: Array<{ personId: string; assetFaceId: string; identityId?: string | null }>,
+    opts?: { source?: FacePersonVerdictSource; actorId?: string | null },
+  ): Promise<number> {
+    if (rows.length === 0) {
+      return 0;
+    }
+    const deduplicated = [...new Map(rows.map((row) => [`${row.personId}|${row.assetFaceId}`, row])).values()];
+    const source = opts?.source ?? 'suggestion';
+    const actorId = opts?.actorId ?? null;
+
+    let written = 0;
+    for (let index = 0; index < deduplicated.length; index += BULK_CHUNK_SIZE) {
+      const result = await this.db
+        .insertInto('face_person_verdict')
+        .values(
+          deduplicated.slice(index, index + BULK_CHUNK_SIZE).map((row) => ({
+            personId: row.personId,
+            assetFaceId: row.assetFaceId,
+            identityId: row.identityId ?? null,
+            status: 'rejected' as const,
+            source,
+            actorId,
+            distance: null,
+          })),
+        )
+        .onConflict((oc) =>
+          oc
+            .columns(['personId', 'assetFaceId'])
+            .where('personId', 'is not', null)
+            .doUpdateSet({
+              status: 'rejected',
+              // D10: never null a stronger existing key — same coalesce the single-row path uses.
+              identityId: sql`coalesce(excluded."identityId", "face_person_verdict"."identityId")`,
+              source,
+              actorId,
+              updatedAt: sql`now()`,
+            }),
+        )
+        .executeTakeFirst();
+      written += Number(result.numInsertedOrUpdatedRows ?? 0n);
+    }
+    return written;
   }
 
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID, { source: 'suggestion' }] })

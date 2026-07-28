@@ -130,22 +130,38 @@ export const FaceRepairPersonFacesSchema = z
 export class FaceRepairPersonFacesDto extends createZodDto(FaceRepairPersonFacesSchema) {}
 
 // Upper bound on every per-request face/owner array (C4). These endpoints are all admin-only, so this is a
-// backstop against a runaway payload rather than a hostile-input guard: the DB write path already chunks
-// IN-lists at 1000 to stay under Postgres's bind-parameter limit, and a single reviewed person never has a
-// realistic selection this large (whole-cluster moves go through `entireCluster`, server-enumerated, with no
-// client array). Mirrors the max(200) already bounding FaceRepairClusterFacesRequestSchema's page size.
-const MAX_RESOLVE_FACES = 1000;
+// backstop against a runaway payload rather than a hostile-input guard: every DB write path chunks its
+// IN-lists/inserts at 1000 internally, so this bound governs payload size and page weight, not statement size.
+//
+// This was 1000 on the assumption that a single reviewed person never has a realistic selection that large,
+// because whole-cluster moves go through `entireCluster` (server-enumerated, no client array). That assumption
+// was wrong for the case it matters most: a real 2952-face cluster came back with 2382 faces flagged toward one
+// owner — a SUBSET, so `entireCluster` (which drains all 2952, flagged or not) is not the same action. The
+// client emits one `moveToPerson` group per (destination, lock) pair, so every one of those faces lands in a
+// single array and the resolve 400'd with no way for the admin to ever apply it.
+//
+// 25 000 uuids is ~1 MB of JSON, an order of magnitude under the 10 MB body limit (`app.common.ts`), and stays
+// far below Postgres's 65 535 bind-parameter ceiling once chunked. The review page is the real limit long
+// before this is: it renders a tile per flagged face.
+const MAX_RESOLVE_FACES = 25_000;
+
+// Bound on arrays whose elements are PEOPLE/CLUSTERS rather than faces: move groups (keyed by
+// (destinationPersonId, lock), i.e. "how many distinct destinations may one resolve route to"), muted clusters,
+// and suspected-owner sets. Kept at the original ceiling — raising the per-group FACE bound is not a reason to
+// accept 25 000 destinations. The decline endpoint's arrays stay on this bound too: its write path was not part
+// of this change, so it keeps exactly the limits it shipped with.
+const MAX_RESOLVE_TARGETS = 1000;
 
 const FaceDeclineSchema = z.object({ assetFaceId: z.uuidv4(), suspectedOwnerId: z.uuidv4() });
 const PersonDeclineSchema = z.object({
   personId: z.uuidv4(),
-  suspectedOwnerIds: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES),
+  suspectedOwnerIds: z.array(z.uuidv4()).max(MAX_RESOLVE_TARGETS),
 });
 
 export const FaceRepairDeclineRequestSchema = z
   .object({
-    faces: z.array(FaceDeclineSchema).max(MAX_RESOLVE_FACES).optional(),
-    persons: z.array(PersonDeclineSchema).max(MAX_RESOLVE_FACES).optional(),
+    faces: z.array(FaceDeclineSchema).max(MAX_RESOLVE_TARGETS).optional(),
+    persons: z.array(PersonDeclineSchema).max(MAX_RESOLVE_TARGETS).optional(),
   })
   .meta({ id: 'FaceRepairDeclineRequestDto' });
 export class FaceRepairDeclineRequestDto extends createZodDto(FaceRepairDeclineRequestSchema) {}
@@ -279,7 +295,7 @@ const MoveGroupSchema = z.object({
 export const FaceRepairResolveRequestSchema = z
   .object({
     personId: z.uuidv4(),
-    moveToPerson: z.array(MoveGroupSchema).max(MAX_RESOLVE_FACES).default([]),
+    moveToPerson: z.array(MoveGroupSchema).max(MAX_RESOLVE_TARGETS).default([]),
     stay: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES).default([]),
     lock: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES).default([]),
     detach: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES).default([]),

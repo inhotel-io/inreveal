@@ -218,22 +218,44 @@ describe('FaceRepairClusterFacesRequestSchema', () => {
 const bulkUuid = (n: number) => `00000000-0000-4000-a000-${String(n).padStart(12, '0')}`;
 
 describe('FaceRepairResolveRequestSchema face-array bounds (C4)', () => {
-  it('accepts a large-but-bounded bucket (1000 faces)', () => {
-    const stay = Array.from({ length: 1000 }, (_, i) => bulkUuid(i + 1));
+  it('accepts a large-but-bounded bucket (25 000 faces)', () => {
+    const stay = Array.from({ length: 25_000 }, (_, i) => bulkUuid(i + 1));
     expect(FaceRepairResolveRequestSchema.safeParse({ personId: UUID_V4, stay }).success).toBe(true);
   });
 
-  it('rejects a bucket over the 1000-face ceiling', () => {
-    const stay = Array.from({ length: 1001 }, (_, i) => bulkUuid(i + 1));
+  it('rejects a bucket over the 25 000-face ceiling', () => {
+    const stay = Array.from({ length: 25_001 }, (_, i) => bulkUuid(i + 1));
     expect(FaceRepairResolveRequestSchema.safeParse({ personId: UUID_V4, stay }).success).toBe(false);
   });
 
   it('rejects a moveToPerson group whose faceIds exceed the ceiling', () => {
-    const faceIds = Array.from({ length: 1001 }, (_, i) => bulkUuid(i + 1));
+    const faceIds = Array.from({ length: 25_001 }, (_, i) => bulkUuid(i + 1));
     const result = FaceRepairResolveRequestSchema.safeParse({
       personId: UUID_V4,
       moveToPerson: [{ destinationPersonId: bulkUuid(999_999), faceIds }],
     });
     expect(result.success).toBe(false);
+  });
+
+  // The regression this ceiling was raised for: a real 2952-face cluster flagged 2382 faces toward ONE owner,
+  // so the client emitted them as a single move group and every Apply 400'd with no way to ever succeed.
+  // `entireCluster` is not the same action — it drains all 2952, flagged or not.
+  it('accepts a whole flagged subset of a large cluster in one move group', () => {
+    const faceIds = Array.from({ length: 2382 }, (_, i) => bulkUuid(i + 1));
+    const result = FaceRepairResolveRequestSchema.safeParse({
+      personId: UUID_V4,
+      moveToPerson: [{ destinationPersonId: bulkUuid(999_999), faceIds }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  // Group COUNT is a separate quantity from faces-per-group: raising the face bound must not let a resolve
+  // route to 25 000 distinct destinations.
+  it('rejects more than 1000 move groups', () => {
+    const moveToPerson = Array.from({ length: 1001 }, (_, i) => ({
+      destinationPersonId: bulkUuid(i + 1),
+      faceIds: [bulkUuid(500_000 + i)],
+    }));
+    expect(FaceRepairResolveRequestSchema.safeParse({ personId: UUID_V4, moveToPerson }).success).toBe(false);
   });
 });

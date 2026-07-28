@@ -20,7 +20,7 @@ import { PersonRepository } from 'src/repositories/person.repository';
 import { SearchRepository } from 'src/repositories/search.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
-import { FaceRepairService } from 'src/services/face-repair.service';
+import { FaceRepairResolveErrorCode, FaceRepairService } from 'src/services/face-repair.service';
 import { applyVerdictFilters } from 'src/utils/face-repair';
 import { newMediumService } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
@@ -1216,7 +1216,14 @@ describe('FaceRepairService.resolveFaces: stay on a non-flagged face (M14, E15)'
         { personId: source.id, moveToPerson: [], stay: [notFlagged], lock: [], detach: [], unknown: [] },
         user.id,
       ),
-    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+    ).rejects.toThrow(
+      // Pinned WITH its reason code: the web client keys its translated banner off that code, so a rename
+      // here without one there silently drops the admin back to English server text.
+      new BadRequestException({
+        message: 'Some faces are not in the flagged snapshot for this person',
+        code: FaceRepairResolveErrorCode.FacesNotInSnapshot,
+      }),
+    );
 
     const byId = await personIdsOf([notFlagged]);
     expect(byId[notFlagged]).toBe(source.id);
@@ -1236,7 +1243,14 @@ describe('FaceRepairService.resolveFaces: stay on a non-flagged face (M14, E15)'
         { personId: source.id, moveToPerson: [], stay: [f1], detach: [], lock: [], unknown: [] },
         user.id,
       ),
-    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+    ).rejects.toThrow(
+      // Pinned WITH its reason code: the web client keys its translated banner off that code, so a rename
+      // here without one there silently drops the admin back to English server text.
+      new BadRequestException({
+        message: 'Some faces are not in the flagged snapshot for this person',
+        code: FaceRepairResolveErrorCode.FacesNotInSnapshot,
+      }),
+    );
   });
 });
 
@@ -2387,7 +2401,14 @@ describe('FaceRepairService.resolveFaces: stay is the ONLY snapshot-gated bucket
         { personId: source.id, moveToPerson: [], stay: [notFlaggedStay], lock: [], detach: [], unknown: [] },
         user.id,
       ),
-    ).rejects.toThrow(new BadRequestException('Some faces are not in the flagged snapshot for this person'));
+    ).rejects.toThrow(
+      // Pinned WITH its reason code: the web client keys its translated banner off that code, so a rename
+      // here without one there silently drops the admin back to English server text.
+      new BadRequestException({
+        message: 'Some faces are not in the flagged snapshot for this person',
+        code: FaceRepairResolveErrorCode.FacesNotInSnapshot,
+      }),
+    );
 
     const lockResult = await sut.resolveFaces(
       { personId: source.id, moveToPerson: [], stay: [], lock: [notFlaggedLock], detach: [], unknown: [] },
