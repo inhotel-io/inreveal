@@ -1548,6 +1548,34 @@ describe(AssetService.name, () => {
   });
 
   describe('handleAssetDeletion', () => {
+    // Deleting an asset makes Postgres lock shared_space_person itself to satisfy the
+    // representativeFaceId ON DELETE SET NULL foreign key, in face-deletion order. That cycles
+    // against concurrent space-people recounts and no application-level ordering can prevent it,
+    // so a deadlock victim must be re-driven or the asset silently survives the delete (#864).
+    it('retries the delete when postgres picks it as a deadlock victim', async () => {
+      const asset = AssetFactory.from().build();
+      mocks.assetJob.getForAssetDeletion.mockResolvedValue(getForAssetDeletion(asset));
+      mocks.asset.remove
+        .mockRejectedValueOnce(Object.assign(new Error('deadlock detected'), { code: '40P01' }))
+        .mockResolvedValue(void 0);
+
+      await expect(sut.handleAssetDeletion({ id: asset.id, deleteOnDisk: true })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.asset.remove).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry a delete that failed for a non-deadlock reason', async () => {
+      const asset = AssetFactory.from().build();
+      mocks.assetJob.getForAssetDeletion.mockResolvedValue(getForAssetDeletion(asset));
+      mocks.asset.remove.mockRejectedValue(Object.assign(new Error('nope'), { code: '23503' }));
+
+      await expect(sut.handleAssetDeletion({ id: asset.id, deleteOnDisk: true })).rejects.toMatchObject({
+        code: '23503',
+      });
+
+      expect(mocks.asset.remove).toHaveBeenCalledTimes(1);
+    });
+
     it('should clean up files', async () => {
       const asset = AssetFactory.from()
         .file({ type: AssetFileType.Thumbnail })

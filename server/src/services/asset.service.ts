@@ -56,7 +56,7 @@ import {
   onBeforeLink,
   onBeforeUnlink,
 } from 'src/utils/asset.util';
-import { updateLockedColumns } from 'src/utils/database';
+import { retryOnDeadlock, updateLockedColumns } from 'src/utils/database';
 import { asDateTimeString, extractTimeZone } from 'src/utils/date';
 import { applyResolvedIdentityMetadata } from 'src/utils/person-identity';
 import { transformOcrBoundingBox } from 'src/utils/transform';
@@ -615,7 +615,10 @@ export class AssetService extends BaseService {
     // handler in SharedSpaceService receives this data and recounts/cleans up after the delete.
     const affectedSpacePersons = await this.sharedSpaceRepository.getSpacePersonsForAsset(id);
 
-    await this.assetRepository.remove(asset);
+    // The delete cascades into asset_face, which makes Postgres lock shared_space_person rows to
+    // null out representativeFaceId. Those locks are taken in face order, so they can cycle against
+    // a concurrent space-people recount. Re-drive the victim rather than lose the deletion (#864).
+    await retryOnDeadlock(() => this.assetRepository.remove(asset));
     if (!asset.libraryId) {
       await this.userRepository.updateUsage(asset.ownerId, -(asset.exifInfo?.fileSizeInByte || 0));
     }

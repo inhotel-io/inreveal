@@ -3,6 +3,7 @@ import {
   ASSET_CHECKSUM_CONSTRAINT,
   isAssetChecksumConstraint,
   removeUndefinedKeys,
+  retryOnDeadlock,
   tokenizeForSearch,
   updateLockedColumns,
   vectorIndexQuery,
@@ -333,5 +334,42 @@ describe('updateLockedColumns', () => {
     const exif = { description: 'test', lockedProperties: ['old'] } as any;
     const result = updateLockedColumns(exif);
     expect(result.lockedProperties).toEqual(['description']);
+  });
+});
+
+const deadlockError = () => Object.assign(new Error('deadlock detected'), { code: '40P01' });
+
+describe('retryOnDeadlock', () => {
+  it('retries a deadlocked operation and returns the eventual result', async () => {
+    let attempts = 0;
+    const operation = () => {
+      attempts++;
+      return attempts < 3 ? Promise.reject(deadlockError()) : Promise.resolve('done');
+    };
+
+    await expect(retryOnDeadlock(operation, { delayMs: 0 })).resolves.toBe('done');
+    expect(attempts).toBe(3);
+  });
+
+  it('does not retry errors that are not deadlocks', async () => {
+    let attempts = 0;
+    const operation = () => {
+      attempts++;
+      return Promise.reject(Object.assign(new Error('violates foreign key constraint'), { code: '23503' }));
+    };
+
+    await expect(retryOnDeadlock(operation, { delayMs: 0 })).rejects.toMatchObject({ code: '23503' });
+    expect(attempts).toBe(1);
+  });
+
+  it('gives up and rethrows once the attempt budget is spent', async () => {
+    let attempts = 0;
+    const operation = () => {
+      attempts++;
+      return Promise.reject(deadlockError());
+    };
+
+    await expect(retryOnDeadlock(operation, { attempts: 4, delayMs: 0 })).rejects.toMatchObject({ code: '40P01' });
+    expect(attempts).toBe(4);
   });
 });
