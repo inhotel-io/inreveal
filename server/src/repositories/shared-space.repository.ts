@@ -3234,6 +3234,27 @@ export class SharedSpaceRepository {
       return;
     }
 
+    // A multi-row UPDATE takes its row locks in scan order, and the planner may pick a different
+    // scan (so a different order) per connection.  Concurrent AssetDelete/face-match workers
+    // recounting overlapping people therefore deadlocked against each other (#864).  Claim the
+    // rows sorted by id first so every caller agrees on one global lock order.  The claim only
+    // holds for the enclosing transaction, so open one when the caller did not supply it.
+    if (db.isTransaction) {
+      return this.recountPersonsLocked(personIds, db);
+    }
+
+    return db.transaction().execute((trx) => this.recountPersonsLocked(personIds, trx));
+  }
+
+  private async recountPersonsLocked(personIds: string[], db: Kysely<DB> | Transaction<DB>) {
+    await db
+      .selectFrom('shared_space_person')
+      .select('id')
+      .where('id', 'in', personIds)
+      .orderBy('id')
+      .forUpdate()
+      .execute();
+
     await db
       .updateTable('shared_space_person')
       .set((eb) => ({

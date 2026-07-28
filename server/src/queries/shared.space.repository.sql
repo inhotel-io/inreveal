@@ -2387,6 +2387,16 @@ where
   "type" = $1
 
 -- SharedSpaceRepository.recountPersons
+begin
+select
+  "id"
+from
+  "shared_space_person"
+where
+  "id" in ($1)
+order by
+  "id"
+for update
 update "shared_space_person"
 set
   "faceCount" = (
@@ -2419,6 +2429,7 @@ set
   )
 where
   "id" in ($1)
+commit
 
 -- SharedSpaceRepository.getAlias
 select
