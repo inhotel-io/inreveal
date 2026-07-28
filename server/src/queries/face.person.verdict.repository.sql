@@ -80,6 +80,32 @@ set
   "actorId" = $10,
   "updatedAt" = now()
 
+-- FacePersonVerdictRepository.markRejectedMany
+insert into
+  "face_person_verdict" (
+    "personId",
+    "assetFaceId",
+    "identityId",
+    "status",
+    "source",
+    "actorId",
+    "distance"
+  )
+values
+  ($1, $2, $3, $4, $5, $6, $7)
+on conflict ("personId", "assetFaceId")
+where
+  "personId" is not null do update
+set
+  "status" = $8,
+  "identityId" = coalesce(
+    excluded."identityId",
+    "face_person_verdict"."identityId"
+  ),
+  "source" = $9,
+  "actorId" = $10,
+  "updatedAt" = now()
+
 -- FacePersonVerdictRepository.markIgnored
 insert into
   "face_person_verdict" (

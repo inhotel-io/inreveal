@@ -7,6 +7,7 @@
     getFaceRepairPersonFaces,
     getLatestScan,
     getPeopleThumbnailPath,
+    isHttpError,
     resolveFaces,
     type FaceRepairResolveRequestDto,
   } from '@immich/sdk';
@@ -16,7 +17,7 @@
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
-  import { handleError } from '$lib/utils/handle-error';
+  import { getServerErrorMessage, handleError } from '$lib/utils/handle-error';
   import ActionsHelpModal from './ActionsHelpModal.svelte';
   import type { PageData } from './$types';
   import PersonPicker from './PersonPicker.svelte';
@@ -96,6 +97,16 @@
   // Lazy-load chunk size for the flagged grid — selection/Apply always act on the full flagged set (via the
   // review model), independent of how much is currently rendered.
   const CHUNK_SIZE = 48;
+  // Cap on the RAW (untranslatable) server text rendered in the apply banner — see commitResolve.
+  const MAX_ERROR_REASON_LENGTH = 300;
+  // Contract with FaceRepairResolveErrorCode in face-repair.service.ts. These are the resolve failures an admin
+  // can actually hit, so they get real translated sentences rather than the server's English developer text.
+  const REASON_KEY_BY_CODE: Record<string, string> = {
+    'face-repair:person-not-found': 'admin.face_cleanup_review_apply_reason_person_gone',
+    'face-repair:destination-missing': 'admin.face_cleanup_review_apply_reason_destination_gone',
+    'face-repair:faces-not-in-snapshot': 'admin.face_cleanup_review_apply_reason_stale',
+    'face-repair:faces-not-eligible': 'admin.face_cleanup_review_apply_reason_stale',
+  };
   let visibleCount = $state(CHUNK_SIZE);
 
   // View model (Model B / full resolution)
@@ -282,6 +293,52 @@
   // move used to `catch {}` the server's 409 ("Refusing to apply while a scan is in progress"), leaving the admin
   // with no banner, nothing moved, and the belief that it had worked — the same faces then came back on the next
   // scan. On success we report what the server actually DID (its own counts) rather than blind-navigating.
+  // The fields this page reads off a failed resolve. Deliberately loose: `code` is a fork-only addition and
+  // Zod's `maximum` is not in the SDK's `ApiValidationError`, so both are validated at the use site.
+  type ApplyErrorData = { code?: unknown; errors?: { code?: unknown; maximum?: unknown }[] };
+
+  const parseErrorData = (data: unknown): ApplyErrorData | undefined => {
+    // Errors from endpoints without a return type arrive as an unparsed JSON string (same case handle-error.ts
+    // covers) — a raw string would silently read as "no code, no issues" and lose the translation.
+    if (typeof data === 'string') {
+      try {
+        return JSON.parse(data) as ApplyErrorData;
+      } catch {
+        return undefined;
+      }
+    }
+    return (data ?? undefined) as ApplyErrorData | undefined;
+  };
+
+  // Turn a failed resolve into the most translatable sentence we can, in this order:
+  //   1. a stable server reason code   → a real, translated explanation of what changed under the page;
+  //   2. a Zod `too_big` issue         → a translated "too many faces" with the server's own limit;
+  //   3. the server's raw message      → English, but a truthful reason beats a reason-less banner;
+  //   4. nothing at all (offline, 502) → the original generic sentence.
+  // Only 3 stays untranslated, and it is reachable only through failures the UI cannot itself produce.
+  const describeApplyFailure = (error: unknown): string => {
+    const data = isHttpError(error) ? parseErrorData(error.data) : undefined;
+
+    const reasonKey = typeof data?.code === 'string' ? REASON_KEY_BY_CODE[data.code] : undefined;
+    if (reasonKey) {
+      return $t('admin.face_cleanup_review_apply_error_reason', { values: { reason: $t(reasonKey) } });
+    }
+
+    const tooBig = data?.errors?.find((issue) => issue?.code === 'too_big');
+    if (tooBig && typeof tooBig.maximum === 'number') {
+      return $t('admin.face_cleanup_review_apply_error_reason', {
+        values: { reason: $t('admin.face_cleanup_review_apply_reason_too_many', { values: { max: tooBig.maximum } }) },
+      });
+    }
+
+    // Truncated: a per-face validation failure produces ONE issue per offending id, and this page's buckets run
+    // to thousands of faces — pasting all of them in would push the banner past the content it warns about.
+    const serverMessage = getServerErrorMessage(error)?.toString().slice(0, MAX_ERROR_REASON_LENGTH);
+    return serverMessage
+      ? $t('admin.face_cleanup_review_apply_error_reason', { values: { reason: serverMessage } })
+      : $t('admin.face_cleanup_review_apply_error');
+  };
+
   const commitResolve = async (request: FaceRepairResolveRequestDto) => {
     if (applying) {
       return;
@@ -305,8 +362,12 @@
       void goto(Route.faceCleanupScan());
     } catch (error: unknown) {
       const status = (error as { status?: number }).status;
-      applyError =
-        status === 409 ? $t('admin.face_cleanup_review_apply_conflict') : $t('admin.face_cleanup_review_apply_error');
+      // 409 is the one failure with a genuine "try again later" remedy, so it keeps its own tailored wording.
+      // Everything else used to collapse into one reason-less sentence, which is how a hard, permanent failure
+      // (a validation ceiling the payload can never satisfy) read exactly like a transient blip and sent admins
+      // into retry loops. Now the banner says why — in the admin's own language wherever the server gave us
+      // something stable to translate from.
+      applyError = status === 409 ? $t('admin.face_cleanup_review_apply_conflict') : describeApplyFailure(error);
     } finally {
       applying = false;
     }

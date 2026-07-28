@@ -42,6 +42,20 @@ export interface RepairPlan {
   perPerson: { personId: string; eligible: number; flagged: number; flaggedFraction: number }[];
 }
 
+// Stable reason codes carried alongside a resolve's 400 message, for the failures an admin can genuinely hit
+// through the console — every one of them means "the library moved under the page you are looking at".
+// The message stays exactly as it was (English, developer-facing, asserted by tests); the code is what the web
+// client keys its TRANSLATED banner off, so a German admin is not shown an English sentence. Codes are a
+// contract with the client: rename one only together with `REASON_KEY_BY_CODE` in the review page.
+// Failures the UI cannot produce (malformed buckets, cross-owner destinations) deliberately get no code — the
+// client falls back to showing the raw server text, which is the right treatment for a client bug.
+export const FaceRepairResolveErrorCode = {
+  PersonNotFound: 'face-repair:person-not-found',
+  DestinationMissing: 'face-repair:destination-missing',
+  FacesNotInSnapshot: 'face-repair:faces-not-in-snapshot',
+  FacesNotEligible: 'face-repair:faces-not-eligible',
+} as const;
+
 const DEFAULT_VOTE_WINDOW = 200;
 const DEFAULT_VOTE_MARGIN = 2;
 const DEFAULT_MAX_ATTRIBUTION_DISTANCE = 0.35;
@@ -795,7 +809,10 @@ export class FaceRepairService extends BaseService {
     if (moveToPerson.length > 0 || entireCluster) {
       const reviewedPerson = await this.personRepository.getById(personId);
       if (!reviewedPerson) {
-        throw new BadRequestException('Reviewed person not found');
+        throw new BadRequestException({
+          message: 'Reviewed person not found',
+          code: FaceRepairResolveErrorCode.PersonNotFound,
+        });
       }
       const destinationIds = new Set(moveToPerson.map((group) => group.destinationPersonId));
       if (entireCluster) {
@@ -804,7 +821,10 @@ export class FaceRepairService extends BaseService {
       for (const destinationId of destinationIds) {
         const destination = await this.personRepository.getById(destinationId);
         if (!destination) {
-          throw new BadRequestException(`Destination person ${destinationId} does not exist`);
+          throw new BadRequestException({
+            message: `Destination person ${destinationId} does not exist`,
+            code: FaceRepairResolveErrorCode.DestinationMissing,
+          });
         }
         if (destination.ownerId !== reviewedPerson.ownerId) {
           throw new BadRequestException(`Destination person ${destinationId} is owned by a different user`);
@@ -849,7 +869,10 @@ export class FaceRepairService extends BaseService {
     // eligibility instead (slice 1), and detach/unknown are person-scoped at the write layer.
     const unresolvable = findUnresolvableIds([...stay], flaggedIds);
     if (unresolvable.length > 0) {
-      throw new BadRequestException('Some faces are not in the flagged snapshot for this person');
+      throw new BadRequestException({
+        message: 'Some faces are not in the flagged snapshot for this person',
+        code: FaceRepairResolveErrorCode.FacesNotInSnapshot,
+      });
     }
 
     // `lock` writes through replaceFaceIdentities, which is keyed only by assetFaceId — no person scope and
@@ -860,7 +883,10 @@ export class FaceRepairService extends BaseService {
       const eligible = await this.faceRepairRepository.getEligibleFaceIdsForPerson(personId, lock);
       const ineligible = lock.filter((id) => !eligible.has(id));
       if (ineligible.length > 0) {
-        throw new BadRequestException('Some faces are not eligible for this person');
+        throw new BadRequestException({
+          message: 'Some faces are not eligible for this person',
+          code: FaceRepairResolveErrorCode.FacesNotEligible,
+        });
       }
     }
 
@@ -946,17 +972,20 @@ export class FaceRepairService extends BaseService {
       // the suggestion engine can see it too: if this face is later unassigned, it must not be proposed as
       // that same person.
       const ownerTokens = await this.faceIdentityRepository.getPersonVerdictTokens([...liveOwnerIds]);
-      for (const face of declineFaces) {
-        const identityId = ownerTokens
-          .get(face.suspectedOwnerId)
-          ?.find((token) => token.startsWith('identity:'))
-          ?.slice('identity:'.length);
-        declined += await this.facePersonVerdictRepository.markRejected(face.suspectedOwnerId, face.assetFaceId, {
-          identityId: identityId ?? null,
-          source: 'cleanup',
-          actorId: resolvedBy,
-        });
-      }
+      // One chunked multi-row upsert, not one round-trip per face: `stay` is bounded by the resolve DTO's
+      // 25 000-face cap, and a per-face loop at that size is a request that times out rather than applies.
+      declined = await this.facePersonVerdictRepository.markRejectedMany(
+        declineFaces.map((face) => ({
+          personId: face.suspectedOwnerId,
+          assetFaceId: face.assetFaceId,
+          identityId:
+            ownerTokens
+              .get(face.suspectedOwnerId)
+              ?.find((token) => token.startsWith('identity:'))
+              ?.slice('identity:'.length) ?? null,
+        })),
+        { source: 'cleanup', actorId: resolvedBy },
+      );
       // Slice 9 (D14/leak 3): a stayed face is settled — drain ANY still-pending suggestion row for it
       // (not just the (suspectedOwnerId, face) pairing markRejected above just resolved), same as the
       // aggregate drain used to before it was split per-bucket. Scoped to the raw `stay` bucket, not
@@ -1047,7 +1076,10 @@ export class FaceRepairService extends BaseService {
     if (unknown.length > 0) {
       const reviewedPerson = await this.personRepository.getById(personId);
       if (!reviewedPerson) {
-        throw new BadRequestException('Reviewed person not found');
+        throw new BadRequestException({
+          message: 'Reviewed person not found',
+          code: FaceRepairResolveErrorCode.PersonNotFound,
+        });
       }
       const cluster = await this.personRepository.create({ ownerId: reviewedPerson.ownerId });
       try {
