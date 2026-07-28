@@ -16,7 +16,7 @@
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
-  import { t } from 'svelte-i18n';
+  import { t, type Translations } from 'svelte-i18n';
   import { getServerErrorMessage, handleError } from '$lib/utils/handle-error';
   import ActionsHelpModal from './ActionsHelpModal.svelte';
   import type { PageData } from './$types';
@@ -101,7 +101,9 @@
   const MAX_ERROR_REASON_LENGTH = 300;
   // Contract with FaceRepairResolveErrorCode in face-repair.service.ts. These are the resolve failures an admin
   // can actually hit, so they get real translated sentences rather than the server's English developer text.
-  const REASON_KEY_BY_CODE: Record<string, string> = {
+  // Typed `Translations`, not `string`: `$t` only accepts keys that exist in en.json, so a typo here is a build
+  // error rather than a banner that renders a raw key at an admin.
+  const REASON_KEY_BY_CODE: Record<string, Translations> = {
     'face-repair:person-not-found': 'admin.face_cleanup_review_apply_reason_person_gone',
     'face-repair:destination-missing': 'admin.face_cleanup_review_apply_reason_destination_gone',
     'face-repair:faces-not-in-snapshot': 'admin.face_cleanup_review_apply_reason_stale',
