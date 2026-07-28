@@ -208,3 +208,57 @@ describe(`${SharedSpaceRepository.name}.addPersonFaces deadlock safety (#864)`, 
     expect(transaction).not.toHaveBeenCalled();
   });
 });
+
+// Chainable Kysely stub: every builder method returns itself, `execute` is caller-controlled.
+const chain = (execute: () => Promise<unknown>): any =>
+  new Proxy({}, { get: (_target, prop) => (prop === 'execute' ? execute : () => chain(execute)) });
+
+const dbWith = (onDelete: () => Promise<unknown>) => {
+  const deletes = { count: 0 };
+  const db = {
+    selectFrom: () => chain(() => Promise.resolve([])),
+    deleteFrom: () =>
+      chain(() => {
+        deletes.count++;
+        return onDelete();
+      }),
+  } as unknown as Kysely<DB>;
+  return { db, deletes };
+};
+
+// P1 from the #864 lock audit — reached from unlinkLibrary / AlbumDelete / AlbumAssetsRemove,
+// i.e. the library unmap itself.
+describe(`${SharedSpaceRepository.name} face-removal deadlock safety (#864)`, () => {
+  const spaceId = '22222222-2222-4222-8222-222222222222';
+
+  it('re-drives removePersonFacesByAssetIds when the delete is the deadlock victim', async () => {
+    let attempts = 0;
+    const { db, deletes } = dbWith(() => {
+      attempts++;
+      return attempts < 3 ? Promise.reject(deadlock()) : Promise.resolve(void 0);
+    });
+
+    await expect(new SharedSpaceRepository(db).removePersonFacesByAssetIds(spaceId, ['a'])).resolves.toBeUndefined();
+    expect(deletes.count).toBe(3);
+  });
+
+  it('does not retry removePersonFacesByAssetIds on non-deadlock failures', async () => {
+    const { db, deletes } = dbWith(() => Promise.reject(Object.assign(new Error('x'), { code: '23503' })));
+
+    await expect(new SharedSpaceRepository(db).removePersonFacesByAssetIds(spaceId, ['a'])).rejects.toMatchObject({
+      code: '23503',
+    });
+    expect(deletes.count).toBe(1);
+  });
+
+  it('re-drives removePersonFacesByLibrary when the delete is the deadlock victim', async () => {
+    let attempts = 0;
+    const { db, deletes } = dbWith(() => {
+      attempts++;
+      return attempts < 2 ? Promise.reject(deadlock()) : Promise.resolve(void 0);
+    });
+
+    await expect(new SharedSpaceRepository(db).removePersonFacesByLibrary(spaceId, 'lib')).resolves.toBeUndefined();
+    expect(deletes.count).toBe(2);
+  });
+});

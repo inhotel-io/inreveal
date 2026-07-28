@@ -2765,50 +2765,58 @@ export class FaceIdentityRepository {
     toPersonId: string;
     identityId: string;
   }): Promise<void> {
-    await this.db.transaction().execute(async (trx) => {
-      // Orphan cleanup runs concurrently with the backfill during a library unmap and can delete
-      // the target person between the caller resolving it and this move. Claim the row first so it
-      // cannot disappear mid-move, and skip entirely if it is already gone — reassigning faces onto
-      // a missing person violates shared_space_person_face_personId_fkey and kills the job (#864).
-      const target = await trx
-        .selectFrom('shared_space_person')
-        .select('id')
-        .where('id', '=', input.toPersonId)
-        .forUpdate()
-        .executeTakeFirst();
+    // The UPDATE below sets personId, so its FK check takes FOR KEY SHARE on BOTH the source and
+    // target person rows. Claiming only the target left the source locked in an arbitrary order,
+    // so claim both in id order (#864).
+    const parentIds = [...new Set([input.fromPersonId, input.toPersonId])].toSorted();
 
-      if (!target) {
-        return;
-      }
+    await retryOnDeadlock(() =>
+      this.db.transaction().execute(async (trx) => {
+        // Orphan cleanup runs concurrently with the backfill during a library unmap and can delete
+        // the target person between the caller resolving it and this move. Claiming it here stops it
+        // disappearing mid-move; if it is already gone we skip, because reassigning faces onto a
+        // missing person violates shared_space_person_face_personId_fkey and kills the job.
+        const claimed = await trx
+          .selectFrom('shared_space_person')
+          .select('id')
+          .where('id', 'in', parentIds)
+          .orderBy('id')
+          .forUpdate()
+          .execute();
 
-      const identityFaceIds = trx
-        .selectFrom('shared_space_person_face')
-        .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
-        .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
-        .select('shared_space_person_face.assetFaceId')
-        .where('shared_space_person_face.personId', '=', input.fromPersonId)
-        .where('face_identity_face.identityId', '=', input.identityId)
-        .where('asset_face.deletedAt', 'is', null)
-        .where('asset_face.isVisible', '=', true);
+        if (!claimed.some(({ id }) => id === input.toPersonId)) {
+          return;
+        }
 
-      await trx
-        .deleteFrom('shared_space_person_face')
-        .where('personId', '=', input.fromPersonId)
-        .where('assetFaceId', 'in', identityFaceIds)
-        .where(
-          'assetFaceId',
-          'in',
-          trx.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', input.toPersonId),
-        )
-        .execute();
+        const identityFaceIds = trx
+          .selectFrom('shared_space_person_face')
+          .innerJoin('asset_face', 'asset_face.id', 'shared_space_person_face.assetFaceId')
+          .innerJoin('face_identity_face', 'face_identity_face.assetFaceId', 'asset_face.id')
+          .select('shared_space_person_face.assetFaceId')
+          .where('shared_space_person_face.personId', '=', input.fromPersonId)
+          .where('face_identity_face.identityId', '=', input.identityId)
+          .where('asset_face.deletedAt', 'is', null)
+          .where('asset_face.isVisible', '=', true);
 
-      await trx
-        .updateTable('shared_space_person_face')
-        .set({ personId: input.toPersonId })
-        .where('personId', '=', input.fromPersonId)
-        .where('assetFaceId', 'in', identityFaceIds)
-        .execute();
-    });
+        await trx
+          .deleteFrom('shared_space_person_face')
+          .where('personId', '=', input.fromPersonId)
+          .where('assetFaceId', 'in', identityFaceIds)
+          .where(
+            'assetFaceId',
+            'in',
+            trx.selectFrom('shared_space_person_face').select('assetFaceId').where('personId', '=', input.toPersonId),
+          )
+          .execute();
+
+        await trx
+          .updateTable('shared_space_person_face')
+          .set({ personId: input.toPersonId })
+          .where('personId', '=', input.fromPersonId)
+          .where('assetFaceId', 'in', identityFaceIds)
+          .execute();
+      }),
+    );
   }
 
   private spacePersonFaceCount(eb: ExpressionBuilder<DB, 'shared_space_person'>) {

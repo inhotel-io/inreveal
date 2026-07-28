@@ -2950,11 +2950,16 @@ export class SharedSpaceRepository {
       .where('personId', 'in', spacePersonSubquery)
       .execute();
 
-    await this.db
-      .deleteFrom('shared_space_person_face')
-      .where('assetFaceId', 'in', assetFaceSubquery)
-      .where('personId', 'in', spacePersonSubquery)
-      .execute();
+    // Reached from unlinkLibrary / AlbumDelete / AlbumAssetsRemove — during the unmap itself. The
+    // asset_face cascade deletes these same junction rows, so the two can cycle (#864). A single
+    // statement is its own transaction, so re-running it is all the recovery needed.
+    await retryOnDeadlock(() =>
+      this.db
+        .deleteFrom('shared_space_person_face')
+        .where('assetFaceId', 'in', assetFaceSubquery)
+        .where('personId', 'in', spacePersonSubquery)
+        .execute(),
+    );
 
     if (affectedPersonIds.length > 0) {
       await this.recountPersons(affectedPersonIds.map((r) => r.personId));
@@ -2982,11 +2987,16 @@ export class SharedSpaceRepository {
       .where('personId', 'in', spacePersonSubquery)
       .execute();
 
-    await this.db
-      .deleteFrom('shared_space_person_face')
-      .where('assetFaceId', 'in', assetFaceSubquery)
-      .where('personId', 'in', spacePersonSubquery)
-      .execute();
+    // Reached from unlinkLibrary / AlbumDelete / AlbumAssetsRemove — during the unmap itself. The
+    // asset_face cascade deletes these same junction rows, so the two can cycle (#864). A single
+    // statement is its own transaction, so re-running it is all the recovery needed.
+    await retryOnDeadlock(() =>
+      this.db
+        .deleteFrom('shared_space_person_face')
+        .where('assetFaceId', 'in', assetFaceSubquery)
+        .where('personId', 'in', spacePersonSubquery)
+        .execute(),
+    );
 
     if (affectedPersonIds.length > 0) {
       await this.recountPersons(affectedPersonIds.map((r) => r.personId));
