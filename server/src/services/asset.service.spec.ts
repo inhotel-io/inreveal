@@ -1564,6 +1564,36 @@ describe(AssetService.name, () => {
       expect(mocks.asset.remove).toHaveBeenCalledTimes(2);
     });
 
+    // A retry must re-drive only the delete. If it re-ran the surrounding work the asset would be
+    // announced as deleted twice and its files queued for deletion twice.
+    it('does not repeat the surrounding work when the delete is retried', async () => {
+      const asset = AssetFactory.from().build();
+      mocks.assetJob.getForAssetDeletion.mockResolvedValue(getForAssetDeletion(asset));
+      mocks.asset.remove
+        .mockRejectedValueOnce(Object.assign(new Error('deadlock detected'), { code: '40P01' }))
+        .mockResolvedValue(void 0);
+
+      await sut.handleAssetDeletion({ id: asset.id, deleteOnDisk: true });
+
+      expect(mocks.asset.remove).toHaveBeenCalledTimes(2);
+      expect(mocks.sharedSpace.getSpacePersonsForAsset).toHaveBeenCalledTimes(1);
+      expect(mocks.event.emit).toHaveBeenCalledTimes(1);
+      expect(mocks.job.queue).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails the job when every retry is also a deadlock victim', async () => {
+      const asset = AssetFactory.from().build();
+      mocks.assetJob.getForAssetDeletion.mockResolvedValue(getForAssetDeletion(asset));
+      mocks.asset.remove.mockRejectedValue(Object.assign(new Error('deadlock detected'), { code: '40P01' }));
+
+      await expect(sut.handleAssetDeletion({ id: asset.id, deleteOnDisk: true })).rejects.toMatchObject({
+        code: '40P01',
+      });
+
+      // the deletion is never silently reported as done
+      expect(mocks.event.emit).not.toHaveBeenCalled();
+    });
+
     it('does not retry a delete that failed for a non-deadlock reason', async () => {
       const asset = AssetFactory.from().build();
       mocks.assetJob.getForAssetDeletion.mockResolvedValue(getForAssetDeletion(asset));
