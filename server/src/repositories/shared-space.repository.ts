@@ -2614,12 +2614,30 @@ export class SharedSpaceRepository {
       return [];
     }
 
-    const result = await this.db
-      .insertInto('shared_space_person_face')
-      .values(values)
-      .onConflict((oc) => oc.doNothing())
-      .returningAll()
-      .execute();
+    // This INSERT names only shared_space_person_face, but the FK check takes FOR KEY SHARE on each
+    // shared_space_person parent, in row order — an invisible deadlock participant against the
+    // representativeFaceId SET NULL cascade that a concurrent asset delete drives (#864). Claim the
+    // parents in id order first so this agrees with every other writer, and re-drive if it still loses.
+    const parentIds = [...new Set(values.map(({ personId }) => personId))].toSorted();
+
+    const result = await retryOnDeadlock(() =>
+      this.db.transaction().execute(async (trx) => {
+        await trx
+          .selectFrom('shared_space_person')
+          .select('id')
+          .where('id', 'in', parentIds)
+          .orderBy('id')
+          .forUpdate()
+          .execute();
+
+        return trx
+          .insertInto('shared_space_person_face')
+          .values(values)
+          .onConflict((oc) => oc.doNothing())
+          .returningAll()
+          .execute();
+      }),
+    );
 
     if (!options?.skipRecount && result.length > 0) {
       const personIds = [...new Set(result.map((r) => r.personId))];
@@ -3180,11 +3198,37 @@ export class SharedSpaceRepository {
 
   @GenerateSql({ params: [DummyValue.UUID] })
   async deleteOrphanedPersons(spaceId: string) {
-    await this.db
-      .deleteFrom('shared_space_person')
-      .where('spaceId', '=', spaceId)
-      .where('id', 'not in', this.db.selectFrom('shared_space_person_face').select('personId'))
-      .execute();
+    // onAssetDelete runs this immediately after recountPersons, so protecting only the recount
+    // just moves the deadlock victim onto this DELETE (#864). Same treatment: resolve the orphans
+    // and claim them in id order first, so this agrees on a lock order with every other writer,
+    // then re-drive if the representativeFaceId cascade still picks us as the victim.
+    await retryOnDeadlock(() =>
+      this.db.transaction().execute(async (trx) => {
+        const orphans = await trx
+          .selectFrom('shared_space_person')
+          .select('id')
+          .where('spaceId', '=', spaceId)
+          .where('id', 'not in', trx.selectFrom('shared_space_person_face').select('personId'))
+          .orderBy('id')
+          .forUpdate()
+          .execute();
+
+        if (orphans.length === 0) {
+          return;
+        }
+
+        await trx
+          .deleteFrom('shared_space_person')
+          .where(
+            'id',
+            'in',
+            orphans.map(({ id }) => id),
+          )
+          // re-checked under the claim: a person that gained a face must not be deleted
+          .where('id', 'not in', trx.selectFrom('shared_space_person_face').select('personId'))
+          .execute();
+      }),
+    );
   }
 
   @GenerateSql({ params: [DummyValue.UUID, [DummyValue.UUID]] })
@@ -3193,12 +3237,34 @@ export class SharedSpaceRepository {
       return;
     }
 
-    await this.db
-      .deleteFrom('shared_space_person')
-      .where('spaceId', '=', spaceId)
-      .where('id', 'in', personIds)
-      .where('id', 'not in', this.db.selectFrom('shared_space_person_face').select('personId'))
-      .execute();
+    // Same claim-then-delete ordering as deleteOrphanedPersons (#864).
+    await retryOnDeadlock(() =>
+      this.db.transaction().execute(async (trx) => {
+        const orphans = await trx
+          .selectFrom('shared_space_person')
+          .select('id')
+          .where('spaceId', '=', spaceId)
+          .where('id', 'in', [...new Set(personIds)].toSorted())
+          .where('id', 'not in', trx.selectFrom('shared_space_person_face').select('personId'))
+          .orderBy('id')
+          .forUpdate()
+          .execute();
+
+        if (orphans.length === 0) {
+          return;
+        }
+
+        await trx
+          .deleteFrom('shared_space_person')
+          .where(
+            'id',
+            'in',
+            orphans.map(({ id }) => id),
+          )
+          .where('id', 'not in', trx.selectFrom('shared_space_person_face').select('personId'))
+          .execute();
+      }),
+    );
   }
 
   @GenerateSql({ params: [] })

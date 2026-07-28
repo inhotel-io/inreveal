@@ -5,6 +5,11 @@ import { describe, expect, it, vitest } from 'vitest';
 
 const deadlock = () => Object.assign(new Error('deadlock detected'), { code: '40P01' });
 
+const fake = (execute: () => Promise<unknown>) => {
+  const transaction = vitest.fn(() => ({ execute }));
+  return { db: { transaction } as unknown as Kysely<DB>, transaction };
+};
+
 /**
  * The recount is a deadlock victim under a real delete storm (#864): the representativeFaceId
  * ON DELETE SET NULL cascade locks shared_space_person rows in face order, so Postgres can pick
@@ -112,6 +117,94 @@ describe(`${SharedSpaceRepository.name}.recountPersons deadlock retry (#864)`, (
     await expect(new SharedSpaceRepository(trx).recountPersons(ids, trx)).rejects.toMatchObject({ code: '40P01' });
 
     expect(claims).toBe(1);
+    expect(transaction).not.toHaveBeenCalled();
+  });
+});
+
+// Ranked P0 by the #864 lock audit: onAssetDelete calls this immediately after the (protected)
+// recountPersons, so protecting only the recount just moves the deadlock victim onto this DELETE.
+describe(`${SharedSpaceRepository.name} orphan cleanup deadlock safety (#864)`, () => {
+  const spaceId = '22222222-2222-4222-8222-222222222222';
+  const ids = ['11111111-1111-4111-8111-111111111111'];
+
+  it('re-drives deleteOrphanedPersons in a fresh transaction when it is the victim', async () => {
+    let attempts = 0;
+    const { db, transaction } = fake(() => {
+      attempts++;
+      return attempts < 3 ? Promise.reject(deadlock()) : Promise.resolve(void 0);
+    });
+
+    await expect(new SharedSpaceRepository(db).deleteOrphanedPersons(spaceId)).resolves.toBeUndefined();
+    expect(transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('gives up on deleteOrphanedPersons once the budget is spent', async () => {
+    const { db, transaction } = fake(() => Promise.reject(deadlock()));
+
+    await expect(new SharedSpaceRepository(db).deleteOrphanedPersons(spaceId)).rejects.toMatchObject({
+      code: '40P01',
+    });
+    expect(transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry deleteOrphanedPersons on non-deadlock failures', async () => {
+    const { db, transaction } = fake(() => Promise.reject(Object.assign(new Error('x'), { code: '23503' })));
+
+    await expect(new SharedSpaceRepository(db).deleteOrphanedPersons(spaceId)).rejects.toMatchObject({
+      code: '23503',
+    });
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-drives deleteOrphanedPersonsByIds too', async () => {
+    let attempts = 0;
+    const { db, transaction } = fake(() => {
+      attempts++;
+      return attempts < 2 ? Promise.reject(deadlock()) : Promise.resolve(void 0);
+    });
+
+    await expect(new SharedSpaceRepository(db).deleteOrphanedPersonsByIds(spaceId, ids)).resolves.toBeUndefined();
+    expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens no transaction for deleteOrphanedPersonsByIds with an empty id list', async () => {
+    const transaction = vitest.fn();
+    const db = { transaction } as unknown as Kysely<DB>;
+
+    await expect(new SharedSpaceRepository(db).deleteOrphanedPersonsByIds(spaceId, [])).resolves.toBeUndefined();
+    expect(transaction).not.toHaveBeenCalled();
+  });
+});
+
+// Path 3 from the #864 lock audit: an INSERT into shared_space_person_face takes FOR KEY SHARE on
+// its shared_space_person parents to satisfy the FK — invisible in the statement, but a real
+// deadlock participant against the representativeFaceId SET NULL cascade during an asset delete.
+describe(`${SharedSpaceRepository.name}.addPersonFaces deadlock safety (#864)`, () => {
+  const values = [{ personId: '11111111-1111-4111-8111-111111111111', assetFaceId: 'a' }] as any;
+
+  it('re-drives the insert in a fresh transaction when it is the deadlock victim', async () => {
+    let attempts = 0;
+    const { db, transaction } = fake(() => {
+      attempts++;
+      return attempts < 3 ? Promise.reject(deadlock()) : Promise.resolve([]);
+    });
+
+    await expect(new SharedSpaceRepository(db).addPersonFaces(values)).resolves.toEqual([]);
+    expect(transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry non-deadlock failures', async () => {
+    const { db, transaction } = fake(() => Promise.reject(Object.assign(new Error('x'), { code: '23503' })));
+
+    await expect(new SharedSpaceRepository(db).addPersonFaces(values)).rejects.toMatchObject({ code: '23503' });
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens no transaction for an empty value list', async () => {
+    const transaction = vitest.fn();
+    const db = { transaction } as unknown as Kysely<DB>;
+
+    await expect(new SharedSpaceRepository(db).addPersonFaces([])).resolves.toEqual([]);
     expect(transaction).not.toHaveBeenCalled();
   });
 });
