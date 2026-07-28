@@ -7892,111 +7892,112 @@ describe(SharedSpaceService.name, () => {
       ]);
     });
 
-    it('should not queue suggestion scans for non-name edits, cleared names, hidden people, pets, disabled spaces, disabled suggestion bands, or suggestions toggled off', async () => {
+    const noSuggestionScanCases: Array<{
+      name: string;
+      prior: Partial<ReturnType<typeof factory.sharedSpacePerson>>;
+      dto: Parameters<typeof sut.updateSpacePerson>[3];
+      spaceFaceRecognitionEnabled?: boolean;
+      suggestionMaxDistance?: number;
+      suggestionsEnabled?: boolean;
+    }> = [
+      {
+        name: 'birth date only',
+        prior: { name: 'Alice', isHidden: false, type: 'person' },
+        dto: { birthDate: '1980-01-01' },
+      },
+      {
+        name: 'representative face only',
+        prior: { name: 'Alice', isHidden: false, type: 'person' },
+        dto: { representativeFaceId: newUuid() },
+      },
+      {
+        name: 'cleared name',
+        prior: { name: 'Alice', isHidden: false, type: 'person' },
+        dto: { name: '' },
+      },
+      {
+        name: 'hidden person',
+        prior: { name: 'Alice', isHidden: false, type: 'person' },
+        dto: { name: 'Bob', isHidden: true },
+      },
+      {
+        name: 'pet',
+        prior: { name: '', isHidden: false, type: 'pet' },
+        dto: { name: 'Mochi' },
+      },
+      {
+        name: 'disabled space',
+        prior: { name: '', isHidden: false, type: 'person' },
+        dto: { name: 'Alice' },
+        spaceFaceRecognitionEnabled: false,
+      },
+      {
+        name: 'disabled suggestion band',
+        prior: { name: '', isHidden: false, type: 'person' },
+        dto: { name: 'Alice' },
+        suggestionMaxDistance: 0.5,
+      },
+      {
+        name: 'suggestions toggled off (valid band)',
+        prior: { name: '', isHidden: false, type: 'person' },
+        dto: { name: 'Alice' },
+        suggestionsEnabled: false,
+      },
+    ];
+
+    // Was a single `it` looping over all 8 cases in one shared `sut`/`mocks` instance (see
+    // git history for the loop form). Split into it.each so each scenario has its own name, its
+    // own timeout, and its own failure attribution — the shared-loop form was slow enough in
+    // aggregate to intermittently exceed the default 5s test timeout under full-suite parallelism.
+    it.each(noSuggestionScanCases)('should not queue a suggestion scan ($name)', async (testCase) => {
       const auth = factory.auth();
       const spaceId = newUuid();
-      const cases: Array<{
-        name: string;
-        prior: Partial<ReturnType<typeof factory.sharedSpacePerson>>;
-        dto: Parameters<typeof sut.updateSpacePerson>[3];
-        spaceFaceRecognitionEnabled?: boolean;
-        suggestionMaxDistance?: number;
-        suggestionsEnabled?: boolean;
-      }> = [
-        {
-          name: 'birth date only',
-          prior: { name: 'Alice', isHidden: false, type: 'person' },
-          dto: { birthDate: '1980-01-01' },
-        },
-        {
-          name: 'representative face only',
-          prior: { name: 'Alice', isHidden: false, type: 'person' },
-          dto: { representativeFaceId: newUuid() },
-        },
-        {
-          name: 'cleared name',
-          prior: { name: 'Alice', isHidden: false, type: 'person' },
-          dto: { name: '' },
-        },
-        {
-          name: 'hidden person',
-          prior: { name: 'Alice', isHidden: false, type: 'person' },
-          dto: { name: 'Bob', isHidden: true },
-        },
-        {
-          name: 'pet',
-          prior: { name: '', isHidden: false, type: 'pet' },
-          dto: { name: 'Mochi' },
-        },
-        {
-          name: 'disabled space',
-          prior: { name: '', isHidden: false, type: 'person' },
-          dto: { name: 'Alice' },
-          spaceFaceRecognitionEnabled: false,
-        },
-        {
-          name: 'disabled suggestion band',
-          prior: { name: '', isHidden: false, type: 'person' },
-          dto: { name: 'Alice' },
-          suggestionMaxDistance: 0.5,
-        },
-        {
-          name: 'suggestions toggled off (valid band)',
-          prior: { name: '', isHidden: false, type: 'person' },
-          dto: { name: 'Alice' },
-          suggestionsEnabled: false,
-        },
-      ];
+      const personId = newUuid();
+      const person = factory.sharedSpacePerson({ id: personId, spaceId, ...testCase.prior });
+      const updatedPerson = factory.sharedSpacePerson({
+        ...person,
+        ...(testCase.dto.name === undefined ? {} : { name: testCase.dto.name }),
+        ...(testCase.dto.isHidden === undefined ? {} : { isHidden: testCase.dto.isHidden }),
+        ...(testCase.dto.representativeFaceId === undefined
+          ? {}
+          : { representativeFaceId: testCase.dto.representativeFaceId }),
+        ...(testCase.dto.birthDate === undefined ? {} : { birthDate: testCase.dto.birthDate }),
+      });
 
-      for (const testCase of cases) {
-        vi.clearAllMocks();
-        const personId = newUuid();
-        const person = factory.sharedSpacePerson({ id: personId, spaceId, ...testCase.prior });
-        const updatedPerson = factory.sharedSpacePerson({
-          ...person,
-          ...(testCase.dto.name === undefined ? {} : { name: testCase.dto.name }),
-          ...(testCase.dto.isHidden === undefined ? {} : { isHidden: testCase.dto.isHidden }),
-          ...(testCase.dto.representativeFaceId === undefined
-            ? {}
-            : { representativeFaceId: testCase.dto.representativeFaceId }),
-          ...(testCase.dto.birthDate === undefined ? {} : { birthDate: testCase.dto.birthDate }),
-        });
-
-        mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-        mocks.sharedSpace.getById.mockResolvedValue(
-          factory.sharedSpace({
-            id: spaceId,
-            faceRecognitionEnabled: testCase.spaceFaceRecognitionEnabled ?? true,
-          }),
-        );
-        mocks.systemMetadata.get.mockResolvedValue({
-          machineLearning: {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({
+          id: spaceId,
+          faceRecognitionEnabled: testCase.spaceFaceRecognitionEnabled ?? true,
+        }),
+      );
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
             enabled: true,
-            facialRecognition: {
-              enabled: true,
-              maxDistance: 0.5,
-              minFaces: 3,
-              suggestions: {
-                enabled: testCase.suggestionsEnabled ?? true,
-                maxDistance: testCase.suggestionMaxDistance ?? 0.8,
-              },
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: {
+              enabled: testCase.suggestionsEnabled ?? true,
+              maxDistance: testCase.suggestionMaxDistance ?? 0.8,
             },
           },
-        });
-        mocks.sharedSpace.getPersonById.mockResolvedValueOnce(person).mockResolvedValueOnce(updatedPerson);
-        mocks.sharedSpace.updatePerson.mockResolvedValue(updatedPerson);
-        mocks.sharedSpace.getAlias.mockResolvedValue(void 0);
-        mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+        },
+      });
+      mocks.sharedSpace.getPersonById.mockResolvedValueOnce(person).mockResolvedValueOnce(updatedPerson);
+      mocks.sharedSpace.updatePerson.mockResolvedValue(updatedPerson);
+      mocks.sharedSpace.getAlias.mockResolvedValue(void 0);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
 
-        await sut.updateSpacePerson(auth, spaceId, personId, testCase.dto);
+      await sut.updateSpacePerson(auth, spaceId, personId, testCase.dto);
 
-        expect(getQueuedSpacePersonSuggestionScans(mocks), testCase.name).toEqual([]);
-        expect(mocks.job.queue, testCase.name).not.toHaveBeenCalledWith({
-          name: JobName.SpacePersonSuggestionScanQueueAll,
-          data: {},
-        });
-        expect(mocks.job.queueAll, testCase.name).not.toHaveBeenCalled();
-      }
+      expect(getQueuedSpacePersonSuggestionScans(mocks)).toEqual([]);
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.SpacePersonSuggestionScanQueueAll,
+        data: {},
+      });
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
     });
   });
 
@@ -8750,69 +8751,70 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.SpacePersonSuggestionScanQueueAll, data: {} });
     });
 
-    it('should not queue scans for inherited name changes when the suggestion band, space face recognition, or the suggestions toggle is disabled', async () => {
-      const cases: Array<{
-        name: string;
-        faceRecognitionEnabled: boolean;
-        suggestionMaxDistance: number;
-        suggestionsEnabled?: boolean;
-      }> = [
-        { name: 'disabled suggestion band', faceRecognitionEnabled: true, suggestionMaxDistance: 0.5 },
-        { name: 'disabled space', faceRecognitionEnabled: false, suggestionMaxDistance: 0.8 },
+    const noInheritedScanCases: Array<{
+      name: string;
+      faceRecognitionEnabled: boolean;
+      suggestionMaxDistance: number;
+      suggestionsEnabled?: boolean;
+    }> = [
+      { name: 'disabled suggestion band', faceRecognitionEnabled: true, suggestionMaxDistance: 0.5 },
+      { name: 'disabled space', faceRecognitionEnabled: false, suggestionMaxDistance: 0.8 },
+      {
+        name: 'suggestions toggled off (valid band)',
+        faceRecognitionEnabled: true,
+        suggestionMaxDistance: 0.8,
+        suggestionsEnabled: false,
+      },
+    ];
+
+    // Was a single `it` looping over all 3 cases (see git history for the loop form). Split into
+    // it.each to match the sibling `updateSpacePerson` fix — each scenario gets its own name and
+    // timeout instead of sharing one budget across the whole table.
+    it.each(noInheritedScanCases)('should not queue a scan for inherited name changes ($name)', async (testCase) => {
+      const spaceId = newUuid();
+      const person = makeSpacePersonMetadataBackfillScanCandidate(newUuid(), spaceId);
+      mocks.sharedSpace.getSpacePersonMetadataBackfillPage.mockResolvedValue([person]);
+      mocks.sharedSpace.getPersonById.mockResolvedValue(person);
+      mocks.sharedSpace.getMetadataInheritanceCandidates.mockResolvedValue([
         {
-          name: 'suggestions toggled off (valid band)',
-          faceRecognitionEnabled: true,
-          suggestionMaxDistance: 0.8,
-          suggestionsEnabled: false,
+          personId: newUuid(),
+          userId: newUuid(),
+          role: SharedSpaceRole.Owner,
+          name: 'Alice',
+          birthDate: null,
+          type: 'person',
+          species: null,
+          updatedAt: newDate(),
+          supportingFaceCount: 3,
+          isAssetAdder: false,
         },
-      ];
-      for (const testCase of cases) {
-        vi.clearAllMocks();
-        const spaceId = newUuid();
-        const person = makeSpacePersonMetadataBackfillScanCandidate(newUuid(), spaceId);
-        mocks.sharedSpace.getSpacePersonMetadataBackfillPage.mockResolvedValue([person]);
-        mocks.sharedSpace.getPersonById.mockResolvedValue(person);
-        mocks.sharedSpace.getMetadataInheritanceCandidates.mockResolvedValue([
-          {
-            personId: newUuid(),
-            userId: newUuid(),
-            role: SharedSpaceRole.Owner,
-            name: 'Alice',
-            birthDate: null,
-            type: 'person',
-            species: null,
-            updatedAt: newDate(),
-            supportingFaceCount: 3,
-            isAssetAdder: false,
-          },
-        ]);
-        mocks.sharedSpace.getById.mockResolvedValue(
-          factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: testCase.faceRecognitionEnabled }),
-        );
-        mocks.systemMetadata.get.mockResolvedValue({
-          machineLearning: {
+      ]);
+      mocks.sharedSpace.getById.mockResolvedValue(
+        factory.sharedSpace({ id: spaceId, faceRecognitionEnabled: testCase.faceRecognitionEnabled }),
+      );
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
             enabled: true,
-            facialRecognition: {
-              enabled: true,
-              maxDistance: 0.5,
-              minFaces: 3,
-              suggestions: {
-                enabled: testCase.suggestionsEnabled ?? true,
-                maxDistance: testCase.suggestionMaxDistance,
-              },
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: {
+              enabled: testCase.suggestionsEnabled ?? true,
+              maxDistance: testCase.suggestionMaxDistance,
             },
           },
-        });
-        mocks.sharedSpace.updatePerson.mockResolvedValue(person);
+        },
+      });
+      mocks.sharedSpace.updatePerson.mockResolvedValue(person);
 
-        await sut.backfillSpacePersonMetadata({ limit: 50 });
+      await sut.backfillSpacePersonMetadata({ limit: 50 });
 
-        expect(mocks.job.queueAll, testCase.name).not.toHaveBeenCalled();
-        expect(mocks.job.queue, testCase.name).not.toHaveBeenCalledWith({
-          name: JobName.SpacePersonSuggestionScanQueueAll,
-          data: {},
-        });
-      }
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+      expect(mocks.job.queue).not.toHaveBeenCalledWith({
+        name: JobName.SpacePersonSuggestionScanQueueAll,
+        data: {},
+      });
     });
   });
 
