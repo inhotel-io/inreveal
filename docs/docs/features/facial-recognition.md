@@ -67,6 +67,23 @@ If you find the totals distracting (for example on a casual family library where
 
 ## Face Suggestions
 
+Face suggestions are **off by default**. To enable them, go to Administration → Settings →
+Machine Learning → Facial Recognition and turn on **Enable face suggestions**.
+
+Enabling the toggle fills in a suggestion distance for you and queues a scan of your library,
+so there is nothing else to run. You can watch it progress in Administration → Jobs. To re-scan
+later — for example after widening the suggestion distance — run the **Face suggestion
+maintenance** job.
+
+A person is only scanned if it has a name, is not hidden, and is a person rather than a pet.
+People in a shared space are scanned only when that space has face recognition enabled.
+
+:::note
+The **Suggestion max distance** must be greater than the **Maximum recognition distance**;
+a smaller value can never match anything, so the settings page refuses to save it. Face
+suggestions also require facial recognition itself to stay enabled.
+:::
+
 When a named person has near-miss faces (similar but below the auto-assign threshold),
 Gallery surfaces them as **suggestions** on that person's page. Review them one at a time:
 
