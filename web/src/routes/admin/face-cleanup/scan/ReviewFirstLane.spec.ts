@@ -47,12 +47,15 @@ const rev = (over: Partial<FaceCleanupPerson> & Pick<FaceCleanupPerson, 'personI
   eligible: 35,
   flagged: 20,
   flaggedFraction: 0.57,
+  // count (routing share) and ownerFaceCount (destination size) deliberately share no digits — a substring
+  // match (e.g. `stringContaining('20')`) can't mistake "1,204" for the routing share this way, unlike the
+  // original 20/1204 pair, which let a tooltip regression that swapped the two numbers pass unnoticed.
   suspectedOwners: [
     {
       ownerPersonId: 'd',
       ownerName: 'Pierre',
       thumbnailFaceId: 'f',
-      count: 20,
+      count: 7,
       ownerFaceCount: 1204,
       ownerMissing: false,
     },
@@ -195,7 +198,7 @@ describe('ReviewFirstLane', () => {
       render(ReviewFirstLane, { props: { people: [rev({ personId: 'p1' })], users, onDismiss: vi.fn() } });
 
       expect(screen.getByText(/1,204/)).toBeInTheDocument();
-      expect(screen.queryByText(/^20 /)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^7 /)).not.toBeInTheDocument();
     });
 
     it('keeps the bad-target warning in place of the count', () => {
@@ -207,10 +210,14 @@ describe('ReviewFirstLane', () => {
       expect(screen.queryByText(/1,204/)).not.toBeInTheDocument();
     });
 
-    it('puts the routing share in the row tooltip', () => {
+    it('puts the routing share in the row tooltip, not the destination size', () => {
       render(ReviewFirstLane, { props: { people: [rev({ personId: 'p1' })], users, onDismiss: vi.fn() } });
 
-      expect(screen.getByTestId('review-destination-p1')).toHaveAttribute('title', expect.stringContaining('20'));
+      const title = screen.getByTestId('review-destination-p1').getAttribute('title');
+      // Asserts the literal count+unit substring the routing share renders as, and separately that the
+      // destination-size number is absent — either half alone would go red if the two were swapped.
+      expect(title).toContain('7 admin.face_cleanup_faces');
+      expect(title).not.toContain('1,204');
     });
   });
 });
