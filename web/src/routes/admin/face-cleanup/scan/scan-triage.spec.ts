@@ -11,7 +11,16 @@ const person = (
   eligible: 10,
   flagged: 3,
   flaggedFraction: 0.3,
-  suspectedOwners: [{ ownerPersonId: 'dest-1', ownerName: 'Dest', thumbnailFaceId: 'f', count: 3 }],
+  suspectedOwners: [
+    {
+      ownerPersonId: 'dest-1',
+      ownerName: 'Dest',
+      thumbnailFaceId: 'f',
+      count: 3,
+      ownerFaceCount: 3,
+      ownerMissing: false,
+    },
+  ],
   reviewReasons: [],
   ...over,
 });

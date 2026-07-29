@@ -11,7 +11,14 @@ export interface FaceCleanupPerson {
   eligible: number;
   flagged: number;
   flaggedFraction: number;
-  suspectedOwners: { ownerPersonId: string; ownerName: string | null; thumbnailFaceId: string | null; count: number }[];
+  suspectedOwners: {
+    ownerPersonId: string;
+    ownerName: string | null;
+    thumbnailFaceId: string | null;
+    count: number;
+    ownerFaceCount: number;
+    ownerMissing: boolean;
+  }[];
   recommendation: 'confident' | 'review-first';
   reviewReasons: string[];
 }

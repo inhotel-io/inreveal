@@ -47,7 +47,16 @@ const rev = (over: Partial<FaceCleanupPerson> & Pick<FaceCleanupPerson, 'personI
   eligible: 35,
   flagged: 20,
   flaggedFraction: 0.57,
-  suspectedOwners: [{ ownerPersonId: 'd', ownerName: 'Pierre', thumbnailFaceId: 'f', count: 20 }],
+  suspectedOwners: [
+    {
+      ownerPersonId: 'd',
+      ownerName: 'Pierre',
+      thumbnailFaceId: 'f',
+      count: 20,
+      ownerFaceCount: 1204,
+      ownerMissing: false,
+    },
+  ],
   recommendation: 'review-first',
   reviewReasons: ['over-cap'],
   ...over,
@@ -179,5 +188,29 @@ describe('ReviewFirstLane', () => {
     expect(row).toHaveTextContent('57%');
     expect(row).toHaveTextContent('20/35');
     expect(row).toHaveTextContent('Pierre');
+  });
+
+  describe('destination column', () => {
+    it("shows the destination's own size beneath its name, not the number of faces routing there", () => {
+      render(ReviewFirstLane, { props: { people: [rev({ personId: 'p1' })], users, onDismiss: vi.fn() } });
+
+      expect(screen.getByText(/1,204/)).toBeInTheDocument();
+      expect(screen.queryByText(/^20 /)).not.toBeInTheDocument();
+    });
+
+    it('keeps the bad-target warning in place of the count', () => {
+      render(ReviewFirstLane, {
+        props: { people: [rev({ personId: 'p1', reviewReasons: ['bad-target'] })], users, onDismiss: vi.fn() },
+      });
+
+      expect(screen.getByText('admin.face_cleanup_bad_target')).toBeInTheDocument();
+      expect(screen.queryByText(/1,204/)).not.toBeInTheDocument();
+    });
+
+    it('puts the routing share in the row tooltip', () => {
+      render(ReviewFirstLane, { props: { people: [rev({ personId: 'p1' })], users, onDismiss: vi.fn() } });
+
+      expect(screen.getByTestId('review-destination-p1')).toHaveAttribute('title', expect.stringContaining('20'));
+    });
   });
 });

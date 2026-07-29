@@ -121,7 +121,16 @@ const makeScanPerson = (
   eligible: 50,
   flagged: 30,
   flaggedFraction: 0.6,
-  suspectedOwners: [{ ownerPersonId: 'owner-person', ownerName: 'Alice', thumbnailFaceId: null, count: 30 }],
+  suspectedOwners: [
+    {
+      ownerPersonId: 'owner-person',
+      ownerName: 'Alice',
+      thumbnailFaceId: null,
+      count: 30,
+      ownerFaceCount: 30,
+      ownerMissing: false,
+    },
+  ],
   recommendation: 'confident' as const,
   reviewReasons: [] as string[],
   ...over,
