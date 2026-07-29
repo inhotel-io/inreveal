@@ -343,4 +343,22 @@ describe('PersonSuggestionReviewModal', () => {
     await userEvent.keyboard('{ArrowRight}');
     expect(confirm).toHaveBeenCalledTimes(1); // still just the original confirm, no re-invocation
   });
+
+  // happy-dom has no layout engine, so this pins the STRUCTURE that makes the footer reflow, not the reflow
+  // itself: the verdict buttons must be free to stack full-width below `sm` and only line up as a row from `sm`
+  // up. Without it the row is a single non-wrapping line and the modal's `overflow-hidden` Card clips the
+  // primary "Same person" button off-screen on a phone. The layout itself is asserted for real, at a 390px
+  // viewport, in e2e/src/specs/web/person-face-suggestions.e2e-spec.ts.
+  it('lets the verdict buttons stack below sm and line up from sm up', async () => {
+    setup();
+    await waitFor(() => screen.getByTestId('suggestion-same-btn'));
+
+    for (const testId of ['suggestion-different-btn', 'suggestion-ignore-btn', 'suggestion-same-btn']) {
+      expect(screen.getByTestId(testId), testId).toHaveClass('w-full', 'sm:w-auto');
+    }
+
+    const group = screen.getByTestId('suggestion-actions');
+    expect(group).toHaveClass('flex-col', 'grow');
+    expect(group).toHaveClass('sm:flex-row', 'sm:grow-0');
+  });
 });

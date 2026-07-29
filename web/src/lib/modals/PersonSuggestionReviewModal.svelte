@@ -274,13 +274,17 @@
             </p>
           {/if}
 
-          <div class="relative mx-auto max-h-[60vh]">
+          <!--
+            The stacked footer costs ~100px on a phone; capping the context photo lower there keeps it, both
+            face crops and the buttons on screen together, which is the whole comparison the user is making.
+          -->
+          <div class="relative mx-auto max-h-[40vh] sm:max-h-[60vh]">
             <img
               bind:this={imgEl}
               data-testid="suggestion-full-photo"
               src={photoUrl}
               alt={$t('face_suggestion_candidate')}
-              class="max-h-[60vh] w-auto rounded-lg object-contain"
+              class="max-h-[40vh] w-auto rounded-lg object-contain sm:max-h-[60vh]"
               onload={() => (imgReady = true)}
             />
             {#if highlight}
@@ -333,7 +337,7 @@
   </ModalBody>
 
   <ModalFooter>
-    <div class="flex w-full items-center justify-between gap-3">
+    <div class="flex w-full items-center justify-between gap-2 sm:gap-3">
       <IconButton
         variant="ghost"
         shape="round"
@@ -343,8 +347,18 @@
         data-testid="suggestion-prev-btn"
         onclick={() => step(-1)}
       />
-      <div class="flex justify-center gap-3">
+      <!--
+        A single non-wrapping row of three labelled pills does not fit a phone, and the modal's @immich/ui Card
+        is `overflow-hidden` — so the overflow CLIPPED the trailing (primary) button rather than scrolling it.
+        Below `sm` the verdicts therefore stack full-width in the space between the two chevrons; from `sm` up
+        `grow-0` + `flex-row` restores the original centred row exactly.
+      -->
+      <div
+        data-testid="suggestion-actions"
+        class="flex min-w-0 grow flex-col gap-2 sm:grow-0 sm:flex-row sm:justify-center sm:gap-3"
+      >
         <Button
+          class="w-full sm:w-auto"
           shape="round"
           color="secondary"
           disabled={busy || !current || currentActed}
@@ -355,6 +369,7 @@
           {$t('face_suggestion_different')}
         </Button>
         <Button
+          class="w-full sm:w-auto"
           shape="round"
           color="secondary"
           disabled={busy || !current || currentActed}
@@ -365,6 +380,7 @@
           {$t('face_suggestion_ignore')}
         </Button>
         <Button
+          class="w-full sm:w-auto"
           shape="round"
           disabled={busy || !current || currentActed}
           leadingIcon={mdiAccountCheckOutline}

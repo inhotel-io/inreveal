@@ -81,4 +81,34 @@ test.describe('Person face suggestions (web)', () => {
     await page.reload();
     await expect(page.locator('[data-testid="person-suggestion-banner"]')).toBeHidden();
   });
+
+  // Runs last: it consumes a suggestion, and the tests above depend on the pending count.
+  //
+  // The review modal's footer used to be a single non-wrapping flex row, and @immich/ui's Card wraps the modal in
+  // `overflow-hidden` — so on a phone the row overflowed to the end and the primary "Same person" button was
+  // CLIPPED, not scrolled, i.e. unreachable. boundingBox() reports the layout box and ignores the clipping
+  // ancestor, so a right edge past the viewport is the precise signal for that overflow.
+  test('the verdict buttons stay inside the viewport at a phone width', async ({ context, page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await utils.setAuthCookies(context, admin.accessToken);
+    await page.goto(`/people/${personId}`);
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    await expect(page.locator('[data-testid="person-suggestion-banner"]')).toBeVisible();
+    await page.locator('[data-testid="suggestion-review-btn"]').click();
+    await expect(page.locator('[data-testid="suggestion-progress"]')).toBeVisible();
+
+    const viewport = page.viewportSize()!;
+    for (const testId of ['suggestion-different-btn', 'suggestion-ignore-btn', 'suggestion-same-btn']) {
+      const box = await page.locator(`[data-testid="${testId}"]`).boundingBox();
+      expect(box, testId).not.toBeNull();
+      expect.soft(box!.x, testId).toBeGreaterThanOrEqual(0);
+      expect.soft(box!.x + box!.width, testId).toBeLessThanOrEqual(viewport.width);
+    }
+
+    // ...and the primary action is operable, not merely laid out on-screen.
+    await page.locator('[data-testid="suggestion-same-btn"]').click();
+    await expect(page.locator('[data-testid="suggestion-progress"]')).toBeVisible();
+  });
 });
