@@ -14,8 +14,12 @@
     valueLabel: string;
     onSelect: (ownerPersonId: string) => void;
     onChooseOther: () => void;
+    // Without a scanPerson to scope the picker's ownerId to, "Choose someone else…" has nowhere to send the
+    // admin — the caller passes this so the button stops looking clickable in that state. The <select> itself
+    // is unaffected: its own options come from `owners`, not from scanPerson.
+    disabled?: boolean;
   };
-  const { owners, value, valueLabel, onSelect, onChooseOther }: Props = $props();
+  const { owners, value, valueLabel, onSelect, onChooseOther, disabled = false }: Props = $props();
 
   // Deleted destinations are omitted, not disabled: the card above already explains why one is unusable, and
   // an option that guarantees a face-repair:destination-missing failure is only a chance to misclick.
@@ -59,7 +63,8 @@
   <button
     type="button"
     onclick={onChooseOther}
-    class="text-sm font-semibold text-primary hover:underline"
+    {disabled}
+    class="text-sm font-semibold text-primary hover:underline disabled:opacity-40"
     data-testid="destination-choose-other"
   >
     {$t('admin.face_cleanup_review_dest_choose_other')}

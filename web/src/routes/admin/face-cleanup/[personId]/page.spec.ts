@@ -1490,6 +1490,12 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
         within(screen.getByTestId('tally-added')).getByText('admin.face_cleanup_review_tally_added_pending'),
       ).toBeInTheDocument();
 
+      // Closes a gap where this test passed on EITHER guard alone: handleApply's own early return on
+      // restBlocked, or the button's `disabled` attribute. A click never reaches the handler on a disabled
+      // button, so deleting only `disabled` would ship a visually-enabled Apply that silently does nothing —
+      // and this test would still stay green without this assertion.
+      expect(screen.getByTestId('apply-btn')).toBeDisabled();
+
       await fireEvent.click(screen.getByTestId('apply-btn'));
 
       expect(resolveFaces).not.toHaveBeenCalled();
@@ -1539,6 +1545,21 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getByTestId('destination-pick-warning')).toBeInTheDocument());
       expect(screen.queryByTestId('destination-self-warning')).not.toBeInTheDocument();
       expect(screen.getByTestId('rest-tile')).toBeDisabled();
+    });
+
+    // The Promise.all in loadPersonData can land getFaceRepairPersonFaces on one scan and getLatestScan on
+    // another, and withCurrentNames drops a person whose live flagged count is 0 while the frozen flaggedFaces
+    // snapshot still lists it — either way scanPerson can be null even though there ARE flagged faces to
+    // review. handleChooseOtherDestination early-returns with no scanPerson.ownerId to scope the picker to, so
+    // the button must stop looking clickable rather than silently doing nothing while the page tells the admin
+    // to pick a destination.
+    it('disables "Choose someone else…" when scanPerson failed to resolve, even with flagged faces present', async () => {
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('destination-pick-warning')).toBeInTheDocument());
+      expect(screen.getByTestId('destination-choose-other')).toBeDisabled();
     });
 
     // A prior version of this test only re-chose the default (OWNER_A_ID) after a dismiss with nothing ever
