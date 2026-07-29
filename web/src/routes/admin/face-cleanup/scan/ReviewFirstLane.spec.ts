@@ -14,13 +14,24 @@ vi.mock('@immich/ui', async (orig) => {
   const noop = await import('@test-data/mocks/noop-component.svelte');
   return { ...mod, Icon: noop.default };
 });
+// Every (key, options) pair the component asked to translate — the mock below still renders keys verbatim
+// (dropping {values}), so a test that needs to tell "count: 7" (the routing share) apart from "count: 1204"
+// (the destination's own size) asserts on this instead of the rendered text. Matches the pattern already
+// established in the sibling +page.svelte spec.
+const { translations } = vi.hoisted(() => ({
+  translations: [] as { key: string; values?: Record<string, unknown> }[],
+}));
+
 vi.mock('svelte-i18n', async (orig) => {
   const actual = await orig<typeof import('svelte-i18n')>();
   return {
     ...actual,
     t: {
       subscribe: (run: (fn: (k: string, o?: unknown) => string) => void) => {
-        run((k: string) => k);
+        run((k: string, o?: unknown) => {
+          translations.push({ key: k, values: (o as { values?: Record<string, unknown> })?.values });
+          return k;
+        });
         return () => {};
       },
     },
@@ -31,12 +42,13 @@ vi.mock('$lib/utils/people-utils', () => ({
   getPeopleThumbnailPath: (id: string) => `/people/${id}/thumbnail`,
 }));
 
-beforeEach(() =>
+beforeEach(() => {
   vi.stubGlobal(
     'confirm',
     vi.fn(() => true),
-  ),
-);
+  );
+  translations.length = 0;
+});
 afterEach(() => vi.unstubAllGlobals());
 
 const rev = (over: Partial<FaceCleanupPerson> & Pick<FaceCleanupPerson, 'personId'>): FaceCleanupPerson => ({
@@ -214,10 +226,18 @@ describe('ReviewFirstLane', () => {
       render(ReviewFirstLane, { props: { people: [rev({ personId: 'p1' })], users, onDismiss: vi.fn() } });
 
       const title = screen.getByTestId('review-destination-p1').getAttribute('title');
-      // Asserts the literal count+unit substring the routing share renders as, and separately that the
-      // destination-size number is absent — either half alone would go red if the two were swapped.
-      expect(title).toContain('7 admin.face_cleanup_faces');
+      // Same key DestinationCards uses for this exact number, so the mocked $t renders it verbatim here too —
+      // the literal digits are gone the moment {values} passes through the mock (see `translations` below),
+      // so this only pins that the ROUTING key (not some ad hoc string) drives the tooltip.
+      expect(title).toContain('admin.face_cleanup_review_dest_routes');
       expect(title).not.toContain('1,204');
+      expect(title).not.toContain('1204');
+
+      // Closes what the substring check above can't: the swap this guards against — rendering ownerFaceCount
+      // (1204) instead of count (7) — would still contain the same key and pass the checks above. Asserting
+      // the actual value handed to $t is the only way this goes red on that swap.
+      const call = translations.find((entry) => entry.key === 'admin.face_cleanup_review_dest_routes');
+      expect(call?.values).toEqual({ count: 7 });
     });
   });
 });
