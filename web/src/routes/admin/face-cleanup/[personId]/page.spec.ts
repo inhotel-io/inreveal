@@ -1281,8 +1281,11 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       await waitFor(() => expect(cards()).toHaveLength(2));
       // Owner B has thumbnailFaceId: null. The person-scoped fallback 403s for a cluster the admin does not
-      // own, so there must be no <img> at all.
-      expect(within(cards()[1]).queryByRole('img')).not.toBeInTheDocument();
+      // own, so there must be no <img> at all. Not queryByRole('img'): an <img alt=""> (this component's own
+      // placeholder-less thumbnail markup, and the convention used everywhere else in this admin console) maps
+      // to role "presentation", not "img" — queryByRole('img') returns null whether or not an <img> is
+      // present, so it can never catch a broken image slipping back in here. A direct DOM query has teeth.
+      expect(cards()[1].querySelector('img')).toBeNull();
       expect(within(cards()[1]).getByTestId('destination-placeholder')).toBeInTheDocument();
     });
   });
