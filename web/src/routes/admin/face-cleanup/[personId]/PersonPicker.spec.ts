@@ -206,4 +206,15 @@ describe('PersonPicker', () => {
     });
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('offers the re-flag lock by default', async () => {
+    render(PersonPicker, { props: { ownerId: 'owner-1', faceCount: 3, onClose: vi.fn() } });
+    await waitFor(() => expect(screen.getByTestId('person-picker-lock-toggle')).toBeInTheDocument());
+  });
+
+  it('hides the re-flag lock when the caller cannot honour it', async () => {
+    render(PersonPicker, { props: { ownerId: 'owner-1', faceCount: 3, showLock: false, onClose: vi.fn() } });
+    await waitFor(() => expect(screen.getByTestId('person-picker-search')).toBeInTheDocument());
+    expect(screen.queryByTestId('person-picker-lock-toggle')).not.toBeInTheDocument();
+  });
 });
