@@ -1,4 +1,5 @@
 import { SvelteSet } from 'svelte/reactivity';
+import type { SuspectedOwner } from '../[personId]/destination';
 
 // Moved verbatim from the deleted face-cleanup.svelte.ts model — the row shape the scan snapshot's persons
 // deserialise into.
@@ -11,14 +12,7 @@ export interface FaceCleanupPerson {
   eligible: number;
   flagged: number;
   flaggedFraction: number;
-  suspectedOwners: {
-    ownerPersonId: string;
-    ownerName: string | null;
-    thumbnailFaceId: string | null;
-    count: number;
-    ownerFaceCount: number;
-    ownerMissing: boolean;
-  }[];
+  suspectedOwners: SuspectedOwner[];
   recommendation: 'confident' | 'review-first';
   reviewReasons: string[];
 }
