@@ -464,7 +464,9 @@ git commit -m "feat(face-cleanup): report a suspected owner's own face count and
 
 ## Task 2: Server — pin the overlay ordering
 
-`getLatestScan` runs `withCurrentNames` then `withLiveFlaggedCounts` (`face-repair.service.ts:581-582`). The latter rebuilds every suspected owner with `.map((owner) => ({ ...owner, count }))` — that spread is the **only** reason Task 1's fields survive to the client. Reversing the calls, or replacing the spread with an explicit object literal, drops them silently.
+`getLatestScanStatus` runs `withCurrentNames` then `withLiveFlaggedCounts` (`face-repair.service.ts:581-582`). The latter rebuilds every suspected owner with `.map((owner) => ({ ...owner, count }))` — that spread is the **only** reason Task 1's fields survive to the client. Replacing it with an explicit object literal drops them silently.
+
+> **Corrected during implementation (2026-07-29).** This plan originally also claimed the _call order_ was load-bearing, and Step 2 below told the implementer to prove the test red by swapping the two calls. That is false: `withCurrentNames` sets both fields unconditionally, so whichever pass runs last wins and either order produces a correct payload. The red phase must instead be proven by replacing the spread with an explicit literal. Steps below are corrected; the shipped comments say the true thing.
 
 **Files:**
 
@@ -487,8 +489,9 @@ because a real `handleFaceRepairScan` run is the only way to exercise the whole 
 ```ts
 it('carries the destination overlay through the live flagged-count recompute', async () => {
   // withLiveFlaggedCounts rebuilds every suspectedOwner. If its object spread is ever replaced with an
-  // explicit literal, or it runs BEFORE withCurrentNames, the overlay fields vanish between the repository
-  // and the client with nothing else failing.
+  // explicit literal, the overlay fields vanish between the repository and the client with nothing else
+  // failing. (Swapping the call order does NOT reproduce this — withCurrentNames sets the fields
+  // unconditionally, so whichever pass runs last wins.)
   const { sut, ctx } = setup();
   const scanRepo = ctx.get(FaceRepairScanRepository);
   const { user } = await ctx.newUser();
@@ -541,12 +544,18 @@ it('carries the destination overlay through the live flagged-count recompute', a
 
 - [ ] **Step 2: Prove the test can fail**
 
-Temporarily swap the two calls in `getLatestScanStatus` (`face-repair.service.ts:581-582`):
+Temporarily replace the `{ ...owner, count }` spread in `withLiveFlaggedCounts` (`face-repair.service.ts:~632`) with an explicit literal that names only the persisted fields:
 
 ```ts
-const withLive = await this.withLiveFlaggedCounts(scan);
-return this.faceRepairScanRepository.withCurrentNames(withLive);
+.map((owner) => ({
+  ownerPersonId: owner.ownerPersonId,
+  ownerName: owner.ownerName,
+  thumbnailFaceId: owner.thumbnailFaceId,
+  count: countByOwner.get(owner.ownerPersonId) ?? 0,
+}))
 ```
+
+(Do **not** try to prove this by swapping the two call sites — that does not reproduce the drop.)
 
 Run:
 
@@ -564,10 +573,12 @@ At `face-repair.service.ts:579-582`, extend the existing comment:
 // Refresh display names/thumbnails from the live person table — people get named after a scan and the
 // persisted report is only a snapshot. Keeps the console legible without an expensive full re-scan.
 //
-// ORDER IS LOAD-BEARING: withCurrentNames adds ownerFaceCount/ownerMissing, and withLiveFlaggedCounts
-// below carries them through only via its `{ ...owner }` spread. Swapping these two, or expanding that
-// spread into an explicit literal, silently drops both fields. Pinned by face-repair.scan.spec.ts
-// ("carries the destination overlay through the live flagged-count recompute").
+// withCurrentNames adds ownerFaceCount/ownerMissing to each suspected owner; withLiveFlaggedCounts
+// below carries them through only via its `{ ...owner }` spread. Expanding that spread into an
+// explicit literal silently drops both fields (verified by hand: swapping the call order alone does
+// NOT reproduce the drop, because withCurrentNames re-adds the fields unconditionally whichever pass
+// runs last — the spread, not the order, is the load-bearing piece). Pinned by
+// face-repair.scan.spec.ts ("carries the destination overlay through the live flagged-count recompute").
 const withNames = await this.faceRepairScanRepository.withCurrentNames(scan);
 return this.withLiveFlaggedCounts(withNames);
 ```
