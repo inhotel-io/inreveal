@@ -5,6 +5,7 @@ import {
   RepairScanPerson,
   ScanInProgressError,
 } from 'src/repositories/face-repair-scan.repository';
+import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { DB } from 'src/schema';
 import { mediumFactory } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
@@ -40,6 +41,69 @@ describe(FaceRepairScanRepository.name, () => {
   });
 
   afterEach(() => db.deleteFrom('face_repair_scan').execute());
+
+  // A person with `visible` countable faces, plus optional faces that must NOT be counted.
+  const insertPersonWithFaces = async (
+    ownerId: string,
+    visible: number,
+    extra: { deleted?: number; invisible?: number; name?: string } = {},
+  ) => {
+    const person = mediumFactory.personInsert({ ownerId, name: extra.name ?? '' });
+    await db
+      .insertInto('person')
+      .values({ ...person, name: extra.name ?? '' })
+      .execute();
+    const asset = mediumFactory.assetInsert({ ownerId });
+    await db.insertInto('asset').values(asset).execute();
+    const rows = [
+      ...Array.from({ length: visible }, () =>
+        mediumFactory.assetFaceInsert({ assetId: asset.id, personId: person.id }),
+      ),
+      ...Array.from({ length: extra.deleted ?? 0 }, () =>
+        mediumFactory.assetFaceInsert({ assetId: asset.id, personId: person.id, deletedAt: new Date() }),
+      ),
+      ...Array.from({ length: extra.invisible ?? 0 }, () =>
+        mediumFactory.assetFaceInsert({ assetId: asset.id, personId: person.id, isVisible: false }),
+      ),
+    ];
+    if (rows.length > 0) {
+      await db.insertInto('asset_face').values(rows).execute();
+    }
+    return person.id;
+  };
+
+  const scanWith = async (
+    clusterId: string,
+    ownerIds: string[],
+    snapshot: { faceCount?: number } = {},
+  ): Promise<RepairScanPerson[]> => {
+    const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+    await sut.completeScan(scan.id, {
+      totals: zeroTotals(),
+      persons: [
+        {
+          personId: clusterId,
+          ownerId: 'ignored-at-read-time',
+          personName: null,
+          faceCount: snapshot.faceCount ?? 999,
+          thumbnailFaceId: null,
+          eligible: 35,
+          flagged: 20,
+          flaggedFraction: 20 / 35,
+          suspectedOwners: ownerIds.map((id) => ({
+            ownerPersonId: id,
+            ownerName: null,
+            thumbnailFaceId: null,
+            count: 20,
+          })),
+          recommendation: 'confident',
+          reviewReasons: [],
+        },
+      ],
+    });
+    const refreshed = await sut.withCurrentNames((await sut.getLatestScan())!);
+    return refreshed.persons as unknown as RepairScanPerson[];
+  };
 
   it('creates a pending scan and returns it as the latest', async () => {
     const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
@@ -261,6 +325,106 @@ describe(FaceRepairScanRepository.name, () => {
       await sut.completeScan(scan.id, { totals: zeroTotals(), persons: [] });
       const refreshed = await sut.withCurrentNames((await sut.getLatestScan())!);
       expect(refreshed.persons).toEqual([]);
+    });
+
+    it("reports a destination's live face count, not the number the scan recorded", async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 1);
+      const owner = await insertPersonWithFaces(user.id, 7);
+
+      const [person] = await scanWith(cluster, [owner]);
+
+      expect(person.suspectedOwners[0].ownerFaceCount).toBe(7);
+      // The routing share is untouched — it is scan-time data, not a live count.
+      expect(person.suspectedOwners[0].count).toBe(20);
+    });
+
+    it('reports the count as a number, not the bigint string Postgres returns', async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 1);
+      const owner = await insertPersonWithFaces(user.id, 3);
+
+      const [person] = await scanWith(cluster, [owner]);
+
+      expect(typeof person.suspectedOwners[0].ownerFaceCount).toBe('number');
+      expect(typeof person.faceCount).toBe('number');
+    });
+
+    it('counts only visible, undeleted faces — agreeing with getPersonMetadata on the same person', async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 1);
+      const owner = await insertPersonWithFaces(user.id, 4, { deleted: 3, invisible: 2 });
+
+      const [person] = await scanWith(cluster, [owner]);
+      const metadata = await new FaceRepairRepository(db).getPersonMetadata(owner);
+
+      expect(person.suspectedOwners[0].ownerFaceCount).toBe(4);
+      expect(person.suspectedOwners[0].ownerFaceCount).toBe(metadata!.faceCount);
+    });
+
+    it('marks a suspected owner whose person row was deleted as missing, with a zero count', async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 1);
+      const owner = await insertPersonWithFaces(user.id, 5);
+      await db.deleteFrom('person').where('id', '=', owner).execute();
+
+      const [person] = await scanWith(cluster, [owner]);
+
+      expect(person.suspectedOwners[0].ownerMissing).toBe(true);
+      expect(person.suspectedOwners[0].ownerFaceCount).toBe(0);
+    });
+
+    it('reports zero for a destination with no faces rather than dropping it', async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 1);
+      const owner = await insertPersonWithFaces(user.id, 0);
+
+      const [person] = await scanWith(cluster, [owner]);
+
+      expect(person.suspectedOwners).toHaveLength(1);
+      expect(person.suspectedOwners[0].ownerFaceCount).toBe(0);
+      expect(person.suspectedOwners[0].ownerMissing).toBe(false);
+    });
+
+    it("overlays the reviewed cluster's own face count live as well", async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 6);
+      const owner = await insertPersonWithFaces(user.id, 2);
+
+      const [person] = await scanWith(cluster, [owner], { faceCount: 999 });
+
+      expect(person.faceCount).toBe(6);
+    });
+
+    it('leaves eligible and the recorded flagged count at their scan-time values', async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 6);
+      const owner = await insertPersonWithFaces(user.id, 2);
+
+      const [person] = await scanWith(cluster, [owner]);
+
+      expect(person.eligible).toBe(35);
+      expect(person.flagged).toBe(20);
+    });
+
+    it('keeps the snapshot face count for a cluster whose own row was deleted', async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 6);
+      const owner = await insertPersonWithFaces(user.id, 2);
+      await db.deleteFrom('person').where('id', '=', cluster).execute();
+
+      const [person] = await scanWith(cluster, [owner], { faceCount: 42 });
+
+      // Better a stale number than claiming a cluster the admin is looking at has zero faces.
+      expect(person.faceCount).toBe(42);
     });
   });
 
