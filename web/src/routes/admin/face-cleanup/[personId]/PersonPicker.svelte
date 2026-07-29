@@ -52,6 +52,10 @@
 
   const trimmedQuery = $derived(query.trim());
   const showEmpty = $derived(!loading && !loadError && people.length === 0 && trimmedQuery.length === 0);
+  // `lockOnMove` stays at its unreachable-toggle default (true) when the toggle is hidden — a caller that
+  // opens the picker with showLock:false has no way to honour a lock either way, so the resolved destination
+  // must say so truthfully rather than echoing a checkbox state the admin never saw or touched.
+  const effectiveLock = $derived(showLock ? lockOnMove : false);
 
   const unnamedLabel = () => $t('admin.face_cleanup_review_unnamed');
   const displayName = (name: string) => (name.trim() ? name : unnamedLabel());
@@ -97,7 +101,7 @@
   };
 
   const choosePerson = (person: OwnerPerson) => {
-    onClose({ personId: person.id, name: displayName(person.name), lock: lockOnMove });
+    onClose({ personId: person.id, name: displayName(person.name), lock: effectiveLock });
   };
 
   const createNew = async () => {
@@ -111,7 +115,7 @@
         ownerId,
         faceRepairOwnerPersonCreateRequestDto: { name: trimmedQuery },
       });
-      onClose({ personId: result.id, name: trimmedQuery, lock: lockOnMove });
+      onClose({ personId: result.id, name: trimmedQuery, lock: effectiveLock });
     } catch {
       // E8: creation failed — leave the selection untouched (nothing applied) and surface the error inline;
       // the picker stays open so the admin can retry.

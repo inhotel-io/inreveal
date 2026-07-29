@@ -140,6 +140,17 @@
   const isSelfDestination = $derived(destinationId === personId);
   const canBulkMove = $derived(!!destinationId && !isSelfDestination);
 
+  // A staged rest-of-cluster face is silently dropped from Apply the instant its destination becomes
+  // unusable (buildApplyRequest below only builds the rest group when canBulkMove holds) — yet the ribbon and
+  // the dock's "+N added → {name}" chip both name a real person regardless. Clearing the staged set here
+  // means the UI can never affirmatively promise a destination Apply will not honour: either something is
+  // staged AND canBulkMove is true (so it really will move), or nothing is staged at all.
+  $effect(() => {
+    if (!canBulkMove && restSelected.size > 0) {
+      restSelected.clear();
+    }
+  });
+
   const visibleFaces = $derived(vm.faces.slice(0, visibleCount));
   const hasMore = $derived(visibleCount < vm.faces.length);
 
@@ -325,8 +336,10 @@
     chosenDestinationName = chosen.name;
   };
 
-  const handleSelectDestination = (ownerPersonId: string) => {
-    chosenDestinationId = ownerPersonId;
+  const handleSelectDestination = (destinationPersonId: string) => {
+    // Named to avoid shadowing the module-level `ownerPersonId` derived above (the scan's own suggestion) —
+    // this parameter is whatever the admin just picked in the select, which may not be it.
+    chosenDestinationId = destinationPersonId;
     chosenDestinationName = null;
   };
 
@@ -679,6 +692,7 @@
           <DestinationSelect
             owners={destinations}
             value={destinationId}
+            valueLabel={destinationName}
             onSelect={handleSelectDestination}
             onChooseOther={handleChooseOtherDestination}
           />
@@ -723,6 +737,12 @@
                     selected ? 'border-primary' : 'border-transparent opacity-70 hover:opacity-100',
                   ].join(' ')}
                   onclick={() => {
+                    // Consistent with select-all-btn's disabled gate: staging a face onto a destination the
+                    // whole-cluster actions have already refused (no destination, or a self-move) would only
+                    // be dropped silently at Apply while the ribbon kept naming a destination that never moves.
+                    if (!canBulkMove) {
+                      return;
+                    }
                     if (restSelected.has(face.assetFaceId)) {
                       restSelected.delete(face.assetFaceId);
                     } else {

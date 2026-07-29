@@ -1431,15 +1431,71 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       expect(screen.getByTestId('destination-self-warning')).toBeInTheDocument();
     });
 
-    it('reverts the selection when the picker is dismissed without choosing', async () => {
-      showModal.mockResolvedValue(undefined);
+    // A self-move is refused, but individual rest tiles (unlike select-all-btn) were never gated on the same
+    // guard — ticking one staged a face the ribbon and the dock chip both named a real destination for, even
+    // though buildApplyRequest's own guard would drop it from the resolve. The UI must never affirmatively
+    // claim a destination Apply will not honour.
+    it('refuses to stage a rest-of-cluster face while the chosen destination cannot be honoured', async () => {
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+        faces: [restFace('rest-1'), restFace('rest-2')],
+        total: 2,
+        hasMore: false,
+      } as unknown as FaceRepairClusterFacesResponseDto);
+      showModal.mockResolvedValue({ personId: PERSON_ID, name: 'Jula', lock: false });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('rest-tile')).toHaveLength(2));
+
+      await fireEvent.click(screen.getByTestId('destination-choose-other'));
+      await waitFor(() => expect(screen.getByTestId('destination-self-warning')).toBeInTheDocument());
+
+      await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
+
+      expect(screen.getAllByTestId('rest-tile')[0]).toHaveAttribute('data-selected', 'false');
+      expect(screen.queryByTestId('tally-added')).not.toBeInTheDocument();
+    });
+
+    // Reproduces the exact sequence the review found live: stage rest faces onto a VALID destination first,
+    // then invalidate that destination (self-move) — the faces were already staged before the guard could ever
+    // apply to them, so gating the tile's onclick alone does not cover this case.
+    it('un-stages already-added rest faces the instant the chosen destination becomes invalid', async () => {
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+        faces: [restFace('rest-1'), restFace('rest-2')],
+        total: 2,
+        hasMore: false,
+      } as unknown as FaceRepairClusterFacesResponseDto);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('select-all-btn')).toBeEnabled());
+
+      await fireEvent.click(screen.getByTestId('select-all-btn'));
+      await waitFor(() => expect(screen.getByTestId('tally-added')).toBeInTheDocument());
+
+      showModal.mockResolvedValue({ personId: PERSON_ID, name: 'Jula', lock: false });
+      await fireEvent.click(screen.getByTestId('destination-choose-other'));
+
+      await waitFor(() => expect(screen.getByTestId('destination-self-warning')).toBeInTheDocument());
+      expect(screen.queryByTestId('tally-added')).not.toBeInTheDocument();
+    });
+
+    // A prior version of this test only re-chose the default (OWNER_A_ID) after a dismiss with nothing ever
+    // chosen first — that passes even with the dismiss-guard deleted, because `destinationId` falls back to
+    // `selectable[0]` regardless. This version establishes a destination the fallback would NOT reproduce
+    // (`chosen-1`, not one of the scan's own suggestions) before dismissing a second picker, so only a real
+    // "leave it exactly as it was" guard can keep the assertion true.
+    it('leaves an already-chosen destination in place when a later picker is dismissed', async () => {
+      showModal.mockResolvedValueOnce({ personId: 'chosen-1', name: 'Chosen', lock: false });
 
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(chooser().value).toBe(OWNER_A_ID));
 
       await fireEvent.click(screen.getByTestId('destination-choose-other'));
+      await waitFor(() => expect(chooser().value).toBe('chosen-1'));
 
-      await waitFor(() => expect(chooser().value).toBe(OWNER_A_ID));
+      showModal.mockResolvedValueOnce(undefined);
+      await fireEvent.click(screen.getByTestId('destination-choose-other'));
+
+      await waitFor(() => expect(chooser().value).toBe('chosen-1'));
     });
 
     it('opens the destination picker without the re-flag lock it cannot honour', async () => {
