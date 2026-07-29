@@ -160,7 +160,11 @@
             <div
               class="{COL_DEST} items-center gap-2"
               title={dest
-                ? `${dest.count} ${$t('admin.face_cleanup_faces')} → ${dest.ownerName ?? $t('admin.face_cleanup_unnamed')}`
+                ? // Same key + formatting DestinationCards uses for this exact number (the routing share, not
+                  // the destination's own size beneath it) — a bare "faces" noun here read as ambiguous between
+                  // the two, and the raw (un-formatted) count disagreed with ownerFaceCount's .toLocaleString()
+                  // right below it.
+                  `${$t('admin.face_cleanup_review_dest_routes', { values: { count: dest.count } })} → ${dest.ownerName ?? $t('admin.face_cleanup_unnamed')}`
                 : undefined}
               data-testid={`review-destination-${person.personId}`}
             >
