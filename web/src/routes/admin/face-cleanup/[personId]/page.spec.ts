@@ -1289,4 +1289,198 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       expect(within(cards()[1]).getByTestId('destination-placeholder')).toBeInTheDocument();
     });
   });
+
+  describe('Destination chooser', () => {
+    const chooser = () => screen.getByTestId('destination-select') as HTMLSelectElement;
+    const restFace = (id: string) => ({ assetFaceId: id });
+
+    beforeEach(() => {
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+        faces: [restFace('rest-1'), restFace('rest-2')],
+        total: 2,
+        hasMore: false,
+      } as unknown as FaceRepairClusterFacesResponseDto);
+    });
+
+    it('defaults to the destination most flagged faces route to', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(chooser().value).toBe(OWNER_A_ID));
+    });
+
+    it("sends staged rest-of-cluster faces to the chosen destination, not the scan's first guess", async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('select-all-btn')).toBeEnabled());
+
+      await fireEvent.change(chooser(), { target: { value: OWNER_B_ID } });
+      await fireEvent.click(screen.getByTestId('select-all-btn'));
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
+      const request = vi.mocked(resolveFaces).mock.calls[0][0].faceRepairResolveRequestDto;
+      const group = request.moveToPerson!.find((g) => g.faceIds.includes('rest-1'))!;
+      expect(group.destinationPersonId).toBe(OWNER_B_ID);
+    });
+
+    it('re-routes already-staged faces when the destination changes, and says so on the dock chip', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('select-all-btn')).toBeEnabled());
+
+      await fireEvent.click(screen.getByTestId('select-all-btn'));
+      await waitFor(() => expect(screen.getByTestId('tally-added')).toBeInTheDocument());
+      await fireEvent.change(chooser(), { target: { value: OWNER_B_ID } });
+
+      await waitFor(() =>
+        expect(
+          translations.some((t) => t.key === 'admin.face_cleanup_review_tally_added' && t.values?.name === 'Berta'),
+        ).toBe(true),
+      );
+    });
+
+    it('names the chosen destination in the move-entire confirmation', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeEnabled());
+
+      await fireEvent.change(chooser(), { target: { value: OWNER_B_ID } });
+      await fireEvent.click(screen.getByTestId('move-entire-btn'));
+      await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
+      const request = vi.mocked(resolveFaces).mock.calls[0][0].faceRepairResolveRequestDto;
+      expect(request.entireCluster).toEqual({ destinationPersonId: OWNER_B_ID });
+      expect(
+        translations.some(
+          (t) => t.key === 'admin.face_cleanup_review_move_entire_confirm_body' && t.values?.owner === 'Berta',
+        ),
+      ).toBe(true);
+    });
+
+    it('offers no destination that no longer exists', async () => {
+      const gone = makeScanPerson({
+        suspectedOwners: [
+          {
+            ownerPersonId: OWNER_A_ID,
+            ownerName: 'Armin',
+            thumbnailFaceId: null,
+            count: 2,
+            ownerFaceCount: 0,
+            ownerMissing: true,
+          },
+          {
+            ownerPersonId: OWNER_B_ID,
+            ownerName: 'Berta',
+            thumbnailFaceId: null,
+            count: 1,
+            ownerFaceCount: 88,
+            ownerMissing: false,
+          },
+        ],
+      });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([gone]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(chooser()).toBeInTheDocument());
+      const values = [...chooser().options].map((o) => o.value);
+      expect(values).not.toContain(OWNER_A_ID);
+      // …and the default moved on to the surviving suggestion rather than a doomed one.
+      expect(chooser().value).toBe(OWNER_B_ID);
+    });
+
+    it('leaves both bulk actions disabled until a destination is picked, when none survives', async () => {
+      const allGone = makeScanPerson({
+        suspectedOwners: [
+          {
+            ownerPersonId: OWNER_A_ID,
+            ownerName: 'Armin',
+            thumbnailFaceId: null,
+            count: 2,
+            ownerFaceCount: 0,
+            ownerMissing: true,
+          },
+        ],
+      });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([allGone]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeDisabled());
+      expect(screen.getByTestId('select-all-btn')).toBeDisabled();
+    });
+
+    it('enables the bulk actions on an unattributable cluster once a person is chosen', async () => {
+      const orphan = makeScanPerson({ suspectedOwners: [] });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([orphan]) as unknown as object);
+      showModal.mockResolvedValue({ personId: 'chosen-1', name: 'Chosen', lock: false });
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeDisabled());
+      await fireEvent.click(screen.getByTestId('destination-choose-other'));
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeEnabled());
+    });
+
+    it('refuses to move a cluster into itself, explaining why', async () => {
+      showModal.mockResolvedValue({ personId: PERSON_ID, name: 'Jula', lock: false });
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeEnabled());
+
+      await fireEvent.click(screen.getByTestId('destination-choose-other'));
+
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeDisabled());
+      expect(screen.getByTestId('destination-self-warning')).toBeInTheDocument();
+    });
+
+    it('reverts the selection when the picker is dismissed without choosing', async () => {
+      showModal.mockResolvedValue(undefined);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(chooser().value).toBe(OWNER_A_ID));
+
+      await fireEvent.click(screen.getByTestId('destination-choose-other'));
+
+      await waitFor(() => expect(chooser().value).toBe(OWNER_A_ID));
+    });
+
+    it('opens the destination picker without the re-flag lock it cannot honour', async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeEnabled());
+
+      await fireEvent.click(screen.getByTestId('destination-choose-other'));
+
+      await waitFor(() => expect(showModal).toHaveBeenCalled());
+      const props = showModal.mock.calls.at(-1)![1] as { showLock?: boolean };
+      expect(props.showLock).toBe(false);
+    });
+
+    it('labels the tally generically when faces are bound for several destinations', async () => {
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('tally')).toBeInTheDocument());
+      expect(translations.some((t) => t.key === 'admin.face_cleanup_review_tally_owner_multi')).toBe(true);
+    });
+
+    it('keeps naming the owner in the tally when there is only one destination', async () => {
+      const single = makeScanPerson({
+        suspectedOwners: [
+          {
+            ownerPersonId: OWNER_A_ID,
+            ownerName: 'Armin',
+            thumbnailFaceId: null,
+            count: 3,
+            ownerFaceCount: 12,
+            ownerMissing: false,
+          },
+        ],
+      });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([single]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('tally')).toBeInTheDocument());
+      expect(
+        translations.some((t) => t.key === 'admin.face_cleanup_review_tally_owner' && t.values?.name === 'Armin'),
+      ).toBe(true);
+    });
+  });
 });

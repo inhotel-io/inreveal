@@ -22,6 +22,7 @@
   import type { PageData } from './$types';
   import { selectableDestinations, sortDestinations, type SuspectedOwner } from './destination';
   import DestinationCards from './DestinationCards.svelte';
+  import DestinationSelect from './DestinationSelect.svelte';
   import PersonPicker from './PersonPicker.svelte';
   import {
     createReviewModel,
@@ -121,6 +122,23 @@
   const primaryOwner = $derived(selectable[0] ?? null);
   const ownerName = $derived(primaryOwner?.ownerName ?? $t('admin.face_cleanup_review_unnamed'));
   const ownerPersonId = $derived(primaryOwner?.ownerPersonId ?? null);
+
+  // The destination for the two whole-cluster actions. Defaults to the largest SURVIVING suggestion — a
+  // deleted one would enable both buttons only to fail at Apply.
+  let chosenDestinationId = $state<string | null>(null);
+  let chosenDestinationName = $state<string | null>(null);
+
+  const destinationId = $derived(chosenDestinationId ?? selectable[0]?.ownerPersonId ?? null);
+  const destinationName = $derived(
+    chosenDestinationName ??
+      selectable.find((o) => o.ownerPersonId === destinationId)?.ownerName ??
+      $t('admin.face_cleanup_review_unnamed'),
+  );
+  // Moving a cluster into itself would move every face onto the person it already sits on and then delete the
+  // "empty" original. Scan suggestions can never be this cluster (the engine skips it), but the picker
+  // searches the whole library, so the guard lives on the action.
+  const isSelfDestination = $derived(destinationId === personId);
+  const canBulkMove = $derived(!!destinationId && !isSelfDestination);
 
   const visibleFaces = $derived(vm.faces.slice(0, visibleCount));
   const hasMore = $derived(visibleCount < vm.faces.length);
@@ -274,7 +292,7 @@
   };
 
   const handleMoveEntireCluster = () => {
-    if (!ownerPersonId) {
+    if (!canBulkMove) {
       return;
     }
     showEntireConfirm = true;
@@ -282,10 +300,34 @@
 
   const confirmMoveEntireCluster = async () => {
     showEntireConfirm = false;
-    if (!ownerPersonId) {
+    if (!canBulkMove || !destinationId) {
       return;
     }
-    await commitResolve({ personId, entireCluster: { destinationPersonId: ownerPersonId } });
+    await commitResolve({ personId, entireCluster: { destinationPersonId: destinationId } });
+  };
+
+  const handleChooseOtherDestination = async () => {
+    // Same guard as handleBulkOther: without scanPerson there is no ownerId to scope the picker to.
+    if (!scanPerson) {
+      return;
+    }
+    const chosen = await modalManager.show(PersonPicker, {
+      ownerId: scanPerson.ownerId,
+      faceCount: clusterTotal,
+      suggestedPersonId: selectable[0]?.ownerPersonId ?? null,
+      showLock: false,
+    });
+    // Dismissed — leave the current destination exactly as it was.
+    if (!chosen) {
+      return;
+    }
+    chosenDestinationId = chosen.personId;
+    chosenDestinationName = chosen.name;
+  };
+
+  const handleSelectDestination = (ownerPersonId: string) => {
+    chosenDestinationId = ownerPersonId;
+    chosenDestinationName = null;
   };
 
   const handleCancel = () => {
@@ -382,8 +424,8 @@
   const buildApplyRequest = () =>
     vm.buildResolveRequest(
       personId,
-      ownerPersonId && restSelected.size > 0
-        ? { destinationPersonId: ownerPersonId, faceIds: [...restSelected] }
+      canBulkMove && destinationId && restSelected.size > 0
+        ? { destinationPersonId: destinationId, faceIds: [...restSelected] }
         : undefined,
     );
 
@@ -624,7 +666,7 @@
           <h3 class="text-sm font-semibold">
             {$t('admin.face_cleanup_review_rest_title', { values: { count: restTotal.toLocaleString() } })}
             <span class="ml-2 font-normal text-gray-400">
-              {$t('admin.face_cleanup_review_rest_hint', { values: { owner: ownerName } })}
+              {$t('admin.face_cleanup_review_rest_hint', { values: { owner: destinationName } })}
             </span>
           </h3>
           <div class="flex-1"></div>
@@ -634,10 +676,21 @@
               {$t('admin.face_cleanup_review_rest_staged', { values: { count: restSelected.size } })}
             </span>
           {/if}
+          <DestinationSelect
+            owners={destinations}
+            value={destinationId}
+            onSelect={handleSelectDestination}
+            onChooseOther={handleChooseOtherDestination}
+          />
+          {#if isSelfDestination}
+            <span class="text-xs font-semibold text-red-600 dark:text-red-400" data-testid="destination-self-warning">
+              {$t('admin.face_cleanup_review_dest_self')}
+            </span>
+          {/if}
           <button
             type="button"
             onclick={handleSelectAllRest}
-            disabled={!ownerPersonId || restFaces.length === 0}
+            disabled={!canBulkMove || restFaces.length === 0}
             class="text-sm font-semibold text-primary hover:underline disabled:opacity-40"
             data-testid="select-all-btn"
           >
@@ -646,7 +699,7 @@
           <Button
             color="secondary"
             size="small"
-            disabled={!ownerPersonId}
+            disabled={!canBulkMove}
             onclick={handleMoveEntireCluster}
             data-testid="move-entire-btn"
           >
@@ -690,7 +743,7 @@
                     <div
                       class="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent px-1.5 pt-3 pb-1 text-[10px] font-semibold text-white"
                     >
-                      {$t('admin.face_cleanup_review_tile_dest', { values: { name: ownerName } })}
+                      {$t('admin.face_cleanup_review_tile_dest', { values: { name: destinationName } })}
                     </div>
                   {/if}
                 </button>
@@ -743,7 +796,9 @@
                   <span>{count}</span>
                   <span class="font-normal text-gray-500 dark:text-gray-400">
                     {state === 'owner'
-                      ? $t('admin.face_cleanup_review_tally_owner', { values: { name: ownerName } })
+                      ? destinations.length > 1
+                        ? $t('admin.face_cleanup_review_tally_owner_multi')
+                        : $t('admin.face_cleanup_review_tally_owner', { values: { name: ownerName } })
                       : $t(`admin.face_cleanup_review_tally_${state}`)}
                   </span>
                 </span>
@@ -756,7 +811,9 @@
                   data-testid="tally-added"
                 >
                   <span>+{restSelected.size}</span>
-                  <span class="font-normal">{$t('admin.face_cleanup_review_tally_added')}</span>
+                  <span class="font-normal">
+                    {$t('admin.face_cleanup_review_tally_added', { values: { name: destinationName } })}
+                  </span>
                 </span>
               {/if}
               <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-600">
@@ -852,7 +909,7 @@
         <h3 class="text-lg font-semibold">{$t('admin.face_cleanup_review_move_entire_confirm_title')}</h3>
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
           {$t('admin.face_cleanup_review_move_entire_confirm_body', {
-            values: { count: clusterTotal.toLocaleString(), owner: ownerName },
+            values: { count: clusterTotal.toLocaleString(), owner: destinationName },
           })}
         </p>
         <div class="mt-5 flex justify-end gap-3">

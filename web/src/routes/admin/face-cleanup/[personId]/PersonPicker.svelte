@@ -33,10 +33,13 @@
     // "this scan's suggestion" subtitle instead of a face count, matching the mockup's Paul Friedrich
     // Meischner row. Optional: a picker opened without scan context just omits the callout.
     suggestedPersonId?: string | null;
+    // The destination chooser feeds `entireCluster` (no lock field) and rest-staging (hardcoded lock:false),
+    // so it opens the picker with the lock hidden rather than showing a toggle its request cannot carry.
+    showLock?: boolean;
     onClose: (destination?: PersonPickerDestination) => void;
   };
 
-  const { ownerId, faceCount, suggestedPersonId = null, onClose }: Props = $props();
+  const { ownerId, faceCount, suggestedPersonId = null, showLock = true, onClose }: Props = $props();
 
   let query = $state('');
   let people = $state<OwnerPerson[]>([]);
@@ -138,19 +141,21 @@
         />
       </div>
 
-      <div class="flex items-center gap-2" data-testid="person-picker-lock-toggle">
-        <Checkbox
-          id="person-picker-lock"
-          size="tiny"
-          checked={lockOnMove}
-          onCheckedChange={() => (lockOnMove = !lockOnMove)}
-        />
-        <Label
-          label={$t('admin.face_cleanup_review_picker_lock_label')}
-          for="person-picker-lock"
-          class="text-xs text-gray-500 dark:text-gray-400"
-        />
-      </div>
+      {#if showLock}
+        <div class="flex items-center gap-2" data-testid="person-picker-lock-toggle">
+          <Checkbox
+            id="person-picker-lock"
+            size="tiny"
+            checked={lockOnMove}
+            onCheckedChange={() => (lockOnMove = !lockOnMove)}
+          />
+          <Label
+            label={$t('admin.face_cleanup_review_picker_lock_label')}
+            for="person-picker-lock"
+            class="text-xs text-gray-500 dark:text-gray-400"
+          />
+        </div>
+      {/if}
 
       {#if createError}
         <p class="text-xs font-medium text-red-600 dark:text-red-400" data-testid="person-picker-create-error">
