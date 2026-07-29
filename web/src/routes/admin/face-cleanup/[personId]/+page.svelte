@@ -146,8 +146,9 @@
   // Staged rest faces are KEPT even once their destination stops being usable — discarding a page of
   // deliberate selection over a dropdown mis-click (e.g. accidentally picking the reviewed cluster itself in
   // "Choose someone else…") was considered and rejected: a mis-click must not destroy real work. Apply is
-  // blocked instead, until the admin resolves the mismatch by picking a valid destination or unticking the
-  // staged faces — either is a single action, and both remain available (see the rest-tile's onclick above).
+  // blocked instead, until the admin resolves the mismatch by picking a valid destination (one action) or
+  // unticking every staged face — there is no deselect-all, so that is one click per face — and both remain
+  // available (see the rest-tile's onclick below).
   const restBlocked = $derived(!canBulkMove && restSelected.size > 0);
 
   const visibleFaces = $derived(vm.faces.slice(0, visibleCount));
@@ -705,6 +706,7 @@
             valueLabel={destinationName}
             onSelect={handleSelectDestination}
             onChooseOther={handleChooseOtherDestination}
+            disabled={!scanPerson}
           />
           {#if isSelfDestination}
             <span class="text-xs font-semibold text-red-600 dark:text-red-400" data-testid="destination-self-warning">
