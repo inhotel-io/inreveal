@@ -138,18 +138,17 @@
   // "empty" original. Scan suggestions can never be this cluster (the engine skips it), but the picker
   // searches the whole library, so the guard lives on the action.
   const isSelfDestination = $derived(destinationId === personId);
+  // Distinct from isSelfDestination: no suggestion survived at all (an orphan cluster, or every suggestion
+  // ownerMissing) — the two need their own explanations, since "pick a different destination" is nonsensical
+  // when there is no destination to begin with.
+  const noDestination = $derived(!destinationId);
   const canBulkMove = $derived(!!destinationId && !isSelfDestination);
-
-  // A staged rest-of-cluster face is silently dropped from Apply the instant its destination becomes
-  // unusable (buildApplyRequest below only builds the rest group when canBulkMove holds) — yet the ribbon and
-  // the dock's "+N added → {name}" chip both name a real person regardless. Clearing the staged set here
-  // means the UI can never affirmatively promise a destination Apply will not honour: either something is
-  // staged AND canBulkMove is true (so it really will move), or nothing is staged at all.
-  $effect(() => {
-    if (!canBulkMove && restSelected.size > 0) {
-      restSelected.clear();
-    }
-  });
+  // Staged rest faces are KEPT even once their destination stops being usable — discarding a page of
+  // deliberate selection over a dropdown mis-click (e.g. accidentally picking the reviewed cluster itself in
+  // "Choose someone else…") was considered and rejected: a mis-click must not destroy real work. Apply is
+  // blocked instead, until the admin resolves the mismatch by picking a valid destination or unticking the
+  // staged faces — either is a single action, and both remain available (see the rest-tile's onclick above).
+  const restBlocked = $derived(!canBulkMove && restSelected.size > 0);
 
   const visibleFaces = $derived(vm.faces.slice(0, visibleCount));
   const hasMore = $derived(visibleCount < vm.faces.length);
@@ -450,6 +449,12 @@
   // through: a confirmation on every Apply would train the admin to click past it, which is how you lose the
   // one warning that matters.
   const handleApply = () => {
+    // Belt-and-braces alongside apply-btn's own disabled gate below (same double-guard convention as
+    // handleMoveEntireCluster/confirmMoveEntireCluster): staged rest faces are never dropped silently, so
+    // Apply must refuse outright rather than quietly building a request that omits them.
+    if (restBlocked) {
+      return;
+    }
     if (vm.tally.detach > 0) {
       showDetachConfirm = true;
       return;
@@ -678,9 +683,14 @@
         <div class="flex flex-wrap items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
           <h3 class="text-sm font-semibold">
             {$t('admin.face_cleanup_review_rest_title', { values: { count: restTotal.toLocaleString() } })}
-            <span class="ml-2 font-normal text-gray-400">
-              {$t('admin.face_cleanup_review_rest_hint', { values: { owner: destinationName } })}
-            </span>
+            {#if canBulkMove}
+              <!-- Only shown once there IS a destination to name — an orphan cluster or a self-move used to
+                   read "add any that belong to Unnamed cluster"/the reviewed person's own name, naming a
+                   destination the admin cannot actually add faces to right now. -->
+              <span class="ml-2 font-normal text-gray-400">
+                {$t('admin.face_cleanup_review_rest_hint', { values: { owner: destinationName } })}
+              </span>
+            {/if}
           </h3>
           <div class="flex-1"></div>
           {#if restSelected.size > 0}
@@ -699,6 +709,10 @@
           {#if isSelfDestination}
             <span class="text-xs font-semibold text-red-600 dark:text-red-400" data-testid="destination-self-warning">
               {$t('admin.face_cleanup_review_dest_self')}
+            </span>
+          {:else if noDestination}
+            <span class="text-xs font-semibold text-red-600 dark:text-red-400" data-testid="destination-pick-warning">
+              {$t('admin.face_cleanup_review_dest_pick_first')}
             </span>
           {/if}
           <button
@@ -729,25 +743,31 @@
           <div class="grid grid-cols-4 gap-3 bg-gray-50 p-4 sm:grid-cols-6 lg:grid-cols-8 dark:bg-gray-800/50">
             {#each restFaces as face (face.assetFaceId)}
               {@const selected = restSelected.has(face.assetFaceId)}
+              {@const blocked = !canBulkMove && !selected}
               <div class="relative aspect-square">
                 <button
                   type="button"
                   class={[
                     'absolute inset-0 overflow-hidden rounded-xl border-2 transition-all',
                     selected ? 'border-primary' : 'border-transparent opacity-70 hover:opacity-100',
+                    blocked ? 'cursor-not-allowed opacity-30 hover:opacity-30' : '',
                   ].join(' ')}
+                  disabled={blocked}
                   onclick={() => {
-                    // Consistent with select-all-btn's disabled gate: staging a face onto a destination the
-                    // whole-cluster actions have already refused (no destination, or a self-move) would only
-                    // be dropped silently at Apply while the ribbon kept naming a destination that never moves.
+                    // Deselecting always works — a staged face is never trapped by a destination that later
+                    // became unusable (a mis-click into a self-move must not destroy deliberate selection, and
+                    // the admin's only way out otherwise would be to pick a new destination first). Only NEW
+                    // staging is gated: adding a face onto a destination the whole-cluster actions have
+                    // already refused would let the ribbon/dock chip start naming a destination Apply refuses
+                    // to use (see canBulkMove/restBlocked below).
+                    if (restSelected.has(face.assetFaceId)) {
+                      restSelected.delete(face.assetFaceId);
+                      return;
+                    }
                     if (!canBulkMove) {
                       return;
                     }
-                    if (restSelected.has(face.assetFaceId)) {
-                      restSelected.delete(face.assetFaceId);
-                    } else {
-                      restSelected.add(face.assetFaceId);
-                    }
+                    restSelected.add(face.assetFaceId);
                   }}
                   data-testid="rest-tile"
                   data-faceid={face.assetFaceId}
@@ -763,7 +783,9 @@
                     <div
                       class="absolute inset-x-0 bottom-0 bg-linear-to-t from-black/70 to-transparent px-1.5 pt-3 pb-1 text-[10px] font-semibold text-white"
                     >
-                      {$t('admin.face_cleanup_review_tile_dest', { values: { name: destinationName } })}
+                      {canBulkMove
+                        ? $t('admin.face_cleanup_review_tile_dest', { values: { name: destinationName } })
+                        : $t('admin.face_cleanup_review_tile_dest_pending')}
                     </div>
                   {/if}
                 </button>
@@ -832,7 +854,9 @@
                 >
                   <span>+{restSelected.size}</span>
                   <span class="font-normal">
-                    {$t('admin.face_cleanup_review_tally_added', { values: { name: destinationName } })}
+                    {canBulkMove
+                      ? $t('admin.face_cleanup_review_tally_added', { values: { name: destinationName } })
+                      : $t('admin.face_cleanup_review_tally_added_pending')}
                   </span>
                 </span>
               {/if}
@@ -841,7 +865,15 @@
                 {$t('admin.face_cleanup_review_tally_all_set')}
               </span>
             </div>
-            <Button color="primary" disabled={applying} onclick={handleApply} data-testid="apply-btn">
+            {#if restBlocked}
+              <!-- Same pattern as the self-move/no-destination warnings next to the whole-cluster buttons
+                   above: the disabled button explains itself right next to it, rather than leaving the admin
+                   to guess why Apply won't go. -->
+              <span class="text-xs font-semibold text-red-600 dark:text-red-400" data-testid="apply-blocked-reason">
+                {$t('admin.face_cleanup_review_apply_blocked_reason')}
+              </span>
+            {/if}
+            <Button color="primary" disabled={applying || restBlocked} onclick={handleApply} data-testid="apply-btn">
               <Icon icon={mdiArrowRight} size="16" />
               {restSelected.size > 0
                 ? $t('admin.face_cleanup_review_apply_label_added', {
