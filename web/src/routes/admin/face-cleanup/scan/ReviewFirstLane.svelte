@@ -157,13 +157,23 @@
               </div>
             </div>
 
-            <div class="{COL_DEST} items-center gap-2">
+            <div
+              class="{COL_DEST} items-center gap-2"
+              title={dest
+                ? `${dest.count} ${$t('admin.face_cleanup_faces')} → ${dest.ownerName ?? $t('admin.face_cleanup_unnamed')}`
+                : undefined}
+              data-testid={`review-destination-${person.personId}`}
+            >
               {#if dest}
                 <Icon icon={mdiArrowRight} size="16" class="flex-none text-gray-300" />
                 <div class="min-w-0">
                   <div class="truncate text-sm font-semibold">{dest.ownerName ?? $t('admin.face_cleanup_unnamed')}</div>
+                  <!-- The destination's OWN size. This used to print `dest.count` — the flagged faces routing
+                       here — directly under the destination's name, which read as "this cluster has 1 face". -->
                   <div class={bad ? 'text-xs text-red-500' : 'text-xs text-green-600'}>
-                    {bad ? $t('admin.face_cleanup_bad_target') : `${dest.count} ${$t('admin.face_cleanup_faces')}`}
+                    {bad
+                      ? $t('admin.face_cleanup_bad_target')
+                      : `${dest.ownerFaceCount.toLocaleString()} ${$t('admin.face_cleanup_faces')}`}
                   </div>
                 </div>
               {:else}

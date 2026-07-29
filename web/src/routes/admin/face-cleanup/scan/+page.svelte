@@ -43,6 +43,8 @@
       ownerName: string | null;
       thumbnailFaceId: string | null;
       count: number;
+      ownerFaceCount: number;
+      ownerMissing: boolean;
     }[];
     recommendation: 'confident' | 'review-first';
     reviewReasons: string[];

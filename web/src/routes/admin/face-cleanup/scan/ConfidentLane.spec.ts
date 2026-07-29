@@ -33,7 +33,9 @@ const conf = (id: string): FaceCleanupPerson => ({
   eligible: 10,
   flagged: 2,
   flaggedFraction: 0.2,
-  suspectedOwners: [{ ownerPersonId: 'd', ownerName: 'Dest', thumbnailFaceId: 'f', count: 2 }],
+  suspectedOwners: [
+    { ownerPersonId: 'd', ownerName: 'Dest', thumbnailFaceId: 'f', count: 2, ownerFaceCount: 2, ownerMissing: false },
+  ],
   recommendation: 'confident',
   reviewReasons: [],
 });
