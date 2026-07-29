@@ -2,6 +2,7 @@ import {
   FaceRepairClusterFacesRequestSchema,
   FaceRepairDeclineRemoveRequestSchema,
   FaceRepairResolveRequestSchema,
+  FaceRepairScanStatusSchema,
   FaceRepairScanTriggerRequestSchema,
 } from 'src/dtos/face-repair.dto';
 import { describe, expect, it } from 'vitest';
@@ -257,5 +258,60 @@ describe('FaceRepairResolveRequestSchema face-array bounds (C4)', () => {
       faceIds: [bulkUuid(500_000 + i)],
     }));
     expect(FaceRepairResolveRequestSchema.safeParse({ personId: UUID_V4, moveToPerson }).success).toBe(false);
+  });
+});
+
+describe('ScanSuspectedOwnerSchema (via FaceRepairScanStatusSchema)', () => {
+  const scan = (owner: Record<string, unknown>) => ({
+    id: 'scan-1',
+    status: 'completed',
+    progress: null,
+    totals: null,
+    persons: [
+      {
+        personId: UUID_V4,
+        ownerId: UUID_V4,
+        personName: null,
+        faceCount: 10,
+        thumbnailFaceId: null,
+        eligible: 10,
+        flagged: 3,
+        flaggedFraction: 0.3,
+        suspectedOwners: [owner],
+        recommendation: 'review-first',
+        reviewReasons: [],
+      },
+    ],
+    error: null,
+    startedAt: null,
+    finishedAt: null,
+    createdAt: '2026-07-29T00:00:00.000Z',
+  });
+
+  const validOwner = {
+    ownerPersonId: UUID_V4,
+    ownerName: 'Katrin',
+    thumbnailFaceId: null,
+    count: 2201,
+    ownerFaceCount: 1204,
+    ownerMissing: false,
+  };
+
+  it('accepts an owner carrying both its routing share and its own face count', () => {
+    const parsed = FaceRepairScanStatusSchema.safeParse(scan(validOwner));
+    expect(parsed.success && parsed.data.persons[0].suspectedOwners[0]).toMatchObject({
+      ownerFaceCount: 1204,
+      ownerMissing: false,
+    });
+  });
+
+  it('rejects a bigint-as-string face count (what Postgres count() returns unconverted)', () => {
+    const result = FaceRepairScanStatusSchema.safeParse(scan({ ...validOwner, ownerFaceCount: '1204' }));
+    expect(result.success).toBe(false);
+  });
+
+  it('requires the overlay to state whether the destination still exists', () => {
+    const { ownerMissing: _ownerMissing, ...withoutFlag } = validOwner;
+    expect(FaceRepairScanStatusSchema.safeParse(scan(withoutFlag)).success).toBe(false);
   });
 });

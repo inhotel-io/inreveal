@@ -83,7 +83,15 @@ const ScanSuspectedOwnerSchema = z.object({
   ownerPersonId: z.string(),
   ownerName: z.string().nullable(),
   thumbnailFaceId: z.string().nullable(),
+  // Two different numbers, one of which used to do duty for both — which is how the console came to print
+  // "Unnamed cluster / 1 faces" under a destination holding thousands.
+  //   count          — PERSISTED, scan-time: flagged faces on THIS cluster routing to this owner.
+  //   ownerFaceCount — OVERLAY, live: the destination person's own face count.
   count: z.number(),
+  ownerFaceCount: z.number(),
+  // The destination person row is gone (deleted or merged since the scan). The console renders a warning and
+  // refuses to offer it as a destination, rather than letting Apply fail with face-repair:destination-missing.
+  ownerMissing: z.boolean(),
 });
 const ScanPersonSchema = z.object({
   personId: z.string(),

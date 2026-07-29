@@ -25,7 +25,13 @@ export interface RepairScanSuspectedOwner {
   ownerPersonId: string;
   ownerName: string | null;
   thumbnailFaceId: string | null;
+  // Flagged faces on the reviewed cluster routing to this owner. PERSISTED at scan time.
   count: number;
+  // Overlay-only, filled by withCurrentNames — never present in the persisted scan JSON, which is why these
+  // are optional here and required in ScanSuspectedOwnerSchema. enrichReportPersons writes the scan-time shape
+  // and must not set them; getLatestScan always fills them before the DTO boundary.
+  ownerFaceCount?: number;
+  ownerMissing?: boolean;
 }
 
 export interface RepairScanPerson {
@@ -214,14 +220,28 @@ export class FaceRepairScanRepository {
       return scan;
     }
     const ids = [...new Set(persons.flatMap((p) => [p.personId, ...p.suspectedOwners.map((o) => o.ownerPersonId)]))];
+    // The join predicate must stay identical to FaceRepairRepository.getPersonMetadata and .searchOwnerPeople:
+    // the review page renders this count next to the picker's, and a disagreement reads as a bug. It is covered
+    // by the partial index asset_face_personId_assetId_notDeleted_isVisible_idx.
     const rows = await this.db
       .selectFrom('person')
-      .select(['id', 'name', 'faceAssetId'])
-      .where('id', 'in', ids)
+      .leftJoin('asset_face', (join) =>
+        join
+          .onRef('asset_face.personId', '=', 'person.id')
+          .on('asset_face.deletedAt', 'is', null)
+          .on('asset_face.isVisible', '=', true),
+      )
+      .select(['person.id as id', 'person.name as name', 'person.faceAssetId as faceAssetId'])
+      .select((eb) => eb.fn.count('asset_face.id').as('faceCount'))
+      .where('person.id', 'in', ids)
+      .groupBy(['person.id'])
       .execute();
     const byId = new Map(rows.map((r) => [r.id, r]));
     const nameOf = (id: string) => (byId.get(id)?.name ? byId.get(id)!.name : null);
     const thumbOf = (id: string) => byId.get(id)?.faceAssetId ?? null;
+    // count() is bigint, which the driver returns as a STRING. Every other face count in this service converts
+    // (getPersonMetadata:108); leaving it a string fails z.number() and breaks {count, number} in the web.
+    const faceCountOf = (id: string) => Number(byId.get(id)?.faceCount ?? 0);
 
     const refreshed = persons.map((p) => {
       const personName = nameOf(p.personId);
@@ -232,12 +252,17 @@ export class FaceRepairScanRepository {
         ...p,
         personName,
         thumbnailFaceId: thumbOf(p.personId),
+        // Live, like the name and thumbnail beside it. A cluster whose row is gone keeps its snapshot count
+        // rather than claiming the cluster the admin is looking at has zero faces.
+        faceCount: byId.has(p.personId) ? faceCountOf(p.personId) : p.faceCount,
         recommendation: (namedNow ? 'review-first' : p.recommendation) as RepairScanPerson['recommendation'],
         reviewReasons,
         suspectedOwners: p.suspectedOwners.map((o) => ({
           ...o,
           ownerName: nameOf(o.ownerPersonId),
           thumbnailFaceId: thumbOf(o.ownerPersonId),
+          ownerFaceCount: faceCountOf(o.ownerPersonId),
+          ownerMissing: !byId.has(o.ownerPersonId),
         })),
       };
     });
