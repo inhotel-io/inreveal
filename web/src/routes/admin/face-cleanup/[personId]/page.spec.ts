@@ -1434,8 +1434,9 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     // A self-move is refused, but individual rest tiles (unlike select-all-btn) were never gated on the same
     // guard — ticking one staged a face the ribbon and the dock chip both named a real destination for, even
     // though buildApplyRequest's own guard would drop it from the resolve. The UI must never affirmatively
-    // claim a destination Apply will not honour.
-    it('refuses to stage a rest-of-cluster face while the chosen destination cannot be honoured', async () => {
+    // claim a destination Apply will not honour. This covers the ADD-only half of the gate: the tile was never
+    // selected to begin with, so there is nothing to un-stage — only new staging is at stake here.
+    it('refuses to newly stage a rest-of-cluster face while the chosen destination cannot be honoured', async () => {
       vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
         faces: [restFace('rest-1'), restFace('rest-2')],
         total: 2,
@@ -1449,6 +1450,10 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('destination-choose-other'));
       await waitFor(() => expect(screen.getByTestId('destination-self-warning')).toBeInTheDocument());
 
+      // The tile now also carries its own inert affordance (disabled + dimmed) — before this, the clicks at
+      // least appeared to work even though they silently did nothing.
+      await waitFor(() => expect(screen.getAllByTestId('rest-tile')[0]).toBeDisabled());
+
       await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
 
       expect(screen.getAllByTestId('rest-tile')[0]).toHaveAttribute('data-selected', 'false');
@@ -1456,9 +1461,11 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     });
 
     // Reproduces the exact sequence the review found live: stage rest faces onto a VALID destination first,
-    // then invalidate that destination (self-move) — the faces were already staged before the guard could ever
-    // apply to them, so gating the tile's onclick alone does not cover this case.
-    it('un-stages already-added rest faces the instant the chosen destination becomes invalid', async () => {
+    // then invalidate that destination (self-move). A prior version of this test asserted the faces got
+    // silently un-staged — that contract was rejected outright (a mis-click into a self-move must not destroy
+    // a page of deliberate selection), so the faces now stay staged, the chip stops naming the (unusable)
+    // destination, and Apply refuses to proceed until the admin resolves the mismatch.
+    it('keeps already-staged rest faces when their destination becomes invalid, and blocks Apply instead of dropping them', async () => {
       vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
         faces: [restFace('rest-1'), restFace('rest-2')],
         total: 2,
@@ -1469,13 +1476,69 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getByTestId('select-all-btn')).toBeEnabled());
 
       await fireEvent.click(screen.getByTestId('select-all-btn'));
-      await waitFor(() => expect(screen.getByTestId('tally-added')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('tally-added')).toHaveTextContent('+2'));
 
       showModal.mockResolvedValue({ personId: PERSON_ID, name: 'Jula', lock: false });
       await fireEvent.click(screen.getByTestId('destination-choose-other'));
 
       await waitFor(() => expect(screen.getByTestId('destination-self-warning')).toBeInTheDocument());
-      expect(screen.queryByTestId('tally-added')).not.toBeInTheDocument();
+
+      // Kept, not discarded.
+      expect(screen.getByTestId('tally-added')).toHaveTextContent('+2');
+      // ...and the chip stops affirmatively naming a destination Apply will not use.
+      expect(
+        within(screen.getByTestId('tally-added')).getByText('admin.face_cleanup_review_tally_added_pending'),
+      ).toBeInTheDocument();
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      expect(resolveFaces).not.toHaveBeenCalled();
+      expect(screen.getByTestId('apply-blocked-reason')).toBeInTheDocument();
+    });
+
+    // The gate only ever blocks NEW staging — deselecting must always work, or the admin would be stranded
+    // with no way out of a blocked state short of finding a valid destination.
+    it('still allows un-staging an already-added rest face while destination staging is blocked', async () => {
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+        faces: [restFace('rest-1'), restFace('rest-2')],
+        total: 2,
+        hasMore: false,
+      } as unknown as FaceRepairClusterFacesResponseDto);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('select-all-btn')).toBeEnabled());
+      await fireEvent.click(screen.getByTestId('select-all-btn'));
+      await waitFor(() => expect(screen.getAllByTestId('rest-tile')[0]).toHaveAttribute('data-selected', 'true'));
+
+      showModal.mockResolvedValue({ personId: PERSON_ID, name: 'Jula', lock: false });
+      await fireEvent.click(screen.getByTestId('destination-choose-other'));
+      await waitFor(() => expect(screen.getByTestId('destination-self-warning')).toBeInTheDocument());
+
+      // Already-selected tiles are never disabled — only staging NEW ones is gated.
+      expect(screen.getAllByTestId('rest-tile')[0]).toBeEnabled();
+
+      await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
+
+      await waitFor(() => expect(screen.getAllByTestId('rest-tile')[0]).toHaveAttribute('data-selected', 'false'));
+    });
+
+    // Item 5 from the review: the no-destination path (an orphan cluster, or every suggestion ownerMissing)
+    // used to leave the rest grid looking exactly as clickable as normal while silently doing nothing, with no
+    // explanation anywhere. The self-move warning slot now also covers this distinct case.
+    it('explains why staging is blocked, and disables the tiles, when no destination has been picked yet', async () => {
+      const orphan = makeScanPerson({ suspectedOwners: [] });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([orphan]) as unknown as object);
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+        faces: [restFace('rest-1')],
+        total: 1,
+        hasMore: false,
+      } as unknown as FaceRepairClusterFacesResponseDto);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('destination-pick-warning')).toBeInTheDocument());
+      expect(screen.queryByTestId('destination-self-warning')).not.toBeInTheDocument();
+      expect(screen.getByTestId('rest-tile')).toBeDisabled();
     });
 
     // A prior version of this test only re-chose the default (OWNER_A_ID) after a dismiss with nothing ever
