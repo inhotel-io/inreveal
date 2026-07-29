@@ -578,6 +578,13 @@ export class FaceRepairService extends BaseService {
     }
     // Refresh display names/thumbnails from the live person table — people get named after a scan and the
     // persisted report is only a snapshot. Keeps the console legible without an expensive full re-scan.
+    //
+    // withCurrentNames adds ownerFaceCount/ownerMissing to each suspected owner; withLiveFlaggedCounts below
+    // carries them through only via its `{ ...owner }` spread when it rebuilds suspectedOwners. Expanding
+    // that spread into an explicit literal silently drops both fields (verified by hand: swapping the call
+    // order alone does NOT reproduce the drop, because withCurrentNames re-adds the fields unconditionally
+    // whichever pass runs last — the spread, not the order, is the load-bearing piece). Pinned by
+    // face-repair.scan.spec.ts ("carries the destination overlay through the live flagged-count recompute").
     const withNames = await this.faceRepairScanRepository.withCurrentNames(scan);
     return this.withLiveFlaggedCounts(withNames);
   }
@@ -628,6 +635,10 @@ export class FaceRepairService extends BaseService {
           ...p,
           flagged: surviving.length,
           flaggedFraction: p.eligible > 0 ? surviving.length / p.eligible : 0,
+          // `...owner` is what preserves the overlay fields withCurrentNames added (ownerFaceCount,
+          // ownerMissing). Do not expand this into an explicit object literal — face-repair.scan.spec.ts
+          // ("carries the destination overlay through the live flagged-count recompute") fails with
+          // `ownerFaceCount: undefined` if this ever regresses.
           suspectedOwners: p.suspectedOwners
             .map((owner) => ({ ...owner, count: countByOwner.get(owner.ownerPersonId) ?? 0 }))
             .filter((owner) => owner.count > 0),
