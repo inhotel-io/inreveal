@@ -365,6 +365,25 @@ describe(FaceRepairScanRepository.name, () => {
       expect(person.suspectedOwners[0].ownerFaceCount).toBe(metadata!.faceCount);
     });
 
+    // The destination chooser (DestinationSelect) labels its options with searchOwnerPeople's faceCount, while
+    // the destination card / tooltip label the same person with withCurrentNames' ownerFaceCount — a
+    // disagreement between the two surfaces would read as a bug. All three join predicates
+    // (getPersonMetadata, searchOwnerPeople, withCurrentNames) are identical today, so this is a pin against
+    // future drift, not a live defect.
+    it('agrees with searchOwnerPeople for the same person', async () => {
+      const user = mediumFactory.userInsert({});
+      await db.insertInto('user').values(user).execute();
+      const cluster = await insertPersonWithFaces(user.id, 1);
+      const owner = await insertPersonWithFaces(user.id, 4, { deleted: 3, invisible: 2 });
+
+      const [person] = await scanWith(cluster, [owner]);
+      const { people } = await new FaceRepairRepository(db).searchOwnerPeople(user.id, { page: 0, size: 50 });
+      const match = people.find((p) => p.id === owner);
+
+      expect(person.suspectedOwners[0].ownerFaceCount).toBe(4);
+      expect(person.suspectedOwners[0].ownerFaceCount).toBe(match!.faceCount);
+    });
+
     it('marks a suspected owner whose person row was deleted as missing, with a zero count', async () => {
       const user = mediumFactory.userInsert({});
       await db.insertInto('user').values(user).execute();
