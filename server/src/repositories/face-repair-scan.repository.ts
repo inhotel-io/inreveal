@@ -29,7 +29,7 @@ export interface RepairScanSuspectedOwner {
   count: number;
   // Overlay-only, filled by withCurrentNames — never present in the persisted scan JSON, which is why these
   // are optional here and required in ScanSuspectedOwnerSchema. enrichReportPersons writes the scan-time shape
-  // and must not set them; getLatestScan always fills them before the DTO boundary.
+  // and must not set them; FaceRepairService.getLatestScanStatus always fills them before the DTO boundary.
   ownerFaceCount?: number;
   ownerMissing?: boolean;
 }

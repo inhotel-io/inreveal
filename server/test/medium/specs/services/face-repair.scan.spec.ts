@@ -285,8 +285,9 @@ describe('FaceRepairService.handleFaceRepairScan', () => {
 
   it('carries the destination overlay through the live flagged-count recompute', async () => {
     // withLiveFlaggedCounts rebuilds every suspectedOwner. If its object spread is ever replaced with an
-    // explicit literal, or it runs BEFORE withCurrentNames, the overlay fields vanish between the repository
-    // and the client with nothing else failing.
+    // explicit literal, the overlay fields vanish between the repository and the client with nothing else
+    // failing. (Swapping the call order alone does NOT reproduce this — verified by hand; see
+    // face-repair.service.ts:582-587.)
     const { sut, ctx } = setup();
     const scanRepo = ctx.get(FaceRepairScanRepository);
     const { user } = await ctx.newUser();
