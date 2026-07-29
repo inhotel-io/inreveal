@@ -531,7 +531,16 @@ test.describe.serial('Face Cleanup', () => {
     expect(box!.y + box!.height).toBeGreaterThanOrEqual(viewport!.height - SHELL_INSET_TOLERANCE);
 
     // Sanity: it really is the dock below the review grid, not some other element that happens to hug the bottom.
-    expect(box!.y).toBeGreaterThan(grid!.y + grid!.height);
+    //
+    // Compared against the grid's TOP, not its bottom. `boundingBox()` reports layout geometry, including the
+    // part of an element scrolled out of view — so once the page content exceeds the viewport, the grid's
+    // reported bottom extends past the pinned footer even though it is visually clipped above it. The old
+    // `grid.y + grid.height` form therefore encoded "this review is short enough not to scroll", which is a
+    // property of the fixture, not of the dock. Adding the destination cards above the grid made a one-face
+    // review tall enough to scroll and broke it (grid bottom 709 vs dock top 617) while the dock was still
+    // correctly pinned. Ordering against the grid's top is scroll-independent and still catches a dock that
+    // renders above the review content.
+    expect(box!.y).toBeGreaterThan(grid!.y);
   });
 
   /**
