@@ -710,14 +710,22 @@ export class GlobalSearchManager {
    * (#869). The thumbnail already 400s, so the row rendered as a blank tile with a
    * readable name.
    *
-   * Only an explicit refusal purges. 400/403/404 mirror `activateAlbum`'s stale-entry
-   * branch — Gallery's `requireAccess` answers 400 (BadRequestException) for both "row
-   * missing" and "no access", so it sits alongside the canonical 404/403. A network
-   * failure leaves history intact rather than erasing it on a dropped connection, and an
-   * abort (palette closed mid-flight) is a no-op because the next open re-runs the check.
+   * Two things drop a row:
    *
-   * An elevated session resolves its own locked assets just fine, so entries survive
-   * while the folder is unlocked and are dropped on the first open after it re-locks.
+   *  - The server refuses it. 400/403/404 mirror `activateAlbum`'s stale-entry branch —
+   *    Gallery's `requireAccess` answers 400 (BadRequestException) for both "row missing"
+   *    and "no access", so it sits alongside the canonical 404/403. This is the deleted-
+   *    asset and lapsed-PIN case.
+   *  - It resolves but sits in the locked folder. Moving a photo there requires an
+   *    elevated session (`asset.service.ts` `requireElevatedPermission`), so the caller
+   *    can still resolve it for the rest of the PIN window — a refusal-only check would
+   *    leave the row up for 15+ minutes right after the user locked it. Gating on the
+   *    visibility instead also matches the palette's searches, which pin Timeline, so a
+   *    locked photo is not reachable from the palette by any route.
+   *
+   * A network failure leaves history intact rather than erasing it on a dropped
+   * connection, and an abort (palette closed mid-flight) is a no-op because the next open
+   * re-runs the check.
    */
   async validatePhotoRecents() {
     const photos = getEntries().filter(
@@ -729,7 +737,11 @@ export class GlobalSearchManager {
     await Promise.all(
       photos.map(async (entry) => {
         try {
-          await getAssetInfo({ id: entry.assetId }, { signal: this.closeSignal });
+          const asset = await getAssetInfo({ id: entry.assetId }, { signal: this.closeSignal });
+          if (asset.visibility === AssetVisibility.Locked) {
+            removeEntry(entry.id);
+            this.recentsRevision++;
+          }
         } catch (error: unknown) {
           if (error instanceof Error && error.name === 'AbortError') {
             return;

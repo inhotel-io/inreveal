@@ -2939,12 +2939,33 @@ describe('photo recents revalidation', () => {
 
   it('keeps a photo recent the user can still open', async () => {
     addEntry(photoEntry);
-    vi.mocked(getAssetInfo).mockResolvedValue({ id: 'a1' } as unknown as Awaited<ReturnType<typeof getAssetInfo>>);
+    vi.mocked(getAssetInfo).mockResolvedValue({
+      id: 'a1',
+      visibility: AssetVisibility.Timeline,
+    } as unknown as Awaited<ReturnType<typeof getAssetInfo>>);
 
     const m = new GlobalSearchManager();
     await m.validatePhotoRecents();
 
     expect(getEntries().map((entry) => entry.id)).toEqual(['photo:a1']);
+  });
+
+  // Moving a photo into the locked folder requires an elevated session
+  // (asset.service.ts requireElevatedPermission), so right after the move the caller can
+  // still resolve it — a refusal-only check would keep the row until the PIN window
+  // lapsed. Drop it on the visibility itself, which also matches the palette's searches:
+  // they pin Timeline, so a locked photo is not reachable from the palette either way.
+  it('drops a photo recent that has moved into the locked folder even while unlocked', async () => {
+    addEntry(photoEntry);
+    vi.mocked(getAssetInfo).mockResolvedValue({
+      id: 'a1',
+      visibility: AssetVisibility.Locked,
+    } as unknown as Awaited<ReturnType<typeof getAssetInfo>>);
+
+    const m = new GlobalSearchManager();
+    await m.validatePhotoRecents();
+
+    expect(getEntries()).toEqual([]);
   });
 
   // A dropped connection must not erase history — only an explicit refusal does.
