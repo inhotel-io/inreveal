@@ -13175,6 +13175,15 @@
             }
           },
           {
+            "name": "city",
+            "required": false,
+            "in": "query",
+            "description": "Filter by city",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "country",
             "required": false,
             "in": "query",
@@ -13246,6 +13255,15 @@
             "description": "Filter by camera make",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "mediaType",
+            "required": false,
+            "in": "query",
+            "description": "Filter by asset type",
+            "schema": {
+              "$ref": "#/components/schemas/AssetTypeEnum"
             }
           },
           {
@@ -31734,6 +31752,13 @@
           "smartSearch": {
             "description": "Whether smart search is enabled",
             "type": "boolean"
+          },
+          "syncRequestTypes": {
+            "description": "Sync stream request types this server accepts. Absent on servers that predate capability signalling; clients fall back to version-based gating.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "trash": {
             "description": "Whether trash feature is enabled",
