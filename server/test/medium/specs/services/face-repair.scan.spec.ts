@@ -282,4 +282,57 @@ describe('FaceRepairService.handleFaceRepairScan', () => {
     expect(tunedRun!.totals!.toRepair).toBe(0);
     expect(tunedRun!.totals!.reviewOnlyByReason.overCap).toBeGreaterThan(0);
   });
+
+  it('carries the destination overlay through the live flagged-count recompute', async () => {
+    // withLiveFlaggedCounts rebuilds every suspectedOwner. If its object spread is ever replaced with an
+    // explicit literal, or it runs BEFORE withCurrentNames, the overlay fields vanish between the repository
+    // and the client with nothing else failing.
+    const { sut, ctx } = setup();
+    const scanRepo = ctx.get(FaceRepairScanRepository);
+    const { user } = await ctx.newUser();
+
+    const karinaData = mediumFactory.personInsert({ ownerId: user.id, name: 'Karina' });
+    await db.insertInto('person').values(karinaData).execute();
+    for (let i = 0; i < 10; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: karinaData.id });
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+    }
+
+    const alexiaData = mediumFactory.personInsert({ ownerId: user.id, name: 'Alexia' });
+    await db.insertInto('person').values(alexiaData).execute();
+    for (let i = 0; i < 3; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaData.id });
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+    }
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaData.id });
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+    }
+
+    const scan = await scanRepo.createScan({ requestedBy: null, params: PARAMS });
+    await sut.handleFaceRepairScan({ scanId: scan.id });
+
+    const latest = await sut.getLatestScanStatus();
+    const alexia = latest!.persons.find((p) => p.personId === alexiaData.id)!;
+    const destination = alexia.suspectedOwners.find((o) => o.ownerPersonId === karinaData.id)!;
+
+    // Karina has 10 real faces; the routing share is the 3 leaked onto Alexia. Two different numbers, and
+    // both must survive the recompute.
+    expect(destination.ownerFaceCount).toBe(10);
+    expect(destination.ownerMissing).toBe(false);
+    expect(destination.count).toBeGreaterThan(0);
+    expect(destination.count).not.toBe(destination.ownerFaceCount);
+  });
 });
