@@ -242,7 +242,7 @@
     "face_cleanup_resolutions_undo_success": "已撤销",
     "face_cleanup_retry_scan": "重试扫描",
     "face_cleanup_review": "审查",
-    "face_cleanup_review_apply_blocked_reason": "新增的人脸无法发送到此目标——请选择有效目标，或取消勾选后继续。",
+    "face_cleanup_review_apply_blocked_reason": "已添加的人脸无法发送到此目标——请选择有效目标，或取消勾选这些人脸后继续。",
     "face_cleanup_review_apply_conflict": "识别或扫描任务正在进行中，请稍候再试。您的选择已保留。",
     "face_cleanup_review_apply_error": "无法应用重新归属。您的选择已保留。",
     "face_cleanup_review_apply_error_reason": "无法应用重新归属：{reason}。您的选择已保留。",

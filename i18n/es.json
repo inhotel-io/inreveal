@@ -242,7 +242,7 @@
     "face_cleanup_resolutions_undo_success": "Deshecho",
     "face_cleanup_retry_scan": "Reintentar análisis",
     "face_cleanup_review": "Revisar",
-    "face_cleanup_review_apply_blocked_reason": "Las caras añadidas no pueden ir a este destino: elige uno válido o desmárcalas para continuar.",
+    "face_cleanup_review_apply_blocked_reason": "Las caras añadidas no pueden enviarse a este destino: elige uno válido o desmárcalas para continuar.",
     "face_cleanup_review_apply_conflict": "Hay una tarea de reconocimiento o análisis en curso: espera e inténtalo de nuevo. Tu selección se conserva.",
     "face_cleanup_review_apply_error": "No se pudo aplicar la reatribución. Tu selección se conserva.",
     "face_cleanup_review_apply_error_reason": "No se pudo aplicar la reatribución: {reason}. Tu selección se conserva.",

@@ -242,7 +242,7 @@
     "face_cleanup_resolutions_undo_success": "Ongedaan gemaakt",
     "face_cleanup_retry_scan": "Scan opnieuw proberen",
     "face_cleanup_review": "Beoordelen",
-    "face_cleanup_review_apply_blocked_reason": "Toegevoegde gezichten kunnen niet naar deze bestemming — kies een geldige bestemming of vink ze uit om door te gaan.",
+    "face_cleanup_review_apply_blocked_reason": "Toegevoegde gezichten kunnen niet naar deze bestemming worden verplaatst — kies een geldige bestemming of vink ze uit om door te gaan.",
     "face_cleanup_review_apply_conflict": "Er loopt een herkennings- of scantaak — wacht even en probeer het opnieuw. Je selectie blijft behouden.",
     "face_cleanup_review_apply_error": "Kan de hertoewijzing niet toepassen. Je selectie blijft behouden.",
     "face_cleanup_review_apply_error_reason": "Kan de hertoewijzing niet toepassen: {reason}. Je selectie blijft behouden.",
