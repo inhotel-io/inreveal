@@ -1,6 +1,6 @@
 import type { PersonFaceSuggestionPageResponseDto, PersonResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PersonSuggestionReviewModal from '$lib/modals/PersonSuggestionReviewModal.svelte';
@@ -63,8 +63,18 @@ describe('PersonSuggestionReviewModal', () => {
     vi.mocked(handleError).mockClear();
   });
 
+  // bits-ui's body-scroll-lock schedules `resetBodyStyle` on a 24ms `window.setTimeout` when a modal unmounts
+  // (`body-scroll-lock.svelte.js`, the same-tick destroy/create guard). That callback touches `document.body`,
+  // so if it is still pending when vitest tears the environment down it throws an UNHANDLED
+  // `ReferenceError: document is not defined` — which fails the whole job even with every test passing.
+  //
+  // Unmounting EXPLICITLY here is the load-bearing part. @testing-library/svelte registers its auto-cleanup
+  // afterEach at import time, so it runs AFTER this hook — meaning a bare sleep here waits BEFORE the unmount
+  // that schedules the timer, and drains nothing. It only ever passed by winning a race, and lost that race
+  // once this file's scheduling shifted. cleanup() forces the unmount first, then we outwait the 24ms.
   afterEach(async () => {
-    await new Promise((r) => setTimeout(r, 50)); // bits-ui scroll-lock drain
+    cleanup();
+    await new Promise((r) => setTimeout(r, 50));
   });
 
   it('loads page 1 and shows the first candidate + reference + counter', async () => {
