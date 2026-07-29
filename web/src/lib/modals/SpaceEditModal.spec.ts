@@ -1,10 +1,10 @@
 import { UserAvatarColor, type SharedSpaceResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 // userEvent (not fireEvent) for the submit button: it dispatches the full pointer/click sequence
 // that actually triggers form submission in happy-dom. PersonEditBirthDateModal.spec does the same.
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SpaceEditModal from './SpaceEditModal.svelte';
 
 const updateSpaceDetailsMock = vi.hoisted(() => vi.fn());
@@ -32,6 +32,19 @@ const saveButton = () => screen.getByRole('button', { name: 'Save' });
 beforeEach(() => {
   vi.clearAllMocks();
   updateSpaceDetailsMock.mockResolvedValue(true);
+});
+
+// bits-ui's body-scroll-lock schedules `resetBodyStyle` on a 24ms `window.setTimeout` when a modal unmounts
+// (`body-scroll-lock.svelte.js`, the same-tick destroy/create guard). That callback touches `document.body`, so
+// a still-pending timer at environment teardown throws an UNHANDLED `ReferenceError: document is not defined`
+// and fails the job even with every test green.
+//
+// Unmounting EXPLICITLY is the load-bearing part: @testing-library/svelte registers its auto-cleanup afterEach
+// at import time, so it runs AFTER this hook — a bare sleep would wait BEFORE the unmount that schedules the
+// timer and drain nothing. cleanup() forces the unmount first, then we outwait the 24ms.
+afterEach(async () => {
+  cleanup();
+  await new Promise((r) => setTimeout(r, 50));
 });
 
 describe('SpaceEditModal', () => {
