@@ -153,11 +153,17 @@ Three constraints on this query:
   `asset_face_personId_assetId_notDeleted_isVisible_idx` (`asset-face.table.ts:31`, predicate
   `"deletedAt" IS NULL AND "isVisible" IS TRUE`), so this is one index-backed aggregate over the
   scan's distinct person ids, once per scan read.
-- **Ordering is load-bearing.** `getLatestScan` runs `withCurrentNames` **then**
+- **The spread is load-bearing.** `getLatestScanStatus` runs `withCurrentNames` **then**
   `withLiveFlaggedCounts` (`face-repair.service.ts:581-582`), and the latter _rebuilds_ each
-  suspected owner via `.map((owner) => ({ ...owner, count }))`. The spread is what carries
-  `ownerFaceCount` / `ownerMissing` through. Reversing the two, or replacing that spread with an
-  explicit object literal, silently drops both fields. This gets a comment at both sites and a test.
+  suspected owner via `.map((owner) => ({ ...owner, count }))`. That spread is what carries
+  `ownerFaceCount` / `ownerMissing` through; replacing it with an explicit object literal silently
+  drops both fields. This gets a comment at both sites and a test.
+
+  **Corrected 2026-07-29, during implementation.** This spec originally claimed the _call order_ was
+  load-bearing too. That is false, and was proven so: `withCurrentNames` sets both fields
+  unconditionally on whatever list it is handed, so whichever pass runs last wins and either order
+  yields a correct payload. Only the spread matters. The regression test pins the spread; there is
+  deliberately no order-specific pin, because there is no order-specific defect to catch.
 
 `withLiveFlaggedCounts` also `.filter((owner) => owner.count > 0)` (`:633`), so an owner whose flagged
 faces have all been settled since the scan disappears from `suspectedOwners` entirely. The card list
