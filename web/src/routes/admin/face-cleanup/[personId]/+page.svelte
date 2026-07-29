@@ -20,6 +20,8 @@
   import { getServerErrorMessage, handleError } from '$lib/utils/handle-error';
   import ActionsHelpModal from './ActionsHelpModal.svelte';
   import type { PageData } from './$types';
+  import { selectableDestinations, sortDestinations, type SuspectedOwner } from './destination';
+  import DestinationCards from './DestinationCards.svelte';
   import PersonPicker from './PersonPicker.svelte';
   import {
     createReviewModel,
@@ -39,12 +41,7 @@
     eligible: number;
     flagged: number;
     flaggedFraction: number;
-    suspectedOwners: {
-      ownerPersonId: string;
-      ownerName: string | null;
-      thumbnailFaceId: string | null;
-      count: number;
-    }[];
+    suspectedOwners: SuspectedOwner[];
     recommendation: 'confident' | 'review-first';
     reviewReasons: string[];
   }
@@ -117,7 +114,11 @@
   // Derived person metadata
   const personName = $derived(scanPerson?.personName ?? $t('admin.face_cleanup_review_unnamed'));
   const faceCount = $derived(scanPerson?.faceCount ?? 0);
-  const primaryOwner = $derived(scanPerson?.suspectedOwners?.[0] ?? null);
+  const destinations = $derived(sortDestinations(scanPerson?.suspectedOwners ?? []));
+  const selectable = $derived(selectableDestinations(destinations));
+  // Retained for the tile ribbons and the tally, which name a face's OWN destination; no longer the page's
+  // single source of truth for where anything goes.
+  const primaryOwner = $derived(selectable[0] ?? null);
   const ownerName = $derived(primaryOwner?.ownerName ?? $t('admin.face_cleanup_review_unnamed'));
   const ownerPersonId = $derived(primaryOwner?.ownerPersonId ?? null);
 
@@ -490,8 +491,11 @@
           <h3 class="mb-1 text-sm font-semibold">
             {$t('admin.face_cleanup_review_banner_title', { values: { count: flaggedFaces.length } })}
           </h3>
+          <div class="mb-3">
+            <DestinationCards owners={destinations} />
+          </div>
           <p class="text-sm text-gray-600 dark:text-gray-300">
-            {$t('admin.face_cleanup_review_banner_body', { values: { ownerName } })}
+            {$t('admin.face_cleanup_review_banner_body')}
           </p>
         </div>
         <!-- Plain button, not <IconButton>: @immich/ui wraps any titled button in a Tooltip, which needs a

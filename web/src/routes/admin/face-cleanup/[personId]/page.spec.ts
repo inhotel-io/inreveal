@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goto } from '$app/navigation';
 import Page from './+page.svelte';
 import ActionsHelpModal from './ActionsHelpModal.svelte';
+import type { SuspectedOwner } from './destination';
 
 // Mock @immich/sdk before any imports that use it
 vi.mock('@immich/sdk', async (importOriginal) => {
@@ -137,7 +138,14 @@ const makeFlaggedFaces = () => [
   { assetFaceId: 'face-3', suspectedOwnerId: OWNER_B_ID },
 ];
 
-const makeScanPerson = (over: Partial<{ personId: string; personName: string | null; faceCount: number }> = {}) => ({
+const makeScanPerson = (
+  over: Partial<{
+    personId: string;
+    personName: string | null;
+    faceCount: number;
+    suspectedOwners: SuspectedOwner[];
+  }> = {},
+) => ({
   personId: PERSON_ID,
   ownerId: 'owner-user-1',
   personName: 'Jula',
@@ -147,8 +155,22 @@ const makeScanPerson = (over: Partial<{ personId: string; personName: string | n
   flagged: 3,
   flaggedFraction: 0.3,
   suspectedOwners: [
-    { ownerPersonId: OWNER_A_ID, ownerName: 'Armin', thumbnailFaceId: null, count: 2 },
-    { ownerPersonId: OWNER_B_ID, ownerName: 'Berta', thumbnailFaceId: null, count: 1 },
+    {
+      ownerPersonId: OWNER_A_ID,
+      ownerName: 'Armin',
+      thumbnailFaceId: 'thumb-a',
+      count: 2,
+      ownerFaceCount: 1204,
+      ownerMissing: false,
+    },
+    {
+      ownerPersonId: OWNER_B_ID,
+      ownerName: 'Berta',
+      thumbnailFaceId: null,
+      count: 1,
+      ownerFaceCount: 88,
+      ownerMissing: false,
+    },
   ],
   recommendation: 'confident' as const,
   reviewReasons: [] as string[],
@@ -1126,6 +1148,142 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('face-tile')).toHaveLength(3);
       expect(screen.queryByTestId('load-error-banner')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Destination identity', () => {
+    const cards = () => screen.getAllByTestId('destination-card');
+
+    it('identifies each destination by thumbnail, name and its own face count', async () => {
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(cards()).toHaveLength(2));
+      const first = cards()[0];
+      // Not getByRole('img'): every other person/face thumbnail in this admin console (ConfidentLane,
+      // people/+page, the reviewed-person header on this very page) pairs an `alt=""` decorative <img> with
+      // adjacent visible text, which the accessibility tree maps to role "presentation", not "img" — querying
+      // the element directly matches that established convention instead of asserting an accessible name this
+      // thumbnail was never meant to have.
+      const image = first.querySelector('img');
+      expect(image).toHaveAttribute('src', '/api/admin/face-repair/faces/thumb-a/thumbnail');
+      expect(within(first).getByText('Armin')).toBeInTheDocument();
+      expect(
+        translations.some((t) => t.key === 'admin.face_cleanup_review_dest_size' && t.values?.count === 1204),
+      ).toBe(true);
+    });
+
+    it('states the routing share separately from the destination size', async () => {
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(cards()).toHaveLength(2));
+      expect(translations.some((t) => t.key === 'admin.face_cleanup_review_dest_routes' && t.values?.count === 2)).toBe(
+        true,
+      );
+    });
+
+    it('links each destination to its cluster page in a new tab, so staged decisions survive', async () => {
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(cards()).toHaveLength(2));
+      const link = within(cards()[0]).getByTestId('destination-open');
+      expect(link).toHaveAttribute('href', `/admin/face-cleanup/people/${OWNER_A_ID}`);
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    });
+
+    it('lists the largest routing share first and collapses past the third', async () => {
+      const many = makeScanPerson({
+        suspectedOwners: Array.from({ length: 5 }, (_, i) => ({
+          ownerPersonId: `owner-${i}`,
+          ownerName: `Owner ${i}`,
+          thumbnailFaceId: null,
+          count: i + 1,
+          ownerFaceCount: 10,
+          ownerMissing: false,
+        })),
+      });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([many]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(cards()).toHaveLength(3));
+      expect(within(cards()[0]).getByText('Owner 4')).toBeInTheDocument();
+
+      await fireEvent.click(screen.getByTestId('destination-more'));
+      await waitFor(() => expect(cards()).toHaveLength(5));
+    });
+
+    it('orders two equally-sized destinations deterministically', async () => {
+      const tied = makeScanPerson({
+        suspectedOwners: [
+          {
+            ownerPersonId: 'zzz',
+            ownerName: 'Zoe',
+            thumbnailFaceId: null,
+            count: 5,
+            ownerFaceCount: 1,
+            ownerMissing: false,
+          },
+          {
+            ownerPersonId: 'aaa',
+            ownerName: 'Ada',
+            thumbnailFaceId: null,
+            count: 5,
+            ownerFaceCount: 1,
+            ownerMissing: false,
+          },
+        ],
+      });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([tied]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(cards()).toHaveLength(2));
+      expect(within(cards()[0]).getByText('Ada')).toBeInTheDocument();
+    });
+
+    it('names no destination at all when the scan could not attribute the faces', async () => {
+      const orphan = makeScanPerson({ suspectedOwners: [] });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([orphan]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('destination-none')).toBeInTheDocument());
+      expect(screen.queryAllByTestId('destination-card')).toHaveLength(0);
+      // No card means no destination is named. Do NOT assert that the "unnamed cluster" KEY went untranslated:
+      // the page's ownerName/destinationName derivations still fall back to it for the tile ribbons, so that
+      // assertion would fail for a reason unrelated to what this test is about.
+    });
+
+    it('warns that a destination no longer exists instead of rendering it as usable', async () => {
+      const gone = makeScanPerson({
+        suspectedOwners: [
+          {
+            ownerPersonId: OWNER_A_ID,
+            ownerName: null,
+            thumbnailFaceId: null,
+            count: 2,
+            ownerFaceCount: 0,
+            ownerMissing: true,
+          },
+        ],
+      });
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([gone]) as unknown as object);
+
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(screen.getByTestId('destination-gone')).toBeInTheDocument());
+      expect(screen.queryByTestId('destination-open')).not.toBeInTheDocument();
+    });
+
+    it('renders a placeholder rather than a broken image when a destination has no thumbnail', async () => {
+      render(Page, { props: { data: makePageData() } });
+
+      await waitFor(() => expect(cards()).toHaveLength(2));
+      // Owner B has thumbnailFaceId: null. The person-scoped fallback 403s for a cluster the admin does not
+      // own, so there must be no <img> at all.
+      expect(within(cards()[1]).queryByRole('img')).not.toBeInTheDocument();
+      expect(within(cards()[1]).getByTestId('destination-placeholder')).toBeInTheDocument();
     });
   });
 });
