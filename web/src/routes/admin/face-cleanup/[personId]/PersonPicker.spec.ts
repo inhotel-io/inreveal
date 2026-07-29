@@ -217,4 +217,19 @@ describe('PersonPicker', () => {
     await waitFor(() => expect(screen.getByTestId('person-picker-search')).toBeInTheDocument());
     expect(screen.queryByTestId('person-picker-lock-toggle')).not.toBeInTheDocument();
   });
+
+  // The internal `lockOnMove` state defaults to true and is unreachable with the toggle hidden — without its
+  // own guard, a caller reading `.lock` off the resolved destination would silently get `true` despite never
+  // having any way to see or set it.
+  it('reports lock:false when the re-flag lock is hidden, regardless of its unreachable default', async () => {
+    vi.mocked(getFaceRepairOwnerPeople).mockResolvedValue(
+      makePeopleResponse([{ id: 'p1', name: 'Marco Weber', faceCount: 412, thumbnailFaceId: 'f1' }]),
+    );
+    const onClose = vi.fn();
+
+    render(PersonPicker, { props: { ownerId: OWNER_ID, faceCount: 3, showLock: false, onClose } });
+    await fireEvent.click(await screen.findByText('Marco Weber'));
+
+    expect(onClose).toHaveBeenCalledWith({ personId: 'p1', name: 'Marco Weber', lock: false });
+  });
 });

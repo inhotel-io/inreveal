@@ -7,50 +7,61 @@
   type Props = {
     owners: SuspectedOwner[];
     value: string | null;
+    // The label for `value` when it is NOT one of `owners` — reachable through "Choose someone else…", which
+    // searches the whole library and can land on a person the scan never suggested. Without an <option> of its
+    // own, a bound `value` that matches nothing in the list renders the control BLANK (the browser sets
+    // selectedIndex -1) — the one control whose job is to say where the cluster is going would show nothing.
+    valueLabel: string;
     onSelect: (ownerPersonId: string) => void;
     onChooseOther: () => void;
   };
-  const { owners, value, onSelect, onChooseOther }: Props = $props();
+  const { owners, value, valueLabel, onSelect, onChooseOther }: Props = $props();
 
-  const OTHER = '__other__';
   // Deleted destinations are omitted, not disabled: the card above already explains why one is unusable, and
   // an option that guarantees a face-repair:destination-missing failure is only a chance to misclick.
   const options = $derived(selectableDestinations(owners));
+  const isUnlisted = $derived(value !== null && !options.some((o) => o.ownerPersonId === value));
 
   const handleChange = (event: Event) => {
-    const next = (event.currentTarget as HTMLSelectElement).value;
-    if (next === OTHER) {
-      onChooseOther();
-      return;
-    }
-    onSelect(next);
+    onSelect((event.currentTarget as HTMLSelectElement).value);
   };
 </script>
 
-<label class="flex items-center gap-2 text-sm">
-  <span class="text-gray-500 dark:text-gray-400">{$t('admin.face_cleanup_review_dest_send_to')}</span>
-  <select
-    value={value ?? ''}
-    onchange={handleChange}
-    class="rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800"
-    data-testid="destination-select"
+<div class="flex items-center gap-2 text-sm">
+  <label class="flex items-center gap-2">
+    <span class="text-gray-500 dark:text-gray-400">{$t('admin.face_cleanup_review_dest_send_to')}</span>
+    <select
+      value={value ?? ''}
+      onchange={handleChange}
+      class="rounded-lg border border-gray-200 bg-white px-2 py-1 text-sm dark:border-gray-700 dark:bg-gray-800"
+      data-testid="destination-select"
+    >
+      {#if value === null}
+        <option value="" disabled>{$t('admin.face_cleanup_review_dest_send_to')}</option>
+      {/if}
+      {#if isUnlisted}
+        <option value={value ?? ''}>{valueLabel}</option>
+      {/if}
+      {#each options as owner (owner.ownerPersonId)}
+        <option value={owner.ownerPersonId}>
+          {$t('admin.face_cleanup_review_dest_option', {
+            values: { name: owner.ownerName ?? $t('admin.face_cleanup_review_unnamed'), count: owner.ownerFaceCount },
+          })}
+        </option>
+      {/each}
+    </select>
+  </label>
+  <!-- A plain sibling button, NOT an <option> inside the select: an <option>'s value gets committed to the
+       <select> the moment it is activated, before any handler runs, so putting "Choose someone else…" there
+       meant a dismissed picker left the control reading that placeholder forever — re-selecting the SAME
+       option fires no further `change` event in a real browser, so the select could never be used again. A
+       sibling button never touches the select's value at all, so there is nothing to revert. -->
+  <button
+    type="button"
+    onclick={onChooseOther}
+    class="text-sm font-semibold text-primary hover:underline"
+    data-testid="destination-choose-other"
   >
-    {#if value === null}
-      <option value="" disabled>{$t('admin.face_cleanup_review_dest_send_to')}</option>
-    {/if}
-    {#each options as owner (owner.ownerPersonId)}
-      <option value={owner.ownerPersonId}>
-        {$t('admin.face_cleanup_review_dest_option', {
-          values: { name: owner.ownerName ?? $t('admin.face_cleanup_review_unnamed'), count: owner.ownerFaceCount },
-        })}
-      </option>
-    {/each}
-    <!-- The test id sits on the <option>, and a plain click on an <option> in happy-dom does not bubble a
-         `change` event to the <select> (unlike a real browser), so onSelect above never fires for it. The
-         onclick here makes the affordance work for both a real user (click, or arrow keys + Enter, both of
-         which DO fire `change` in a real browser) and this test environment. -->
-    <option value={OTHER} data-testid="destination-choose-other" onclick={onChooseOther}>
-      {$t('admin.face_cleanup_review_dest_choose_other')}
-    </option>
-  </select>
-</label>
+    {$t('admin.face_cleanup_review_dest_choose_other')}
+  </button>
+</div>
