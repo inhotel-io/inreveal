@@ -382,6 +382,10 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
   /// from starting a second concurrent scan.
   TimelineScrollTarget? _resolvingScrollTarget;
 
+  /// Incremented per resolution so a superseded cycle cannot touch shared state
+  /// (scrubbing, highlight) after a newer jump has started.
+  int _scrollResolveGeneration = 0;
+
   /// Ensures a single retry loop is running to apply a pending scroll request.
   void _requestScrollDrain() {
     if (scrollToAssetNotifierProvider.value == null) return;
@@ -468,6 +472,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
   /// `_scrollDrainScheduled` only after the async resolution settles, so a failed
   /// lookup cannot silently drop the request.
   Future<void> _beginScrollToAsset(TimelineScrollTarget target, List<Segment> segments) async {
+    final generation = ++_scrollResolveGeneration;
     final segment = _findSegmentForDate(segments, target.date);
     if (segment == null) {
       // Defensive: decideScrollDrain only returns `scroll` when a segment matched,
@@ -540,19 +545,22 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
         duration: const Duration(milliseconds: 500),
         curve: Curves.easeInOut,
       );
+    } catch (_) {
+      // An interrupted animation (user scrolls, controller detached, or a newer jump
+      // replaced the ScrollActivity) completes with an error. Swallow it: this runs
+      // under unawaited(), so an escaping error would surface as an unhandled async
+      // error, and the finally below still restores the scrubbing state.
     } finally {
-      // `finally`, not a plain trailing call: an interrupted animation (the user
-      // scrolls, or the controller is detached) completes the future with an error.
-      // Leaving `isScrubbing` true would strand the whole timeline rendering
-      // placeholder tiles. The `mounted` guard is required because `ref.read` throws
-      // once the widget is disposed.
-      if (mounted) {
+      // Only the newest resolution may clear scrubbing. A superseded cycle resumes
+      // early when its ScrollActivity is replaced, and must not un-scrub an animation
+      // that is still running.
+      if (mounted && generation == _scrollResolveGeneration) {
         timelineState.setScrubbing(false);
       }
     }
 
     // Only mark a tile we actually landed on — not the day-level fallback.
-    if (mounted && rowOffset != null) {
+    if (mounted && rowOffset != null && generation == _scrollResolveGeneration) {
       ref.read(timelineHighlightedAssetProvider.notifier).highlight(target.asset);
     }
   }
