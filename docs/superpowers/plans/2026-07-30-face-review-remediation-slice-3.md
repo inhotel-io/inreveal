@@ -39,14 +39,14 @@ anti-joins its read twin applies at `:558-586`.
 
 ## Files
 
-| File                                                                          | Change |
-| ----------------------------------------------------------------------------- | ------ |
-| `server/src/repositories/face-person-verdict.repository.ts`                    | shared predicate; gate both claims; complete `hasPendingForSpacePerson` |
-| `server/src/services/person.service.ts`                                       | `confirmFaceSuggestion` passes the band; feature gate |
-| `server/src/services/shared-space.service.ts`                                 | `confirmSpacePersonFaceSuggestion` passes the band |
-| `server/test/medium/specs/repositories/face-person-verdict.repository.spec.ts` | S3.1–S3.7, S3.11 |
-| `server/src/services/person.service.spec.ts`                                   | S3.9 |
-| `server/test/medium/specs/services/shared-space-face-suggestions.service.spec.ts` | S3.6, S3.8 |
+| File                                                                              | Change                                                                  |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `server/src/repositories/face-person-verdict.repository.ts`                       | shared predicate; gate both claims; complete `hasPendingForSpacePerson` |
+| `server/src/services/person.service.ts`                                           | `confirmFaceSuggestion` passes the band; feature gate                   |
+| `server/src/services/shared-space.service.ts`                                     | `confirmSpacePersonFaceSuggestion` passes the band                      |
+| `server/test/medium/specs/repositories/face-person-verdict.repository.spec.ts`    | S3.1–S3.7, S3.11                                                        |
+| `server/src/services/person.service.spec.ts`                                      | S3.9                                                                    |
+| `server/test/medium/specs/services/shared-space-face-suggestions.service.spec.ts` | S3.6, S3.8                                                              |
 
 Do **not** touch `server/src/utils/config.ts`, `server/src/utils/config.spec.ts`,
 `scripts/revert-to-immich.sql`, `server/test/medium/specs/migrations/`, anything under `web/`,
@@ -129,19 +129,19 @@ Requirements:
 
 Every absence assertion needs a positive control in the same test body (spec §2).
 
-| #     | Layer  | Test                                                                                                                                                            |
-| ----- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S3.1  | medium | `claimPending` returns 0 and leaves the row intact for a pending row whose asset became `locked` after the row was written; returns 1 for an eligible control row in the same test |
-| S3.2  | medium | Table-driven: the same for a trashed asset, an offline asset, `visibility='hidden'`, `af.deletedAt` set, `af.isVisible=false`, and `af.personId` already set      |
-| S3.3  | medium | `claimPending` returns 0 when the face has acquired a `source='manual'` link for **another** identity                                                            |
-| S3.4  | medium | `claimPending` returns 0 when a negative verdict exists for the same target — two tests, one matched by `personId`, one matched by `identityId`                   |
-| S3.5  | medium | `claimPending` returns 0 when the row's distance falls outside the current band (both boundaries: `<= maxDistance` and `> suggestionMaxDistance`)                 |
-| S3.6  | medium | `claimPendingForSpacePerson` mirrors S3.1–S3.5                                                                                                                   |
-| S3.7  | medium | `hasPendingForSpacePerson` returns `false` for a face carrying a manual link, and for one carrying a negative verdict for that space person's identity; `true` for the control |
+| #     | Layer  | Test                                                                                                                                                                                                                         |
+| ----- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S3.1  | medium | `claimPending` returns 0 and leaves the row intact for a pending row whose asset became `locked` after the row was written; returns 1 for an eligible control row in the same test                                           |
+| S3.2  | medium | Table-driven: the same for a trashed asset, an offline asset, `visibility='hidden'`, `af.deletedAt` set, `af.isVisible=false`, and `af.personId` already set                                                                 |
+| S3.3  | medium | `claimPending` returns 0 when the face has acquired a `source='manual'` link for **another** identity                                                                                                                        |
+| S3.4  | medium | `claimPending` returns 0 when a negative verdict exists for the same target — two tests, one matched by `personId`, one matched by `identityId`                                                                              |
+| S3.5  | medium | `claimPending` returns 0 when the row's distance falls outside the current band (both boundaries: `<= maxDistance` and `> suggestionMaxDistance`)                                                                            |
+| S3.6  | medium | `claimPendingForSpacePerson` mirrors S3.1–S3.5                                                                                                                                                                               |
+| S3.7  | medium | `hasPendingForSpacePerson` returns `false` for a face carrying a manual link, and for one carrying a negative verdict for that space person's identity; `true` for the control                                               |
 | S3.8  | medium | **BDD** — **Given** a pending suggestion, **When** the owner moves the asset into the Locked folder and then calls confirm, **Then** the confirm is a no-op: no reassignment, no manual link, and the row is still `pending` |
-| S3.9  | unit   | `confirmFaceSuggestion` returns early without calling `requireAccess` or any repository when `suggestions.enabled` is false                                       |
-| S3.10 | medium | **pin** — the happy path still works end to end: an eligible pending row confirms, reassigns, drains and manual-links                                            |
-| S3.11 | medium | `claimPending` honours a passed transaction: run it inside a transaction that then rolls back, and assert the row is still present                                |
+| S3.9  | unit   | `confirmFaceSuggestion` returns early without calling `requireAccess` or any repository when `suggestions.enabled` is false                                                                                                  |
+| S3.10 | medium | **pin** — the happy path still works end to end: an eligible pending row confirms, reassigns, drains and manual-links                                                                                                        |
+| S3.11 | medium | `claimPending` honours a passed transaction: run it inside a transaction that then rolls back, and assert the row is still present                                                                                           |
 
 S3.10 is the refactor's safety net. Run it first, before touching anything, and confirm it passes
 against the current code — then keep it green throughout.

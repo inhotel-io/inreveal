@@ -20,7 +20,7 @@ re-home the face, and a crash mid-confirm cannot settle a face onto nobody.
 2. Non-forced recognition selects `{ personId: null, sourceType: MachineLearning }`
    (`server/src/services/person.service.ts`, around `:1312-1313`), so the face is re-queued.
 3. The face was surfaced as a suggestion precisely because it sits outside `maxDistance`, so
-   recognition clusters it to a *different* personal person, or creates a new one (around
+   recognition clusters it to a _different_ personal person, or creates a new one (around
    `:1500-1505`).
 4. `replaceFaceIdentity(…, 'owner-person')` keeps `source='manual'` via `preserveManualSource` but
    **repoints `identityId`** (`server/src/repositories/face-identity.repository.ts`, around
@@ -44,20 +44,20 @@ twin was not.
 
 The fix is **"recognition never claims a face a human has already placed"**, not "the space confirm
 writes `asset_face.personId`". The rejected alternative would mean an editor's action in a shared
-space writing into the *asset owner's* personal people, a cross-owner side effect. If you believe the
+space writing into the _asset owner's_ personal people, a cross-owner side effect. If you believe the
 alternative is better, report the argument — do not silently switch.
 
 ## Files
 
-| File                                                                     | Change |
-| ------------------------------------------------------------------------ | ------ |
-| `server/src/repositories/person.repository.ts`                            | `getAllFaces` gains `excludeManuallyPlaced?: boolean` |
-| `server/src/services/person.service.ts`                                   | the **non-forced** recognition feed passes it |
-| `server/src/services/shared-space.service.ts`                             | wrap `confirmSpacePersonFaceSuggestion` in one transaction |
-| `server/src/repositories/shared-space.repository.ts`                      | `addPersonFaces` gains a `db` parameter |
-| `server/test/medium/specs/services/face-review-cross-flow.spec.ts`         | S5.4, S5.5, S5.6 |
-| `server/test/medium/specs/repositories/person.repository.spec.ts`          | S5.1–S5.3 |
-| `server/test/medium/specs/services/shared-space-face-suggestions.service.spec.ts` | S5.8–S5.10 |
+| File                                                                              | Change                                                     |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `server/src/repositories/person.repository.ts`                                    | `getAllFaces` gains `excludeManuallyPlaced?: boolean`      |
+| `server/src/services/person.service.ts`                                           | the **non-forced** recognition feed passes it              |
+| `server/src/services/shared-space.service.ts`                                     | wrap `confirmSpacePersonFaceSuggestion` in one transaction |
+| `server/src/repositories/shared-space.repository.ts`                              | `addPersonFaces` gains a `db` parameter                    |
+| `server/test/medium/specs/services/face-review-cross-flow.spec.ts`                | S5.4, S5.5, S5.6                                           |
+| `server/test/medium/specs/repositories/person.repository.spec.ts`                 | S5.1–S5.3                                                  |
+| `server/test/medium/specs/services/shared-space-face-suggestions.service.spec.ts` | S5.8–S5.10                                                 |
 
 ## Implementation
 
@@ -65,7 +65,7 @@ alternative is better, report the argument — do not silently switch.
    `NOT EXISTS (SELECT 1 FROM face_identity_face fif WHERE fif.assetFaceId = asset_face.id AND fif.source = 'manual')`.
    Default off, so every other caller is unchanged.
 2. **`handleQueueRecognizeFaces` passes `excludeManuallyPlaced: true` on the non-forced branch only.**
-   The forced branch (`{ sourceType: MachineLearning }` with no `personId` filter) runs *after*
+   The forced branch (`{ sourceType: MachineLearning }` with no `personId` filter) runs _after_
    `unassignFaces` has already deleted every `face_identity_face` row, so there is nothing to preserve
    and passing it there would be meaningless. Read the surrounding code and confirm that ordering
    before you rely on it.
@@ -83,18 +83,18 @@ alternative is better, report the argument — do not silently switch.
 
 Every absence assertion needs a positive control in the same test body (spec §2).
 
-| #     | Layer  | Test                                                                                                                                                                                        |
-| ----- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S5.1  | medium | `getAllFaces({ personId: null, sourceType: ML, excludeManuallyPlaced: true })` omits a face carrying a `manual` link and yields an unassigned control face with no link                        |
-| S5.2  | medium | **pin** — the same query **without** the option still yields the manual-linked face                                                                                                            |
-| S5.3  | medium | **pin** — `getAllFaces({ sourceType: ML })` (the force-branch shape) is unchanged                                                                                                              |
+| #     | Layer  | Test                                                                                                                                                                                                                                                                                                                                                    |
+| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S5.1  | medium | `getAllFaces({ personId: null, sourceType: ML, excludeManuallyPlaced: true })` omits a face carrying a `manual` link and yields an unassigned control face with no link                                                                                                                                                                                 |
+| S5.2  | medium | **pin** — the same query **without** the option still yields the manual-linked face                                                                                                                                                                                                                                                                     |
+| S5.3  | medium | **pin** — `getAllFaces({ sourceType: ML })` (the force-branch shape) is unchanged                                                                                                                                                                                                                                                                       |
 | S5.4  | medium | **BDD, the revert chain.** **Given** an editor has confirmed face F on space person S, **When** a non-forced `handleQueueRecognizeFaces` runs and every queued `handleRecognizeFaces` job is executed, **Then** F was not queued, `shared_space_person_face` still holds `(S, F)`, and the face's `face_identity_face.identityId` is still S's identity |
-| S5.5  | medium | Red proof of S5.4 before the fix: the `(S, F)` row is gone. Fold into S5.4 once green rather than keeping both                                                                                 |
-| S5.6  | medium | A face carrying an `ml` / `owner-person` / `backfill` link **is** still queued by non-forced recognition — only `manual` is excluded (control for S5.1)                                        |
-| S5.7  | medium | **pin** — personal confirm is unaffected: it sets `asset_face.personId`, so the `personId: null` filter already excluded it                                                                    |
-| S5.8  | medium | Fault injection: make `addPersonFaces` throw inside the space-confirm transaction ⇒ all four writes rolled back — the pending row is still `pending`, no `manual` link exists, no `sspf` row exists |
-| S5.9  | medium | Fault injection at `replaceFaceIdentity` ⇒ the same all-or-nothing assertion                                                                                                                   |
-| S5.10 | medium | **pin** — double-submit under the transaction still resolves exactly once (`claimed === 0` on the second call)                                                                                  |
+| S5.5  | medium | Red proof of S5.4 before the fix: the `(S, F)` row is gone. Fold into S5.4 once green rather than keeping both                                                                                                                                                                                                                                          |
+| S5.6  | medium | A face carrying an `ml` / `owner-person` / `backfill` link **is** still queued by non-forced recognition — only `manual` is excluded (control for S5.1)                                                                                                                                                                                                 |
+| S5.7  | medium | **pin** — personal confirm is unaffected: it sets `asset_face.personId`, so the `personId: null` filter already excluded it                                                                                                                                                                                                                             |
+| S5.8  | medium | Fault injection: make `addPersonFaces` throw inside the space-confirm transaction ⇒ all four writes rolled back — the pending row is still `pending`, no `manual` link exists, no `sspf` row exists                                                                                                                                                     |
+| S5.9  | medium | Fault injection at `replaceFaceIdentity` ⇒ the same all-or-nothing assertion                                                                                                                                                                                                                                                                            |
+| S5.10 | medium | **pin** — double-submit under the transaction still resolves exactly once (`claimed === 0` on the second call)                                                                                                                                                                                                                                          |
 
 S5.4 is the load-bearing test and the hardest to set up: it needs a real space, a contributed asset,
 an editor, a pending suggestion inside the band, and then a full recognition cycle. Read

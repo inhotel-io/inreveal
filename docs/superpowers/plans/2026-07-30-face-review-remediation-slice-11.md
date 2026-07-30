@@ -29,7 +29,7 @@ verify.
 "already resolved": it marks the face acted, advances, and shows nothing. The comment claims the
 dangerous failure mode (insufficient role / RBAC) surfaces as 403. **That is false for the personal
 path** — `requireAccess` throws `BadRequestException` (`server/src/utils/access.ts`, around `:40`), so
-*every* authorization failure there is a 400. And Slice 4 added a face-ownership check to reject and
+_every_ authorization failure there is a 400. And Slice 4 added a face-ownership check to reject and
 ignore, so there are now more 400s, not fewer. A suggestion whose asset is trashed or un-shared
 between the queue load and the click reports success.
 
@@ -79,7 +79,7 @@ listing the failures. New i18n keys as needed, `en.json` only.
   its `.then`, so polling continues after `onDestroy`. Add a `destroyed` guard checked before
   re-arming.
 - `web/src/routes/admin/face-cleanup/people/+page.svelte`: any page failure sets `loadError`, which is
-  exclusive with the grid, so a failed *load-more* wipes several loaded pages and Retry restarts from
+  exclusive with the grid, so a failed _load-more_ wipes several loaded pages and Retry restarts from
   page 0. Keep the grid and offer an inline retry for the failed page; only a failed **first** page
   renders the full-page error state.
 
@@ -104,23 +104,23 @@ existing one.
 Every absence assertion needs a positive control in the same test body (spec §2). Web specs use
 happy-dom, which never fires `img.onload` by itself.
 
-| #      | Layer  | Test                                                                                                                                     |
-| ------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| #      | Layer  | Test                                                                                                                                        |
+| ------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | S11.1  | web    | Confirm rejected with `{ status: 400 }` ⇒ `handleError` called, face **not** marked acted, modal does not advance, counter unchanged        |
 | S11.2  | web    | Confirm resolving 204 ⇒ no toast, face acted, modal advances, counter **not** incremented                                                   |
-| S11.3  | web    | Confirm resolving 200 ⇒ counter incremented and the success toast shown                                                                    |
-| S11.4  | web    | The same three cases for `dismiss` and `ignore`                                                                                            |
-| S11.5  | web    | **pin** — a 500 still surfaces and leaves the current face selected and retryable                                                          |
-| S11.6  | web    | The all-done state renders when the queue drains to zero                                                                                   |
+| S11.3  | web    | Confirm resolving 200 ⇒ counter incremented and the success toast shown                                                                     |
+| S11.4  | web    | The same three cases for `dismiss` and `ignore`                                                                                             |
+| S11.5  | web    | **pin** — a 500 still surfaces and leaves the current face selected and retryable                                                           |
+| S11.6  | web    | The all-done state renders when the queue drains to zero                                                                                    |
 | S11.7  | unit   | Server: each action returns the acted/no-op signal correctly — acted, already-resolved, feature-disabled, ineligible                        |
-| S11.8  | unit   | Server: the controllers map that signal to 200 vs 204                                                                                      |
+| S11.8  | unit   | Server: the controllers map that signal to 200 vs 204                                                                                       |
 | S11.9  | web    | With the rest-load failed, the whole-cluster action is disabled with an explanation, and the flagged grid still renders                     |
 | S11.10 | web    | **pin** — with a successful rest load, the confirm copy shows `restTotal + flagged.length`                                                  |
-| S11.11 | web    | Bulk approve shows a confirm naming the cluster count; cancelling issues zero `resolveFaces` calls                                         |
-| S11.12 | web    | Bulk approve where one of three rejects ⇒ the other two still applied, message reports 2 applied / 1 failed                                |
+| S11.11 | web    | Bulk approve shows a confirm naming the cluster count; cancelling issues zero `resolveFaces` calls                                          |
+| S11.12 | web    | Bulk approve where one of three rejects ⇒ the other two still applied, message reports 2 applied / 1 failed                                 |
 | S11.13 | web    | No further `getLatestScan` after `onDestroy`, including when a fetch was already in flight                                                  |
-| S11.14 | web    | Page 3 of the people grid failing keeps pages 1–2 rendered and offers a retry for page 3 only                                              |
-| S11.15 | web    | **pin** — page 1 failing still renders the full-page error state                                                                           |
+| S11.14 | web    | Page 3 of the people grid failing keeps pages 1–2 rendered and offers a retry for page 3 only                                               |
+| S11.15 | web    | **pin** — page 1 failing still renders the full-page error state                                                                            |
 | S11.16 | medium | `listNegativeVerdicts({ page: 1, size: 2 })` over 5 rows returns 2 items and `total: 5`; page 3 returns 1; ordering stable across pages     |
 | S11.17 | medium | A space-person-targeted verdict exposes its representative face id; a personal one still exposes `person.faceAssetId`                       |
 | S11.18 | web    | The resolutions page renders page 1, loads page 2 on demand, its total matches the server total, and a space-person row renders a thumbnail |

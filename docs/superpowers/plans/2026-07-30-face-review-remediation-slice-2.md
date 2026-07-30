@@ -25,15 +25,15 @@ runs per item.
 
 ## Files
 
-| File                                                                    | Item |
-| ----------------------------------------------------------------------- | ---- |
-| `server/src/controllers/face-repair-admin.controller.spec.ts`           | A    |
-| `server/test/medium/specs/services/face-review-cross-flow.spec.ts`      | B, C |
+| File                                                                      | Item |
+| ------------------------------------------------------------------------- | ---- |
+| `server/src/controllers/face-repair-admin.controller.spec.ts`             | A    |
+| `server/test/medium/specs/services/face-review-cross-flow.spec.ts`        | B, C |
 | `server/test/medium/specs/services/face-verdict.merge-durability.spec.ts` | D    |
-| `web/src/routes/admin/face-cleanup/resolutions/page.spec.ts`            | E    |
-| `web/src/lib/modals/PersonSuggestionReviewModal.svelte` + `.spec.ts`    | F    |
-| `server/test/medium/specs/repositories/face-verdict-safety.spec.ts`     | G    |
-| `e2e/src/specs/server/api/person-face-suggestions.e2e-spec.ts`          | H    |
+| `web/src/routes/admin/face-cleanup/resolutions/page.spec.ts`              | E    |
+| `web/src/lib/modals/PersonSuggestionReviewModal.svelte` + `.spec.ts`      | F    |
+| `server/test/medium/specs/repositories/face-verdict-safety.spec.ts`       | G    |
+| `e2e/src/specs/server/api/person-face-suggestions.e2e-spec.ts`            | H    |
 
 Do **not** touch any other file. In particular do not edit the spec file — another slice is editing
 it concurrently.
@@ -211,7 +211,7 @@ the test so it cannot affect sibling specs.
 **Defects** in `e2e/src/specs/server/api/person-face-suggestions.e2e-spec.ts`:
 
 - `:170-181` (`items include required fields per DTO`) and `:199-203` (`results are ordered by
-  distance ascending`) are unguarded loops over `body.items` / `distances`. An endpoint regressed to
+distance ascending`) are unguarded loops over `body.items` / `distances`. An endpoint regressed to
   `{ total: 0, items: [] }` passes both.
 - `:242-250` asserts `expect(ids).not.toContain(faceForDismiss)` with no assertion that the other
   two seeded faces are still present.

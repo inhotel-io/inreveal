@@ -23,7 +23,7 @@ in three ways:
    non-null `identityId`.
 2. `face_identity.id` is a **cross-owner** key —
    `server/src/services/identity-merge-propagation.service.ts:360-370` assigns one identity to
-   personal people belonging to *different* owners (`person_ownerId_identityId_key` is unique per
+   personal people belonging to _different_ owners (`person_ownerId_identityId_key` is unique per
    owner **and** identity, so sharing across owners is by design).
 3. `getPendingForPerson`'s anti-join matches `neg.identityId = <target identity>` with **no ownership
    filter** (`server/src/repositories/face-person-verdict.repository.ts`, the D3 self-heal block). So
@@ -40,12 +40,12 @@ The personal path is the outlier.
 
 ## Files
 
-| File                                                                | Change |
-| ------------------------------------------------------------------- | ------ |
-| `server/src/services/person.service.ts`                             | add the face gate to both methods; replace the stale comment |
-| `server/src/services/person.service.spec.ts`                         | S4.1–S4.3 |
-| `server/test/medium/specs/services/face-suggestion-exclusions.spec.ts` | S4.4, S4.6, S4.7 |
-| `e2e/src/specs/server/api/person-face-suggestions.e2e-spec.ts`        | S4.8, S4.9 |
+| File                                                                   | Change                                                       |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `server/src/services/person.service.ts`                                | add the face gate to both methods; replace the stale comment |
+| `server/src/services/person.service.spec.ts`                           | S4.1–S4.3                                                    |
+| `server/test/medium/specs/services/face-suggestion-exclusions.spec.ts` | S4.4, S4.6, S4.7                                             |
+| `e2e/src/specs/server/api/person-face-suggestions.e2e-spec.ts`         | S4.8, S4.9                                                   |
 
 Do not touch anything else. Other agents may be working under `web/`, `server/src/repositories/` and
 `server/src/utils/`.
@@ -73,16 +73,16 @@ path filters `asset.deletedAt`).
 
 Every absence assertion needs a positive control in the same test body (spec §2).
 
-| #    | Layer  | Test                                                                                                                                                                                                             |
-| ---- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S4.1 | unit   | `rejectFaceSuggestion` throws `BadRequestException` when `checkFaceOwnerAccess` returns empty, and `markRejected` is never called                                                                                  |
-| S4.2 | unit   | The same for `ignoreFaceSuggestion` (asserting `markIgnored`) and for `dismissFaceSuggestion`                                                                                                                      |
-| S4.3 | unit   | **pin** — the owner path passes both checks and still calls `markRejected` with `{ identityId, source: 'suggestion', actorId }`                                                                                     |
+| #    | Layer  | Test                                                                                                                                                                                                                                                                                                                                                              |
+| ---- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S4.1 | unit   | `rejectFaceSuggestion` throws `BadRequestException` when `checkFaceOwnerAccess` returns empty, and `markRejected` is never called                                                                                                                                                                                                                                 |
+| S4.2 | unit   | The same for `ignoreFaceSuggestion` (asserting `markIgnored`) and for `dismissFaceSuggestion`                                                                                                                                                                                                                                                                     |
+| S4.3 | unit   | **pin** — the owner path passes both checks and still calls `markRejected` with `{ identityId, source: 'suggestion', actorId }`                                                                                                                                                                                                                                   |
 | S4.4 | medium | **BDD, the cross-owner scenario.** **Given** users A and B whose personal people both named "Anna" share one identity `I`, and an unassigned near-miss face F in **B's** library with a pending suggestion for B's Anna, **When** A calls `rejectFaceSuggestion(authA, annaA.id, F)`, **Then** it throws and `getFaceSuggestions(authB, annaB.id)` still offers F |
-| S4.6 | medium | A rejects a face in **A's own** library that is also visible to B through a space: still allowed. The gate is ownership, not exclusivity                                                                            |
-| S4.7 | medium | Rejecting a face whose asset is in the trash now throws, and writes no row (the accepted consequence)                                                                                                              |
-| S4.8 | e2e    | `POST /people/{personId}/face-suggestions/{foreignFaceId}/reject` as a second user → 400; a follow-up `GET` by the face's owner still lists it                                                                     |
-| S4.9 | e2e    | `reject` and `ignore` happy paths. **These two endpoints currently have zero e2e coverage in any scope** — only `confirm` and `dismiss` are exercised. Assert the row leaves the queue and does not return on a re-read |
+| S4.6 | medium | A rejects a face in **A's own** library that is also visible to B through a space: still allowed. The gate is ownership, not exclusivity                                                                                                                                                                                                                          |
+| S4.7 | medium | Rejecting a face whose asset is in the trash now throws, and writes no row (the accepted consequence)                                                                                                                                                                                                                                                             |
+| S4.8 | e2e    | `POST /people/{personId}/face-suggestions/{foreignFaceId}/reject` as a second user → 400; a follow-up `GET` by the face's owner still lists it                                                                                                                                                                                                                    |
+| S4.9 | e2e    | `reject` and `ignore` happy paths. **These two endpoints currently have zero e2e coverage in any scope** — only `confirm` and `dismiss` are exercised. Assert the row leaves the queue and does not return on a re-read                                                                                                                                           |
 
 For S4.4, the cross-owner identity fixture is the fiddly part. Establish the shared identity the way
 the production code does — do not hand-write two `person` rows with the same `identityId` unless you

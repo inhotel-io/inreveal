@@ -23,12 +23,12 @@ correct.
 per-request face/owner array is capped and that every write path chunks its `IN`-lists at 1000.
 **Both halves are false** for these four:
 
-| DTO field                        | Where                          | Downstream, unchunked                                        |
-| -------------------------------- | ------------------------------ | ------------------------------------------------------------- |
-| `assetFaceIds` (unconfirm)       | `.min(1)` only                 | `face-identity.repository.ts` `demoteManualFaceLinks`          |
-| `verdictIds`                     | `.min(1).optional()`           | `face-person-verdict.repository.ts` `removeVerdicts`           |
-| `clusterMuteIds` / `ids`         | `.min(1).optional()`           | `face-repair-decline.repository.ts` (the removal method)       |
-| `excludeFaceIds`                 | **no cap at all**              | `face-repair.repository.ts` `getClusterFacePage` (executed twice per call) |
+| DTO field                  | Where                | Downstream, unchunked                                                      |
+| -------------------------- | -------------------- | -------------------------------------------------------------------------- |
+| `assetFaceIds` (unconfirm) | `.min(1)` only       | `face-identity.repository.ts` `demoteManualFaceLinks`                      |
+| `verdictIds`               | `.min(1).optional()` | `face-person-verdict.repository.ts` `removeVerdicts`                       |
+| `clusterMuteIds` / `ids`   | `.min(1).optional()` | `face-repair-decline.repository.ts` (the removal method)                   |
+| `excludeFaceIds`           | **no cap at all**    | `face-repair.repository.ts` `getClusterFacePage` (executed twice per call) |
 
 The 10 MB body limit admits far more ids than Postgres's 65 535-parameter ceiling, and
 `excludeFaceIds` is reachable from the shipped UI: `web/src/routes/admin/face-cleanup/[personId]/+page.svelte`
@@ -48,10 +48,10 @@ but state it explicitly rather than leaving it implicit.
 
 ## Part 2 — F21: publish the permission that is actually enforced
 
-| Endpoint                                                    | Publishes                    | Enforces                            |
-| ----------------------------------------------------------- | ---------------------------- | ----------------------------------- |
-| `GET /people/{id}/face-suggestions`                         | `Permission.PersonRead`      | `PersonUpdate`                      |
-| `POST /people/{id}/face-suggestions/{assetFaceId}/confirm`  | `Permission.PersonReassign`  | `PersonUpdate` **and** `PersonCreate` |
+| Endpoint                                                   | Publishes                   | Enforces                              |
+| ---------------------------------------------------------- | --------------------------- | ------------------------------------- |
+| `GET /people/{id}/face-suggestions`                        | `Permission.PersonRead`     | `PersonUpdate`                        |
+| `POST /people/{id}/face-suggestions/{assetFaceId}/confirm` | `Permission.PersonReassign` | `PersonUpdate` **and** `PersonCreate` |
 
 An API key scoped exactly as the spec documents passes the guard and then gets a 400 from
 `requireAccess`.
@@ -94,13 +94,13 @@ checked against your prediction.
 
 Every absence assertion needs a positive control in the same test body (spec §2).
 
-| #     | Layer  | Test                                                                                                                                                        |
-| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S10.1 | unit   | Each of the four schemas rejects `25_001` ids and accepts exactly `25_000` (table-driven over the four)                                                       |
-| S10.2 | unit   | `excludeFaceIds` rejects over-cap input — it has **no** cap today, so this is a genuine red                                                                   |
+| #     | Layer  | Test                                                                                                                                                                                                                             |
+| ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S10.1 | unit   | Each of the four schemas rejects `25_001` ids and accepts exactly `25_000` (table-driven over the four)                                                                                                                          |
+| S10.2 | unit   | `excludeFaceIds` rejects over-cap input — it has **no** cap today, so this is a genuine red                                                                                                                                      |
 | S10.3 | medium | `demoteManualFaceLinks`, `removeVerdicts`, the decline removal and `getClusterFacePage` each complete with 25 000 ids without a bind-parameter error, and each returns the right result for a small control set in the same test |
-| S10.4 | unit   | `person.controller.spec.ts` asserts the GET publishes `PersonUpdate` and confirm publishes `PersonUpdate`; the service-level checks are unchanged (**pin** the service side) |
-| S10.5 | —      | Not a test: your predicted diff for `face.identity.repository.sql`                                                                                            |
+| S10.4 | unit   | `person.controller.spec.ts` asserts the GET publishes `PersonUpdate` and confirm publishes `PersonUpdate`; the service-level checks are unchanged (**pin** the service side)                                                     |
+| S10.5 | —      | Not a test: your predicted diff for `face.identity.repository.sql`                                                                                                                                                               |
 
 For S10.3, bulk-insert the fixture rows rather than looping 25 000 single inserts, or the test will
 dominate the suite runtime. Slice 7 added a `seedFacesBulk` helper to

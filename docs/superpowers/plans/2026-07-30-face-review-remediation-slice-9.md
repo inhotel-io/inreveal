@@ -33,16 +33,16 @@ sweep drains — and F17/F18 can replenish the sweep while it waits.
 
 ## Files
 
-| File                                                                | Change |
-| ------------------------------------------------------------------- | ------ |
-| `server/src/repositories/person.repository.ts`                       | narrow the `EXISTS` to per-person candidates |
-| `server/src/repositories/shared-space.repository.ts`                 | verify/align the space twin |
-| `server/src/repositories/job.repository.ts`                          | `getJobOptions` cases; bound `waitForQueueCompletion` |
-| `server/src/services/person.service.ts`                              | pass the timeout at the forced call site |
-| `server/test/medium/specs/repositories/person.repository.spec.ts`     | S9.1–S9.6 |
-| `server/test/medium/specs/repositories/shared-space.repository.spec.ts` | S9.7 |
-| `server/src/repositories/job.repository.spec.ts`                     | S9.8 |
-| `server/src/services/person.service.spec.ts`                         | S9.9, S9.10 |
+| File                                                                    | Change                                                |
+| ----------------------------------------------------------------------- | ----------------------------------------------------- |
+| `server/src/repositories/person.repository.ts`                          | narrow the `EXISTS` to per-person candidates          |
+| `server/src/repositories/shared-space.repository.ts`                    | verify/align the space twin                           |
+| `server/src/repositories/job.repository.ts`                             | `getJobOptions` cases; bound `waitForQueueCompletion` |
+| `server/src/services/person.service.ts`                                 | pass the timeout at the forced call site              |
+| `server/test/medium/specs/repositories/person.repository.spec.ts`       | S9.1–S9.6                                             |
+| `server/test/medium/specs/repositories/shared-space.repository.spec.ts` | S9.7                                                  |
+| `server/src/repositories/job.repository.spec.ts`                        | S9.8                                                  |
+| `server/src/services/person.service.spec.ts`                            | S9.9, S9.10                                           |
 
 Nothing else. Another agent owns `web/`, `server/src/repositories/face-person-verdict.repository.ts`
 and `server/src/services/face-repair.service.ts`.
@@ -79,18 +79,18 @@ and `server/src/services/face-repair.service.ts`.
 
 Every absence assertion needs a positive control in the same test body (spec §2).
 
-| #     | Layer  | Test                                                                                                                                                       |
-| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #     | Layer  | Test                                                                                                                                                                                                                                       |
+| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | S9.1  | medium | **BDD** — **Given** an owner with three named people, only one of which has an unassigned ML face in its own library, **When** `getScannablePeopleWithUnassignedFaces` streams, **Then** exactly one person is yielded, and it is that one |
-| S9.2  | medium | Red proof for S9.1 (three yielded before the fix). Fold into S9.1 once green rather than keeping both                                                        |
-| S9.3  | medium | A person whose only candidate is on a Locked asset is not yielded — composes with Slice 1                                                                    |
-| S9.4  | medium | A person whose only candidate is soft-deleted / invisible / non-ML is not yielded (table-driven), with a live control yielded in the same test                |
-| S9.5  | medium | **pin** — hidden, unnamed and `type='pet'` people are still excluded                                                                                        |
-| S9.6  | medium | Two owners: owner A's unassigned face does not make owner B's people scannable                                                                              |
-| S9.7  | medium | The space twin yields only space people with candidates reachable in that space (**pin** if it is already correct — see Implementation step 2)                |
-| S9.8  | unit   | `getJobOptions` for both new job names returns a `jobId` containing the person id; two calls with the same id produce the same `jobId`, two different ids do not |
-| S9.9  | unit   | `handleQueueRecognizeFaces({ force: true })` returns after the bounded wait when `PeopleBackfill` never drains, and logs a warning naming the queue           |
-| S9.10 | unit   | **pin** — the non-forced path does not wait on `PeopleBackfill` at all                                                                                     |
+| S9.2  | medium | Red proof for S9.1 (three yielded before the fix). Fold into S9.1 once green rather than keeping both                                                                                                                                      |
+| S9.3  | medium | A person whose only candidate is on a Locked asset is not yielded — composes with Slice 1                                                                                                                                                  |
+| S9.4  | medium | A person whose only candidate is soft-deleted / invisible / non-ML is not yielded (table-driven), with a live control yielded in the same test                                                                                             |
+| S9.5  | medium | **pin** — hidden, unnamed and `type='pet'` people are still excluded                                                                                                                                                                       |
+| S9.6  | medium | Two owners: owner A's unassigned face does not make owner B's people scannable                                                                                                                                                             |
+| S9.7  | medium | The space twin yields only space people with candidates reachable in that space (**pin** if it is already correct — see Implementation step 2)                                                                                             |
+| S9.8  | unit   | `getJobOptions` for both new job names returns a `jobId` containing the person id; two calls with the same id produce the same `jobId`, two different ids do not                                                                           |
+| S9.9  | unit   | `handleQueueRecognizeFaces({ force: true })` returns after the bounded wait when `PeopleBackfill` never drains, and logs a warning naming the queue                                                                                        |
+| S9.10 | unit   | **pin** — the non-forced path does not wait on `PeopleBackfill` at all                                                                                                                                                                     |
 
 For S9.9, drive the timeout with fake timers or a very short injected timeout — do **not** make the
 test actually sleep for a production-length interval.

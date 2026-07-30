@@ -40,15 +40,15 @@ Every user "not this person" decision is lost and the table grows monotonically.
 
 ## Files
 
-| File                                                                | Change |
-| ------------------------------------------------------------------- | ------ |
-| `server/src/repositories/face-person-verdict.repository.ts`           | `clearNegativeForTarget`, `deleteOrphanedVerdicts` |
-| `server/src/services/person.service.ts`                              | call clearing from the human-placement paths; call the reaper from `handlePersonCleanup` |
-| `server/src/services/shared-space.service.ts`                        | call clearing from the space confirm |
-| `server/src/services/face-repair.service.ts`                         | call clearing from the move and lock buckets |
-| `server/test/medium/specs/repositories/face-person-verdict.repository.spec.ts` | S8.7, S8.9, S8.10 |
-| `server/test/medium/specs/services/face-review-cross-flow.spec.ts`    | S8.1–S8.6 |
-| `server/test/medium/specs/repositories/face-verdict-safety.spec.ts`    | S8.8 |
+| File                                                                           | Change                                                                                   |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `server/src/repositories/face-person-verdict.repository.ts`                    | `clearNegativeForTarget`, `deleteOrphanedVerdicts`                                       |
+| `server/src/services/person.service.ts`                                        | call clearing from the human-placement paths; call the reaper from `handlePersonCleanup` |
+| `server/src/services/shared-space.service.ts`                                  | call clearing from the space confirm                                                     |
+| `server/src/services/face-repair.service.ts`                                   | call clearing from the move and lock buckets                                             |
+| `server/test/medium/specs/repositories/face-person-verdict.repository.spec.ts` | S8.7, S8.9, S8.10                                                                        |
+| `server/test/medium/specs/services/face-review-cross-flow.spec.ts`             | S8.1–S8.6                                                                                |
+| `server/test/medium/specs/repositories/face-verdict-safety.spec.ts`            | S8.8                                                                                     |
 
 Nothing else. Do not touch anything under `web/`, `e2e/`,
 `server/src/repositories/person.repository.ts`, `shared-space.repository.ts` or `job.repository.ts`.
@@ -64,7 +64,7 @@ rather than three separate methods.
 
 Two things to get right:
 
-- **Scope it to the target being placed onto.** A verdict against a *different* person for the same
+- **Scope it to the target being placed onto.** A verdict against a _different_ person for the same
   face must survive. This is the same asymmetry `isSettledForOwner` already encodes.
 - **Chunk the `assetFaceIds` `IN`-list** (the cleanup move path can pass up to 25 000), reusing
   `BULK_CHUNK_SIZE` in that file.
@@ -96,18 +96,18 @@ exists to collect. Verify that ordering in the current source before wiring it.
 
 Every absence assertion needs a positive control in the same test body (spec §2).
 
-| #     | Layer  | Test                                                                                                                                                     |
-| ----- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S8.1  | medium | **BDD** — **Given** an admin kept F away from Q via the stay bucket, **When** the owner later places F on Q through the face editor, **Then** `listResolutions` no longer lists "F is not Q" (assert it DID list it before the placement) |
-| S8.2  | medium | The same placement leaves a `rejected` row for a **different** person R intact — the scoping control                                                        |
-| S8.3  | medium | Identity-keyed clearing: a verdict whose `personId` is NULL but whose `identityId` matches the target is cleared                                            |
-| S8.4  | medium | The space confirm clears a negative recorded against that space person, and one recorded against its identity                                              |
-| S8.5  | medium | A cleanup move to Q clears any negative for `(Q, F)`; the `lock` bucket clears any negative for the reviewed person                                        |
-| S8.6  | medium | **BDD, the follow-on defect** — **Given** the S8.1 sequence, **When** Q is deleted and re-created and a suggestion scan runs, **Then** F is offered again. Assert it is NOT offered without the clearing fix (that is the red) |
-| S8.7  | medium | `deleteOrphanedVerdicts` deletes an all-keys-NULL row and **keeps** rows retaining `personId` only, `spacePersonId` only, and `identityId` only — four assertions, one test |
+| #     | Layer  | Test                                                                                                                                                                                                                                               |
+| ----- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S8.1  | medium | **BDD** — **Given** an admin kept F away from Q via the stay bucket, **When** the owner later places F on Q through the face editor, **Then** `listResolutions` no longer lists "F is not Q" (assert it DID list it before the placement)          |
+| S8.2  | medium | The same placement leaves a `rejected` row for a **different** person R intact — the scoping control                                                                                                                                               |
+| S8.3  | medium | Identity-keyed clearing: a verdict whose `personId` is NULL but whose `identityId` matches the target is cleared                                                                                                                                   |
+| S8.4  | medium | The space confirm clears a negative recorded against that space person, and one recorded against its identity                                                                                                                                      |
+| S8.5  | medium | A cleanup move to Q clears any negative for `(Q, F)`; the `lock` bucket clears any negative for the reviewed person                                                                                                                                |
+| S8.6  | medium | **BDD, the follow-on defect** — **Given** the S8.1 sequence, **When** Q is deleted and re-created and a suggestion scan runs, **Then** F is offered again. Assert it is NOT offered without the clearing fix (that is the red)                     |
+| S8.7  | medium | `deleteOrphanedVerdicts` deletes an all-keys-NULL row and **keeps** rows retaining `personId` only, `spacePersonId` only, and `identityId` only — four assertions, one test                                                                        |
 | S8.8  | medium | **BDD, reset** — **Given** verdicts of every shape, **When** a forced recognition run completes (`unassignFaces` → `handlePersonCleanup` → `deleteUnreferencedIdentities`), **Then** no fully-orphaned row survives and rows with a live target do |
-| S8.9  | medium | The reaper runs **after** the identity GC: seed a row whose only key is an identity that the GC removes in the same run, and assert the row is gone. Ordered the other way it would survive — that is the discriminating case |
-| S8.10 | medium | The reaper and the clearing both handle a large id set without a bind-parameter error (bulk-seed; do not loop single inserts) |
+| S8.9  | medium | The reaper runs **after** the identity GC: seed a row whose only key is an identity that the GC removes in the same run, and assert the row is gone. Ordered the other way it would survive — that is the discriminating case                      |
+| S8.10 | medium | The reaper and the clearing both handle a large id set without a bind-parameter error (bulk-seed; do not loop single inserts)                                                                                                                      |
 
 ## Verification
 

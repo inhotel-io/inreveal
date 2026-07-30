@@ -25,10 +25,10 @@ must stay fixed: every 4xx/5xx still surfaces through `handleError` with the fac
 
 Eight endpoints, all currently `@HttpCode(HttpStatus.OK)` + `@Res({ passthrough: true })`:
 
-| Controller                  | Endpoints                                     |
-| --------------------------- | --------------------------------------------- |
-| `person.controller.ts`      | confirm, reject, ignore, dismiss              |
-| `shared-space.controller.ts`| confirm, reject, ignore, dismiss (space person)|
+| Controller                   | Endpoints                                       |
+| ---------------------------- | ----------------------------------------------- |
+| `person.controller.ts`       | confirm, reject, ignore, dismiss                |
+| `shared-space.controller.ts` | confirm, reject, ignore, dismiss (space person) |
 
 The services already return `Promise<boolean>` — **no service change is needed**. This slice changes
 the controllers, adds one DTO, updates the specs, and then removes the two web adapters.
@@ -43,9 +43,7 @@ const FaceSuggestionActionResponseSchema = z
     // F24: the acted/no-op signal lives in the BODY, not the status code. oazapfts' ok() resolves to
     // the body and discards the status for every 2xx, so a 200-vs-204 contract is unreadable by any
     // generated client. Both controllers return 200 with this shape.
-    acted: z
-      .boolean()
-      .describe('Whether the call changed anything. False when the suggestion was already resolved.'),
+    acted: z.boolean().describe('Whether the call changed anything. False when the suggestion was already resolved.'),
   })
   .meta({ id: 'FaceSuggestionActionResponseDto' });
 
@@ -96,17 +94,17 @@ both controllers if nothing else uses it.
 
 ## Tests (write first — each must be seen RED for the stated reason)
 
-| #       | Layer  | Test                                                                                                 |
-| ------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| S11b.1  | unit   | `person.controller`: confirm returns **200** and body `{ acted: true }` when the service acted        |
-| S11b.2  | unit   | `person.controller`: confirm returns **200** and body `{ acted: false }` on a no-op — and **not** 204 |
-| S11b.3  | unit   | the same two cases for reject, ignore and dismiss                                                     |
-| S11b.4  | unit   | `shared-space.controller`: the same acted/no-op body for all four space-person actions                |
-| S11b.5  | web    | modal: `{ acted: true }` from confirm ⇒ counter incremented and success toast shown                   |
-| S11b.6  | web    | modal: `{ acted: false }` ⇒ face acted and modal advances, but counter **not** incremented, no toast  |
-| S11b.7  | web    | **pin** — a rejected call still calls `handleError`, leaves the face unacted and does not advance     |
-| S11b.8  | web    | resolutions: Load more requests **page 2** (not page 1 again) and appends its rows                    |
-| S11b.9  | web    | resolutions: the rendered total comes from the server's `total`, not `resolutions.length`             |
+| #      | Layer | Test                                                                                                  |
+| ------ | ----- | ----------------------------------------------------------------------------------------------------- |
+| S11b.1 | unit  | `person.controller`: confirm returns **200** and body `{ acted: true }` when the service acted        |
+| S11b.2 | unit  | `person.controller`: confirm returns **200** and body `{ acted: false }` on a no-op — and **not** 204 |
+| S11b.3 | unit  | the same two cases for reject, ignore and dismiss                                                     |
+| S11b.4 | unit  | `shared-space.controller`: the same acted/no-op body for all four space-person actions                |
+| S11b.5 | web   | modal: `{ acted: true }` from confirm ⇒ counter incremented and success toast shown                   |
+| S11b.6 | web   | modal: `{ acted: false }` ⇒ face acted and modal advances, but counter **not** incremented, no toast  |
+| S11b.7 | web   | **pin** — a rejected call still calls `handleError`, leaves the face unacted and does not advance     |
+| S11b.8 | web   | resolutions: Load more requests **page 2** (not page 1 again) and appends its rows                    |
+| S11b.9 | web   | resolutions: the rendered total comes from the server's `total`, not `resolutions.length`             |
 
 S11b.2 is the load-bearing one: it is the test that would have caught the un-shippable contract.
 

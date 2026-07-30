@@ -369,7 +369,7 @@ overrides.faceRepairDecline || (mocks.faceRepairDecline as As<FaceRepairDeclineR
      Add the import for `FaceRepairDeclineRepository` at the top of `utils.ts` next to the other repo imports.
 
 4. `server/test/medium.factory.ts`: import next to `FaceRepairScanRepository` (~line 37) and add the switch
-   case next to `FaceRepairScanRepository` (~line 481):
+case next to `FaceRepairScanRepository` (~line 481):
 
 ```ts
     case FaceRepairDeclineRepository:

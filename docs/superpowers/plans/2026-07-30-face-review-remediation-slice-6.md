@@ -19,9 +19,11 @@ await db
   .deleteFrom('face_person_verdict')
   .where('personId', '=', sourcePersonId)
   .where('assetFaceId', 'in', (eb) =>
-    eb.selectFrom('face_person_verdict as survivor')
+    eb
+      .selectFrom('face_person_verdict as survivor')
       .select('survivor.assetFaceId')
-      .where('survivor.personId', '=', targetPersonId))
+      .where('survivor.personId', '=', targetPersonId),
+  )
   .execute();
 ```
 
@@ -95,20 +97,20 @@ In `server/test/medium/specs/services/face-verdict.merge-durability.spec.ts`. Sl
 added the red test for S6.1 (named `a source negative outranks a survivor pending row`) — start by
 running it and confirming it is red, then make it green. Add the rest.
 
-| #     | Test                                                                                                                                                |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #     | Test                                                                                                                                                                                                                                                                                              |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | S6.1  | **BDD** — Given a rejection of F for Bob and a later pending suggestion of F for Robert, When Bob merges into Robert, Then exactly one row exists, `status='rejected'`, `personId=Robert`, and `getPendingForPerson(Robert)` does not offer F (assert a control face IS offered in the same call) |
-| S6.2  | The promoted row carries the source's `source` and `actorId`, and its `distance` is NULL                                                              |
-| S6.3  | **pin** — source `pending` + survivor `rejected` still keeps the survivor's rejected row                                                              |
-| S6.4  | source `ignored` + survivor `pending` promotes to `ignored`, not `rejected`                                                                          |
-| S6.5  | source `rejected` + survivor `ignored` keeps the survivor unchanged (negative-vs-negative is not a promotion)                                         |
-| S6.6  | **pin** — survivor has no row for F: the plain re-target moves the source row, unchanged path                                                         |
-| S6.7  | source `identityId` NULL, survivor `identityId` set ⇒ promoted row keeps the survivor's identity                                                      |
-| S6.8  | survivor `identityId` NULL, source set ⇒ promoted row adopts the source's identity                                                                    |
-| S6.9  | Three-way merge: two sources (one `rejected`, one `ignored`) into a `pending` survivor ⇒ exactly one row, negative, no unique-index violation          |
-| S6.10 | Row-count assertions after every case above — both partial unique indexes still satisfied                                                             |
-| S6.11 | The space twin: S6.1, S6.3 and S6.9 repeated on `spacePersonId` through `mergeSpacePeople`                                                            |
-| S6.12 | **pin** — `rekeyVerdictIdentity` still runs after the re-target and leaves the promoted row keyed to the surviving identity                            |
+| S6.2  | The promoted row carries the source's `source` and `actorId`, and its `distance` is NULL                                                                                                                                                                                                          |
+| S6.3  | **pin** — source `pending` + survivor `rejected` still keeps the survivor's rejected row                                                                                                                                                                                                          |
+| S6.4  | source `ignored` + survivor `pending` promotes to `ignored`, not `rejected`                                                                                                                                                                                                                       |
+| S6.5  | source `rejected` + survivor `ignored` keeps the survivor unchanged (negative-vs-negative is not a promotion)                                                                                                                                                                                     |
+| S6.6  | **pin** — survivor has no row for F: the plain re-target moves the source row, unchanged path                                                                                                                                                                                                     |
+| S6.7  | source `identityId` NULL, survivor `identityId` set ⇒ promoted row keeps the survivor's identity                                                                                                                                                                                                  |
+| S6.8  | survivor `identityId` NULL, source set ⇒ promoted row adopts the source's identity                                                                                                                                                                                                                |
+| S6.9  | Three-way merge: two sources (one `rejected`, one `ignored`) into a `pending` survivor ⇒ exactly one row, negative, no unique-index violation                                                                                                                                                     |
+| S6.10 | Row-count assertions after every case above — both partial unique indexes still satisfied                                                                                                                                                                                                         |
+| S6.11 | The space twin: S6.1, S6.3 and S6.9 repeated on `spacePersonId` through `mergeSpacePeople`                                                                                                                                                                                                        |
+| S6.12 | **pin** — `rekeyVerdictIdentity` still runs after the re-target and leaves the promoted row keyed to the surviving identity                                                                                                                                                                       |
 
 Every absence assertion needs a positive control in the same test body (spec §2).
 

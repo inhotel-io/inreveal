@@ -186,7 +186,7 @@ Semantics, reusing existing primitives:
   `applyDeclineFilters` so faces declined/locked/moved-off since the scan are dropped.
   - `stay` → `FaceRepairDeclineRepository.createDeclines` for each `(assetFaceId, its stored
 suspectedOwnerId)`, `declinedBy` = the admin. Insert with `ON CONFLICT (assetFaceId, suspectedOwnerId) DO
-    NOTHING` so re-staying an already-declined pairing is idempotent — no unique-violation (E20).
+NOTHING` so re-staying an already-declined pairing is idempotent — no unique-violation (E20).
   - `lock` → insert `face_repair_lock(assetFaceId, personId, createdBy)` (`ON CONFLICT DO NOTHING`).
   - `detach` → `detachFaces` (§5.2).
 - **Disjoint buckets.** A face may appear in at most one bucket; the server rejects overlaps with 400 (E7).
