@@ -413,6 +413,17 @@ DELETE FROM "kysely_migrations"
    '1785000000000-AddFaceRepairLock',
    '1786000000000-FaceRepairLockPersonNullable',
    '1787000000000-AddFacePersonVerdict',
+   '1788000000000-ReconcileFacePersonVerdictConstraints',
+
+   -- Pre-rename names for two migrations that were renumbered off timestamp collisions
+   -- ("renumber AddFaceRepairScanFlaggedFace off the #722 collision",
+   -- "renumber AddFaceRepairScanInFlightIndex off the #752 collision"). The current names are
+   -- already in the list above (1781500000000 / 1783050000000); an RC/staging database that ran
+   -- this branch before either renumbering fix recorded the OLD name below instead, which has no
+   -- matching file on disk in this tree, and without an exact-name DELETE entry that database
+   -- trips "corrupted migrations: previously executed migration ... is missing" on boot.
+   '1782000000000-AddFaceRepairScanFlaggedFace',
+   '1783000000000-AddFaceRepairScanInFlightIndex',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current
@@ -466,7 +477,12 @@ BEGIN
       OR "name" LIKE '%AddPersonFaceSuggestion%'
       OR "name" LIKE '%AddSpacePersonFaceSuggestion%'
       OR "name" LIKE '%AddFaceSuggestionIntentStatuses%'
-      OR "name" LIKE '%AddFacePersonVerdict%';
+      OR "name" LIKE '%AddFacePersonVerdict%'
+      OR "name" LIKE '%AddFaceRepairScan%'
+      OR "name" LIKE '%AddFaceRepairDecline%'
+      OR "name" LIKE '%AddFaceRepairLock%'
+      OR "name" LIKE '%AddFaceRepairScanFlaggedFace%'
+      OR "name" LIKE '%AddFaceRepairScanInFlightIndex%';
   IF fork_rows_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery row(s) still present in kysely_migrations after cleanup — aborting.', fork_rows_left;
   END IF;
@@ -491,7 +507,8 @@ BEGIN
        'shared_space', 'user_group_member', 'user_group',
        'classification_prompt_embedding', 'classification_category',
        'storage_migration_log', 'asset_duplicate_checksum',
-       'face_person_verdict'
+       'face_person_verdict', 'face_repair_scan', 'face_repair_decline',
+       'face_repair_scan_flagged_face', 'face_repair_lock'
      );
   IF fork_tables_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery table(s) still present after cleanup — aborting.', fork_tables_left;

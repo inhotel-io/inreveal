@@ -173,3 +173,8 @@ declined`), where each entry has an **Undo** action that re-surfaces it in the n
 - A **fully-contaminated cluster** (every face flagged) is always classified _Review these first_ with an
   `over-cap` badge — it can never be bulk-approved via the pre-selection. Approving it from its review page moves
   all of its faces, after which the emptied person is removed by the regular cleanup job.
+- **Instances that ran a pre-release build of this feature must be reset, not upgraded in place.** A handful of
+  fork migration names that shipped in early release candidates were later renamed or removed as the face review
+  and cleanup engines were unified. A database that recorded one of those names has no matching migration file on
+  disk in later builds and fails to boot with a "corrupted migrations" error naming the missing migration. There
+  is no automatic upgrade path for this — reset the instance (fresh database) rather than carrying it forward.

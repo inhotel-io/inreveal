@@ -159,6 +159,24 @@ const buildConfig = async (repos: RepoDeps) => {
 
   const config = (result.success ? result.data : rawConfig) as SystemConfig;
 
+  // The suggestion-band cross-field invariant (F35). `ConfigValidate` (person.service.ts) enforces the same rule
+  // on the database-config path, but that event only fires from `updateSystemConfig`, which config-file mode
+  // refuses outright — so a config file with an inverted band boots cleanly and silently disables the feature,
+  // with no admin UI available to diagnose it. Deliberately NOT expressed as a Zod `.superRefine` on
+  // FacialRecognitionConfigSchema/SystemConfigSchema: both are consumed by createZodDto and the OpenAPI
+  // generator, and wrapping them turns them into a ZodEffects that can't be `.extend()`ed and may lose its
+  // `.meta({ id })` — silently changing the generated spec. An explicit check here carries no such risk, and
+  // reuses the same throw-vs-log split as the schema validation above.
+  const { maxDistance: facialRecognitionMaxDistance, suggestions } = config.machineLearning.facialRecognition;
+  if (suggestions.enabled && suggestions.maxDistance <= facialRecognitionMaxDistance) {
+    const message = `Invalid system config: machineLearning.facialRecognition.suggestions.maxDistance (${suggestions.maxDistance}) must be greater than machineLearning.facialRecognition.maxDistance (${facialRecognitionMaxDistance}), otherwise no faces can ever be suggested.`;
+    if (configFile) {
+      throw new Error(message);
+    } else {
+      logger.error(message);
+    }
+  }
+
   if (config.server.externalDomain.length > 0) {
     const domain = new URL(config.server.externalDomain);
 
