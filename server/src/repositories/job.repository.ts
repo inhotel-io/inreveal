@@ -399,21 +399,26 @@ export class JobRepository {
       return;
     }
 
+    // bullmq >=5.80 narrowed `IRedisClient` to just the commands bullmq itself issues; EXISTS, LREM
+    // and SREM are not among them. The concrete client is ioredis, so cast to reach them — the same
+    // approach removeOrphanedActiveJobs above takes for LREM.
+    const redis = client as unknown as Pick<Redis, 'exists' | 'lrem' | 'srem'>;
+
     const removedIds: string[] = [];
     let removedCount = 0;
     for (const jobId of activeJobIds) {
       const jobKey = queue.toKey(jobId);
       const lockKey = `${jobKey}:lock`;
-      const [jobExists, lockExists] = await Promise.all([client.exists(jobKey), client.exists(lockKey)]);
+      const [jobExists, lockExists] = await Promise.all([redis.exists(jobKey), redis.exists(lockKey)]);
       if (jobExists > 0 || lockExists > 0) {
         continue;
       }
 
-      const removed = await client.lrem(activeKey, 0, jobId);
+      const removed = await redis.lrem(activeKey, 0, jobId);
       if (removed > 0) {
         removedCount += removed;
         removedIds.push(jobId);
-        await client.srem(queue.toKey('stalled'), jobId);
+        await redis.srem(queue.toKey('stalled'), jobId);
       }
     }
 
