@@ -313,7 +313,7 @@ describe('buildSmartSearchParams', () => {
     it('omits all five when unset, and omits a whitespace-only ocr', () => {
       const result = buildSmartSearchParams({
         query: 'beach',
-        filters: { ...baseFilters, ocr: '   ' },
+        filters: { ...baseFilters, ocr: ' '.repeat(3) },
       });
 
       expect(result.state).toBeUndefined();
