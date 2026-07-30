@@ -24,11 +24,12 @@ representative thumbnail at all.
 
 ### Why the crop was introduced at all
 
-For a **shared-space member who does not own the asset**, `/people/{id}/thumbnail` is owner-gated
-and is cropped from a _different_ asset the viewer may have no right to see (#796). The crop from
-the on-screen asset is the only face image such a viewer is certainly entitled to. That constraint
-does not disappear when the setting is added — it becomes the reason the setting cannot be applied
-unconditionally (§3.2).
+For a viewer who does not own the asset, the representative thumbnail is a crop of a _different_
+asset — one they may have no right to see — and `/people/{id}/thumbnail` is reachable only to the
+owner or to a member of a space containing that person (§3.1). The crop from the on-screen asset is
+the only face image every entitled viewer is certainly allowed. That constraint does not disappear
+when the setting is added — it becomes the reason the setting cannot be applied unconditionally
+(§3.2).
 
 ## 2. Decisions
 
@@ -81,12 +82,21 @@ export const resolvePersonAvatar = (input: {
 | -------------------------------------------- | ----------------------------------------------------------------------- |
 | Space context and `person.spacePersonId` set | `/shared-spaces/{spaceId}/people/{spacePersonId}/thumbnail?updatedAt=…` |
 | `isOwner`                                    | `/people/{person.id}/thumbnail?updatedAt=…`                             |
-| Anyone else                                  | `undefined` — owner-gated, must never be requested (#796)               |
+| Anyone else                                  | `undefined` — no representative face this viewer can reach (§3.2)       |
 
 The space arm is checked **first**, preserving today's ordering in `getPersonFallbackThumbnailUrl`:
 whenever a person carries a `spacePersonId` in space context, the space thumbnail wins, because the
 space person may carry a different name and face from the underlying `person` row. Both arms carry
 `updatedAt` as the cache-buster — `getPeopleThumbnailUrl` already defaults it to `person.updatedAt`.
+
+**Precise RBAC note (the component's own comment overstates this).** `/people/{id}/thumbnail` is
+guarded by `Permission.PersonRead`, which `server/src/utils/access.ts:319-326` resolves as
+`checkOwnerAccess ∪ checkSharedSpaceAccess` — a shared-space member **can** legitimately read it for
+a person shared through their space. So the third arm is not "owner-gated"; it is "this viewer is
+neither the owner nor a member of a space containing this person, so the request would be denied".
+Routing space members to `/shared-spaces/…` instead is a **product** decision (the space profile may
+carry its own representative face and name), not an RBAC necessity. Do not restate the third arm as
+"owner-only" in code comments — it is wrong and will mislead the next reader.
 
 **`resolvePersonAvatar`** — first match wins:
 
@@ -171,19 +181,39 @@ Both icon names are verified present in `@mdi/js`.
 `R` = representative URL exists. `F` = person has a face row in this asset. `C` = setting
 `cropFacesFromAsset`.
 
-| Viewer                        | R   | F   | C     | Result                            | Toggle shown |
-| ----------------------------- | --- | --- | ----- | --------------------------------- | ------------ |
-| Owner                         | yes | yes | true  | crop, fallback `/people/…`        | yes          |
-| Owner                         | yes | yes | false | `/people/…`, no crop computed     | yes          |
-| Owner                         | yes | no  | true  | `/people/…`                       | yes          |
-| Owner                         | yes | no  | false | `/people/…`                       | yes          |
-| Space member (non-owner)      | yes | yes | true  | crop, fallback `/shared-spaces/…` | yes          |
-| Space member (non-owner)      | yes | yes | false | `/shared-spaces/…`                | yes          |
-| Space member (non-owner)      | yes | no  | any   | `/shared-spaces/…`                | yes          |
-| Shared-album / partner viewer | no  | yes | true  | crop, fallback asset thumbnail    | no           |
-| Shared-album / partner viewer | no  | yes | false | crop, fallback asset thumbnail    | no           |
-| Shared-album / partner viewer | no  | no  | any   | asset thumbnail                   | no           |
-| Shared link                   | —   | —   | —     | section not rendered at all       | no           |
+| Viewer                           | R   | F   | C     | Result                                | Toggle shown |
+| -------------------------------- | --- | --- | ----- | ------------------------------------- | ------------ |
+| Owner, no space                  | yes | yes | true  | crop, fallback `/people/…`            | yes          |
+| Owner, no space                  | yes | yes | false | `/people/…`, no crop computed         | yes          |
+| Owner, no space                  | yes | no  | true  | `/people/…`                           | yes          |
+| Owner, no space                  | yes | no  | false | `/people/…`                           | yes          |
+| **Owner, inside a space**        | yes | any | any   | `/people/…` — **never** the space arm | yes          |
+| Space member (non-owner)         | yes | yes | true  | crop, fallback `/shared-spaces/…`     | yes          |
+| Space member (non-owner)         | yes | yes | false | `/shared-spaces/…`                    | yes          |
+| Space member (non-owner)         | yes | no  | any   | `/shared-spaces/…`                    | yes          |
+| Space member, no `spacePersonId` | no  | yes | any   | crop, fallback asset thumbnail        | no           |
+| Album / partner viewer, no space | no  | yes | true  | crop, fallback asset thumbnail        | no           |
+| Album / partner viewer, no space | no  | yes | false | crop, fallback asset thumbnail        | no           |
+| Album / partner viewer, no space | no  | no  | any   | asset thumbnail                       | no           |
+| Shared link                      | —   | —   | —     | section not rendered at all           | no           |
+
+Two rows above are counter-intuitive and each needs its own test:
+
+- **Owner inside a space** takes the owner arm, not the space arm. `people` comes from
+  `faceManager.people` (the ternary at `DetailPanelPeople.svelte:28` only switches source for
+  `isSpaceMember && !isOwner`), and `mapPerson` (`server/src/dtos/person.dto.ts:304-317`) does not
+  emit `spacePersonId` at all — so the space arm's guard can never be satisfied on that source, even
+  with a `spaceId` prop present.
+- **Space member whose person carries no `spacePersonId`** degrades to the album/partner row.
+  `AssetService.get` filters these out server-side (`asset.service.ts:123` and `:141`), so it should
+  not occur — but the client must not synthesise `/shared-spaces/…/people/undefined/thumbnail`.
+
+**"No space" means no `effectiveSpaceId`, which is broader than "no space route".**
+`DetailPanel.svelte:48` computes `effectiveSpaceId = spaceId || asset.resolvedSpaceId`, and
+`AssetService.get` sets `resolvedSpaceId` whenever _any_ space contains the asset for that viewer
+(`asset.service.ts:132-142`). The album/partner rows are therefore only reachable when no space
+contains the asset. A test that passes `spaceId: undefined` is testing that narrow case, not
+"a non-owner in general" — production would have resolved a space for most non-owners.
 
 Additional behaviours that must hold in **both** modes:
 
@@ -209,12 +239,12 @@ highest layer that can observe it.
 
 ### 5.1 Layers
 
-| Layer         | File                                                            | Proves                                                             |
-| ------------- | --------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Unit (pure)   | `web/src/lib/utils/person-avatar.spec.ts` (new)                 | The whole §4 truth table, URL shape, `updatedAt` cache-busting     |
-| Component BDD | `web/src/lib/components/asset-viewer/DetailPanelPeople.spec.ts` | Rendered `img src`, that the crop is _not_ computed, toggle gating |
-| Settings      | `web/src/routes/(user)/user-settings/AppSettings.spec.ts` (new) | Switch reflects and writes the store                               |
-| E2E           | `e2e/src/ui/specs/asset-viewer/people-avatar.e2e-spec.ts` (new) | Real browser: flipping the mode changes the avatar `src` shape     |
+| Layer         | File                                                            | Proves                                                                                                                                           |
+| ------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit (pure)   | `web/src/lib/utils/person-avatar.spec.ts` (new)                 | The whole §4 truth table, URL shape, `updatedAt` cache-busting                                                                                   |
+| Component BDD | `web/src/lib/components/asset-viewer/DetailPanelPeople.spec.ts` | Rendered `img src`, that the crop is _not_ computed, toggle gating                                                                               |
+| Settings      | `web/src/routes/(user)/user-settings/AppSettings.spec.ts` (new) | Switch reflects and writes the store                                                                                                             |
+| E2E           | `e2e/src/ui/specs/asset-viewer/people-avatar.e2e-spec.ts` (new) | Real browser: flipping the mode changes the avatar `src` and persists across a reload. **Requires a new `GET /api/faces` mock first — see §5.3** |
 
 ### 5.2 Test traps (verified against the current tree — do not rediscover these the hard way)
 
@@ -234,17 +264,42 @@ highest layer that can observe it.
 5. **`utils.createFace` in `e2e/src/utils.ts` inserts no bounding box**, so a DB-backed e2e face has
    an all-zero box and `zoomImageToBase64` returns `null` (`faceWidth <= 0`). A DB-backed e2e can
    never show the crop — hence §5.3.
-6. **`web/src/lib/components/asset-viewer/DetailPanelPeople.spec.ts` never renders real people from
-   the server** — it mocks `faceManager`. These tests prove the component's logic, not the server
-   contract. Do not weaken the file's existing `#796` NOTE comment when extending it.
+6. **`DetailPanelPeople.spec.ts` never renders real people from the server** — it mocks
+   `faceManager`. These tests prove the component's logic, not the server contract.
+7. **The file's existing `#796` NOTE is now factually wrong — correct it, do not preserve it.** It
+   claims `mapFaces()` nulls `person` unless `person.ownerId === auth.user.id`, and that
+   `AssetService.get` hard-sets `people = []` for a non-owner with no space. Neither holds since
+   #818 landed the server half: `mapFaces` (`server/src/dtos/person.dto.ts:350-361`) does
+   `void auth` and maps the person unconditionally, and `AssetService.get`
+   (`server/src/services/asset.service.ts:147`) merely filters hidden people. The sibling test
+   _"renders nothing for a non-owner given the empty list the server actually serves today"_ is
+   likewise describing a server that no longer exists — it still passes (it mocks an empty list) but
+   its name and comment are misleading. **Slice 1 rewrites that comment block and renames that test**
+   to say what it actually proves: the component renders nothing when handed an empty list.
+8. **`pnpm test -- --run <path>` silently drops the path filter.** Measured on this tree: the `--`
+   form ran 294 files / 3987 tests in 72 s; `pnpm test --run <path>` ran 1 file / 13 tests in 4 s.
+   Use the second form. Note `CLAUDE.md` documents the first — that instruction is wrong.
 
-### 5.3 E2E flavour
+### 5.3 E2E flavour and its prerequisite
 
-The e2e goes in `e2e/src/ui/specs/asset-viewer/` (Playwright with **mocked network**), following
-`face-editor.e2e-spec.ts` and reusing the route mocks in
-`e2e/src/ui/mock-network/face-editor-network.ts`, which already intercepts `**/api/faces` and
-`**/api/people/*/thumbnail`. This is deterministic and sidesteps traps 4 and 5. It does **not** go
-in `e2e/src/specs/web/asset-viewer/detail-panel.e2e-spec.ts` (DB-backed), for the reasons above.
+The e2e goes in `e2e/src/ui/specs/asset-viewer/` (Playwright, **fully mocked network**), following
+`face-editor.e2e-spec.ts`. It does **not** go in
+`e2e/src/specs/web/asset-viewer/detail-panel.e2e-spec.ts` (DB-backed), because of trap 5.
+
+**The mock this needs does not exist yet.** `face-editor-network.ts:102` intercepts
+`**/api/faces` for **`POST` only** (`if (request.method() !== 'POST') return route.fallback()`),
+and nothing in `e2e/src/ui/mock-network/` intercepts the `GET /api/faces?id=…` that
+`faceManager.getAssetFaces` actually calls — `base-network.ts` has no catch-all either. Left as-is,
+the People section renders empty and the spec proves nothing. Slice 7 must therefore add a
+`GET **/api/faces*` mock returning `AssetFaceResponseDto[]` with a non-null `person` and a
+**non-zero** bounding box. `**/api/people/*/thumbnail` is already mocked in `face-editor-network.ts`
+and can be reused, as can `randomThumbnail` from `e2e/src/ui/generators/timeline/images.ts`.
+
+**Do not make the e2e depend on a successful crop.** Producing one requires the on-screen `<img>`
+to decode and survive `canvas.toDataURL()` in the mocked environment; that is an unproven
+prerequisite and not worth blocking on. Assert instead that the avatar `src` is **not** the person
+thumbnail before the flip, **is** `/api/people/…/thumbnail` after it, and survives a reload. That
+holds whether or not the crop renders.
 
 ### 5.4 Known interaction with an existing test
 
@@ -274,8 +329,21 @@ _No production change._ Extend `DetailPanelPeople.spec.ts`.
 - **1.5** (pin) Given a non-owner with no space context and a person with a face, when the crop
   resolves to `null`, then the avatar `src` contains neither `/people/` nor `/shared-spaces/`
   (it is the asset thumbnail).
+- **1.6** (pin) Given the **owner** viewing their own asset **with a `spaceId` prop set** and a
+  person carrying no `spacePersonId`, then the avatar `src` contains `/people/` — the space arm does
+  not fire. _(§4, first counter-intuitive row.)_
+- **1.7** (pin) Given a space member and a person **without** `spacePersonId`, then the avatar `src`
+  contains neither `/shared-spaces/` nor the string `undefined`. _(§4, second counter-intuitive
+  row — guards against synthesising `/shared-spaces/…/people/undefined/thumbnail`.)_
+- **1.8** (pin) Given a person whose `name` is the empty string (an untagged face — the common
+  case), the avatar still renders. Assert via `container.querySelector('img')`, never
+  `getByRole('img')` or `getByText` (trap 3).
+- **1.9** Correct the stale `#796` NOTE comment block and rename the misleading
+  _"…the empty list the server actually serves today"_ test per trap 7. _(Comment/name change only;
+  no assertion changes.)_
 
-**Done when:** all five pass, and each has been individually mutation-verified to go red.
+**Done when:** 1.1–1.8 pass and each has been individually mutation-verified to go red; 1.9 leaves
+the suite green.
 
 ### Slice 2 — Extract the pure resolver
 
@@ -309,22 +377,43 @@ _Not consumed by any component yet._
 - **4.4** Given a **non-owner with no space** and the setting **off**, then `zoomImageToBase64` is
   still called and, once it resolves, the avatar `src` is its `data:` URL — the setting does not
   demote this viewer to the asset thumbnail. _(§3.2 — the regression guard.)_
-- **4.5** Given the panel is open, when the store value flips, then the avatars re-render without a
-  remount.
-- **4.6** Given a video asset with the setting **off**, then `zoomImageToBase64` is not called
-  (no media fetch for a crop nobody will see).
-- **4.7** Hidden-people filtering, highlight-on-hover, person links and age rendering are unchanged
+- **4.5** Given a rendered panel, when the store value is flipped **on the same component instance**
+  (no re-render, no remount), then the avatar `src` updates. Assert by grabbing the container once,
+  calling `cropFacesFromAsset.set(false)`, awaiting a tick, and re-reading `src` from that same
+  container.
+- **4.6** Given a **video** asset with the setting **off**, then `zoomImageToBase64` is not called
+  (no media fetch for a crop nobody will see). Pass `type: AssetTypeEnum.Video` explicitly (trap 1).
+- **4.7** Given the **owner inside a space** (§4 row 5) and the setting **off**, then the avatar
+  `src` contains `/people/`, not `/shared-spaces/`.
+- **4.8** Hidden-people filtering, highlight-on-hover, person links and age rendering are unchanged
   with the setting off. _(One test per behaviour; these guard the snippet refactor.)_
+- **4.9** Given the setting **off** and the same person present on two consecutive assets, when the
+  panel switches asset, then the avatar `src` still resolves from the new asset's props. _(The
+  `{#await}` sits inside an `{#each}` keyed on `person.id`, so a person shared between two assets
+  keeps its DOM node across the switch; this guards the snippet refactor in 2.4 against pinning a
+  stale avatar.)_
 
 Implementation: pass `$cropFacesFromAsset` into `resolvePersonAvatar`.
 
 ### Slice 5 — Settings switch
 
-- **5.1** Add the four i18n keys to `i18n/en.json`, alphabetically (§3.6).
+- **5.1** Add the four i18n keys to `i18n/en.json` (§3.6). Placement is automatic — the root
+  `.prettierrc` runs `prettier-plugin-sort-json` with `jsonRecursiveSort: true`, and `en.json` is
+  currently fully sorted (verified), so prettier will order them. Do not hand-place and do not
+  reorder anything else.
 - **5.2** Add the `<Field>` + `<Switch>` to `AppSettings.svelte` (§3.7).
 - **5.3** New `AppSettings.spec.ts` (mirroring `FeatureSettings.spec.ts`): the switch is checked
   when the store is `true`; toggling it writes `false` to the store; it reflects an
   already-`false` store on mount.
+
+**Risk on 5.3, and the fallback.** `AppSettings.svelte` is heavier to mount than `FeatureSettings`:
+it pulls `themeManager` from `@immich/ui`, starts a `setInterval` in `onMount`, and renders
+`SettingsLanguageSelector` + `SettingCombobox`. `FeatureSettings.spec.ts` already needed four module
+mocks to become mountable. Budget for mocking `@immich/ui`'s `themeManager` and using fake timers
+for the interval. **If mounting proves impractical, do not sink the slice into it** — drop 5.3, note
+it in the PR, and rely on slice 6's component tests (same store, real assertions) plus slice 7.1's
+e2e, which drives the real settings page in a browser. The switch is three lines of markup over an
+already-tested store; an unmountable harness is not worth a day.
 
 ### Slice 6 — In-panel toggle button
 
@@ -343,9 +432,14 @@ Implementation: button in the section header, **outside** `{#if isOwner}`, gated
 
 ### Slice 7 — E2E and the final gate
 
-- **7.1** New `e2e/src/ui/specs/asset-viewer/people-avatar.e2e-spec.ts` (§5.3): open a photo with
-  mocked faces and people; assert the avatar `src` starts with `data:`; click the toggle; assert it
-  now matches `/api/people/…/thumbnail`; reload and assert the choice persisted.
+- **7.1a** New mock module (or an addition to `face-editor-network.ts`) intercepting
+  `GET **/api/faces*` and returning one `AssetFaceResponseDto` per mock person, each with a non-null
+  `person` and a non-zero bounding box (§5.3). Without this the People section is empty and 7.1b
+  proves nothing — verify the section renders people **before** writing the assertions.
+- **7.1b** New `e2e/src/ui/specs/asset-viewer/people-avatar.e2e-spec.ts`: open a photo, open the
+  Info panel, assert the avatar `src` is **not** `/api/people/…/thumbnail`; click the in-panel
+  toggle; assert it now matches `/api/people/…/thumbnail`; reload and assert the choice persisted.
+  Deliberately does not assert a `data:` URL — see §5.3.
 - **7.2** Full web gate from `web/`: `pnpm check:typescript`, `pnpm check:svelte`, `pnpm lint`,
   `pnpm test`.
 - **7.3** `cd docs && pnpm format` — the spec and any plan files must be prettier-clean; this is the
@@ -364,15 +458,19 @@ rather than merely _not displayed_.
 ## 8. Global invariants
 
 - **No server changes.** If a slice appears to need one, stop — the design is wrong.
-- **Never request `/people/{id}/thumbnail` for a non-owner** (#796). Enforced by
-  `getRepresentativeThumbnailUrl` returning `undefined`, and pinned by the existing
-  "never requests the owner-only person thumbnail for a non-owner" test.
+- **Never request `/people/{id}/thumbnail` for a viewer who is neither the owner nor a member of a
+  space containing that person** (#796). Enforced by `getRepresentativeThumbnailUrl` returning
+  `undefined`, and pinned by the existing "never requests the owner-only person thumbnail for a
+  non-owner" test. That test's _name_ is a simplification (see the RBAC note in §3.1) but its
+  assertion is correct for the scenario it sets up — leave it alone.
 - **`i18n/` is shared by web and mobile.** New keys go in `en.json` only; grep both apps before
   editing or deleting an existing key.
-- **`pnpm test -- --run <path>` drops the path filter** — run web unit tests as
+- **`pnpm test -- --run <path>` drops the path filter** (trap 8) — run web unit tests as
   `pnpm test --run <path>`.
 - `web/pnpm check:svelte` has been observed scanning zero files locally; treat CI as the
   authority for that gate.
+- **Baseline measured 2026-07-30:** `web` is fully green at 294 files / 3987 tests / 2 skipped /
+  8 todo. Any red after a slice is that slice's doing.
 
 ## 9. Out of scope
 
