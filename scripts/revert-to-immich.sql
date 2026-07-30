@@ -414,6 +414,7 @@ DELETE FROM "kysely_migrations"
    '1786000000000-FaceRepairLockPersonNullable',
    '1787000000000-AddFacePersonVerdict',
    '1788000000000-ReconcileFacePersonVerdictConstraints',
+   '1789000000000-AddFacePersonVerdictStatusCreatedAtIdIndex',
 
    -- Pre-rename names for two migrations that were renumbered off timestamp collisions
    -- ("renumber AddFaceRepairScanFlaggedFace off the #722 collision",

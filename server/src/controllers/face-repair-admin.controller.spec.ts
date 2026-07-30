@@ -4,6 +4,7 @@ import { CacheControl } from 'src/enum';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import { ImmichRedirectResponse } from 'src/utils/file';
 import request from 'supertest';
+import { errorDto } from 'test/medium/responses';
 import { factory } from 'test/small.factory';
 import { ControllerContext, controllerSetup, mockBaseService } from 'test/utils';
 
@@ -745,13 +746,46 @@ describe(FaceRepairAdminController.name, () => {
     });
 
     it('delegates to service.listResolutions', async () => {
-      service.listResolutions.mockResolvedValue({ resolutions: [] });
+      service.listResolutions.mockResolvedValue({ total: 0, resolutions: [] });
       const { status, body } = await request(ctx.getHttpServer())
         .get('/admin/face-repair/resolutions')
         .set('Authorization', 'Bearer token');
       expect(status).toBe(200);
       expect(service.listResolutions).toHaveBeenCalled();
-      expect(body).toMatchObject({ resolutions: [] });
+      expect(body).toMatchObject({ total: 0, resolutions: [] });
+    });
+
+    // S11 (F23): unscoped by design — paginated so a large instance's resolutions list does not return every
+    // outstanding verdict in one response.
+    it('S11: parses page/size query params and passes them through to the service', async () => {
+      service.listResolutions.mockResolvedValue({ total: 0, resolutions: [] });
+      const { status } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/resolutions')
+        .query({ page: 2, size: 10 })
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(service.listResolutions).toHaveBeenCalledWith(expect.objectContaining({ page: 2, size: 10 }));
+    });
+
+    it('S11: defaults page/size when omitted', async () => {
+      service.listResolutions.mockResolvedValue({ total: 0, resolutions: [] });
+      const { status } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/resolutions')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(200);
+      expect(service.listResolutions).toHaveBeenCalledWith(expect.objectContaining({ page: 1, size: 50 }));
+    });
+
+    it('S11: rejects a size above the 200 ceiling', async () => {
+      const { status, body } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/resolutions')
+        .query({ size: 201 })
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(400);
+      expect(body).toEqual(
+        errorDto.validationError([{ path: ['size'], message: 'Too big: expected number to be <=200' }]),
+      );
+      expect(service.listResolutions).not.toHaveBeenCalled();
     });
   });
 

@@ -6997,7 +6997,10 @@ describe(PersonService.name, () => {
       mocks.person.getRandomFace.mockResolvedValue(face); // drives createNewFeaturePhoto
       mocks.facePersonVerdict.claimPending.mockResolvedValue(1); // a pending row existed
 
-      await sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id);
+      // S11.7: the caller (controller) needs to know whether this call actually did something — `true` here
+      // is what the controller maps to 200. See the idempotent/disabled-feature cases below for the `false`
+      // (204, no-op) side of the same signal.
+      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id)).resolves.toBe(true);
 
       // Slice 9: every write in the chain now runs inside `databaseRepository.transaction`, so each call
       // carries a trailing trx arg — the test/utils.ts L318 passthrough default makes `trx === mocks.database`.
@@ -7023,7 +7026,7 @@ describe(PersonService.name, () => {
       expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith(face.id, mocks.database);
     });
 
-    it('is idempotent when the row is already confirmed/rejected/ignored but person+face still exist → 200, no reassign', async () => {
+    it('is idempotent when the row is already confirmed/rejected/ignored but person+face still exist → 204 (false), no reassign', async () => {
       const face = AssetFaceFactory.create();
       const person = PersonFactory.create();
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id]));
@@ -7035,7 +7038,8 @@ describe(PersonService.name, () => {
       mocks.person.getFaceById.mockResolvedValue(getForAssetFace(face));
       mocks.facePersonVerdict.claimPending.mockResolvedValue(0); // already confirmed/rejected/ignored
 
-      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id)).resolves.toBeUndefined();
+      // S11.7: no-op (already resolved) -> false, the signal the controller maps to 204.
+      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id)).resolves.toBe(false);
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
     });
 
@@ -7061,7 +7065,8 @@ describe(PersonService.name, () => {
         },
       });
 
-      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
+      // S11.7: the feature-disabled short-circuit is a no-op -> false (204).
+      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBe(false);
 
       expect(mocks.access.person.checkOwnerAccess).not.toHaveBeenCalled();
       expect(mocks.access.person.checkFaceOwnerAccess).not.toHaveBeenCalled();
@@ -7137,7 +7142,8 @@ describe(PersonService.name, () => {
       mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
       mocks.facePersonVerdict.markRejected.mockResolvedValue(1);
 
-      await expect(sut.rejectFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBeUndefined();
+      // S11.7: markRejected affecting a row -> true (200).
+      await expect(sut.rejectFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(true);
 
       expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalledWith(authUser.user.id, new Set(['person-1']));
       expect(mocks.access.person.checkFaceOwnerAccess).toHaveBeenCalledWith(authUser.user.id, new Set(['face-1']));
@@ -7154,7 +7160,7 @@ describe(PersonService.name, () => {
       mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
       mocks.facePersonVerdict.markRejected.mockResolvedValue(1);
 
-      await expect(sut.rejectFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBeUndefined();
+      await expect(sut.rejectFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(true);
 
       expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1', {
         identityId: expect.any(String),
@@ -7172,7 +7178,7 @@ describe(PersonService.name, () => {
       mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
       mocks.facePersonVerdict.markIgnored.mockResolvedValue(1);
 
-      await expect(sut.ignoreFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBeUndefined();
+      await expect(sut.ignoreFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(true);
 
       expect(mocks.facePersonVerdict.markIgnored).toHaveBeenCalledWith('person-1', 'face-1', {
         identityId: expect.any(String),
@@ -7191,8 +7197,10 @@ describe(PersonService.name, () => {
       mocks.facePersonVerdict.markRejected.mockResolvedValue(0);
       mocks.facePersonVerdict.markIgnored.mockResolvedValue(0);
 
-      await expect(sut.rejectFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBeUndefined();
-      await expect(sut.ignoreFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBeUndefined();
+      // S11.7: markRejected/markIgnored affecting no rows -> false (204) — the third of the "server methods
+      // already distinguish these internally" signals the plan calls out for reject/ignore.
+      await expect(sut.rejectFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(false);
+      await expect(sut.ignoreFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(false);
 
       expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1', {
         identityId: expect.any(String),
@@ -7214,7 +7222,7 @@ describe(PersonService.name, () => {
       mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
       mocks.facePersonVerdict.markRejected.mockResolvedValue(1);
 
-      await expect(sut.dismissFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBeUndefined();
+      await expect(sut.dismissFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(true);
 
       expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1', {
         identityId: expect.any(String),

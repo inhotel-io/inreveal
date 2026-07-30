@@ -7377,9 +7377,10 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.facePersonVerdict.hasPendingForSpacePerson.mockResolvedValue(false);
 
+      // S11.7: not pending -> false (204), the acted/no-op signal the controller maps to a status code.
       await expect(
         sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(false);
       expect(mocks.facePersonVerdict.hasPendingForSpacePerson).toHaveBeenCalledWith(
         'space-1',
         'space-person-1',
@@ -7400,7 +7401,10 @@ describe(SharedSpaceService.name, () => {
       mocks.facePersonVerdict.claimPendingForSpacePerson.mockResolvedValue(1);
       mocks.sharedSpace.addPersonFaces.mockResolvedValue([]);
 
-      await sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1');
+      // S11.7: acted -> true (200).
+      await expect(
+        sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
+      ).resolves.toBe(true);
 
       expect(mocks.facePersonVerdict.hasPendingForSpacePerson).toHaveBeenCalledWith(
         'space-1',
@@ -7450,9 +7454,10 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Owner }));
       mocks.facePersonVerdict.claimPendingForSpacePerson.mockResolvedValue(0);
 
+      // S11.7: claimed === 0 -> false (204).
       await expect(
         sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(false);
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1', mocks.database);
       // Slice 3: the claim carries the band, so an ineligible row cannot be confirmed through it.
       expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith(
@@ -7477,7 +7482,10 @@ describe(SharedSpaceService.name, () => {
         },
       });
 
-      await sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1');
+      // S11.7: feature-disabled short-circuit -> false (204).
+      await expect(
+        sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
+      ).resolves.toBe(false);
 
       expect(mocks.facePersonVerdict.hasPendingForSpacePerson).not.toHaveBeenCalled();
     });
@@ -7555,9 +7563,10 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.facePersonVerdict.isFaceReachableInSpace.mockResolvedValue(false);
 
+      // S11.7: unreachable -> false (204).
       await expect(
         sut.rejectSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(false);
       expect(mocks.facePersonVerdict.isFaceReachableInSpace).toHaveBeenCalledWith('space-1', 'face-1');
       expect(mocks.facePersonVerdict.markRejectedForSpacePerson).not.toHaveBeenCalled();
       expect(mocks.facePersonVerdict.markIgnoredForSpacePerson).not.toHaveBeenCalled();
@@ -7574,9 +7583,10 @@ describe(SharedSpaceService.name, () => {
       mocks.facePersonVerdict.isFaceReachableInSpace.mockResolvedValue(true);
       mocks.facePersonVerdict.markRejectedForSpacePerson.mockResolvedValue(1);
 
-      await expect(
-        sut.rejectSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1'),
-      ).resolves.toBeUndefined();
+      // S11.7: reachable and a row was written -> true (200).
+      await expect(sut.rejectSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
+        true,
+      );
       expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
         identityId: 'space-identity-1',
         source: 'suggestion',
@@ -7584,14 +7594,31 @@ describe(SharedSpaceService.name, () => {
       });
     });
 
+    // S11.7: symmetric with the personal path's "affecting no rows" case — reachable, but the upsert itself
+    // reports nothing written.
+    it('S11.7: reachable but markRejectedForSpacePerson/markIgnoredForSpacePerson affecting no rows -> false (204)', async () => {
+      const authUser = factory.auth();
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.facePersonVerdict.isFaceReachableInSpace.mockResolvedValue(true);
+      mocks.facePersonVerdict.markRejectedForSpacePerson.mockResolvedValue(0);
+      mocks.facePersonVerdict.markIgnoredForSpacePerson.mockResolvedValue(0);
+
+      await expect(sut.rejectSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
+        false,
+      );
+      await expect(sut.ignoreSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
+        false,
+      );
+    });
+
     it('reject marks only the target suggestion with identity + actor, without touching identity links or other suggestions', async () => {
       const authUser = factory.auth();
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.facePersonVerdict.markRejectedForSpacePerson.mockResolvedValue(1);
 
-      await expect(
-        sut.rejectSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1'),
-      ).resolves.toBeUndefined();
+      await expect(sut.rejectSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
+        true,
+      );
       expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
         identityId: expect.any(String),
         source: 'suggestion',
@@ -7607,9 +7634,9 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.facePersonVerdict.markIgnoredForSpacePerson.mockResolvedValue(1);
 
-      await expect(
-        sut.ignoreSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1'),
-      ).resolves.toBeUndefined();
+      await expect(sut.ignoreSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
+        true,
+      );
       expect(mocks.facePersonVerdict.markIgnoredForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
         identityId: expect.any(String),
         source: 'suggestion',
@@ -7625,9 +7652,9 @@ describe(SharedSpaceService.name, () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.facePersonVerdict.markRejectedForSpacePerson.mockResolvedValue(1);
 
-      await expect(
-        sut.dismissSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1'),
-      ).resolves.toBeUndefined();
+      await expect(sut.dismissSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
+        true,
+      );
       expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
         identityId: expect.any(String),
         source: 'suggestion',

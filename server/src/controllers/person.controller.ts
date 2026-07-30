@@ -335,19 +335,27 @@ export class PersonController {
   // the face itself (assetFaceId), but the guard can only carry one permission; that face-level check
   // stays service-level (see the comment on confirmFaceSuggestion in person.service.ts). Do not drop it
   // there on the assumption this decorator covers it.
+  //
+  // S11 (F24): the response code now EXPLICITLY reports whether the call acted (200) or was a no-op (204) —
+  // the service's return value, not a fixed default. The web modal used to infer "already resolved" from a
+  // 400, which is indistinguishable from a genuine authorization failure (see the comment that used to sit
+  // here and on PersonSuggestionReviewModal.svelte). @HttpCode's default only covers the case nothing below
+  // overrides it via the passthrough response.
   @Post(':id/face-suggestions/:assetFaceId/confirm')
   @Authenticated({ permission: Permission.PersonUpdate })
   @HttpCode(HttpStatus.OK)
   @Endpoint({
     summary: 'Confirm a face suggestion',
-    description: 'Assign the suggested face to the person. Idempotent.',
+    description: 'Assign the suggested face to the person. Idempotent. 204 if there was nothing to do.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  confirmPersonFaceSuggestion(
+  async confirmPersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, assetFaceId }: PersonFaceSuggestionParamsDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    return this.service.confirmFaceSuggestion(auth, id, assetFaceId);
+    const acted = await this.service.confirmFaceSuggestion(auth, id, assetFaceId);
+    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
   }
 
   @Post(':id/face-suggestions/:assetFaceId/reject')
@@ -355,14 +363,17 @@ export class PersonController {
   @HttpCode(HttpStatus.OK)
   @Endpoint({
     summary: 'Reject a face suggestion',
-    description: 'Reject this suggestion for the person. The face stays unassigned. Idempotent.',
+    description:
+      'Reject this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  rejectPersonFaceSuggestion(
+  async rejectPersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, assetFaceId }: PersonFaceSuggestionParamsDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    return this.service.rejectFaceSuggestion(auth, id, assetFaceId);
+    const acted = await this.service.rejectFaceSuggestion(auth, id, assetFaceId);
+    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
   }
 
   @Post(':id/face-suggestions/:assetFaceId/ignore')
@@ -370,14 +381,17 @@ export class PersonController {
   @HttpCode(HttpStatus.OK)
   @Endpoint({
     summary: 'Ignore a face suggestion',
-    description: 'Ignore this suggestion for the person. The face stays unassigned. Idempotent.',
+    description:
+      'Ignore this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  ignorePersonFaceSuggestion(
+  async ignorePersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, assetFaceId }: PersonFaceSuggestionParamsDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    return this.service.ignoreFaceSuggestion(auth, id, assetFaceId);
+    const acted = await this.service.ignoreFaceSuggestion(auth, id, assetFaceId);
+    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
   }
 
   @Post(':id/face-suggestions/:assetFaceId/dismiss')
@@ -385,13 +399,16 @@ export class PersonController {
   @HttpCode(HttpStatus.OK)
   @Endpoint({
     summary: 'Dismiss a face suggestion',
-    description: 'Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent.',
+    description:
+      'Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
-  dismissPersonFaceSuggestion(
+  async dismissPersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, assetFaceId }: PersonFaceSuggestionParamsDto,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    return this.service.dismissFaceSuggestion(auth, id, assetFaceId);
+    const acted = await this.service.dismissFaceSuggestion(auth, id, assetFaceId);
+    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
   }
 }

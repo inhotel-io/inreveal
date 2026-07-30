@@ -1,4 +1,5 @@
 import type { PersonFaceSuggestionPageResponseDto, PersonResponseDto } from '@immich/sdk';
+import { toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -12,11 +13,25 @@ vi.mock('svelte-i18n', () => ({
 
 vi.mock('$lib/utils/handle-error', () => ({ handleError: vi.fn() }));
 
-// The server's documented already-resolved outcome for confirm/reject/ignore is a 400 (requireAccess
-// precedence on a CASCADE-deleted face/person — see person.service.ts confirmFaceSuggestion). The modal reads
-// `.status` off the caught error the same way the rest of this codebase already does (page.svelte's 409
-// checks), so a plain `{ status }`-augmented Error is enough to model it — no @immich/sdk mock needed.
-const benignAlreadyResolvedError = () => Object.assign(new Error('Not found or no access'), { status: 400 });
+vi.mock('@immich/ui', async (importOriginal: () => Promise<typeof import('@immich/ui')>) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    toastManager: {
+      primary: vi.fn(),
+      danger: vi.fn(),
+    },
+  };
+});
+
+// F24: the server now states explicitly, via the response status, whether an action endpoint acted (200) or
+// was a no-op (204) — see person.controller.ts / shared-space.controller.ts. The modal's confirm/dismiss/
+// ignore props resolve to `{ status: 200 | 204 }` on success and REJECT for every 4xx/5xx (including what
+// used to be misread as "already resolved": a 400 is now always a genuine failure — see access.ts
+// requireAccess).
+const acted = (): { status: 200 } => ({ status: 200 });
+const noOp = (): { status: 204 } => ({ status: 204 });
+const authFailure = () => Object.assign(new Error('Not found or no access'), { status: 400 });
 const serverError = () => Object.assign(new Error('Internal Server Error'), { status: 500 });
 
 const person = { id: 'p1', name: 'Alice', updatedAt: '2026-01-01T00:00:00.000Z' } as PersonResponseDto;
@@ -49,9 +64,9 @@ function setup(
     person,
     referenceThumbnailUrl: '/api/people/p1/thumbnail',
     loadPage: overrides.loadPage ?? vi.fn().mockResolvedValue(page1),
-    confirm: overrides.confirm ?? vi.fn().mockResolvedValue(undefined),
-    dismiss: overrides.dismiss ?? vi.fn().mockResolvedValue(undefined),
-    ignore: overrides.ignore ?? vi.fn().mockResolvedValue(undefined),
+    confirm: overrides.confirm ?? vi.fn().mockResolvedValue(acted()),
+    dismiss: overrides.dismiss ?? vi.fn().mockResolvedValue(acted()),
+    ignore: overrides.ignore ?? vi.fn().mockResolvedValue(acted()),
     onClose: overrides.onClose ?? vi.fn(),
   };
   render(PersonSuggestionReviewModal, { props });
@@ -61,6 +76,7 @@ function setup(
 describe('PersonSuggestionReviewModal', () => {
   beforeEach(() => {
     vi.mocked(handleError).mockClear();
+    vi.mocked(toastManager.primary).mockClear();
   });
 
   // bits-ui's body-scroll-lock schedules `resetBodyStyle` on a 24ms `window.setTimeout` when a modal unmounts
@@ -127,7 +143,7 @@ describe('PersonSuggestionReviewModal', () => {
   });
 
   it('Same person calls confirm then advances; last item closes with confirmed count', async () => {
-    const confirm = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.fn().mockResolvedValue(acted());
     const onClose = vi.fn();
     setup({ confirm, onClose });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
@@ -141,7 +157,7 @@ describe('PersonSuggestionReviewModal', () => {
   });
 
   it('Different person calls dismiss and advances', async () => {
-    const dismiss = vi.fn().mockResolvedValue(undefined);
+    const dismiss = vi.fn().mockResolvedValue(acted());
     setup({ dismiss });
     await waitFor(() => screen.getByTestId('suggestion-different-btn'));
     await userEvent.click(screen.getByTestId('suggestion-different-btn'));
@@ -149,7 +165,7 @@ describe('PersonSuggestionReviewModal', () => {
   });
 
   it('Ignore face calls ignore and advances without counting a confirmation', async () => {
-    const ignore = vi.fn().mockResolvedValue(undefined);
+    const ignore = vi.fn().mockResolvedValue(acted());
     const onClose = vi.fn();
     setup({ ignore, onClose });
     await waitFor(() => screen.getByTestId('suggestion-ignore-btn'));
@@ -180,9 +196,9 @@ describe('PersonSuggestionReviewModal', () => {
   });
 
   it('keyboard: ArrowRight confirms, ArrowLeft dismisses, ArrowDown ignores', async () => {
-    const confirm = vi.fn().mockResolvedValue(undefined);
-    const dismiss = vi.fn().mockResolvedValue(undefined);
-    const ignore = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.fn().mockResolvedValue(acted());
+    const dismiss = vi.fn().mockResolvedValue(acted());
+    const ignore = vi.fn().mockResolvedValue(acted());
     setup({ confirm, dismiss, ignore });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
     await userEvent.keyboard('{ArrowRight}'); // f1 → confirm
@@ -192,53 +208,135 @@ describe('PersonSuggestionReviewModal', () => {
   });
 
   it('keyboard: ArrowLeft dismisses', async () => {
-    const dismiss = vi.fn().mockResolvedValue(undefined);
+    const dismiss = vi.fn().mockResolvedValue(acted());
     setup({ dismiss });
     await waitFor(() => screen.getByTestId('suggestion-different-btn'));
     await userEvent.keyboard('{ArrowLeft}'); // f1 → dismiss
     expect(dismiss).toHaveBeenCalledWith('f1');
   });
 
-  // edges 9/10/11: a stale row (already resolved server-side — e.g. a concurrent scan/auto-assign, or the
-  // face's CASCADE-deleted precedence check) 400s. That is the ONE documented benign-advance outcome — see
-  // person.service.ts confirmFaceSuggestion's `claimed === 0` / requireAccess comments.
-  it('a stale item (confirm 400s — edges 9/10/11) still advances silently', async () => {
-    const confirm = vi.fn().mockRejectedValue(benignAlreadyResolvedError());
+  // S11.1/F24: the modal must stop inferring "already resolved" from a status code that ALSO means "you're
+  // not allowed to do this" — a 400 (or any 4xx/5xx) is now ALWAYS a genuine failure: handleError fires, the
+  // face is NOT marked acted, and the modal does not advance (positive control: the same click DOES advance
+  // and mark acted on a real acted() resolution — see "Same person calls confirm..." above).
+  it('S11.1: confirm rejected with { status: 400 } surfaces via handleError, does not mark acted, does not advance', async () => {
+    const confirm = vi.fn().mockRejectedValue(authFailure());
     const onClose = vi.fn();
     setup({ confirm, onClose });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 already resolved
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2
-    await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 0 }));
-    expect(handleError).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId('suggestion-same-btn'));
+    await waitFor(() => expect(handleError).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+    // still on f1: not advanced, not acted (buttons stay enabled — currentActed is false)
+    expect(screen.getByTestId('suggestion-progress')).toHaveAttribute('data-current', '1');
+    expect(screen.getByTestId('suggestion-same-btn')).not.toBeDisabled();
+    expect(screen.queryByTestId('suggestion-reviewed-badge')).not.toBeInTheDocument();
   });
 
-  it('a stale item (dismiss 400s — edges 9/10/11) still advances silently (symmetry)', async () => {
-    const dismiss = vi.fn().mockRejectedValue(benignAlreadyResolvedError());
+  // S11.4: the same three cases (400 fails, 204 no-op, 200 acted) for dismiss and ignore.
+  it('S11.4: dismiss rejected with { status: 400 } surfaces via handleError, does not mark acted, does not advance', async () => {
+    const dismiss = vi.fn().mockRejectedValue(authFailure());
     const onClose = vi.fn();
     setup({ dismiss, onClose });
     await waitFor(() => screen.getByTestId('suggestion-different-btn'));
-    await userEvent.click(screen.getByTestId('suggestion-different-btn')); // f1 already resolved
-    await userEvent.click(screen.getByTestId('suggestion-different-btn')); // f2
-    await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 0 }));
-    expect(handleError).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId('suggestion-different-btn'));
+    await waitFor(() => expect(handleError).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId('suggestion-progress')).toHaveAttribute('data-current', '1');
+    expect(screen.getByTestId('suggestion-different-btn')).not.toBeDisabled();
   });
 
-  it('a stale item (ignore 400s — edges 9/10/11) still advances silently (symmetry)', async () => {
-    const ignore = vi.fn().mockRejectedValue(benignAlreadyResolvedError());
+  it('S11.4: ignore rejected with { status: 400 } surfaces via handleError, does not mark acted, does not advance', async () => {
+    const ignore = vi.fn().mockRejectedValue(authFailure());
     const onClose = vi.fn();
     setup({ ignore, onClose });
     await waitFor(() => screen.getByTestId('suggestion-ignore-btn'));
-    await userEvent.click(screen.getByTestId('suggestion-ignore-btn')); // f1 already resolved
-    await userEvent.click(screen.getByTestId('suggestion-ignore-btn')); // f2
+
+    await userEvent.click(screen.getByTestId('suggestion-ignore-btn'));
+    await waitFor(() => expect(handleError).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId('suggestion-progress')).toHaveAttribute('data-current', '1');
+    expect(screen.getByTestId('suggestion-ignore-btn')).not.toBeDisabled();
+  });
+
+  // S11.2: a 204 (no-op) resolution still marks the face acted and advances — but shows no toast and does not
+  // increment `confirmed` (positive control: the default acted() resolution in "Same person calls confirm..."
+  // above DOES increment/close with confirmed:2 via the identical click path).
+  it('S11.2: confirm resolving 204 marks acted and advances without a toast or incrementing the counter', async () => {
+    const confirm = vi.fn().mockResolvedValue(noOp());
+    const onClose = vi.fn();
+    setup({ confirm, onClose });
+    await waitFor(() => screen.getByTestId('suggestion-same-btn'));
+
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> 204
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> 204
     await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 0 }));
     expect(handleError).not.toHaveBeenCalled();
+    expect(toastManager.primary).not.toHaveBeenCalled();
+  });
+
+  it('S11.4: dismiss resolving 204 marks acted and advances', async () => {
+    const dismiss = vi.fn().mockResolvedValue(noOp());
+    setup({ dismiss });
+    await waitFor(() => screen.getByTestId('suggestion-different-btn'));
+    await userEvent.click(screen.getByTestId('suggestion-different-btn'));
+    await waitFor(() => expect(screen.getByTestId('suggestion-progress')).toHaveAttribute('data-current', '2'));
+    expect(handleError).not.toHaveBeenCalled();
+  });
+
+  it('S11.4: ignore resolving 204 marks acted and advances', async () => {
+    const ignore = vi.fn().mockResolvedValue(noOp());
+    setup({ ignore });
+    await waitFor(() => screen.getByTestId('suggestion-ignore-btn'));
+    await userEvent.click(screen.getByTestId('suggestion-ignore-btn'));
+    await waitFor(() => expect(screen.getByTestId('suggestion-progress')).toHaveAttribute('data-current', '2'));
+    expect(handleError).not.toHaveBeenCalled();
+  });
+
+  // S11.3: confirm resolving 200 increments the counter AND shows the success toast (positive control on the
+  // toast call itself — the 204 case above asserts it is NOT called under otherwise-identical conditions).
+  it('S11.3: confirm resolving 200 increments the counter and shows the success toast', async () => {
+    const confirm = vi.fn().mockResolvedValue(acted());
+    const onClose = vi.fn();
+    setup({ confirm, onClose });
+    await waitFor(() => screen.getByTestId('suggestion-same-btn'));
+
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> 200
+    await waitFor(() => expect(toastManager.primary).toHaveBeenCalledTimes(1));
+    expect(toastManager.primary).toHaveBeenCalledWith('face_suggestion_confirmed_toast');
+
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> 200
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 2 }));
+    expect(toastManager.primary).toHaveBeenCalledTimes(2);
   });
 
   it('closes immediately with confirmed:0 when the first page is empty', async () => {
     const onClose = vi.fn();
     setup({ loadPage: vi.fn().mockResolvedValue({ total: 0, items: [] }), onClose });
     await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 0 }));
+  });
+
+  // S11.6: reviewing the last candidate drains the queue to zero — the modal renders the all-done state
+  // (positive control: it is absent while a candidate is still showing, in the same test body) and still
+  // calls onClose with the final count.
+  it('S11.6: the all-done state renders when the queue drains to zero', async () => {
+    const confirm = vi.fn().mockResolvedValue(acted());
+    const onClose = vi.fn();
+    // loadPage keeps returning the single row unconditionally — the modal itself filters it out of `items`
+    // once actedFaceIds has it (D8 head-refetch semantics), so the queue still drains to empty.
+    const loadPage = vi.fn().mockResolvedValue({ total: 1, items: [item('f1')] });
+    setup({ loadPage, confirm, onClose });
+
+    await waitFor(() => screen.getByTestId('suggestion-same-btn'));
+    // Positive control: the all-done panel is absent while a candidate is showing.
+    expect(screen.queryByTestId('suggestion-all-done')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // confirms the only item, queue drains
+    await waitFor(() => expect(screen.getByTestId('suggestion-all-done')).toBeInTheDocument());
+    expect(screen.getByTestId('suggestion-all-done')).toHaveTextContent('face_suggestion_all_done');
+    await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 1 }));
   });
 
   // D8: the server drains a face's row the moment it's acted on, so a fixed-offset "page 2" walks a moving
@@ -263,7 +361,7 @@ describe('PersonSuggestionReviewModal', () => {
   });
 
   it('a top-up fetch failure once the buffer is exhausted surfaces via handleError and does NOT close', async () => {
-    const confirm = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.fn().mockResolvedValue(acted());
     const onClose = vi.fn();
     // onMount's fetch succeeds (2 items); every top-up refetch triggered by advance() thereafter rejects.
     const loadPage = vi.fn().mockResolvedValueOnce(page1).mockRejectedValue(new Error('network blip'));
@@ -292,7 +390,7 @@ describe('PersonSuggestionReviewModal', () => {
     let remaining = Array.from({ length: TOTAL }, (_, i) => `f${i}`);
     const confirm = vi.fn((id: string) => {
       remaining = remaining.filter((x) => x !== id);
-      return Promise.resolve();
+      return Promise.resolve(acted());
     });
     const loadPage = vi.fn(({ size }: { page: number; size: number }) =>
       Promise.resolve({
@@ -326,8 +424,10 @@ describe('PersonSuggestionReviewModal', () => {
     expect(remaining).toHaveLength(0);
   });
 
-  it('surfaces a 500 from an action via handleError, does NOT mark the row acted, and allows retry', async () => {
-    const confirm = vi.fn().mockRejectedValueOnce(serverError()).mockResolvedValueOnce(undefined);
+  // S11.5 (pin): a 500 — like any 4xx/5xx now — surfaces via handleError and leaves the current face selected
+  // and retryable. Mutated/reverted below (see "S11.5 pin mutation") to prove this can actually fail.
+  it('S11.5 (pin): surfaces a 500 from an action via handleError, does NOT mark the row acted, and allows retry', async () => {
+    const confirm = vi.fn().mockRejectedValueOnce(serverError()).mockResolvedValueOnce(acted());
     const onClose = vi.fn();
     setup({ confirm, onClose });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
@@ -344,23 +444,27 @@ describe('PersonSuggestionReviewModal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('advances silently on the benign already-resolved error (no handleError toast)', async () => {
-    const confirm = vi.fn().mockRejectedValueOnce(benignAlreadyResolvedError()).mockResolvedValueOnce(undefined);
+  // F24: the mixed-sequence property the OLD 400-based "already resolved" test used to cover, now expressed
+  // with the real signal (204 no-op, then a genuine 200 acted) — a no-op must not inflate `confirmed`.
+  it('a 204 no-op followed by a real 200 confirm only counts the real one', async () => {
+    const confirm = vi.fn().mockResolvedValueOnce(noOp()).mockResolvedValueOnce(acted());
     const onClose = vi.fn();
     setup({ confirm, onClose });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
 
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 already resolved -> advance silently
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> 204, advance silently
     await waitFor(() => expect(screen.getByTestId('suggestion-progress')).toHaveAttribute('data-current', '2'));
     expect(handleError).not.toHaveBeenCalled();
+    expect(toastManager.primary).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 confirms for real
-    // Only the real confirm counts — the benign-skip on f1 must not inflate the confirmed count.
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> 200, confirms for real
+    // Only the real confirm counts — the no-op on f1 must not inflate the confirmed count.
     await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 1 }));
+    expect(toastManager.primary).toHaveBeenCalledTimes(1);
   });
 
   it('marks acted rows read-only on back-navigation (no re-invocation of confirm/dismiss/ignore)', async () => {
-    const confirm = vi.fn().mockResolvedValue(undefined);
+    const confirm = vi.fn().mockResolvedValue(acted());
     setup({ confirm });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
 

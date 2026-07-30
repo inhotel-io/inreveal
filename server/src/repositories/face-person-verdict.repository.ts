@@ -19,6 +19,9 @@ export interface NegativeVerdictListRow {
   spacePersonId: string | null;
   spacePersonName: string | null;
   spaceName: string | null;
+  // Slice 11 (F23): the space-person twin of personThumbnailFaceId above — projected from
+  // shared_space_person.representativeFaceId so a space-person-targeted row can render a thumbnail too.
+  spacePersonThumbnailFaceId: string | null;
   actorId: string | null;
   actorName: string | null;
 }
@@ -433,9 +436,22 @@ export class FacePersonVerdictRepository {
   // Every negative verdict, newest first, for the admin resolutions page. Joined for display against both
   // possible targets plus the actor, and tagged with the engine that recorded it so the page can separate an
   // admin's "keep here" from a user's "that isn't Anna".
-  async listNegativeVerdicts(): Promise<NegativeVerdictListRow[]> {
-    const rows = await this.db
-      .selectFrom('face_person_verdict as fpv')
+  //
+  // Slice 11 (F23): this list is unscoped (no owner/person filter — it's the whole instance's outstanding
+  // verdicts), so it now paginates server-side instead of returning every row in one response. `page` is
+  // 1-indexed, matching PersonFaceSuggestionPageQueryDto's convention. Ordered by createdAt DESC with `id`
+  // (a UUID v7, itself roughly time-ordered but never EQUAL between rows) as a tie-break, so paging is stable
+  // even across rows written in the same instant.
+  @GenerateSql({ params: [{ page: 1, size: 50 }] })
+  async listNegativeVerdicts(opts: {
+    page: number;
+    size: number;
+  }): Promise<{ total: number; items: NegativeVerdictListRow[] }> {
+    const base = this.db.selectFrom('face_person_verdict as fpv').where('fpv.status', 'in', ['rejected', 'ignored']);
+
+    const totalRow = await base.select((eb) => eb.fn.countAll<string>().as('total')).executeTakeFirstOrThrow();
+
+    const rows = await base
       .leftJoin('person', 'person.id', 'fpv.personId')
       .leftJoin('shared_space_person as ssp', 'ssp.id', 'fpv.spacePersonId')
       .leftJoin('shared_space', 'shared_space.id', 'ssp.spaceId')
@@ -451,18 +467,24 @@ export class FacePersonVerdictRepository {
         'person.faceAssetId as personThumbnailFaceId',
         'fpv.spacePersonId as spacePersonId',
         'ssp.name as spacePersonName',
+        'ssp.representativeFaceId as spacePersonThumbnailFaceId',
         'shared_space.name as spaceName',
         'fpv.actorId as actorId',
         'actor.name as actorName',
       ])
-      .where('fpv.status', 'in', ['rejected', 'ignored'])
       .orderBy('fpv.createdAt', 'desc')
+      .orderBy('fpv.id', 'desc')
+      .limit(opts.size)
+      .offset((opts.page - 1) * opts.size)
       .execute();
 
-    return rows.map((row) => ({
-      ...row,
-      createdAt: row.createdAt as unknown as string,
-    }));
+    return {
+      total: Number(totalRow.total),
+      items: rows.map((row) => ({
+        ...row,
+        createdAt: row.createdAt as unknown as string,
+      })),
+    };
   }
 
   // Slice 8 (F15): a human placing face F on target T states a fact that contradicts any durable

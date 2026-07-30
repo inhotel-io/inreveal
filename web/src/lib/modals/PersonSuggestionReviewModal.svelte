@@ -11,7 +11,7 @@
     type PersonFaceSuggestionResponseDto,
     type PersonResponseDto,
   } from '@immich/sdk';
-  import { Button, IconButton, Modal, ModalBody, ModalFooter } from '@immich/ui';
+  import { Button, IconButton, Modal, ModalBody, ModalFooter, toastManager } from '@immich/ui';
   import {
     mdiAccountCheckOutline,
     mdiAccountRemoveOutline,
@@ -25,13 +25,19 @@
 
   type PageReq = { page: number; size: number };
 
+  // F24: the server now states explicitly whether an action endpoint acted (200) or was a no-op (204) —
+  // see person.controller.ts / shared-space.controller.ts. The modal reads THIS instead of inferring intent
+  // from an error status code (the old `{ status: 400 }` check this replaced conflated the one genuinely
+  // benign no-op case with a real authorization failure, which also 400s via requireAccess).
+  type FaceSuggestionActionResult = { status: 200 | 204 };
+
   interface Props {
     person: PersonResponseDto;
     referenceThumbnailUrl: string;
     loadPage: (req: PageReq) => Promise<PersonFaceSuggestionPageResponseDto>;
-    confirm: (assetFaceId: string) => Promise<void>;
-    dismiss: (assetFaceId: string) => Promise<void>;
-    ignore: (assetFaceId: string) => Promise<void>;
+    confirm: (assetFaceId: string) => Promise<FaceSuggestionActionResult>;
+    dismiss: (assetFaceId: string) => Promise<FaceSuggestionActionResult>;
+    ignore: (assetFaceId: string) => Promise<FaceSuggestionActionResult>;
     onClose: (result: { confirmed: number }) => void;
   }
 
@@ -61,6 +67,10 @@
   const current = $derived(items[index]);
   const currentActed = $derived(current ? actedFaceIds.has(current.assetFaceId) : false);
   const photoUrl = $derived(current ? getAssetMediaUrl({ id: current.assetId, size: AssetMediaSize.Preview }) : '');
+  // S11.6: the queue is empty — either it started that way or reviewing drained it — and the initial load has
+  // settled. `onClose` still fires (unchanged, see advance()/onMount below); this only controls what renders
+  // in the instant before/around that.
+  const allDone = $derived(!loading && !current);
 
   // `total` is the server's PENDING count — it shrinks as rows are acted on server-side, while `index` walks
   // the append-only `items` buffer and only grows. Rendering `total` directly as the counter denominator makes
@@ -142,15 +152,10 @@
     }
   }
 
-  // A `{ status: 400 }`-shaped error is the ONE documented already-resolved outcome for these action
-  // endpoints (requireAccess precedence on a CASCADE-deleted face/person — see person.service.ts
-  // confirmFaceSuggestion's `claimed === 0` path and the reject/ignore idempotent-200 comments). Read via a
-  // plain duck-typed `.status`, the same idiom the sibling admin pages already use for their 409 checks —
-  // matches a real caught SDK error without needing an `@immich/sdk` import/mock here.
-  function isAlreadyResolved(error: unknown): boolean {
-    return typeof error === 'object' && error !== null && (error as { status?: unknown }).status === 400;
-  }
-
+  // F24: stop inferring intent from a status code. The one thing the OLD code got dangerously wrong — treating
+  // every `{ status: 400 }` as "already resolved" — is gone: EVERY 4xx/5xx now surfaces via handleError, with
+  // the face left unacted so it can be retried. The acted/no-op distinction comes from the resolved value on
+  // the SUCCESS path only (200 vs 204), which the server states explicitly.
   async function act(kind: 'confirm' | 'dismiss' | 'ignore') {
     if (busy || !current || currentActed) {
       return;
@@ -158,36 +163,24 @@
     busy = true;
     const face = current.assetFaceId;
     try {
-      if (kind === 'confirm') {
-        await confirm(face);
+      const result =
+        kind === 'confirm' ? await confirm(face) : kind === 'dismiss' ? await dismiss(face) : await ignore(face);
+      actedFaceIds.add(face);
+      busy = false;
+      // 200 = acted; 204 = no-op (already resolved, feature disabled, ...). Only `confirm` has a counter/toast
+      // — dismiss/ignore mark the face acted and advance identically either way.
+      if (kind === 'confirm' && result.status === 200) {
         confirmed++;
-      } else if (kind === 'dismiss') {
-        await dismiss(face);
-      } else {
-        await ignore(face);
+        toastManager.primary($t('face_suggestion_confirmed_toast', { values: { count: 1 } }));
       }
+      await advance();
     } catch (error) {
       busy = false;
-      // The `.status === 400` check below is intentionally broad — any 400, not a narrower body-shape match —
-      // and that's safe: the genuinely-dangerous failure mode (insufficient space role / RBAC) throws 403,
-      // which falls through to the handleError branch, not this one. The only 400 these action endpoints raise
-      // is the benign requireAccess-precedence check on a gone/CASCADE-deleted face; the already-resolved
-      // `claimed === 0` outcome returns 200, so it never reaches this catch at all.
-      if (isAlreadyResolved(error)) {
-        // edges 9/10/11: benign, advance anyway — but never inflate `confirmed`, since our action didn't
-        // actually do anything (something else already resolved this row).
-        actedFaceIds.add(face);
-        await advance();
-      } else {
-        // A genuine failure (500, network drop, ...): surface it and leave `current` exactly as it was so
-        // the user can retry.
-        handleError(error, $t('errors.unable_to_process_face_suggestion'));
-      }
-      return;
+      // A genuine failure (400 auth/ownership, 403, 500, network drop, ...): surface it and leave `current`
+      // exactly as it was so the user can retry. No status code is inspected here — the server's success path
+      // (200/204, handled above) is the ONLY acted/no-op signal now.
+      handleError(error, $t('errors.unable_to_process_face_suggestion'));
     }
-    actedFaceIds.add(face);
-    busy = false;
-    await advance();
   }
 
   const canPrev = $derived(index > 0);
@@ -331,6 +324,10 @@
               <span class="text-xs text-gray-500 dark:text-gray-400">{$t('face_suggestion_candidate')}</span>
             </div>
           </div>
+        </div>
+      {:else if allDone}
+        <div data-testid="suggestion-all-done" class="flex h-96 flex-col items-center justify-center gap-2">
+          <p class="text-center text-sm text-gray-500 dark:text-gray-400">{$t('face_suggestion_all_done')}</p>
         </div>
       {/if}
     </div>

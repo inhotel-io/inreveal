@@ -19,6 +19,7 @@ import {
   FaceRepairPersonMetadataResponseDto,
   FaceRepairRequestDto,
   FaceRepairResolutionsListDto,
+  FaceRepairResolutionsQueryDto,
   FaceRepairResolutionsRemovedDto,
   FaceRepairResolutionsRemoveRequestDto,
   FaceRepairResolveRequestDto,
@@ -146,14 +147,16 @@ export class FaceRepairAdminController {
   // Slice 7 (unified resolutions manage page): lists every soft-decline AND lock, each tagged `kind`, replacing
   // the declines-only `GET /decline` page. The old decline list/remove routes below are kept for now — the web
   // still uses them until the resolutions page dispatch migrates off them.
+  // S11 (F23): unscoped (no owner/person filter) — paginated so a large instance's resolutions list does not
+  // return every outstanding verdict in one response. See FaceRepairService.listResolutions.
   @Get('resolutions')
   @Authenticated({ admin: true })
   @Endpoint({
     summary: 'List face-repair resolutions (negative verdicts from both engines)',
     history: new HistoryBuilder().added('v1'),
   })
-  getFaceRepairResolutions(): Promise<FaceRepairResolutionsListDto> {
-    return this.service.listResolutions() as unknown as Promise<FaceRepairResolutionsListDto>;
+  getFaceRepairResolutions(@Query() dto: FaceRepairResolutionsQueryDto): Promise<FaceRepairResolutionsListDto> {
+    return this.service.listResolutions(dto) as unknown as Promise<FaceRepairResolutionsListDto>;
   }
 
   @Post('resolutions/remove')

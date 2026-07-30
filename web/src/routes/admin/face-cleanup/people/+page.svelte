@@ -46,7 +46,14 @@
   let page = $state(0);
   let loading = $state(false);
   let loadingMore = $state(false);
+  // loadError is the FIRST-page (page 0) failure only — there is nothing else to show, so it takes over the
+  // whole view with a full-page Retry. loadMoreError (F27) is a LATER-page failure: the pages already loaded
+  // are still good and stay rendered; only an inline retry for the failed page is shown, scoped to the
+  // pagination footer. Before this split, ANY page failing set the same flag, which — since the template
+  // treated it as exclusive with the grid — hid several already-loaded pages behind the full-page error, and
+  // Retry always re-fetched page 0, discarding them for good.
   let loadError = $state(false);
+  let loadMoreError = $state(false);
   // Distinguishes "never successfully loaded" from "loaded and empty" — a load error on the very first
   // fetch must never be allowed to fall through to the reassuring owner-empty state (D17 on the guided page).
   let hasLoadedOnce = $state(false);
@@ -71,10 +78,11 @@
     const token = ++requestToken;
     if (requestPage === 0) {
       loading = true;
+      loadError = false;
     } else {
       loadingMore = true;
+      loadMoreError = false;
     }
-    loadError = false;
     try {
       const result = await getFaceRepairOwnerPeople({
         ownerId,
@@ -95,9 +103,13 @@
       if (token !== requestToken) {
         return;
       }
-      loadError = true;
+      // F27: a later page failing must not touch `people` (the pages already loaded stay exactly as they
+      // were) or set the SAME flag a first-page failure does — see loadError/loadMoreError above.
       if (requestPage === 0) {
+        loadError = true;
         people = [];
+      } else {
+        loadMoreError = true;
       }
     } finally {
       if (token === requestToken) {
@@ -278,15 +290,29 @@
         {/each}
       </div>
 
-      <!-- Scroll-driven pagination: the sentinel loads the next page as it enters the viewport, so the grid
-           grows as the admin scrolls instead of dead-ending on a "Load more" button. -->
-      <InfiniteScrollSentinel
-        {hasMore}
-        loading={loadingMore}
-        onLoadMore={handleLoadMore}
-        itemCount={people.length}
-        class="mt-6 flex h-10 w-full items-center justify-center"
-      />
+      {#if loadMoreError}
+        <!-- F27: scoped to the failed page only — the grid above (every page loaded so far) stays exactly as
+             it was. Retry re-requests the SAME page (`page` was never advanced on failure), never page 0. -->
+        <div
+          class="mt-6 flex items-center justify-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400"
+          data-testid="people-load-more-error"
+        >
+          <span>{$t('admin.face_cleanup_people_page_error')}</span>
+          <Button color="secondary" size="small" onclick={handleLoadMore} data-testid="people-load-more-error-retry">
+            {$t('retry')}
+          </Button>
+        </div>
+      {:else}
+        <!-- Scroll-driven pagination: the sentinel loads the next page as it enters the viewport, so the grid
+             grows as the admin scrolls instead of dead-ending on a "Load more" button. -->
+        <InfiniteScrollSentinel
+          {hasMore}
+          loading={loadingMore}
+          onLoadMore={handleLoadMore}
+          itemCount={people.length}
+          class="mt-6 flex h-10 w-full items-center justify-center"
+        />
+      {/if}
     {/if}
   </div>
 </AdminPageLayout>

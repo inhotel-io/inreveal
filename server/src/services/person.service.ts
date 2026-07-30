@@ -450,10 +450,13 @@ export class PersonService extends BaseService {
   // access check the result would be discarded anyway. maxDistance/suggestions.maxDistance come from the
   // SAME config read and are threaded into claimPending (F5) so the claim applies the identical eligibility
   // band the read (getFaceSuggestions) already does.
-  async confirmFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
+  // S11 (F24): the return value is the acted/no-op signal the controller maps to 200/204 — `true` once the
+  // write chain actually ran, `false` for every no-op branch (feature disabled, already resolved). Callers must
+  // stop inferring that distinction from a status code (see the controller's HttpCode comment).
+  async confirmFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<boolean> {
     const { machineLearning } = await this.getConfig({ withCache: true });
     if (!isFaceSuggestionEnabled(machineLearning)) {
-      return;
+      return false;
     }
     const { maxDistance, suggestions } = machineLearning.facialRecognition;
 
@@ -508,7 +511,7 @@ export class PersonService extends BaseService {
       return claimed;
     });
     if (claimed === 0) {
-      return;
+      return false;
     }
 
     // Feature-photo refresh is display-only (a job enqueue + a non-identity person column), so it stays
@@ -519,6 +522,7 @@ export class PersonService extends BaseService {
     if (face.person && face.person.faceAssetId === face.id) {
       await this.createNewFeaturePhoto([face.person.id]);
     }
+    return true;
   }
 
   // D2: reject/ignore write the target's identity + the acting user, same as a cleanup verdict, so the
@@ -532,7 +536,9 @@ export class PersonService extends BaseService {
     return { identityId: identity.id, source: 'suggestion', actorId: auth.user.id };
   }
 
-  async rejectFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
+  // S11 (F24): returns whether a row was actually written (`markRejected`'s affected-row count) — the
+  // acted/no-op signal the controller maps to 200/204.
+  async rejectFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<boolean> {
     // Owner-only on BOTH the person and the face — the identical pair confirmFaceSuggestion applies.
     // verdictOpts (below) stamps every row with the target's identity, and face_identity.id is a
     // CROSS-OWNER key (identity-merge-propagation.service.ts assigns one identity to personal people of
@@ -543,19 +549,29 @@ export class PersonService extends BaseService {
     // instead of writing a row nothing can ever read back (every read path filters asset.deletedAt).
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
     await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
-    await this.facePersonVerdictRepository.markRejected(personId, assetFaceId, await this.verdictOpts(auth, personId));
+    const affected = await this.facePersonVerdictRepository.markRejected(
+      personId,
+      assetFaceId,
+      await this.verdictOpts(auth, personId),
+    );
     // Face stays unassigned; the Phase-1 conditional upsertPending never resurrects a
     // 'rejected' row, so a later scan will not re-suggest it for this person.
+    return affected > 0;
   }
 
-  async ignoreFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
+  async ignoreFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<boolean> {
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
     await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
-    await this.facePersonVerdictRepository.markIgnored(personId, assetFaceId, await this.verdictOpts(auth, personId));
+    const affected = await this.facePersonVerdictRepository.markIgnored(
+      personId,
+      assetFaceId,
+      await this.verdictOpts(auth, personId),
+    );
     // Face stays unassigned; ignored rows suppress future suggestions without rejecting the match.
+    return affected > 0;
   }
 
-  async dismissFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
+  async dismissFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<boolean> {
     return this.rejectFaceSuggestion(auth, personId, assetFaceId);
   }
 

@@ -242,13 +242,27 @@ const ResolutionItemSchema = z.object({
   personThumbnailFaceId: z.string().nullable(),
   spacePersonId: z.string().nullable(),
   spacePersonName: z.string().nullable(),
+  // Slice 11 (F23): the space-person twin of personThumbnailFaceId above, so a space-person target can
+  // render a thumbnail too (projected from shared_space_person.representativeFaceId).
+  spacePersonThumbnailFaceId: z.string().nullable(),
   spaceName: z.string().nullable(),
   actorId: z.string().nullable(),
   actorName: z.string().nullable(),
   createdAt: z.string().meta({ format: 'date-time' }),
 });
+// Slice 11 (F23): this list is unscoped (no owner/person filter), so it now paginates like every other
+// admin/review page query — same page/size shape as PersonFaceSuggestionPageQuerySchema, capped higher
+// (200, not 100) since an admin working through a long resolutions list benefits from a larger page.
+export const FaceRepairResolutionsQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1).describe('Page number'),
+    size: z.coerce.number().int().min(1).max(200).default(50).describe('Number of resolutions per page'),
+  })
+  .meta({ id: 'FaceRepairResolutionsQueryDto' });
+export class FaceRepairResolutionsQueryDto extends createZodDto(FaceRepairResolutionsQuerySchema) {}
+
 export const FaceRepairResolutionsListSchema = z
-  .object({ resolutions: z.array(ResolutionItemSchema) })
+  .object({ total: z.int().min(0), resolutions: z.array(ResolutionItemSchema) })
   .meta({ id: 'FaceRepairResolutionsListDto' });
 export class FaceRepairResolutionsListDto extends createZodDto(FaceRepairResolutionsListSchema) {}
 

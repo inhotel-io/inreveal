@@ -6,6 +6,7 @@ import {
   triggerScan,
   type FaceRepairPersonFacesDto,
 } from '@immich/sdk';
+import { ConfirmModal, modalManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,8 +47,19 @@ vi.mock('@immich/ui', async (original) => {
     },
     // Avoid tooltip/context provider issues in tests
     IconButton: mod.Button,
+    // S11.11/F26: bulk approve now gates on a real ConfirmModal, same pattern as [personId]/+page.svelte's
+    // Move-entire-cluster confirmation.
+    modalManager: { show: vi.fn() },
   };
 });
+
+// Every (key, options) pair the page asked to translate — same tracker as
+// [personId]/page.spec.ts — so a test can assert what was INTERPOLATED (e.g. the cluster count in the
+// bulk-approve confirmation), not just which key rendered. The returned string is still just the bare key
+// (opts dropped), so every existing `getByText('admin.some_key')` assertion is unaffected.
+const { translations } = vi.hoisted(() => ({
+  translations: [] as { key: string; values?: Record<string, unknown> }[],
+}));
 
 // Mock svelte-i18n: return the key as the translation
 vi.mock('svelte-i18n', async (orig) => {
@@ -56,7 +68,10 @@ vi.mock('svelte-i18n', async (orig) => {
     ...actual,
     t: {
       subscribe: (run: (fn: (key: string, opts?: unknown) => string) => void) => {
-        run((key: string) => key);
+        run((key: string, opts?: unknown) => {
+          translations.push({ key, values: (opts as { values?: Record<string, unknown> })?.values });
+          return key;
+        });
         return () => {};
       },
     },
@@ -167,9 +182,14 @@ const mockFlaggedFaces = (faces: { assetFaceId: string; suspectedOwnerId: string
 
 const makePageData = () => ({ users: [], meta: { title: 'Face cleanup' } });
 
+// Same cast rationale as [personId]/page.spec.ts: modalManager.show's return type depends on which component
+// is passed, so a single concrete signature has to be asserted at this call site.
+const showModal = modalManager.show as unknown as ReturnType<typeof vi.fn<(...args: unknown[]) => Promise<boolean>>>;
+
 describe('+page.svelte (face cleanup)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    translations.length = 0;
     sessionStorage.clear();
     vi.useFakeTimers();
     vi.mocked(getLatestScan).mockResolvedValue(null as unknown as object);
@@ -187,6 +207,9 @@ describe('+page.svelte (face cleanup)', () => {
       skipped: 0,
     });
     vi.mocked(declineFaceRepair).mockResolvedValue({ created: 1 });
+    // Default: confirm the bulk-approve gate so the pre-existing tests below (written before F26 added the
+    // confirmation) keep exercising what happens AFTER confirmation. Tests about the gate itself override this.
+    showModal.mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -272,6 +295,53 @@ describe('+page.svelte (face cleanup)', () => {
     await waitFor(() => {
       expect(vi.mocked(getLatestScan).mock.calls.length).toBeGreaterThanOrEqual(2);
     });
+  });
+
+  // S11.13/F27: stopPolling() only clears the pending setTimeout — a fetchLatestScan() call that had ALREADY
+  // fired and is awaiting its network response is untouched by that clearTimeout, and its `.then` unconditionally
+  // re-arms the next poll. Unmounting mid-flight therefore used to leave polling running forever after the page
+  // was gone.
+  it('S11.13/F27: stops polling for good on unmount, even when a fetch was already in flight', async () => {
+    const runningScan = {
+      id: 'scan-1',
+      status: 'running',
+      progress: { scanned: 500, total: 1000 },
+      totals: null,
+      persons: [],
+      error: null,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      createdAt: new Date().toISOString(),
+    };
+    let resolveInFlight!: (value: object) => void;
+    vi.mocked(getLatestScan)
+      .mockResolvedValueOnce(runningScan as unknown as object) // initial load
+      .mockImplementationOnce(
+        () =>
+          new Promise<object>((resolve) => {
+            resolveInFlight = resolve;
+          }),
+      ); // first poll — deliberately left unsettled to simulate "in flight at unmount"
+
+    const { unmount } = render(Page, { props: { data: makePageData() } });
+    await waitFor(() => expect(screen.getByText('admin.face_cleanup_scan_running')).toBeInTheDocument());
+
+    // Fire the first poll's setTimeout — its fetchLatestScan() call is now in flight (the mock above never
+    // resolves on its own).
+    await vi.advanceTimersByTimeAsync(2000);
+    await waitFor(() => expect(vi.mocked(getLatestScan).mock.calls.length).toBe(2));
+
+    unmount();
+    const callsAtUnmount = vi.mocked(getLatestScan).mock.calls.length;
+
+    // Only NOW does the in-flight call settle — its `.then` is exactly where the old code unconditionally
+    // re-armed the next poll.
+    resolveInFlight(runningScan);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Advance well past several poll intervals: a re-armed timer would have fired again by now.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(vi.mocked(getLatestScan).mock.calls.length).toBe(callsAtUnmount);
   });
 
   it('shows error state when scan failed', async () => {
@@ -443,7 +513,10 @@ describe('+page.svelte (face cleanup)', () => {
     expect(screen.getByTestId('confident-lane')).toBeInTheDocument();
   });
 
-  it('refetches the scan even when one confident cluster fails to apply (partial failure)', async () => {
+  // S11.12/F26: Promise.all used to reject on the FIRST failure, so a genuine partial success (2 of 3 applied)
+  // was reported as a blanket failure. Promise.allSettled lets every call finish, and the banner now says
+  // exactly what happened instead of hiding the clusters that DID apply.
+  it('S11.12/F26: refetches the scan and reports "N applied, M failed" (listing the failure) on a partial failure', async () => {
     const persons = [
       makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
       makeScanPerson({ personId: 'c2', recommendation: 'confident', ownerId: 'owner2' }),
@@ -459,8 +532,70 @@ describe('+page.svelte (face cleanup)', () => {
     const before = vi.mocked(getLatestScan).mock.calls.length;
     await fireEvent.click(screen.getByTestId('confident-approve'));
 
-    // handleApprove's finally refetches even after a rejected resolve.
+    // handleApprove's finally refetches even after a partial failure.
     await waitFor(() => expect(vi.mocked(getLatestScan).mock.calls.length).toBeGreaterThan(before));
+    // Both calls actually ran (allSettled, not all-or-nothing) — c2 applied despite c1 rejecting.
+    expect(resolveFaces).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(
+        translations.some(
+          (t) =>
+            t.key === 'admin.face_cleanup_confident_approve_partial' &&
+            t.values?.applied === 1 &&
+            t.values?.failed === 1 &&
+            t.values?.names === 'c1',
+        ),
+      ).toBe(true),
+    );
+  });
+
+  // ---- F26: a real confirmation before bulk-approving, and an honest partial-failure report ----
+  describe('Bulk approve confirmation (F26)', () => {
+    it('S11.11: shows a confirm naming the cluster count; cancelling issues zero resolveFaces calls', async () => {
+      const persons = [
+        makeScanPerson({ personId: 'c1', recommendation: 'confident' }),
+        makeScanPerson({ personId: 'c2', recommendation: 'confident', ownerId: 'owner2' }),
+        makeScanPerson({ personId: 'c3', recommendation: 'confident', ownerId: 'owner3' }),
+      ];
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+      showModal.mockResolvedValueOnce(false); // decline
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('confident-approve')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('confident-approve'));
+
+      await waitFor(() =>
+        expect(showModal).toHaveBeenCalledWith(
+          ConfirmModal,
+          expect.objectContaining({
+            title: 'admin.face_cleanup_confident_approve_confirm_title',
+            prompt: 'admin.face_cleanup_confident_approve_confirm_body',
+            confirmText: 'admin.face_cleanup_confident_approve_confirm_cta',
+          }),
+        ),
+      );
+      // Names the cluster count (3) in the prompt/CTA interpolation.
+      expect(
+        translations.some(
+          (t) => t.key === 'admin.face_cleanup_confident_approve_confirm_body' && t.values?.count === 3,
+        ),
+      ).toBe(true);
+      expect(resolveFaces).not.toHaveBeenCalled();
+      expect(getFaceRepairPersonFaces).not.toHaveBeenCalled();
+    });
+
+    it('confirming proceeds with the approve batch exactly as before', async () => {
+      const persons = [makeScanPerson({ personId: 'c1', recommendation: 'confident' })];
+      vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan(persons) as unknown as object);
+      mockFlaggedFaces([flagged('a1', 'own1')]);
+      showModal.mockResolvedValueOnce(true);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('confident-approve')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('confident-approve'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalledTimes(1));
+    });
   });
 
   // ---- re-scan ----

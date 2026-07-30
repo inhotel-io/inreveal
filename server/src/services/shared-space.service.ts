@@ -1309,17 +1309,19 @@ export class SharedSpaceService extends BaseService {
     };
   }
 
+  // S11 (F24): the return value is the acted/no-op signal the controller maps to 200/204 — mirrors the
+  // personal confirmFaceSuggestion twin.
   async confirmSpacePersonFaceSuggestion(
     auth: AuthDto,
     spaceId: string,
     personId: string,
     assetFaceId: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     const person = await this.requireSpacePersonInSpace(spaceId, personId);
 
     if (!(await this.areSpacePersonSuggestionsEnabled({ withCache: true }))) {
-      return;
+      return false;
     }
 
     const distanceConfig = await this.getFaceSuggestionDistanceConfig();
@@ -1330,7 +1332,7 @@ export class SharedSpaceService extends BaseService {
       distanceConfig,
     );
     if (!isPending) {
-      return;
+      return false;
     }
 
     // Slice 5 (F10): the four writes below used to be autocommit — a crash between replaceFaceIdentity and
@@ -1338,7 +1340,7 @@ export class SharedSpaceService extends BaseService {
     // every cleanup scan, with no repair path (processSpaceFaceMatch early-returns on `!face.personId`). One
     // transaction makes the whole confirm all-or-nothing, mirroring the personal confirm path. Every call
     // below threads `trx` — never `this.db` inside this callback (issue #595).
-    await this.databaseRepository.transaction(async (trx) => {
+    const claimed = await this.databaseRepository.transaction(async (trx) => {
       const identity = await this.faceIdentityRepository.ensureSpacePersonIdentity(person.id, trx);
       // Claim the queue row first so a double-submit resolves exactly once. No 'confirmed' status is written:
       // the durable positive verdict is the manual identity link set immediately below.
@@ -1351,7 +1353,7 @@ export class SharedSpaceService extends BaseService {
         trx,
       );
       if (claimed === 0) {
-        return;
+        return claimed;
       }
 
       await this.faceIdentityRepository.replaceFaceIdentity(
@@ -1373,7 +1375,9 @@ export class SharedSpaceService extends BaseService {
       // next scan, for every space person — not just this one. addPersonFaces is onConflict().doNothing(), so
       // this is idempotent if a concurrent face-match backfill already wrote the same row.
       await this.sharedSpaceRepository.addPersonFaces([{ personId: person.id, assetFaceId }], undefined, trx);
+      return claimed;
     });
+    return claimed > 0;
   }
 
   // D9/D2: reachability (RBAC — is this face's asset in the space at all), not pendingness, gates a space
@@ -1382,25 +1386,28 @@ export class SharedSpaceService extends BaseService {
   // refusing a face whose asset has genuinely left the space. Carries the target's identity + acting user,
   // same as a cleanup verdict, so the negative-verdict row answers "not this person" everywhere the identity
   // is checked and records who made the call.
+  // S11 (F24): returns whether a row was actually written — the acted/no-op signal the controller maps to
+  // 200/204, mirroring the personal reject/ignore twins.
   private async resolveSpacePersonFaceSuggestion(
     auth: AuthDto,
     spaceId: string,
     personId: string,
     assetFaceId: string,
     action: 'rejected' | 'ignored',
-  ): Promise<void> {
+  ): Promise<boolean> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     const person = await this.requireSpacePersonInSpace(spaceId, personId);
     const reachable = await this.facePersonVerdictRepository.isFaceReachableInSpace(spaceId, assetFaceId);
     if (!reachable) {
-      return;
+      return false;
     }
 
     const identity = await this.faceIdentityRepository.ensureSpacePersonIdentity(person.id);
     const opts = { identityId: identity.id, source: 'suggestion' as const, actorId: auth.user.id };
-    await (action === 'rejected'
+    const affected = await (action === 'rejected'
       ? this.facePersonVerdictRepository.markRejectedForSpacePerson(person.id, assetFaceId, opts)
       : this.facePersonVerdictRepository.markIgnoredForSpacePerson(person.id, assetFaceId, opts));
+    return affected > 0;
   }
 
   async rejectSpacePersonFaceSuggestion(
@@ -1408,8 +1415,8 @@ export class SharedSpaceService extends BaseService {
     spaceId: string,
     personId: string,
     assetFaceId: string,
-  ): Promise<void> {
-    await this.resolveSpacePersonFaceSuggestion(auth, spaceId, personId, assetFaceId, 'rejected');
+  ): Promise<boolean> {
+    return this.resolveSpacePersonFaceSuggestion(auth, spaceId, personId, assetFaceId, 'rejected');
   }
 
   async ignoreSpacePersonFaceSuggestion(
@@ -1417,8 +1424,8 @@ export class SharedSpaceService extends BaseService {
     spaceId: string,
     personId: string,
     assetFaceId: string,
-  ): Promise<void> {
-    await this.resolveSpacePersonFaceSuggestion(auth, spaceId, personId, assetFaceId, 'ignored');
+  ): Promise<boolean> {
+    return this.resolveSpacePersonFaceSuggestion(auth, spaceId, personId, assetFaceId, 'ignored');
   }
 
   async dismissSpacePersonFaceSuggestion(
@@ -1426,8 +1433,8 @@ export class SharedSpaceService extends BaseService {
     spaceId: string,
     personId: string,
     assetFaceId: string,
-  ): Promise<void> {
-    await this.rejectSpacePersonFaceSuggestion(auth, spaceId, personId, assetFaceId);
+  ): Promise<boolean> {
+    return this.rejectSpacePersonFaceSuggestion(auth, spaceId, personId, assetFaceId);
   }
 
   async updateSpacePersonRepresentativeFace(

@@ -348,6 +348,64 @@ describe('+page.svelte (manual face-cleanup people browser)', () => {
     expect(screen.getByText('Bob')).toBeInTheDocument();
   });
 
+  // ---- F27: a failed later page must not wipe the pages already loaded, or reset Retry to page 0 ----
+  // S11.14: page 3 (requestPage index 2) failing keeps pages 1-2 rendered and offers a retry for page 3 only.
+  it('S11.14/F27: a failed load-more page keeps earlier pages rendered and offers an inline retry for that page only', async () => {
+    const users = [makeUser('solo', 'Solo Admin')];
+    vi.mocked(getFaceRepairOwnerPeople)
+      .mockResolvedValueOnce(makeResponse([makePerson({ id: 'p1', name: 'Alice' })], { hasMore: true, total: 3 })) // page 0 (page 1)
+      .mockResolvedValueOnce(makeResponse([makePerson({ id: 'p2', name: 'Bob' })], { hasMore: true, total: 3 })) // page 1 (page 2)
+      .mockRejectedValueOnce(new Error('network blip')) // page 2 (page 3) fails
+      .mockResolvedValueOnce(makeResponse([makePerson({ id: 'p3', name: 'Cara' })], { hasMore: false, total: 3 })); // retry succeeds
+
+    render(Page, { props: { data: makePageData(users) } });
+    await vi.advanceTimersByTimeAsync(0);
+    await waitFor(() => expect(screen.getByText('Alice')).toBeInTheDocument());
+
+    // Load page 2 (Bob).
+    await waitFor(() => expect(observerInstances.length).toBeGreaterThan(0));
+    observerInstances.at(-1)!.trigger({ target: observerInstances.at(-1)!.observedTarget!, isIntersecting: true });
+    await waitFor(() => expect(screen.getByText('Bob')).toBeInTheDocument());
+
+    // Load page 3 — this one fails.
+    await waitFor(() => expect(observerInstances.length).toBeGreaterThan(0));
+    observerInstances.at(-1)!.trigger({ target: observerInstances.at(-1)!.observedTarget!, isIntersecting: true });
+
+    await waitFor(() => expect(screen.getByTestId('people-load-more-error')).toBeInTheDocument());
+    // The full-page error state must NOT take over — that would hide pages 1-2, which are still valid.
+    expect(screen.queryByTestId('people-load-error')).not.toBeInTheDocument();
+    expect(screen.getByTestId('people-grid')).toBeInTheDocument();
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByTestId('people-load-more-error-retry'));
+
+    // Retry re-requests page 3 (index 2) — NOT page 0 — and appends onto the existing pages.
+    await waitFor(() => {
+      expect(getFaceRepairOwnerPeople).toHaveBeenLastCalledWith({ ownerId: 'solo', page: 2, query: undefined });
+    });
+    await waitFor(() => expect(screen.getByText('Cara')).toBeInTheDocument());
+    expect(screen.getByText('Alice')).toBeInTheDocument();
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.queryByTestId('people-load-more-error')).not.toBeInTheDocument();
+  });
+
+  // S11.15 (pin): a failed FIRST page (unlike a failed later page above) still renders the full-page error
+  // state — there is nothing else to show. This is the existing "load error is distinct from empty" coverage
+  // (test #11 below) re-asserted here under its own name; mutated/reverted in the implementation pass to prove
+  // it can fail once page-scoped error state exists.
+  it('S11.15 (pin): page 1 failing still renders the full-page error state, not the inline load-more retry', async () => {
+    const users = [makeUser('solo', 'Solo Admin')];
+    vi.mocked(getFaceRepairOwnerPeople).mockRejectedValueOnce(new Error('network down'));
+
+    render(Page, { props: { data: makePageData(users) } });
+    await vi.advanceTimersByTimeAsync(0);
+
+    await waitFor(() => expect(screen.getByTestId('people-load-error')).toBeInTheDocument());
+    expect(screen.queryByTestId('people-load-more-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('people-grid')).not.toBeInTheDocument();
+  });
+
   // ---- defaults to the admin's own account, not whichever owner sorts first alphabetically ----
   it("defaults to the admin's own account when it is among the owners, instead of the alphabetically-first owner", async () => {
     const users = [makeUser('u1', 'Alice Owner'), makeUser('u2', 'Bob Owner')];

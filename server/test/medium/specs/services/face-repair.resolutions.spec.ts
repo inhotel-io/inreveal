@@ -93,7 +93,7 @@ describe('FaceRepairService.listResolutions', () => {
     await verdictRepo.markRejected(ownerA.id, fromCleanup, { source: 'cleanup', actorId: user.id });
     await verdictRepo.markIgnored(ownerB.id, fromSuggestion, { source: 'suggestion', actorId: user.id });
 
-    const { resolutions } = await sut.listResolutions();
+    const { resolutions } = await sut.listResolutions({ page: 1, size: 50 });
     expect(resolutions).toHaveLength(2);
 
     const cleanupRow = resolutions.find((r) => r.source === 'cleanup');
@@ -119,27 +119,35 @@ describe('FaceRepairService.listResolutions', () => {
     });
   });
 
-  it('lists a space-person verdict rendered with its space named', async () => {
+  it('lists a space-person verdict rendered with its space named and representative face id (S11.17)', async () => {
     const { sut, ctx, verdictRepo } = setup();
     const { user } = await ctx.newUser();
     const { space } = await ctx.newSharedSpace({ createdById: user.id, name: 'Family Trip' });
     const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Jane' });
     const faceId = await seedFace(ctx, user.id, source.id);
+    const reprFaceId = await seedFace(ctx, user.id, source.id);
 
     const spacePerson = await db
       .insertInto('shared_space_person')
-      .values({ spaceId: space.id, name: 'Casper', type: 'person', isHidden: false })
+      .values({
+        spaceId: space.id,
+        name: 'Casper',
+        type: 'person',
+        isHidden: false,
+        representativeFaceId: reprFaceId,
+      })
       .returningAll()
       .executeTakeFirstOrThrow();
 
     await verdictRepo.markRejectedForSpacePerson(spacePerson.id, faceId, { source: 'cleanup', actorId: user.id });
 
-    const { resolutions } = await sut.listResolutions();
+    const { resolutions } = await sut.listResolutions({ page: 1, size: 50 });
     expect(resolutions).toHaveLength(1);
     expect(resolutions[0]).toMatchObject({
       assetFaceId: faceId,
       spacePersonId: spacePerson.id,
       spacePersonName: 'Casper',
+      spacePersonThumbnailFaceId: reprFaceId,
       spaceName: 'Family Trip',
       personId: null,
       personName: null,
@@ -167,7 +175,7 @@ describe('FaceRepairService.listResolutions', () => {
     await ctx.get(PersonRepository).delete([ownerA.id]);
     await db.deleteFrom('face_identity').where('id', '=', identity.id).execute();
 
-    const { resolutions } = await sut.listResolutions();
+    const { resolutions } = await sut.listResolutions({ page: 1, size: 50 });
     expect(resolutions).toHaveLength(1);
     expect(resolutions[0]).toMatchObject({
       assetFaceId: faceId,
@@ -190,14 +198,35 @@ describe('FaceRepairService.listResolutions', () => {
       .get(FaceIdentityRepository)
       .replaceFaceIdentity({ assetFaceId: faceId, identityId: identity.id, source: 'manual' });
 
-    const { resolutions } = await sut.listResolutions();
+    const { resolutions } = await sut.listResolutions({ page: 1, size: 50 });
     expect(resolutions).toEqual([]);
   });
 
   it('returns an empty list when there is nothing recorded', async () => {
     const { sut } = setup();
-    const { resolutions } = await sut.listResolutions();
+    const { resolutions } = await sut.listResolutions({ page: 1, size: 50 });
     expect(resolutions).toEqual([]);
+  });
+
+  // S11.16: the service threads page/size through and exposes the server's true total, not just the page's
+  // own item count — the resolutions page needs `total` to know whether more pages exist.
+  it('S11.16: threads page/size through and exposes the true total, not just the current page size', async () => {
+    const { sut, ctx, verdictRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: 'Jane' });
+    for (let index = 0; index < 3; index++) {
+      const faceId = await seedFace(ctx, user.id, source.id);
+      await verdictRepo.markRejected(ownerA.id, faceId, { source: 'cleanup', actorId: user.id });
+    }
+
+    const page1 = await sut.listResolutions({ page: 1, size: 2 });
+    expect(page1.total).toBe(3);
+    expect(page1.resolutions).toHaveLength(2);
+
+    const page2 = await sut.listResolutions({ page: 2, size: 2 });
+    expect(page2.total).toBe(3);
+    expect(page2.resolutions).toHaveLength(1);
   });
 });
 
@@ -210,7 +239,7 @@ describe('FaceRepairService.removeResolutions', () => {
     const f1 = await seedFace(ctx, user.id, source.id);
     await verdictRepo.markRejected(ownerA.id, f1, { source: 'cleanup', actorId: user.id });
 
-    const [row] = await sut.listResolutions().then((r) => r.resolutions);
+    const [row] = await sut.listResolutions({ page: 1, size: 50 }).then((r) => r.resolutions);
     expect(row.id).toMatch(UUID_V7_RE);
 
     const before = await verdictRepo.getNegativeVerdictTokens([f1]);
@@ -250,13 +279,13 @@ describe('FaceRepairService.removeResolutions', () => {
       declinedBy: user.id,
     });
 
-    const [verdict] = await sut.listResolutions().then((r) => r.resolutions);
+    const [verdict] = await sut.listResolutions({ page: 1, size: 50 }).then((r) => r.resolutions);
     const [mute] = await declineRepo.listDeclines();
 
     expect(await sut.removeResolutions({ verdictIds: [verdict.id], clusterMuteIds: [mute.id] })).toEqual({
       removed: 2,
     });
-    expect(await sut.listResolutions().then((r) => r.resolutions)).toHaveLength(0);
+    expect(await sut.listResolutions({ page: 1, size: 50 }).then((r) => r.resolutions)).toHaveLength(0);
     expect(await declineRepo.listDeclines()).toHaveLength(0);
   });
 
