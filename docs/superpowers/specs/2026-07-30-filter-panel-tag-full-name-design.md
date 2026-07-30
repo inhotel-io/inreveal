@@ -220,7 +220,7 @@ The 18 existing tests must keep passing; they are the regression suite for searc
 - Label shorter than one line — no tooltip (R5).
 - Label wrapping to exactly two lines — no tooltip; the case wrapping is meant to fix (A2/R5).
 - Label exceeding two lines — tooltip (R4).
-- Single unbreakable token — wraps mid-word, then tooltip (R12/R14).
+- Single unbreakable token — R14 pins that the label carries `wrap-break-words`; that the class actually converts horizontal overflow into detectable vertical overflow is proven only by the real-browser probe above, never by a unit test (happy-dom has no layout).
 - Click path with a tooltip attached and with none (R8/R9).
 - Orphaned rows, whose name falls back to `selectedNames` → `tagNameCache` → the raw id (`tags-filter.svelte:45`) and so is never empty (T2/T3).
 - Tag renamed while its id is unchanged — `update()` re-measures (A8).
