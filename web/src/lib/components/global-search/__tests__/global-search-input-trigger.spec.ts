@@ -255,6 +255,53 @@ describe('global-search-input-trigger', () => {
     expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
   });
 
+  it('upgrades an already-open inline dropdown to the modal when tapped', async () => {
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    await user.click(input);
+    expect(globalSearchManager.presentation).toBe('dropdown');
+
+    await user.pointer({ keys: '[TouchA]', target: input });
+
+    expect(globalSearchManager.presentation).toBe('modal');
+    expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
+  });
+
+  it('reopens the modal on a second tap after the first modal was closed', async () => {
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    await user.pointer({ keys: '[TouchA]', target: input });
+    expect(globalSearchManager.presentation).toBe('modal');
+
+    globalSearchManager.close();
+    expect(globalSearchManager.isOpen).toBe(false);
+
+    await user.pointer({ keys: '[TouchA]', target: input });
+
+    expect(globalSearchManager.isOpen).toBe(true);
+    expect(globalSearchManager.presentation).toBe('modal');
+    expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
+  });
+
+  it('opens the inline dropdown, not the modal, when focus arrives via Tab with no pointer event', async () => {
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    await user.tab();
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    expect(input).toHaveFocus();
+    expect(globalSearchManager.presentation).toBe('dropdown');
+    expect(document.querySelector('[data-cmdk-dropdown-panel]')).not.toBeNull();
+  });
+
   it('renders the placeholder and hotkey hint', () => {
     render(GlobalSearchInputTrigger);
 
