@@ -172,9 +172,8 @@ const buildConfig = async (repos: RepoDeps) => {
     const message = `Invalid system config: machineLearning.facialRecognition.suggestions.maxDistance (${suggestions.maxDistance}) must be greater than machineLearning.facialRecognition.maxDistance (${facialRecognitionMaxDistance}), otherwise no faces can ever be suggested.`;
     if (configFile) {
       throw new Error(message);
-    } else {
-      logger.error(message);
     }
+    logger.error(message);
   }
 
   if (config.server.externalDomain.length > 0) {

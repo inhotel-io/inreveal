@@ -202,7 +202,7 @@ const emptyRest = () => ({ faces: [], total: 0, hasMore: false }) as unknown as 
 // covers ConfirmModal (a boolean), the other modal this page opens through the same mock.
 const showModal = modalManager.show as unknown as ReturnType<
   typeof vi.fn<
-    (...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | boolean | undefined>
+    (...args: unknown[]) => Promise<boolean | { personId: string; name: string; lock?: boolean } | undefined>
   >
 >;
 

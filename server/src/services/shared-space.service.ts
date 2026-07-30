@@ -3264,9 +3264,10 @@ export class SharedSpaceService extends BaseService {
       const nameChanged = typeof updates.name === 'string' && updates.name.trim() !== person.name.trim();
       return {
         didInherit: true,
-        ...(nameChanged && this.isNamedVisibleSpacePerson({ ...person, name: nextName })
-          ? { suggestionScanCandidate: { ...person, name: nextName } }
-          : {}),
+        ...(nameChanged &&
+          this.isNamedVisibleSpacePerson({ ...person, name: nextName }) && {
+            suggestionScanCandidate: { ...person, name: nextName },
+          }),
       };
     }
     return { didInherit: false };

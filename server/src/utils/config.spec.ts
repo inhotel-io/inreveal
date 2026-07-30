@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const legacy = (suggestionMaxDistance: number, maxDistance?: number) => ({
   machineLearning: {
     facialRecognition: {
-      ...(maxDistance === undefined ? {} : { maxDistance }),
+      ...(maxDistance !== undefined && { maxDistance }),
       suggestionMaxDistance,
     },
   },

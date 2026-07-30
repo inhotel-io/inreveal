@@ -181,12 +181,20 @@ export class FaceRepairService extends BaseService {
     // tables on every scan pass. Scope must be built from the pre-filter flaggedByPerson (not the post-filter
     // toRepair/reviewOnlyFaces below) so a decline/lock on any candidate face is still fetched even though its
     // whole purpose is to drop that very face.
-    const flaggedFaceIds = [...flaggedByPerson.values()].flat().map((f) => f.assetFaceId);
-    const flaggedPersonIds = [...flaggedByPerson.keys()];
+    const flaggedFaceIds = flaggedByPerson
+      .values()
+      .toArray()
+      .flat()
+      .map((f) => f.assetFaceId);
+    const flaggedPersonIds = flaggedByPerson.keys().toArray();
     const verdictMaps = await this.buildVerdictMaps({
       assetFaceIds: flaggedFaceIds,
       personIds: flaggedPersonIds,
-      suspectedOwnerIds: [...flaggedByPerson.values()].flat().map((f) => f.suspectedOwnerId),
+      suspectedOwnerIds: flaggedByPerson
+        .values()
+        .toArray()
+        .flat()
+        .map((f) => f.suspectedOwnerId),
     });
     applyVerdictFilters(flaggedByPerson, verdictMaps);
 
@@ -449,10 +457,12 @@ export class FaceRepairService extends BaseService {
       // Step 4: build plan with progress callback (throttled every SCAN_PROGRESS_INTERVAL + final update)
       let lastReported = 0;
       const onProgress = async (scanned: number) => {
-        if (scanned - lastReported >= SCAN_PROGRESS_INTERVAL || scanned >= total) {
-          lastReported = scanned;
-          await this.faceRepairScanRepository.updateScanProgress(scanId, { progress: { scanned, total } });
+        if (!(scanned - lastReported >= SCAN_PROGRESS_INTERVAL || scanned >= total)) {
+          return;
         }
+
+        lastReported = scanned;
+        await this.faceRepairScanRepository.updateScanProgress(scanId, { progress: { scanned, total } });
       };
 
       const plan = await this.buildRepairPlan({

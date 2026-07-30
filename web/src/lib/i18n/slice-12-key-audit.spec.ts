@@ -63,7 +63,7 @@ const extractKeys = (source: string): string[] => {
 describe('S12.10: $t keys referenced by slice-12-touched files exist in en.json', () => {
   for (const file of TOUCHED_FILES) {
     const relative = path.relative(WEB_SRC, file);
-    it(`${relative}`, () => {
+    it(relative, () => {
       expect(fs.existsSync(file), `file not found: ${file}`).toBe(true);
       const source = fs.readFileSync(file, 'utf8');
       const keys = extractKeys(source);

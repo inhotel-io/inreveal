@@ -8006,12 +8006,12 @@ describe(SharedSpaceService.name, () => {
       const person = factory.sharedSpacePerson({ id: personId, spaceId, ...testCase.prior });
       const updatedPerson = factory.sharedSpacePerson({
         ...person,
-        ...(testCase.dto.name === undefined ? {} : { name: testCase.dto.name }),
-        ...(testCase.dto.isHidden === undefined ? {} : { isHidden: testCase.dto.isHidden }),
-        ...(testCase.dto.representativeFaceId === undefined
-          ? {}
-          : { representativeFaceId: testCase.dto.representativeFaceId }),
-        ...(testCase.dto.birthDate === undefined ? {} : { birthDate: testCase.dto.birthDate }),
+        ...(testCase.dto.name !== undefined && { name: testCase.dto.name }),
+        ...(testCase.dto.isHidden !== undefined && { isHidden: testCase.dto.isHidden }),
+        ...(testCase.dto.representativeFaceId !== undefined && {
+          representativeFaceId: testCase.dto.representativeFaceId,
+        }),
+        ...(testCase.dto.birthDate !== undefined && { birthDate: testCase.dto.birthDate }),
       });
 
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));

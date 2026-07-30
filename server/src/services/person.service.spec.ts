@@ -4468,7 +4468,7 @@ describe(PersonService.name, () => {
 
       for (const person of [
         { id: 'p', spaceId: 's', name: '', isHidden: false, type: 'person', faceRecognitionEnabled: true },
-        { id: 'p', spaceId: 's', name: '   ', isHidden: false, type: 'person', faceRecognitionEnabled: true },
+        { id: 'p', spaceId: 's', name: ' '.repeat(3), isHidden: false, type: 'person', faceRecognitionEnabled: true },
         { id: 'p', spaceId: 's', name: 'Alice', isHidden: true, type: 'person', faceRecognitionEnabled: true },
         { id: 'p', spaceId: 's', name: 'Rex', isHidden: false, type: 'pet', faceRecognitionEnabled: true },
         { id: 'p', spaceId: 's', name: 'Alice', isHidden: false, type: 'person', faceRecognitionEnabled: false },

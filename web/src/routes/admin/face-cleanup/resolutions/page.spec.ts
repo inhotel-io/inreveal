@@ -170,7 +170,10 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
 
     const rows = screen.getAllByTestId('resolution-row');
-    expect(rows.map((r) => r.dataset.source).sort()).toEqual(['cleanup', 'suggestion']);
+    expect(rows.map((r) => r.dataset.source).sort((a, b) => (a ?? '').localeCompare(b ?? ''))).toEqual([
+      'cleanup',
+      'suggestion',
+    ]);
 
     const cleanupRow = rows.find((r) => r.dataset.source === 'cleanup')!;
     const suggestionRow = rows.find((r) => r.dataset.source === 'suggestion')!;

@@ -124,8 +124,10 @@ describe('PersonSuggestionReviewModal', () => {
     // reflect content attributes (settable directly); naturalWidth/naturalHeight have no public setter.
     img.width = 400;
     img.height = 300;
-    Object.defineProperty(img, 'naturalWidth', { value: 1000, configurable: true });
-    Object.defineProperty(img, 'naturalHeight', { value: 500, configurable: true });
+    Object.defineProperties(img, {
+      naturalWidth: { value: 1000, configurable: true },
+      naturalHeight: { value: 500, configurable: true },
+    });
 
     await fireEvent.load(img);
 

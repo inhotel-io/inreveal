@@ -24,7 +24,7 @@
   // Deleted destinations are omitted, not disabled: the card above already explains why one is unusable, and
   // an option that guarantees a face-repair:destination-missing failure is only a chance to misclick.
   const options = $derived(selectableDestinations(owners));
-  const isUnlisted = $derived(value !== null && !options.some((o) => o.ownerPersonId === value));
+  const isUnlisted = $derived(value !== null && options.every((o) => o.ownerPersonId !== value));
 
   const handleChange = (event: Event) => {
     onSelect((event.currentTarget as HTMLSelectElement).value);

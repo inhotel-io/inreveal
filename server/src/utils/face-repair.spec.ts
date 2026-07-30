@@ -180,7 +180,7 @@ describe('classifyFlaggedPerson', () => {
 
   it('treats empty / whitespace name as unnamed', () => {
     expect(classifyFlaggedPerson(person({ personName: '' }), ctx()).reviewReasons).toEqual([]);
-    expect(classifyFlaggedPerson(person({ personName: '   ' }), ctx()).reviewReasons).toEqual([]);
+    expect(classifyFlaggedPerson(person({ personName: ' '.repeat(3) }), ctx()).reviewReasons).toEqual([]);
   });
 
   it('large-cluster boundary: 50 is confident, 51 is review-first', () => {
@@ -353,7 +353,7 @@ describe('applyVerdictFilters', () => {
     const scopedMaps = {
       negativeFaceTargets: new Map([...fullMaps.negativeFaceTargets].filter(([faceId]) => flaggedFaceIds.has(faceId))),
       mutedPersons: new Map([...fullMaps.mutedPersons].filter(([personId]) => flaggedPersonIds.has(personId))),
-      manualLinkedFaceIds: new Set([...fullMaps.manualLinkedFaceIds].filter((id) => flaggedFaceIds.has(id))),
+      manualLinkedFaceIds: fullMaps.manualLinkedFaceIds.intersection(flaggedFaceIds),
     };
 
     const withFull = buildFlagged();

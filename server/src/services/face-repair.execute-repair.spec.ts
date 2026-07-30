@@ -55,7 +55,6 @@ describe(FaceRepairService.name, () => {
     });
 
     it('skips faces whose suspected owner no longer exists (deleted/merged since the scan)', async () => {
-      // eslint-disable-next-line unicorn/no-useless-undefined
       mocks.person.getById.mockResolvedValue(undefined);
 
       const r = await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'gone' }]));

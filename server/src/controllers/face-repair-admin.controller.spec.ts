@@ -948,13 +948,13 @@ describe(FaceRepairAdminController.name, () => {
       // ImmichRedirectResponse exercises sendFile's real dispatch without touching the filesystem, so the
       // assertion below is about delegation + response wiring, not disk I/O.
       service.getAdminFaceThumbnail.mockResolvedValue(
-        new ImmichRedirectResponse({ url: 'http://example.com/face.jpg', cacheControl: CacheControl.None }),
+        new ImmichRedirectResponse({ url: 'https://example.com/face.jpg', cacheControl: CacheControl.None }),
       );
       const { status, headers } = await request(ctx.getHttpServer())
         .get(`/admin/face-repair/faces/${assetFaceId}/thumbnail`)
         .set('Authorization', 'Bearer token');
       expect(status).toBe(302);
-      expect(headers.location).toBe('http://example.com/face.jpg');
+      expect(headers.location).toBe('https://example.com/face.jpg');
       expect(service.getAdminFaceThumbnail).toHaveBeenCalledWith(assetFaceId);
     });
 

@@ -191,7 +191,7 @@
             {#if person.reviewReasons.length > 0}
               {@const primaryReason = bad ? 'bad-target' : person.reviewReasons[0]}
               {@const reasonLabels = person.reviewReasons.map((r) =>
-                reasonKeys[r] ? $t(reasonKeys[r] as Translations) : r,
+                Object.hasOwn(reasonKeys, r) ? $t(reasonKeys[r] as Translations) : r,
               )}
               <div
                 class="{COL_REASONS} items-center gap-1.5"
@@ -206,7 +206,9 @@
                       : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
                   ].join(' ')}
                 >
-                  {reasonKeys[primaryReason] ? $t(reasonKeys[primaryReason] as Translations) : primaryReason}
+                  {Object.hasOwn(reasonKeys, primaryReason)
+                    ? $t(reasonKeys[primaryReason] as Translations)
+                    : primaryReason}
                 </span>
                 {#if person.reviewReasons.length > 1}
                   <span class="flex-none text-[10px] font-medium text-gray-400">+{person.reviewReasons.length - 1}</span

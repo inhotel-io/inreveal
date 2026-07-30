@@ -136,7 +136,7 @@ export function findOverlappingIds(buckets: string[][]): string[] {
       seenInBuckets.set(id, (seenInBuckets.get(id) ?? 0) + 1);
     }
   }
-  return [...seenInBuckets.entries()].filter(([, count]) => count > 1).map(([id]) => id);
+  return [...seenInBuckets].filter(([, count]) => count > 1).map(([id]) => id);
 }
 
 // `resolve` (E15): stay/lock/detach/moveToPerson ids must be members of the person's stored flagged-face

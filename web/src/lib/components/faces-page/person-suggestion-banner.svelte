@@ -53,7 +53,7 @@
           data-testid="suggestion-banner-reference"
           src={referenceThumbnailUrl}
           alt={person.name || $t('face_suggestion_reference')}
-          class="h-9 w-9 shrink-0 rounded-full object-cover"
+          class="size-9 shrink-0 rounded-full object-cover"
         />
         <p class="truncate font-medium text-primary">{title}</p>
       </div>

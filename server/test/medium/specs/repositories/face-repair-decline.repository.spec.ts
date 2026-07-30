@@ -86,7 +86,7 @@ describe(FaceRepairDeclineRepository.name, () => {
     });
 
     const mutes = await sut.getClusterMuteMap([personP]);
-    expect([...mutes.keys()]).toEqual([personP]);
+    expect(mutes.keys().toArray()).toEqual([personP]);
   });
 
   it('re-muting a person replaces the stored fingerprint (one row per person, last-write-wins)', async () => {

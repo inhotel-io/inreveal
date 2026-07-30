@@ -182,10 +182,12 @@
   };
 
   const stopPolling = () => {
-    if (pollTimer) {
-      clearTimeout(pollTimer);
-      pollTimer = null;
+    if (!pollTimer) {
+      return;
     }
+
+    clearTimeout(pollTimer);
+    pollTimer = null;
   };
 
   // The INITIAL load is kept separate from fetchLatestScan's swallow-everything poll idiom above (D17): a
@@ -268,7 +270,7 @@
         moveGroups.set(face.suspectedOwnerId, [face.assetFaceId]);
       }
     }
-    const moveToPerson = [...moveGroups.entries()].map(([destinationPersonId, faceIds]) => ({
+    const moveToPerson = [...moveGroups].map(([destinationPersonId, faceIds]) => ({
       destinationPersonId,
       faceIds,
     }));

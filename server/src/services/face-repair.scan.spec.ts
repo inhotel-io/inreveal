@@ -31,7 +31,7 @@ describe(FaceRepairService.name, () => {
 
     // Default: no stored scan row → params come from config defaults
     mocks.systemMetadata.get.mockResolvedValue(null);
-    // eslint-disable-next-line unicorn/no-useless-undefined
+
     mocks.faceRepairScan.getScanById.mockResolvedValue(undefined);
     mocks.faceRepairScan.updateScanProgress.mockResolvedValue();
     mocks.faceRepairScan.completeScan.mockResolvedValue();

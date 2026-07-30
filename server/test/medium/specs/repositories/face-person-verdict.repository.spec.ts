@@ -1775,7 +1775,7 @@ describe('FacePersonVerdictRepository', () => {
         .insertInto('shared_space_person')
         .values([
           { spaceId: space.id, name: 'Valid', type: 'person', isHidden: false },
-          { spaceId: space.id, name: '   ', type: 'person', isHidden: false },
+          { spaceId: space.id, name: ' '.repeat(3), type: 'person', isHidden: false },
           { spaceId: space.id, name: 'Hidden', type: 'person', isHidden: true },
           { spaceId: space.id, name: 'Pet', type: 'pet', isHidden: false },
           { spaceId: disabledSpace.id, name: 'Disabled', type: 'person', isHidden: false },
@@ -1919,7 +1919,7 @@ describe('FacePersonVerdictRepository', () => {
         const rows = await ctx.database
           .insertInto('shared_space_person')
           .values([
-            { spaceId: space.id, name: '   ', type: 'person', isHidden: false },
+            { spaceId: space.id, name: ' '.repeat(3), type: 'person', isHidden: false },
             { spaceId: space.id, name: 'Hidden', type: 'person', isHidden: true },
             { spaceId: space.id, name: 'Pet', type: 'pet', isHidden: false },
             { spaceId: disabledSpace.id, name: 'Disabled', type: 'person', isHidden: false },

@@ -285,7 +285,7 @@
               onload={() => (imgReady = true)}
             />
             {#if highlight}
-              <svg class="pointer-events-none absolute inset-0 h-full w-full">
+              <svg class="pointer-events-none absolute inset-0 size-full">
                 <defs>
                   <mask id="suggestion-dim-mask">
                     <rect width="100%" height="100%" fill="white" />
@@ -317,12 +317,12 @@
                 data-testid="suggestion-reference"
                 src={referenceThumbnailUrl}
                 alt={$t('face_suggestion_reference')}
-                class="h-24 w-24 rounded-lg object-cover"
+                class="size-24 rounded-lg object-cover"
               />
               <span class="text-xs text-gray-500 dark:text-gray-400">{$t('face_suggestion_reference')}</span>
             </div>
             <div class="flex flex-col items-center gap-1">
-              <div class="h-24 w-24">
+              <div class="size-24">
                 <FaceCrop face={current} label={$t('face_suggestion_candidate')} />
               </div>
               <span class="text-xs text-gray-500 dark:text-gray-400">{$t('face_suggestion_candidate')}</span>

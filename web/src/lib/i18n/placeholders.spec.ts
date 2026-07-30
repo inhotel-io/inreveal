@@ -135,7 +135,7 @@ describe('i18n placeholders', () => {
     const orphans: string[] = [];
 
     for (const [key, message] of Object.entries(locale)) {
-      if (!(key in en)) {
+      if (!Object.hasOwn(en, key)) {
         continue; // a key en.json no longer has is dead weight, not a rendering bug — it is never looked up
       }
       const supplied = new Set(argumentsOf(en[key]));

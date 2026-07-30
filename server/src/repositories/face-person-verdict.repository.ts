@@ -328,7 +328,7 @@ export class FacePersonVerdictRepository {
     if (rows.length === 0) {
       return 0;
     }
-    const deduplicated = [...new Map(rows.map((row) => [`${row.personId}|${row.assetFaceId}`, row])).values()];
+    const deduplicated = new Map(rows.map((row) => [`${row.personId}|${row.assetFaceId}`, row])).values().toArray();
     const source = opts?.source ?? 'suggestion';
     const actorId = opts?.actorId ?? null;
 

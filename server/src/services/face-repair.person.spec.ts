@@ -54,7 +54,6 @@ describe(FaceRepairService.name, () => {
     });
 
     it('returns empty when there is no scan (E6)', async () => {
-      // eslint-disable-next-line unicorn/no-useless-undefined
       mocks.faceRepairScan.getLatestScan.mockResolvedValue(undefined);
       const result = await sut.getPersonFlaggedFaces('p1');
       expect(result).toEqual({ personId: 'p1', flaggedFaces: [] });

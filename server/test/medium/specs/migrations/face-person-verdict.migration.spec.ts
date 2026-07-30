@@ -267,7 +267,7 @@ async function computeDriftForThisDb() {
   const { rows } = await sql<{ db: string }>`SELECT current_database() as db`.execute(db);
   const dbName = rows[0].db;
   const testUrl = process.env.IMMICH_TEST_POSTGRES_URL!;
-  const url = testUrl.replace(/\/[^/]+$/, `/${dbName}`);
+  const url = testUrl.replace(/\/[^/]+$/, () => `/${dbName}`);
 
   const source = schemaFromCode({
     overrides: true,

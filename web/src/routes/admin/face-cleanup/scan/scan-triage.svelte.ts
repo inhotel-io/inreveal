@@ -47,15 +47,17 @@ export function createScanTriageModel(persons: FaceCleanupPerson[], options?: Sc
     [...(options?.prev?.excluded ?? [])].filter((id) => confidentIds.has(id)),
   );
 
+  const approvedIds = () => confident.filter((p) => !excluded.has(p.personId)).map((p) => p.personId);
+
   return {
     confident,
     reviewFirst,
     excluded,
     get approvedIds() {
-      return confident.filter((p) => !excluded.has(p.personId)).map((p) => p.personId);
+      return approvedIds();
     },
     get approvedCount() {
-      return this.approvedIds.length;
+      return approvedIds().length;
     },
     isExcluded(id: string): boolean {
       return excluded.has(id);

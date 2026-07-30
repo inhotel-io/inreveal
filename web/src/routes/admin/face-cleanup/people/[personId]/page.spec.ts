@@ -169,7 +169,7 @@ const getVm = (): ManualReviewModel => {
 
 // Slice 9 tests drive the REAL bulk-action buttons and Apply — never the model directly (unlike slice 8's
 // getVm() seam above, which existed only because there was no UI yet to click).
-const tileFor = (id: string) => document.querySelector(`[data-testid="face-tile"][data-faceid="${id}"]`)!;
+const tileFor = (id: string) => document.querySelector(`[data-testid="face-tile"][data-faceid="${CSS.escape(id)}"]`)!;
 const selectTile = async (index: number) => {
   const tiles = screen.getAllByTestId('face-tile');
   await fireEvent.click(tiles[index]);
@@ -181,7 +181,7 @@ const selectTile = async (index: number) => {
 // or undefined) and ConfirmModal (a boolean).
 const showModal = modalManager.show as unknown as ReturnType<
   typeof vi.fn<
-    (...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | boolean | undefined>
+    (...args: unknown[]) => Promise<boolean | { personId: string; name: string; lock?: boolean } | undefined>
   >
 >;
 
@@ -323,7 +323,8 @@ describe('+page.svelte (manual face-review page)', () => {
     vm.toggle('f3');
     vm.applyToSelection('detach');
 
-    const tileFor = (id: string) => document.querySelector(`[data-testid="face-tile"][data-faceid="${id}"]`)!;
+    const tileFor = (id: string) =>
+      document.querySelector(`[data-testid="face-tile"][data-faceid="${CSS.escape(id)}"]`)!;
 
     await waitFor(() => {
       expect(tileFor('f1')).toHaveAttribute('data-state', 'lock');
@@ -451,7 +452,8 @@ describe('+page.svelte (manual face-review page)', () => {
     });
     await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(4));
 
-    const tileFor = (id: string) => document.querySelector(`[data-testid="face-tile"][data-faceid="${id}"]`)!;
+    const tileFor = (id: string) =>
+      document.querySelector(`[data-testid="face-tile"][data-faceid="${CSS.escape(id)}"]`)!;
     // Marks survived the append.
     expect(tileFor('f1')).toHaveAttribute('data-state', 'lock');
     // Selection survived the append.

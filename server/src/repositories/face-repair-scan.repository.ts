@@ -124,9 +124,9 @@ export class FaceRepairScanRepository {
     await this.db
       .updateTable('face_repair_scan')
       .set({
-        ...(input.status ? { status: input.status } : {}),
-        ...(input.progress ? { progress: { ...input.progress, heartbeatAt: new Date().toISOString() } } : {}),
-        ...(input.startedAt ? { startedAt: input.startedAt } : {}),
+        ...(input.status && { status: input.status }),
+        ...(input.progress && { progress: { ...input.progress, heartbeatAt: new Date().toISOString() } }),
+        ...(input.startedAt && { startedAt: input.startedAt }),
       })
       .where('id', '=', id)
       .execute();

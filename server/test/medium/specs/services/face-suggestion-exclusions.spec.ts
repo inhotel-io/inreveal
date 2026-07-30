@@ -116,7 +116,7 @@ const seedFace = async (
 ) => {
   const { asset } = await ctx.newAsset({
     ownerId: input.ownerId,
-    ...(input.visibility ? { visibility: input.visibility } : {}),
+    ...(input.visibility && { visibility: input.visibility }),
   });
   const { assetFace } = await ctx.newAssetFace({
     assetId: asset.id,

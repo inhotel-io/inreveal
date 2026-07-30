@@ -3744,7 +3744,12 @@ describe(SharedSpaceRepository.name, () => {
         type: 'person',
         isHidden: false,
       });
-      const whitespace = await sut.createPerson({ spaceId: space.id, name: '   ', type: 'person', isHidden: false });
+      const whitespace = await sut.createPerson({
+        spaceId: space.id,
+        name: ' '.repeat(3),
+        type: 'person',
+        isHidden: false,
+      });
       const hidden = await sut.createPerson({ spaceId: space.id, name: 'Hidden', type: 'person', isHidden: true });
       const pet = await sut.createPerson({ spaceId: space.id, name: 'Pet', type: 'pet', isHidden: false });
       const disabled = await sut.createPerson({

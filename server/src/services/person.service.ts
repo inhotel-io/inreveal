@@ -1009,7 +1009,7 @@ export class PersonService extends BaseService {
     // D3: exclude candidates a human has already settled — a manually-linked face (owner-agnostic), or a
     // face a human has already said "not this person/identity" about, in ANY scope that shares the target's
     // identity. The candidate set is bounded to this scan's own results (never an unscoped read).
-    const candidateFaceIds = [...bestByFace.keys()];
+    const candidateFaceIds = bestByFace.keys().toArray();
     const { manualLinkedFaceIds, negativeFaceTargets } =
       await this.faceVerdictService.getFaceSettlementInputs(candidateFaceIds);
     const targetTokens = new Set([`person:${id}`, ...(person.identityId ? [`identity:${person.identityId}`] : [])]);
@@ -1094,16 +1094,17 @@ export class PersonService extends BaseService {
       }
     }
 
-    const assigned = await this.sharedSpaceRepository.getAssignedFaceIdsForSpace(person.spaceId, [
-      ...bestByFace.keys(),
-    ]);
+    const assigned = await this.sharedSpaceRepository.getAssignedFaceIdsForSpace(
+      person.spaceId,
+      bestByFace.keys().toArray(),
+    );
     for (const { assetFaceId } of assigned) {
       bestByFace.delete(assetFaceId);
     }
 
     // D3: same exclusion as the personal scan — a manually-linked face (owner-agnostic), or a face a human
     // has already said "not this person/identity" about, in ANY scope that shares the target's identity.
-    const candidateFaceIds = [...bestByFace.keys()];
+    const candidateFaceIds = bestByFace.keys().toArray();
     const { manualLinkedFaceIds, negativeFaceTargets } =
       await this.faceVerdictService.getFaceSettlementInputs(candidateFaceIds);
     const targetTokens = new Set([
