@@ -80,6 +80,23 @@ const renderPanel = (props: {
   });
 };
 
+// renderWithTooltips casts away the TestWrapper indirection, so rerender must be fed the
+// wrapper's own prop shape — passing the component's props directly silently does nothing.
+const rerenderPanel = async (
+  result: { rerender: (props: never) => Promise<void> },
+  props: { isOwner: boolean; spaceId?: string; assetId: string },
+) => {
+  await result.rerender({
+    component: DetailPanelPeople,
+    componentProps: {
+      asset: asset({ id: props.assetId }),
+      isOwner: props.isOwner,
+      previousRoute: '/photos',
+      spaceId: props.spaceId,
+    },
+  } as never);
+};
+
 // A person as the server sends it inside a shared space: the id stays the GLOBAL person id
 // (AssetService.applySpacePeople only *adds* spacePersonId), which is why faceManager's
 // facesByPersonId lookup still matches for space members.
@@ -465,6 +482,24 @@ describe('DetailPanelPeople', () => {
       expect(screen.getByText('Alice')).toBeInTheDocument();
       expect(screen.queryByText('Hidden')).not.toBeInTheDocument();
       expect(screen.getByRole('link')).toBeInTheDocument();
+    });
+
+    it('resolves the fallback against the new asset after navigating to the next photo', async () => {
+      // The {#await} lives inside an {#each} keyed on person.id, so a person present on both photos
+      // keeps their DOM node across the switch. The avatar inputs must still be recomputed.
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      zoomImageToBase64Mock.mockResolvedValue(null);
+
+      const result = renderPanel({ isOwner: false });
+      const { container } = result;
+      await settleCrop();
+      expect(container.querySelector('img')?.getAttribute('src')).toContain('/assets/asset-1/');
+
+      await rerenderPanel(result as never, { isOwner: false, assetId: 'asset-2' });
+      await tick();
+
+      expect(container.querySelector('img')?.getAttribute('src')).toContain('/assets/asset-2/');
     });
   });
 });
