@@ -344,6 +344,16 @@ test.describe.serial('Face Cleanup', () => {
     );
     expect(beforeUndo.flaggedFaces.some((f) => f.assetFaceId === faceId)).toBe(false);
 
+    // S14.6 positive control for the post-undo `toHaveLength(0)` at the end of this test. Without it that
+    // assertion passes vacuously the moment the resolve stops writing a verdict at all, or the column/status
+    // names drift — an empty result would then mean "Undo worked" and "nothing was ever written" identically.
+    // Run the SAME query first and require exactly the row Undo is supposed to remove.
+    const { rows: seededVerdictRows } = await db.query(
+      `SELECT id FROM "face_person_verdict" WHERE "assetFaceId" = $1 AND status IN ('rejected', 'ignored')`,
+      [faceId],
+    );
+    expect(seededVerdictRows).toHaveLength(1);
+
     await page.goto('/admin/face-cleanup/resolutions');
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
 
@@ -837,7 +847,10 @@ test.describe.serial('Face Cleanup', () => {
     await page.goto('/admin/face-cleanup/resolutions');
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
 
-    const row = page.locator('[data-testid="resolution-row"]').first();
+    // S14.6: scoped to THIS test's person. `.first()` on an unscoped locator is a shared-DB hazard — this
+    // suite runs `.serial` and earlier tests leave their own resolution rows behind, so an unscoped `.first()`
+    // could assert a thumbnail on some other test's row and pass while this one's row rendered nothing.
+    const row = page.locator('[data-testid="resolution-row"]').filter({ hasText: source.name }).first();
     await expect(row).toBeVisible({ timeout: 15_000 });
     const rowImg = row.locator('img').first();
     await expect(rowImg).toHaveAttribute('src', /.+/);
