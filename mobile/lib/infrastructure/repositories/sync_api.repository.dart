@@ -148,7 +148,7 @@ class SyncApiRepository {
           // that predate capability signalling. An unknown enum value 400s the WHOLE /sync/stream
           // request, so this gate is the only protection.
           if (supportedSyncTypes != null)
-            ...(_assetFavoriteSyncTypes.where((type) => supportedSyncTypes.contains(type.value)))
+            ...(_assetFavoriteSyncTypes.where((type) => supportedSyncTypes.contains(type.toJson())))
           else if (serverVersion > const SemVer(major: 5, minor: 2, patch: 0))
             ..._assetFavoriteSyncTypes,
         ],
