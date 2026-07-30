@@ -63,12 +63,16 @@
   import {
     AssetVisibility,
     confirmPersonFaceSuggestion,
+    confirmSpacePersonFaceSuggestion,
     detachScopedPerson,
     dismissPersonFaceSuggestion,
+    dismissSpacePersonFaceSuggestion,
     getAllPeople,
     getPersonFaceSuggestions,
     getPerson,
+    getSpacePersonFaceSuggestions,
     ignorePersonFaceSuggestion,
+    ignoreSpacePersonFaceSuggestion,
     mergePerson,
     searchPerson,
     Type2 as ScopedPersonProfileType,
@@ -440,14 +444,45 @@
   let suggestionTotal = $state(0);
   let suggestionPreviews = $state<PersonFaceSuggestionResponseDto[]>([]);
 
+  type SuggestionTarget = { type: 'person'; personId: string } | { type: 'space'; spaceId: string; personId: string };
+
+  /**
+   * A space member who holds no person row for this identity reaches the shared person through this
+   * (global) route from the main People list — their primary profile IS the space profile, and the
+   * owner-only person endpoints do not know that id. Route those reads and verdicts at the shared
+   * space endpoints instead, so suggestions are not a /spaces-only affordance. The server returns an
+   * empty page to members below editor, which keeps the banner hidden for viewers.
+   */
+  const getSuggestionTarget = (target: PersonResponseDto): SuggestionTarget => {
+    const profile = target.primaryProfile;
+    return profile?.type === 'space-person' && profile.spaceId
+      ? { type: 'space', spaceId: profile.spaceId, personId: profile.id }
+      : { type: 'person', personId: target.id };
+  };
+
+  const fetchSuggestions = (target: SuggestionTarget, page: number, size: number) =>
+    target.type === 'space'
+      ? getSpacePersonFaceSuggestions({ id: target.spaceId, personId: target.personId, page, size })
+      : getPersonFaceSuggestions({ id: target.personId, page, size });
+
+  const confirmSuggestion = (target: SuggestionTarget, assetFaceId: string) =>
+    target.type === 'space'
+      ? confirmSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
+      : confirmPersonFaceSuggestion({ id: target.personId, assetFaceId });
+
+  const dismissSuggestion = (target: SuggestionTarget, assetFaceId: string) =>
+    target.type === 'space'
+      ? dismissSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
+      : dismissPersonFaceSuggestion({ id: target.personId, assetFaceId });
+
+  const ignoreSuggestion = (target: SuggestionTarget, assetFaceId: string) =>
+    target.type === 'space'
+      ? ignoreSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
+      : ignorePersonFaceSuggestion({ id: target.personId, assetFaceId });
+
   const loadSuggestionSummary = async (currentPerson: PersonResponseDto) => {
-    if (isSpaceScopedPerson(currentPerson)) {
-      suggestionTotal = 0;
-      suggestionPreviews = [];
-      return;
-    }
     try {
-      const res = await getPersonFaceSuggestions({ id: currentPerson.id, page: 1, size: 5 });
+      const res = await fetchSuggestions(getSuggestionTarget(currentPerson), 1, 5);
       if (currentPerson.id !== person.id) {
         return;
       }
@@ -464,17 +499,16 @@
 
   const openSuggestionReview = async () => {
     const currentPerson = person;
-    const currentPersonId = person.id;
-    const currentThumbnailUrl = getPeopleThumbnailUrl(person);
+    const currentTarget = getSuggestionTarget(currentPerson);
+    const currentThumbnailUrl = getScopedThumbnailUrl(currentPerson);
 
     const result = await modalManager.show(PersonSuggestionReviewModal, {
       person: currentPerson,
       referenceThumbnailUrl: currentThumbnailUrl,
-      loadPage: ({ page, size }: { page: number; size: number }) =>
-        getPersonFaceSuggestions({ id: currentPersonId, page, size }),
-      confirm: (assetFaceId: string) => confirmPersonFaceSuggestion({ id: currentPersonId, assetFaceId }),
-      dismiss: (assetFaceId: string) => dismissPersonFaceSuggestion({ id: currentPersonId, assetFaceId }),
-      ignore: (assetFaceId: string) => ignorePersonFaceSuggestion({ id: currentPersonId, assetFaceId }),
+      loadPage: ({ page, size }: { page: number; size: number }) => fetchSuggestions(currentTarget, page, size),
+      confirm: (assetFaceId: string) => confirmSuggestion(currentTarget, assetFaceId),
+      dismiss: (assetFaceId: string) => dismissSuggestion(currentTarget, assetFaceId),
+      ignore: (assetFaceId: string) => ignoreSuggestion(currentTarget, assetFaceId),
     });
     await loadSuggestionSummary(currentPerson);
     if (result && result.confirmed > 0) {
@@ -743,7 +777,7 @@
             {person}
             total={suggestionTotal}
             previews={suggestionPreviews}
-            referenceThumbnailUrl={getPeopleThumbnailUrl(person)}
+            referenceThumbnailUrl={thumbnailData}
             onReview={openSuggestionReview}
           />
         {/if}

@@ -95,6 +95,10 @@ Gallery surfaces them as **suggestions** on that person's page. Review them one 
 > face within the automatic-recognition threshold, it can still be auto-assigned — by design,
 > so dismissing a suggestion never blocks normal recognition.
 
+People in a [shared space](/features/shared-spaces) work the same way: owners and editors of
+the space get suggestions for a space person, whether they open that person from the space or
+from the main People view. Viewers get none, since they cannot assign faces.
+
 ## How Face Detection Works
 
 Face detection sends the generated preview image to the machine learning service for processing. The service checks if it has the relevant model downloaded and downloads it if not. The image is decoded, pre-processed and passed to the face detection model (with hardware acceleration if configured). The bounding boxes and scores outputted from this model are used to crop and preprocess the image once again to be passed to a facial recognition model (also accelerated if configured). The embeddings from the recognition model, together with the bounding boxes and scores from the face detection model, are then sent back to the server to be added to the database. The embeddings in particular are indexed so they can be searched quickly during facial recognition clustering.
