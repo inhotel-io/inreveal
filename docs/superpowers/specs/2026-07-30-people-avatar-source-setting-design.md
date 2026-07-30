@@ -472,10 +472,14 @@ rather than merely _not displayed_.
 - `web/pnpm check:svelte` has been observed scanning zero files locally; treat CI as the
   authority for that gate.
 - **`web`'s `pnpm lint` is `eslint . --concurrency 6` — there is no `--max-warnings`.** Only
-  **errors** fail it. The ~600 package-wide `better-tailwindcss/enforce-consistent-class-order`
-  warnings are pre-existing and tolerated; do not chase them, and do not treat a non-empty warning
-  list as a failing gate. (CLAUDE.md's blanket "zero warnings policy" does not describe this
-  package.) Judge the gate by exit code.
+  **errors** fail it, so judge the gate by **exit code**, never by warning count. On the rebased
+  base there are 8 pre-existing warnings in unrelated files; do not chase them. (CLAUDE.md's
+  blanket "zero warnings policy" does not describe this package.)
+  **But errors are real and they are usually yours.** The post-cutover config enables
+  `unicorn/consistent-conditional-object-spread`, which turns `...(cond ? { a } : {})` into an
+  error — write `...(cond && { a })`. When lint exits non-zero, check whether the cited file is
+  one this feature introduced before concluding it is pre-existing; `npx eslint --fix <file>`
+  applies the rule's own autofix.
 - **Branch base:** this branch is rebased onto `origin/main` (`a7390f7c057`, the v3.1.0 cutover).
   All open PRs target `main`; the older "target the rolling branch" guidance is stale as of the
   2026-07-30 cutover.

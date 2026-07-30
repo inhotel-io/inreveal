@@ -70,8 +70,8 @@ const renderPanel = (props: {
   authManagerMock.isSharedLink = props.sharedLink ?? false;
   return renderWithTooltips(DetailPanelPeople, {
     asset: asset({
-      ...(props.people ? { people: props.people } : {}),
-      ...(props.assetType ? { type: props.assetType } : {}),
+      ...(props.people && { people: props.people }),
+      ...(props.assetType && { type: props.assetType }),
     }),
     isOwner: props.isOwner,
     previousRoute: '/photos',
