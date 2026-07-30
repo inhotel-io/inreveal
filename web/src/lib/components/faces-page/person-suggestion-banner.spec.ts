@@ -35,6 +35,7 @@ function previews(n: number): PersonFaceSuggestionResponseDto[] {
 
 const base = (over: Record<string, unknown> = {}) => ({
   person,
+  snoozeId: person.id,
   total: 3,
   previews: previews(3),
   referenceThumbnailUrl: REF,
@@ -85,6 +86,22 @@ describe('PersonSuggestionBanner', () => {
     expect(screen.queryByTestId('person-suggestion-banner')).not.toBeInTheDocument();
     unmount();
     render(PersonSuggestionBanner, { props: base({ total: 5, previews: previews(5) }) });
+    expect(screen.getByTestId('person-suggestion-banner')).toBeInTheDocument();
+  });
+
+  // S12.5/F32a (snooze keying): the banner must key snooze on the caller-supplied `snoozeId`, never on
+  // `person.id` directly. The two happen to coincide in most fixtures (including `base()` above, which is
+  // the positive control every other test in this file relies on), so this test deliberately makes them
+  // DIFFER — proving the banner reads the explicit prop, not `person.id` — the exact drift the two routes
+  // (space vs global) must not reintroduce by deriving the key themselves instead of being told it.
+  it('keys snooze on the snoozeId prop, not on person.id, when the two differ', async () => {
+    render(PersonSuggestionBanner, { props: base({ snoozeId: 'suggestion-target-id' }) });
+    await userEvent.click(screen.getByTestId('suggestion-snooze-btn'));
+    expect(screen.queryByTestId('person-suggestion-banner')).not.toBeInTheDocument();
+
+    // Snoozed under 'suggestion-target-id' (the prop), so a banner for the SAME person.id but a DIFFERENT
+    // snoozeId must still show — the person's own id was never the key.
+    render(PersonSuggestionBanner, { props: base({ snoozeId: 'other-target-id' }) });
     expect(screen.getByTestId('person-suggestion-banner')).toBeInTheDocument();
   });
 });

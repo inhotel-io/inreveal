@@ -65,12 +65,26 @@ export function isSuggestionSnoozed(personId: string, total: number): boolean {
   return total <= entry.count;
 }
 
+// Drops every entry whose expiry has already passed. Without this, the record only ever grows — one stale
+// entry per person ever snoozed, for every user who ever used a shared/demo browser — since nothing else ever
+// removes an entry once `isSuggestionSnoozed` starts reading `false` for it.
+const pruneExpired = (record: SnoozeRecord): SnoozeRecord => {
+  const now = Date.now();
+  const pruned: SnoozeRecord = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (entry.until > now) {
+      pruned[key] = entry;
+    }
+  }
+  return pruned;
+};
+
 export function snoozeSuggestions(personId: string, total: number): void {
   const storageKey = scopedKey(personId);
   if (!storageKey) {
     return;
   }
-  const record = read();
+  const record = pruneExpired(read());
   record[storageKey] = { until: Date.now() + SUGGESTION_SNOOZE_MS, count: total };
   write(record);
 }

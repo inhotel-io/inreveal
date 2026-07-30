@@ -52,8 +52,23 @@
     thumbnailFaceId ? getAdminFaceThumbnailUrl(thumbnailFaceId) : `/api${getPeopleThumbnailPath(personId)}`;
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString();
 
-  const targetName = (item: ResolutionItem) =>
-    item.personName ?? item.spacePersonName ?? $t('admin.face_cleanup_unnamed');
+  // Both `personId`/`spacePersonId` FKs are `ON DELETE SET NULL`, and both `person.name`/`shared_space_person.
+  // name` can independently be null on a row whose FK is still intact — so "the id survived but the name
+  // didn't" and "nothing survived at all" are genuinely different states, not the same "no name" case. The old
+  // single `?? unnamed` fallback rendered both identically, telling an admin nothing about which one they were
+  // looking at.
+  const targetName = (item: ResolutionItem) => {
+    if (item.personName) {
+      return item.personName;
+    }
+    if (item.spacePersonName) {
+      return item.spacePersonName;
+    }
+    if (item.personId || item.spacePersonId) {
+      return $t('admin.face_cleanup_resolutions_target_deleted');
+    }
+    return $t('admin.face_cleanup_unnamed');
+  };
 
   const load = async () => {
     loadError = false;
@@ -85,11 +100,14 @@
     }
   };
 
-  const filters: { value: SourceFilter; label: string }[] = [
+  // $derived, not a plain array evaluated once at init: a plain array captures whatever $t(...) returned at
+  // component construction and never re-evaluates, so the chips stayed in the mount-time language forever
+  // after a locale switch.
+  const filters = $derived<{ value: SourceFilter; label: string }[]>([
     { value: 'all', label: $t('admin.face_cleanup_resolutions_filter_all') },
     { value: 'cleanup', label: $t('admin.face_cleanup_resolutions_filter_cleanup') },
     { value: 'suggestion', label: $t('admin.face_cleanup_resolutions_filter_suggestion') },
-  ];
+  ]);
 </script>
 
 <AdminPageLayout
@@ -138,12 +156,18 @@
           {$t('retry')}
         </Button>
       </div>
-    {:else if filtered.length === 0}
+    {:else if resolutions.length === 0}
+      <!-- Genuinely nothing has ever been recorded — never confused with the filter having excluded
+           everything below, which is a different (and much less alarming) state for an admin to be told. -->
       <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
         <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_resolutions_empty')}</div>
         <div class="mt-4">
           <Button color="secondary" href={Route.faceCleanupScan()}>{$t('admin.face_cleanup_review_back')}</Button>
         </div>
+      </div>
+    {:else if filtered.length === 0}
+      <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
+        <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_resolutions_empty_filtered')}</div>
       </div>
     {:else}
       <div class="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700" data-testid="verdicts-list">
@@ -192,7 +216,16 @@
               </div>
             </div>
 
-            <!-- Target person thumbnail -->
+            <!-- Target person thumbnail.
+                 KNOWN GAP (slice-12, F30 item 3): a space-person target never renders one, because
+                 `FaceRepairResolutionsListDto` (server/src/dtos/face-repair.dto.ts `ResolutionItemSchema`,
+                 fed by `FacePersonVerdictRepository.listNegativeVerdicts`) selects `person.faceAssetId as
+                 personThumbnailFaceId` for a personal target but has no equivalent projection for a
+                 space-person target — `shared_space_person.representativeFaceId` exists in the schema but
+                 isn't selected here. Fixing this needs a server-side DTO/repository change (out of scope for
+                 this web-only slice — see the slice-12 report's Deviations); once that field exists, add a
+                 `{:else if item.spacePersonId}` branch here using the same face-keyed
+                 `getAdminFaceThumbnailUrl`, which works for any assetFaceId regardless of target kind. -->
             {#if item.personId}
               <img
                 src={personThumbUrl(item.personId, item.personThumbnailFaceId)}

@@ -11,7 +11,7 @@
     resolveFaces,
     type FaceRepairResolveRequestDto,
   } from '@immich/sdk';
-  import { Button, Icon, modalManager, toastManager } from '@immich/ui';
+  import { Button, ConfirmModal, Icon, modalManager, toastManager } from '@immich/ui';
   import { mdiArrowLeft, mdiArrowRight, mdiCheckBold, mdiClose, mdiInformationOutline } from '@mdi/js';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
@@ -85,8 +85,6 @@
   let restHasMore = $state(false);
   let restLoading = $state(false);
   const restSelected = new SvelteSet<string>();
-  let showEntireConfirm = $state(false);
-  let showDetachConfirm = $state(false);
 
   // An entire-cluster move covers ALL eligible faces: the Rest (which excludes the flagged ids) plus the
   // still-flagged faces. This is why "Move entire cluster" works even when the Rest is empty.
@@ -306,12 +304,26 @@
     if (!canBulkMove) {
       return;
     }
-    showEntireConfirm = true;
+    void confirmMoveEntireCluster();
   };
 
+  // Uses `modalManager.show(ConfirmModal, …)` (@immich/ui) rather than a hand-rolled overlay: it comes with
+  // `role="dialog"`, `aria-modal`, a focus trap, Escape-to-cancel and backdrop dismissal for free — none of
+  // which the previous inline `fixed inset-0` div had.
   const confirmMoveEntireCluster = async () => {
-    showEntireConfirm = false;
     if (!canBulkMove || !destinationId) {
+      return;
+    }
+    const confirmed = await modalManager.show(ConfirmModal, {
+      title: $t('admin.face_cleanup_review_move_entire_confirm_title'),
+      prompt: $t('admin.face_cleanup_review_move_entire_confirm_body', {
+        values: { count: clusterTotal.toLocaleString(), owner: destinationName },
+      }),
+      confirmText: $t('admin.face_cleanup_review_move_entire_confirm_cta', {
+        values: { count: clusterTotal.toLocaleString() },
+      }),
+    });
+    if (!confirmed || !canBulkMove || !destinationId) {
       return;
     }
     await commitResolve({ personId, entireCluster: { destinationPersonId: destinationId } });
@@ -457,14 +469,25 @@
       return;
     }
     if (vm.tally.detach > 0) {
-      showDetachConfirm = true;
+      void confirmDestructiveApply();
       return;
     }
     return commitResolve(buildApplyRequest());
   };
 
+  // `modalManager.show(ConfirmModal, …)` — see confirmMoveEntireCluster above for why.
   const confirmDestructiveApply = async () => {
-    showDetachConfirm = false;
+    const confirmed = await modalManager.show(ConfirmModal, {
+      title: $t('admin.face_cleanup_review_detach_confirm_title', { values: { count: vm.tally.detach } }),
+      // No `count` value here: the message doesn't reference it (the title above already states the count),
+      // and passing an argument the message never interpolates is exactly F31 item 4's other i18n defect.
+      prompt: $t('admin.face_cleanup_review_detach_confirm_body'),
+      confirmText: $t('admin.face_cleanup_review_detach_confirm_cta', { values: { count: vm.tally.detach } }),
+      confirmColor: 'danger',
+    });
+    if (!confirmed) {
+      return;
+    }
     await commitResolve(buildApplyRequest());
   };
 </script>
@@ -956,51 +979,4 @@
       </div>
     {/if}
   {/snippet}
-
-  {#if showEntireConfirm}
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" data-testid="entire-confirm">
-      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h3 class="text-lg font-semibold">{$t('admin.face_cleanup_review_move_entire_confirm_title')}</h3>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          {$t('admin.face_cleanup_review_move_entire_confirm_body', {
-            values: { count: clusterTotal.toLocaleString(), owner: destinationName },
-          })}
-        </p>
-        <div class="mt-5 flex justify-end gap-3">
-          <Button color="secondary" onclick={() => (showEntireConfirm = false)} data-testid="entire-confirm-cancel">
-            {$t('admin.face_cleanup_review_cancel')}
-          </Button>
-          <Button color="primary" onclick={confirmMoveEntireCluster} data-testid="entire-confirm-cta">
-            {$t('admin.face_cleanup_review_move_entire_confirm_cta', {
-              values: { count: clusterTotal.toLocaleString() },
-            })}
-          </Button>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- The only destructive confirmation on this page. `danger` on the CTA, not `primary`: this button is the one
-       that cannot be taken back, and it must not look like the routine Apply the admin has already clicked a
-       dozen times. Cancel returns to the review with every staged state intact — nothing is committed. -->
-  {#if showDetachConfirm}
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" data-testid="detach-confirm">
-      <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800">
-        <h3 class="text-lg font-semibold">
-          {$t('admin.face_cleanup_review_detach_confirm_title', { values: { count: vm.tally.detach } })}
-        </h3>
-        <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          {$t('admin.face_cleanup_review_detach_confirm_body', { values: { count: vm.tally.detach } })}
-        </p>
-        <div class="mt-5 flex justify-end gap-3">
-          <Button color="secondary" onclick={() => (showDetachConfirm = false)} data-testid="detach-confirm-cancel">
-            {$t('admin.face_cleanup_review_cancel')}
-          </Button>
-          <Button color="danger" onclick={confirmDestructiveApply} data-testid="detach-confirm-cta">
-            {$t('admin.face_cleanup_review_detach_confirm_cta', { values: { count: vm.tally.detach } })}
-          </Button>
-        </div>
-      </div>
-    </div>
-  {/if}
 </AdminPageLayout>
