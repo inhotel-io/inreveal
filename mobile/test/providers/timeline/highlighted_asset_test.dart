@@ -82,9 +82,22 @@ void main() {
 
         notifier.highlight(_remote('a1'), duration: const Duration(milliseconds: 1000));
         notifier.clear();
-
         expect(container.read(timelineHighlightedAssetProvider), isNull);
-        async.elapse(const Duration(milliseconds: 2000));
+
+        // Highlight a second asset whose own deadline lands after a1's original deadline.
+        // If clear() had failed to cancel a1's timer, that stale timer would still fire at
+        // a1's original 1000ms mark and null out a2's highlight — this is what makes the
+        // test able to fail.
+        async.elapse(const Duration(milliseconds: 500));
+        notifier.highlight(_remote('a2'), duration: const Duration(milliseconds: 1000));
+
+        // Past a1's original deadline (500 + 600 = 1100ms since a1 was highlighted), a2
+        // must still be highlighted.
+        async.elapse(const Duration(milliseconds: 600));
+        expect((container.read(timelineHighlightedAssetProvider) as RemoteAsset?)?.id, 'a2');
+
+        // Past a2's own deadline, it clears normally.
+        async.elapse(const Duration(milliseconds: 400));
         expect(container.read(timelineHighlightedAssetProvider), isNull);
       });
     });
