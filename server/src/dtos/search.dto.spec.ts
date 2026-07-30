@@ -136,4 +136,38 @@ describe('SearchSuggestionRequestDto (#858)', () => {
     const result = SearchSuggestionRequestDto.schema.safeParse({ type: 'camera-model', mediaType: 'NOT_A_TYPE' });
     expect(result.success).toBe(false);
   });
+
+  // The panel spreads its whole FilterContext into this request, so every dimension the context can
+  // carry must be declared here — an undeclared key is silently stripped by the ZodValidationPipe
+  // and the second-level list quietly stops narrowing (no error to notice).
+  it('accepts the contributor filter the filter panel now sends', () => {
+    const ownerId = '00000000-0000-4000-8000-000000000001';
+    const result = SearchSuggestionRequestDto.schema.safeParse({ type: 'city', ownerId });
+    expect(result.success).toBe(true);
+    expect(result.data?.ownerId).toBe(ownerId);
+  });
+
+  it('rejects a non-uuid contributor filter', () => {
+    expect(SearchSuggestionRequestDto.schema.safeParse({ type: 'city', ownerId: 'not-a-uuid' }).success).toBe(false);
+  });
+});
+
+describe('FilterSuggestionsRequestDto narrowing dimensions', () => {
+  it('accepts state, lensModel and ownerId so every suggestion list can narrow by them', () => {
+    const ownerId = '00000000-0000-4000-8000-000000000001';
+    const result = FilterSuggestionsRequestDto.schema.safeParse({
+      state: 'Bavaria',
+      lensModel: 'RF24-105mm F4 L IS USM',
+      ownerId,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.state).toBe('Bavaria');
+    expect(result.data?.lensModel).toBe('RF24-105mm F4 L IS USM');
+    expect(result.data?.ownerId).toBe(ownerId);
+  });
+
+  it('rejects a non-uuid contributor filter', () => {
+    expect(FilterSuggestionsRequestDto.schema.safeParse({ ownerId: 'not-a-uuid' }).success).toBe(false);
+  });
 });

@@ -199,6 +199,10 @@ const SearchSuggestionRequestBaseSchema = z.object({
   make: z.string().optional().describe('Filter by camera make'),
   model: z.string().optional().describe('Filter by camera model'),
   lensModel: z.string().optional().describe('Filter by lens model'),
+  // Contributor filter, not an ownership scope: it narrows within whatever scope the request
+  // already resolved (see FilterSuggestionFilterOptions.ownerId). Without a field here the
+  // ZodValidationPipe would silently strip it and the suggestion lists would not narrow.
+  ownerId: z.uuidv4().optional().describe('Filter by asset owner (contributor)'),
   mediaType: AssetTypeSchema.optional().describe('Filter by asset type'),
   takenAfter: isoDatetimeToDate.optional().describe('Filter suggestions by taken date (after)'),
   takenBefore: isoDatetimeToDate.optional().describe('Filter suggestions by taken date (before)'),
@@ -285,9 +289,13 @@ const FilterSuggestionsRequestBaseSchema = z.object({
     .optional()
     .describe('Filter by person IDs'),
   country: z.string().optional().describe('Filter by country'),
+  state: z.string().optional().describe('Filter by state/province'),
   city: z.string().optional().describe('Filter by city'),
   make: z.string().optional().describe('Filter by camera make'),
   model: z.string().optional().describe('Filter by camera model'),
+  lensModel: z.string().optional().describe('Filter by lens model'),
+  // See SearchSuggestionRequestBaseSchema.ownerId — a narrowing contributor filter, never a scope.
+  ownerId: z.uuidv4().optional().describe('Filter by asset owner (contributor)'),
   tagIds: z
     .preprocess((v) => (v === undefined ? undefined : Array.isArray(v) ? v : [v]), z.array(z.uuidv4()))
     .optional()

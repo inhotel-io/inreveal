@@ -35,6 +35,15 @@ const buildAssetSearchSql = (options: Record<string, unknown>) => compileAssetSe
 const compileFilteredAssetIds = (sut: SearchRepository, options: Record<string, unknown>) =>
   (sut as any).buildFilteredAssetIds(['00000000-0000-0000-0000-000000000000'], options).compile().sql;
 
+// A fresh repository whose private buildFilteredAssetIds is spied on rather than mocked, so the
+// suggestion queries still compile and run against the DummyDriver (empty rows) — what is asserted
+// is the *options* each list narrows by. Fresh per test so no spy state leaks between them.
+const spyOnFilteredAssetIds = () => {
+  const repository = new SearchRepository(offlineKysely());
+  const spy = vi.spyOn(repository as any, 'buildFilteredAssetIds');
+  return { repository, options: () => spy.mock.calls.map((call) => call[1] as Record<string, unknown>) };
+};
+
 const compileFilteredPeopleQuery = (sut: SearchRepository, options: Record<string, unknown>) =>
   (sut as any)
     .buildFilteredGlobalPeopleQuery(
@@ -393,6 +402,42 @@ describe(SearchRepository.name, () => {
       expect(sql).not.toMatch(/"asset_exif"\."rating"\s*=\s*\$\d+/i);
     });
 
+    it('narrows facet assets by an active state', () => {
+      const sql = compileFilteredAssetIds(sut, { state: 'Bavaria' });
+
+      expect(sql).toContain('"asset_exif"');
+      expect(sql).toMatch(/"asset_exif"\."state"\s*=\s*\$\d+/i);
+    });
+
+    it('narrows facet assets by an active lens model', () => {
+      const sql = compileFilteredAssetIds(sut, { lensModel: 'RF24-105mm F4 L IS USM' });
+
+      expect(sql).toContain('"asset_exif"');
+      expect(sql).toMatch(/"asset_exif"\."lensModel"\s*=\s*\$\d+/i);
+    });
+
+    it('ANDs the contributor filter with the owner scope instead of replacing it', () => {
+      const sql = compileFilteredAssetIds(sut, { ownerId: '00000000-0000-4000-8000-000000000009' });
+
+      // The scope predicate resolved by applySuggestionScope must survive …
+      expect(sql).toMatch(/"asset"\."ownerId"\s*=\s*any\s*\(\$\d+::uuid\[\]\)/i);
+      // … and the contributor filter is a second, single-value predicate on top of it. A merged
+      // implementation (ownerId folded into userIds) would widen the set — design §4.4.
+      expect(sql).toMatch(/"asset"\."ownerId"\s*=\s*\$\d+::uuid/i);
+    });
+
+    // Guards the committed server/src/queries/*.sql: every predicate added for state / lensModel /
+    // ownerId is $if-guarded, so the @GenerateSql dummy params (which set none of them) still
+    // compile to exactly the same SQL and `mise //:sql` stays a no-op.
+    it('adds no exif join or contributor predicate when none of the new dimensions is set', () => {
+      const sql = compileFilteredAssetIds(sut, {});
+
+      expect(sql).not.toContain('"asset_exif"');
+      expect(sql).not.toMatch(/"state"/i);
+      expect(sql).not.toMatch(/"lensModel"/i);
+      expect(sql).not.toMatch(/"asset"\."ownerId"\s*=\s*\$\d+::uuid/i);
+    });
+
     it('orders global people suggestions by favorite first, then name', () => {
       const sql = compileFilteredPeopleQuery(sut, {});
 
@@ -489,6 +534,111 @@ describe(SearchRepository.name, () => {
 
       expect(sql).toContain('exists');
       expect(sql).toContain('not exists');
+    });
+  });
+
+  // Which options each suggestion list excludes from its own asset-id subquery.
+  describe('suggestion self-exclusion', () => {
+    const userId = '00000000-0000-0000-0000-000000000000';
+    const allDimensions = {
+      country: 'Germany',
+      state: 'Bavaria',
+      city: 'Munich',
+      make: 'Canon',
+      model: 'Canon EOS R6',
+      lensModel: 'RF24-105mm F4 L IS USM',
+      ownerId: '00000000-0000-4000-8000-000000000009',
+    };
+
+    it('excludes the whole location group when listing countries, keeping camera and contributor', async () => {
+      const { repository, options } = spyOnFilteredAssetIds();
+
+      await repository.getCountries([userId], { ...allDimensions });
+
+      expect(options()).toEqual([
+        expect.objectContaining({
+          country: undefined,
+          state: undefined,
+          city: undefined,
+          make: 'Canon',
+          lensModel: 'RF24-105mm F4 L IS USM',
+          ownerId: '00000000-0000-4000-8000-000000000009',
+        }),
+      ]);
+    });
+
+    it('excludes state and city when listing states, keeping the country parent', async () => {
+      const { repository, options } = spyOnFilteredAssetIds();
+
+      await repository.getStates([userId], { ...allDimensions });
+
+      expect(options()).toEqual([
+        expect.objectContaining({
+          state: undefined,
+          city: undefined,
+          country: 'Germany',
+          lensModel: 'RF24-105mm F4 L IS USM',
+        }),
+      ]);
+    });
+
+    it('keeps the state parent applied when listing cities', async () => {
+      const { repository, options } = spyOnFilteredAssetIds();
+
+      await repository.getCities([userId], { ...allDimensions });
+
+      expect(options()).toEqual([expect.objectContaining({ city: undefined, state: 'Bavaria', country: 'Germany' })]);
+    });
+
+    it('keeps the lens applied when listing camera makes and models', async () => {
+      const makes = spyOnFilteredAssetIds();
+      const models = spyOnFilteredAssetIds();
+
+      await makes.repository.getCameraMakes([userId], { ...allDimensions });
+      await models.repository.getCameraModels([userId], { ...allDimensions });
+
+      expect(makes.options()).toEqual([
+        expect.objectContaining({ make: undefined, lensModel: 'RF24-105mm F4 L IS USM' }),
+      ]);
+      expect(models.options()).toEqual([
+        expect.objectContaining({ model: undefined, make: 'Canon', lensModel: 'RF24-105mm F4 L IS USM' }),
+      ]);
+    });
+
+    it('excludes only the lens itself when listing lens models', async () => {
+      const { repository, options } = spyOnFilteredAssetIds();
+
+      await repository.getCameraLensModels([userId], { ...allDimensions });
+
+      expect(options()).toEqual([
+        expect.objectContaining({
+          lensModel: undefined,
+          make: 'Canon',
+          model: 'Canon EOS R6',
+          state: 'Bavaria',
+          ownerId: '00000000-0000-4000-8000-000000000009',
+        }),
+      ]);
+    });
+
+    it('narrows every unified suggestion list by state, lens and contributor except the country list', async () => {
+      const { repository, options } = spyOnFilteredAssetIds();
+
+      await repository.getFilterSuggestions([userId], { ...allDimensions });
+
+      // countries, cameraMakes, tags, people, ratings, mediaTypes — in construction order.
+      const [countries, ...rest] = options();
+      expect(rest).toHaveLength(5);
+
+      expect(countries.state).toBeUndefined();
+      expect(countries.lensModel).toBe('RF24-105mm F4 L IS USM');
+      expect(countries.ownerId).toBe('00000000-0000-4000-8000-000000000009');
+
+      for (const list of rest) {
+        expect(list.state).toBe('Bavaria');
+        expect(list.lensModel).toBe('RF24-105mm F4 L IS USM');
+        expect(list.ownerId).toBe('00000000-0000-4000-8000-000000000009');
+      }
     });
   });
 
