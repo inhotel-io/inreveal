@@ -7412,7 +7412,11 @@ describe(SharedSpaceService.name, () => {
         },
       );
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
-      expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
+      // Slice 3: the claim carries the band, so an ineligible row cannot be confirmed through it.
+      expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
+        maxDistance: 0.5,
+        suggestionMaxDistance: 0.8,
+      });
       expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
         assetFaceId: 'face-1',
         identityId: 'space-identity-1',
@@ -7440,7 +7444,11 @@ describe(SharedSpaceService.name, () => {
         sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
       ).resolves.toBeUndefined();
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
-      expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1');
+      // Slice 3: the claim carries the band, so an ineligible row cannot be confirmed through it.
+      expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
+        maxDistance: 0.5,
+        suggestionMaxDistance: 0.8,
+      });
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.facePersonVerdict.resolveAssignedFace).not.toHaveBeenCalled();
     });

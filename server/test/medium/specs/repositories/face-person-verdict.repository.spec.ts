@@ -3,6 +3,7 @@ import { AssetVisibility } from 'src/enum';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
+import { PersonRepository } from 'src/repositories/person.repository';
 import { DB } from 'src/schema';
 import { FacePersonVerdictStatus } from 'src/schema/tables/face-person-verdict.table';
 import { BaseService } from 'src/services/base.service';
@@ -36,6 +37,17 @@ const getSpaceRow = (spacePersonId: string, assetFaceId: string) =>
     .where('assetFaceId', '=', assetFaceId)
     .executeTakeFirstOrThrow();
 
+// Status-only helpers for the Slice 3 eligibility tests below, which assert `status` after a claim attempt.
+const getRowStatus = async (pId: string, afId: string) => {
+  const row = await getRow(pId, afId);
+  return row.status;
+};
+
+const getSpaceRowStatus = async (spacePersonId: string, assetFaceId: string) => {
+  const row = await getSpaceRow(spacePersonId, assetFaceId);
+  return row.status;
+};
+
 const countRows = (assetFaceId: string, status: FacePersonVerdictStatus) =>
   defaultDatabase
     .selectFrom('face_person_verdict')
@@ -44,6 +56,18 @@ const countRows = (assetFaceId: string, status: FacePersonVerdictStatus) =>
     .where('status', '=', status)
     .executeTakeFirstOrThrow()
     .then((r) => Number(r.c));
+
+// S3.6 fixture: a bare space + space person, reused across the claimPendingForSpacePerson eligibility tests.
+const makeSpaceFixture = async (ctx: ReturnType<typeof setup>['ctx']) => {
+  const { user } = await ctx.newUser();
+  const { space } = await ctx.newSharedSpace({ createdById: user.id });
+  const spacePerson = await ctx.database
+    .insertInto('shared_space_person')
+    .values({ spaceId: space.id, name: 'Alice' })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  return { user, space, spacePerson };
+};
 
 const setup = (db?: Kysely<DB>) => {
   const { ctx } = newMediumService(BaseService, {
@@ -399,6 +423,7 @@ describe('FacePersonVerdictRepository', () => {
   describe('claimPending / markRejected / markIgnored', () => {
     let personId: string;
     let assetFaceId: string;
+    const opts = { maxDistance: 0.5, suggestionMaxDistance: 0.8 };
 
     beforeAll(async () => {
       const { ctx } = setup();
@@ -424,10 +449,10 @@ describe('FacePersonVerdictRepository', () => {
       const { sut } = setup();
       await sut.upsertPending([{ personId, assetFaceId, distance: 0.6 }]);
 
-      expect(await sut.claimPending(personId, assetFaceId)).toBe(1);
+      expect(await sut.claimPending(personId, assetFaceId, opts)).toBe(1);
       expect(await getRowOrUndefined(personId, assetFaceId)).toBeUndefined();
 
-      expect(await sut.claimPending(personId, assetFaceId)).toBe(0);
+      expect(await sut.claimPending(personId, assetFaceId, opts)).toBe(0);
     });
 
     it.each([
@@ -471,7 +496,7 @@ describe('FacePersonVerdictRepository', () => {
       expect(await sut[method](personId, assetFaceId)).toBe(1);
 
       // The row is no longer 'pending', so a confirm arriving afterwards finds nothing to claim.
-      expect(await sut.claimPending(personId, assetFaceId)).toBe(0);
+      expect(await sut.claimPending(personId, assetFaceId, opts)).toBe(0);
       const row = await getRow(personId, assetFaceId);
       expect(row.status).toBe(status);
     });
@@ -532,7 +557,7 @@ describe('FacePersonVerdictRepository', () => {
 
     it('claimPending returns 0 for a pair that has no row (benign idempotent)', async () => {
       const { sut } = setup();
-      expect(await sut.claimPending(personId, assetFaceId)).toBe(0);
+      expect(await sut.claimPending(personId, assetFaceId, opts)).toBe(0);
     });
 
     it('reject over an existing keep-here row preserves identityId, updates status/source/actor (D10)', async () => {
@@ -572,6 +597,375 @@ describe('FacePersonVerdictRepository', () => {
         source: 'suggestion',
         actorId: user.id,
       });
+    });
+  });
+
+  // S3.10 (pin): the refactor's safety net. This mirrors PersonService#confirmFaceSuggestion's write chain
+  // (claim -> reassign -> resolveAssignedFace -> identity-relink) directly against the repositories, so it
+  // exercises exactly what the Slice 3 eligibility refactor touches without pulling in the service's access
+  // checks. Written and run FIRST, against the pre-refactor `claimPending`, to prove the happy path is green
+  // before anything changes; kept green throughout the refactor.
+  describe('S3.10 — happy path safety net (pin)', () => {
+    it('an eligible pending row confirms, reassigns, drains and manual-links end to end', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Happy Path', isHidden: false, type: 'person' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await sut.upsertPending([{ personId: person.id, assetFaceId: assetFace.id, distance: 0.6 }]);
+
+      // Confirm flow order: claim BEFORE reassign/resolve/relink (mirrors person.service.ts).
+      const claimed = await sut.claimPending(person.id, assetFace.id, { maxDistance: 0.5, suggestionMaxDistance: 0.8 });
+      expect(claimed).toBe(1);
+
+      const personRepository = ctx.get(PersonRepository);
+      const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+
+      await personRepository.reassignFace(assetFace.id, person.id);
+      await sut.resolveAssignedFace(assetFace.id);
+      const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+      await faceIdentityRepository.replaceFaceIdentity({
+        assetFaceId: assetFace.id,
+        identityId: identity.id,
+        source: 'manual',
+      });
+
+      const face = await defaultDatabase
+        .selectFrom('asset_face')
+        .select(['personId'])
+        .where('id', '=', assetFace.id)
+        .executeTakeFirstOrThrow();
+      expect(face.personId).toBe(person.id); // reassigned
+
+      const verdictRow = await getRowOrUndefined(person.id, assetFace.id);
+      expect(verdictRow).toBeUndefined(); // drained
+
+      const link = await defaultDatabase
+        .selectFrom('face_identity_face')
+        .select(['identityId', 'source'])
+        .where('assetFaceId', '=', assetFace.id)
+        .executeTakeFirstOrThrow();
+      expect(link).toEqual({ identityId: identity.id, source: 'manual' }); // manual-linked
+    });
+  });
+
+  // Slice 3 (F5): claimPending is now gated by the SAME eligibility getPendingForPerson already applies to the
+  // read. A pending row the queue would not show must not be confirmable through it.
+  describe('claimPending eligibility gate (Slice 3, F5)', () => {
+    const opts = { maxDistance: 0.5, suggestionMaxDistance: 0.8 };
+
+    it('S3.1: returns 0 and leaves the row pending when the asset became Locked after the row was written; 1 for an eligible control', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'S3.1 Person',
+        isHidden: false,
+        type: 'person',
+      });
+
+      const { asset: controlAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: controlAsset.id, personId: null });
+      await sut.upsertPending([{ personId: person.id, assetFaceId: controlFace.id, distance: 0.6 }]);
+
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace: lockedFace } = await ctx.newAssetFace({ assetId: lockedAsset.id, personId: null });
+      await sut.upsertPending([{ personId: person.id, assetFaceId: lockedFace.id, distance: 0.6 }]);
+      // The asset moves to the Locked folder AFTER the pending row was written — the queue read would no
+      // longer show it, so the claim must refuse it too.
+      await defaultDatabase
+        .updateTable('asset')
+        .set({ visibility: AssetVisibility.Locked })
+        .where('id', '=', lockedAsset.id)
+        .execute();
+
+      expect(await sut.claimPending(person.id, lockedFace.id, opts)).toBe(0);
+      expect(await getRowStatus(person.id, lockedFace.id)).toBe('pending'); // row intact, not claimed
+
+      expect(await sut.claimPending(person.id, controlFace.id, opts)).toBe(1); // positive control
+    });
+
+    describe('S3.2: table-driven ineligible mutations', () => {
+      it.each([
+        [
+          'trashed asset',
+          async (assetId: string) =>
+            defaultDatabase.updateTable('asset').set({ deletedAt: new Date() }).where('id', '=', assetId).execute(),
+        ],
+        [
+          'offline asset',
+          async (assetId: string) =>
+            defaultDatabase.updateTable('asset').set({ isOffline: true }).where('id', '=', assetId).execute(),
+        ],
+        [
+          'hidden asset',
+          async (assetId: string) =>
+            defaultDatabase
+              .updateTable('asset')
+              .set({ visibility: AssetVisibility.Hidden })
+              .where('id', '=', assetId)
+              .execute(),
+        ],
+      ] as const)(
+        '%s: claimPending returns 0, row stays pending; eligible control still claims',
+        async (_label, mutateAsset) => {
+          const { ctx, sut } = setup();
+          const { user } = await ctx.newUser();
+          const { person } = await ctx.newPerson({
+            ownerId: user.id,
+            name: `S3.2 ${_label}`,
+            isHidden: false,
+            type: 'person',
+          });
+
+          const { asset: controlAsset } = await ctx.newAsset({
+            ownerId: user.id,
+            visibility: AssetVisibility.Timeline,
+          });
+          const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: controlAsset.id, personId: null });
+          await sut.upsertPending([{ personId: person.id, assetFaceId: controlFace.id, distance: 0.6 }]);
+
+          const { asset: targetAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+          const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: targetAsset.id, personId: null });
+          await sut.upsertPending([{ personId: person.id, assetFaceId: targetFace.id, distance: 0.6 }]);
+          await mutateAsset(targetAsset.id);
+
+          expect(await sut.claimPending(person.id, targetFace.id, opts)).toBe(0);
+          expect(await getRowStatus(person.id, targetFace.id)).toBe('pending');
+
+          expect(await sut.claimPending(person.id, controlFace.id, opts)).toBe(1); // positive control
+        },
+      );
+
+      it.each([
+        [
+          'af.deletedAt set',
+          async (faceId: string) =>
+            defaultDatabase.updateTable('asset_face').set({ deletedAt: new Date() }).where('id', '=', faceId).execute(),
+        ],
+        [
+          'af.isVisible=false',
+          async (faceId: string) =>
+            defaultDatabase.updateTable('asset_face').set({ isVisible: false }).where('id', '=', faceId).execute(),
+        ],
+      ] as const)(
+        '%s: claimPending returns 0, row stays pending; eligible control still claims',
+        async (_label, mutateFace) => {
+          const { ctx, sut } = setup();
+          const { user } = await ctx.newUser();
+          const { person } = await ctx.newPerson({
+            ownerId: user.id,
+            name: `S3.2 ${_label}`,
+            isHidden: false,
+            type: 'person',
+          });
+          const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+          const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+          await sut.upsertPending([{ personId: person.id, assetFaceId: controlFace.id, distance: 0.6 }]);
+
+          const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+          await sut.upsertPending([{ personId: person.id, assetFaceId: targetFace.id, distance: 0.6 }]);
+          await mutateFace(targetFace.id);
+
+          expect(await sut.claimPending(person.id, targetFace.id, opts)).toBe(0);
+          expect(await getRowStatus(person.id, targetFace.id)).toBe('pending');
+
+          expect(await sut.claimPending(person.id, controlFace.id, opts)).toBe(1); // positive control
+        },
+      );
+
+      it('af.personId already set: claimPending returns 0, row stays pending; eligible control still claims', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { person } = await ctx.newPerson({
+          ownerId: user.id,
+          name: 'S3.2 assigned',
+          isHidden: false,
+          type: 'person',
+        });
+        const { person: otherPerson } = await ctx.newPerson({
+          ownerId: user.id,
+          name: 'S3.2 other',
+          isHidden: false,
+          type: 'person',
+        });
+        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+        const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPending([{ personId: person.id, assetFaceId: controlFace.id, distance: 0.6 }]);
+
+        const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPending([{ personId: person.id, assetFaceId: targetFace.id, distance: 0.6 }]);
+        await defaultDatabase
+          .updateTable('asset_face')
+          .set({ personId: otherPerson.id })
+          .where('id', '=', targetFace.id)
+          .execute();
+
+        expect(await sut.claimPending(person.id, targetFace.id, opts)).toBe(0);
+        expect(await getRowStatus(person.id, targetFace.id)).toBe('pending');
+
+        expect(await sut.claimPending(person.id, controlFace.id, opts)).toBe(1); // positive control
+      });
+    });
+
+    it('S3.3: returns 0 when the face has acquired a manual link for another identity; 1 for an eligible control', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'S3.3 Person',
+        isHidden: false,
+        type: 'person',
+      });
+      const { person: otherPerson } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'S3.3 Other',
+        isHidden: false,
+        type: 'person',
+      });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+      const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      await sut.upsertPending([{ personId: person.id, assetFaceId: controlFace.id, distance: 0.6 }]);
+
+      const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      await sut.upsertPending([{ personId: person.id, assetFaceId: targetFace.id, distance: 0.6 }]);
+
+      const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+      const otherIdentity = await faceIdentityRepository.ensurePersonIdentity(otherPerson.id);
+      await faceIdentityRepository.replaceFaceIdentity({
+        assetFaceId: targetFace.id,
+        identityId: otherIdentity.id,
+        source: 'manual',
+      });
+
+      expect(await sut.claimPending(person.id, targetFace.id, opts)).toBe(0);
+      expect(await getRowStatus(person.id, targetFace.id)).toBe('pending');
+
+      expect(await sut.claimPending(person.id, controlFace.id, opts)).toBe(1); // positive control
+    });
+
+    describe('S3.4: negative-verdict anti-join', () => {
+      it('matched by personId: returns 0 once the target itself has recorded a negative verdict for the face; 1 for an eligible control', async () => {
+        // The unique (personId, assetFaceId) index means a negative verdict "for the same target" can only
+        // ever be recorded on the SAME row a pending claim would target — upsertPending's own conflict guard
+        // (never resurrects a resolved row) makes that row's terminal state observable here. Whichever clause
+        // is doing the excluding, the contract under test holds: once the target has answered, the claim is a
+        // no-op and the row is never silently reset.
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { person } = await ctx.newPerson({
+          ownerId: user.id,
+          name: 'S3.4a Person',
+          isHidden: false,
+          type: 'person',
+        });
+        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+        const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPending([{ personId: person.id, assetFaceId: controlFace.id, distance: 0.6 }]);
+
+        const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPending([{ personId: person.id, assetFaceId: targetFace.id, distance: 0.6 }]);
+        await sut.markRejected(person.id, targetFace.id);
+
+        expect(await sut.claimPending(person.id, targetFace.id, opts)).toBe(0);
+        expect(await getRowStatus(person.id, targetFace.id)).toBe('rejected');
+
+        expect(await sut.claimPending(person.id, controlFace.id, opts)).toBe(1); // positive control
+      });
+
+      it('matched by identityId: returns 0 when a DIFFERENT person sharing the same identity already rejected the face; 1 for an eligible control', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { person } = await ctx.newPerson({
+          ownerId: user.id,
+          name: 'S3.4b Person',
+          isHidden: false,
+          type: 'person',
+        });
+        const { person: otherPerson } = await ctx.newPerson({
+          ownerId: user.id,
+          name: 'S3.4b Other',
+          isHidden: false,
+          type: 'person',
+        });
+        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+        const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+        const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+
+        const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPending([{ personId: person.id, assetFaceId: controlFace.id, distance: 0.6 }]);
+
+        const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPending([{ personId: person.id, assetFaceId: targetFace.id, distance: 0.6 }]);
+        // A DIFFERENT person, sharing `person`'s identity, has already said "not this" about the face.
+        await sut.markRejected(otherPerson.id, targetFace.id, { identityId: identity.id });
+
+        expect(await sut.claimPending(person.id, targetFace.id, opts)).toBe(0);
+        expect(await getRowStatus(person.id, targetFace.id)).toBe('pending'); // the row itself untouched
+
+        expect(await sut.claimPending(person.id, controlFace.id, opts)).toBe(1); // positive control
+      });
+    });
+
+    it('S3.5: returns 0 at both band boundaries (== maxDistance and > suggestionMaxDistance); 1 for a mid-band control', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'S3.5 Person',
+        isHidden: false,
+        type: 'person',
+      });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+      const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      await sut.upsertPending([{ personId: person.id, assetFaceId: controlFace.id, distance: 0.6 }]);
+
+      const { assetFace: lowBoundaryFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      await sut.upsertPending([{ personId: person.id, assetFaceId: lowBoundaryFace.id, distance: opts.maxDistance }]);
+
+      const { assetFace: aboveUpperFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      await sut.upsertPending([{ personId: person.id, assetFaceId: aboveUpperFace.id, distance: 0.9 }]);
+
+      expect(await sut.claimPending(person.id, lowBoundaryFace.id, opts)).toBe(0);
+      expect(await getRowStatus(person.id, lowBoundaryFace.id)).toBe('pending');
+
+      expect(await sut.claimPending(person.id, aboveUpperFace.id, opts)).toBe(0);
+      expect(await getRowStatus(person.id, aboveUpperFace.id)).toBe('pending');
+
+      expect(await sut.claimPending(person.id, controlFace.id, opts)).toBe(1); // positive control
+    });
+
+    it('S3.11: honours a passed transaction — a rollback leaves the row untouched', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({
+        ownerId: user.id,
+        name: 'S3.11 Person',
+        isHidden: false,
+        type: 'person',
+      });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await sut.upsertPending([{ personId: person.id, assetFaceId: assetFace.id, distance: 0.6 }]);
+
+      await expect(
+        defaultDatabase.transaction().execute(async (trx) => {
+          const claimed = await sut.claimPending(person.id, assetFace.id, opts, trx);
+          expect(claimed).toBe(1);
+          throw new Error('force rollback');
+        }),
+      ).rejects.toThrow('force rollback');
+
+      const row = await getRow(person.id, assetFace.id);
+      expect(row.status).toBe('pending'); // rolled back — the claim never committed
     });
   });
 
@@ -820,7 +1214,7 @@ describe('FacePersonVerdictRepository', () => {
       ]);
 
       // Confirm flow order: claimPending BEFORE resolveAssignedFace
-      expect(await sut.claimPending(p1Id, assetFaceId)).toBe(1);
+      expect(await sut.claimPending(p1Id, assetFaceId, { maxDistance: 0.5, suggestionMaxDistance: 0.8 })).toBe(1);
       await sut.resolveAssignedFace(assetFaceId); // pending-only delete across ALL persons
 
       // No row survives for the confirming person: the positive verdict lives in the face's manual
@@ -951,8 +1345,9 @@ describe('FacePersonVerdictRepository', () => {
         { spacePersonId: spacePerson.id, assetFaceId: assetFace.id, distance: 0.7 },
       ]);
 
-      expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id)).toBe(1);
-      expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id)).toBe(0);
+      const opts = { maxDistance: 0.5, suggestionMaxDistance: 0.8 };
+      expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id, opts)).toBe(1);
+      expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id, opts)).toBe(0);
 
       const row = await defaultDatabase
         .selectFrom('face_person_verdict')
@@ -961,6 +1356,187 @@ describe('FacePersonVerdictRepository', () => {
         .where('assetFaceId', '=', assetFace.id)
         .executeTakeFirst();
       expect(row).toBeUndefined();
+    });
+
+    // S3.6: claimPendingForSpacePerson mirrors S3.1-S3.5 — the same eligibility gate the personal claim now
+    // applies, keyed by spacePersonId instead of personId.
+    describe('claimPendingForSpacePerson eligibility gate (Slice 3, F5/F6)', () => {
+      const opts = { maxDistance: 0.5, suggestionMaxDistance: 0.8 };
+
+      it('S3.1/S3.2 mirror: returns 0 and leaves the row pending for a Locked, trashed, offline or hidden asset; 1 for an eligible control', async () => {
+        const { ctx, sut } = setup();
+        const { user, space, spacePerson } = await makeSpaceFixture(ctx);
+
+        const { asset: controlAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: controlAsset.id, addedById: user.id });
+        const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: controlAsset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: controlFace.id, distance: 0.6 },
+        ]);
+
+        const mutations: Array<[string, () => Promise<unknown>]> = [
+          [
+            'locked',
+            async () => {
+              const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+              await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+              const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+              await sut.upsertPendingForSpacePerson([
+                { spacePersonId: spacePerson.id, assetFaceId: assetFace.id, distance: 0.6 },
+              ]);
+              await defaultDatabase
+                .updateTable('asset')
+                .set({ visibility: AssetVisibility.Locked })
+                .where('id', '=', asset.id)
+                .execute();
+              expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id, opts)).toBe(0);
+              expect(await getSpaceRowStatus(spacePerson.id, assetFace.id)).toBe('pending');
+            },
+          ],
+          [
+            'trashed',
+            async () => {
+              const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+              await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+              const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+              await sut.upsertPendingForSpacePerson([
+                { spacePersonId: spacePerson.id, assetFaceId: assetFace.id, distance: 0.6 },
+              ]);
+              await defaultDatabase
+                .updateTable('asset')
+                .set({ deletedAt: new Date() })
+                .where('id', '=', asset.id)
+                .execute();
+              expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id, opts)).toBe(0);
+              expect(await getSpaceRowStatus(spacePerson.id, assetFace.id)).toBe('pending');
+            },
+          ],
+          [
+            'offline',
+            async () => {
+              const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+              await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+              const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+              await sut.upsertPendingForSpacePerson([
+                { spacePersonId: spacePerson.id, assetFaceId: assetFace.id, distance: 0.6 },
+              ]);
+              await defaultDatabase.updateTable('asset').set({ isOffline: true }).where('id', '=', asset.id).execute();
+              expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id, opts)).toBe(0);
+              expect(await getSpaceRowStatus(spacePerson.id, assetFace.id)).toBe('pending');
+            },
+          ],
+          [
+            'hidden',
+            async () => {
+              const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+              await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+              const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+              await sut.upsertPendingForSpacePerson([
+                { spacePersonId: spacePerson.id, assetFaceId: assetFace.id, distance: 0.6 },
+              ]);
+              await defaultDatabase
+                .updateTable('asset')
+                .set({ visibility: AssetVisibility.Hidden })
+                .where('id', '=', asset.id)
+                .execute();
+              expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id, opts)).toBe(0);
+              expect(await getSpaceRowStatus(spacePerson.id, assetFace.id)).toBe('pending');
+            },
+          ],
+        ];
+        for (const [, run] of mutations) {
+          await run();
+        }
+
+        expect(await sut.claimPendingForSpacePerson(spacePerson.id, controlFace.id, opts)).toBe(1); // positive control
+      });
+
+      it('S3.3 mirror: returns 0 when the face has acquired a manual link for another identity; 1 for an eligible control', async () => {
+        const { ctx, sut } = setup();
+        const { user, space, spacePerson } = await makeSpaceFixture(ctx);
+        const { person: otherPerson } = await ctx.newPerson({ ownerId: user.id, name: 'S3.6c Other' });
+        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+
+        const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: controlFace.id, distance: 0.6 },
+        ]);
+
+        const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: targetFace.id, distance: 0.6 },
+        ]);
+        const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+        const otherIdentity = await faceIdentityRepository.ensurePersonIdentity(otherPerson.id);
+        await faceIdentityRepository.replaceFaceIdentity({
+          assetFaceId: targetFace.id,
+          identityId: otherIdentity.id,
+          source: 'manual',
+        });
+
+        expect(await sut.claimPendingForSpacePerson(spacePerson.id, targetFace.id, opts)).toBe(0);
+        expect(await getSpaceRowStatus(spacePerson.id, targetFace.id)).toBe('pending');
+
+        expect(await sut.claimPendingForSpacePerson(spacePerson.id, controlFace.id, opts)).toBe(1); // positive control
+      });
+
+      it('S3.4 mirror: returns 0 when a different space person sharing the same identity already rejected the face; 1 for an eligible control', async () => {
+        const { ctx, sut } = setup();
+        const { user, space, spacePerson } = await makeSpaceFixture(ctx);
+        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+
+        const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+        const identity = await faceIdentityRepository.ensureSpacePersonIdentity(spacePerson.id);
+        const otherSpacePerson = await ctx.database
+          .insertInto('shared_space_person')
+          .values({ spaceId: space.id, name: 'Bob' })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+
+        const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: controlFace.id, distance: 0.6 },
+        ]);
+
+        const { assetFace: targetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: targetFace.id, distance: 0.6 },
+        ]);
+        await sut.markRejectedForSpacePerson(otherSpacePerson.id, targetFace.id, { identityId: identity.id });
+
+        expect(await sut.claimPendingForSpacePerson(spacePerson.id, targetFace.id, opts)).toBe(0);
+        expect(await getSpaceRowStatus(spacePerson.id, targetFace.id)).toBe('pending');
+
+        expect(await sut.claimPendingForSpacePerson(spacePerson.id, controlFace.id, opts)).toBe(1); // positive control
+      });
+
+      it('S3.5 mirror: returns 0 at both band boundaries; 1 for a mid-band control', async () => {
+        const { ctx, sut } = setup();
+        const { user, space, spacePerson } = await makeSpaceFixture(ctx);
+        const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+
+        const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: controlFace.id, distance: 0.6 },
+        ]);
+
+        const { assetFace: lowBoundaryFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: lowBoundaryFace.id, distance: opts.maxDistance },
+        ]);
+
+        const { assetFace: aboveUpperFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: aboveUpperFace.id, distance: 0.9 },
+        ]);
+
+        expect(await sut.claimPendingForSpacePerson(spacePerson.id, lowBoundaryFace.id, opts)).toBe(0);
+        expect(await sut.claimPendingForSpacePerson(spacePerson.id, aboveUpperFace.id, opts)).toBe(0);
+        expect(await sut.claimPendingForSpacePerson(spacePerson.id, controlFace.id, opts)).toBe(1); // positive control
+      });
     });
 
     it.each([
@@ -985,7 +1561,12 @@ describe('FacePersonVerdictRepository', () => {
 
       expect(await sut[method](spacePerson.id, assetFace.id)).toBe(1);
       // The row is no longer pending, so a confirm arriving afterwards has nothing to claim.
-      expect(await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id)).toBe(0);
+      expect(
+        await sut.claimPendingForSpacePerson(spacePerson.id, assetFace.id, {
+          maxDistance: 0.5,
+          suggestionMaxDistance: 0.8,
+        }),
+      ).toBe(0);
 
       const row = await getSpaceRow(spacePerson.id, assetFace.id);
       expect(row.status).toBe(status);
@@ -1359,6 +1940,60 @@ describe('FacePersonVerdictRepository', () => {
           .execute();
 
         await expect(sut.hasPendingForSpacePerson(space.id, spacePerson.id, assetFace.id, opts)).resolves.toBe(false);
+      });
+
+      // S3.7 (F6): hasPendingForSpacePerson reproduces the display gates its read twin applies but historically
+      // OMITTED the two anti-joins (manual-link, negative-verdict) — this closes that gap.
+      it('S3.7: returns false for a face carrying a manual link, and for one carrying a negative verdict for the space person identity; true for the control', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { space } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: user.id });
+        const spacePerson = await ctx.database
+          .insertInto('shared_space_person')
+          .values({ spaceId: space.id, name: 'Alice', type: 'person', isHidden: false })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+
+        const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+        const identity = await faceIdentityRepository.ensureSpacePersonIdentity(spacePerson.id);
+
+        const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: controlFace.id, distance: 0.6 },
+        ]);
+
+        const { assetFace: manualLinkFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: manualLinkFace.id, distance: 0.6 },
+        ]);
+        const { person: otherPerson } = await ctx.newPerson({ ownerId: user.id, name: 'S3.7 Other' });
+        const otherIdentity = await faceIdentityRepository.ensurePersonIdentity(otherPerson.id);
+        await faceIdentityRepository.replaceFaceIdentity({
+          assetFaceId: manualLinkFace.id,
+          identityId: otherIdentity.id,
+          source: 'manual',
+        });
+
+        const { assetFace: negativeFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        await sut.upsertPendingForSpacePerson([
+          { spacePersonId: spacePerson.id, assetFaceId: negativeFace.id, distance: 0.6 },
+        ]);
+        const otherSpacePerson = await ctx.database
+          .insertInto('shared_space_person')
+          .values({ spaceId: space.id, name: 'Bob', type: 'person', isHidden: false })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+        await sut.markRejectedForSpacePerson(otherSpacePerson.id, negativeFace.id, { identityId: identity.id });
+
+        await expect(sut.hasPendingForSpacePerson(space.id, spacePerson.id, controlFace.id, opts)).resolves.toBe(true); // positive control
+        await expect(sut.hasPendingForSpacePerson(space.id, spacePerson.id, manualLinkFace.id, opts)).resolves.toBe(
+          false,
+        );
+        await expect(sut.hasPendingForSpacePerson(space.id, spacePerson.id, negativeFace.id, opts)).resolves.toBe(
+          false,
+        );
       });
     });
 

@@ -211,7 +211,13 @@ describe('SharedSpaceService space face suggestions', () => {
     expect(link.source).toBe('manual');
   });
 
-  it('confirm overwrites an existing face identity link (edge 32)', async () => {
+  // Slice 3 (F6): hasPendingForSpacePerson now applies the SAME manual-link anti-join its read twin
+  // (getPendingForSpacePerson) always has — a face someone has already manually placed (any identity) never
+  // reads as pending for anyone else. Before this slice, hasPendingForSpacePerson omitted that anti-join, so
+  // a confirm could still "win" a face the review queue would no longer have offered, silently overwriting
+  // the earlier human's placement. Renamed from "confirm overwrites an existing face identity link (edge 32)"
+  // — that assumption is exactly the gap this slice closes.
+  it('confirm no-ops when the face already carries a manual link to a different identity (D3 self-heal, edge 32)', async () => {
     const { ctx, sut } = setup();
     const faceIdentityRepository = ctx.get(FaceIdentityRepository);
     const fx = await createSuggestionFixture(ctx);
@@ -222,15 +228,6 @@ describe('SharedSpaceService space face suggestions', () => {
       identityId: oldIdentity.id,
       source: 'manual',
     });
-    const otherSpacePerson = await ctx.database
-      .insertInto('shared_space_person')
-      .values({ spaceId: fx.space.id, name: 'Other Candidate', type: 'person', isHidden: false })
-      .returningAll()
-      .executeTakeFirstOrThrow();
-    await ctx.database
-      .insertInto('face_person_verdict')
-      .values({ spacePersonId: otherSpacePerson.id, assetFaceId: fx.assetFace.id, distance: 0.62 })
-      .execute();
 
     await sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id);
 
@@ -239,18 +236,39 @@ describe('SharedSpaceService space face suggestions', () => {
       .select('identityId')
       .where('id', '=', fx.spacePerson.id)
       .executeTakeFirstOrThrow();
+    expect(spacePerson.identityId).toBeNull(); // no-op: no identity created for the space person
+
     const link = await ctx.database
       .selectFrom('face_identity_face')
       .select(['identityId', 'source'])
       .where('assetFaceId', '=', fx.assetFace.id)
       .executeTakeFirstOrThrow();
-    expect(link).toEqual({ identityId: spacePerson.identityId!, source: 'manual' });
-    const rows = await ctx.database
+    expect(link).toEqual({ identityId: oldIdentity.id, source: 'manual' }); // the existing link is untouched
+
+    const row = await ctx.database
       .selectFrom('face_person_verdict')
-      .select(['spacePersonId', 'status'])
+      .select('status')
+      .where('spacePersonId', '=', fx.spacePerson.id)
       .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirstOrThrow();
+    expect(row.status).toBe('pending'); // untouched
+
+    // Positive control, same fixture: a DIFFERENT, not-yet-linked face on the same space person confirms
+    // normally — the no-op above is specific to the pre-existing manual link, not a broken confirm path.
+    const { assetFace: freshFace } = await ctx.newAssetFace({ assetId: fx.asset.id, personId: null });
+    await ctx.database
+      .insertInto('face_person_verdict')
+      .values({ spacePersonId: fx.spacePerson.id, assetFaceId: freshFace.id, distance: 0.6 })
       .execute();
-    expect(rows).toEqual([]);
+
+    await sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, freshFace.id);
+
+    const freshLink = await ctx.database
+      .selectFrom('face_identity_face')
+      .select(['identityId', 'source'])
+      .where('assetFaceId', '=', freshFace.id)
+      .executeTakeFirstOrThrow();
+    expect(freshLink.source).toBe('manual');
   });
 
   it('confirm and dismiss no-op stale unshared candidates (edge 21)', async () => {
@@ -313,7 +331,9 @@ describe('SharedSpaceService space face suggestions', () => {
     const fx = await createSuggestionFixture(ctx);
     // Drain the pending row directly — the face's asset stays in the space (reachable), it simply has no
     // queue row left to claim.
-    await ctx.get(FacePersonVerdictRepository).claimPendingForSpacePerson(fx.spacePerson.id, fx.assetFace.id);
+    await ctx
+      .get(FacePersonVerdictRepository)
+      .claimPendingForSpacePerson(fx.spacePerson.id, fx.assetFace.id, { maxDistance: 0.5, suggestionMaxDistance: 0.8 });
     const drained = await ctx.database
       .selectFrom('face_person_verdict')
       .selectAll()
@@ -357,5 +377,75 @@ describe('SharedSpaceService space face suggestions', () => {
       .executeTakeFirstOrThrow();
     // The original pending row is untouched — no verdict was written.
     expect(row).toEqual({ status: 'pending', identityId: null, actorId: null });
+  });
+
+  // S3.8 (F5): confirm applies the same eligibility the read (hasPendingForSpacePerson) already applies — a
+  // pending suggestion whose asset the owner has since moved into the Locked folder must not be confirmable.
+  it('S3.8 — Given a pending suggestion, When the owner moves the asset into the Locked folder and then confirms, Then the confirm is a no-op', async () => {
+    const { ctx, sut } = setup();
+    const fx = await createSuggestionFixture(ctx);
+
+    await ctx.database
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Locked })
+      .where('id', '=', fx.asset.id)
+      .execute();
+
+    await expect(
+      sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
+    ).resolves.toBeUndefined();
+
+    const lockedPerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .select('identityId')
+      .where('id', '=', fx.spacePerson.id)
+      .executeTakeFirstOrThrow();
+    expect(lockedPerson.identityId).toBeNull(); // no identity created
+
+    const lockedLink = await ctx.database
+      .selectFrom('face_identity_face')
+      .select('assetFaceId')
+      .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirst();
+    expect(lockedLink).toBeUndefined(); // no manual link
+
+    const lockedRow = await ctx.database
+      .selectFrom('face_person_verdict')
+      .select('status')
+      .where('spacePersonId', '=', fx.spacePerson.id)
+      .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirstOrThrow();
+    expect(lockedRow.status).toBe('pending'); // row untouched
+
+    // Positive control, same fixture: once the asset leaves the Locked folder, the SAME confirm call succeeds.
+    await ctx.database
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Timeline })
+      .where('id', '=', fx.asset.id)
+      .execute();
+
+    await sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id);
+
+    const unlockedPerson = await ctx.database
+      .selectFrom('shared_space_person')
+      .select('identityId')
+      .where('id', '=', fx.spacePerson.id)
+      .executeTakeFirstOrThrow();
+    expect(unlockedPerson.identityId).toEqual(expect.any(String));
+
+    const unlockedLink = await ctx.database
+      .selectFrom('face_identity_face')
+      .select(['identityId', 'source'])
+      .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirstOrThrow();
+    expect(unlockedLink).toEqual({ identityId: unlockedPerson.identityId!, source: 'manual' });
+
+    const unlockedRow = await ctx.database
+      .selectFrom('face_person_verdict')
+      .select('status')
+      .where('spacePersonId', '=', fx.spacePerson.id)
+      .where('assetFaceId', '=', fx.assetFace.id)
+      .executeTakeFirst();
+    expect(unlockedRow).toBeUndefined(); // drained
   });
 });
