@@ -1950,32 +1950,68 @@ describe(PersonService.name, () => {
   // write) and the claimed pending row gone for good — the exact defect class executeRepair's per-route
   // transaction (A1) already closes for the cleanup engine.
   describe('confirmFaceSuggestion (atomicity)', () => {
+    // Slice 3 (S3.9) added an isFaceSuggestionEnabled short-circuit ahead of the transaction, so this test's
+    // config must enable suggestions with a valid band — plain setup() defaults leave suggestions disabled,
+    // which would resolve confirmFaceSuggestion before it ever reaches the write chain under test.
+    const enabled = {
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
+    };
+
     it('rolls back the reassign when the identity relink fails (no torn write)', async () => {
       const { sut, ctx } = setup();
+      ctx
+        .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
+        .get.mockResolvedValue(enabled as any);
       const faceIdentityRepo = ctx.get(FaceIdentityRepository);
       const verdictRepo = ctx.get(FacePersonVerdictRepository);
       const { user } = await ctx.newUser();
       const auth = factory.auth({ user });
 
-      // P is the suggested target; the face actually sits on a DIFFERENT person, Q.
+      // P is the suggested target. A real suggestion sits on an UNASSIGNED face — confirm's job is to make
+      // the assignment, not to steal the face from someone else.
       const { person: p } = await ctx.newPerson({ ownerId: user.id, name: 'P' });
-      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
-      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: q.id });
-      await verdictRepo.upsertPending([{ personId: p.id, assetFaceId: face.id, distance: 0.5 }]);
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      // distance 0.6 sits strictly inside the open eligibility band (0.5, 0.8] — a valid, claimable row.
+      await verdictRepo.upsertPending([{ personId: p.id, assetFaceId: face.id, distance: 0.6 }]);
+
+      // Positive control: the seeded row really is pending before the confirm call touches anything.
+      const seeded = await ctx.database
+        .selectFrom('face_person_verdict')
+        .select(['status'])
+        .where('personId', '=', p.id)
+        .where('assetFaceId', '=', face.id)
+        .executeTakeFirstOrThrow();
+      expect(seeded.status).toBe('pending');
 
       // The LAST write in the chain fails.
       vi.spyOn(faceIdentityRepo, 'replaceFaceIdentity').mockRejectedValueOnce(new Error('relink failed'));
 
       await expect(sut.confirmFaceSuggestion(auth, p.id, face.id)).rejects.toThrow('relink failed');
 
-      // The reassign must have rolled back — the face is still on Q, not P.
+      // The reassign must have rolled back — the face is still unassigned.
       const reloadedFace = await ctx.database
         .selectFrom('asset_face')
         .select('personId')
         .where('id', '=', face.id)
         .executeTakeFirstOrThrow();
-      expect(reloadedFace.personId).toBe(q.id);
+      expect(reloadedFace.personId).toBeNull();
+
+      // No manual identity link was left dangling on the face.
+      const identityLink = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('assetFaceId')
+        .where('assetFaceId', '=', face.id)
+        .executeTakeFirst();
+      expect(identityLink).toBeUndefined();
 
       // The claim must have rolled back too — the row is still pending (claim-then-work contract, R4).
       const verdict = await ctx.database
