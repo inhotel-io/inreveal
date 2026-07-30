@@ -22,15 +22,15 @@ Separately, we want `/` to open search, matching the GitHub/Gmail/Slack conventi
 
 ## Decisions
 
-| # | Decision | Rationale |
-|---|---|---|
-| 1 | On touch, tapping the search bar opens the **modal** palette, not the inline dropdown | Full-height below 640px, large centred card above; no soft-keyboard occlusion |
-| 2 | `/` **replaces** the existing `/` → Explore binding | `/` = search is the near-universal convention; Explore stays reachable from the sidebar |
-| 3 | `/` opens the **same modal palette** `Ctrl+K` opens | One surface, one documented behaviour, works where the nav bar is hidden |
-| 4 | Touch is detected **per event** via `PointerEvent.pointerType` | Exact per-interaction; an iPad user gets the modal by finger and the dropdown by trackpad |
-| 5 | The `<kbd>` chip is **hidden** when `pointer: coarse` | Removes the misleading hint; the whole bar becomes the tap target |
-| 6 | The iPad modal keeps its **current large centred size** | Already comfortable, needs no new CSS; full-bleed styling can follow if it reads cramped |
-| 7 | Chip visibility uses `{#if}` on `mediaQueryManager.pointerCoarse`, not a CSS media query | jsdom does not evaluate CSS media queries, so `{#if}` is the testable form |
+| #   | Decision                                                                                 | Rationale                                                                                 |
+| --- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| 1   | On touch, tapping the search bar opens the **modal** palette, not the inline dropdown    | Full-height below 640px, large centred card above; no soft-keyboard occlusion             |
+| 2   | `/` **replaces** the existing `/` → Explore binding                                      | `/` = search is the near-universal convention; Explore stays reachable from the sidebar   |
+| 3   | `/` opens the **same modal palette** `Ctrl+K` opens                                      | One surface, one documented behaviour, works where the nav bar is hidden                  |
+| 4   | Touch is detected **per event** via `PointerEvent.pointerType`                           | Exact per-interaction; an iPad user gets the modal by finger and the dropdown by trackpad |
+| 5   | The `<kbd>` chip is **hidden** when `pointer: coarse`                                    | Removes the misleading hint; the whole bar becomes the tap target                         |
+| 6   | The iPad modal keeps its **current large centred size**                                  | Already comfortable, needs no new CSS; full-bleed styling can follow if it reads cramped  |
+| 7   | Chip visibility uses `{#if}` on `mediaQueryManager.pointerCoarse`, not a CSS media query | jsdom does not evaluate CSS media queries, so `{#if}` is the testable form                |
 
 Decision 7 does not cost a flash: `web/src/routes/+layout.ts:9` sets `export const ssr = false`, so
 this app never server-renders any route. `MediaQuery` having no SSR value would only matter if there
@@ -43,18 +43,18 @@ input on this surface is rare. Pinned by test so the choice is deliberate rather
 
 ## Behaviour
 
-| Interaction | Before | After |
-|---|---|---|
-| Tap nav search bar (finger) | focus → inline dropdown, soft keyboard covers it | **modal palette**; its own input autofocuses, so the keyboard opens against the modal instead |
-| Click nav search bar (mouse / trackpad / pen) | inline dropdown | unchanged |
-| Tab to nav search bar | inline dropdown | unchanged |
-| `Ctrl+K` / `⌘K` | modal palette | unchanged |
-| **`/`** | go to Explore | **modal palette** |
-| **`/` on layouts where `/` needs Shift** | dead | **modal palette** |
-| `Ctrl+/` | cycle search mode | unchanged |
-| `?` | shortcuts modal | unchanged |
-| Magnify button below 640px | modal palette | unchanged |
-| `Ctrl+K` chip shown | always ≥640px | only when `pointer: coarse` is false |
+| Interaction                                   | Before                                           | After                                                                                         |
+| --------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| Tap nav search bar (finger)                   | focus → inline dropdown, soft keyboard covers it | **modal palette**; its own input autofocuses, so the keyboard opens against the modal instead |
+| Click nav search bar (mouse / trackpad / pen) | inline dropdown                                  | unchanged                                                                                     |
+| Tab to nav search bar                         | inline dropdown                                  | unchanged                                                                                     |
+| `Ctrl+K` / `⌘K`                               | modal palette                                    | unchanged                                                                                     |
+| **`/`**                                       | go to Explore                                    | **modal palette**                                                                             |
+| **`/` on layouts where `/` needs Shift**      | dead                                             | **modal palette**                                                                             |
+| `Ctrl+/`                                      | cycle search mode                                | unchanged                                                                                     |
+| `?`                                           | shortcuts modal                                  | unchanged                                                                                     |
+| Magnify button below 640px                    | modal palette                                    | unchanged                                                                                     |
+| `Ctrl+K` chip shown                           | always ≥640px                                    | only when `pointer: coarse` is false                                                          |
 
 ## Implementation
 
@@ -69,7 +69,7 @@ The `preventDefault()` is load-bearing for two reasons, and both belong in a cod
 
 - it suppresses the focus that would otherwise fire `onfocus={openDropdown}`, which calls
   `manager.open('dropdown')` and clobbers `presentation` straight back to `'dropdown'`;
-- it stops iOS raising the soft keyboard against *this inline input*, which the modal is about to
+- it stops iOS raising the soft keyboard against _this inline input_, which the modal is about to
   cover. The modal's own `Command.Input` autofocuses once it opens, so the keyboard still appears —
   just against the modal's input instead of this one.
 
@@ -79,7 +79,7 @@ existing `hidden … sm:inline-block` classes stay, so sub-640px behaviour is un
 
 **Guard the modal against focus downgrade.** `openDropdown` currently reads
 `if (!showDropdownPanel) { manager.open('dropdown') }`. `showDropdownPanel` is false whenever the
-palette is open *as a modal*, so any focus landing on the nav input while the modal is open flips
+palette is open _as a modal_, so any focus landing on the nav input while the modal is open flips
 `presentation` back to `'dropdown'`. Tighten it to return early when
 `manager.isOpen && manager.presentation === 'modal'`. This is the invariant behind the
 `preventDefault()` above — focus must never downgrade an open modal — and holds even if a browser or
@@ -102,7 +102,7 @@ The module exports two things:
 [
   { shortcut: { key: '/' }, onShortcut: guarded },
   { shortcut: { key: '/', shift: true }, onShortcut: guarded },
-]
+];
 ```
 
 **Why two descriptors.** `matchesShortcut` in `@immich/ui` compares modifiers strictly:
@@ -174,18 +174,18 @@ So focus arrives at **release**, after our `pointerdown` handler has already set
 and clobbers the presentation back to `'dropdown'` — which is exactly the RED signal the first test
 should produce. `expect(input).not.toHaveFocus()` is therefore a real assertion, not a jsdom artefact.
 
-| Scenario | Expected |
-|---|---|
-| Finger tap, full press+release | `open` called with `'modal'`; no `[data-cmdk-dropdown-panel]` in the DOM |
-| Finger tap | input is **not** focused (`preventDefault()` suppressed the release-time focus) |
-| Finger tap | `presentation` is still `'modal'` after release (the clobber regression) |
-| Mouse click | `open` called with `'dropdown'`; panel present (regression guard for decision 4) |
-| Pen input (`pointerType: 'pen'`) | dropdown, not modal (pins decision 4's scope) |
-| `pointerType` absent/empty (synthetic `pointerdown`) | falls through to dropdown |
-| Keyboard focus via Tab, no pointer event | dropdown, on touch-capable devices too |
-| Tap while the dropdown is already open | ends in `presentation === 'modal'` |
-| Tap, close modal, tap again | reopens the modal; no stuck presentation state |
-| Focus the nav input while the modal is open | stays `'modal'` (the `openDropdown` guard) |
+| Scenario                                             | Expected                                                                         |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Finger tap, full press+release                       | `open` called with `'modal'`; no `[data-cmdk-dropdown-panel]` in the DOM         |
+| Finger tap                                           | input is **not** focused (`preventDefault()` suppressed the release-time focus)  |
+| Finger tap                                           | `presentation` is still `'modal'` after release (the clobber regression)         |
+| Mouse click                                          | `open` called with `'dropdown'`; panel present (regression guard for decision 4) |
+| Pen input (`pointerType: 'pen'`)                     | dropdown, not modal (pins decision 4's scope)                                    |
+| `pointerType` absent/empty (synthetic `pointerdown`) | falls through to dropdown                                                        |
+| Keyboard focus via Tab, no pointer event             | dropdown, on touch-capable devices too                                           |
+| Tap while the dropdown is already open               | ends in `presentation === 'modal'`                                               |
+| Tap, close modal, tap again                          | reopens the modal; no stuck presentation state                                   |
+| Focus the nav input while the modal is open          | stays `'modal'` (the `openDropdown` guard)                                       |
 
 ### `global-search-input-trigger.spec.ts` — chip visibility
 
@@ -199,13 +199,13 @@ no effect on an already-imported module, so those two rows require `vi.resetModu
 pre-existing behaviour this change does not touch — and keep the presence/absence rows, which are
 the ones that matter for #862.
 
-| Scenario | Expected |
-|---|---|
-| `pointerCoarse` true | no `<kbd>` in the DOM |
-| `pointerCoarse` false | `<kbd>` present |
-| `pointerCoarse` false, non-Apple platform | reads `Ctrl+K` |
-| `pointerCoarse` false, Apple platform | reads `⌘K` |
-| Either value | input keeps `role="combobox"` and its accessible name — the chip is not part of the name |
+| Scenario                                  | Expected                                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `pointerCoarse` true                      | no `<kbd>` in the DOM                                                                    |
+| `pointerCoarse` false                     | `<kbd>` present                                                                          |
+| `pointerCoarse` false, non-Apple platform | reads `Ctrl+K`                                                                           |
+| `pointerCoarse` false, Apple platform     | reads `⌘K`                                                                               |
+| Either value                              | input keeps `role="combobox"` and its accessible name — the chip is not part of the name |
 
 Aside, not a bug to fix here: iPadOS Safari reports `navigator.platform === 'MacIntel'`, so iPads
 already render `⌘K` rather than `Ctrl+K` — consistent with the screenshot in #862. Hiding the chip on
@@ -217,22 +217,22 @@ Tests target the pure module and drive `@immich/ui`'s real `matchesShortcut` aga
 `KeyboardEvent`s, so the layout-sensitivity fix is verified against the actual matcher rather than a
 reimplementation of it. `open` is a `vi.fn()`.
 
-| Scenario | Expected |
-|---|---|
-| `searchShortcuts(open)` shape | exactly two descriptors: `{ key: '/' }` and `{ key: '/', shift: true }` |
-| `{ key: '/', shiftKey: false }` | matches exactly one descriptor |
-| `{ key: '/', shiftKey: true }` (QWERTZ / AZERTY / Spanish / Italian) | matches exactly one descriptor |
-| `{ key: '?', shiftKey: true }` (US Shift+/) | matches neither — the shortcuts modal keeps `?` |
-| `{ key: '/', ctrlKey: true }` | matches neither — `Ctrl+/` stays the mode-cycle binding |
-| `{ key: '/', altKey: true }` / `{ key: '/', metaKey: true }` | match neither |
-| `onShortcut` with `document.activeElement` unfocused (`body`) | `open` called once |
-| `onShortcut` with `<input type="text">` focused | `open` not called |
-| `onShortcut` with `<input type="search">` focused | `open` not called — the gap `shouldIgnoreEvent` misses |
-| `onShortcut` with `<input type="number">` focused | `open` not called |
-| `onShortcut` with `<textarea>` focused | `open` not called |
-| `onShortcut` with `<select>` focused | `open` not called |
-| `onShortcut` with a `[contenteditable]` element focused | `open` not called |
-| `isEditableTarget(null)` | `false`, no throw |
+| Scenario                                                             | Expected                                                                |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `searchShortcuts(open)` shape                                        | exactly two descriptors: `{ key: '/' }` and `{ key: '/', shift: true }` |
+| `{ key: '/', shiftKey: false }`                                      | matches exactly one descriptor                                          |
+| `{ key: '/', shiftKey: true }` (QWERTZ / AZERTY / Spanish / Italian) | matches exactly one descriptor                                          |
+| `{ key: '?', shiftKey: true }` (US Shift+/)                          | matches neither — the shortcuts modal keeps `?`                         |
+| `{ key: '/', ctrlKey: true }`                                        | matches neither — `Ctrl+/` stays the mode-cycle binding                 |
+| `{ key: '/', altKey: true }` / `{ key: '/', metaKey: true }`         | match neither                                                           |
+| `onShortcut` with `document.activeElement` unfocused (`body`)        | `open` called once                                                      |
+| `onShortcut` with `<input type="text">` focused                      | `open` not called                                                       |
+| `onShortcut` with `<input type="search">` focused                    | `open` not called — the gap `shouldIgnoreEvent` misses                  |
+| `onShortcut` with `<input type="number">` focused                    | `open` not called                                                       |
+| `onShortcut` with `<textarea>` focused                               | `open` not called                                                       |
+| `onShortcut` with `<select>` focused                                 | `open` not called                                                       |
+| `onShortcut` with a `[contenteditable]` element focused              | `open` not called                                                       |
+| `isEditableTarget(null)`                                             | `false`, no throw                                                       |
 
 Two `/` behaviours are wiring, not module logic, and are confirmed by reading the rendered layout
 rather than by a unit test: the feature-flag guard and the `toggle('modal')` semantics come from
@@ -268,34 +268,34 @@ by the unit tests above.
 
 ## Risks
 
-| Risk | Mitigation |
-|---|---|
-| Users relying on `/` → Explore lose it | Sidebar entry unchanged; `/` = search is the stronger convention |
-| ~~One-frame chip flash on touch after hydration~~ — does not apply | `web/src/routes/+layout.ts:9` sets `ssr = false`; there is no SSR render pass, so there is nothing for hydration to reconcile away |
-| `preventDefault()` on pointerdown blocks focus more broadly than intended | Guarded to `pointerType === 'touch'`; mouse, pen, and keyboard paths each covered by test |
-| A browser focuses the nav input by a path `preventDefault()` misses | The `openDropdown` early-return holds the invariant independently |
-| Upstream edits conflict on rebase | Pure deletions in two files, three lines total |
+| Risk                                                                      | Mitigation                                                                                                                         |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Users relying on `/` → Explore lose it                                    | Sidebar entry unchanged; `/` = search is the stronger convention                                                                   |
+| ~~One-frame chip flash on touch after hydration~~ — does not apply        | `web/src/routes/+layout.ts:9` sets `ssr = false`; there is no SSR render pass, so there is nothing for hydration to reconcile away |
+| `preventDefault()` on pointerdown blocks focus more broadly than intended | Guarded to `pointerType === 'touch'`; mouse, pen, and keyboard paths each covered by test                                          |
+| A browser focuses the nav input by a path `preventDefault()` misses       | The `openDropdown` early-return holds the invariant independently                                                                  |
+| Upstream edits conflict on rebase                                         | Pure deletions in two files, three lines total                                                                                     |
 
 ## Verified against the codebase
 
 Every anchor and claim below was confirmed in this worktree before the plan was written.
 
-| Claim | Confirmed |
-|---|---|
-| `mediaQueryManager` imported at `global-search.svelte:24`; `pointerCoarse` is an object-literal getter | yes — spy-able with `vi.spyOn(…, 'get')` |
-| `isApplePlatform` / `hotkeyLabel` at `global-search.svelte:44-45` | yes — module scope, hence the `resetModules` note |
-| `Command.Input` at `global-search.svelte:631`, `<kbd>` at `652-656` | yes |
-| `openModalSearch` at `+layout.svelte:235`, `use:shortcuts` array at `279` | yes |
-| `/` → Explore at `GalleryViewer.svelte:274` and `TimelineKeyboardActions.svelte:119` | yes |
-| `goto` (L2) and `Route` (L17) unused in `TimelineKeyboardActions` after deletion | yes — both have exactly one use, that line |
-| `goto` / `Route` still used elsewhere in `GalleryViewer` | yes — two uses each, imports stay |
-| `Ctrl+K` row at `ShortcutsModal.svelte:35`; `shortcut_open_global_search` exists | yes — `i18n/en.json:2608`, no new strings |
-| `matchesShortcut` compares modifiers strictly | yes — `Boolean(shortcut.shift) === event.shiftKey` |
-| `shouldIgnoreEvent` allowlist misses `type="search"` | yes — one use, `space-albums-controls.svelte:108` |
-| No `contenteditable` anywhere in `web/src` | yes — guard clause is forward-looking only |
-| `Command.Input` renders `type="text"` | yes — `bits-ui` `CommandInputState.props` |
-| `matchesShortcut` / `ShortcutOptions` importable from `@immich/ui` | yes — `export * from './actions/shortcut.js'` |
-| Explore still reachable without the shortcut | yes — `UserSidebar.svelte:67` |
-| No existing spec covers `+layout.svelte` or the `/` → Explore binding | yes — hence the extracted module |
-| Playwright defines only `Desktop Chrome` projects | yes |
-| userEvent honours `preventDefault()` on `pointerdown` for touch | yes — `pointer/index.js:80` → `pointer/mouse.js:76-79` |
+| Claim                                                                                                  | Confirmed                                              |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| `mediaQueryManager` imported at `global-search.svelte:24`; `pointerCoarse` is an object-literal getter | yes — spy-able with `vi.spyOn(…, 'get')`               |
+| `isApplePlatform` / `hotkeyLabel` at `global-search.svelte:44-45`                                      | yes — module scope, hence the `resetModules` note      |
+| `Command.Input` at `global-search.svelte:631`, `<kbd>` at `652-656`                                    | yes                                                    |
+| `openModalSearch` at `+layout.svelte:235`, `use:shortcuts` array at `279`                              | yes                                                    |
+| `/` → Explore at `GalleryViewer.svelte:274` and `TimelineKeyboardActions.svelte:119`                   | yes                                                    |
+| `goto` (L2) and `Route` (L17) unused in `TimelineKeyboardActions` after deletion                       | yes — both have exactly one use, that line             |
+| `goto` / `Route` still used elsewhere in `GalleryViewer`                                               | yes — two uses each, imports stay                      |
+| `Ctrl+K` row at `ShortcutsModal.svelte:35`; `shortcut_open_global_search` exists                       | yes — `i18n/en.json:2608`, no new strings              |
+| `matchesShortcut` compares modifiers strictly                                                          | yes — `Boolean(shortcut.shift) === event.shiftKey`     |
+| `shouldIgnoreEvent` allowlist misses `type="search"`                                                   | yes — one use, `space-albums-controls.svelte:108`      |
+| No `contenteditable` anywhere in `web/src`                                                             | yes — guard clause is forward-looking only             |
+| `Command.Input` renders `type="text"`                                                                  | yes — `bits-ui` `CommandInputState.props`              |
+| `matchesShortcut` / `ShortcutOptions` importable from `@immich/ui`                                     | yes — `export * from './actions/shortcut.js'`          |
+| Explore still reachable without the shortcut                                                           | yes — `UserSidebar.svelte:67`                          |
+| No existing spec covers `+layout.svelte` or the `/` → Explore binding                                  | yes — hence the extracted module                       |
+| Playwright defines only `Desktop Chrome` projects                                                      | yes                                                    |
+| userEvent honours `preventDefault()` on `pointerdown` for touch                                        | yes — `pointer/index.js:80` → `pointer/mouse.js:76-79` |

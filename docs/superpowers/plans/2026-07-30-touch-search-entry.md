@@ -25,40 +25,42 @@
 
 These were confirmed empirically in this worktree. Do not re-litigate them; build on them.
 
-| Fact | Evidence |
-|---|---|
-| `user.pointer({ keys: '[TouchA]', target })` dispatches `pointerdown` with `pointerType === 'touch'` | probed, passing |
-| An **unprevented** touch tap **focuses** the input | probed, passing — this is why the guard matters |
-| `preventDefault()` on a touch `pointerdown` **suppresses** that focus | probed, passing — `not.toHaveFocus()` is a real assertion |
-| `user.click(target)` dispatches `pointerdown` with `pointerType === 'mouse'` | probed, passing |
-| `PointerEvent` constructor exists and carries `pointerType` | probed, passing |
-| `fireEvent.pointerDown(el, { pointerType: 'pen' })` delivers `'pen'` | probed, passing |
-| `fireEvent.pointerDown(el)` yields `pointerType === ''` | probed, passing |
+| Fact                                                                                                 | Evidence                                                  |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `user.pointer({ keys: '[TouchA]', target })` dispatches `pointerdown` with `pointerType === 'touch'` | probed, passing                                           |
+| An **unprevented** touch tap **focuses** the input                                                   | probed, passing — this is why the guard matters           |
+| `preventDefault()` on a touch `pointerdown` **suppresses** that focus                                | probed, passing — `not.toHaveFocus()` is a real assertion |
+| `user.click(target)` dispatches `pointerdown` with `pointerType === 'mouse'`                         | probed, passing                                           |
+| `PointerEvent` constructor exists and carries `pointerType`                                          | probed, passing                                           |
+| `fireEvent.pointerDown(el, { pointerType: 'pen' })` delivers `'pen'`                                 | probed, passing                                           |
+| `fireEvent.pointerDown(el)` yields `pointerType === ''`                                              | probed, passing                                           |
 
 **The plan itself was dry-run before being finalised.** Task 1's tests were applied against unmodified source and produced exactly the failures Step 2 claims (`3 failed | 20 passed`). Task 3's module and spec were written and run in full (`20 passed`). Both were then reverted, so the tree is clean and every task still starts from RED. Every line number, code block, and expected tally below is copied from that run — not estimated.
 
 ## File Structure
 
-| File | Responsibility |
-|---|---|
-| `src/lib/components/global-search/global-search.svelte` (modify) | Route touch taps to the modal; hold the "focus never downgrades an open modal" invariant; hide the chip on coarse pointers |
-| `src/lib/components/global-search/__tests__/global-search-input-trigger.spec.ts` (modify) | Cover pointer routing and chip visibility |
-| `src/lib/utils/search-shortcut.ts` (create) | The `/` descriptors and the editable-target guard — pure, no Svelte |
-| `src/lib/utils/search-shortcut.spec.ts` (create) | Cover the descriptors against the real matcher, and the guard |
-| `src/routes/+layout.svelte` (modify) | Wire the `/` descriptors into the existing `use:shortcuts` array |
-| `src/lib/components/timeline/actions/TimelineKeyboardActions.svelte` (modify) | Remove `/` → Explore and its now-unused imports |
-| `src/lib/components/shared-components/gallery-viewer/GalleryViewer.svelte` (modify) | Remove `/` → Explore |
-| `src/lib/modals/ShortcutsModal.svelte` (modify) | Document `/` |
+| File                                                                                      | Responsibility                                                                                                             |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/components/global-search/global-search.svelte` (modify)                          | Route touch taps to the modal; hold the "focus never downgrades an open modal" invariant; hide the chip on coarse pointers |
+| `src/lib/components/global-search/__tests__/global-search-input-trigger.spec.ts` (modify) | Cover pointer routing and chip visibility                                                                                  |
+| `src/lib/utils/search-shortcut.ts` (create)                                               | The `/` descriptors and the editable-target guard — pure, no Svelte                                                        |
+| `src/lib/utils/search-shortcut.spec.ts` (create)                                          | Cover the descriptors against the real matcher, and the guard                                                              |
+| `src/routes/+layout.svelte` (modify)                                                      | Wire the `/` descriptors into the existing `use:shortcuts` array                                                           |
+| `src/lib/components/timeline/actions/TimelineKeyboardActions.svelte` (modify)             | Remove `/` → Explore and its now-unused imports                                                                            |
+| `src/lib/components/shared-components/gallery-viewer/GalleryViewer.svelte` (modify)       | Remove `/` → Explore                                                                                                       |
+| `src/lib/modals/ShortcutsModal.svelte` (modify)                                           | Document `/`                                                                                                               |
 
 ---
 
 ### Task 1: Route touch taps to the modal palette
 
 **Files:**
+
 - Modify: `web/src/lib/components/global-search/global-search.svelte:485-489` (the `openDropdown` function) and `:631-651` (the dropdown `Command.Input`)
 - Test: `web/src/lib/components/global-search/__tests__/global-search-input-trigger.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing from earlier tasks.
 - Produces: no exported symbols. Behaviour later tasks rely on: `globalSearchManager.presentation === 'modal'` after a touch tap, and `openDropdown` refusing to run while a modal is open.
 
@@ -73,66 +75,66 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 ```
 
 ```ts
-  it('opens the modal palette when the search field is tapped', async () => {
-    const openSpy = vi.spyOn(globalSearchManager, 'open');
-    const user = userEvent.setup();
+it('opens the modal palette when the search field is tapped', async () => {
+  const openSpy = vi.spyOn(globalSearchManager, 'open');
+  const user = userEvent.setup();
 
-    render(GlobalSearchInputTrigger);
+  render(GlobalSearchInputTrigger);
 
-    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
-    await user.pointer({ keys: '[TouchA]', target: input });
+  const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+  await user.pointer({ keys: '[TouchA]', target: input });
 
-    expect(openSpy).toHaveBeenCalledWith('modal');
-    expect(globalSearchManager.presentation).toBe('modal');
-    expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
-  });
+  expect(openSpy).toHaveBeenCalledWith('modal');
+  expect(globalSearchManager.presentation).toBe('modal');
+  expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
+});
 
-  it('does not focus the search field when it is tapped', async () => {
-    const user = userEvent.setup();
+it('does not focus the search field when it is tapped', async () => {
+  const user = userEvent.setup();
 
-    render(GlobalSearchInputTrigger);
+  render(GlobalSearchInputTrigger);
 
-    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
-    await user.pointer({ keys: '[TouchA]', target: input });
+  const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+  await user.pointer({ keys: '[TouchA]', target: input });
 
-    expect(input).not.toHaveFocus();
-  });
+  expect(input).not.toHaveFocus();
+});
 
-  it('opens the inline dropdown for pen input rather than the modal', async () => {
-    const user = userEvent.setup();
+it('opens the inline dropdown for pen input rather than the modal', async () => {
+  const user = userEvent.setup();
 
-    render(GlobalSearchInputTrigger);
+  render(GlobalSearchInputTrigger);
 
-    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
-    await fireEvent.pointerDown(input, { pointerType: 'pen' });
-    await user.click(input);
+  const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+  await fireEvent.pointerDown(input, { pointerType: 'pen' });
+  await user.click(input);
 
-    expect(globalSearchManager.presentation).toBe('dropdown');
-  });
+  expect(globalSearchManager.presentation).toBe('dropdown');
+});
 
-  it('opens the inline dropdown when a pointerdown carries no pointer type', async () => {
-    const user = userEvent.setup();
+it('opens the inline dropdown when a pointerdown carries no pointer type', async () => {
+  const user = userEvent.setup();
 
-    render(GlobalSearchInputTrigger);
+  render(GlobalSearchInputTrigger);
 
-    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
-    await fireEvent.pointerDown(input);
-    await user.click(input);
+  const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+  await fireEvent.pointerDown(input);
+  await user.click(input);
 
-    expect(globalSearchManager.presentation).toBe('dropdown');
-  });
+  expect(globalSearchManager.presentation).toBe('dropdown');
+});
 
-  it('does not let focus downgrade an open modal to the inline dropdown', async () => {
-    render(GlobalSearchInputTrigger);
+it('does not let focus downgrade an open modal to the inline dropdown', async () => {
+  render(GlobalSearchInputTrigger);
 
-    globalSearchManager.open('modal');
+  globalSearchManager.open('modal');
 
-    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
-    await fireEvent.focus(input);
+  const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+  await fireEvent.focus(input);
 
-    expect(globalSearchManager.presentation).toBe('modal');
-    expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
-  });
+  expect(globalSearchManager.presentation).toBe('modal');
+  expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
+});
 ```
 
 - [ ] **Step 2: Run the tests and confirm they fail for the right reason**
@@ -152,38 +154,38 @@ The two `pointerType` tests (`pen`, none) **pass already** — they pin behaviou
 In `global-search.svelte`, replace the existing `openDropdown` function (currently at `:485-489`):
 
 ```ts
-  function openDropdown() {
-    if (!showDropdownPanel) {
-      manager.open('dropdown');
-    }
+function openDropdown() {
+  if (!showDropdownPanel) {
+    manager.open('dropdown');
   }
+}
 ```
 
 with:
 
 ```ts
-  function openDropdown() {
-    // Focus must never downgrade an open modal to the inline dropdown.
-    // `showDropdownPanel` is false while the modal is open, so without this the
-    // next focus event would call open('dropdown') and clobber the presentation.
-    if (manager.isOpen && manager.presentation === 'modal') {
-      return;
-    }
-    if (!showDropdownPanel) {
-      manager.open('dropdown');
-    }
+function openDropdown() {
+  // Focus must never downgrade an open modal to the inline dropdown.
+  // `showDropdownPanel` is false while the modal is open, so without this the
+  // next focus event would call open('dropdown') and clobber the presentation.
+  if (manager.isOpen && manager.presentation === 'modal') {
+    return;
   }
+  if (!showDropdownPanel) {
+    manager.open('dropdown');
+  }
+}
 
-  function openModalOnTouch(event: PointerEvent) {
-    if (event.pointerType !== 'touch') {
-      return;
-    }
-    // preventDefault is load-bearing: it suppresses the focus this tap would
-    // otherwise produce on pointer release, and it stops iOS raising the soft
-    // keyboard against an input the modal is about to cover.
-    event.preventDefault();
-    manager.open('modal');
+function openModalOnTouch(event: PointerEvent) {
+  if (event.pointerType !== 'touch') {
+    return;
   }
+  // preventDefault is load-bearing: it suppresses the focus this tap would
+  // otherwise produce on pointer release, and it stops iOS raising the soft
+  // keyboard against an input the modal is about to cover.
+  event.preventDefault();
+  manager.open('modal');
+}
 ```
 
 - [ ] **Step 4: Wire the handler to the dropdown input**
@@ -221,10 +223,12 @@ git commit -m "fix(web): open the modal palette when the search bar is tapped (#
 ### Task 2: Hide the hotkey chip on coarse pointers
 
 **Files:**
+
 - Modify: `web/src/lib/components/global-search/global-search.svelte:652-656` (the `<kbd>` block)
 - Test: `web/src/lib/components/global-search/__tests__/global-search-input-trigger.spec.ts`
 
 **Interfaces:**
+
 - Consumes: nothing from Task 1.
 - Produces: no exported symbols.
 
@@ -250,8 +254,8 @@ vi.mock('$lib/stores/media-query-manager.svelte', () => ({
 Then reset it in the existing `beforeEach`, after `sessionStorage.clear();`:
 
 ```ts
-    mediaState.pointerCoarse = false;
-    mediaState.minLg = false;
+mediaState.pointerCoarse = false;
+mediaState.minLg = false;
 ```
 
 - [ ] **Step 2: Run the suite to confirm the mock changed nothing**
@@ -265,31 +269,31 @@ Expected: PASS, same count as after Task 1. The mock's defaults match the global
 Append inside the same `describe` block:
 
 ```ts
-  it('hides the keyboard hint when the pointer is coarse', () => {
-    mediaState.pointerCoarse = true;
+it('hides the keyboard hint when the pointer is coarse', () => {
+  mediaState.pointerCoarse = true;
 
-    render(GlobalSearchInputTrigger);
+  render(GlobalSearchInputTrigger);
 
-    expect(screen.queryByText(/^(⌘K|Ctrl\+K)$/)).not.toBeInTheDocument();
-  });
+  expect(screen.queryByText(/^(⌘K|Ctrl\+K)$/)).not.toBeInTheDocument();
+});
 
-  it('keeps the search field usable when the keyboard hint is hidden', () => {
-    mediaState.pointerCoarse = true;
+it('keeps the search field usable when the keyboard hint is hidden', () => {
+  mediaState.pointerCoarse = true;
 
-    render(GlobalSearchInputTrigger);
+  render(GlobalSearchInputTrigger);
 
-    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
-    expect(input).toBeInTheDocument();
-    expect(screen.getByTestId('cmdk-input-trigger')).toBeInTheDocument();
-  });
+  const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+  expect(input).toBeInTheDocument();
+  expect(screen.getByTestId('cmdk-input-trigger')).toBeInTheDocument();
+});
 
-  it('shows the keyboard hint when the pointer is not coarse', () => {
-    mediaState.pointerCoarse = false;
+it('shows the keyboard hint when the pointer is not coarse', () => {
+  mediaState.pointerCoarse = false;
 
-    render(GlobalSearchInputTrigger);
+  render(GlobalSearchInputTrigger);
 
-    expect(screen.getByText(/^(⌘K|Ctrl\+K)$/)).toBeInTheDocument();
-  });
+  expect(screen.getByText(/^(⌘K|Ctrl\+K)$/)).toBeInTheDocument();
+});
 ```
 
 - [ ] **Step 4: Run the tests and confirm the first one fails**
@@ -334,10 +338,12 @@ git commit -m "fix(web): hide the Ctrl+K hint on touch devices (#862)"
 ### Task 3: Create the `/` shortcut module
 
 **Files:**
+
 - Create: `web/src/lib/utils/search-shortcut.ts`
 - Test: `web/src/lib/utils/search-shortcut.spec.ts`
 
 **Interfaces:**
+
 - Consumes: `matchesShortcut` and the `ShortcutOptions` type from `$lib/actions/shortcut`.
 - Produces:
   - `isEditableTarget(element: Element | null): boolean`
@@ -544,12 +550,14 @@ git commit -m "feat(web): add / shortcut descriptors for global search"
 ### Task 4: Wire `/` in, remove `/` → Explore, and document it
 
 **Files:**
+
 - Modify: `web/src/routes/+layout.svelte:4` (import) and `:279-307` (the `use:shortcuts` array, closing `]}` on 307)
 - Modify: `web/src/lib/components/timeline/actions/TimelineKeyboardActions.svelte:2`, `:17`, `:119`
 - Modify: `web/src/lib/components/shared-components/gallery-viewer/GalleryViewer.svelte:274`
 - Modify: `web/src/lib/modals/ShortcutsModal.svelte:35`
 
 **Interfaces:**
+
 - Consumes: `searchShortcuts(open: () => void): ShortcutOptions[]` from Task 3.
 - Produces: nothing.
 
@@ -560,7 +568,7 @@ This task has no unit test of its own. It is wiring plus two deletions; the logi
 In `web/src/routes/+layout.svelte`, add the import next to the existing shortcut import at `:4`:
 
 ```ts
-  import { searchShortcuts } from '$lib/utils/search-shortcut';
+import { searchShortcuts } from '$lib/utils/search-shortcut';
 ```
 
 Then add a single spread as the **last** element of the `use:shortcuts` array, after the `{ ctrl: true, key: '/' }` entry's closing `},`:
@@ -593,13 +601,13 @@ In `web/src/lib/components/timeline/actions/TimelineKeyboardActions.svelte`, del
 That was the only use of both imports in this file, so also delete line 2:
 
 ```ts
-  import { goto } from '$app/navigation';
+import { goto } from '$app/navigation';
 ```
 
 and line 17:
 
 ```ts
-  import { Route } from '$lib/route';
+import { Route } from '$lib/route';
 ```
 
 Change nothing else in either file.
@@ -659,6 +667,7 @@ Start the dev stack (`make dev` from the repo root) and confirm by hand, since t
 **Spec coverage.** Every section of the spec maps to a task: decision 1 and 4 → Task 1; decision 5 and 7 → Task 2; decisions 2 and 3 plus both edge-case fixes (shift layouts, `type="search"`) → Tasks 3 and 4; the `openDropdown` invariant → Task 1; the ShortcutsModal entry and both upstream deletions → Task 4. Decision 6 (iPad modal keeps its current size) is a deliberate no-op and needs no task.
 
 **Deviations from the spec, and why.**
+
 1. The spec said to import `matchesShortcut` / `ShortcutOptions` from `@immich/ui`. The codebase actually routes these through the fork-local barrel `$lib/actions/shortcut`, which is what `TimelineKeyboardActions.svelte` uses. The plan follows the codebase.
 2. The spec described the test environment as jsdom and proposed `vi.spyOn(mediaQueryManager, 'pointerCoarse', 'get')`. It is happy-dom, `matchMedia` is globally stubbed to `matches: false`, and the codebase's established pattern is a hoisted-state `vi.mock`. The plan uses that pattern.
 3. The spec left the per-platform `⌘K` / `Ctrl+K` label rows as optional-if-brittle. The plan drops them, with the reason recorded in Task 2, and keeps a label-agnostic regex.
