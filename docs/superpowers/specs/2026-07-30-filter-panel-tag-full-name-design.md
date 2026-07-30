@@ -111,7 +111,7 @@ Today `font-medium` sits on the orphaned _label_ (`:107`) while active normal ro
 
 bits-ui's trigger props include `onclick` (`tooltip.svelte.js`, `#onclick` → `root.handleClose()`), alongside `id`, `aria-describedby`, `data-state`, `tabindex`, and the pointer/focus handlers. So neither naive spread order is safe:
 
-- `{...props}` first, then our `onclick` → our handler wins, and the tooltip never closes on click.
+- `{...props}` first, then our `onclick` → our handler wins, and bits-ui's own click handling is dropped.
 - our `onclick` first, then `{...props}` → **selection breaks entirely**, taking both e2e suites with it.
 
 The handler must therefore be **composed**, spreading everything else so `id`/`aria-describedby` stay wired:
@@ -136,7 +136,17 @@ Written test-first: each scenario below is committed as a failing test, confirme
 - `getResizeObserverMock()` from `$lib/__mocks__/resize-observer.mock` has a **no-op** `observe`, so its callback never fires by itself; tests that need a resize invoke the captured callback directly.
 - The tooltip trigger carries `data-tooltip-trigger` (`tooltipAttrs` in `tooltip.svelte.js` × the `data-{component}-{part}` scheme in `internal/attrs.js`). Presence or absence of this attribute is the deterministic, timer-free assertion for conditionality.
 - Hover is **delayed by 700 ms** (`tooltip-provider.svelte:8`, `delayDuration = 700`, via `#handleDelayedOpen`), so any test asserting visible hover content must use fake timers.
-- Focus opens **immediately** (`#onfocus` → `handleOpen()`), and `ignoreNonKeyboardFocus` defaults to `false` (`tooltip-provider.svelte:12`), so a plain `focus` event suffices — provided no `pointerdown` was simulated first, which `#onfocus` short-circuits on.
+- **`@immich/ui`'s `TooltipProvider` overrides two bits-ui defaults app-wide**, and both matter here:
+
+  ```svelte
+  <Tooltip.Provider disableCloseOnTriggerClick ignoreNonKeyboardFocus {delayDuration}>
+  ```
+
+  - `ignoreNonKeyboardFocus` makes `#onfocus` bail unless `:focus-visible` matches. happy-dom cannot produce that through `fireEvent.focus`, so **focus-opens-the-tooltip is not testable here** and moves to manual verification.
+  - `disableCloseOnTriggerClick` makes `#onclick` return early **without** closing. Clicking a trigger therefore leaves the tooltip open by deliberate app-wide policy — an assertion that it closes would be asserting a behaviour this app disables.
+
+  Neither weakens the composed-`onclick` requirement below: bits-ui's handler is inert here only because of provider configuration this component does not own and must not depend on.
+
 - `Tooltip.Content` renders through a portal into `document.body`; Testing Library queries bind to `baseElement`, so portalled content is still reachable.
 - Only tests that simulate overflow need `TestWrapper.svelte` for `TooltipProvider` scope. Rows that fit never instantiate `Tooltip.Root`, so the existing suite does not need rewrapping.
 
@@ -161,22 +171,22 @@ Measurement is tested against a stub node with `scrollHeight`/`clientHeight` def
 
 Rendered through `TestWrapper.svelte` so `TooltipProvider` is in scope, with `getResizeObserverMock()` stubbed.
 
-| #   | Scenario                          | Given / When / Then                                                                                                                                                                          |
-| --- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1  | renders the full name in the DOM  | Given a long hierarchical name, when the row renders, then the label's text content is the complete path — clipping is visual only, so screen readers already read the whole name.           |
-| R2  | clamps rather than truncates      | Given any row, when it renders, then the label carries `line-clamp-2` and **not** `truncate`.                                                                                                |
-| R3  | keeps the e2e handle              | Given a tag with id `t1`, when the row renders, then `data-testid="tags-item-t1"` is on the element that receives the click.                                                                 |
-| R4  | tooltip when clipped              | Given a label whose `scrollHeight` exceeds its `clientHeight`, when the row renders, then the button carries `data-tooltip-trigger`.                                                         |
-| R5  | no tooltip when it fits           | Given a label whose `scrollHeight` equals its `clientHeight`, when the row renders, then the button carries no `data-tooltip-trigger`.                                                       |
-| R6  | tooltip content on hover          | Given a clipped row, when a non-touch `pointerenter` fires and 700 ms elapse on fake timers, then the full name appears in tooltip content.                                                  |
-| R7  | tooltip content on focus          | Given a clipped row with no preceding `pointerdown`, when it receives focus, then the full name appears immediately — the keyboard path, distinct from R6.                                   |
-| R8  | toggling still works when clipped | Given a clipped row, when it is clicked, then `onToggle` is called with the tag id **and** the tooltip closes — pins the composed `onclick`.                                                 |
-| R9  | toggling works when not clipped   | Given a fitting row rendering no tooltip at all, when it is clicked, then `onToggle` is called with the tag id — the `props.onclick?.()` optional call must tolerate the empty-props branch. |
-| R10 | checked state                     | Given `checked` is true, then the checkmark renders and `aria-pressed` is `"true"`.                                                                                                          |
-| R11 | unchecked state                   | Given `checked` is false, then no checkmark renders and `aria-pressed` is `"false"`.                                                                                                         |
-| R12 | unbreakable token still clipped   | Given a single very long word with no break opportunity, then it wraps via `wrap-break-words` and overflows vertically, so the tooltip is present.                                           |
-| R13 | dimmed variant                    | Given `dimmed` is true, then the row element carries `opacity-50` and `font-medium`.                                                                                                         |
-| R14 | label allows mid-word breaks      | Given any row, then the label carries `wrap-break-words` — pins the class that makes height-only detection sufficient.                                                                       |
+| #      | Scenario                          | Given / When / Then                                                                                                                                                                                                                     |
+| ------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1     | renders the full name in the DOM  | Given a long hierarchical name, when the row renders, then the label's text content is the complete path — clipping is visual only, so screen readers already read the whole name.                                                      |
+| R2     | clamps rather than truncates      | Given any row, when it renders, then the label carries `line-clamp-2` and **not** `truncate`.                                                                                                                                           |
+| R3     | keeps the e2e handle              | Given a tag with id `t1`, when the row renders, then `data-testid="tags-item-t1"` is on the element that receives the click.                                                                                                            |
+| R4     | tooltip when clipped              | Given a label whose `scrollHeight` exceeds its `clientHeight`, when the row renders, then the button carries `data-tooltip-trigger`.                                                                                                    |
+| R5     | no tooltip when it fits           | Given a label whose `scrollHeight` equals its `clientHeight`, when the row renders, then the button carries no `data-tooltip-trigger`.                                                                                                  |
+| R6     | tooltip content on hover          | Given a clipped row, when a non-touch `pointerenter` fires and 700 ms elapse on fake timers, then the full name appears in tooltip content.                                                                                             |
+| ~~R7~~ | ~~tooltip content on focus~~      | **Removed — not testable.** `ignoreNonKeyboardFocus` requires `:focus-visible`, which happy-dom cannot produce. Moved to manual verification.                                                                                           |
+| R8     | toggling still works when clipped | Given a clipped row, when it is clicked, then `onToggle` is called with the tag id **and** the tooltip stays open (`disableCloseOnTriggerClick`) — pins that the `{...props}` spread has not broken selection on a tooltip-bearing row. |
+| R9     | toggling works when not clipped   | Given a fitting row rendering no tooltip at all, when it is clicked, then `onToggle` is called with the tag id — the `props.onclick?.()` optional call must tolerate the empty-props branch.                                            |
+| R10    | checked state                     | Given `checked` is true, then the checkmark renders and `aria-pressed` is `"true"`.                                                                                                                                                     |
+| R11    | unchecked state                   | Given `checked` is false, then no checkmark renders and `aria-pressed` is `"false"`.                                                                                                                                                    |
+| R12    | unbreakable token still clipped   | Given a single very long word with no break opportunity, then it wraps via `wrap-break-words` and overflows vertically, so the tooltip is present.                                                                                      |
+| R13    | dimmed variant                    | Given `dimmed` is true, then the row element carries `opacity-50` and `font-medium`.                                                                                                                                                    |
+| R14    | label allows mid-word breaks      | Given any row, then the label carries `wrap-break-words` — pins the class that makes height-only detection sufficient.                                                                                                                  |
 
 ### `web/src/lib/components/filter-panel/__tests__/tags-filter.spec.ts`
 
@@ -210,11 +220,12 @@ The 19 existing tests must keep passing; they are the regression suite for searc
 
 `scrollHeight > clientHeight` against `-webkit-line-clamp` is the standard detection technique, but happy-dom implements no layout, so **no automated test proves a real browser reports overflow for a clamped element**. Manual verification, recorded rather than assumed:
 
-1. A tag path long enough to exceed two lines shows a tooltip on hover and on keyboard focus.
-2. A short tag shows no tooltip.
-3. A tag that wraps to exactly two lines shows no tooltip.
-4. On a touch device, wrapped names are readable with no interaction.
-5. Clicking a tag with a tooltip attached still toggles the filter.
+1. A tag path long enough to exceed two lines shows a tooltip on hover.
+2. **The same row shows the tooltip when reached by keyboard `Tab`** — this is ex-scenario R7, which no automated test covers because `ignoreNonKeyboardFocus` needs a real `:focus-visible` that happy-dom cannot produce. It is the only accessibility path with no automated coverage, so it must be checked by hand.
+3. A short tag shows no tooltip.
+4. A tag that wraps to exactly two lines shows no tooltip.
+5. On a touch device, wrapped names are readable with no interaction.
+6. Clicking a tag with a tooltip attached still toggles the filter.
 
 ## Not included
 
