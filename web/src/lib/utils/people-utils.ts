@@ -146,7 +146,11 @@ export const getFaceCropTransform = (face: FaceBox): FaceCropTransform => {
   const bw = (face.boundingBoxX2 - face.boundingBoxX1) / face.imageWidth;
   const bh = (face.boundingBoxY2 - face.boundingBoxY1) / face.imageHeight;
 
-  if (!(bw > 0) || !(bh > 0) || bw >= 1 || bh >= 1) {
+  // Number.isFinite rather than `bw <= 0`: imageWidth/imageHeight can be 0, and 0/0 is NaN. `!(NaN > 0)` is
+  // true but `NaN <= 0` is false, so the obvious rewrite the linter suggests would silently drop the NaN
+  // guard and let a garbage transform through. This form also catches ±Infinity explicitly, which the old
+  // code only caught incidentally via the `>= 1` bound.
+  if (!Number.isFinite(bw) || !Number.isFinite(bh) || bw <= 0 || bh <= 0 || bw >= 1 || bh >= 1) {
     return { backgroundSize: 'cover', backgroundPosition: 'center' };
   }
 

@@ -451,11 +451,16 @@ test.describe.serial('Face Cleanup', () => {
 
     // This Apply discards a face ("not a face" is irreversible), so it must be confirmed before anything is sent.
     await page.locator('[data-testid="apply-btn"]').click();
-    await expect(page.locator('[data-testid="detach-confirm"]')).toBeVisible({ timeout: 10_000 });
+    // The hand-rolled `detach-confirm` overlay these testids targeted is gone — the page now uses
+    // @immich/ui's ConfirmModal (modalManager.show), which renders a role=dialog and takes no testid. Target
+    // the dialog and its confirm button by accessible name, the pattern the other web specs already use.
+    const detachDialog = page.getByRole('dialog');
+    await expect(detachDialog).toBeVisible({ timeout: 10_000 });
+    await expect(detachDialog.getByText(/not a face/i)).toBeVisible();
 
     const [resolveRequest] = await Promise.all([
       page.waitForRequest((req) => req.url().includes('/admin/face-repair/resolve') && req.method() === 'POST'),
-      page.locator('[data-testid="detach-confirm-cta"]').click(),
+      detachDialog.getByRole('button', { name: /Yes, discard/i }).click(),
     ]);
 
     const payload = resolveRequest.postDataJSON() as {
@@ -951,14 +956,16 @@ test.describe.serial('Face Cleanup', () => {
 
     // "Not a face" is irreversible, so Apply confirms before sending anything.
     await page.locator('[data-testid="manual-review-apply-btn"]').click();
-    await expect(page.locator('[data-testid="manual-review-detach-confirm"]')).toBeVisible({ timeout: 10_000 });
+    // Same ConfirmModal as the guided review page above — see the note there.
+    const manualDetachDialog = page.getByRole('dialog');
+    await expect(manualDetachDialog).toBeVisible({ timeout: 10_000 });
 
     const [resolveRequest, resolveResponse] = await Promise.all([
       page.waitForRequest((req) => req.url().includes('/admin/face-repair/resolve') && req.method() === 'POST'),
       page.waitForResponse(
         (res) => res.url().includes('/admin/face-repair/resolve') && res.request().method() === 'POST',
       ),
-      page.locator('[data-testid="manual-review-detach-confirm-cta"]').click(),
+      manualDetachDialog.getByRole('button', { name: /Yes, discard/i }).click(),
     ]);
     expect(resolveResponse.ok()).toBe(true);
 

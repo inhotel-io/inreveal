@@ -20,12 +20,23 @@
  * that IS surfaced under otherwise-identical conditions. Without it, "the locked face is not offered" would
  * pass just as happily if the endpoint returned nothing at all.
  */
-import { SharedSpaceRole, updateConfig, updateSpace, type LoginResponseDto } from '@immich/sdk';
+import {
+  getFaceRepairPersonFaces,
+  SharedSpaceRole,
+  updateConfig,
+  updateSpace,
+  type LoginResponseDto,
+} from '@immich/sdk';
 import { expect, test } from '@playwright/test';
 import { createUserDto } from 'src/fixtures';
 import { asBearerAuth, utils } from 'src/utils';
 
 const bearer = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+// getScanFlaggedFaces joins face_search (sourceType=MachineLearning AND visible AND HAS an embedding), so a
+// flagged face with no embedding row is silently invisible to the console. Same fixed literal the sibling
+// suite uses — no real ANN search runs against it.
+const EMBEDDING = '[' + Array.from({ length: 512 }, () => 1).join(',') + ']';
 
 test.describe.serial('Face review cross-engine', () => {
   let admin: LoginResponseDto;
@@ -150,13 +161,36 @@ test.describe.serial('Face review cross-engine', () => {
 
     const { rows: scanRows } = await db.query<{ id: string }>(
       `INSERT INTO "face_repair_scan" ("status", "requestedBy", "totals", "persons", "startedAt", "finishedAt")
-       VALUES ('completed', $1, '{}'::jsonb, '[]'::jsonb, now(), now())
+       VALUES ('completed', $1, $2::jsonb, $3::jsonb, now(), now())
        RETURNING id`,
-      [admin.userId],
+      [
+        admin.userId,
+        JSON.stringify({ eligibleFaces: 2, flaggedFaces: 2, reviewOnlyFaces: 2, affectedPersons: 1 }),
+        JSON.stringify([
+          {
+            personId: cluster.id,
+            ownerId: admin.userId,
+            personName: null,
+            faceCount: 2,
+            thumbnailFaceId: null,
+            eligible: 2,
+            flagged: 2,
+            flaggedFraction: 1,
+            suspectedOwners: [{ ownerPersonId: suspected.id, ownerName: null, thumbnailFaceId: null, count: 2 }],
+            recommendation: 'review-first',
+            reviewReasons: [],
+          },
+        ]),
+      ],
     );
     const scanId = scanRows[0].id;
 
     for (const faceId of [controlFlagged, lockedFlagged]) {
+      await db.query(
+        `INSERT INTO "face_search" ("faceId", "embedding") VALUES ($1, $2::vector)
+         ON CONFLICT ("faceId") DO NOTHING`,
+        [faceId, EMBEDDING],
+      );
       // A face a real scan would cluster is an ML attribution, not a human placement; left as 'manual'
       // (utils.createFace's shortcut) the verdict layer reads it as already settled and the assertions below
       // go vacuous. Same downgrade the sibling suite performs — see face-cleanup.e2e-spec.ts.
@@ -168,14 +202,14 @@ test.describe.serial('Face review cross-engine', () => {
       );
     }
 
-    const consoleResponse = await page.request.get(`/api/admin/face-repair/person/${cluster.id}`, {
-      headers: bearer(admin.accessToken),
-    });
-    expect(consoleResponse.status()).toBe(200);
-    const consoleBody = await consoleResponse.json();
-    const consoleFaceIds: string[] = (consoleBody.flaggedFaces ?? []).map(
-      (f: { assetFaceId: string }) => f.assetFaceId,
+    // `admin/face-repair/person/:id` is the MANUAL review page's metadata route and carries no flaggedFaces
+    // at all — reading it here silently yielded an empty list. The flagged-faces reader is
+    // `scan/person/:id`, which this SDK call wraps, same as face-cleanup.e2e-spec.ts uses.
+    const consoleBody = await getFaceRepairPersonFaces(
+      { personId: cluster.id },
+      { headers: bearer(admin.accessToken) },
     );
+    const consoleFaceIds: string[] = consoleBody.flaggedFaces.map((f) => f.assetFaceId);
     // Control first: the identically-seeded face on an ordinary asset IS surfaced, so the absence below is
     // about the Locked policy and not about the console being empty.
     expect(consoleFaceIds).toContain(controlFlagged);
