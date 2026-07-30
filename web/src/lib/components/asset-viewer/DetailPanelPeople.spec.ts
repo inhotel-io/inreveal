@@ -1,7 +1,9 @@
 import { AssetTypeEnum, type AssetResponseDto, type PersonResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { screen, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { tick } from 'svelte';
+import { get } from 'svelte/store';
 import { cropFacesFromAsset } from '$lib/stores/preferences.store';
 import { renderWithTooltips } from '$tests/helpers';
 import { assetFactory } from '@test-data/factories/asset-factory';
@@ -500,6 +502,62 @@ describe('DetailPanelPeople', () => {
       await tick();
 
       expect(container.querySelector('img')?.getAttribute('src')).toContain('/assets/asset-2/');
+    });
+  });
+
+  describe('in-panel avatar source toggle', () => {
+    // The test harness's svelte-i18n instance (src/test-data/setup.ts) has no dictionaries
+    // registered, so $t() resolves to the raw key rather than translated English text — the same
+    // convention already used throughout this suite (e.g. `name: 'use_inherited_thumbnail'` in
+    // RepresentativeFacePickerModal.spec.ts, `name: 'link'` / `'save'` elsewhere).
+    const toggle = () => screen.queryByRole('button', { name: /show_profile_faces|show_faces_from_photo/ });
+
+    it('offers the owner a toggle that flips the store and relabels itself', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+
+      renderPanel({ isOwner: true });
+      await tick();
+
+      const button = screen.getByRole('button', { name: 'show_profile_faces' });
+      await userEvent.click(button);
+
+      expect(get(cropFacesFromAsset)).toBe(false);
+      expect(screen.getByRole('button', { name: 'show_faces_from_photo' })).toBeInTheDocument();
+    });
+
+    it('offers the toggle to a space member who is not the owner', async () => {
+      const bob = spacePerson('Bob', 'space-person-1');
+      givePersonAFace('person-Bob');
+
+      renderPanel({ isOwner: false, spaceId: 'space-1', people: [bob] });
+      await tick();
+
+      // Proves the button sits OUTSIDE the {#if isOwner} gate.
+      expect(toggle()).toBeInTheDocument();
+    });
+
+    it('hides the toggle from a viewer with no reachable profile face', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+
+      renderPanel({ isOwner: false });
+      await tick();
+
+      // Nothing to switch to — a control that cannot change anything must not be offered.
+      expect(toggle()).not.toBeInTheDocument();
+    });
+
+    it('hides the toggle when the asset has no people, keeping the add-face affordance', async () => {
+      faceManagerMock.people = [];
+      faceManagerMock.data = [];
+      faceManagerMock.facesByPersonId = new Map();
+
+      renderPanel({ isOwner: true });
+      await tick();
+
+      expect(toggle()).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'tag_people' })).toBeInTheDocument();
     });
   });
 });
