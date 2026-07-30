@@ -53,7 +53,7 @@ class FaceRepairOwnerPeopleResponseDtoPeopleInner {
     if (this.thumbnailFaceId != null) {
       json[r'thumbnailFaceId'] = this.thumbnailFaceId;
     } else {
-    //  json[r'thumbnailFaceId'] = null;
+      json[r'thumbnailFaceId'] = null;
     }
     return json;
   }

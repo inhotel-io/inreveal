@@ -184,7 +184,7 @@ class SharedSpacesApi {
 
   /// Confirm a face suggestion for a person in a shared space
   ///
-  /// Assign the suggested face to the space person. Idempotent.
+  /// Assign the suggested face to the space person. Idempotent. 204 if there was nothing to do.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -229,7 +229,7 @@ class SharedSpacesApi {
 
   /// Confirm a face suggestion for a person in a shared space
   ///
-  /// Assign the suggested face to the space person. Idempotent.
+  /// Assign the suggested face to the space person. Idempotent. 204 if there was nothing to do.
   ///
   /// Parameters:
   ///
@@ -467,7 +467,7 @@ class SharedSpacesApi {
 
   /// Dismiss a face suggestion for a person in a shared space
   ///
-  /// Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent.
+  /// Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -512,7 +512,7 @@ class SharedSpacesApi {
 
   /// Dismiss a face suggestion for a person in a shared space
   ///
-  /// Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent.
+  /// Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Parameters:
   ///
@@ -1799,7 +1799,7 @@ class SharedSpacesApi {
 
   /// Ignore a face suggestion for a person in a shared space
   ///
-  /// Ignore this suggestion for the space person. The face stays unassigned. Idempotent.
+  /// Ignore this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1844,7 +1844,7 @@ class SharedSpacesApi {
 
   /// Ignore a face suggestion for a person in a shared space
   ///
-  /// Ignore this suggestion for the space person. The face stays unassigned. Idempotent.
+  /// Ignore this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Parameters:
   ///
@@ -2083,7 +2083,7 @@ class SharedSpacesApi {
 
   /// Reject a face suggestion for a person in a shared space
   ///
-  /// Reject this suggestion for the space person. The face stays unassigned. Idempotent.
+  /// Reject this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -2128,7 +2128,7 @@ class SharedSpacesApi {
 
   /// Reject a face suggestion for a person in a shared space
   ///
-  /// Reject this suggestion for the space person. The face stays unassigned. Idempotent.
+  /// Reject this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Parameters:
   ///

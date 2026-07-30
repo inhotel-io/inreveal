@@ -567,7 +567,15 @@ class FacesApi {
   /// List face-repair resolutions (negative verdicts from both engines)
   ///
   /// Note: This method returns the HTTP [Response].
-  Future<Response> getFaceRepairResolutionsWithHttpInfo({ Future<void>? abortTrigger, }) async {
+  ///
+  /// Parameters:
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of resolutions per page
+  Future<Response> getFaceRepairResolutionsWithHttpInfo({ int? page, int? size, Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/admin/face-repair/resolutions';
 
@@ -577,6 +585,13 @@ class FacesApi {
     final queryParams = <QueryParam>[];
     final headerParams = <String, String>{};
     final formParams = <String, String>{};
+
+    if (page != null) {
+      queryParams.addAll(_queryParams('', 'page', page));
+    }
+    if (size != null) {
+      queryParams.addAll(_queryParams('', 'size', size));
+    }
 
     const contentTypes = <String>[];
 
@@ -594,8 +609,16 @@ class FacesApi {
   }
 
   /// List face-repair resolutions (negative verdicts from both engines)
-  Future<FaceRepairResolutionsListDto?> getFaceRepairResolutions({ Future<void>? abortTrigger, }) async {
-    final response = await getFaceRepairResolutionsWithHttpInfo(abortTrigger: abortTrigger,);
+  ///
+  /// Parameters:
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of resolutions per page
+  Future<FaceRepairResolutionsListDto?> getFaceRepairResolutions({ int? page, int? size, Future<void>? abortTrigger, }) async {
+    final response = await getFaceRepairResolutionsWithHttpInfo(page: page, size: size, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

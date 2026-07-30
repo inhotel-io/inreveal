@@ -80,39 +80,39 @@ class FaceRepairDeclineListDtoDeclinesInner {
     if (this.assetFaceId != null) {
       json[r'assetFaceId'] = this.assetFaceId;
     } else {
-    //  json[r'assetFaceId'] = null;
+      json[r'assetFaceId'] = null;
     }
       json[r'createdAt'] = this.createdAt.toUtc().toIso8601String();
       json[r'id'] = this.id;
     if (this.personId != null) {
       json[r'personId'] = this.personId;
     } else {
-    //  json[r'personId'] = null;
+      json[r'personId'] = null;
     }
     if (this.personName != null) {
       json[r'personName'] = this.personName;
     } else {
-    //  json[r'personName'] = null;
+      json[r'personName'] = null;
     }
     if (this.personThumbnailFaceId != null) {
       json[r'personThumbnailFaceId'] = this.personThumbnailFaceId;
     } else {
-    //  json[r'personThumbnailFaceId'] = null;
+      json[r'personThumbnailFaceId'] = null;
     }
     if (this.suspectedOwnerId != null) {
       json[r'suspectedOwnerId'] = this.suspectedOwnerId;
     } else {
-    //  json[r'suspectedOwnerId'] = null;
+      json[r'suspectedOwnerId'] = null;
     }
     if (this.suspectedOwnerName != null) {
       json[r'suspectedOwnerName'] = this.suspectedOwnerName;
     } else {
-    //  json[r'suspectedOwnerName'] = null;
+      json[r'suspectedOwnerName'] = null;
     }
     if (this.suspectedOwnerThumbnailFaceId != null) {
       json[r'suspectedOwnerThumbnailFaceId'] = this.suspectedOwnerThumbnailFaceId;
     } else {
-    //  json[r'suspectedOwnerThumbnailFaceId'] = null;
+      json[r'suspectedOwnerThumbnailFaceId'] = null;
     }
       json[r'type'] = this.type;
     return json;

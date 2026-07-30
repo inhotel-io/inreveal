@@ -18,7 +18,7 @@ class PeopleApi {
 
   /// Confirm a face suggestion
   ///
-  /// Assign the suggested face to the person. Idempotent.
+  /// Assign the suggested face to the person. Idempotent. 204 if there was nothing to do.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -59,7 +59,7 @@ class PeopleApi {
 
   /// Confirm a face suggestion
   ///
-  /// Assign the suggested face to the person. Idempotent.
+  /// Assign the suggested face to the person. Idempotent. 204 if there was nothing to do.
   ///
   /// Parameters:
   ///
@@ -282,7 +282,7 @@ class PeopleApi {
 
   /// Dismiss a face suggestion
   ///
-  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent.
+  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -323,7 +323,7 @@ class PeopleApi {
 
   /// Dismiss a face suggestion
   ///
-  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent.
+  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Parameters:
   ///
@@ -1056,7 +1056,7 @@ class PeopleApi {
 
   /// Ignore a face suggestion
   ///
-  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent.
+  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1097,7 +1097,7 @@ class PeopleApi {
 
   /// Ignore a face suggestion
   ///
-  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent.
+  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Parameters:
   ///
@@ -1294,7 +1294,7 @@ class PeopleApi {
 
   /// Reject a face suggestion
   ///
-  /// Reject this suggestion for the person. The face stays unassigned. Idempotent.
+  /// Reject this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1335,7 +1335,7 @@ class PeopleApi {
 
   /// Reject a face suggestion
   ///
-  /// Reject this suggestion for the person. The face stays unassigned. Idempotent.
+  /// Reject this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
   ///
   /// Parameters:
   ///

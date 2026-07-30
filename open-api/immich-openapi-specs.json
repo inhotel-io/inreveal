@@ -977,7 +977,32 @@
     "/admin/face-repair/resolutions": {
       "get": {
         "operationId": "getFaceRepairResolutions",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number",
+            "schema": {
+              "minimum": 1,
+              "maximum": 9007199254740991,
+              "default": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "description": "Number of resolutions per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10812,13 +10837,13 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "person.read",
+        "x-immich-permission": "person.update",
         "x-immich-state": "Beta"
       }
     },
     "/people/{id}/face-suggestions/{assetFaceId}/confirm": {
       "post": {
-        "description": "Assign the suggested face to the person. Idempotent.",
+        "description": "Assign the suggested face to the person. Idempotent. 204 if there was nothing to do.",
         "operationId": "confirmPersonFaceSuggestion",
         "parameters": [
           {
@@ -10874,13 +10899,13 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "person.reassign",
+        "x-immich-permission": "person.update",
         "x-immich-state": "Beta"
       }
     },
     "/people/{id}/face-suggestions/{assetFaceId}/dismiss": {
       "post": {
-        "description": "Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent.",
+        "description": "Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
         "operationId": "dismissPersonFaceSuggestion",
         "parameters": [
           {
@@ -10942,7 +10967,7 @@
     },
     "/people/{id}/face-suggestions/{assetFaceId}/ignore": {
       "post": {
-        "description": "Ignore this suggestion for the person. The face stays unassigned. Idempotent.",
+        "description": "Ignore this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
         "operationId": "ignorePersonFaceSuggestion",
         "parameters": [
           {
@@ -11004,7 +11029,7 @@
     },
     "/people/{id}/face-suggestions/{assetFaceId}/reject": {
       "post": {
-        "description": "Reject this suggestion for the person. The face stays unassigned. Idempotent.",
+        "description": "Reject this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
         "operationId": "rejectPersonFaceSuggestion",
         "parameters": [
           {
@@ -17786,7 +17811,7 @@
     },
     "/shared-spaces/{id}/people/{personId}/face-suggestions/{assetFaceId}/confirm": {
       "post": {
-        "description": "Assign the suggested face to the space person. Idempotent.",
+        "description": "Assign the suggested face to the space person. Idempotent. 204 if there was nothing to do.",
         "operationId": "confirmSpacePersonFaceSuggestion",
         "parameters": [
           {
@@ -17859,7 +17884,7 @@
     },
     "/shared-spaces/{id}/people/{personId}/face-suggestions/{assetFaceId}/dismiss": {
       "post": {
-        "description": "Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent.",
+        "description": "Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
         "operationId": "dismissSpacePersonFaceSuggestion",
         "parameters": [
           {
@@ -17932,7 +17957,7 @@
     },
     "/shared-spaces/{id}/people/{personId}/face-suggestions/{assetFaceId}/ignore": {
       "post": {
-        "description": "Ignore this suggestion for the space person. The face stays unassigned. Idempotent.",
+        "description": "Ignore this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
         "operationId": "ignoreSpacePersonFaceSuggestion",
         "parameters": [
           {
@@ -18005,7 +18030,7 @@
     },
     "/shared-spaces/{id}/people/{personId}/face-suggestions/{assetFaceId}/reject": {
       "post": {
-        "description": "Reject this suggestion for the space person. The face stays unassigned. Idempotent.",
+        "description": "Reject this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
         "operationId": "rejectSpacePersonFaceSuggestion",
         "parameters": [
           {
@@ -26486,6 +26511,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             },
+            "maxItems": 25000,
             "type": "array"
           },
           "page": {
@@ -26940,6 +26966,10 @@
                   "nullable": true,
                   "type": "string"
                 },
+                "spacePersonThumbnailFaceId": {
+                  "nullable": true,
+                  "type": "string"
+                },
                 "status": {
                   "type": "string"
                 }
@@ -26954,6 +26984,7 @@
                 "personThumbnailFaceId",
                 "spacePersonId",
                 "spacePersonName",
+                "spacePersonThumbnailFaceId",
                 "spaceName",
                 "actorId",
                 "actorName",
@@ -26962,10 +26993,16 @@
               "type": "object"
             },
             "type": "array"
+          },
+          "total": {
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "required": [
-          "resolutions"
+          "resolutions",
+          "total"
         ],
         "type": "object"
       },
@@ -26978,6 +27015,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
               "type": "string"
             },
+            "maxItems": 25000,
             "minItems": 1,
             "type": "array"
           },
@@ -26987,6 +27025,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
               "type": "string"
             },
+            "maxItems": 25000,
             "minItems": 1,
             "type": "array"
           }
@@ -27361,6 +27400,7 @@
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
               "type": "string"
             },
+            "maxItems": 25000,
             "minItems": 1,
             "type": "array"
           }

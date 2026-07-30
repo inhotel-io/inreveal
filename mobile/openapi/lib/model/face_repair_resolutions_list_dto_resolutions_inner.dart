@@ -25,6 +25,7 @@ class FaceRepairResolutionsListDtoResolutionsInner {
     required this.spaceName,
     required this.spacePersonId,
     required this.spacePersonName,
+    required this.spacePersonThumbnailFaceId,
     required this.status,
   });
 
@@ -52,6 +53,8 @@ class FaceRepairResolutionsListDtoResolutionsInner {
 
   String? spacePersonName;
 
+  String? spacePersonThumbnailFaceId;
+
   String status;
 
   @override
@@ -68,6 +71,7 @@ class FaceRepairResolutionsListDtoResolutionsInner {
     other.spaceName == spaceName &&
     other.spacePersonId == spacePersonId &&
     other.spacePersonName == spacePersonName &&
+    other.spacePersonThumbnailFaceId == spacePersonThumbnailFaceId &&
     other.status == status;
 
   @override
@@ -85,22 +89,23 @@ class FaceRepairResolutionsListDtoResolutionsInner {
     (spaceName == null ? 0 : spaceName!.hashCode) +
     (spacePersonId == null ? 0 : spacePersonId!.hashCode) +
     (spacePersonName == null ? 0 : spacePersonName!.hashCode) +
+    (spacePersonThumbnailFaceId == null ? 0 : spacePersonThumbnailFaceId!.hashCode) +
     (status.hashCode);
 
   @override
-  String toString() => 'FaceRepairResolutionsListDtoResolutionsInner[actorId=$actorId, actorName=$actorName, assetFaceId=$assetFaceId, createdAt=$createdAt, id=$id, personId=$personId, personName=$personName, personThumbnailFaceId=$personThumbnailFaceId, source_=$source_, spaceName=$spaceName, spacePersonId=$spacePersonId, spacePersonName=$spacePersonName, status=$status]';
+  String toString() => 'FaceRepairResolutionsListDtoResolutionsInner[actorId=$actorId, actorName=$actorName, assetFaceId=$assetFaceId, createdAt=$createdAt, id=$id, personId=$personId, personName=$personName, personThumbnailFaceId=$personThumbnailFaceId, source_=$source_, spaceName=$spaceName, spacePersonId=$spacePersonId, spacePersonName=$spacePersonName, spacePersonThumbnailFaceId=$spacePersonThumbnailFaceId, status=$status]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
     if (this.actorId != null) {
       json[r'actorId'] = this.actorId;
     } else {
-    //  json[r'actorId'] = null;
+      json[r'actorId'] = null;
     }
     if (this.actorName != null) {
       json[r'actorName'] = this.actorName;
     } else {
-    //  json[r'actorName'] = null;
+      json[r'actorName'] = null;
     }
       json[r'assetFaceId'] = this.assetFaceId;
       json[r'createdAt'] = this.createdAt.toUtc().toIso8601String();
@@ -108,33 +113,38 @@ class FaceRepairResolutionsListDtoResolutionsInner {
     if (this.personId != null) {
       json[r'personId'] = this.personId;
     } else {
-    //  json[r'personId'] = null;
+      json[r'personId'] = null;
     }
     if (this.personName != null) {
       json[r'personName'] = this.personName;
     } else {
-    //  json[r'personName'] = null;
+      json[r'personName'] = null;
     }
     if (this.personThumbnailFaceId != null) {
       json[r'personThumbnailFaceId'] = this.personThumbnailFaceId;
     } else {
-    //  json[r'personThumbnailFaceId'] = null;
+      json[r'personThumbnailFaceId'] = null;
     }
       json[r'source'] = this.source_;
     if (this.spaceName != null) {
       json[r'spaceName'] = this.spaceName;
     } else {
-    //  json[r'spaceName'] = null;
+      json[r'spaceName'] = null;
     }
     if (this.spacePersonId != null) {
       json[r'spacePersonId'] = this.spacePersonId;
     } else {
-    //  json[r'spacePersonId'] = null;
+      json[r'spacePersonId'] = null;
     }
     if (this.spacePersonName != null) {
       json[r'spacePersonName'] = this.spacePersonName;
     } else {
-    //  json[r'spacePersonName'] = null;
+      json[r'spacePersonName'] = null;
+    }
+    if (this.spacePersonThumbnailFaceId != null) {
+      json[r'spacePersonThumbnailFaceId'] = this.spacePersonThumbnailFaceId;
+    } else {
+      json[r'spacePersonThumbnailFaceId'] = null;
     }
       json[r'status'] = this.status;
     return json;
@@ -161,6 +171,7 @@ class FaceRepairResolutionsListDtoResolutionsInner {
         spaceName: mapValueOfType<String>(json, r'spaceName'),
         spacePersonId: mapValueOfType<String>(json, r'spacePersonId'),
         spacePersonName: mapValueOfType<String>(json, r'spacePersonName'),
+        spacePersonThumbnailFaceId: mapValueOfType<String>(json, r'spacePersonThumbnailFaceId'),
         status: mapValueOfType<String>(json, r'status')!,
       );
     }
@@ -221,6 +232,7 @@ class FaceRepairResolutionsListDtoResolutionsInner {
     'spaceName',
     'spacePersonId',
     'spacePersonName',
+    'spacePersonThumbnailFaceId',
     'status',
   };
 }

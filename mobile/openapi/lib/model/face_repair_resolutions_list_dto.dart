@@ -14,25 +14,33 @@ class FaceRepairResolutionsListDto {
   /// Returns a new [FaceRepairResolutionsListDto] instance.
   FaceRepairResolutionsListDto({
     this.resolutions = const [],
+    required this.total,
   });
 
   List<FaceRepairResolutionsListDtoResolutionsInner> resolutions;
 
+  /// Minimum value: 0
+  /// Maximum value: 9007199254740991
+  int total;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is FaceRepairResolutionsListDto &&
-    _deepEquality.equals(other.resolutions, resolutions);
+    _deepEquality.equals(other.resolutions, resolutions) &&
+    other.total == total;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (resolutions.hashCode);
+    (resolutions.hashCode) +
+    (total.hashCode);
 
   @override
-  String toString() => 'FaceRepairResolutionsListDto[resolutions=$resolutions]';
+  String toString() => 'FaceRepairResolutionsListDto[resolutions=$resolutions, total=$total]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'resolutions'] = this.resolutions;
+      json[r'total'] = this.total;
     return json;
   }
 
@@ -46,6 +54,7 @@ class FaceRepairResolutionsListDto {
 
       return FaceRepairResolutionsListDto(
         resolutions: FaceRepairResolutionsListDtoResolutionsInner.listFromJson(json[r'resolutions']),
+        total: mapValueOfType<int>(json, r'total')!,
       );
     }
     return null;
@@ -94,6 +103,7 @@ class FaceRepairResolutionsListDto {
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
     'resolutions',
+    'total',
   };
 }
 

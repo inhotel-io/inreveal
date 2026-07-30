@@ -193,8 +193,10 @@ export type FaceRepairResolutionsListDto = {
         spaceName: string | null;
         spacePersonId: string | null;
         spacePersonName: string | null;
+        spacePersonThumbnailFaceId: string | null;
         status: string;
     }[];
+    total: number;
 };
 export type FaceRepairResolutionsRemoveRequestDto = {
     clusterMuteIds?: string[];
@@ -4688,11 +4690,17 @@ export function getFaceRepairPersonMetadata({ personId }: {
 /**
  * List face-repair resolutions (negative verdicts from both engines)
  */
-export function getFaceRepairResolutions(opts?: Oazapfts.RequestOpts) {
+export function getFaceRepairResolutions({ page, size }: {
+    page?: number;
+    size?: number;
+}, opts?: Oazapfts.RequestOpts) {
     return oazapfts.ok(oazapfts.fetchJson<{
         status: 200;
         data: FaceRepairResolutionsListDto;
-    }>("/admin/face-repair/resolutions", {
+    }>(`/admin/face-repair/resolutions${QS.query(QS.explode({
+        page,
+        size
+    }))}`, {
         ...opts
     }));
 }
