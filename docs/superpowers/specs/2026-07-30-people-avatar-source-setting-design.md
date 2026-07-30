@@ -297,6 +297,23 @@ the People section renders empty and the spec proves nothing. Slice 7 must there
 **non-zero** bounding box. `**/api/people/*/thumbnail` is already mocked in `face-editor-network.ts`
 and can be reused, as can `randomThumbnail` from `e2e/src/ui/generators/timeline/images.ts`.
 
+**Running the `ui` project locally without touching the shared Docker stack.** The `ui` project's
+`webServer` points at the machine-wide `immich-e2e` compose stack on `:2285`, which other sessions
+may be using and which serves a _stale_ web bundle — useless for verifying new UI. Because the
+`ui` suite mocks every `/api/*` route, it only needs the web app served. Build and preview locally
+instead:
+
+```bash
+cd web && pnpm build && pnpm preview --port 4173 --host 127.0.0.1   # leave running
+cd e2e && PLAYWRIGHT_DISABLE_WEBSERVER=1 PLAYWRIGHT_BASE_URL=http://127.0.0.1:4173 \
+  pnpm exec playwright test --project=ui
+```
+
+Two prerequisites: `git submodule update --init e2e/test-assets` (empty in a fresh worktree —
+`e2e/src/utils.ts` throws at import without it, which surfaces as a confusing "No tests found"),
+and a **rebuild + preview restart** after any web change, or Playwright silently tests the old
+bundle. Verified: 100 `ui` tests pass this way.
+
 **Do not make the e2e depend on a successful crop.** Producing one requires the on-screen `<img>`
 to decode and survive `canvas.toDataURL()` in the mocked environment; that is an unproven
 prerequisite and not worth blocking on. Assert instead that the avatar `src` is **not** the person

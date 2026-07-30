@@ -246,10 +246,10 @@ Expected: PASS, 34 tests.
 
 - [ ] **Step 5: Mutation-verify the two guard tests**
 
-| Test                                          | Mutation                                                              | Must go red |
-| --------------------------------------------- | --------------------------------------------------------------------- | ----------- |
-| hides the toggle from a viewer with no profile face | Replace `{#if canChooseAvatarSource}` with `{#if true}`          | yes — and `offers no face editing controls to a non-owner` should go red too |
-| hides the toggle when the asset has no people | Replace `{#if canChooseAvatarSource}` with `{#if true}`               | yes         |
+| Test                                                | Mutation                                                | Must go red                                                                  |
+| --------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| hides the toggle from a viewer with no profile face | Replace `{#if canChooseAvatarSource}` with `{#if true}` | yes — and `offers no face editing controls to a non-owner` should go red too |
+| hides the toggle when the asset has no people       | Replace `{#if canChooseAvatarSource}` with `{#if true}` | yes                                                                          |
 
 Revert with `git checkout web/src/lib/components/asset-viewer/DetailPanelPeople.svelte` and confirm 34/34 green again.
 
