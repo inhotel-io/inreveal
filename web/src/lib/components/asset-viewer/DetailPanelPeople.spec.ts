@@ -2,6 +2,7 @@ import { AssetTypeEnum, type AssetResponseDto, type PersonResponseDto } from '@i
 import '@testing-library/jest-dom';
 import { screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
+import { cropFacesFromAsset } from '$lib/stores/preferences.store';
 import { renderWithTooltips } from '$tests/helpers';
 import { assetFactory } from '@test-data/factories/asset-factory';
 import DetailPanelPeople from './DetailPanelPeople.svelte';
@@ -120,6 +121,9 @@ const settleCrop = async () => {
 // fall back to, which is why they stay on the asset crop unconditionally.
 describe('DetailPanelPeople', () => {
   beforeEach(() => {
+    // Real localStorage-backed store: a flip in one test leaks into every later test (and into
+    // preferences.store.spec.ts) unless it is reset here.
+    cropFacesFromAsset.set(true);
     faceManagerMock.people = [];
     faceManagerMock.data = [];
     faceManagerMock.facesByPersonId = new Map();
@@ -344,6 +348,123 @@ describe('DetailPanelPeople', () => {
       const img = container.querySelector('img');
       expect(img).not.toBeNull();
       expect(img?.getAttribute('src')).toContain('/people/');
+    });
+  });
+
+  describe('avatar source setting', () => {
+    it('shows the profile face and never computes a crop when the setting is off', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      zoomImageToBase64Mock.mockResolvedValue(CROP_DATA_URL);
+      cropFacesFromAsset.set(false);
+
+      const { container } = renderPanel({ isOwner: true });
+      await tick();
+
+      // Not merely "not displayed" — not attempted. The crop decodes the full-size image and runs
+      // a canvas draw per person, so skipping it is the performance half of this feature.
+      expect(zoomImageToBase64Mock).not.toHaveBeenCalled();
+      expect(container.querySelector('img')?.getAttribute('src')).toContain('/people/');
+    });
+
+    it('still crops when the setting is on', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      zoomImageToBase64Mock.mockResolvedValue(CROP_DATA_URL);
+      cropFacesFromAsset.set(true);
+
+      const { container } = renderPanel({ isOwner: true });
+      await settleCrop();
+
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(CROP_DATA_URL);
+    });
+
+    it('shows the space profile face to a space member when the setting is off', async () => {
+      const bob = spacePerson('Bob', 'space-person-1');
+      givePersonAFace('person-Bob');
+      cropFacesFromAsset.set(false);
+
+      const { container } = renderPanel({ isOwner: false, spaceId: 'space-1', people: [bob] });
+      await tick();
+
+      expect(zoomImageToBase64Mock).not.toHaveBeenCalled();
+      expect(container.querySelector('img')?.getAttribute('src')).toContain(
+        '/shared-spaces/space-1/people/space-person-1/thumbnail',
+      );
+    });
+
+    it('KEEPS cropping for a viewer with no reachable profile face even when the setting is off', async () => {
+      // The regression guard. Turning the setting off must not give an album/partner viewer the
+      // whole photo as every person's avatar — they have no profile face to switch to.
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      zoomImageToBase64Mock.mockResolvedValue(CROP_DATA_URL);
+      cropFacesFromAsset.set(false);
+
+      const { container } = renderPanel({ isOwner: false });
+      await settleCrop();
+
+      expect(zoomImageToBase64Mock).toHaveBeenCalledTimes(1);
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(CROP_DATA_URL);
+    });
+
+    it('uses the owner profile face for the owner inside a space when the setting is off', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      cropFacesFromAsset.set(false);
+
+      const { container } = renderPanel({ isOwner: true, spaceId: 'space-1' });
+      await tick();
+
+      // The "not called" assertion is what makes this a driver rather than a passenger: without
+      // it the URL assertion passes even before the fix, because the pending crop branch already
+      // renders this same fallback.
+      expect(zoomImageToBase64Mock).not.toHaveBeenCalled();
+      const src = container.querySelector('img')?.getAttribute('src');
+      expect(src).toContain('/people/');
+      expect(src).not.toContain('/shared-spaces/');
+    });
+
+    it('does not fetch video media for a crop nobody will see when the setting is off', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      cropFacesFromAsset.set(false);
+
+      renderPanel({ isOwner: true, assetType: AssetTypeEnum.Video });
+      await tick();
+
+      expect(zoomImageToBase64Mock).not.toHaveBeenCalled();
+    });
+
+    it('updates the rendered avatar when the setting is flipped on a live panel', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      zoomImageToBase64Mock.mockResolvedValue(CROP_DATA_URL);
+
+      const { container } = renderPanel({ isOwner: true });
+      await settleCrop();
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(CROP_DATA_URL);
+
+      cropFacesFromAsset.set(false);
+      await tick();
+
+      // Same container, no re-render call: the change must propagate through reactivity alone.
+      expect(container.querySelector('img')?.getAttribute('src')).toContain('/people/');
+    });
+
+    it('keeps hidden-people filtering, links and age rendering intact when the setting is off', async () => {
+      const alice = person('Alice');
+      const hidden = { ...person('Hidden'), isHidden: true } as PersonResponseDto;
+      faceManagerMock.people = [alice, hidden];
+      faceManagerMock.facesByPersonId = new Map();
+      cropFacesFromAsset.set(false);
+
+      renderPanel({ isOwner: true });
+      await tick();
+
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(screen.queryByText('Hidden')).not.toBeInTheDocument();
+      expect(screen.getByRole('link')).toBeInTheDocument();
     });
   });
 });

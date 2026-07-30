@@ -5,7 +5,7 @@
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { Route } from '$lib/route';
   import { faceManager } from '$lib/stores/face.svelte';
-  import { locale } from '$lib/stores/preferences.store';
+  import { cropFacesFromAsset, locale } from '$lib/stores/preferences.store';
   import { getAssetUrls } from '$lib/utils';
   import {
     buildContextualFilterUrl,
@@ -182,7 +182,7 @@
           isOwner,
           spaceId,
           hasFaceInAsset: personFaces.length > 0,
-          cropFacesFromAsset: true,
+          cropFacesFromAsset: $cropFacesFromAsset,
           assetThumbnailUrl: getAssetUrls(asset).thumbnail,
         })}
         {@const filterHref = getPersonFilterHref(person)}
