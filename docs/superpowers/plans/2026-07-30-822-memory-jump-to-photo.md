@@ -44,15 +44,19 @@
 
 **Files:**
 
+- Modify: `mobile/lib/presentation/widgets/timeline/segment.model.dart` (add an `isOverview` getter to `Segment`)
+- Modify: `mobile/lib/presentation/widgets/timeline/overview/overview_segment.model.dart` (override it)
 - Modify: `mobile/lib/presentation/widgets/timeline/scroll_drain.dart`
 - Test: `mobile/test/presentation/widgets/timeline/scroll_drain_test.dart`
 
 **Interfaces:**
 
 - Consumes: nothing.
-- Produces: `bool segmentsAreOverview(List<Segment>? segments)` — used by Task 2's widget wiring.
+- Produces: `bool get Segment.isOverview` and `bool segmentsAreOverview(List<Segment>? segments)` — used by Task 2's widget wiring.
 
 **Why this exists:** `timeline.state.dart:97-107` chooses the overview builder from `timelineArgsProvider.groupBy ?? timelineGroupingProvider`, then overrides it to `day` when the bucket source is dateless. A `TimelineRouteScope` can also swap in a route-local grouping notifier. Reading the grouping provider would disagree with the screen in all three cases, and a "switch to day" that changes nothing would spin until the attempt budget expired, silently dropping the request.
+
+**Why a getter rather than an `is TimelineOverviewSegment` check in `scroll_drain.dart`:** `overview_segment.model.dart` imports `hooks_riverpod`, `overview_drilldown.provider.dart`, and `overview_representative_cache.provider.dart`. Type-testing against it from `scroll_drain.dart` would drag Riverpod and two providers into what is otherwise a dependency-light decision file. A segment already knows what it renders, so the knowledge belongs on the model.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -128,10 +132,24 @@ Expected: FAIL to compile — `The function 'segmentsAreOverview' isn't defined`
 
 - [ ] **Step 3: Implement**
 
-In `mobile/lib/presentation/widgets/timeline/scroll_drain.dart`, add these imports at the top:
+In `mobile/lib/presentation/widgets/timeline/segment.model.dart`, add this getter to the abstract `Segment` class (next to `containsIndex` / `isWithinOffset`):
 
 ```dart
-import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_segment.model.dart';
+  /// True when this segment renders a year/month overview card rather than rows
+  /// of asset tiles. Overridden by [TimelineOverviewSegment].
+  bool get isOverview => false;
+```
+
+In `mobile/lib/presentation/widgets/timeline/overview/overview_segment.model.dart`, override it inside `TimelineOverviewSegment` (after the `groupBy` field):
+
+```dart
+  @override
+  bool get isOverview => true;
+```
+
+In `mobile/lib/presentation/widgets/timeline/scroll_drain.dart`, add this import at the top:
+
+```dart
 import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
 ```
 
@@ -149,7 +167,7 @@ Append this function to the file:
 /// disagree with the screen in all three cases, and a "switch to day" that
 /// changes nothing would spin until the attempt budget expired.
 bool segmentsAreOverview(List<Segment>? segments) =>
-    segments != null && segments.any((segment) => segment is TimelineOverviewSegment);
+    segments != null && segments.any((segment) => segment.isOverview);
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -160,7 +178,9 @@ Expected: PASS (all pre-existing tests in the file still pass too).
 - [ ] **Step 5: Commit**
 
 ```bash
-git add mobile/lib/presentation/widgets/timeline/scroll_drain.dart \
+git add mobile/lib/presentation/widgets/timeline/segment.model.dart \
+        mobile/lib/presentation/widgets/timeline/overview/overview_segment.model.dart \
+        mobile/lib/presentation/widgets/timeline/scroll_drain.dart \
         mobile/test/presentation/widgets/timeline/scroll_drain_test.dart
 git commit -m "feat(mobile): detect overview timeline rendering from built segments"
 ```
@@ -968,13 +988,7 @@ Expected: FAIL to compile — `The function 'assetRowOffset' isn't defined`.
 
 - [ ] **Step 3: Implement**
 
-In `mobile/lib/presentation/widgets/timeline/timeline_scroll_target.dart`, add the import:
-
-```dart
-import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
-```
-
-(If `segment.model.dart` is already imported, skip — do not duplicate it, `--fatal-infos` treats a duplicate import as a failure.)
+`mobile/lib/presentation/widgets/timeline/timeline_scroll_target.dart` **already imports** `segment.model.dart` (line 4). Do not add it again — `--fatal-infos` treats a duplicate import as a failure. No import changes are needed for this task.
 
 Append:
 
@@ -1122,25 +1136,29 @@ git commit -m "feat(mobile): add the async scroll-resolution guard decision"
 
 ---
 
-### Task 7: Latch the asset instead of the date
+### Task 7: Latch the on-screen asset instead of the date
 
 **Files:**
 
 - Create: `mobile/lib/providers/asset_viewer/scroll_to_asset_notifier.provider.dart`
 - Delete: `mobile/lib/providers/asset_viewer/scroll_to_date_notifier.provider.dart`
-- Modify: `mobile/lib/presentation/widgets/memory/memory_bottom_info.widget.dart:47`
+- Modify: `mobile/lib/presentation/widgets/memory/memory_bottom_info.widget.dart` (take an `asset`, drop `memory.assets.first`)
+- Modify: `mobile/lib/presentation/pages/drift_memory.page.dart:363` (pass the asset actually on screen)
 - Modify: `mobile/lib/utils/action_button.utils.dart:285`
 - Modify: `mobile/lib/pages/backup/drift_backup_asset_detail.page.dart:91`
 - Modify: `mobile/lib/presentation/widgets/timeline/timeline.widget.dart`
 - Create: `mobile/test/providers/asset_viewer/scroll_to_asset_notifier_test.dart`
+- Create: `mobile/test/presentation/widgets/memory/memory_bottom_info_test.dart`
 - Delete: `mobile/test/providers/asset_viewer/scroll_to_date_notifier_test.dart`
 
 **Interfaces:**
 
 - Consumes: nothing.
-- Produces: `class TimelineScrollTarget { final BaseAsset asset; final DateTime date; }`, `class ScrollToAssetNotifier extends ValueNotifier<TimelineScrollTarget?>` with `void scrollToAsset(BaseAsset asset)` and `TimelineScrollTarget? consume()`, and the top-level `scrollToAssetNotifierProvider` — consumed by Task 9.
+- Produces: `class TimelineScrollTarget { final BaseAsset asset; final DateTime date; }`, `class ScrollToAssetNotifier extends ValueNotifier<TimelineScrollTarget?>` with `void scrollToAsset(BaseAsset asset)` and `TimelineScrollTarget? consume()`, the top-level `scrollToAssetNotifierProvider`, and `RemoteAsset memoryAssetForPage(DriftMemory memory, int page)` — consumed by Task 9.
 
-**Behaviour preserved:** this task keeps the timeline scrolling to `target.date` exactly as before. Task 9 changes where it lands. All three call sites already have the asset in scope, so the date-only API is removed rather than left dangling.
+**Behaviour preserved:** this task keeps the timeline scrolling to `target.date` exactly as before. Task 9 changes where it lands.
+
+**The bug this also fixes.** `DriftMemoryBottomInfo` currently reads `memory.assets.first` for both the date label and the jump target, while `drift_memory.page.dart` pages _through_ a memory's assets — it tracks `currentAssetPage` (line 51) and `currentAsset` (line 55) but passes neither to the bottom info (line 363). So the arrow targets the memory's **first** photo no matter which one is on screen. Without this, Tasks 1-9 would navigate precisely to the wrong asset whenever the user has paged forward. The date label follows the same asset, since both describe the photo the user is looking at.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1321,16 +1339,123 @@ class ScrollToAssetNotifier extends ValueNotifier<TimelineScrollTarget?> {
 Run: `flutter test test/providers/asset_viewer/scroll_to_asset_notifier_test.dart`
 Expected: PASS.
 
-- [ ] **Step 5: Migrate the three call sites**
+- [ ] **Step 5: Write the failing test for the on-screen asset selector**
 
-`mobile/lib/presentation/widgets/memory/memory_bottom_info.widget.dart` — replace the import of `scroll_to_date_notifier.provider.dart` with `scroll_to_asset_notifier.provider.dart`, and replace line 47:
+Create `mobile/test/presentation/widgets/memory/memory_bottom_info_test.dart`:
+
+```dart
+import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/domain/models/memory.model.dart';
+import 'package:immich_mobile/presentation/widgets/memory/memory_bottom_info.widget.dart';
+
+void main() {
+  group('memoryAssetForPage', () {
+    final assets = [_asset('a0'), _asset('a1'), _asset('a2')];
+    final memory = DriftMemory(id: 'm1', createdAt: DateTime(2026, 4, 3), assets: assets);
+
+    test('returns the asset on the requested page', () {
+      // The whole point of #822: the arrow must target the photo on screen, not
+      // whichever one happens to be first in the memory.
+      expect(memoryAssetForPage(memory, 1).id, 'a1');
+      expect(memoryAssetForPage(memory, 2).id, 'a2');
+    });
+
+    test('returns the first asset for page zero', () {
+      expect(memoryAssetForPage(memory, 0).id, 'a0');
+    });
+
+    test('clamps a page past the end to the last asset', () {
+      // currentAssetPage belongs to the ACTIVE memory; an inactive page in the
+      // vertical PageView can ask with an index this memory does not have.
+      expect(memoryAssetForPage(memory, 99).id, 'a2');
+    });
+
+    test('clamps a negative page to the first asset', () {
+      expect(memoryAssetForPage(memory, -1).id, 'a0');
+    });
+  });
+}
+
+RemoteAsset _asset(String id) => RemoteAsset(
+  id: id,
+  name: '$id.jpg',
+  ownerId: 'owner-1',
+  checksum: 'checksum-$id',
+  type: AssetType.image,
+  createdAt: DateTime(2026, 4, 3, 12),
+  updatedAt: DateTime(2026, 4, 3, 12),
+  isEdited: false,
+);
+```
+
+**Before writing the test, confirm the `DriftMemory` constructor** in `mobile/lib/domain/models/memory.model.dart` — adjust the named arguments above to match its actual required fields. Do not guess: read the class first.
+
+- [ ] **Step 6: Run the test to verify it fails**
+
+Run: `flutter test test/presentation/widgets/memory/memory_bottom_info_test.dart`
+Expected: FAIL to compile — `The function 'memoryAssetForPage' isn't defined`.
+
+- [ ] **Step 7: Migrate the memory bottom info to the on-screen asset**
+
+In `mobile/lib/presentation/widgets/memory/memory_bottom_info.widget.dart`: swap the provider import, add a top-level selector, and take the asset as a parameter instead of digging it out of the memory.
+
+```dart
+/// The asset shown on [page] of [memory], clamped to the memory's bounds.
+///
+/// `currentAssetPage` in the memory page belongs to the ACTIVE memory, so an
+/// inactive page in the vertical PageView can ask for an index this memory does
+/// not have.
+RemoteAsset memoryAssetForPage(DriftMemory memory, int page) =>
+    memory.assets[page.clamp(0, memory.assets.length - 1)];
+```
+
+Change the widget to accept the asset, replacing the `memory` field:
+
+```dart
+class DriftMemoryBottomInfo extends StatelessWidget {
+  final RemoteAsset asset;
+  final String title;
+  const DriftMemoryBottomInfo({super.key, required this.asset, required this.title});
+```
+
+Replace the `fileCreatedDate` line so the label describes the photo on screen:
+
+```dart
+    final fileCreatedDate = asset.createdAt;
+```
+
+Replace the `onPressed` body's final line:
 
 ```dart
                 // #28941: the notifier converts to the viewer's local time itself.
-                scrollToAssetNotifierProvider.scrollToAsset(memory.assets.first);
+                scrollToAssetNotifierProvider.scrollToAsset(asset);
 ```
 
-`mobile/lib/utils/action_button.utils.dart` — same import swap, and replace line 285:
+- [ ] **Step 8: Pass the on-screen asset from the memory page**
+
+In `mobile/lib/presentation/pages/drift_memory.page.dart`, replace line 363:
+
+```dart
+                  DriftMemoryBottomInfo(
+                    // currentAssetPage tracks the ACTIVE memory only; other pages in
+                    // the vertical PageView show their own first asset.
+                    asset: memoryAssetForPage(
+                      memories[mIndex],
+                      mIndex == currentMemoryIndex.value ? currentAssetPage.value : 0,
+                    ),
+                    title: title,
+                  ),
+```
+
+- [ ] **Step 9: Run the test to verify it passes**
+
+Run: `flutter test test/presentation/widgets/memory/memory_bottom_info_test.dart`
+Expected: PASS.
+
+- [ ] **Step 10: Migrate the remaining two call sites**
+
+`mobile/lib/utils/action_button.utils.dart` — swap the provider import, and replace line 285:
 
 ```dart
                 scrollToAssetNotifierProvider.scrollToAsset(context.asset);
@@ -1342,7 +1467,7 @@ Expected: PASS.
                       scrollToAssetNotifierProvider.scrollToAsset(asset);
 ```
 
-- [ ] **Step 6: Migrate the timeline widget (behaviour unchanged)**
+- [ ] **Step 11: Migrate the timeline widget (behaviour unchanged)**
 
 In `mobile/lib/presentation/widgets/timeline/timeline.widget.dart`, swap the import, then replace every `scrollToDateNotifierProvider` reference with `scrollToAssetNotifierProvider` (lines 217, 349, 373, 391, 410, 414, plus the `_onGroupingChanged` guard added in Task 2).
 
@@ -1355,19 +1480,19 @@ In `_attemptScrollDrain`, take the date off the target:
 
 The rest of the method is unchanged — `_scrollToDate(date!, segments!)` still runs, so the landing position does not change yet.
 
-- [ ] **Step 7: Delete the old files**
+- [ ] **Step 12: Delete the old files**
 
 ```bash
 git rm mobile/lib/providers/asset_viewer/scroll_to_date_notifier.provider.dart \
        mobile/test/providers/asset_viewer/scroll_to_date_notifier_test.dart
 ```
 
-- [ ] **Step 8: Verify the whole suite is green**
+- [ ] **Step 13: Verify the whole suite is green**
 
 Run: `dart analyze --fatal-infos lib test && flutter test`
-Expected: no analyzer output (in particular, no lingering references to the deleted provider), all tests pass.
+Expected: no analyzer output (in particular, no lingering references to the deleted provider or to `DriftMemoryBottomInfo(memory: ...)`), all tests pass.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
 git add -A mobile/lib mobile/test
@@ -1747,6 +1872,9 @@ Delete the existing `_scrollToDate` method and add:
       target: target.asset,
     );
 
+    // `==` on TimelineScrollTarget compares date + refersToSameAsset, so re-tapping
+    // the SAME photo mid-resolution reads as unchanged and is absorbed. That is
+    // intended: the destination is identical, and restarting would only re-scan.
     final outcome = decideScrollResolve(
       stillMounted: mounted,
       stillHasClients: _scrollController.hasClients,
@@ -1786,18 +1914,25 @@ Delete the existing `_scrollToDate` method and add:
 
     final timelineState = ref.read(timelineStateProvider.notifier);
     timelineState.setScrubbing(true);
-    await _scrollController.animateTo(
-      targetOffset,
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOut,
-    );
-    if (!mounted) {
-      return;
+    try {
+      await _scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    } finally {
+      // `finally`, not a plain trailing call: an interrupted animation (the user
+      // scrolls, or the controller is detached) completes the future with an error.
+      // Leaving `isScrubbing` true would strand the whole timeline rendering
+      // placeholder tiles. The `mounted` guard is required because `ref.read` throws
+      // once the widget is disposed.
+      if (mounted) {
+        timelineState.setScrubbing(false);
+      }
     }
-    timelineState.setScrubbing(false);
 
     // Only mark a tile we actually landed on — not the day-level fallback.
-    if (rowOffset != null) {
+    if (mounted && rowOffset != null) {
       ref.read(timelineHighlightedAssetProvider.notifier).highlight(target.asset);
     }
   }
@@ -1834,6 +1969,7 @@ git commit -m "fix(mobile): land view-in-timeline on the exact photo, not the bu
 
 Unit tests cover every decision; these cross the widget/animation boundary and must be checked on a device or simulator (see the `mobile-emulator` skill for an iOS simulator loop):
 
+- [ ] **Page forward within a memory, then tap the arrow → lands on the photo on screen, not the memory's first photo.** The date label above the arrow must also track the photo being viewed.
 - [ ] Year grouping → open a memory → tap the arrow → grouping becomes Day, the timeline lands on the photo, its tile flashes.
 - [ ] Month grouping → same.
 - [ ] Day grouping on a day with 500+ photos → lands on the photo's row, not the day header.
