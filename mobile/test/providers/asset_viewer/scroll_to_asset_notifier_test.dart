@@ -80,7 +80,9 @@ void main() {
       final first = notifier.value;
       notifier.scrollToAsset(_asset('a1', createdAt: createdAt, localId: 'local-1'));
 
-      expect(notifier.value, first);
+      // `same`, not `equals`: TimelineScrollTarget has value equality, so a replaced
+      // target would compare equal too. Only identity proves the request was absorbed.
+      expect(notifier.value, same(first));
     });
   });
 }
