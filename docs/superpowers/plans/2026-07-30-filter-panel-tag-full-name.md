@@ -79,8 +79,12 @@ import { clampOverflow } from '$lib/actions/clamp-overflow';
 function makeNode(scrollHeight: number, clientHeight: number) {
   const node = document.createElement('div');
   const metrics = { scrollHeight, clientHeight };
-  Object.defineProperty(node, 'scrollHeight', { configurable: true, get: () => metrics.scrollHeight });
-  Object.defineProperty(node, 'clientHeight', { configurable: true, get: () => metrics.clientHeight });
+  // One defineProperties call, not two defineProperty calls: eslint's
+  // unicorn/prefer-object-define-properties is an ERROR here and CI runs bare `pnpm lint`.
+  Object.defineProperties(node, {
+    scrollHeight: { configurable: true, get: () => metrics.scrollHeight },
+    clientHeight: { configurable: true, get: () => metrics.clientHeight },
+  });
   return { node, metrics };
 }
 
@@ -160,16 +164,19 @@ describe('clampOverflow', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it('A8: re-measures on update', () => {
+  it('A8: re-measures on update, using the updated params', () => {
     const { node, metrics } = makeNode(40, 40);
     const onChange = vi.fn();
     const action = clampOverflow(node, { onChange, key: 'short' });
     onChange.mockClear();
 
+    // A second mock proves update() adopts the new params rather than retaining the mount-time closure.
+    const nextOnChange = vi.fn();
     metrics.scrollHeight = 100;
-    action.update?.({ onChange, key: 'a much longer name' });
+    action.update?.({ onChange: nextOnChange, key: 'a much longer name' });
 
-    expect(onChange).toHaveBeenCalledWith(true);
+    expect(nextOnChange).toHaveBeenCalledWith(true);
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('A9: disconnects the observer on destroy', () => {
@@ -312,8 +319,12 @@ const LONG_NAME = 'Events/2024/Italy Summer Trip Rome Colosseum And Vatican Muse
  * only this shadow and restores happy-dom's own behaviour — it does not clobber it process-wide.
  */
 function stubHeights(scrollHeight: number, clientHeight: number) {
-  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => scrollHeight });
-  Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => clientHeight });
+  // One defineProperties call, not two defineProperty calls: eslint's
+  // unicorn/prefer-object-define-properties is an ERROR here and CI runs bare `pnpm lint`.
+  Object.defineProperties(HTMLElement.prototype, {
+    scrollHeight: { configurable: true, get: () => scrollHeight },
+    clientHeight: { configurable: true, get: () => clientHeight },
+  });
 }
 
 type RowProps = {
