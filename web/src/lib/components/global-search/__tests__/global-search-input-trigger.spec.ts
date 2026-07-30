@@ -15,6 +15,19 @@ const { mockPage } = vi.hoisted(() => ({
 
 vi.mock('$app/state', () => ({ page: mockPage }));
 
+const { mediaState } = vi.hoisted(() => ({ mediaState: { pointerCoarse: false, minLg: false } }));
+
+vi.mock('$lib/stores/media-query-manager.svelte', () => ({
+  mediaQueryManager: {
+    get pointerCoarse() {
+      return mediaState.pointerCoarse;
+    },
+    get minLg() {
+      return mediaState.minLg;
+    },
+  },
+}));
+
 describe('global-search-input-trigger', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -23,6 +36,8 @@ describe('global-search-input-trigger', () => {
     mockPage.route.id = null;
     mockPage.params = {};
     sessionStorage.clear();
+    mediaState.pointerCoarse = false;
+    mediaState.minLg = false;
   });
 
   it('opens a dropdown from an editable search field', async () => {
@@ -312,5 +327,31 @@ describe('global-search-input-trigger', () => {
     await user.click(screen.getByText('search_sort_oldest'));
 
     expect(applySortSpy).toHaveBeenCalledWith('asc', '');
+  });
+
+  it('hides the keyboard hint when the pointer is coarse', () => {
+    mediaState.pointerCoarse = true;
+
+    render(GlobalSearchInputTrigger);
+
+    expect(screen.queryByText(/^(⌘K|Ctrl\+K)$/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the search field usable when the keyboard hint is hidden', () => {
+    mediaState.pointerCoarse = true;
+
+    render(GlobalSearchInputTrigger);
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    expect(input).toBeInTheDocument();
+    expect(screen.getByTestId('cmdk-input-trigger')).toBeInTheDocument();
+  });
+
+  it('shows the keyboard hint when the pointer is not coarse', () => {
+    mediaState.pointerCoarse = false;
+
+    render(GlobalSearchInputTrigger);
+
+    expect(screen.getByText(/^(⌘K|Ctrl\+K)$/)).toBeInTheDocument();
   });
 });

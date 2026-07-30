@@ -667,11 +667,13 @@
           }}
           class="min-w-0 flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-500 focus:outline-none dark:text-gray-100 dark:placeholder:text-gray-300"
         />
-        <kbd
-          class="hidden shrink-0 rounded-lg border border-gray-300 bg-white px-2 py-1 font-mono text-[11px] font-semibold tracking-wide text-gray-500 sm:inline-block dark:border-immich-dark-gray dark:bg-immich-dark-bg dark:text-gray-300"
-        >
-          {hotkeyLabel}
-        </kbd>
+        {#if !mediaQueryManager.pointerCoarse}
+          <kbd
+            class="hidden shrink-0 rounded-lg border border-gray-300 bg-white px-2 py-1 font-mono text-[11px] font-semibold tracking-wide text-gray-500 sm:inline-block dark:border-immich-dark-gray dark:bg-immich-dark-bg dark:text-gray-300"
+          >
+            {hotkeyLabel}
+          </kbd>
+        {/if}
       </div>
 
       {#if showDropdownPanel}
