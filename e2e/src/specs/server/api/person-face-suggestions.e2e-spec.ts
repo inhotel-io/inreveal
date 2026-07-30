@@ -167,6 +167,9 @@ describe('/people/:id/face-suggestions', () => {
         .set(asBearerAuth(owner.accessToken));
 
       expect(status).toBe(200);
+      // An unguarded loop over an empty array would pass vacuously — this endpoint has at least the two
+      // seeded in-band faces (faceForGet1, faceForGet2), so the loop below must actually execute.
+      expect(body.items.length).toBeGreaterThan(0);
       for (const item of body.items as Array<Record<string, unknown>>) {
         expect(item).toMatchObject({
           assetFaceId: expect.any(String),
@@ -198,6 +201,9 @@ describe('/people/:id/face-suggestions', () => {
 
       expect(status).toBe(200);
       const distances = (body.items as Array<{ distance: number }>).map((i) => i.distance);
+      // An empty (or single-item) list would pass the ascending check below vacuously — pin that there are
+      // genuinely multiple items to compare.
+      expect(distances.length).toBeGreaterThan(1);
       // Assert each distance is <= the next one
       for (let i = 1; i < distances.length; i++) {
         expect(distances[i]).toBeGreaterThanOrEqual(distances[i - 1]);
@@ -247,6 +253,11 @@ describe('/people/:id/face-suggestions', () => {
       expect(status).toBe(200);
       const ids = (body.items as Array<{ assetFaceId: string }>).map((i) => i.assetFaceId);
       expect(ids).not.toContain(faceForDismiss);
+      // Positive control: the dismiss must be scoped to faceForDismiss only — the two other still-pending
+      // faces (not yet acted on at this point in the suite) must still be returned. An endpoint regressed to
+      // dropping the whole list (or over-dismissing) would still pass the `not.toContain` check above alone.
+      expect(ids).toContain(faceForGet1);
+      expect(ids).toContain(faceForGet2);
     });
   });
 
@@ -270,10 +281,44 @@ describe('/people/:id/face-suggestions', () => {
     });
 
     it('owner can confirm a suggestion (200)', async () => {
+      const db = await utils.connectDatabase();
+
+      // Positive control: before confirming, the face is genuinely unassigned and carries no manual
+      // identity link — otherwise the post-condition assertions below would prove nothing.
+      const before = await db.query<{ personId: string | null }>(`SELECT "personId" FROM asset_face WHERE id = $1`, [
+        faceForConfirm,
+      ]);
+      expect(before.rows[0].personId).toBeNull();
+      const linkBefore = await db.query(`SELECT source FROM face_identity_face WHERE "assetFaceId" = $1`, [
+        faceForConfirm,
+      ]);
+      expect(linkBefore.rows).toHaveLength(0);
+
       const { status } = await request(app)
         .post(`/people/${namedPerson.id}/face-suggestions/${faceForConfirm}/confirm`)
         .set(asBearerAuth(owner.accessToken));
       expect(status).toBe(200);
+
+      // Post-conditions: the face actually moved and got a durable manual identity link, not just a 200.
+      const after = await db.query<{ personId: string | null }>(`SELECT "personId" FROM asset_face WHERE id = $1`, [
+        faceForConfirm,
+      ]);
+      expect(after.rows[0].personId).toBe(namedPerson.id);
+      const linkAfter = await db.query<{ source: string }>(
+        `SELECT source FROM face_identity_face WHERE "assetFaceId" = $1`,
+        [faceForConfirm],
+      );
+      expect(linkAfter.rows).toHaveLength(1);
+      expect(linkAfter.rows[0].source).toBe('manual');
+
+      // The face left the suggestion queue, and the still-pending control faces did not.
+      const { body } = await request(app)
+        .get(`/people/${namedPerson.id}/face-suggestions`)
+        .set(asBearerAuth(owner.accessToken));
+      const ids = (body.items as Array<{ assetFaceId: string }>).map((i) => i.assetFaceId);
+      expect(ids).not.toContain(faceForConfirm);
+      expect(ids).toContain(faceForGet1);
+      expect(ids).toContain(faceForGet2);
     });
 
     it('second confirm call is idempotent (200)', async () => {

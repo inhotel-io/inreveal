@@ -2,7 +2,8 @@ import { getFaceRepairResolutions, removeFaceRepairResolutions } from '@immich/s
 import { toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { init, register, waitLocale } from 'svelte-i18n';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Page from './+page.svelte';
 
 // Unified resolutions manage page: NEGATIVE verdicts only ("this face is not that person"), from BOTH
@@ -32,18 +33,15 @@ vi.mock('@immich/ui', async (original) => {
   };
 });
 
-// Mock svelte-i18n: return the key as the translation (matches the sibling face-cleanup specs).
-vi.mock('svelte-i18n', async (orig) => {
-  const actual = await orig<typeof import('svelte-i18n')>();
-  return {
-    ...actual,
-    t: {
-      subscribe: (run: (fn: (key: string, opts?: unknown) => string) => void) => {
-        run((key: string) => key);
-        return () => {};
-      },
-    },
-  };
+// Render against the REAL translations (matches PersonPicker.spec.ts / *ActionsHelpModal.spec.ts). The
+// previous key-passthrough mock accepted only the key and dropped `{ values }`, so every attribution
+// assertion collapsed to the same constant string, identical for every row — targetName() could return the
+// wrong person and every test would still pass. Real interpolation is what makes those assertions
+// discriminating.
+beforeAll(async () => {
+  register('en', () => import('$i18n/en.json'));
+  await init({ fallbackLocale: 'en', initialLocale: 'en' });
+  await waitLocale('en');
 });
 
 vi.mock('$app/navigation', () => ({
@@ -163,20 +161,35 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     vi.useRealTimers();
   });
 
-  it('lists verdicts from both engines with their source and target', async () => {
+  it('lists verdicts from both engines with their source, target and actor', async () => {
     render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
 
     await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
 
     const rows = screen.getAllByTestId('resolution-row');
     expect(rows.map((r) => r.dataset.source).sort()).toEqual(['cleanup', 'suggestion']);
-    // Every row renders a "not <target>" label (both rows here).
-    expect(screen.getAllByText('admin.face_cleanup_resolutions_not_person')).toHaveLength(2);
+
+    const cleanupRow = rows.find((r) => r.dataset.source === 'cleanup')!;
+    const suggestionRow = rows.find((r) => r.dataset.source === 'suggestion')!;
+
+    // Target name resolves to the ACTUAL person on each row (Berta / Armin), not a shared constant —
+    // discriminating per row. With the old key-passthrough i18n mock both rows rendered the identical
+    // literal key string regardless of which person the row was actually about.
+    expect(within(cleanupRow).getByText('not Berta')).toBeInTheDocument();
+    expect(within(suggestionRow).getByText('not Armin')).toBeInTheDocument();
+
+    // Source label + actor, per row — both previously unqueried by any test. The actor span renders as
+    // "· by <name>" (a leading bullet separator), hence the substring match.
+    expect(within(cleanupRow).getByTestId('source-label')).toHaveTextContent('Admin cleanup');
+    expect(within(cleanupRow).getByText(/by Admin/)).toBeInTheDocument();
+    expect(within(suggestionRow).getByTestId('source-label')).toHaveTextContent('User review');
+    expect(within(suggestionRow).getByText(/by Jula/)).toBeInTheDocument();
+
     // No locks section survives.
     expect(screen.queryByTestId('locks-section')).not.toBeInTheDocument();
   });
 
-  it('renders a space-person verdict with its space named, and a fully-orphaned verdict as a valid row', async () => {
+  it('renders a space-person verdict with its space named, and a fully-orphaned verdict falls back to "unnamed"', async () => {
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
       resolutions: [SPACE_PERSON_ROW, ORPHANED_ROW],
     } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
@@ -189,12 +202,17 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     const spacePersonRow = rows.find((r) => r.dataset.source === 'cleanup')!;
     const orphanedRow = rows.find((r) => r.dataset.source === 'suggestion')!;
 
-    // (a) space-person row: target name resolves to the space person, and the space is named alongside it.
-    expect(within(spacePersonRow).getByText('admin.face_cleanup_resolutions_not_person')).toBeInTheDocument();
-    expect(within(spacePersonRow).getByText('admin.face_cleanup_resolutions_in_space')).toBeInTheDocument();
+    // (a) space-person row: target name resolves to the SPACE PERSON (Casper), not the personal fallback,
+    // and the space is named alongside it.
+    expect(within(spacePersonRow).getByText('not Casper')).toBeInTheDocument();
+    expect(within(spacePersonRow).getByText('in Family Trip')).toBeInTheDocument();
 
-    // (b) fully-orphaned row: no crash, renders as a valid row falling back to "unnamed".
-    expect(within(orphanedRow).getByText('admin.face_cleanup_resolutions_not_person')).toBeInTheDocument();
+    // (b) fully-orphaned row: no crash, and falls back to the actual "unnamed" label — a positive control
+    // that the fallback branch itself renders correctly, not just that SOME text is present.
+    expect(within(orphanedRow).getByText('not Unnamed cluster')).toBeInTheDocument();
+    // No actor for the orphaned row (actorId/actorName both null) — the positive control for "by <actor>"
+    // rendering at all is the cleanup row's "by Admin" assertion in the previous test.
+    expect(within(orphanedRow).queryByText(/^by /)).not.toBeInTheDocument();
   });
 
   it('filters by source', async () => {
@@ -239,7 +257,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
 
     await waitFor(() => {
-      expect(screen.getByText('admin.face_cleanup_resolutions_empty')).toBeInTheDocument();
+      expect(screen.getByText('No decisions recorded yet')).toBeInTheDocument();
     });
     expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument();
   });
@@ -254,7 +272,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('load-error-banner')).toBeInTheDocument();
     });
-    expect(screen.queryByText('admin.face_cleanup_resolutions_empty')).not.toBeInTheDocument();
+    expect(screen.queryByText('No decisions recorded yet')).not.toBeInTheDocument();
 
     vi.mocked(getFaceRepairResolutions).mockResolvedValueOnce({
       resolutions: [CLEANUP_ROW, SUGGESTION_ROW],

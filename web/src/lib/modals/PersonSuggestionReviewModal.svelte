@@ -310,7 +310,7 @@
                 style="top: {highlight.top}px; left: {highlight.left}px; width: {highlight.width}px; height: {highlight.height}px;"
               ></div>
             {:else}
-              <div data-testid="suggestion-highlight" class="hidden"></div>
+              <div data-testid="suggestion-highlight-placeholder" class="hidden"></div>
             {/if}
           </div>
 

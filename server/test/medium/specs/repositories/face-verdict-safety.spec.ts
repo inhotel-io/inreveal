@@ -114,8 +114,71 @@ describe('unassignFaces clears human placements', () => {
     expect(linkedAfter.has(assetFace.id)).toBe(false);
   });
 
-  it('is a no-op when there are no faces of the given source type', async () => {
-    const { personRepository } = setup();
-    await expect(personRepository.unassignFaces({ sourceType: SourceType.MachineLearning })).resolves.toBeUndefined();
+  it('unassigns only faces of the given source type, leaving other-source faces and their identity links untouched', async () => {
+    // `unassignFaces` returns Promise<void>, so `resolves.toBeUndefined()` alone (the old body of this test)
+    // can never fail for any non-throwing implementation, including a complete no-op or one that ignores
+    // `sourceType` entirely. It was also unscoped — it ran against the whole shared medium database with
+    // nothing seeded, which could perturb sibling specs. This version seeds two faces of DIFFERENT source
+    // types under a fresh user (so it cannot leak into sibling specs), calls unassignFaces scoped to ONE of
+    // them, and asserts the untouched source type is a genuine, checked control — not merely unperturbed by
+    // accident.
+    const { ctx, personRepository, faceIdentityRepository } = setup();
+    const { user } = await ctx.newUser();
+
+    const { person: mlPerson } = await ctx.newPerson({ ownerId: user.id, name: 'ML Person' });
+    const { asset: mlAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: mlFace } = await ctx.newAssetFace({
+      assetId: mlAsset.id,
+      personId: mlPerson.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    const mlIdentity = await faceIdentityRepository.ensurePersonIdentity(mlPerson.id);
+    await faceIdentityRepository.replaceFaceIdentity({
+      assetFaceId: mlFace.id,
+      identityId: mlIdentity.id,
+      source: 'manual',
+    });
+
+    const { person: manualPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Manual Person' });
+    const { asset: manualAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: manualFace } = await ctx.newAssetFace({
+      assetId: manualAsset.id,
+      personId: manualPerson.id,
+      sourceType: SourceType.Manual,
+    });
+    const manualIdentity = await faceIdentityRepository.ensurePersonIdentity(manualPerson.id);
+    await faceIdentityRepository.replaceFaceIdentity({
+      assetFaceId: manualFace.id,
+      identityId: manualIdentity.id,
+      source: 'manual',
+    });
+
+    // Positive controls: both faces are genuinely assigned + linked before the call.
+    const mlLinkedBefore = await faceIdentityRepository.getManualLinkedFaceIds([mlFace.id]);
+    expect(mlLinkedBefore.has(mlFace.id)).toBe(true);
+    const manualLinkedBefore = await faceIdentityRepository.getManualLinkedFaceIds([manualFace.id]);
+    expect(manualLinkedBefore.has(manualFace.id)).toBe(true);
+
+    await personRepository.unassignFaces({ sourceType: SourceType.MachineLearning });
+
+    // The ML face is unassigned and its human-placement record is gone.
+    const mlAfter = await db
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', mlFace.id)
+      .executeTakeFirstOrThrow();
+    expect(mlAfter.personId).toBeNull();
+    const mlLinkedAfter = await faceIdentityRepository.getManualLinkedFaceIds([mlFace.id]);
+    expect(mlLinkedAfter.has(mlFace.id)).toBe(false);
+
+    // The non-ML (Manual) face is completely untouched — still assigned, link intact.
+    const manualAfter = await db
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', manualFace.id)
+      .executeTakeFirstOrThrow();
+    expect(manualAfter.personId).toBe(manualPerson.id);
+    const manualLinkedAfter = await faceIdentityRepository.getManualLinkedFaceIds([manualFace.id]);
+    expect(manualLinkedAfter.has(manualFace.id)).toBe(true);
   });
 });

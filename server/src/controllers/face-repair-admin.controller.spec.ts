@@ -1,6 +1,8 @@
 import { ForbiddenException } from '@nestjs/common';
 import { FaceRepairAdminController } from 'src/controllers/face-repair-admin.controller';
+import { CacheControl } from 'src/enum';
 import { FaceRepairService } from 'src/services/face-repair.service';
+import { ImmichRedirectResponse } from 'src/utils/file';
 import request from 'supertest';
 import { factory } from 'test/small.factory';
 import { ControllerContext, controllerSetup, mockBaseService } from 'test/utils';
@@ -22,7 +24,11 @@ describe(FaceRepairAdminController.name, () => {
   describe('POST /admin/face-repair', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).post('/admin/face-repair');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('should call runRepair with dryRun: true by default', async () => {
@@ -122,7 +128,11 @@ describe(FaceRepairAdminController.name, () => {
   describe('POST /admin/face-repair/scan', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).post('/admin/face-repair/scan');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('delegates a no-body scan (quick path) with undefined params', async () => {
@@ -161,7 +171,11 @@ describe(FaceRepairAdminController.name, () => {
   describe('GET /admin/face-repair/scan/defaults', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).get('/admin/face-repair/scan/defaults');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('delegates to service.getScanDefaults', async () => {
@@ -181,7 +195,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).post('/admin/face-repair/decline');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('should delegate to service.createDeclines with auth user id', async () => {
@@ -230,7 +248,11 @@ describe(FaceRepairAdminController.name, () => {
   describe('GET /admin/face-repair/decline', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).get('/admin/face-repair/decline');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('should delegate to service.listDeclines', async () => {
@@ -250,7 +272,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).post(`/admin/face-repair/scan/person/${personId}/cluster-faces`);
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('delegates to service.getClusterFaces and returns the page', async () => {
@@ -299,7 +325,11 @@ describe(FaceRepairAdminController.name, () => {
   describe('GET /admin/face-repair/scan/latest', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).get('/admin/face-repair/scan/latest');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('delegates to service.getLatestScanStatus', async () => {
@@ -317,7 +347,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).get(`/admin/face-repair/scan/person/${personId}`);
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('delegates to service.getPersonFlaggedFaces', async () => {
@@ -346,7 +380,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).get(`/admin/face-repair/person/${personId}`);
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('is admin-only', async () => {
@@ -395,7 +433,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).post('/admin/face-repair/resolve');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('is admin-only: a non-admin caller gets 403 (C1)', async () => {
@@ -529,7 +571,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).delete('/admin/face-repair/decline');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('should delegate to service.removeDeclines (by id)', async () => {
@@ -580,7 +626,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route (C3)', async () => {
       await request(ctx.getHttpServer()).get(`/admin/face-repair/owner/${ownerId}/people`);
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('is admin-only: a non-admin caller gets 403 (C3)', async () => {
@@ -628,7 +678,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route (C3)', async () => {
       await request(ctx.getHttpServer()).post(`/admin/face-repair/owner/${ownerId}/people`);
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('is admin-only: a non-admin caller gets 403 (C3)', async () => {
@@ -674,7 +728,11 @@ describe(FaceRepairAdminController.name, () => {
   describe('GET /admin/face-repair/resolutions', () => {
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).get('/admin/face-repair/resolutions');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('is admin-only: a non-admin caller gets 403 (C1)', async () => {
@@ -703,7 +761,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).post('/admin/face-repair/resolutions/remove');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('is admin-only: a non-admin caller gets 403 (C1)', async () => {
@@ -795,7 +857,11 @@ describe(FaceRepairAdminController.name, () => {
 
     it('should be an authenticated route', async () => {
       await request(ctx.getHttpServer()).post('/admin/face-repair/unconfirm');
-      expect(ctx.authenticate).toHaveBeenCalled();
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
     });
 
     it('is admin-only: a non-admin caller gets 403', async () => {
@@ -826,6 +892,44 @@ describe(FaceRepairAdminController.name, () => {
         .send({ assetFaceIds: [] });
       expect(status).toBe(400);
       expect(service.unconfirmFaces).not.toHaveBeenCalled();
+    });
+  });
+
+  // Slice 7 (D7): face-keyed, join-free, admin-gated thumbnail. Highest-value route on this controller — it
+  // is new and returns any user's face crop by id — so it must not be the one route on this controller with
+  // no coverage at all (it previously had none).
+  describe('GET /admin/face-repair/faces/:assetFaceId/thumbnail', () => {
+    const assetFaceId = '00000000-0000-4000-a000-000000000060';
+
+    it('should be an authenticated route', async () => {
+      await request(ctx.getHttpServer()).get(`/admin/face-repair/faces/${assetFaceId}/thumbnail`);
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ adminRoute: true }),
+        }),
+      );
+    });
+
+    it('delegates to service.getAdminFaceThumbnail with the assetFaceId', async () => {
+      // ImmichRedirectResponse exercises sendFile's real dispatch without touching the filesystem, so the
+      // assertion below is about delegation + response wiring, not disk I/O.
+      service.getAdminFaceThumbnail.mockResolvedValue(
+        new ImmichRedirectResponse({ url: 'http://example.com/face.jpg', cacheControl: CacheControl.None }),
+      );
+      const { status, headers } = await request(ctx.getHttpServer())
+        .get(`/admin/face-repair/faces/${assetFaceId}/thumbnail`)
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(302);
+      expect(headers.location).toBe('http://example.com/face.jpg');
+      expect(service.getAdminFaceThumbnail).toHaveBeenCalledWith(assetFaceId);
+    });
+
+    it('rejects a non-uuid assetFaceId with 400', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .get('/admin/face-repair/faces/not-a-uuid/thumbnail')
+        .set('Authorization', 'Bearer token');
+      expect(status).toBe(400);
+      expect(service.getAdminFaceThumbnail).not.toHaveBeenCalled();
     });
   });
 });
