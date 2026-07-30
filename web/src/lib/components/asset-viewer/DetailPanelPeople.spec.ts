@@ -241,4 +241,40 @@ describe('DetailPanelPeople', () => {
     expect(screen.getByText('Bob')).toBeInTheDocument();
     expect(screen.queryByText('Should Not Appear')).not.toBeInTheDocument();
   });
+
+  describe('avatar source (pins current behaviour)', () => {
+    it('shows the face cropped from this asset when the crop resolves', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      zoomImageToBase64Mock.mockResolvedValue(CROP_DATA_URL);
+
+      const { container } = renderPanel({ isOwner: true });
+      await settleCrop();
+
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(CROP_DATA_URL);
+    });
+
+    it('falls back to the person thumbnail when the crop resolves to null', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      zoomImageToBase64Mock.mockResolvedValue(null);
+
+      const { container } = renderPanel({ isOwner: true });
+      await settleCrop();
+
+      expect(zoomImageToBase64Mock).toHaveBeenCalledTimes(1);
+      expect(container.querySelector('img')?.getAttribute('src')).toContain('/people/');
+    });
+
+    it('uses the person thumbnail and never crops when the person has no face in this asset', async () => {
+      faceManagerMock.people = [person('Alice')];
+      faceManagerMock.facesByPersonId = new Map();
+
+      const { container } = renderPanel({ isOwner: true });
+      await tick();
+
+      expect(zoomImageToBase64Mock).not.toHaveBeenCalled();
+      expect(container.querySelector('img')?.getAttribute('src')).toContain('/people/');
+    });
+  });
 });
