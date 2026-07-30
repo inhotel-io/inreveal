@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { SourceType } from 'src/enum';
+import { AssetVisibility, SourceType } from 'src/enum';
 import { FaceRepairScanRepository, RepairScanParams } from 'src/repositories/face-repair-scan.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -215,5 +215,42 @@ describe('FaceRepairScanRepository flagged faces', () => {
 
     const rows = await sut.getScanFlaggedFaces(scan.id, person.id);
     expect(rows.map((r) => r.assetFaceId)).toEqual([f2]);
+  });
+
+  // Slice 1, found by the cross-engine e2e: the flagged list is a PERSISTED snapshot, so the scan's own
+  // eligibility filter is not enough — an asset moved into the Locked folder after the scan flagged its face
+  // would otherwise still have its crop rendered by the admin console, and the apply path would act on it.
+  // Both snapshot reads now carry reviewableAssetVisibility.
+  it('drops a face whose asset was locked AFTER the scan flagged it, keeping an unlocked control', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+    const { person: owner } = await ctx.newPerson({ ownerId: user.id });
+    const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
+
+    const control = await seedEligibleFace(ctx, user.id, person.id);
+    const lockedLater = await seedEligibleFace(ctx, user.id, person.id);
+    await sut.replaceScanFlaggedFaces(scan.id, [
+      { assetFaceId: control, personId: person.id, suspectedOwnerId: owner.id },
+      { assetFaceId: lockedLater, personId: person.id, suspectedOwnerId: owner.id },
+    ]);
+
+    // Both are flagged while both assets are ordinary — the positive control for the exclusion below.
+    const before = await sut.getScanFlaggedFaces(scan.id, person.id);
+    expect(before.map((r) => r.assetFaceId).sort()).toEqual([control, lockedLater].sort());
+
+    await ctx.database
+      .updateTable('asset')
+      .set({ visibility: AssetVisibility.Locked })
+      .where('id', '=', ctx.database.selectFrom('asset_face').select('assetId').where('id', '=', lockedLater))
+      .execute();
+
+    const after = await sut.getScanFlaggedFaces(scan.id, person.id);
+    expect(after.map((r) => r.assetFaceId)).toEqual([control]);
+
+    // The apply path reads the same snapshot through the multi-person variant and must agree, or a resolve
+    // could still write against a locked-asset face.
+    const forApply = await sut.getScanFlaggedFacesForPersons(scan.id, [person.id]);
+    expect(forApply.map((r) => r.assetFaceId)).toEqual([control]);
   });
 });

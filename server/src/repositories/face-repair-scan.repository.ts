@@ -1,9 +1,10 @@
-import { Insertable, Kysely, Selectable, sql } from 'kysely';
+import { ExpressionBuilder, Insertable, Kysely, Selectable, sql } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { PostgresError } from 'postgres';
 import { SourceType } from 'src/enum';
 import { DB } from 'src/schema';
 import { FaceRepairScanTable } from 'src/schema/tables/face-repair-scan.table';
+import { reviewableAssetVisibility } from 'src/utils/face-review';
 
 // The partial unique index enforcing at most one in-flight scan (see face-repair-scan.table.ts).
 const IN_FLIGHT_INDEX = 'face_repair_scan_in_flight_uq';
@@ -294,21 +295,28 @@ export class FaceRepairScanRepository {
     scanId: string,
     personId: string,
   ): Promise<{ assetFaceId: string; suspectedOwnerId: string }[]> {
-    return this.db
-      .selectFrom('face_repair_scan_flagged_face as ff')
-      .innerJoin('asset_face', 'asset_face.id', 'ff.assetFaceId')
-      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
-      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
-      .select(['ff.assetFaceId as assetFaceId', 'ff.suspectedOwnerId as suspectedOwnerId'])
-      .where('ff.scanId', '=', scanId)
-      .where('ff.personId', '=', personId)
-      .where('asset_face.personId', '=', personId)
-      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
-      .where('asset_face.deletedAt', 'is', null)
-      .where('asset_face.isVisible', '=', true)
-      .where('asset.deletedAt', 'is', null)
-      .orderBy('ff.assetFaceId')
-      .execute();
+    return (
+      this.db
+        .selectFrom('face_repair_scan_flagged_face as ff')
+        .innerJoin('asset_face', 'asset_face.id', 'ff.assetFaceId')
+        .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+        .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+        .select(['ff.assetFaceId as assetFaceId', 'ff.suspectedOwnerId as suspectedOwnerId'])
+        .where('ff.scanId', '=', scanId)
+        .where('ff.personId', '=', personId)
+        .where('asset_face.personId', '=', personId)
+        .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+        .where('asset_face.deletedAt', 'is', null)
+        .where('asset_face.isVisible', '=', true)
+        .where('asset.deletedAt', 'is', null)
+        // Slice 1: the snapshot is a persisted list, so an asset moved into the Locked folder AFTER the scan
+        // flagged its face would otherwise still have its crop rendered by the console. The scan's own
+        // eligibility read excludes locked/hidden assets; this read has to agree, or the policy holds only
+        // until someone locks a photo.
+        .where((eb) => reviewableAssetVisibility(eb as unknown as ExpressionBuilder<DB, keyof DB>))
+        .orderBy('ff.assetFaceId')
+        .execute()
+    );
   }
 
   // Multi-person variant of getScanFlaggedFaces used by the apply path: read the persisted flagged-face
@@ -324,21 +332,27 @@ export class FaceRepairScanRepository {
     if (personIds.length === 0) {
       return [];
     }
-    return this.db
-      .selectFrom('face_repair_scan_flagged_face as ff')
-      .innerJoin('asset_face', 'asset_face.id', 'ff.assetFaceId')
-      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
-      .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
-      .select(['ff.assetFaceId as assetFaceId', 'ff.personId as personId', 'ff.suspectedOwnerId as suspectedOwnerId'])
-      .where('ff.scanId', '=', scanId)
-      .where('ff.personId', 'in', personIds)
-      .whereRef('asset_face.personId', '=', 'ff.personId')
-      .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
-      .where('asset_face.deletedAt', 'is', null)
-      .where('asset_face.isVisible', '=', true)
-      .where('asset.deletedAt', 'is', null)
-      .orderBy('ff.assetFaceId')
-      .execute();
+    return (
+      this.db
+        .selectFrom('face_repair_scan_flagged_face as ff')
+        .innerJoin('asset_face', 'asset_face.id', 'ff.assetFaceId')
+        .innerJoin('asset', 'asset.id', 'asset_face.assetId')
+        .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+        .select(['ff.assetFaceId as assetFaceId', 'ff.personId as personId', 'ff.suspectedOwnerId as suspectedOwnerId'])
+        .where('ff.scanId', '=', scanId)
+        .where('ff.personId', 'in', personIds)
+        .whereRef('asset_face.personId', '=', 'ff.personId')
+        .where('asset_face.sourceType', '=', sql.lit(SourceType.MachineLearning))
+        .where('asset_face.deletedAt', 'is', null)
+        .where('asset_face.isVisible', '=', true)
+        .where('asset.deletedAt', 'is', null)
+        // Slice 1, and more load-bearing here than on the console read: this feeds the APPLY path, so without
+        // it a resolve could act on a face whose asset was locked after the scan. Dropping it silently is the
+        // same self-correcting behaviour this query already applies to a face moved off its recorded person.
+        .where((eb) => reviewableAssetVisibility(eb as unknown as ExpressionBuilder<DB, keyof DB>))
+        .orderBy('ff.assetFaceId')
+        .execute()
+    );
   }
 
   async enrichReportPersons(
