@@ -2377,8 +2377,13 @@ export class FaceIdentityRepository {
     if (input.assetFaceIds.length === 0) {
       return;
     }
-    for (let index = 0; index < input.assetFaceIds.length; index += 1000) {
-      const chunk = input.assetFaceIds.slice(index, index + 1000);
+    // F13: de-duplicate before chunking, mirroring markRejectedMany's guard. A client repeating an id
+    // (e.g. a duplicate in the cleanup console's `lock` bucket) would otherwise land twice in the same
+    // chunk's INSERT, and Postgres refuses an ON CONFLICT DO UPDATE that touches the same row twice in
+    // one statement ("cannot affect row a second time", 21000).
+    const assetFaceIds = [...new Set(input.assetFaceIds)];
+    for (let index = 0; index < assetFaceIds.length; index += 1000) {
+      const chunk = assetFaceIds.slice(index, index + 1000);
       await db
         .insertInto('face_identity_face')
         .values(

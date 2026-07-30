@@ -4607,4 +4607,37 @@ describe(FaceIdentityRepository.name, () => {
       }
     });
   });
+
+  // S7.8 (F13): the cleanup console's `lock` bucket passes assetFaceIds straight through from the request —
+  // a client repeating an id (double-click, retry) must not make this call 500. Postgres refuses an
+  // ON CONFLICT DO UPDATE that would touch the same row twice in one statement ("cannot affect row a second
+  // time", 21000) unless the duplicate is removed before chunking.
+  describe('replaceFaceIdentities', () => {
+    it('deduplicates repeated assetFaceIds before chunking, writing exactly one row per distinct id', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const identity = await sut.ensurePersonIdentity(person.id);
+      const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: person.id });
+      const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id, personId: person.id });
+
+      // Repeating faceA's id must not raise Postgres 21000.
+      await sut.replaceFaceIdentities({
+        assetFaceIds: [faceA.id, faceA.id, faceB.id],
+        identityId: identity.id,
+        source: 'manual',
+      });
+
+      const rows = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('assetFaceId')
+        .where('assetFaceId', 'in', [faceA.id, faceB.id])
+        .execute();
+      // Positive control built in: faceB is a genuinely DIFFERENT id in the same call and must still get its
+      // own row — proving the fix only merges the DUPLICATE, not the whole batch.
+      expect(rows.map((r) => r.assetFaceId).sort()).toEqual([faceA.id, faceB.id].sort());
+    });
+  });
 });

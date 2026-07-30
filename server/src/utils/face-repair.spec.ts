@@ -395,6 +395,26 @@ describe('findOverlappingIds', () => {
   it('does not flag a duplicate id within the SAME bucket', () => {
     expect(findOverlappingIds([['a', 'a'], ['b']])).toEqual([]);
   });
+
+  // F14: resolveFaces used to flatten every moveToPerson group's faceIds into ONE bucket before calling this,
+  // which made a face routed to two different destinations invisible to the check below (both occurrences
+  // collapsed into the same bucket's within-bucket de-duplication). The fix is entirely at the CALLER — pass
+  // one bucket per move group — so this function needed no change; this test documents that it already
+  // supports that shape as long as the caller stops flattening.
+  it('flags a face present in two different moveToPerson groups, each passed as its own bucket (F14)', () => {
+    const groupToQ = ['face-1', 'face-2'];
+    const groupToR = ['face-1', 'face-3'];
+    expect(findOverlappingIds([groupToQ, groupToR, [], [], []])).toEqual(['face-1']);
+  });
+
+  // Positive control for the above: a face that only ever appears in ONE move group must NOT be flagged,
+  // proving the detection is genuinely about cross-group membership and not, say, "any face in a multi-group
+  // request".
+  it('does not flag a face that appears in only one of several moveToPerson groups', () => {
+    const groupToQ = ['face-1', 'face-2'];
+    const groupToR = ['face-3'];
+    expect(findOverlappingIds([groupToQ, groupToR, [], [], []])).toEqual([]);
+  });
 });
 
 describe('findUnresolvableIds', () => {
