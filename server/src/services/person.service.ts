@@ -506,12 +506,16 @@ export class PersonService extends BaseService {
   }
 
   async rejectFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
-    // Owner-only on the PERSON only — intentionally asymmetric with confirm. Reject never
-    // touches the face (it only suppresses a (personId, assetFaceId) suggestion row), so
-    // person ownership is sufficient; confirm additionally checks face ownership because it
-    // assigns the face. Consequence: reject on a CASCADE-deleted face (person still exists)
-    // → markRejected affects 0 rows → benign 200; that asymmetry is by-design, not a gap.
+    // Owner-only on BOTH the person and the face — the identical pair confirmFaceSuggestion applies.
+    // verdictOpts (below) stamps every row with the target's identity, and face_identity.id is a
+    // CROSS-OWNER key (identity-merge-propagation.service.ts assigns one identity to personal people of
+    // different owners), and getPendingForPerson's anti-join matches on identityId with no ownership
+    // filter. So a row written against a face the caller does not own can suppress another owner's
+    // suggestion queue for that same face. The face must be one the caller owns before any row is
+    // written. Accepted consequence: rejecting a suggestion whose asset has since been trashed now 400s
+    // instead of writing a row nothing can ever read back (every read path filters asset.deletedAt).
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
+    await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
     await this.facePersonVerdictRepository.markRejected(personId, assetFaceId, await this.verdictOpts(auth, personId));
     // Face stays unassigned; the Phase-1 conditional upsertPending never resurrects a
     // 'rejected' row, so a later scan will not re-suggest it for this person.
@@ -519,6 +523,7 @@ export class PersonService extends BaseService {
 
   async ignoreFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
+    await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
     await this.facePersonVerdictRepository.markIgnored(personId, assetFaceId, await this.verdictOpts(auth, personId));
     // Face stays unassigned; ignored rows suppress future suggestions without rejecting the match.
   }

@@ -438,3 +438,119 @@ describe('GET /people/:id/face-suggestions — disabled toggle with a valid band
     expect(body).toEqual({ total: 0, items: [] });
   });
 });
+
+// --------------------------------------------------------------------------
+// POST /people/:id/face-suggestions/:assetFaceId/reject and /ignore (F8: face-level authorization)
+// --------------------------------------------------------------------------
+//
+// reject and ignore previously performed NO authorization check on assetFaceId — only on personId. A
+// caller who owns personId but not assetFaceId could still write a verdict row against a face they do
+// not own, because the verdict is identity-keyed and read back across owners (see
+// person.service.ts rejectFaceSuggestion). These two endpoints also had zero e2e coverage before this
+// slice — only confirm and dismiss were exercised.
+describe('POST /people/:id/face-suggestions/:assetFaceId/reject and /ignore (F8)', () => {
+  let admin: LoginResponseDto;
+  let owner: LoginResponseDto;
+  let stranger: LoginResponseDto;
+
+  let ownerPerson: PersonResponseDto;
+  let strangerPerson: PersonResponseDto;
+
+  let ownerAssetId: string;
+
+  let foreignFaceForReject: string;
+  let rejectHappyFace: string;
+  let ignoreHappyFace: string;
+  let controlFace: string;
+
+  beforeAll(async () => {
+    await utils.resetDatabase();
+    admin = await utils.adminSetup({ onboarding: false });
+
+    [owner, stranger] = await Promise.all([
+      utils.userSetup(admin.accessToken, createUserDto.create('fsugg-f8-owner')),
+      utils.userSetup(admin.accessToken, createUserDto.create('fsugg-f8-stranger')),
+    ]);
+
+    const config = await utils.getSystemConfig(admin.accessToken);
+    config.machineLearning.facialRecognition.suggestions = { enabled: true, maxDistance: 0.8 };
+    await updateConfig({ systemConfigDto: config }, { headers: asBearerAuth(admin.accessToken) });
+
+    [ownerPerson, strangerPerson] = await Promise.all([
+      utils.createPerson(owner.accessToken, { name: 'F8 Owner Person' }),
+      utils.createPerson(stranger.accessToken, { name: 'F8 Stranger Person' }),
+    ]);
+
+    const asset = await utils.createAsset(owner.accessToken);
+    ownerAssetId = asset.id;
+
+    const db = await utils.connectDatabase();
+    foreignFaceForReject = await insertUnassignedFace(db, ownerAssetId);
+    rejectHappyFace = await insertUnassignedFace(db, ownerAssetId);
+    ignoreHappyFace = await insertUnassignedFace(db, ownerAssetId);
+    controlFace = await insertUnassignedFace(db, ownerAssetId);
+
+    await insertSuggestion(db, ownerPerson.id, foreignFaceForReject, 0.6);
+    await insertSuggestion(db, ownerPerson.id, rejectHappyFace, 0.6);
+    await insertSuggestion(db, ownerPerson.id, ignoreHappyFace, 0.6);
+    await insertSuggestion(db, ownerPerson.id, controlFace, 0.6);
+  });
+
+  afterAll(async () => {
+    const defaults = await utils.getSystemConfig(admin.accessToken);
+    defaults.machineLearning.facialRecognition.suggestions = { enabled: false, maxDistance: 0.7 };
+    await updateConfig({ systemConfigDto: defaults }, { headers: asBearerAuth(admin.accessToken) });
+  });
+
+  it('S4.8: a second user naming their OWN person but a face they do not own gets 400; the face owner still sees it', async () => {
+    // Positive control: the owner's queue genuinely contains this face before the refused call.
+    const before = await request(app)
+      .get(`/people/${ownerPerson.id}/face-suggestions`)
+      .set(asBearerAuth(owner.accessToken));
+    expect((before.body.items as Array<{ assetFaceId: string }>).map((i) => i.assetFaceId)).toContain(
+      foreignFaceForReject,
+    );
+
+    // stranger owns strangerPerson (so PersonUpdate passes), but foreignFaceForReject belongs to owner's
+    // asset — checkFaceOwnerAccess must refuse it.
+    const { status } = await request(app)
+      .post(`/people/${strangerPerson.id}/face-suggestions/${foreignFaceForReject}/reject`)
+      .set(asBearerAuth(stranger.accessToken));
+    expect(status).toBe(400);
+
+    const after = await request(app)
+      .get(`/people/${ownerPerson.id}/face-suggestions`)
+      .set(asBearerAuth(owner.accessToken));
+    const ids = (after.body.items as Array<{ assetFaceId: string }>).map((i) => i.assetFaceId);
+    expect(ids).toContain(foreignFaceForReject);
+  });
+
+  it('S4.9: reject happy path removes the face from the queue and it does not return on re-read', async () => {
+    const { status } = await request(app)
+      .post(`/people/${ownerPerson.id}/face-suggestions/${rejectHappyFace}/reject`)
+      .set(asBearerAuth(owner.accessToken));
+    expect(status).toBe(200);
+
+    const { body } = await request(app)
+      .get(`/people/${ownerPerson.id}/face-suggestions`)
+      .set(asBearerAuth(owner.accessToken));
+    const ids = (body.items as Array<{ assetFaceId: string }>).map((i) => i.assetFaceId);
+    expect(ids).not.toContain(rejectHappyFace);
+    // Positive control: a still-pending sibling face is not swept up by the same call.
+    expect(ids).toContain(controlFace);
+  });
+
+  it('S4.9: ignore happy path removes the face from the queue and it does not return on re-read', async () => {
+    const { status } = await request(app)
+      .post(`/people/${ownerPerson.id}/face-suggestions/${ignoreHappyFace}/ignore`)
+      .set(asBearerAuth(owner.accessToken));
+    expect(status).toBe(200);
+
+    const { body } = await request(app)
+      .get(`/people/${ownerPerson.id}/face-suggestions`)
+      .set(asBearerAuth(owner.accessToken));
+    const ids = (body.items as Array<{ assetFaceId: string }>).map((i) => i.assetFaceId);
+    expect(ids).not.toContain(ignoreHappyFace);
+    expect(ids).toContain(controlFace);
+  });
+});
