@@ -12228,6 +12228,17 @@
             }
           },
           {
+            "name": "ownerId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by asset owner (contributor)",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
             "name": "personIds",
             "required": false,
             "in": "query",
@@ -12438,6 +12449,15 @@
             }
           },
           {
+            "name": "lensModel",
+            "required": false,
+            "in": "query",
+            "description": "Filter by lens model",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "make",
             "required": false,
             "in": "query",
@@ -12461,6 +12481,17 @@
             "in": "query",
             "description": "Filter by camera model",
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ownerId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by asset owner (contributor)",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
               "type": "string"
             }
           },
@@ -12497,6 +12528,15 @@
             "schema": {
               "format": "uuid",
               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "required": false,
+            "in": "query",
+            "description": "Filter by state/province",
+            "schema": {
               "type": "string"
             }
           },

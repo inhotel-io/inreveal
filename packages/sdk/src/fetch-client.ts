@@ -7046,7 +7046,7 @@ export function searchAssetStatistics({ statisticsSearchDto }: {
 /**
  * Retrieve search suggestions
  */
-export function getSearchSuggestions({ albumId, city, country, includeNull, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, mediaType, model, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
+export function getSearchSuggestions({ albumId, city, country, includeNull, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, mediaType, model, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, $type, withSharedSpaces }: {
     albumId?: string;
     city?: string;
     country?: string;
@@ -7058,6 +7058,7 @@ export function getSearchSuggestions({ albumId, city, country, includeNull, isFa
     make?: string;
     mediaType?: AssetTypeEnum;
     model?: string;
+    ownerId?: string;
     personIds?: string[];
     rating?: number;
     spaceId?: string;
@@ -7083,6 +7084,7 @@ export function getSearchSuggestions({ albumId, city, country, includeNull, isFa
         make,
         mediaType,
         model,
+        ownerId,
         personIds,
         rating,
         spaceId,
@@ -7099,19 +7101,22 @@ export function getSearchSuggestions({ albumId, city, country, includeNull, isFa
 /**
  * Retrieve dynamic filter suggestions
  */
-export function getFilterSuggestions({ albumId, city, country, isFavorite, isInAlbum, isNotInAlbum, make, mediaType, model, personIds, rating, spaceId, tagIds, takenAfter, takenBefore, withSharedSpaces }: {
+export function getFilterSuggestions({ albumId, city, country, isFavorite, isInAlbum, isNotInAlbum, lensModel, make, mediaType, model, ownerId, personIds, rating, spaceId, state, tagIds, takenAfter, takenBefore, withSharedSpaces }: {
     albumId?: string;
     city?: string;
     country?: string;
     isFavorite?: boolean;
     isInAlbum?: boolean;
     isNotInAlbum?: boolean;
+    lensModel?: string;
     make?: string;
     mediaType?: AssetTypeEnum;
     model?: string;
+    ownerId?: string;
     personIds?: string[];
     rating?: number;
     spaceId?: string;
+    state?: string;
     tagIds?: string[];
     takenAfter?: string;
     takenBefore?: string;
@@ -7127,12 +7132,15 @@ export function getFilterSuggestions({ albumId, city, country, isFavorite, isInA
         isFavorite,
         isInAlbum,
         isNotInAlbum,
+        lensModel,
         make,
         mediaType,
         model,
+        ownerId,
         personIds,
         rating,
         spaceId,
+        state,
         tagIds,
         takenAfter,
         takenBefore,
