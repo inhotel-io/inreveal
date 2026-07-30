@@ -163,7 +163,7 @@ describe('DetailPanel camera filter', () => {
     await fireEvent.click(await screen.findByLabelText(/filter_by_camera/));
 
     const [url] = gotoMock.mock.calls[0] as [string];
-    const decoded = new URLSearchParams(url.split('?')[1]);
+    const decoded = new URLSearchParams(url.split('?', 2)[1]);
     expect(decoded.get('make')).toBe(asset.exifInfo?.make);
     expect(decoded.get('model')).toBe(asset.exifInfo?.model);
   });
@@ -213,7 +213,7 @@ describe('DetailPanel camera filter', () => {
   // would close the viewer and apply no filter. Must not be rendered as clickable at all.
   it('R9: a whitespace-only value is not rendered as clickable', async () => {
     mockPage.reset('https://gallery.test/photos/asset-1');
-    const asset = buildAsset({ exifInfo: { make: '   ', model: undefined } });
+    const asset = buildAsset({ exifInfo: { make: ' '.repeat(3), model: undefined } });
 
     renderWithTooltips(DetailPanel, { asset, currentAlbum: null });
 
@@ -260,7 +260,7 @@ describe('DetailPanel filename filter', () => {
     expect(expected.startsWith('/spaces/space-1')).toBe(true);
     expect(expected).not.toContain('asset-1'); // one goto() closes the asset viewer
 
-    const params = new URLSearchParams(expected.split('?')[1]);
+    const params = new URLSearchParams(expected.split('?', 2)[1]);
     expect(params.get('filename')).toBe(basename);
   });
 
@@ -347,7 +347,7 @@ describe('DetailPanel lens filter', () => {
 
   it('R9: a whitespace-only lensModel is not rendered as clickable', async () => {
     mockPage.reset('https://gallery.test/photos/asset-1');
-    const asset = buildAsset({ exifInfo: { lensModel: '   ' } });
+    const asset = buildAsset({ exifInfo: { lensModel: ' '.repeat(3) } });
 
     renderWithTooltips(DetailPanel, { asset, currentAlbum: null });
 
@@ -382,10 +382,15 @@ const OWNER = {
   profileChangedAt: '2026-01-01T00:00:00.000Z',
 } as AssetResponseDto['owner'];
 
+// Two albumUsers, not one: DetailPanel only renders the "shared by" row for an album shared with
+// more than one person (upstream #30187 — a single-member album has nobody to attribute it to).
 const currentAlbum = {
   id: 'album-1',
   albumName: 'Trip',
-  albumUsers: [{ role: 'editor', user: OWNER }],
+  albumUsers: [
+    { role: 'editor', user: OWNER },
+    { role: 'viewer', user: { ...OWNER, id: 'owner-1', name: 'Me', email: 'me@example.com' } },
+  ],
 } as unknown as AlbumResponseDto;
 
 const albumDto = (id: string, albumName: string) =>

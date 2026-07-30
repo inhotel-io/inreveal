@@ -432,7 +432,9 @@ test.describe('Asset viewer contextual filters — the map handoff', () => {
     // Sanity — unfiltered, the Space's map has BOTH markers. Without it, every exclusion below could
     // pass because a fixture silently lost its GPS.
     const unfiltered = await markerIds(admin.accessToken, { spaceId });
-    expect(unfiltered.toSorted()).toEqual([canonId, appleId].toSorted());
+    expect(unfiltered.toSorted((a, b) => a.localeCompare(b))).toEqual(
+      [canonId, appleId].toSorted((a, b) => a.localeCompare(b)),
+    );
 
     // #767's exact repro, step 1: filter the Space to the Canon, from the asset viewer.
     await openDetailPanel(page, `/spaces/${spaceId}/photos/${canonId}`);

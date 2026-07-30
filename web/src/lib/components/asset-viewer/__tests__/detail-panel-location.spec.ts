@@ -206,7 +206,7 @@ describe('DetailPanelLocation filter grammar', () => {
   // NO filter. It must not be clickable at all (the country line still is).
   it('R9: a whitespace-only city line is not clickable', async () => {
     renderWithTooltips(DetailPanelLocation, {
-      asset: buildAsset({ city: '   ', country: 'Germany' }),
+      asset: buildAsset({ city: ' '.repeat(3), country: 'Germany' }),
       isOwner: true,
       canFilter: true,
     });

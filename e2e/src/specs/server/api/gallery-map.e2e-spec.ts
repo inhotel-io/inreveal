@@ -498,7 +498,7 @@ describe('/gallery/map/markers', () => {
         const { status } = await request(app)
           .put(`/assets/${id}`)
           .set(asBearerAuth(owner.accessToken))
-          .send({ latitude: 48.858_37, longitude: 2.294_48 });
+          .send({ latitude: 48.85837, longitude: 2.29448 });
         expect(status).toBe(200);
         return id;
       };
@@ -522,8 +522,10 @@ describe('/gallery/map/markers', () => {
         .get(`/gallery/map/markers?albumId=${visibilityAlbumId}`)
         .set(asBearerAuth(owner.accessToken));
       expect(status).toBe(200);
-      expect(markerIds(body).toSorted()).toEqual(
-        [timelineAssetId, archivedAssetId, hiddenAssetId, lockedAssetId, trashedAssetId].toSorted(),
+      expect(markerIds(body).toSorted((a, b) => a.localeCompare(b))).toEqual(
+        [timelineAssetId, archivedAssetId, hiddenAssetId, lockedAssetId, trashedAssetId].toSorted((a, b) =>
+          a.localeCompare(b),
+        ),
       );
 
       // Now move four of them out of Timeline. The single-asset PUT is used deliberately: the BULK
@@ -706,7 +708,9 @@ describe('/gallery/map/markers', () => {
         .set(asBearerAuth(exifFilterUser.accessToken));
 
       expect(status).toBe(200);
-      expect(markerIds(body).toSorted()).toEqual([coloradoAssetId, nebraskaAssetId].toSorted());
+      expect(markerIds(body).toSorted((a, b) => a.localeCompare(b))).toEqual(
+        [coloradoAssetId, nebraskaAssetId].toSorted((a, b) => a.localeCompare(b)),
+      );
     });
 
     it('lensModel narrows to the matching asset over the wire', async () => {
@@ -765,7 +769,7 @@ describe('/gallery/map/markers', () => {
         const { status } = await request(app)
           .put(`/assets/${id}`)
           .set(asBearerAuth(wildcardUser.accessToken))
-          .send({ latitude: 48.858_37, longitude: 2.294_48 });
+          .send({ latitude: 48.85837, longitude: 2.29448 });
         expect(status).toBe(200);
         return id;
       };
@@ -1007,7 +1011,9 @@ describe('/gallery/map/markers', () => {
         .set(asBearerAuth(andUser.accessToken));
 
       expect(status).toBe(200);
-      expect(markerIds(body).toSorted()).toEqual([assetWithBoth, assetWithAliceOnly].toSorted());
+      expect(markerIds(body).toSorted((a, b) => a.localeCompare(b))).toEqual(
+        [assetWithBoth, assetWithAliceOnly].toSorted((a, b) => a.localeCompare(b)),
+      );
     });
 
     it('two people return ONLY the asset that has BOTH (not the union)', async () => {
@@ -1034,7 +1040,9 @@ describe('/gallery/map/markers', () => {
         .set(asBearerAuth(andUser.accessToken));
 
       expect(status).toBe(200);
-      expect(markerIds(body).toSorted()).toEqual([assetWithBoth, assetWithAliceOnly].toSorted());
+      expect(markerIds(body).toSorted((a, b) => a.localeCompare(b))).toEqual(
+        [assetWithBoth, assetWithAliceOnly].toSorted((a, b) => a.localeCompare(b)),
+      );
     });
   });
 
@@ -1095,7 +1103,9 @@ describe('/gallery/map/markers', () => {
       const all = await request(app)
         .get('/gallery/map/markers?withSharedSpaces=true')
         .set(asBearerAuth(favUser.accessToken));
-      expect(markerIds(all.body).toSorted()).toEqual([favAssetId, unfavAssetId].toSorted());
+      expect(markerIds(all.body).toSorted((a, b) => a.localeCompare(b))).toEqual(
+        [favAssetId, unfavAssetId].toSorted((a, b) => a.localeCompare(b)),
+      );
 
       const { status, body } = await request(app)
         .get('/gallery/map/markers?withSharedSpaces=true&isFavorite=true')

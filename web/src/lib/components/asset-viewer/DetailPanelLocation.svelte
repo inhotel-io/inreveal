@@ -31,7 +31,7 @@
   const mapUrl = $derived(
     buildContextualMapUrl(
       page.url,
-      asset.exifInfo?.latitude && asset.exifInfo?.longitude
+      asset.exifInfo?.latitude && asset.exifInfo.longitude
         ? { lat: asset.exifInfo.latitude, lng: asset.exifInfo.longitude, zoom: 12.5 }
         : undefined,
     ),

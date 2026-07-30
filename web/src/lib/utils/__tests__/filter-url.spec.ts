@@ -83,7 +83,7 @@ describe('filter-url codec', () => {
 
   // E7 — empty/whitespace values must not become filters
   it('E7: emits no param for empty or whitespace-only values', () => {
-    const params = encode({ make: '   ', lensModel: '', state: '  ', ownerId: '' });
+    const params = encode({ make: ' '.repeat(3), lensModel: '', state: '  ', ownerId: '' });
 
     expect(params.get('make')).toBeNull();
     expect(params.get('lens')).toBeNull();

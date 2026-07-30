@@ -114,7 +114,7 @@ describe('DetailPanelPeople filter grammar (R8)', () => {
     expect(href).toBe(buildContextualFilterUrl(mockPage.url, { personIds: [SPACE_PERSON_UUID] }));
     expect(href.startsWith('/spaces/space-1')).toBe(true);
 
-    const people = new URLSearchParams(href.split('?')[1]).get('people') ?? '';
+    const people = new URLSearchParams(href.split('?', 2)[1]).get('people') ?? '';
     expect(people).toMatch(UUID); // bare uuid — spacePersonIds is z.array(z.uuidv4())
     expect(people).not.toContain('space-person:');
     expect(href).not.toContain('asset-1'); // one navigation closes the viewer
@@ -133,7 +133,7 @@ describe('DetailPanelPeople filter grammar (R8)', () => {
 
     const chip = await screen.findByLabelText('filter_by_person: Alice');
     const href = chip.getAttribute('href') ?? '';
-    const people = new URLSearchParams(href.split('?')[1]).get('people') ?? '';
+    const people = new URLSearchParams(href.split('?', 2)[1]).get('people') ?? '';
 
     expect(people).toBe(SPACE_PERSON_UUID);
     expect(people).not.toContain('space-person:');
@@ -152,7 +152,7 @@ describe('DetailPanelPeople filter grammar (R8)', () => {
 
     const chip = await screen.findByLabelText('filter_by_person: Alice');
     const href = chip.getAttribute('href') ?? '';
-    const people = new URLSearchParams(href.split('?')[1]).get('people') ?? '';
+    const people = new URLSearchParams(href.split('?', 2)[1]).get('people') ?? '';
 
     expect(people).toBe(`space-person:${SPACE_PERSON_UUID}`);
     expect(href.startsWith('/photos')).toBe(true);
@@ -172,7 +172,7 @@ describe('DetailPanelPeople filter grammar (R8)', () => {
 
     const chip = await screen.findByLabelText('filter_by_person: Bob');
     const href = chip.getAttribute('href') ?? '';
-    const people = new URLSearchParams(href.split('?')[1]).get('people') ?? '';
+    const people = new URLSearchParams(href.split('?', 2)[1]).get('people') ?? '';
 
     // Scoped, not bare: this is the id `getPhotosPersonFilterId` derives for the same person, and
     // therefore the key the chip's `personNames` map and the panel's people options are stored under.
@@ -269,7 +269,7 @@ describe('DetailPanelPeople name hand-off', () => {
     expect(href).toContain('#12/50.08/14.43');
     await fireEvent.click(chip);
 
-    const names = consumeTypedSearchNames(href.split('#')[0]);
+    const names = consumeTypedSearchNames(href.split('#', 1)[0]);
     expect(names.personNames.get(`person:${PERSON_UUID}`)).toBe('Bob');
   });
 

@@ -69,7 +69,7 @@ describe('DetailPanelDate filter (E14)', () => {
     expect(gotoMock).toHaveBeenCalledWith(expected);
 
     const [url] = gotoMock.mock.calls[0] as [string];
-    const params = new URLSearchParams(url.split('?')[1]);
+    const params = new URLSearchParams(url.split('?', 2)[1]);
     expect(params.get('from')).toBe('2026-01-01');
     expect(params.get('to')).toBe('2026-01-01');
   });
@@ -82,7 +82,7 @@ describe('DetailPanelDate filter (E14)', () => {
     await fireEvent.click(await screen.findByLabelText(/^filter_by_date/));
 
     const [url] = gotoMock.mock.calls[0] as [string];
-    const params = new URLSearchParams(url.split('?')[1]);
+    const params = new URLSearchParams(url.split('?', 2)[1]);
     expect(params.get('from')).toBe('2026-04-16');
     expect(params.get('to')).toBe('2026-04-16');
   });

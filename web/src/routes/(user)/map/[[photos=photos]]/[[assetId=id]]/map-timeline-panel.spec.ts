@@ -125,13 +125,15 @@ function renderPanel(filters = createFilterState(), onFiltersChange?: (filters: 
         selectedClusterIds: new Set(['asset-1', 'asset-2']),
         filters,
         onClose: vi.fn(),
-        ...(onFiltersChange ? { onFiltersChange } : {}),
+        ...(onFiltersChange && { onFiltersChange }),
       },
     },
   );
 }
 
-type TimelineStubGlobal = { __timelineStubAssetCount?: number };
+type TimelineStubGlobal = typeof globalThis & { __timelineStubAssetCount?: number };
+
+const timelineStubGlobals = globalThis as TimelineStubGlobal;
 
 describe('MapTimelinePanel grouping', () => {
   beforeEach(() => {
@@ -142,14 +144,14 @@ describe('MapTimelinePanel grouping', () => {
   });
 
   afterEach(() => {
-    delete (globalThis as TimelineStubGlobal).__timelineStubAssetCount;
+    timelineStubGlobals.__timelineStubAssetCount = undefined;
   });
 
   // Task 10: the header used to be handed `selectedClusterIds.size` by the map page — the number of
   // pins in the cluster at CLICK time, which no filter change ever recomputed ("50 assets" over the
   // five pins a rating filter had left). It must count what the panel itself lists.
   it('counts the assets its own timeline holds, not the size of the cluster selection', async () => {
-    (globalThis as TimelineStubGlobal).__timelineStubAssetCount = 7;
+    timelineStubGlobals.__timelineStubAssetCount = 7;
 
     renderPanel(); // the cluster selection carries 2 ids
 
@@ -157,7 +159,7 @@ describe('MapTimelinePanel grouping', () => {
   });
 
   it('reports an empty panel when its timeline holds nothing (a filter excluded every pin)', async () => {
-    (globalThis as TimelineStubGlobal).__timelineStubAssetCount = 0;
+    timelineStubGlobals.__timelineStubAssetCount = 0;
 
     renderPanel();
 

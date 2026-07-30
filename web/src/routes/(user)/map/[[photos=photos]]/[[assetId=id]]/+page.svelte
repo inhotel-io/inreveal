@@ -484,7 +484,7 @@
             data-testid="map-smart-search-notice"
             role="status"
           >
-            <p class="pointer-events-auto rounded-lg bg-warning/90 px-4 py-2 text-sm text-dark shadow">
+            <p class="pointer-events-auto rounded-lg bg-warning/90 px-4 py-2 text-sm text-dark shadow-sm">
               {$t('map_smart_search_not_applied')}
             </p>
           </div>

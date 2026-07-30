@@ -182,7 +182,7 @@ describe('Route', () => {
     });
 
     it('omits an empty query and an empty filter state', () => {
-      expect(Route.map({ spaceId: 'space-1', query: '   ', filters: createFilterState() })).toBe(
+      expect(Route.map({ spaceId: 'space-1', query: ' '.repeat(3), filters: createFilterState() })).toBe(
         '/map?spaceId=space-1',
       );
     });

@@ -73,7 +73,7 @@ export function buildContextualFilterUrl(url: URL, patch: Partial<FilterState>, 
 
   const current: FilterState = {
     ...createFilterState(),
-    ...(carryOver ? decodeFilterParams(url) : {}),
+    ...(carryOver && decodeFilterParams(url)),
     ...patch,
   };
 
@@ -172,7 +172,7 @@ export function rememberContextualPersonName(destination: string, personId: stri
     return;
   }
 
-  storeTypedSearchNames(destination.split('#')[0], {
+  storeTypedSearchNames(destination.split('#', 1)[0], {
     personNames: new Map([[personId, trimmed]]),
     tagNames: new Map(),
   });
@@ -203,7 +203,7 @@ export function buildContextualMapUrl(url: URL, point?: { lat: number; lng: numb
   }
 
   const carryOver = target !== null;
-  const filters: FilterState = { ...createFilterState(), ...(carryOver ? decodeFilterParams(url) : {}) };
+  const filters: FilterState = { ...createFilterState(), ...(carryOver && decodeFilterParams(url)) };
   const spaceId = target && (target.kind === 'space' || target.kind === 'map') ? target.spaceId : undefined;
   const query = carryOver ? (url.searchParams.get('q') ?? undefined) : undefined;
 
@@ -277,7 +277,7 @@ export function withoutAtParam(search: string): string {
  * `description=x` plus `make=Apple`, and the guard below would call a real filter change a no-op.
  */
 function canonicalizeParams(params: URLSearchParams): string {
-  return [...params.entries()]
+  return [...params]
     .sort(([keyA, valueA], [keyB, valueB]) => keyA.localeCompare(keyB) || valueA.localeCompare(valueB))
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
     .join('&');

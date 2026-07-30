@@ -122,7 +122,7 @@ describe('DetailPanelDescription filter (R6)', () => {
 
   // R9 — an empty/whitespace-only description trims to nothing: the click would close the viewer and
   // apply no filter at all.
-  it.each(['', '   '])('R9: renders no ⚗️ for an empty description (%j)', async (description) => {
+  it.each(['', ' '.repeat(3)])('R9: renders no ⚗️ for an empty description (%j)', async (description) => {
     const asset = assetFactory.build({ id: 'asset-1', exifInfo: { description } });
 
     renderWithTooltips(DetailPanelDescription, { asset, isOwner: true, canFilter: true });
@@ -142,7 +142,7 @@ describe('DetailPanelDescription filter (R6)', () => {
     await fireEvent.click(await screen.findByLabelText(/^filter_by_description/));
 
     const [url] = gotoMock.mock.calls[0] as [string];
-    expect(new URLSearchParams(url.split('?')[1]).get('description')).toBe('a'.repeat(200));
+    expect(new URLSearchParams(url.split('?', 2)[1]).get('description')).toBe('a'.repeat(200));
   });
 
   it('E2: with canFilter false no ⚗️ renders', async () => {

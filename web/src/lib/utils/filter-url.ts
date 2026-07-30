@@ -277,7 +277,7 @@ function parseBoundedInteger(value: string | null, min: number, max: number): nu
   }
 
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
+  return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? parsed : undefined;
 }
 
 function parseMediaType(value: string | null): 'image' | 'video' | undefined {

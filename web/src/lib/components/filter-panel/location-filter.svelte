@@ -344,11 +344,11 @@
     data-testid="location-state-{state}"
   >
     <div
-      class="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 border-immich-primary bg-immich-primary dark:border-immich-dark-primary dark:bg-immich-dark-primary"
+      class="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-immich-primary bg-immich-primary dark:border-immich-dark-primary dark:bg-immich-dark-primary"
     >
-      <div class="h-1.5 w-1.5 rounded-full bg-white dark:bg-black"></div>
+      <div class="size-1.5 rounded-full bg-white dark:bg-black"></div>
     </div>
-    <span class="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left">{state}</span>
+    <span class="flex-1 truncate text-left">{state}</span>
   </button>
 {/snippet}
 

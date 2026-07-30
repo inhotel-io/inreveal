@@ -216,11 +216,15 @@ const buildSubjectAsset = (): AssetResponseDto =>
 const albumDto = (id: string, albumName: string) =>
   ({ id, albumName, albumThumbnailAssetId: null, albumUsers: [], assetCount: 3 }) as unknown as AlbumResponseDto;
 
-// `albumUsers` is what makes the "shared by" row render at all (DetailPanel gates on it).
+// `albumUsers` is what makes the "shared by" row render at all (DetailPanel gates on it) — and it
+// needs MORE THAN ONE member: upstream #30187 suppresses the row on a single-member album.
 const CURRENT_ALBUM = {
   id: CURRENT_ALBUM_ID,
   albumName: 'Trip',
-  albumUsers: [{ role: 'editor', user: OWNER }],
+  albumUsers: [
+    { role: 'editor', user: OWNER },
+    { role: 'viewer', user: { ...OWNER, id: VIEWER_ID, name: 'Me', email: 'me@example.com' } },
+  ],
 } as unknown as AlbumResponseDto;
 
 const OTHER_ALBUM = albumDto(OTHER_ALBUM_ID, 'Iceland');

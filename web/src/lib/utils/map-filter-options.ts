@@ -103,7 +103,7 @@ function mapTimelineScope(filters: FilterState, spaceId?: string): Record<string
   const includeSharedTimelineAssets = filters.isFavorite === undefined;
   return {
     visibility: AssetVisibility.Timeline,
-    ...(includeSharedTimelineAssets ? { withSharedSpaces: true } : {}),
+    ...(includeSharedTimelineAssets && { withSharedSpaces: true }),
   };
 }
 

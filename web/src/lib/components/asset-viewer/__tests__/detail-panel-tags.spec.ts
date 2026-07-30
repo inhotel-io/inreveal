@@ -114,7 +114,7 @@ describe('DetailPanelTags filter grammar', () => {
 
     const link = await screen.findByLabelText('filter_by_tag: test/2');
     const href = link.getAttribute('href') ?? '';
-    const params = new URLSearchParams(href.split('?')[1]);
+    const params = new URLSearchParams(href.split('?', 2)[1]);
 
     expect(params.get('tags')).toBe('tag-2');
     expect(href).not.toContain('tag-9');

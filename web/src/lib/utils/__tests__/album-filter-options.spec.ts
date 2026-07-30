@@ -111,7 +111,7 @@ describe('buildAlbumTimelineOptions', () => {
   });
 
   it('omits blank description/filename/ocr text filters from the album timeline query', () => {
-    const filters = { ...createFilterState(), description: '   ', originalFileName: '', ocr: undefined };
+    const filters = { ...createFilterState(), description: ' '.repeat(3), originalFileName: '', ocr: undefined };
 
     const options = buildAlbumTimelineOptions('album-1', AssetOrder.Desc, filters);
 
