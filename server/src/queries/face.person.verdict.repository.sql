@@ -43,16 +43,92 @@ where
 -- FacePersonVerdictRepository.claimPending
 delete from "face_person_verdict"
 where
-  "personId" = $1
-  and "assetFaceId" = $2
-  and "status" = $3
+  "id" in (
+    select
+      "fpv"."id" as "id"
+    from
+      "face_person_verdict" as "fpv"
+      inner join "asset_face" as "af" on "af"."id" = "fpv"."assetFaceId"
+      inner join "asset" on "asset"."id" = "af"."assetId"
+      left join "person" on "person"."id" = "fpv"."personId"
+    where
+      "fpv"."personId" = $1
+      and "fpv"."assetFaceId" = $2
+      and "fpv"."status" = $3
+      and "fpv"."distance" > $4
+      and "fpv"."distance" <= $5
+      and "af"."personId" is null
+      and "af"."deletedAt" is null
+      and "af"."isVisible" is true
+      and "asset"."deletedAt" is null
+      and "asset"."isOffline" is false
+      and "asset"."visibility" in ($6, $7)
+      and not exists (
+        select
+        from
+          "face_identity_face" as "fif"
+        where
+          "fif"."assetFaceId" = "fpv"."assetFaceId"
+          and "fif"."source" = $8
+      )
+      and not exists (
+        select
+        from
+          "face_person_verdict" as "neg"
+        where
+          "neg"."assetFaceId" = "fpv"."assetFaceId"
+          and "neg"."status" in ($9, $10)
+          and (
+            "neg"."personId" = $11
+            or "neg"."identityId" = "person"."identityId"
+          )
+      )
+  )
 
 -- FacePersonVerdictRepository.claimPendingForSpacePerson
 delete from "face_person_verdict"
 where
-  "spacePersonId" = $1
-  and "assetFaceId" = $2
-  and "status" = $3
+  "id" in (
+    select
+      "fpv"."id" as "id"
+    from
+      "face_person_verdict" as "fpv"
+      inner join "asset_face" as "af" on "af"."id" = "fpv"."assetFaceId"
+      inner join "asset" on "asset"."id" = "af"."assetId"
+      left join "shared_space_person" on "shared_space_person"."id" = "fpv"."spacePersonId"
+    where
+      "fpv"."spacePersonId" = $1
+      and "fpv"."assetFaceId" = $2
+      and "fpv"."status" = $3
+      and "fpv"."distance" > $4
+      and "fpv"."distance" <= $5
+      and "af"."personId" is null
+      and "af"."deletedAt" is null
+      and "af"."isVisible" is true
+      and "asset"."deletedAt" is null
+      and "asset"."isOffline" is false
+      and "asset"."visibility" in ($6, $7)
+      and not exists (
+        select
+        from
+          "face_identity_face" as "fif"
+        where
+          "fif"."assetFaceId" = "fpv"."assetFaceId"
+          and "fif"."source" = $8
+      )
+      and not exists (
+        select
+        from
+          "face_person_verdict" as "neg"
+        where
+          "neg"."assetFaceId" = "fpv"."assetFaceId"
+          and "neg"."status" in ($9, $10)
+          and (
+            "neg"."spacePersonId" = $11
+            or "neg"."identityId" = "shared_space_person"."identityId"
+          )
+      )
+  )
 
 -- FacePersonVerdictRepository.markRejected
 insert into
@@ -184,6 +260,69 @@ set
   "actorId" = $10,
   "updatedAt" = now()
 
+-- FacePersonVerdictRepository.listNegativeVerdicts
+select
+  count(*) as "total"
+from
+  "face_person_verdict" as "fpv"
+where
+  "fpv"."status" in ($1, $2)
+select
+  "fpv"."id" as "id",
+  "fpv"."assetFaceId" as "assetFaceId",
+  "fpv"."status" as "status",
+  "fpv"."source" as "source",
+  "fpv"."createdAt" as "createdAt",
+  "fpv"."personId" as "personId",
+  "person"."name" as "personName",
+  "person"."faceAssetId" as "personThumbnailFaceId",
+  "fpv"."spacePersonId" as "spacePersonId",
+  "ssp"."name" as "spacePersonName",
+  "ssp"."representativeFaceId" as "spacePersonThumbnailFaceId",
+  "shared_space"."name" as "spaceName",
+  "fpv"."actorId" as "actorId",
+  "actor"."name" as "actorName"
+from
+  "face_person_verdict" as "fpv"
+  left join "person" on "person"."id" = "fpv"."personId"
+  left join "shared_space_person" as "ssp" on "ssp"."id" = "fpv"."spacePersonId"
+  left join "shared_space" on "shared_space"."id" = "ssp"."spaceId"
+  left join "user" as "actor" on "actor"."id" = "fpv"."actorId"
+where
+  "fpv"."status" in ($1, $2)
+order by
+  "fpv"."createdAt" desc,
+  "fpv"."id" desc
+limit
+  $3
+offset
+  $4
+
+-- FacePersonVerdictRepository.clearNegativeForTarget
+delete from "face_person_verdict"
+where
+  "assetFaceId" in ($1)
+  and "status" in ($2, $3)
+  and "face_person_verdict"."personId" = $4
+
+-- FacePersonVerdictRepository.deleteOrphanedVerdicts
+delete from "face_person_verdict"
+where
+  "id" in (
+    select
+      "id"
+    from
+      "face_person_verdict"
+    where
+      "personId" is null
+      and "spacePersonId" is null
+      and "identityId" is null
+    limit
+      $1
+  )
+returning
+  "id"
+
 -- FacePersonVerdictRepository.removeVerdicts
 delete from "face_person_verdict"
 where
@@ -244,19 +383,11 @@ where
   "fpv"."spacePersonId" = $1
   and "fpv"."assetFaceId" = $2
   and "fpv"."status" = $3
-  and "fpv"."distance" > $4
-  and "fpv"."distance" <= $5
-  and "shared_space_person"."spaceId" = $6
-  and BTRIM("shared_space_person"."name") <> $7
+  and "shared_space_person"."spaceId" = $4
+  and BTRIM("shared_space_person"."name") <> $5
   and "shared_space_person"."isHidden" is false
-  and "shared_space_person"."type" = $8
+  and "shared_space_person"."type" = $6
   and "shared_space"."faceRecognitionEnabled" is true
-  and "af"."personId" is null
-  and "af"."deletedAt" is null
-  and "af"."isVisible" is true
-  and "asset"."deletedAt" is null
-  and "asset"."isOffline" is false
-  and "asset"."visibility" in ($9, $10)
   and (
     exists (
       select
@@ -265,7 +396,7 @@ where
         "shared_space_asset"
       where
         "shared_space_asset"."assetId" = "asset"."id"
-        and "shared_space_asset"."spaceId" = $11::uuid
+        and "shared_space_asset"."spaceId" = $7::uuid
     )
     or exists (
       select
@@ -274,7 +405,7 @@ where
         "shared_space_library"
       where
         "shared_space_library"."libraryId" = "asset"."libraryId"
-        and "shared_space_library"."spaceId" = $12::uuid
+        and "shared_space_library"."spaceId" = $8::uuid
     )
     or (
       exists (
@@ -287,7 +418,7 @@ where
           and "album"."deletedAt" is null
         where
           "album_asset"."assetId" = "asset"."id"
-          and "shared_space_album"."spaceId" = $13::uuid
+          and "shared_space_album"."spaceId" = $9::uuid
       )
       or exists (
         select
@@ -300,9 +431,37 @@ where
           and "album"."deletedAt" is null
         where
           "album_space_asset"."assetId" = "asset"."id"
-          and "shared_space_album"."spaceId" = $14::uuid
+          and "shared_space_album"."spaceId" = $10::uuid
       )
     )
+  )
+  and "fpv"."distance" > $11
+  and "fpv"."distance" <= $12
+  and "af"."personId" is null
+  and "af"."deletedAt" is null
+  and "af"."isVisible" is true
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" is false
+  and "asset"."visibility" in ($13, $14)
+  and not exists (
+    select
+    from
+      "face_identity_face" as "fif"
+    where
+      "fif"."assetFaceId" = "fpv"."assetFaceId"
+      and "fif"."source" = $15
+  )
+  and not exists (
+    select
+    from
+      "face_person_verdict" as "neg"
+    where
+      "neg"."assetFaceId" = "fpv"."assetFaceId"
+      and "neg"."status" in ($16, $17)
+      and (
+        "neg"."spacePersonId" = $18
+        or "neg"."identityId" = "shared_space_person"."identityId"
+      )
   )
 
 -- FacePersonVerdictRepository.isFaceReachableInSpace
@@ -313,6 +472,11 @@ from
   inner join "asset" on "asset"."id" = "asset_face"."assetId"
 where
   "asset_face"."id" = $1
+  and "asset_face"."deletedAt" is null
+  and "asset_face"."isVisible" is true
+  and "asset"."deletedAt" is null
+  and "asset"."isOffline" is false
+  and "asset"."visibility" in ($2, $3)
   and (
     exists (
       select
@@ -321,7 +485,7 @@ where
         "shared_space_asset"
       where
         "shared_space_asset"."assetId" = "asset"."id"
-        and "shared_space_asset"."spaceId" = $2::uuid
+        and "shared_space_asset"."spaceId" = $4::uuid
     )
     or exists (
       select
@@ -330,7 +494,7 @@ where
         "shared_space_library"
       where
         "shared_space_library"."libraryId" = "asset"."libraryId"
-        and "shared_space_library"."spaceId" = $3::uuid
+        and "shared_space_library"."spaceId" = $5::uuid
     )
     or (
       exists (
@@ -343,7 +507,7 @@ where
           and "album"."deletedAt" is null
         where
           "album_asset"."assetId" = "asset"."id"
-          and "shared_space_album"."spaceId" = $4::uuid
+          and "shared_space_album"."spaceId" = $6::uuid
       )
       or exists (
         select
@@ -356,7 +520,7 @@ where
           and "album"."deletedAt" is null
         where
           "album_space_asset"."assetId" = "asset"."id"
-          and "shared_space_album"."spaceId" = $5::uuid
+          and "shared_space_album"."spaceId" = $7::uuid
       )
     )
   )

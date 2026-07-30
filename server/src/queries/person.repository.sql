@@ -171,8 +171,10 @@ select
   ) as "person"
 from
   "asset_face"
+  inner join "asset" on "asset"."id" = "asset_face"."assetId"
 where
   "asset_face"."id" = $1
+  and "asset"."visibility" in ($2, $3)
 
 -- PersonRepository.getRepresentativeFaces
 select

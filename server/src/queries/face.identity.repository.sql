@@ -1611,7 +1611,7 @@ select
 from
   "face_identity_face"
 where
-  "assetFaceId" in $1
+  "assetFaceId" in ($1)
   and "source" = $2
 
 -- FaceIdentityRepository.getPersonVerdictTokens
@@ -1632,6 +1632,27 @@ where
   and "source" = $3
 returning
   "assetFaceId"
+
+-- FaceIdentityRepository.replaceFaceIdentity
+insert into
+  "face_identity_face" (
+    "assetFaceId",
+    "identityId",
+    "source",
+    "confidence"
+  )
+values
+  ($1, $2, $3, $4)
+on conflict ("assetFaceId") do update
+set
+  "identityId" = $5,
+  "source" = CASE
+    WHEN "face_identity_face"."source" = 'manual' THEN 'manual'
+    ELSE $6
+  END,
+  "confidence" = $7
+returning
+  *
 
 -- FaceIdentityRepository.linkPersonFaces
 insert into

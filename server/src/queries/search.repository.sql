@@ -1101,6 +1101,39 @@ where
   "cte"."distance" <= $9
 commit
 
+-- SearchRepository.searchFaces (owner-visibility)
+begin
+set
+  local vchordrq.probes = 1
+with
+  "cte" as (
+    select
+      "asset_face"."id",
+      "asset_face"."personId",
+      face_search.embedding <=> $1 as "distance"
+    from
+      "asset_face"
+      inner join "asset" on "asset"."id" = "asset_face"."assetId"
+      inner join "face_search" on "face_search"."faceId" = "asset_face"."id"
+      left join "person" on "person"."id" = "asset_face"."personId"
+    where
+      "asset"."ownerId" = any ($2::uuid[])
+      and "asset"."deletedAt" is null
+      and "asset"."visibility" in ($3, $4)
+      and "asset_face"."deletedAt" is null
+    order by
+      "distance"
+    limit
+      $5
+  )
+select
+  *
+from
+  "cte"
+where
+  "cte"."distance" <= $6
+commit
+
 -- SearchRepository.searchPlaces
 select
   *
