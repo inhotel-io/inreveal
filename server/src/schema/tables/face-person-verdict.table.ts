@@ -46,8 +46,10 @@ export type FacePersonVerdictSource = 'suggestion' | 'cleanup';
 // Never both targets; MAY be neither. A lower bound (`>= 1`) would be wrong: `personId`/`spacePersonId` are
 // ON DELETE SET NULL so an identity-keyed verdict outlives the person row it was written against, and a
 // `>= 1` check would make that person's DELETE fail outright for any row with no identity. Rows that end up
-// fully orphaned (no target, no identity) are unreachable by every read predicate and are collected when
-// their face goes, via the assetFaceId CASCADE.
+// fully orphaned (no target, no identity) are unreachable by every read predicate. They are collected
+// whenever their face goes (the assetFaceId CASCADE), or sooner by FacePersonVerdictRepository.deleteOrphanedVerdicts
+// — the PersonCleanup reaper called from PersonService.handleQueueRecognizeFaces after the identity GC
+// (Slice 8 / F16) — so a fully-orphaned row does not have to wait for its face to be hard-deleted.
 @Check({
   name: 'face_person_verdict_single_target_chk',
   expression: `num_nonnulls("personId", "spacePersonId") <= 1`,

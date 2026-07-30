@@ -293,6 +293,14 @@ export class FaceRepairService extends BaseService {
             trx,
           );
           await this.facePersonVerdictRepository.drainPendingForFaces(ids, trx);
+          // Slice 8 (F15): the move just stated a fact ("these faces ARE this person") that contradicts any
+          // durable rejected/ignored row for this SAME destination (e.g. an earlier decline against `to`,
+          // now overridden by this move). Scoped to `to` only — see clearNegativeForTarget.
+          await this.facePersonVerdictRepository.clearNegativeForTarget(
+            { personId: to, identityId: identity.id },
+            ids,
+            trx,
+          );
         }
         return ids;
       });
@@ -1051,6 +1059,9 @@ export class FaceRepairService extends BaseService {
           trx,
         );
         await this.facePersonVerdictRepository.drainPendingForFaces(lock, trx);
+        // Slice 8 (F15): the lock just re-affirmed a fact ("these faces ARE this reviewed person") that
+        // contradicts any durable rejected/ignored row for this SAME person — see clearNegativeForTarget.
+        await this.facePersonVerdictRepository.clearNegativeForTarget({ personId, identityId: identity.id }, lock, trx);
       });
       locked += lock.length;
     }

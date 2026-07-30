@@ -465,6 +465,93 @@ export class FacePersonVerdictRepository {
     }));
   }
 
+  // Slice 8 (F15): a human placing face F on target T states a fact that contradicts any durable
+  // rejected/ignored row for that SAME (T, F) pairing — the newer human decision wins, so that row must go.
+  // Matched exactly like the read paths match a negative: by personId, by spacePersonId, OR by identityId
+  // when the target carries one (the D3 self-heal match `excludeNegativeVerdict` already applies) — never a
+  // blanket match, or a verdict against a DIFFERENT target for the same face would be destroyed too, which
+  // is the whole scoping point (S8.2).
+  //
+  // Deliberately does NOT touch `status='pending'` rows — a pending row is drained by
+  // resolveAssignedFace/drainPendingForFaces, not cleared here; this method's WHERE always includes
+  // `status IN ('rejected','ignored')`.
+  @GenerateSql({ params: [{ personId: DummyValue.UUID }, [DummyValue.UUID]] })
+  async clearNegativeForTarget(
+    target: { personId?: string; spacePersonId?: string; identityId?: string | null },
+    assetFaceIds: string[],
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ): Promise<number> {
+    if (assetFaceIds.length === 0) {
+      return 0;
+    }
+    const matchers: Array<(eb: ExpressionBuilder<DB, 'face_person_verdict'>) => Expression<SqlBool>> = [];
+    if (target.personId) {
+      matchers.push((eb) => eb('face_person_verdict.personId', '=', target.personId!));
+    }
+    if (target.spacePersonId) {
+      matchers.push((eb) => eb('face_person_verdict.spacePersonId', '=', target.spacePersonId!));
+    }
+    if (target.identityId) {
+      matchers.push((eb) => eb('face_person_verdict.identityId', '=', target.identityId!));
+    }
+    // No key to scope to — refuse rather than fall through to a match-everything OR of zero conditions.
+    if (matchers.length === 0) {
+      return 0;
+    }
+
+    let cleared = 0;
+    // Chunked like every other bulk face path in this file (drainPendingForFaces, markRejectedMany,
+    // removeVerdicts) — the cleanup move path can pass up to MAX_RESOLVE_FACES (25 000) ids.
+    for (let index = 0; index < assetFaceIds.length; index += BULK_CHUNK_SIZE) {
+      const result = await db
+        .deleteFrom('face_person_verdict')
+        .where('assetFaceId', 'in', assetFaceIds.slice(index, index + BULK_CHUNK_SIZE))
+        .where('status', 'in', ['rejected', 'ignored'])
+        .where((eb) => eb.or(matchers.map((matcher) => matcher(eb))))
+        .executeTakeFirst();
+      cleared += Number(result.numDeletedRows ?? 0n);
+    }
+    return cleared;
+  }
+
+  // Slice 8 (F16): a row with `personId`, `spacePersonId` AND `identityId` all NULL is unreachable by every
+  // read predicate in this file (every read matches on at least one of those three) — a "reset all people"
+  // (unassignFaces -> handlePersonCleanup -> deleteUnreferencedIdentities) degrades a row to exactly this
+  // shape: the person is gone (personId SET NULL), it was never space-scoped (spacePersonId already NULL),
+  // and its identity became unreferenced and was GC'd (identityId SET NULL). Called from
+  // PersonService.handleQueueRecognizeFaces, after deleteUnreferencedIdentities — the identity GC is what
+  // nulls the row's last remaining key, so calling this any earlier in that flow would miss exactly the rows
+  // it exists to collect (see the ordering test in face-review-cross-flow.spec.ts).
+  //
+  // Bounded via a LIMIT'd subquery rather than one unbounded DELETE, so a large orphan backlog cannot become
+  // one enormous statement/lock. Unlike the other bulk paths in this file, there is no caller-supplied id
+  // list to chunk — the WHERE clause binds a small, fixed number of parameters regardless of how many rows
+  // match, so the loop below is about bounding rows-per-statement, not bind parameters.
+  @GenerateSql({ params: [] })
+  async deleteOrphanedVerdicts(db: Kysely<DB> | Transaction<DB> = this.db): Promise<number> {
+    let deleted = 0;
+    for (;;) {
+      const rows = await db
+        .deleteFrom('face_person_verdict')
+        .where('id', 'in', (eb) =>
+          eb
+            .selectFrom('face_person_verdict')
+            .select('id')
+            .where('personId', 'is', null)
+            .where('spacePersonId', 'is', null)
+            .where('identityId', 'is', null)
+            .limit(BULK_CHUNK_SIZE),
+        )
+        .returning('id')
+        .execute();
+      deleted += rows.length;
+      if (rows.length < BULK_CHUNK_SIZE) {
+        break;
+      }
+    }
+    return deleted;
+  }
+
   // F20: chunked at BULK_CHUNK_SIZE, matching drainPendingForFaces/markRejectedMany in this file. The
   // resolutions-remove DTO's verdictIds is capped at MAX_RESOLVE_FACES (25 000) but a direct caller is not
   // bounded by the DTO at all — one id is one bind parameter, so an unchunked IN-list breaks at Postgres's
