@@ -483,9 +483,26 @@
   }
 
   function openDropdown() {
+    // Focus must never downgrade an open modal to the inline dropdown.
+    // `showDropdownPanel` is false while the modal is open, so without this the
+    // next focus event would call open('dropdown') and clobber the presentation.
+    if (manager.isOpen && manager.presentation === 'modal') {
+      return;
+    }
     if (!showDropdownPanel) {
       manager.open('dropdown');
     }
+  }
+
+  function openModalOnTouch(event: PointerEvent) {
+    if (event.pointerType !== 'touch') {
+      return;
+    }
+    // preventDefault is load-bearing: it suppresses the focus this tap would
+    // otherwise produce on pointer release, and it stops iOS raising the soft
+    // keyboard against an input the modal is about to cover.
+    event.preventDefault();
+    manager.open('modal');
   }
 
   function onKeyDown(e: KeyboardEvent) {
@@ -634,6 +651,7 @@
           placeholder={$t('cmdk_placeholder')}
           maxlength={256}
           onfocus={openDropdown}
+          onpointerdown={openModalOnTouch}
           oninput={(event) => {
             inputEditRevision++;
             syncInputCaret(event);

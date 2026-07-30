@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { globalSearchManager } from '$lib/managers/global-search-manager.svelte';
@@ -175,6 +175,67 @@ describe('global-search-input-trigger', () => {
     await user.keyboard('{Control>}k{/Control}');
 
     expect(globalSearchManager.isOpen).toBe(true);
+    expect(globalSearchManager.presentation).toBe('modal');
+    expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
+  });
+
+  it('opens the modal palette when the search field is tapped', async () => {
+    const openSpy = vi.spyOn(globalSearchManager, 'open');
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    await user.pointer({ keys: '[TouchA]', target: input });
+
+    expect(openSpy).toHaveBeenCalledWith('modal');
+    expect(globalSearchManager.presentation).toBe('modal');
+    expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
+  });
+
+  it('does not focus the search field when it is tapped', async () => {
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    await user.pointer({ keys: '[TouchA]', target: input });
+
+    expect(input).not.toHaveFocus();
+  });
+
+  it('opens the inline dropdown for pen input rather than the modal', async () => {
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    await fireEvent.pointerDown(input, { pointerType: 'pen' });
+    await user.click(input);
+
+    expect(globalSearchManager.presentation).toBe('dropdown');
+  });
+
+  it('opens the inline dropdown when a pointerdown carries no pointer type', async () => {
+    const user = userEvent.setup();
+
+    render(GlobalSearchInputTrigger);
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    await fireEvent.pointerDown(input);
+    await user.click(input);
+
+    expect(globalSearchManager.presentation).toBe('dropdown');
+  });
+
+  it('does not let focus downgrade an open modal to the inline dropdown', async () => {
+    render(GlobalSearchInputTrigger);
+
+    globalSearchManager.open('modal');
+
+    const input = screen.getByRole('combobox', { name: 'cmdk_placeholder' });
+    await fireEvent.focus(input);
+
     expect(globalSearchManager.presentation).toBe('modal');
     expect(document.querySelector('[data-cmdk-dropdown-panel]')).toBeNull();
   });
