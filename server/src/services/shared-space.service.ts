@@ -1336,7 +1336,13 @@ export class SharedSpaceService extends BaseService {
     const identity = await this.faceIdentityRepository.ensureSpacePersonIdentity(person.id);
     // Claim the queue row first so a double-submit resolves exactly once. No 'confirmed' status is written:
     // the durable positive verdict is the manual identity link set immediately below.
-    const claimed = await this.facePersonVerdictRepository.claimPendingForSpacePerson(person.id, assetFaceId);
+    // Slice 3 (F5): pass the SAME band `hasPendingForSpacePerson` just checked, so the claim itself is gated
+    // by the identical eligibility — not just the read that preceded it.
+    const claimed = await this.facePersonVerdictRepository.claimPendingForSpacePerson(
+      person.id,
+      assetFaceId,
+      distanceConfig,
+    );
     if (claimed === 0) {
       return;
     }

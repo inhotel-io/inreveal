@@ -428,7 +428,19 @@ export class PersonService extends BaseService {
   // wrapped. This intentionally does NOT delegate to reassignFacesById (the public method, used autocommit
   // by its OTHER callers, e.g. the face-editor reassign endpoint) — confirm gets its own trx-wrapped write
   // chain so that method's signature/behaviour for those callers is untouched.
+  //
+  // Slice 3 (S3.9): the feature gate runs FIRST, before the access checks, matching the space twin
+  // (confirmSpacePersonFaceSuggestion) — a disabled feature is a cheap no-op rather than paying for an
+  // access check the result would be discarded anyway. maxDistance/suggestions.maxDistance come from the
+  // SAME config read and are threaded into claimPending (F5) so the claim applies the identical eligibility
+  // band the read (getFaceSuggestions) already does.
   async confirmFaceSuggestion(auth: AuthDto, personId: string, assetFaceId: string): Promise<void> {
+    const { machineLearning } = await this.getConfig({ withCache: true });
+    if (!isFaceSuggestionEnabled(machineLearning)) {
+      return;
+    }
+    const { maxDistance, suggestions } = machineLearning.facialRecognition;
+
     await this.requireAccess({ auth, permission: Permission.PersonUpdate, ids: [personId] });
     await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
 
@@ -442,7 +454,12 @@ export class PersonService extends BaseService {
     // rolls the whole transaction back — including the claim — so a retried confirm sees the row still
     // pending (R4: strictly safer than a claimed-but-never-applied row).
     const claimed = await this.databaseRepository.transaction(async (trx) => {
-      const claimed = await this.facePersonVerdictRepository.claimPending(personId, assetFaceId, trx);
+      const claimed = await this.facePersonVerdictRepository.claimPending(
+        personId,
+        assetFaceId,
+        { maxDistance, suggestionMaxDistance: suggestions.maxDistance },
+        trx,
+      );
       if (claimed === 0) {
         // Idempotent: the row was already resolved (double-submit, or a concurrent scan/auto-assign) while
         // person+face still exist. A CASCADE-deleted person/face never reaches here — the requireAccess

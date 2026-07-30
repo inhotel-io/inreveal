@@ -22,6 +22,7 @@ import {
 import { FaceSearchResult } from 'src/repositories/search.repository';
 import { FACE_IDENTITY_BACKFILL_MAX_CONTINUATIONS, PersonService } from 'src/services/person.service';
 import { StorageService } from 'src/services/storage.service';
+import { clearConfigCache } from 'src/utils/config';
 import { ImmichFileResponse, ImmichStreamResponse } from 'src/utils/file';
 import { CROSS_OWNER_MERGE_ERROR_CODE } from 'src/utils/merge-policy';
 import { AssetFaceFactory } from 'test/factories/asset-face.factory';
@@ -6879,6 +6880,25 @@ describe(PersonService.name, () => {
   });
 
   describe('confirmFaceSuggestion', () => {
+    // Slice 3 (S3.9): the feature gate now runs BEFORE the access checks, so every test below that exercises
+    // the write chain needs suggestions enabled — matching the space twin (confirmSpacePersonFaceSuggestion),
+    // which already gates the same way.
+    const enabled = {
+      machineLearning: {
+        enabled: true,
+        facialRecognition: {
+          enabled: true,
+          maxDistance: 0.5,
+          minFaces: 3,
+          suggestions: { enabled: true, maxDistance: 0.8 },
+        },
+      },
+    };
+
+    beforeEach(() => {
+      mocks.systemMetadata.get.mockResolvedValue(enabled);
+    });
+
     it('denies a non-owner with NO state change (edge 18 absence)', async () => {
       mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set()); // not owner
 
@@ -6905,7 +6925,13 @@ describe(PersonService.name, () => {
 
       // Slice 9: every write in the chain now runs inside `databaseRepository.transaction`, so each call
       // carries a trailing trx arg — the test/utils.ts L318 passthrough default makes `trx === mocks.database`.
-      expect(mocks.facePersonVerdict.claimPending).toHaveBeenCalledWith(person.id, face.id, mocks.database);
+      // Slice 3 (S3.9): claimPending now also takes the eligibility band, read from the same config lookup.
+      expect(mocks.facePersonVerdict.claimPending).toHaveBeenCalledWith(
+        person.id,
+        face.id,
+        { maxDistance: 0.5, suggestionMaxDistance: 0.8 },
+        mocks.database,
+      );
       expect(mocks.person.reassignFace).toHaveBeenCalledWith(face.id, person.id, mocks.database);
       expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith(
         {
@@ -6944,6 +6970,40 @@ describe(PersonService.name, () => {
         BadRequestException,
       );
       expect(mocks.facePersonVerdict.claimPending).not.toHaveBeenCalled();
+    });
+
+    it('S3.9: returns early without calling requireAccess or any repository when suggestions.enabled is false', async () => {
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: false, maxDistance: 0.8 },
+          },
+        },
+      });
+
+      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).resolves.toBeUndefined();
+
+      expect(mocks.access.person.checkOwnerAccess).not.toHaveBeenCalled();
+      expect(mocks.access.person.checkFaceOwnerAccess).not.toHaveBeenCalled();
+      expect(mocks.person.getById).not.toHaveBeenCalled();
+      expect(mocks.person.getFaceById).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.claimPending).not.toHaveBeenCalled();
+
+      // Positive control, same test body: the identical call reaches requireAccess once suggestions are
+      // enabled again — proves the absence above is the feature gate, not a broken mock/call path.
+      // getConfig({ withCache: true }) memoizes at module scope, so the mock swap alone would not be
+      // observed on the next call — clear it explicitly, same as a fresh test's systemMetadata mock does.
+      clearConfigCache();
+      mocks.systemMetadata.get.mockResolvedValue(enabled);
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set()); // still denies — but PROVES it ran
+      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), 'person-1', 'face-1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalled();
     });
   });
 
