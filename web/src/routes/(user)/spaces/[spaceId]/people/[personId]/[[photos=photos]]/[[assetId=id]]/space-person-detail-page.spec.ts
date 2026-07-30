@@ -914,6 +914,24 @@ describe('Spaces person detail page', () => {
       expect(screen.queryByTestId('suggestion-review-btn')).not.toBeInTheDocument();
     });
 
+    // S12.1: client-side defence in depth. The server already returns `{ total: 0 }` to viewers (covered
+    // above), but that is enforced only by the read endpoint — a future relaxation of that read gate ("let
+    // viewers see what is pending") must not silently expose the review action too. This test uses the SAME
+    // non-zero suggestion data for both halves, differing only in role, so it cannot pass on `total: 0` alone
+    // (the vacuous shape a previous slice removed).
+    it('gates the banner on isEditor: a viewer with pending suggestions renders none, an editor with the same data does', async () => {
+      const suggestions = { total: 3, items: [makeSuggestion()] };
+      sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue(suggestions);
+
+      const viewerRender = renderPage({ members: [makeMember({ role: SharedSpaceRole.Viewer })] });
+      await waitFor(() => expect(sdkMock.getSpacePersonFaceSuggestions).toHaveBeenCalled());
+      expect(screen.queryByTestId('person-suggestion-banner')).not.toBeInTheDocument();
+      viewerRender.unmount();
+
+      renderPage({ members: [makeMember({ role: SharedSpaceRole.Editor })] });
+      await screen.findByTestId('person-suggestion-banner');
+    });
+
     it('hides the banner if the shared-space suggestion summary request fails', async () => {
       sdkMock.getSpacePersonFaceSuggestions.mockRejectedValue(new Error('not a member'));
 

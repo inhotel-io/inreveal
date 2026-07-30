@@ -14,6 +14,7 @@ import type { Component } from 'svelte';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
+import { isSuggestionSnoozed, snoozeSuggestions } from '$lib/utils/face-suggestion-snooze';
 import { preferencesFactory } from '@test-data/factories/preferences-factory';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 import PersonDetailPage from './+page.svelte';
@@ -646,6 +647,19 @@ describe('face suggestions', () => {
     expect(sdkMock.getPersonFaceSuggestions).toHaveBeenCalledWith({ id: 'person-1', page: 1, size: 5 });
   });
 
+  // S12.3 (pin): the new canEditSpacePerson gate (S12.2) must never suppress the banner for a personal
+  // (non-space) person — that flag is a space-write-role check, not a general "may this viewer act" gate, and
+  // it must stay true unconditionally when there is no space profile to check a role against.
+  it('pin: a personal (non-space) person always renders the banner for its owner', async () => {
+    sdkMock.getPersonFaceSuggestions.mockResolvedValue({
+      total: 2,
+      items: [makeSuggestion()],
+    });
+    renderPage({ person: makePerson({ name: 'Alice', primaryProfile: undefined }) });
+
+    await screen.findByTestId('person-suggestion-banner');
+  });
+
   it('renders no banner when the API returns total 0 (server read-gate: edges 7/13)', async () => {
     sdkMock.getPersonFaceSuggestions.mockResolvedValue({ total: 0, items: [] });
     renderPage({ person: makePerson({ name: 'Alice' }) });
@@ -679,6 +693,40 @@ describe('face suggestions', () => {
       size: 5,
     });
     expect(sdkMock.getPersonFaceSuggestions).not.toHaveBeenCalled();
+  });
+
+  // S12.2: client-side defence in depth, mirroring S12.1 on the space route. The server already returns
+  // `{ total: 0 }` to non-editors (covered above), but that is enforced only by the read endpoint. This test
+  // uses the SAME non-zero suggestion data for both halves, differing only in role, so it cannot pass on
+  // `total: 0` alone. Two distinct spaceIds are used because `isSpaceEditor` caches its result per
+  // `spaceId:userId` — reusing one space between the two renders would read the first render's cached answer.
+  it('gates the banner on canEditSpacePerson: a space viewer with pending suggestions renders none, an editor with the same data does', async () => {
+    sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue({
+      total: 3,
+      items: [makeSuggestion({ assetFaceId: 'face-1' })],
+    });
+
+    sdkMock.getMembers.mockResolvedValueOnce([makeMember('current-user-id', SharedSpaceRole.Viewer)]);
+    const viewerRender = renderPage({
+      person: makePerson({
+        id: 'space-person-1',
+        name: 'Alice',
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-suggest-gate-viewer' },
+      }),
+    });
+    await waitFor(() => expect(sdkMock.getMembers).toHaveBeenCalledWith({ id: 'space-suggest-gate-viewer' }));
+    await waitFor(() => expect(screen.queryByTestId('person-suggestion-banner')).not.toBeInTheDocument());
+    viewerRender.unmount();
+
+    sdkMock.getMembers.mockResolvedValueOnce([makeMember('current-user-id', SharedSpaceRole.Editor)]);
+    renderPage({
+      person: makePerson({
+        id: 'space-person-1',
+        name: 'Alice',
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-suggest-gate-editor' },
+      }),
+    });
+    await screen.findByTestId('person-suggestion-banner');
   });
 
   it('renders no banner for a space-primary person when the space endpoint returns total 0', async () => {
@@ -893,6 +941,68 @@ describe('face suggestions', () => {
 
     await waitFor(() => {
       expect(sdkMock.getPersonFaceSuggestions).toHaveBeenLastCalledWith({ id: 'person-1', page: 1, size: 5 });
+    });
+  });
+
+  // S12.11/F32a: cross-route snooze consistency (pin). The space route's snoozeId is `person.id` (its own
+  // SharedSpacePersonResponseDto id — see space-person-detail-page.spec.ts); this route's snoozeId for the
+  // identical space-primary profile is `getSuggestionTarget(person).personId`. Rendering both routes' pages in
+  // one spec file isn't practical (each pulls in a distinct set of top-level `vi.mock()`s), so this drives the
+  // REAL, unmocked face-suggestion-snooze module directly for the "other route" half of each assertion —
+  // exactly the calls that route's own banner would make with the same id.
+  //
+  // Pin, not a fresh red/green: the server always sets `person.id === primaryProfile.id` for a space-primary
+  // identity (FaceIdentityRepository.mapAccessiblePerson), so with realistic fixtures this passes even against
+  // the pre-fix code that derived the key from `person.id` directly — the two values coincide here regardless.
+  // What this guards is the WIRING: that `snoozeId` is actually threaded from `getSuggestionTarget(person)`,
+  // not a value that merely happens to match. Confirmed by mutating `snoozeId` to a wrong constant and back
+  // (see the slice-12 report's Pin evidence) — this test goes red under that mutation and green again on revert.
+  describe('cross-route snooze consistency (F32a)', () => {
+    const PROFILE_ID = 'space-person-1';
+    const spacePrimaryPerson = () =>
+      makePerson({
+        id: PROFILE_ID,
+        name: 'Alice',
+        primaryProfile: { type: Type.SpacePerson, id: PROFILE_ID, spaceId: 'space-snooze-consistency' },
+      });
+
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('a snooze recorded by the space route (keyed on the raw profile id) suppresses this route’s banner', async () => {
+      sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue({
+        total: 3,
+        items: [makeSuggestion()],
+      });
+      // The snooze module keys on the authenticated user (both `user` AND `preferences` — see
+      // AuthManager#authenticated), so the (real, unmocked) session has to be established before recording it,
+      // exactly as it would be by the time the space route runs.
+      authManager.setUser(userAdminFactory.build({ id: 'current-user-id' }));
+      authManager.setPreferences(preferencesFactory.build());
+      // What clicking "Not now" on /spaces/… would do: it passes snoozeId={person.id}, the space-person's own
+      // (raw) id — identical to PROFILE_ID here.
+      snoozeSuggestions(PROFILE_ID, 3);
+
+      renderPage({ person: spacePrimaryPerson() });
+
+      await waitFor(() => expect(sdkMock.getSpacePersonFaceSuggestions).toHaveBeenCalled());
+      expect(screen.queryByTestId('person-suggestion-banner')).not.toBeInTheDocument();
+    });
+
+    it('a snooze recorded on this route reads back as snoozed under the raw profile id the space route uses', async () => {
+      sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue({
+        total: 3,
+        items: [makeSuggestion()],
+      });
+
+      renderPage({ person: spacePrimaryPerson() });
+      await screen.findByTestId('person-suggestion-banner');
+      await userEvent.click(screen.getByTestId('suggestion-snooze-btn'));
+      expect(screen.queryByTestId('person-suggestion-banner')).not.toBeInTheDocument();
+
+      // What the space route's banner would check for the same profile: isSuggestionSnoozed(person.id, total).
+      expect(isSuggestionSnoozed(PROFILE_ID, 3)).toBe(true);
     });
   });
 });

@@ -773,13 +773,23 @@
               </div>
             {/if}
           </div>
-          <PersonSuggestionBanner
-            {person}
-            total={suggestionTotal}
-            previews={suggestionPreviews}
-            referenceThumbnailUrl={thumbnailData}
-            onReview={openSuggestionReview}
-          />
+          {#if canEditSpacePerson}
+            <!-- Defence in depth, not the primary gate: the server already returns an empty page (`total: 0`)
+                 to space members below editor (loadSuggestionSummary/fetchSuggestions above), which is what
+                 actually keeps this hidden from viewers today. `canEditSpacePerson` is always true for a
+                 personal (non-space) person — only a space-scoped profile is role-gated. This client-side
+                 check exists so that a future relaxation of that read gate ("let viewers see what is
+                 pending") does not also silently expose the review action — it must be relaxed here
+                 explicitly, not by accident. -->
+            <PersonSuggestionBanner
+              {person}
+              snoozeId={getSuggestionTarget(person).personId}
+              total={suggestionTotal}
+              previews={suggestionPreviews}
+              referenceThumbnailUrl={thumbnailData}
+              onReview={openSuggestionReview}
+            />
+          {/if}
         {/if}
       </Timeline>
     {/key}

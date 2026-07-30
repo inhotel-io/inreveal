@@ -31,7 +31,13 @@
 
     untrack(() => {
       const { maxDistance, suggestions } = configToEdit.machineLearning.facialRecognition;
-      if (suggestions.maxDistance <= maxDistance) {
+      // `<=` alone misses a genuinely unset value: `undefined <= maxDistance` is always `false` in
+      // JS (comparisons coerce `undefined` to `NaN`), so a partial/legacy config that never wrote
+      // this key would otherwise never get auto-filled. Check for "unset" explicitly instead of
+      // relying on the numeric comparison to catch it. A value that already satisfies the invariant
+      // (an admin's deliberate choice) is left untouched either way.
+      const isUnset = suggestions.maxDistance === undefined || suggestions.maxDistance === null;
+      if (isUnset || suggestions.maxDistance <= maxDistance) {
         suggestions.maxDistance = Math.min(Math.round((maxDistance + 0.2) * 100) / 100, 2);
       }
     });
@@ -269,13 +275,19 @@
               config.machineLearning.facialRecognition.maxDistance}
           />
 
+          <!--
+            No `!configToEdit.machineLearning.enabled` here: the server deliberately supports
+            suggestions with the ML master switch off (server/src/utils/misc.ts omits that check on
+            purpose, pinned by person.service.spec.ts) so an admin can keep reviewing/queuing
+            suggestions while ML is otherwise disabled. Gating this toggle on the master switch made
+            it unreachable in exactly that state. `facialRecognition.enabled` still gates it — this
+            feature is a facial-recognition sub-feature, not an ML-wide one.
+          -->
           <SettingSwitch
             title={$t('admin.machine_learning_face_suggestions_setting')}
             subtitle={$t('admin.machine_learning_face_suggestions_setting_description')}
             bind:checked={configToEdit.machineLearning.facialRecognition.suggestions.enabled}
-            disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
-              !configToEdit.machineLearning.facialRecognition.enabled}
+            disabled={disabled || !configToEdit.machineLearning.facialRecognition.enabled}
           />
 
           <SettingInputField
@@ -287,7 +299,6 @@
             min={0.1}
             max={2}
             disabled={disabled ||
-              !configToEdit.machineLearning.enabled ||
               !configToEdit.machineLearning.facialRecognition.enabled ||
               !configToEdit.machineLearning.facialRecognition.suggestions.enabled}
             isEdited={configToEdit.machineLearning.facialRecognition.suggestions.maxDistance !==

@@ -78,6 +78,33 @@ describe('face-suggestion-snooze', () => {
     expect(localStorage.getItem('gallery-face-suggestion-snooze')).toBeNull();
   });
 
+  // S12.12/F32a: `write()` never pruned, so the record grew forever — one stale entry per person ever snoozed,
+  // for every user who ever used a shared browser. A write for any key must sweep every entry whose expiry has
+  // passed out of storage; an entry that has not yet expired must survive the same write (positive control in
+  // the same test body, alongside the negative pruning assertion).
+  it('prunes expired entries from storage on the next write, and keeps unexpired ones', () => {
+    vi.useFakeTimers();
+    const t0 = new Date('2026-05-16T00:00:00Z').getTime();
+    vi.setSystemTime(t0);
+    snoozeSuggestions('p-old', 3);
+
+    // Written a full day later, so its own expiry sits a full day past p-old's — it must survive the write below.
+    vi.setSystemTime(t0 + 24 * 60 * 60 * 1000);
+    snoozeSuggestions('p-fresh', 3);
+
+    // 1 second past p-old's expiry, but far short of p-fresh's (p-fresh was written a day later than p-old).
+    vi.setSystemTime(t0 + SUGGESTION_SNOOZE_MS + 1000);
+
+    // Any write — even for an unrelated third key — must prune p-old.
+    snoozeSuggestions('p-new', 4);
+
+    const raw = JSON.parse(localStorage.getItem('gallery-face-suggestion-snooze') ?? '{}') as Record<string, unknown>;
+    expect(Object.keys(raw)).not.toContain('user-a:p-old');
+    // Positive control: the still-valid entry and the entry that triggered the write both survive.
+    expect(Object.keys(raw)).toContain('user-a:p-fresh');
+    expect(Object.keys(raw)).toContain('user-a:p-new');
+  });
+
   it('resurfaces after reject-elsewhere churn: baseline rebases down, a genuinely-new suggestion re-shows', () => {
     // Snoozed at 10 pending suggestions.
     snoozeSuggestions('p1', 10);

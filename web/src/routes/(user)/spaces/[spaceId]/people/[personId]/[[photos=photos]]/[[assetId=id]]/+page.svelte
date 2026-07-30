@@ -781,13 +781,21 @@
           {/if}
         </div>
 
-        <PersonSuggestionBanner
-          person={suggestionPerson}
-          total={suggestionTotal}
-          previews={suggestionPreviews}
-          referenceThumbnailUrl={thumbnailUrl}
-          onReview={openSuggestionReview}
-        />
+        {#if isEditor}
+          <!-- Defence in depth, not the primary gate: the server already returns an empty page (`total: 0`)
+               to members below editor (loadSuggestionSummary above), which is what actually keeps this
+               hidden from viewers today. This client-side check exists so that a future relaxation of that
+               read gate ("let viewers see what is pending") does not also silently expose the review
+               action — it must be relaxed here explicitly, not by accident. -->
+          <PersonSuggestionBanner
+            person={suggestionPerson}
+            snoozeId={person.id}
+            total={suggestionTotal}
+            previews={suggestionPreviews}
+            referenceThumbnailUrl={thumbnailUrl}
+            onReview={openSuggestionReview}
+          />
+        {/if}
 
         {#snippet empty()}
           <div class="mx-auto max-w-md py-16 text-center">

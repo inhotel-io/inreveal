@@ -6,7 +6,7 @@ import {
   type FaceRepairClusterFacesResponseDto,
   type FaceRepairPersonMetadataResponseDto,
 } from '@immich/sdk';
-import { modalManager, toastManager } from '@immich/ui';
+import { ConfirmModal, modalManager, toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -177,9 +177,12 @@ const selectTile = async (index: number) => {
 
 // `modalManager.show` is a generic overloaded method (its return type depends on the component passed in), so
 // `vi.mocked(modalManager.show)` can't infer a concrete signature at this call site — same cast the guided
-// page's page.spec.ts uses.
+// page's page.spec.ts uses. The union covers both modals this page opens through it: PersonPicker (an object
+// or undefined) and ConfirmModal (a boolean).
 const showModal = modalManager.show as unknown as ReturnType<
-  typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | undefined>>
+  typeof vi.fn<
+    (...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | boolean | undefined>
+  >
 >;
 
 // Face-grid pagination is scroll-driven (InfiniteScrollSentinel): a controllable IntersectionObserver lets the
@@ -732,6 +735,10 @@ describe('+page.svelte (manual face-review page)', () => {
     });
 
     // ---- 7. detach requires the destructive confirm on Apply; declining does NOT post ----
+    // S12.4: the confirmation is a real `modalManager.show(ConfirmModal, …)` dialog. Escape/backdrop dismissal
+    // and focus handling are ConfirmModal's own responsibility; this page must prove it opens the dialog with
+    // the right copy, a decline (`onClose(false)`, exactly what Escape/Cancel both produce) posts nothing, and
+    // a confirm (`onClose(true)`) posts exactly once with the expected payload.
     describe('destructive confirm — Not a face', () => {
       const stageDetach = async () => {
         render(Page, { props: { data: makePageData() } });
@@ -741,35 +748,53 @@ describe('+page.svelte (manual face-review page)', () => {
         await fireEvent.click(screen.getByTestId('manual-review-bulk-detach'));
       };
 
-      it('does NOT commit anything when Apply carries a detached face — it asks first', async () => {
+      it('does NOT commit anything when Apply carries a detached face — it asks first, with the right copy', async () => {
+        let settleConfirm!: (confirmed: boolean) => void;
+        showModal.mockReturnValueOnce(
+          new Promise((resolve) => {
+            settleConfirm = resolve as (confirmed: boolean) => void;
+          }) as never,
+        );
         await stageDetach();
 
         await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
 
-        await waitFor(() => expect(screen.getByTestId('manual-review-detach-confirm')).toBeInTheDocument());
+        await waitFor(() =>
+          expect(showModal).toHaveBeenCalledWith(
+            ConfirmModal,
+            expect.objectContaining({
+              title: 'admin.face_cleanup_review_detach_confirm_title',
+              prompt: 'admin.face_cleanup_review_detach_confirm_body',
+              confirmText: 'admin.face_cleanup_review_detach_confirm_cta',
+              confirmColor: 'danger',
+            }),
+          ),
+        );
         expect(resolveFaces).not.toHaveBeenCalled();
+
+        settleConfirm(false);
+        await waitFor(() => expect(resolveFaces).not.toHaveBeenCalled());
       });
 
       it('declining the confirm does NOT post, and the staged mark survives', async () => {
+        showModal.mockResolvedValueOnce(false);
         await stageDetach();
+
         await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
-        await waitFor(() => expect(screen.getByTestId('manual-review-detach-confirm')).toBeInTheDocument());
 
-        await fireEvent.click(screen.getByTestId('manual-review-detach-confirm-cancel'));
-
-        await waitFor(() => expect(screen.queryByTestId('manual-review-detach-confirm')).not.toBeInTheDocument());
+        await waitFor(() => expect(showModal).toHaveBeenCalledWith(ConfirmModal, expect.anything()));
         expect(resolveFaces).not.toHaveBeenCalled();
         expect(tileFor('f1')).toHaveAttribute('data-state', 'detach');
       });
 
       it('confirming posts the request with the detached face', async () => {
+        showModal.mockResolvedValueOnce(true);
         await stageDetach();
-        await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
-        await waitFor(() => expect(screen.getByTestId('manual-review-detach-confirm')).toBeInTheDocument());
 
-        await fireEvent.click(screen.getByTestId('manual-review-detach-confirm-cta'));
+        await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
 
         await waitFor(() => {
+          expect(resolveFaces).toHaveBeenCalledTimes(1);
           expect(resolveFaces).toHaveBeenCalledWith({
             faceRepairResolveRequestDto: {
               personId: PERSON_ID,
@@ -792,7 +817,7 @@ describe('+page.svelte (manual face-review page)', () => {
         await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
 
         await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
-        expect(screen.queryByTestId('manual-review-detach-confirm')).not.toBeInTheDocument();
+        expect(showModal).not.toHaveBeenCalledWith(ConfirmModal, expect.anything());
       });
     });
 
@@ -893,56 +918,73 @@ describe('+page.svelte (manual face-review page)', () => {
       await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
       await waitFor(() => expect(showModal).toHaveBeenCalled());
 
-      expect(screen.queryByTestId('manual-review-entire-confirm')).not.toBeInTheDocument();
+      // Only the PersonPicker call happened — cancelling it never opens the ConfirmModal at all.
+      expect(showModal).toHaveBeenCalledTimes(1);
       expect(resolveFaces).not.toHaveBeenCalled();
     });
 
+    // S12.5: same three assertions as the detach confirmation (S12.4) — a real ConfirmModal (chained after
+    // PersonPicker here), a decline that posts nothing, a confirm that posts exactly once with the expected
+    // payload.
     it('confirms before posting, carrying the distinct never-seen-faces warning copy', async () => {
-      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false });
+      let settleConfirm!: (confirmed: boolean) => void;
+      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false }).mockReturnValueOnce(
+        new Promise((resolve) => {
+          settleConfirm = resolve as (confirmed: boolean) => void;
+        }) as never,
+      );
 
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
 
-      await waitFor(() => expect(screen.getByTestId('manual-review-entire-confirm')).toBeInTheDocument());
-      expect(resolveFaces).not.toHaveBeenCalled();
       // The manual-specific confirm copy (never the guided page's generic entire-cluster body, which says
       // nothing about faces the admin has never reviewed).
-      expect(screen.getByTestId('manual-review-entire-confirm')).toHaveTextContent(
-        'admin.face_cleanup_manual_review_move_entire_confirm_body',
+      await waitFor(() =>
+        expect(showModal).toHaveBeenCalledWith(
+          ConfirmModal,
+          expect.objectContaining({
+            title: 'admin.face_cleanup_review_move_entire_confirm_title',
+            prompt: 'admin.face_cleanup_manual_review_move_entire_confirm_body',
+            confirmText: 'admin.face_cleanup_review_move_entire_confirm_cta',
+          }),
+        ),
       );
+      expect(resolveFaces).not.toHaveBeenCalled();
+
+      settleConfirm(false);
+      await waitFor(() => expect(resolveFaces).not.toHaveBeenCalled());
     });
 
     it('declining the confirm posts nothing', async () => {
-      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false });
+      showModal
+        .mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false })
+        .mockResolvedValueOnce(false);
 
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
-      await waitFor(() => expect(screen.getByTestId('manual-review-entire-confirm')).toBeInTheDocument());
 
-      await fireEvent.click(screen.getByTestId('manual-review-entire-confirm-cancel'));
-
-      await waitFor(() => expect(screen.queryByTestId('manual-review-entire-confirm')).not.toBeInTheDocument());
+      await waitFor(() => expect(showModal).toHaveBeenCalledWith(ConfirmModal, expect.anything()));
       expect(resolveFaces).not.toHaveBeenCalled();
     });
 
     it('choosing a destination and confirming posts ONLY entireCluster — no per-face buckets at all', async () => {
-      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: true });
+      showModal
+        .mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: true })
+        .mockResolvedValueOnce(true);
 
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
-      await waitFor(() => expect(screen.getByTestId('manual-review-entire-confirm')).toBeInTheDocument());
-
-      await fireEvent.click(screen.getByTestId('manual-review-entire-confirm-cta'));
 
       // Exact-equality: the server 400s entireCluster combined with any per-face bucket (moveToPerson/stay/
       // lock/detach/unknown), so this request must carry ONLY personId + entireCluster.
       await waitFor(() => {
+        expect(resolveFaces).toHaveBeenCalledTimes(1);
         expect(resolveFaces).toHaveBeenCalledWith({
           faceRepairResolveRequestDto: {
             personId: PERSON_ID,
@@ -950,11 +992,12 @@ describe('+page.svelte (manual face-review page)', () => {
           },
         });
       });
-      expect(screen.queryByTestId('manual-review-entire-confirm')).not.toBeInTheDocument();
     });
 
     it('refreshes the page (re-fetches metadata + cluster faces) after a successful entire-cluster move', async () => {
-      showModal.mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false });
+      showModal
+        .mockResolvedValueOnce({ personId: 'dest-1', name: 'Dest Person', lock: false })
+        .mockResolvedValueOnce(true);
 
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
@@ -963,8 +1006,6 @@ describe('+page.svelte (manual face-review page)', () => {
       expect(getFaceRepairClusterFaces).toHaveBeenCalledTimes(1);
 
       await fireEvent.click(screen.getByTestId('manual-review-move-entire-btn'));
-      await waitFor(() => expect(screen.getByTestId('manual-review-entire-confirm')).toBeInTheDocument());
-      await fireEvent.click(screen.getByTestId('manual-review-entire-confirm-cta'));
 
       await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
       await waitFor(() => {
@@ -1026,14 +1067,12 @@ describe('+page.svelte (manual face-review page)', () => {
       });
       vi.mocked(getFaceRepairPersonMetadata).mockResolvedValueOnce(makeMetadata({ faceCount: 0 }));
       vi.mocked(getFaceRepairClusterFaces).mockResolvedValueOnce(makeFacesResponse([], 0));
+      showModal.mockResolvedValueOnce(true);
 
       await fireEvent.click(screen.getByTestId('manual-review-select-all-loaded'));
       await fireEvent.click(screen.getByTestId('manual-review-bulk-detach'));
       await waitFor(() => expect(screen.getByTestId('manual-review-apply-btn')).toBeInTheDocument());
       await fireEvent.click(screen.getByTestId('manual-review-apply-btn'));
-
-      await waitFor(() => expect(screen.getByTestId('manual-review-detach-confirm')).toBeInTheDocument());
-      await fireEvent.click(screen.getByTestId('manual-review-detach-confirm-cta'));
 
       await waitFor(() => expect(goto).toHaveBeenCalledWith(Route.faceCleanupPeople()));
       expect(toastManager.danger).not.toHaveBeenCalled();

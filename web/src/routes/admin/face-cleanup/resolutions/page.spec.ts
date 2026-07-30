@@ -2,7 +2,7 @@ import { getFaceRepairResolutions, removeFaceRepairResolutions } from '@immich/s
 import { toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
-import { init, register, waitLocale } from 'svelte-i18n';
+import { init, locale, register, waitLocale } from 'svelte-i18n';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Page from './+page.svelte';
 
@@ -215,6 +215,40 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(within(orphanedRow).queryByText(/^by /)).not.toBeInTheDocument();
   });
 
+  // S12.7/F30: a target whose id survived (the row itself was never deleted, so its FK is intact) but whose
+  // name resolved null must read distinctly from a row that never had a target at all (both null) — otherwise
+  // an admin cannot tell "this person was removed after the verdict" from "this cluster was simply never
+  // named". Positive control (both-null → "Unnamed cluster") is DELETED_TARGET_ROW's sibling assertion in the
+  // same test, using the SAME `targetName()` code path with different input.
+  it('renders a deleted-target row distinctly from a genuinely unnamed (fully-orphaned) row', async () => {
+    const deletedTargetRow = {
+      ...CLEANUP_ROW,
+      id: 'verdict-5',
+      assetFaceId: 'face-5',
+      personId: 'person-5',
+      personName: null,
+    };
+
+    vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      resolutions: [deletedTargetRow, ORPHANED_ROW],
+    } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
+
+    const rows = screen.getAllByTestId('resolution-row');
+    const deletedRow = rows.find((r) => r.dataset.source === 'cleanup')!;
+    const orphanedRow = rows.find((r) => r.dataset.source === 'suggestion')!;
+
+    expect(within(deletedRow).getByText('not Deleted target')).toBeInTheDocument();
+    expect(within(deletedRow).queryByText('not Unnamed cluster')).not.toBeInTheDocument();
+
+    // Positive control, same body: the fully-orphaned row (no id survived at all) still reads as "unnamed",
+    // not "deleted" — the two states use different i18n keys, not just different data.
+    expect(within(orphanedRow).getByText('not Unnamed cluster')).toBeInTheDocument();
+  });
+
   it('filters by source', async () => {
     render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
 
@@ -262,6 +296,31 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument();
   });
 
+  // S12.6/F30: the empty state used to branch on the FILTERED list alone, so a filter that excludes every row
+  // rendered the same "no decisions recorded yet" as a genuinely empty account — telling the admin their
+  // filter selection had erased history that is actually still there. Positive control (never-recorded) is
+  // the previous test; this test's own body also covers it via `rows-present-then-filtered`.
+  it('shows a distinct "filter excluded everything" message when rows exist but none match the active filter', async () => {
+    vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      resolutions: [CLEANUP_ROW],
+    } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(1));
+
+    const suggestionFilter = screen
+      .getAllByTestId('source-filter-option')
+      .find((el) => el.dataset.value === 'suggestion')!;
+    await fireEvent.click(suggestionFilter);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument();
+      // The never-recorded message must NOT appear here — the row IS there, just filtered out.
+      expect(screen.queryByText('No decisions recorded yet')).not.toBeInTheDocument();
+      expect(screen.getByText('No decisions match this filter')).toBeInTheDocument();
+    });
+  });
+
   // ---- D17: a failed INITIAL load must not render as the reassuring "no verdicts" empty state ----
 
   it('shows a load-error state (not the empty state) when the initial fetch fails, and Retry re-fetches', async () => {
@@ -283,5 +342,50 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
       expect(screen.getAllByTestId('resolution-row')).toHaveLength(2);
       expect(screen.queryByTestId('load-error-banner')).not.toBeInTheDocument();
     });
+  });
+
+  // S12.8/F30: the three filter-chip labels were built once, at component init, into a plain (non-reactive)
+  // array — so switching locale mid-session left them stuck in whatever language was active on first render.
+  afterEach(async () => {
+    // Always leave the shared svelte-i18n `locale` store back on 'en' for the next test in this file, even if
+    // the assertion above throws.
+    await locale.set('en');
+    await waitLocale('en');
+  });
+
+  it('updates the three filter chip labels when the locale changes', async () => {
+    register('resolutions-test-locale', () =>
+      Promise.resolve({
+        admin: {
+          face_cleanup_resolutions_filter_all: 'Toutes les sources',
+          face_cleanup_resolutions_filter_cleanup: 'Nettoyage admin',
+          face_cleanup_resolutions_filter_suggestion: 'Avis utilisateur',
+        },
+      }),
+    );
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
+
+    // Scoped to the filter-chip strip: `source-label` spans in the rows below also say "Admin cleanup" /
+    // "User review(s)", which would otherwise make these queries ambiguous.
+    const filterStrip = () => within(screen.getByTestId('source-filter'));
+
+    // Positive control: the English labels render first, under the locale active at mount.
+    expect(filterStrip().getByText('All sources')).toBeInTheDocument();
+    expect(filterStrip().getByText('Admin cleanup')).toBeInTheDocument();
+    expect(filterStrip().getByText('User reviews')).toBeInTheDocument();
+
+    await locale.set('resolutions-test-locale');
+    await waitLocale('resolutions-test-locale');
+
+    await waitFor(() => {
+      expect(filterStrip().getByText('Toutes les sources')).toBeInTheDocument();
+      expect(filterStrip().getByText('Nettoyage admin')).toBeInTheDocument();
+      expect(filterStrip().getByText('Avis utilisateur')).toBeInTheDocument();
+    });
+    expect(filterStrip().queryByText('All sources')).not.toBeInTheDocument();
+    expect(filterStrip().queryByText('Admin cleanup')).not.toBeInTheDocument();
+    expect(filterStrip().queryByText('User reviews')).not.toBeInTheDocument();
   });
 });

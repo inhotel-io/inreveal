@@ -8,20 +8,25 @@
 
   interface Props {
     person: PersonResponseDto;
+    // The identifier the CALLER's suggestion API calls use for this surface — deliberately not derived from
+    // `person.id` in here. `/spaces/…` and `/people/…` route to different SDK calls (space-scoped vs
+    // person-scoped) and must key "Not now" on whichever id their own calls use, so the two routes cannot
+    // silently drift apart again (F32a). Pass it in explicitly from each route.
+    snoozeId: string;
     total: number;
     previews: PersonFaceSuggestionResponseDto[];
     referenceThumbnailUrl: string;
     onReview: () => void;
   }
 
-  let { person, total, previews, referenceThumbnailUrl, onReview }: Props = $props();
+  let { person, snoozeId, total, previews, referenceThumbnailUrl, onReview }: Props = $props();
 
   let snoozeTick = $state(0);
   const visible = $derived.by(() => {
     if (snoozeTick < 0) {
       return false;
     }
-    return total > 0 && !isSuggestionSnoozed(person.id, total);
+    return total > 0 && !isSuggestionSnoozed(snoozeId, total);
   });
   const shownPreviews = $derived(previews.slice(0, 5));
 
@@ -32,7 +37,7 @@
   );
 
   const snooze = () => {
-    snoozeSuggestions(person.id, total);
+    snoozeSuggestions(snoozeId, total);
     snoozeTick++;
   };
 </script>

@@ -6,7 +6,7 @@ import {
   type FaceRepairClusterFacesResponseDto,
   type FaceRepairPersonFacesDto,
 } from '@immich/sdk';
-import { modalManager, toastManager } from '@immich/ui';
+import { ConfirmModal, modalManager, toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -198,9 +198,12 @@ const emptyRest = () => ({ faces: [], total: 0, hasMore: false }) as unknown as 
 
 // `modalManager.show` is a generic overloaded method (its return type depends on the component passed in),
 // so `vi.mocked(modalManager.show)` can't infer a concrete signature at this call site. Cast once to a plain
-// mock of the shape the picker's `onClose` actually resolves with (see PersonPicker.svelte).
+// mock of the shape the picker's `onClose` actually resolves with (see PersonPicker.svelte). The union also
+// covers ConfirmModal (a boolean), the other modal this page opens through the same mock.
 const showModal = modalManager.show as unknown as ReturnType<
-  typeof vi.fn<(...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | undefined>>
+  typeof vi.fn<
+    (...args: unknown[]) => Promise<{ personId: string; name: string; lock?: boolean } | boolean | undefined>
+  >
 >;
 
 describe('+page.svelte (face-cleanup review — Model B)', () => {
@@ -816,9 +819,8 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('bulk-detach'));
 
       // Detaching is irreversible, so Apply routes through the confirmation first.
+      showModal.mockResolvedValueOnce(true);
       await fireEvent.click(screen.getByTestId('apply-btn'));
-      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
-      await fireEvent.click(screen.getByTestId('detach-confirm-cta'));
 
       await waitFor(() => {
         expect(resolveFaces).toHaveBeenCalledWith({
@@ -841,6 +843,12 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
   // "Not a face" is the only action on this page that cannot be undone — it retires the detected face for good,
   // and nothing in the app brings it back. It also sits one button away from "Unknown person", which means the
   // OPPOSITE thing. These tests pin the guard against that slip.
+  //
+  // S12.4: the confirmation is a real `modalManager.show(ConfirmModal, …)` dialog, not a hand-rolled overlay —
+  // Escape/backdrop dismissal and focus handling are ConfirmModal's own responsibility (covered where that
+  // component is itself tested); what this page owns and must prove is: it opens the dialog with the right
+  // copy, a decline (`onClose(false)` — exactly what Escape and the Cancel button both produce) issues no
+  // `resolveFaces` call, and a confirm (`onClose(true)`) issues exactly one with the expected payload.
   describe('Destructive Apply — confirmation before discarding faces', () => {
     const stageDetach = async () => {
       render(Page, { props: { data: makePageData() } });
@@ -849,28 +857,73 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('bulk-detach'));
     };
 
-    it('does NOT commit anything when Apply carries a detached face — it asks first', async () => {
+    it('does NOT commit anything when Apply carries a detached face — it asks first, with the right copy', async () => {
+      let settleConfirm!: (confirmed: boolean) => void;
+      showModal.mockReturnValueOnce(
+        new Promise((resolve) => {
+          settleConfirm = resolve as (confirmed: boolean) => void;
+        }) as never,
+      );
       await stageDetach();
 
       await fireEvent.click(screen.getByTestId('apply-btn'));
 
-      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
-      // The whole point: the destructive resolve has NOT been sent yet.
+      await waitFor(() =>
+        expect(showModal).toHaveBeenCalledWith(
+          ConfirmModal,
+          expect.objectContaining({
+            title: 'admin.face_cleanup_review_detach_confirm_title',
+            prompt: 'admin.face_cleanup_review_detach_confirm_body',
+            confirmText: 'admin.face_cleanup_review_detach_confirm_cta',
+            confirmColor: 'danger',
+          }),
+        ),
+      );
+      // The whole point: the destructive resolve has NOT been sent yet — the dialog is still pending.
       expect(resolveFaces).not.toHaveBeenCalled();
       expect(goto).not.toHaveBeenCalled();
+
+      // F31 item 4: this message doesn't reference {count} at all — it must not be handed one, the exact
+      // "argument the message never interpolates" defect the item calls out.
+      const bodyTranslation = translations.findLast((t) => t.key === 'admin.face_cleanup_review_detach_confirm_body');
+      expect(bodyTranslation?.values?.count).toBeUndefined();
+
+      settleConfirm(false);
+      await waitFor(() => expect(resolveFaces).not.toHaveBeenCalled());
     });
 
-    it('cancelling commits nothing and leaves the staged review exactly as it was', async () => {
+    it('cancelling (Escape/backdrop/Cancel all resolve false) commits nothing and leaves the staged review intact', async () => {
+      showModal.mockResolvedValueOnce(false);
       await stageDetach();
+
       await fireEvent.click(screen.getByTestId('apply-btn'));
-      await waitFor(() => expect(screen.getByTestId('detach-confirm')).toBeInTheDocument());
 
-      await fireEvent.click(screen.getByTestId('detach-confirm-cancel'));
-
-      await waitFor(() => expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument());
+      await waitFor(() => expect(showModal).toHaveBeenCalledWith(ConfirmModal, expect.anything()));
       expect(resolveFaces).not.toHaveBeenCalled();
       // The staged decision survives the cancel — the admin returns to their review, not to a blank slate.
       expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'detach');
+    });
+
+    it('confirming issues exactly one resolveFaces call carrying the detached face', async () => {
+      showModal.mockResolvedValueOnce(true);
+      await stageDetach();
+
+      await fireEvent.click(screen.getByTestId('apply-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalledTimes(1));
+      expect(resolveFaces).toHaveBeenCalledWith({
+        faceRepairResolveRequestDto: {
+          personId: PERSON_ID,
+          moveToPerson: [
+            { destinationPersonId: OWNER_A_ID, faceIds: ['face-2'], lock: false },
+            { destinationPersonId: OWNER_B_ID, faceIds: ['face-3'], lock: false },
+          ],
+          stay: [],
+          lock: [],
+          detach: ['face-1'],
+          unknown: [],
+        },
+      });
     });
 
     it('does NOT ask when nothing is being discarded — a routine Apply goes straight through', async () => {
@@ -882,7 +935,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('apply-btn'));
 
       await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
-      expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument();
+      expect(showModal).not.toHaveBeenCalledWith(ConfirmModal, expect.anything());
     });
 
     it('does NOT ask for the Unknown person action — parking a stranger is reversible', async () => {
@@ -894,7 +947,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('apply-btn'));
 
       await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
-      expect(screen.queryByTestId('detach-confirm')).not.toBeInTheDocument();
+      expect(showModal).not.toHaveBeenCalledWith(ConfirmModal, expect.anything());
     });
   });
 
@@ -955,24 +1008,51 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
   // ---- Rest-of-cluster (own self-contained flow, now also posting through `resolve` — Slice 6) ----
 
   describe('Rest-of-cluster via resolve', () => {
-    it('Move entire cluster: confirming the modal calls resolveFaces with entireCluster', async () => {
+    // S12.5: same three assertions as the detach confirmation (S12.4) — a real ConfirmModal, a decline that
+    // posts nothing, a confirm that posts exactly once with the expected payload.
+    it('Move entire cluster: opens a ConfirmModal with the right copy and posts nothing until confirmed', async () => {
+      let settleConfirm!: (confirmed: boolean) => void;
+      showModal.mockReturnValueOnce(
+        new Promise((resolve) => {
+          settleConfirm = resolve as (confirmed: boolean) => void;
+        }) as never,
+      );
+
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getByTestId('move-entire-btn'));
-      await waitFor(() => expect(screen.getByTestId('entire-confirm')).toBeInTheDocument());
 
-      await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
+      await waitFor(() =>
+        expect(showModal).toHaveBeenCalledWith(
+          ConfirmModal,
+          expect.objectContaining({
+            title: 'admin.face_cleanup_review_move_entire_confirm_title',
+            prompt: 'admin.face_cleanup_review_move_entire_confirm_body',
+            confirmText: 'admin.face_cleanup_review_move_entire_confirm_cta',
+          }),
+        ),
+      );
+      expect(resolveFaces).not.toHaveBeenCalled();
 
-      await waitFor(() => {
-        expect(resolveFaces).toHaveBeenCalledWith({
-          faceRepairResolveRequestDto: {
-            personId: PERSON_ID,
-            entireCluster: { destinationPersonId: OWNER_A_ID },
-          },
-        });
+      settleConfirm(false);
+      await waitFor(() => expect(resolveFaces).not.toHaveBeenCalled());
+    });
+
+    it('Move entire cluster: confirming the modal calls resolveFaces exactly once with entireCluster', async () => {
+      showModal.mockResolvedValueOnce(true);
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await fireEvent.click(screen.getByTestId('move-entire-btn'));
+
+      await waitFor(() => expect(resolveFaces).toHaveBeenCalledTimes(1));
+      expect(resolveFaces).toHaveBeenCalledWith({
+        faceRepairResolveRequestDto: {
+          personId: PERSON_ID,
+          entireCluster: { destinationPersonId: OWNER_A_ID },
+        },
       });
-      expect(screen.queryByTestId('entire-confirm')).not.toBeInTheDocument();
     });
 
     // The rest-of-cluster section used to COMMIT its own independent resolve, which drained the person from the
@@ -1030,13 +1110,12 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     // the client swallowed it — no banner, nothing moved, and the admin believed it had worked.
     it('surfaces a rejected Move entire cluster instead of swallowing it, and does not navigate away', async () => {
       vi.mocked(resolveFaces).mockRejectedValue({ status: 409 });
+      showModal.mockResolvedValueOnce(true);
 
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getByTestId('move-entire-btn'));
-      await waitFor(() => expect(screen.getByTestId('entire-confirm')).toBeInTheDocument());
-      await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
 
       await waitFor(() => {
         expect(screen.getByText('admin.face_cleanup_review_apply_conflict')).toBeInTheDocument();
@@ -1337,12 +1416,12 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     });
 
     it('names the chosen destination in the move-entire confirmation', async () => {
+      showModal.mockResolvedValueOnce(true);
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeEnabled());
 
       await fireEvent.change(chooser(), { target: { value: OWNER_B_ID } });
       await fireEvent.click(screen.getByTestId('move-entire-btn'));
-      await fireEvent.click(screen.getByTestId('entire-confirm-cta'));
 
       await waitFor(() => expect(resolveFaces).toHaveBeenCalled());
       const request = vi.mocked(resolveFaces).mock.calls[0][0].faceRepairResolveRequestDto;
