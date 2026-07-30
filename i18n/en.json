@@ -237,6 +237,7 @@
     "face_cleanup_resolutions_not_person": "not {name}",
     "face_cleanup_resolutions_source_cleanup": "Admin cleanup",
     "face_cleanup_resolutions_source_suggestion": "User review",
+    "face_cleanup_resolutions_target_deleted": "Deleted target",
     "face_cleanup_resolutions_title": "Resolutions",
     "face_cleanup_resolutions_undo": "Undo",
     "face_cleanup_resolutions_undo_success": "Undone",
@@ -834,8 +835,7 @@
     "version_check_settings": "Version Check",
     "version_check_settings_description": "Enable/disable the new version notification",
     "video_conversion_job": "Transcode videos",
-    "video_conversion_job_description": "Transcode videos for wider compatibility with browsers and devices",
-    "face_cleanup_resolutions_target_deleted": "Deleted target"
+    "video_conversion_job_description": "Transcode videos for wider compatibility with browsers and devices"
   },
   "admin_email": "Admin Email",
   "admin_password": "Admin Password",
