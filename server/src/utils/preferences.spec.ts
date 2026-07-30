@@ -279,6 +279,17 @@ describe('getPreferencesPartial', () => {
     const result = getPreferencesPartial(preferences);
     expect(result).toEqual({ memories: { types: { birthday: false } } });
   });
+
+  it('should drop a memory-type key that has no registry default while keeping known changes', () => {
+    // Deliberate asymmetry with `getPreferences`, which preserves unknown keys on load: the partial
+    // is built by walking the *defaults*, and the per-user memory-type default is a dense map of the
+    // registry keys, so a key outside the registry has no default path to be diffed against. Only a
+    // downgrade or hand-edited metadata can produce one, and dropping it is the safe outcome.
+    const preferences = getDefaultPreferences();
+    preferences.memories.types = { ...preferences.memories.types, birthday: false, future_type: true };
+    const result = getPreferencesPartial(preferences);
+    expect(result).toEqual({ memories: { types: { birthday: false } } });
+  });
 });
 
 describe('mergePreferences', () => {
