@@ -23,6 +23,13 @@
     (triggerProps.onclick as ((event: MouseEvent) => void) | undefined)?.(event);
     onToggle(id);
   }
+
+  // When isOverflowing flips, @immich/ui's Tooltip below switches its `{#if text}` branch, which
+  // destroys and recreates this button (see Tooltip.svelte in @immich/ui). Every clipped row
+  // therefore mounts twice on first render (bare branch, then Tooltip.Root branch), and a
+  // mid-session flip (window narrowed, a webfont finishing load) while that row holds keyboard
+  // focus sends focus to <body>, since the focused element is destroyed. This is inherent to the
+  // Tooltip's conditional rendering, not something this component can fix — out of scope here.
 </script>
 
 <Tooltip text={isOverflowing ? name : undefined}>
@@ -51,9 +58,13 @@
 
       <!-- wrap-break-words is required, not cosmetic: without it an unbreakable token overflows
            horizontally and clampOverflow reports a false "fits". -->
+      <!-- key includes `checked`, not just `name`: selecting a row flips its class from
+           `text-gray-500 dark:text-gray-300` (font-weight 400) to `font-medium` (500), which changes
+           the label's text metrics without changing its border box — so ResizeObserver never fires
+           for this — and without `checked` here the action's update() never re-measures either. -->
       <span
         class="wrap-break-words line-clamp-2 flex-1 text-left"
-        use:clampOverflow={{ onChange: (overflowing) => (isOverflowing = overflowing), key: name }}
+        use:clampOverflow={{ onChange: (overflowing) => (isOverflowing = overflowing), key: `${name}|${checked}` }}
       >
         {name}
       </span>

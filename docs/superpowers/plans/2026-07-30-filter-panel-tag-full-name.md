@@ -32,7 +32,7 @@
 | `web/src/lib/components/filter-panel/tag-filter-row.svelte`            | Create | One filter row: checkbox, clamped label, conditional tooltip.             |
 | `web/src/lib/components/filter-panel/__tests__/tag-filter-row.spec.ts` | Create | Component tests for the row (R1–R15).                                     |
 | `web/src/lib/components/filter-panel/tags-filter.svelte`               | Modify | Render `TagFilterRow` for the orphaned and normal lists.                  |
-| `web/src/lib/components/filter-panel/__tests__/tags-filter.spec.ts`    | Modify | Add integration scenarios T1–T5; keep the 19 existing tests green.        |
+| `web/src/lib/components/filter-panel/__tests__/tags-filter.spec.ts`    | Modify | Add integration scenarios T1–T5; keep the 18 existing tests green.        |
 
 ---
 
@@ -623,7 +623,7 @@ git commit -m "feat(web): add a tag filter row that wraps long names and tooltip
 
 **Background the implementer needs:**
 
-- The existing 19 tests in `tags-filter.spec.ts` are the regression suite for search, `Show N more`, orphaned rows, and empty states. They must keep passing untouched apart from the `ResizeObserver` stub.
+- The existing 18 tests in `tags-filter.spec.ts` are the regression suite for search, `Show N more`, orphaned rows, and empty states. They must keep passing untouched apart from the `ResizeObserver` stub.
 - They render `TagsFilter` directly with no `TooltipProvider`, and that stays correct: nothing overflows under happy-dom, so `Tooltip.Root` is never instantiated and no provider context is needed.
 - `toggleTag(id: string)` already exists at `tags-filter.svelte:57` and matches `onToggle` exactly.
 
@@ -725,7 +725,7 @@ export PATH="$HOME/.local/share/mise/shims:$PATH"
 cd web && pnpm test --run src/lib/components/filter-panel/__tests__/tags-filter.spec.ts
 ```
 
-Expected: 19 passed, 5 failed. T1, T2 and T5 fail on `line-clamp-2` not being found (the label still says `truncate`); T3 fails because `font-medium` currently sits on the label, not the row. T4 may already pass — that is fine, it is a regression guard for the refactor in Step 3.
+Expected: 18 passed, 5 failed. T1, T2 and T5 fail on `line-clamp-2` not being found (the label still says `truncate`); T3 fails because `font-medium` currently sits on the label, not the row. T4 may already pass — that is fine, it is a regression guard for the refactor in Step 3.
 
 - [ ] **Step 3: Write the implementation**
 
@@ -762,7 +762,7 @@ export PATH="$HOME/.local/share/mise/shims:$PATH"
 cd web && pnpm test --run src/lib/components/filter-panel/__tests__/tags-filter.spec.ts
 ```
 
-Expected: PASS — 24 passed (19 existing + 5 new).
+Expected: PASS — 23 passed (18 existing + 5 new).
 
 - [ ] **Step 5: Commit**
 
@@ -845,7 +845,7 @@ Skip this step if Steps 1–4 needed no changes.
 | `wrap-break-words` hazard                | Task 2 (R12, R14)               |
 | Class unification onto the row element   | Task 2 (R13), Task 3 (T3)       |
 | `tags-filter.svelte` wiring + T1–T5      | Task 3                          |
-| 19 existing tests stay green             | Task 3 (Step 4)                 |
+| 18 existing tests stay green             | Task 3 (Step 4)                 |
 | e2e `data-testid` preserved              | Task 2 (R3), Global Constraints |
 | Manual browser verification              | Task 4 (Step 4)                 |
 | No new i18n strings                      | Global Constraints              |

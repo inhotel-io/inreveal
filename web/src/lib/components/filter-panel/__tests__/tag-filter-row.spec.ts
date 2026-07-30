@@ -4,9 +4,16 @@ import { tick } from 'svelte';
 import { getResizeObserverMock } from '$lib/__mocks__/resize-observer.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import TagFilterRowNonDefaultProvider from '../tag-filter-row-non-default-provider.test-wrapper.svelte';
+import TagFilterRowToggleChecked from '../tag-filter-row-toggle-checked.test-wrapper.svelte';
 import TagFilterRow from '../tag-filter-row.svelte';
 
 const LONG_NAME = 'Events/2024/Italy Summer Trip Rome Colosseum And Vatican Museums';
+
+// The only two non-closed values bits-ui's tooltip state machine produces (tooltip.svelte.js:
+// #stateAttr returns "delayed-open" or "instant-open" whenever the trigger is open). Asserting
+// membership in this set is real coverage; `.not.toBe('closed')` would also pass if `data-state`
+// were absent entirely (undefined !== 'closed'), which is why it is avoided below.
+const OPEN_STATES = ['delayed-open', 'instant-open'];
 
 /**
  * happy-dom reports 0 for both metrics, so overflow is simulated on the prototype — the action reads
@@ -15,13 +22,21 @@ const LONG_NAME = 'Events/2024/Italy Summer Trip Rome Colosseum And Vatican Muse
  * Defining on HTMLElement.prototype only *shadows* happy-dom, which defines both as getters on
  * Element.prototype (verified in happy-dom's Element.d.ts). The afterEach delete therefore removes
  * only this shadow and restores happy-dom's own behaviour — it does not clobber it process-wide.
+ *
+ * The getters read through a mutable `heightMetrics` object rather than closing over the values
+ * passed to stubHeights directly, so a test can change the reported heights mid-test (R17) without
+ * re-running Object.defineProperties or losing the shadow already installed for the current test.
  */
+const heightMetrics = { scrollHeight: 0, clientHeight: 0 };
+
 function stubHeights(scrollHeight: number, clientHeight: number) {
+  heightMetrics.scrollHeight = scrollHeight;
+  heightMetrics.clientHeight = clientHeight;
   // One defineProperties call, not two defineProperty calls: eslint's
   // unicorn/prefer-object-define-properties is an ERROR here and CI runs bare `pnpm lint`.
   Object.defineProperties(HTMLElement.prototype, {
-    scrollHeight: { configurable: true, get: () => scrollHeight },
-    clientHeight: { configurable: true, get: () => clientHeight },
+    scrollHeight: { configurable: true, get: () => heightMetrics.scrollHeight },
+    clientHeight: { configurable: true, get: () => heightMetrics.clientHeight },
   });
 }
 
@@ -136,7 +151,7 @@ describe('TagFilterRow', () => {
       vi.advanceTimersByTime(700);
       await tick();
 
-      expect(row.dataset.state).not.toBe('closed');
+      expect(OPEN_STATES).toContain(row.dataset.state);
     } finally {
       vi.useRealTimers();
     }
@@ -150,13 +165,14 @@ describe('TagFilterRow', () => {
       const { getByTestId, onToggle } = renderRow({ id: 't7' });
       await tick();
       const row = getByTestId('tags-item-t7');
+      expect(row.dataset.state).toBe('closed');
 
       // Open via the hover path proven in R6 — focus-open cannot be exercised under happy-dom
       // (see the note above the describe block explaining R7's removal).
       await fireEvent.pointerEnter(row, { pointerType: 'mouse' });
       vi.advanceTimersByTime(700);
       await tick();
-      expect(row.dataset.state).not.toBe('closed');
+      expect(OPEN_STATES).toContain(row.dataset.state);
 
       await fireEvent.click(row);
       await tick();
@@ -169,7 +185,7 @@ describe('TagFilterRow', () => {
       // rather than replaced — bits-ui's onclick is inert here either way, so this assertion would
       // pass identically even if handleClick dropped triggerProps.onclick entirely. See R16, which
       // uses a provider where that handler is live, for the test that can actually tell the two apart.
-      expect(row.dataset.state).not.toBe('closed');
+      expect(OPEN_STATES).toContain(row.dataset.state);
     } finally {
       vi.useRealTimers();
     }
@@ -201,7 +217,15 @@ describe('TagFilterRow', () => {
     expect(row.querySelector('svg')).toBeNull();
   });
 
-  it('R12: still reveals an unbreakable token that overflows two lines', async () => {
+  it('R12: attaches a tooltip whenever clampOverflow reports overflow, regardless of the name shape', async () => {
+    // stubHeights(100, 40) forces the overflow verdict independent of the name it is given, so the
+    // 'A'.repeat(120) unbreakable token here is inert as far as this assertion goes — this test would
+    // pass unchanged even if `wrap-break-words` were deleted from the component. It pins only that an
+    // overflowing row always gets a tooltip. The actual "wrap-break-words makes an unbreakable token
+    // overflow vertically instead of clipping horizontally" claim cannot be proven under happy-dom
+    // (no layout engine); it is proven only by the real-browser probe recorded in the design spec's
+    // "Hazard: an unbreakable token defeats height-based detection" section. R14 below only pins that
+    // the class is present on the label, not the resulting behaviour.
     stubHeights(100, 40);
     const { getByTestId } = renderRow({ name: 'A'.repeat(120) });
     await tick();
@@ -226,11 +250,14 @@ describe('TagFilterRow', () => {
   it('R15: shows the complete tag name in the open tooltip content', async () => {
     // Queries the portalled tooltip content directly instead of via aria-describedby. bits-ui does
     // portal the content and render the full name under happy-dom (confirmed with a full DOM dump
-    // during investigation), but it never threads the content's generated id through to the
-    // trigger's aria-describedby attribute here — that stays an empty string regardless of extra
-    // tick()/microtask flushes, so asserting through aria-describedby cannot work in this
-    // environment. [data-tooltip-content] is bits-ui's own stable marker for the content element
-    // (derived from its "tooltip" component name), so this sidesteps the id-wiring gap entirely.
+    // during investigation). bits-ui DOES generate a content id for this wiring — tooltip-content.svelte
+    // sets `id = createId(uid)`, and the trigger reads `root?.contentNode?.id` for aria-describedby — so
+    // this is not bits-ui failing to thread an id through. Here, though, the trigger's aria-describedby
+    // stays an empty string regardless of extra tick()/microtask flushes. That is a happy-dom
+    // limitation, most likely `contentNode` resolving to the popper wrapper element rather than the
+    // inner content div that actually carries the id, not a gap in bits-ui's own behaviour.
+    // [data-tooltip-content] is bits-ui's own stable marker for the content element (derived from its
+    // "tooltip" component name), so this sidesteps the issue entirely.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       stubHeights(100, 40);
@@ -265,11 +292,12 @@ describe('TagFilterRow', () => {
       const { getByTestId, onToggle } = renderNonDefaultProviderRow({ id: 't16' });
       await tick();
       const row = getByTestId('tags-item-t16');
+      expect(row.dataset.state).toBe('closed');
 
       await fireEvent.pointerEnter(row, { pointerType: 'mouse' });
       vi.advanceTimersByTime(700);
       await tick();
-      expect(row.dataset.state).not.toBe('closed');
+      expect(OPEN_STATES).toContain(row.dataset.state);
 
       await fireEvent.click(row);
       await tick();
@@ -279,5 +307,38 @@ describe('TagFilterRow', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('R17: re-measures when `checked` flips, because selecting a row changes its font weight', async () => {
+    // Selecting a row swaps its class from `text-gray-500 dark:text-gray-300` (font-weight 400) to
+    // `font-medium` (500). That cascades into the label and can change how many lines the text wraps
+    // to WITHOUT changing the label's border box (fixed width, height clamped to 2 lines) — so
+    // ResizeObserver never fires — and if the action's `key` is just `name`, `update()` never runs
+    // either, since `checked` isn't one of its dependencies. Measured in real Chrome at this row's
+    // true geometry (200px wide, font-size 0.875rem, line-height 1.25rem, overflow-wrap: break-word):
+    // "Events/2024/Italy Summer Trip Roma Vatican Museum Tour" is 2 lines at weight 400 and 3 lines at
+    // weight 500 — an unselected borderline tag can correctly show no tooltip, then need one the
+    // instant it is selected (and, symmetrically, deselecting can leave a stale tooltip).
+    //
+    // This is driven through TagFilterRowToggleChecked, not renderRow()/rerender(): rerender() would
+    // replace TagFilterRow's whole props object as one shallow `$state.raw` box (see that wrapper's
+    // own comment), over-invalidating every prop together and masking the exact per-prop dependency
+    // gap this test exists to catch. The wrapper instead gives TagFilterRow a real, independently
+    // reactive `checked` prop, flipped by a click the wrapper handles itself — the same shape of
+    // update TagFilterRow gets from its real parent, tags-filter.svelte.
+    stubHeights(40, 40); // fits at the unchecked (400) weight
+    const onToggle = vi.fn();
+    const { getByTestId } = render(TagFilterRowToggleChecked, {
+      props: { id: 't17', name: LONG_NAME, initialChecked: false, onToggle },
+    });
+    await tick();
+    expect('tooltipTrigger' in getByTestId('tags-item-t17').dataset).toBe(false);
+
+    // Now overflows, standing in for the extra line the heavier weight would introduce.
+    heightMetrics.scrollHeight = 60;
+    await fireEvent.click(getByTestId('toggle-checked'));
+    await tick();
+
+    expect('tooltipTrigger' in getByTestId('tags-item-t17').dataset).toBe(true);
   });
 });
