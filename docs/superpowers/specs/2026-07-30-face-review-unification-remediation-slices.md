@@ -180,8 +180,8 @@ admin face-thumbnail route refuses to serve its crop. Facial recognition is prov
 - `server/src/utils/face-review.ts` (new — the canonical predicate above)
 - `server/src/repositories/search.repository.ts` (`searchFaces` — new `visibility` option)
 - `server/src/repositories/face-repair.repository.ts` (`streamEligibleFaces`,
-  `getEligibleFacePage`, `countEligibleFaces`, `countAllFaces`, `getClusterFacePage`,
-  `getEligibleFaceIdsForPerson`)
+  `getEligibleFacePage`, `countEligibleFaces`, `getClusterFacePage`, `getEligibleFaceIdsForPerson`
+  — **not** `countAllFaces`, which deliberately stays unfiltered, see Implementation step 5)
 - `server/src/repositories/face-person-verdict.repository.ts` (`isFaceReachableInSpace`)
 - `server/src/repositories/person.repository.ts` (`getFaceByIdIncludingTombstoned` — see below)
 - `server/src/services/person.service.ts` (both suggestion scans pass `visibility`)
@@ -206,36 +206,46 @@ admin face-thumbnail route refuses to serve its crop. Facial recognition is prov
    `spaceVisibilityGate`; passing the option there is redundant but harmless and keeps the two call
    sites symmetric — pass it in both.
 4. `face-repair.service.ts:378` (the cleanup scan's KNN pass) passes the same.
-5. All six `face-repair.repository.ts` feed methods gain
-   `.where((eb) => reviewableAssetVisibility(eb))`. `countEligibleFaces` and `countAllFaces` must
-   change too or the console's totals disagree with its lists.
+5. **Five** `face-repair.repository.ts` feed methods gain `.where((eb) => reviewableAssetVisibility(eb))`:
+   `streamEligibleFaces`, `getEligibleFacePage`, `countEligibleFaces`, `getClusterFacePage`, and
+   `getEligibleFaceIdsForPerson`. `countEligibleFaces` must change too or the console's totals
+   disagree with its lists. **`countAllFaces` must NOT get the predicate** — it deliberately joins
+   no `asset` and counts **all** remaining faces of a person, any source type, visible or hidden, as
+   the delete gate for an emptied manual-move source (invariant A2). Narrowing it would let a person
+   be deleted while Locked-asset faces still point at it, and `asset_face.personId`'s
+   `ON DELETE SET NULL` would orphan them — the exact bug the method's comment says it exists to
+   prevent.
 6. `isFaceReachableInSpace` gains the full sibling gate — `spaceVisibilityGate`,
    `asset.deletedAt is null`, `asset.isOffline = false`, `asset_face.deletedAt is null`,
    `asset_face.isVisible = true` — matching `getPendingForSpacePerson`.
-7. `getAdminFaceThumbnail` (`face-repair.service.ts:1210`): after loading the face, refuse when the
-   asset's visibility is not reviewable. Add `asset.visibility` to
-   `getFaceByIdIncludingTombstoned`'s select (it already joins nothing — add an inner join on
-   `asset`) and throw `new BadRequestException('Face not found')` on a non-reviewable asset. Keep
-   the tombstone (`asset_face.deletedAt`) inclusion — that is deliberate and tested.
+7. `getAdminFaceThumbnail` (`face-repair.service.ts:1210`) needs **no service-level change**. Its
+   sole production caller already wraps it in `try { … } catch { throw new NotFoundException() }`.
+   The refusal moves into the repository query instead: `getFaceByIdIncludingTombstoned`
+   (`person.repository.ts:459-467`) gains an inner join on `asset` and
+   `.where((eb) => reviewableAssetVisibility(eb))`, keeping the select list and `AssetFace` return
+   type unchanged. `executeTakeFirstOrThrow` then throws for a non-reviewable face, and the
+   service's existing catch turns that into a 404 — not a service-level `BadRequestException`. This
+   also avoids disclosing that the face exists. Keep the tombstone (`asset_face.deletedAt`)
+   inclusion — that is deliberate and tested.
 
 **Tests (write first)**
 
-| #     | Layer  | Test                                                                                                                                                                                                                                        |
-| ----- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1.1  | medium | `searchFaces({ userIds, visibility: [archive, timeline] })` omits a face on a `locked` asset and **returns a control face on a `timeline` asset in the same call** (positive control)                                                       |
-| S1.2  | medium | `searchFaces({ userIds })` **without** the option still returns the `locked` face — pin: recognition is unchanged                                                                                                                           |
-| S1.3  | medium | `searchFaces({ spaceId, visibility })` omits a `locked` asset (the space branch already gated it — pin)                                                                                                                                     |
-| S1.4  | medium | BDD: **Given** an owner with a named person and one unassigned near-miss face on a **Locked** asset and one on a Timeline asset, **When** `handlePersonSuggestionScan` runs, **Then** exactly one pending row exists, for the Timeline face |
-| S1.5  | medium | Same BDD for `handleSpacePersonSuggestionScan`                                                                                                                                                                                              |
-| S1.6  | medium | `streamEligibleFaces` skips a Locked-asset face and yields a control Timeline face                                                                                                                                                          |
-| S1.7  | medium | `getEligibleFacePage` / `countEligibleFaces` / `countAllFaces` agree: a person with 1 Timeline + 1 Locked face reports `1` from every one of the three                                                                                      |
-| S1.8  | medium | `getClusterFacePage` omits the Locked face from the "rest of cluster" list and from its `total`                                                                                                                                             |
-| S1.9  | medium | `getEligibleFaceIdsForPerson` omits a Locked face id — so a `lock` bucket naming it is refused rather than silently manual-linking a Locked crop                                                                                            |
-| S1.10 | medium | BDD: **Given** a cluster contaminated with one Locked-asset face and one Timeline face, **When** the cleanup scan runs, **Then** only the Timeline face is flagged (control asserts the Timeline face **is** flagged)                       |
-| S1.11 | medium | `isFaceReachableInSpace` returns `false` for a Locked asset, a trashed asset, an offline asset, a soft-deleted face and an invisible face — and `true` for a reachable control face in the same test                                        |
-| S1.12 | unit   | `getAdminFaceThumbnail` throws `BadRequestException` for a face on a Locked asset; returns the file for a Timeline asset; **and still returns it for a tombstoned (`deletedAt`) face on a Timeline asset** (pin)                            |
-| S1.13 | medium | pin: `getPendingForPerson` and `getPendingForSpacePerson` already exclude Locked — assert both, with a Timeline control row present in the same call                                                                                        |
-| S1.14 | medium | pin: `handleRecognizeFaces` still assigns a Locked-asset face to a person (recognition explicitly unchanged, spec §4)                                                                                                                       |
+| #     | Layer                                | Test                                                                                                                                                                                                                                                                                                                                                         |
+| ----- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1.1  | medium                               | `searchFaces({ userIds, visibility: [archive, timeline] })` omits a face on a `locked` asset and **returns a control face on a `timeline` asset in the same call** (positive control)                                                                                                                                                                        |
+| S1.2  | medium                               | `searchFaces({ userIds })` **without** the option still returns the `locked` face — pin: recognition is unchanged                                                                                                                                                                                                                                            |
+| S1.3  | medium                               | `searchFaces({ spaceId, visibility })` omits a `locked` asset (the space branch already gated it — pin)                                                                                                                                                                                                                                                      |
+| S1.4  | medium                               | BDD: **Given** an owner with a named person and one unassigned near-miss face on a **Locked** asset and one on a Timeline asset, **When** `handlePersonSuggestionScan` runs, **Then** exactly one pending row exists, for the Timeline face                                                                                                                  |
+| S1.5  | medium                               | Same BDD for `handleSpacePersonSuggestionScan`                                                                                                                                                                                                                                                                                                               |
+| S1.6  | medium                               | `streamEligibleFaces` skips a Locked-asset face and yields a control Timeline face                                                                                                                                                                                                                                                                           |
+| S1.7  | medium                               | `getEligibleFacePage` and `countEligibleFaces` agree: a person with 1 Timeline + 1 Locked face reports `1` from both. `countAllFaces` reports `2` — asserted explicitly, the guard against re-introducing the A2 orphan bug                                                                                                                                  |
+| S1.8  | medium                               | `getClusterFacePage` omits the Locked face from the "rest of cluster" list and from its `total`                                                                                                                                                                                                                                                              |
+| S1.9  | medium                               | `getEligibleFaceIdsForPerson` omits a Locked face id — so a `lock` bucket naming it is refused rather than silently manual-linking a Locked crop                                                                                                                                                                                                             |
+| S1.10 | medium                               | BDD: **Given** a cluster contaminated with one Locked-asset face and one Timeline face, **When** the cleanup scan runs, **Then** only the Timeline face is flagged (control asserts the Timeline face **is** flagged)                                                                                                                                        |
+| S1.11 | medium                               | `isFaceReachableInSpace` returns `false` for a Locked asset, a trashed asset, an offline asset, a soft-deleted face and an invisible face — and `true` for a reachable control face in the same test                                                                                                                                                         |
+| S1.12 | medium (repository) + unit (service) | `getFaceByIdIncludingTombstoned` throws for a face on a Locked asset (the query itself, at the repository); the service's existing catch converts that into a `NotFoundException` — not a service-level `BadRequestException`; returns the file for a Timeline asset; **and still returns it for a tombstoned (`deletedAt`) face on a Timeline asset** (pin) |
+| S1.13 | medium                               | pin: `getPendingForPerson` and `getPendingForSpacePerson` already exclude Locked — assert both, with a Timeline control row present in the same call                                                                                                                                                                                                         |
+| S1.14 | medium                               | pin: `handleRecognizeFaces` still assigns a Locked-asset face to a person (recognition explicitly unchanged, spec §4)                                                                                                                                                                                                                                        |
 
 **Verify**
 

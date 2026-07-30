@@ -68,6 +68,7 @@ import { mimeTypes } from 'src/utils/mime-types';
 import { isFaceSuggestionEnabled, isFacialRecognitionEnabled } from 'src/utils/misc';
 import { applyResolvedIdentityMetadata } from 'src/utils/person-identity';
 import { getPreferences } from 'src/utils/preferences';
+import { spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
 import { Point, transformPoints } from 'src/utils/transform';
 
 const FACE_IDENTITY_BACKFILL_CHUNK_SIZE = 1000;
@@ -927,6 +928,7 @@ export class PersonService extends BaseService {
         hasPerson: false,
         maxDistance: suggestionMaxDistance,
         numResults: PERSON_SUGGESTION_NUM_RESULTS,
+        visibility: spaceVisibleAssetVisibilities,
       });
       for (const match of matches) {
         if (match.distance <= maxDistance) {
@@ -1012,6 +1014,9 @@ export class PersonService extends BaseService {
         hasPerson: false,
         maxDistance: suggestionMaxDistance,
         numResults: PERSON_SUGGESTION_NUM_RESULTS,
+        // The space branch already applies spaceVisibilityGate unconditionally (search.repository.ts)
+        // so this is redundant there — passed for symmetry with the personal call site above.
+        visibility: spaceVisibleAssetVisibilities,
       });
       for (const match of matches) {
         if (match.distance <= maxDistance) {

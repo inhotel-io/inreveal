@@ -10,6 +10,7 @@ import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
+import { reviewableAssetVisibility } from 'src/utils/face-review';
 import { retargetVerdictPersonId } from 'src/utils/face-verdict-merge';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
 import {
@@ -483,13 +484,20 @@ export class PersonRepository {
 
   // Admin face-thumbnail read: no person join, and INCLUDES tombstoned faces (the "not a face"
   // action sets deletedAt but keeps boundingBox/dims, and resolutions history must still render).
+  // Slice 1 (F1): excludes faces on a non-reviewable (Locked/Hidden) asset — the Locked folder requires
+  // the owner's elevated re-authentication, which this admin route never performs. A Locked-asset face id
+  // makes this throw, which the sole caller (face-repair.service.ts getAdminFaceThumbnail) already turns
+  // into a 404, so the asset's existence is never disclosed. The tombstone inclusion above is unaffected —
+  // deliberate and still tested.
   @GenerateSql({ params: [DummyValue.UUID] })
   getFaceByIdIncludingTombstoned(id: string) {
     return this.db
       .selectFrom('asset_face')
+      .innerJoin('asset', 'asset.id', 'asset_face.assetId')
       .selectAll('asset_face')
       .select(withPerson)
       .where('asset_face.id', '=', id)
+      .where((eb) => reviewableAssetVisibility(eb))
       .executeTakeFirstOrThrow();
   }
 

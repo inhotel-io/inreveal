@@ -221,6 +221,13 @@ export interface FaceEmbeddingSearch extends Omit<SearchEmbeddingOptions, 'userI
   numResults: number;
   maxDistance: number;
   minBirthDate?: Date | null;
+  /**
+   * Restricts candidate faces to assets whose visibility is in this set (Slice 1, F1/F2). Defaults to
+   * undefined — no predicate — so the two recognition callers (person.service.ts:1436, :1485) and the
+   * space-face-match caller (shared-space.service.ts:2063) emit byte-identical SQL to before this option
+   * existed. Only the suggestion scans and the cleanup scan's KNN pass pass this.
+   */
+  visibility?: AssetVisibility[];
 }
 
 export interface FaceSearchResult {
@@ -947,6 +954,18 @@ export class SearchRepository {
         },
       ],
     },
+    {
+      name: 'owner-visibility',
+      params: [
+        {
+          userIds: [DummyValue.UUID],
+          embedding: DummyValue.VECTOR,
+          numResults: 10,
+          maxDistance: 0.6,
+          visibility: [AssetVisibility.Archive, AssetVisibility.Timeline],
+        },
+      ],
+    },
   )
   async searchFaces({
     userIds,
@@ -956,6 +975,7 @@ export class SearchRepository {
     maxDistance,
     hasPerson,
     minBirthDate,
+    visibility,
   }: FaceEmbeddingSearch) {
     if (!z.int().min(1).max(1000).safeParse(numResults).success) {
       throw new Error(`Invalid value for 'numResults': ${numResults}`);
@@ -1001,6 +1021,11 @@ export class SearchRepository {
                 .where((eb) => spaceVisibilityGate(eb)),
             )
             .where('asset.deletedAt', 'is', null)
+            // Slice 1 (F2): opt-in visibility gate for the owner-scoped branch. Defaults to undefined (no
+            // predicate) so recognition (person.service.ts:1436, :1485) and space-face-match
+            // (shared-space.service.ts:2063) keep emitting byte-identical SQL — only the suggestion scans
+            // and the cleanup scan's KNN pass pass this.
+            .$if(!!visibility?.length, (qb) => qb.where('asset.visibility', 'in', visibility!))
             // Exclude soft-deleted faces. The Face Cleanup "not a face" action tombstones a face by setting
             // asset_face.deletedAt (personId is also nulled), and every recognition/suggestion candidate must
             // honour that — otherwise the suggestion scan keeps proposing a crop an admin already declared not

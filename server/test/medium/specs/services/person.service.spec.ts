@@ -24,6 +24,7 @@ import { JobRepository } from 'src/repositories/job.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
 import { MachineLearningRepository } from 'src/repositories/machine-learning.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
+import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { StorageRepository } from 'src/repositories/storage.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
@@ -31,7 +32,7 @@ import { DB } from 'src/schema';
 import { PersonService } from 'src/services/person.service';
 import { clearConfigCache } from 'src/utils/config';
 import { newMediumService } from 'test/medium.factory';
-import { factory } from 'test/small.factory';
+import { factory, newEmbedding } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 import { Mocked } from 'vitest';
 
@@ -124,6 +125,31 @@ const seedPersonWithRepresentativeFace = async (
   const { result: faceId } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
   await ctx.get(PersonRepository).update({ id: person.id, faceAssetId: faceId });
   return { asset, person };
+};
+
+// Slice 1 (S1.14 pin): a setup with SearchRepository real, so handleRecognizeFaces's KNN passes run
+// against a real DB rather than a mock.
+const setupRecognition = (db?: Kysely<DB>) => {
+  clearConfigCache();
+  const { sut, ctx } = newMediumService(PersonService, {
+    database: db || defaultDatabase,
+    real: [
+      AccessRepository,
+      ConfigRepository,
+      DatabaseRepository,
+      FaceIdentityRepository,
+      PersonRepository,
+      SearchRepository,
+      SharedSpaceRepository,
+    ],
+    mock: [JobRepository, LoggingRepository, SystemMetadataRepository],
+  });
+  const metadata = ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository);
+  metadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { minFaces: 1 } } } as any);
+  const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+  jobs.queue.mockResolvedValue();
+  jobs.queueAll.mockResolvedValue();
+  return { sut, ctx };
 };
 
 /**
@@ -1959,6 +1985,46 @@ describe(PersonService.name, () => {
         .where('assetFaceId', '=', face.id)
         .executeTakeFirst();
       expect(verdict?.status).toBe('pending');
+    });
+  });
+
+  // Slice 1 (§4 decision): facial recognition is deliberately OUT of scope for the Locked/Hidden exclusion —
+  // it keeps clustering Locked-folder faces into the owner's own people exactly as before this slice. S1.14
+  // pins that: a Locked-asset anchor face must still be usable as a recognition neighbor.
+  describe('handleRecognizeFaces visibility scoping (Slice 1, S1.14 pin)', () => {
+    it('S1.14: a locked-asset anchor face still gets a timeline query face assigned to its person', async () => {
+      const { sut, ctx } = setupRecognition();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Anchor' });
+
+      const embedding = newEmbedding();
+
+      // The anchor: an already-assigned ML face on a LOCKED asset.
+      const { asset: anchorAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { assetFace: anchorFace } = await ctx.newAssetFace({
+        assetId: anchorAsset.id,
+        personId: person.id,
+        sourceType: SourceType.MachineLearning,
+      });
+      await ctx.database.insertInto('face_search').values({ faceId: anchorFace.id, embedding }).execute();
+
+      // The query face: unassigned, on a Timeline asset, with the SAME embedding (distance 0 — guaranteed match).
+      const { asset: queryAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace: queryFace } = await ctx.newAssetFace({
+        assetId: queryAsset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+      await ctx.database.insertInto('face_search').values({ faceId: queryFace.id, embedding }).execute();
+
+      await sut.handleRecognizeFaces({ id: queryFace.id, deferred: false });
+
+      const row = await ctx.database
+        .selectFrom('asset_face')
+        .select('personId')
+        .where('id', '=', queryFace.id)
+        .executeTakeFirstOrThrow();
+      expect(row.personId).toBe(person.id);
     });
   });
 });

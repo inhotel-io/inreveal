@@ -1433,5 +1433,56 @@ describe('FacePersonVerdictRepository', () => {
 
       await expect(sut.isFaceReachableInSpace(space.id, assetFace.id)).resolves.toBe(true);
     });
+
+    // Slice 1 (F3): isFaceReachableInSpace applied no visibility / trash / face-state gate at all — a face
+    // is only "reachable" if a human could actually be shown it, matching the sibling gates
+    // getPendingForSpacePerson already applies. S1.11: every non-reachable case, plus a positive control.
+    it('S1.11: false for a locked asset, trashed asset, offline asset, soft-deleted face, invisible face — true for a reachable control', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+
+      const { asset: controlAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: controlAsset.id, addedById: user.id });
+      const { assetFace: controlFace } = await ctx.newAssetFace({ assetId: controlAsset.id, personId: null });
+
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: lockedAsset.id, addedById: user.id });
+      const { assetFace: lockedFace } = await ctx.newAssetFace({ assetId: lockedAsset.id, personId: null });
+
+      const { asset: trashedAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: trashedAsset.id, addedById: user.id });
+      const { assetFace: trashedFace } = await ctx.newAssetFace({ assetId: trashedAsset.id, personId: null });
+      await ctx.softDeleteAsset(trashedAsset.id);
+
+      const { asset: offlineAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: offlineAsset.id, addedById: user.id });
+      const { assetFace: offlineFace } = await ctx.newAssetFace({ assetId: offlineAsset.id, personId: null });
+      await ctx.database.updateTable('asset').set({ isOffline: true }).where('id', '=', offlineAsset.id).execute();
+
+      const { asset: deletedFaceAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: deletedFaceAsset.id, addedById: user.id });
+      const { assetFace: deletedFace } = await ctx.newAssetFace({ assetId: deletedFaceAsset.id, personId: null });
+      await ctx.database
+        .updateTable('asset_face')
+        .set({ deletedAt: new Date() })
+        .where('id', '=', deletedFace.id)
+        .execute();
+
+      const { asset: invisibleFaceAsset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: invisibleFaceAsset.id, addedById: user.id });
+      const { assetFace: invisibleFace } = await ctx.newAssetFace({
+        assetId: invisibleFaceAsset.id,
+        personId: null,
+        isVisible: false,
+      });
+
+      await expect(sut.isFaceReachableInSpace(space.id, controlFace.id)).resolves.toBe(true); // positive control
+      await expect(sut.isFaceReachableInSpace(space.id, lockedFace.id)).resolves.toBe(false);
+      await expect(sut.isFaceReachableInSpace(space.id, trashedFace.id)).resolves.toBe(false);
+      await expect(sut.isFaceReachableInSpace(space.id, offlineFace.id)).resolves.toBe(false);
+      await expect(sut.isFaceReachableInSpace(space.id, deletedFace.id)).resolves.toBe(false);
+      await expect(sut.isFaceReachableInSpace(space.id, invisibleFace.id)).resolves.toBe(false);
+    });
   });
 });

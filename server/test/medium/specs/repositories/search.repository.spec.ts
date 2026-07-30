@@ -1394,4 +1394,103 @@ describe(SearchRepository.name, () => {
       ).rejects.toThrow('Cannot mix spaceId and userIds');
     });
   });
+
+  // Slice 1 (F2): the owner-scoped branch of searchFaces has no visibility gate by default — a Locked or
+  // Hidden asset's faces flow into the suggestion/cleanup scans unfiltered. `visibility` is a new, opt-in
+  // option; passing it excludes non-reviewable assets. S1.1-S1.3.
+  describe('searchFaces visibility option (Slice 1)', () => {
+    it('S1.1: with visibility: [archive, timeline], omits a face on a locked asset and returns a control face on a timeline asset', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+      const embedding = newEmbedding();
+      const { assetFace: lockedFace } = await ctx.newAssetFace({ assetId: lockedAsset.id, personId: null });
+      const { assetFace: timelineFace } = await ctx.newAssetFace({ assetId: timelineAsset.id, personId: null });
+      await ctx.database
+        .insertInto('face_search')
+        .values([
+          { faceId: lockedFace.id, embedding },
+          { faceId: timelineFace.id, embedding },
+        ])
+        .execute();
+
+      const result = await sut.searchFaces({
+        userIds: [user.id],
+        embedding,
+        numResults: 10,
+        maxDistance: 1,
+        visibility: [AssetVisibility.Archive, AssetVisibility.Timeline],
+      });
+
+      const ids = result.map((face) => face.id);
+      expect(ids).toContain(timelineFace.id); // positive control
+      expect(ids).not.toContain(lockedFace.id);
+    });
+
+    it('S1.2 (pin): without the visibility option, the locked asset face is still returned (recognition unchanged)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+      const embedding = newEmbedding();
+      const { assetFace: lockedFace } = await ctx.newAssetFace({ assetId: lockedAsset.id, personId: null });
+      const { assetFace: timelineFace } = await ctx.newAssetFace({ assetId: timelineAsset.id, personId: null });
+      await ctx.database
+        .insertInto('face_search')
+        .values([
+          { faceId: lockedFace.id, embedding },
+          { faceId: timelineFace.id, embedding },
+        ])
+        .execute();
+
+      const result = await sut.searchFaces({
+        userIds: [user.id],
+        embedding,
+        numResults: 10,
+        maxDistance: 1,
+      });
+
+      const ids = result.map((face) => face.id);
+      expect(ids).toContain(timelineFace.id); // positive control
+      expect(ids).toContain(lockedFace.id);
+    });
+
+    it('S1.3 (pin): the space branch already gates locked assets out, with a timeline control returned', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: lockedAsset.id, addedById: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: timelineAsset.id, addedById: user.id });
+
+      const embedding = newEmbedding();
+      const { assetFace: lockedFace } = await ctx.newAssetFace({ assetId: lockedAsset.id, personId: null });
+      const { assetFace: timelineFace } = await ctx.newAssetFace({ assetId: timelineAsset.id, personId: null });
+      await ctx.database
+        .insertInto('face_search')
+        .values([
+          { faceId: lockedFace.id, embedding },
+          { faceId: timelineFace.id, embedding },
+        ])
+        .execute();
+
+      // Deliberately WITHOUT the new `visibility` option — this isolates the PRE-EXISTING space-branch
+      // gate (spaceVisibilityGate, applied unconditionally whenever spaceId is set) from the new opt-in
+      // option under test elsewhere in this describe block (S1.1/S1.2).
+      const result = await sut.searchFaces({
+        spaceId: space.id,
+        embedding,
+        numResults: 10,
+        maxDistance: 1,
+      });
+
+      const ids = result.map((face) => face.id);
+      expect(ids).toContain(timelineFace.id); // positive control
+      expect(ids).not.toContain(lockedFace.id);
+    });
+  });
 });

@@ -208,6 +208,31 @@ describe('FaceRepairRepository.streamEligibleFaces', () => {
     // Archive-visibility face IS returned (non-Timeline assets are eligible)
     expect(results).toContain(archiveFace.id);
   });
+
+  // Slice 1 (F1): a Locked-folder face must never reach the cleanup console's feed.
+  it('S1.6: skips a face on a locked asset and yields a control face on a timeline asset', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+    const { assetFace: lockedFace } = await ctx.newAssetFace({
+      assetId: lockedAsset.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await ctx.database.insertInto('face_search').values({ faceId: lockedFace.id, embedding: EMBEDDING }).execute();
+
+    const timelineFaceId = await seedEligibleFace(ctx, user.id, person.id);
+
+    const results: string[] = [];
+    for await (const row of sut.streamEligibleFaces({ personId: person.id })) {
+      results.push(row.assetFaceId);
+    }
+
+    expect(results).toContain(timelineFaceId); // positive control
+    expect(results).not.toContain(lockedFace.id);
+  });
 });
 
 describe('FaceRepairRepository.reattributeFaces', () => {
@@ -598,5 +623,87 @@ describe('FaceRepairRepository.getClusterFacePage', () => {
     expect(page.total).toBe(0);
     expect(page.faces).toEqual([]);
     expect(page.hasMore).toBe(false);
+  });
+
+  // Slice 1 (F1): getClusterFacePage's own docstring claims it "mirrors streamEligibleFaces' filter
+  // exactly" — a Locked face must be excluded from both the list and the total.
+  it('S1.8: omits a locked-asset face from both the faces list and the total, with a timeline control included', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const timelineFaceId = await seedEligibleFace(ctx, user.id, person.id);
+
+    const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+    const { assetFace: lockedFace } = await ctx.newAssetFace({
+      assetId: lockedAsset.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await ctx.database.insertInto('face_search').values({ faceId: lockedFace.id, embedding: EMBEDDING }).execute();
+
+    const page = await sut.getClusterFacePage(person.id, { excludeFaceIds: [], limit: 50, offset: 0 });
+
+    expect(page.total).toBe(1);
+    expect(page.faces.map((f) => f.assetFaceId)).toContain(timelineFaceId); // positive control
+    expect(page.faces.map((f) => f.assetFaceId)).not.toContain(lockedFace.id);
+  });
+});
+
+describe('FaceRepairRepository.getEligibleFacePage / countEligibleFaces / countAllFaces (Slice 1, S1.7)', () => {
+  // S1.7: a person with 1 Timeline + 1 Locked assigned face reports `1` from getEligibleFacePage and
+  // countEligibleFaces (the Locked face is not reviewable), but countAllFaces reports `2` — it
+  // deliberately counts every remaining face of the person regardless of visibility, because it is the
+  // delete gate for an emptied manual-move source (A2): narrowing it would let a person be deleted while
+  // Locked-asset faces still point at it, orphaning them via asset_face.personId's ON DELETE SET NULL.
+  // countAllFaces must NOT gain the reviewableAssetVisibility predicate — see the Slice 1 plan's
+  // correction to the spec.
+  it('S1.7: getEligibleFacePage and countEligibleFaces report 1 (locked excluded); countAllFaces reports 2 (locked included)', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const timelineFaceId = await seedEligibleFace(ctx, user.id, person.id);
+
+    const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+    const { assetFace: lockedFace } = await ctx.newAssetFace({
+      assetId: lockedAsset.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await ctx.database.insertInto('face_search').values({ faceId: lockedFace.id, embedding: EMBEDDING }).execute();
+
+    const page = await sut.getEligibleFacePage({ personId: person.id, limit: 50 });
+    expect(page.map((row) => row.assetFaceId)).toContain(timelineFaceId); // positive control
+    expect(page.map((row) => row.assetFaceId)).not.toContain(lockedFace.id);
+    expect(page).toHaveLength(1);
+
+    await expect(sut.countEligibleFaces({ personId: person.id })).resolves.toBe(1);
+
+    // countAllFaces counts BOTH faces — this is the A2 guard, not a bug. It must not change with this slice.
+    await expect(sut.countAllFaces(person.id)).resolves.toBe(2);
+  });
+});
+
+describe('FaceRepairRepository.getEligibleFaceIdsForPerson (Slice 1, S1.9)', () => {
+  it('S1.9: omits a locked-asset face id, so a lock bucket naming it is refused rather than silently manual-linking a locked crop', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const timelineFaceId = await seedEligibleFace(ctx, user.id, person.id);
+
+    const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+    const { assetFace: lockedFace } = await ctx.newAssetFace({
+      assetId: lockedAsset.id,
+      personId: person.id,
+      sourceType: SourceType.MachineLearning,
+    });
+    await ctx.database.insertInto('face_search').values({ faceId: lockedFace.id, embedding: EMBEDDING }).execute();
+
+    const eligible = await sut.getEligibleFaceIdsForPerson(person.id, [timelineFaceId, lockedFace.id]);
+
+    expect(eligible.has(timelineFaceId)).toBe(true); // positive control
+    expect(eligible.has(lockedFace.id)).toBe(false);
   });
 });

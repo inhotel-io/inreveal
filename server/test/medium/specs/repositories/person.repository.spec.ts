@@ -1051,4 +1051,41 @@ describe(PersonRepository.name, () => {
       expect(ids).not.toContain(person.id);
     });
   });
+
+  // Slice 1 (F1): getAdminFaceThumbnail's only production caller wraps this in try/catch → NotFoundException,
+  // so the refusal for a non-reviewable asset belongs here, at the query, not in the service. S1.12.
+  describe('getFaceByIdIncludingTombstoned', () => {
+    it('S1.12: throws for a face on a locked asset, returns it for a face on a timeline asset (control)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace: timelineFace } = await ctx.newAssetFace({ assetId: timelineAsset.id, personId: null });
+
+      const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+      const { assetFace: lockedFace } = await ctx.newAssetFace({ assetId: lockedAsset.id, personId: null });
+
+      await expect(sut.getFaceByIdIncludingTombstoned(timelineFace.id)).resolves.toMatchObject({
+        id: timelineFace.id,
+      }); // positive control
+      await expect(sut.getFaceByIdIncludingTombstoned(lockedFace.id)).rejects.toThrow();
+    });
+
+    it('S1.12 (pin): still returns a tombstoned (deletedAt set) face on a timeline asset', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace: tombstonedFace } = await ctx.newAssetFace({ assetId: timelineAsset.id, personId: null });
+      await ctx.database
+        .updateTable('asset_face')
+        .set({ deletedAt: new Date() })
+        .where('id', '=', tombstonedFace.id)
+        .execute();
+
+      await expect(sut.getFaceByIdIncludingTombstoned(tombstonedFace.id)).resolves.toMatchObject({
+        id: tombstonedFace.id,
+      });
+    });
+  });
 });
