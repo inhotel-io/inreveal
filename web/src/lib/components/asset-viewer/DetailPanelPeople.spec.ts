@@ -124,6 +124,10 @@ describe('DetailPanelPeople', () => {
     faceManagerMock.people = [];
     faceManagerMock.data = [];
     faceManagerMock.facesByPersonId = new Map();
+    // vite.config.ts sets no clearMocks/restoreMocks, so this shared hoisted mock keeps its call
+    // history across tests in this file. settleCrop() waits on that history, so it must be cleared
+    // or every crop assertion after the first one asserts the pending branch by mistake.
+    zoomImageToBase64Mock.mockReset();
     zoomImageToBase64Mock.mockResolvedValue(undefined);
   });
 
