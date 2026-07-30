@@ -23,7 +23,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -87,7 +86,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -221,7 +219,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -282,7 +279,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1393,7 +1389,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1464,7 +1459,33 @@ with recursive
     )
   )
 select
-  "asset".*,
+  "asset"."id",
+  "asset"."updateId",
+  "asset"."createdAt",
+  "asset"."updatedAt",
+  "asset"."deletedAt",
+  "asset"."status",
+  "asset"."checksum",
+  "asset"."checksumAlgorithm",
+  "asset"."duplicateId",
+  "asset"."duration",
+  "asset"."fileCreatedAt",
+  "asset"."fileModifiedAt",
+  "asset"."isExternal",
+  "asset"."isOffline",
+  "asset"."isEdited",
+  "asset"."visibility",
+  "asset"."libraryId",
+  "asset"."livePhotoVideoId",
+  "asset"."localDateTime",
+  "asset"."originalFileName",
+  "asset"."originalPath",
+  "asset"."ownerId",
+  "asset"."stackId",
+  "asset"."thumbhash",
+  "asset"."type",
+  "asset"."width",
+  "asset"."height",
   to_jsonb("asset_exif") as "exifInfo",
   exists (
     select
@@ -1597,7 +1618,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1639,7 +1659,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1680,7 +1699,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1722,7 +1740,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1764,7 +1781,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1806,7 +1822,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1848,7 +1863,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1890,7 +1904,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1939,7 +1952,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -1988,7 +2000,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2044,7 +2055,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2093,7 +2103,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2143,7 +2152,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2198,7 +2206,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2246,7 +2253,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2295,7 +2301,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2340,7 +2345,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2382,7 +2386,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2427,7 +2430,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2470,7 +2472,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2512,7 +2513,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2533,7 +2533,15 @@ from
 where
   "asset"."ownerId" = any ($1::uuid[])
   and (
-    "asset"."isFavorite" = $2
+    exists (
+      select
+        1 as "exists"
+      from
+        "asset_favorite"
+      where
+        "asset_favorite"."assetId" = "asset"."id"
+        and "asset_favorite"."userId" = $2::uuid
+    )
     or exists (
       select
       from
@@ -2566,7 +2574,6 @@ select
   "asset"."fileCreatedAt",
   "asset"."fileModifiedAt",
   "asset"."isExternal",
-  "asset"."isFavorite",
   "asset"."isOffline",
   "asset"."isEdited",
   "asset"."visibility",
@@ -2590,7 +2597,15 @@ where
     "asset"."fileCreatedAt" < $2
     and "asset"."fileCreatedAt" >= $3
     and (
-      "asset"."isFavorite" = $4
+      exists (
+        select
+          1 as "exists"
+        from
+          "asset_favorite"
+        where
+          "asset_favorite"."assetId" = "asset"."id"
+          and "asset_favorite"."userId" = $4::uuid
+      )
       or exists (
         select
         from
@@ -2640,7 +2655,15 @@ from
 where
   "asset"."ownerId" = any ($1::uuid[])
   and (
-    "asset"."isFavorite" = $2
+    exists (
+      select
+        1 as "exists"
+      from
+        "asset_favorite"
+      where
+        "asset_favorite"."assetId" = "asset"."id"
+        and "asset_favorite"."userId" = $2::uuid
+    )
     or not exists (
       select
       from
