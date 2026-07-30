@@ -21,7 +21,9 @@
   dart run bin/generate_keys.dart
   ```
   Drift and OpenAPI generated code is committed — `build_runner` is **not** needed.
-- **CI gates both:** `dart analyze --fatal-infos lib test` and `dart format`. An `info`-level lint fails the build, so unused imports and non-exhaustive enum switches are errors in practice.
+- **CI gates** (`mobile/mise.toml`): `analyze:dart` runs `dart analyze --fatal-infos` over the package, and `format` runs `dart format --set-exit-if-changed` over **`lib/` only** — never `test/`.
+- **Never run `dart format lib test`.** The repo's `test/` tree was formatted by an older Dart and is not gated; formatting it with the pinned 3.44.8 reflows ~30 unrelated files into your diff. Format only the files you touched: `dart format <the files you changed>`.
+- An `info`-level lint fails the build, so unused imports, duplicate imports, and non-exhaustive enum switches are errors in practice.
 - **`dart analyze` is not a substitute for `flutter test`** — generated-code compile errors only surface when a test actually compiles.
 - **Commit trailers:** never add `Co-Authored-By` or `Generated with` trailers.
 - **Every task must leave `flutter test` green and the tree compiling.** Tasks are ordered so this holds at each commit.
@@ -1953,7 +1955,7 @@ Expected: no analyzer output, all tests pass. In particular there must be no rem
 
 - [ ] **Step 7: Format**
 
-Run: `dart format lib test`
+Run: `dart format` on the files you changed in this task
 Expected: reformats nothing of substance; commit any whitespace changes it makes.
 
 - [ ] **Step 8: Commit**
