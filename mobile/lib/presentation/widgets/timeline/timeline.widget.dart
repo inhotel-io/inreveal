@@ -293,6 +293,12 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
     if (previous == null || previous == next) {
       return;
     }
+    // A pending "view in timeline" request is about to scroll precisely — including
+    // for the grouping change this very drain loop just triggered. Don't overwrite
+    // its target with a position-derived anchor.
+    if (scrollToDateNotifierProvider.value != null) {
+      return;
+    }
     // A card-tap drilldown sets an explicit year/month anchor right before it
     // changes the grouping; don't overwrite it with a position-derived anchor.
     if (!ref.read(timelineZoomAnchorProvider).isEmpty) {
@@ -367,6 +373,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
   bool _scrollDrainScheduled = false;
   int _scrollDrainAttempts = 0;
   static const int _maxScrollDrainAttempts = 180;
+  bool _daySwitchRequested = false;
 
   /// Ensures a single retry loop is running to apply a pending scroll request.
   void _requestScrollDrain() {
@@ -374,6 +381,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
     if (_scrollDrainScheduled) return;
     _scrollDrainScheduled = true;
     _scrollDrainAttempts = 0;
+    _daySwitchRequested = false;
     _attemptScrollDrain();
   }
 
@@ -392,12 +400,14 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
     final segments = ref.read(timelineSegmentProvider).valueOrNull;
     final laidOut = _scrollController.hasClients && _scrollController.position.hasContentDimensions;
     final matched = date != null && segments != null && _findSegmentForDate(segments, date) != null;
+    final isOverview = segmentsAreOverview(segments);
 
     final action = decideScrollDrain(
       hasPending: date != null,
       segmentsLoaded: segments != null,
       laidOut: laidOut,
       segmentMatched: matched,
+      isOverviewTimeline: isOverview,
       attempts: _scrollDrainAttempts,
       maxAttempts: _maxScrollDrainAttempts,
     );
@@ -405,14 +415,28 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
     switch (action) {
       case ScrollDrainAction.idle:
         _scrollDrainScheduled = false;
+        _daySwitchRequested = false;
       case ScrollDrainAction.scroll:
         _scrollToDate(date!, segments!);
         scrollToDateNotifierProvider.consume();
         _scrollDrainScheduled = false;
+        _daySwitchRequested = false;
       case ScrollDrainAction.giveUp:
         // Budget exhausted: drop the request so it cannot leak into a later timeline.
         scrollToDateNotifierProvider.consume();
         _scrollDrainScheduled = false;
+        _daySwitchRequested = false;
+      case ScrollDrainAction.switchToDayGrouping:
+        // Overview groupings render cards, not tiles. Drill to day the same way a
+        // card tap does, then keep retrying until the rebuilt segments arrive.
+        // `attempts` MUST increment here: if the grouping is pinned and set() is a
+        // no-op, the budget is the only thing that ends this loop.
+        _scrollDrainAttempts++;
+        if (!_daySwitchRequested) {
+          _daySwitchRequested = true;
+          unawaited(ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.day));
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) => _attemptScrollDrain());
       case ScrollDrainAction.retry:
         _scrollDrainAttempts++;
         WidgetsBinding.instance.addPostFrameCallback((_) => _attemptScrollDrain());

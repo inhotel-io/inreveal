@@ -17,6 +17,10 @@ enum ScrollDrainAction {
   /// The attempt budget is exhausted — consume the request and stop, so a stale
   /// request cannot leak into a later timeline.
   giveUp,
+
+  /// The timeline is rendering overview cards, so the target photo has no tile.
+  /// Switch the grouping to day and keep retrying until the rebuilt segments arrive.
+  switchToDayGrouping,
 }
 
 /// Decides what to do with a latched scroll-to-date request on a single frame.
@@ -32,12 +36,19 @@ ScrollDrainAction decideScrollDrain({
   required bool segmentsLoaded,
   required bool laidOut,
   required bool segmentMatched,
+  required bool isOverviewTimeline,
   required int attempts,
   required int maxAttempts,
 }) {
   if (!hasPending) return ScrollDrainAction.idle;
-  if (segmentsLoaded && laidOut && segmentMatched) return ScrollDrainAction.scroll;
+  // `scroll` stays ahead of the budget check so a request that becomes ready on the
+  // very last frame still scrolls. `!isOverviewTimeline` gates it so an overview
+  // timeline can never scroll to a year/month card — the #822 symptom.
+  if (segmentsLoaded && laidOut && segmentMatched && !isOverviewTimeline) return ScrollDrainAction.scroll;
+  // The budget sits AHEAD of the switch so a grouping write that never lands
+  // (pinned by timelineArgs, or a dateless bucket source) cannot spin forever.
   if (attempts >= maxAttempts) return ScrollDrainAction.giveUp;
+  if (isOverviewTimeline) return ScrollDrainAction.switchToDayGrouping;
   return ScrollDrainAction.retry;
 }
 

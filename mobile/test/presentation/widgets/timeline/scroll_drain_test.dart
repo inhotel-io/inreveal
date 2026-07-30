@@ -13,6 +13,7 @@ void main() {
       bool segmentsLoaded = true,
       bool laidOut = true,
       bool segmentMatched = true,
+      bool isOverviewTimeline = false,
       int attempts = 0,
     }) {
       return decideScrollDrain(
@@ -20,6 +21,7 @@ void main() {
         segmentsLoaded: segmentsLoaded,
         laidOut: laidOut,
         segmentMatched: segmentMatched,
+        isOverviewTimeline: isOverviewTimeline,
         attempts: attempts,
         maxAttempts: maxAttempts,
       );
@@ -60,6 +62,37 @@ void main() {
 
     test('a ready request still scrolls even past the budget (never needed to give up)', () {
       expect(decide(attempts: maxAttempts + 5), ScrollDrainAction.scroll);
+    });
+
+    test('is idle with no pending request regardless of grouping or attempts', () {
+      expect(decide(hasPending: false, isOverviewTimeline: true), ScrollDrainAction.idle);
+      expect(
+        decide(hasPending: false, isOverviewTimeline: true, laidOut: false, attempts: maxAttempts + 1),
+        ScrollDrainAction.idle,
+      );
+    });
+
+    test('never scrolls while the timeline renders overview cards', () {
+      // #822: in Year/Month grouping findTimelineScrollTargetSegment happily matches
+      // the year/month CARD, so "ready" is true — scrolling here is exactly the bug.
+      expect(decide(isOverviewTimeline: true), ScrollDrainAction.switchToDayGrouping);
+    });
+
+    test('switches to day grouping while an overview timeline is still loading', () {
+      expect(decide(isOverviewTimeline: true, segmentsLoaded: false), ScrollDrainAction.switchToDayGrouping);
+      expect(decide(isOverviewTimeline: true, laidOut: false), ScrollDrainAction.switchToDayGrouping);
+    });
+
+    test('keeps switching right up to the attempt budget', () {
+      expect(decide(isOverviewTimeline: true, attempts: maxAttempts - 1), ScrollDrainAction.switchToDayGrouping);
+    });
+
+    test('gives up rather than switching forever when the grouping write never lands', () {
+      // If the grouping is pinned by timelineArgs or a dateless bucket source, set(day)
+      // is a no-op. The budget is the only thing stopping an infinite loop, so the
+      // widget must increment attempts on this branch too.
+      expect(decide(isOverviewTimeline: true, attempts: maxAttempts), ScrollDrainAction.giveUp);
+      expect(decide(isOverviewTimeline: true, attempts: maxAttempts + 5), ScrollDrainAction.giveUp);
     });
   });
 
