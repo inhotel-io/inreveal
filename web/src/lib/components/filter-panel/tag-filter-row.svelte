@@ -15,8 +15,10 @@
 
   let isOverflowing = $state(false);
 
-  // The tooltip trigger supplies its own onclick (it closes the tooltip), so both handlers must run —
-  // spreading ours over it would break the tooltip, spreading theirs over ours would break selection.
+  // The tooltip trigger supplies its own onclick, so we compose rather than replace it: this
+  // component must not assume provider-level configuration it does not own. Today that handler is
+  // inert because @immich/ui's shared TooltipProvider sets disableCloseOnTriggerClick app-wide —
+  // but that is not this component's to rely on, so both handlers still run.
   function handleClick(triggerProps: Record<string, unknown>, event: MouseEvent) {
     (triggerProps.onclick as ((event: MouseEvent) => void) | undefined)?.(event);
     onToggle(id);
