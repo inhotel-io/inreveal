@@ -25,6 +25,9 @@ class TimelineOverviewSegment extends Segment {
   final GroupAssetsBy groupBy;
 
   @override
+  bool get isOverview => true;
+
+  @override
   int getMinChildIndexForScrollOffset(double scrollOffset) => firstIndex;
 
   @override

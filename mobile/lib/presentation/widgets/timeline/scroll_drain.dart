@@ -1,3 +1,5 @@
+import 'package:immich_mobile/presentation/widgets/timeline/segment.model.dart';
+
 /// What the timeline should do this frame with a pending "view in timeline"
 /// scroll request.
 enum ScrollDrainAction {
@@ -61,3 +63,15 @@ int? findMatchingSegmentIndex(List<DateTime?> segmentDates, DateTime target) {
   }
   return null;
 }
+
+/// True when the timeline is rendering year/month overview cards rather than
+/// asset tiles — in which case the target photo has no tile to scroll to.
+///
+/// Deliberately derived from the segments that were actually built, NOT from
+/// `timelineGroupingProvider`. `timeline.state.dart` picks the builder from
+/// `timelineArgsProvider.groupBy ?? timelineGroupingProvider`, then overrides it
+/// to `day` when the bucket source is dateless, and a `TimelineRouteScope` can
+/// substitute a route-local grouping notifier. Reading the provider would
+/// disagree with the screen in all three cases, and a "switch to day" that
+/// changes nothing would spin until the attempt budget expired.
+bool segmentsAreOverview(List<Segment>? segments) => segments != null && segments.any((segment) => segment.isOverview);

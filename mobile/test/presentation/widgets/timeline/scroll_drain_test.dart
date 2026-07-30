@@ -1,4 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/fixed/segment.model.dart';
+import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/scroll_drain.dart';
 
 void main() {
@@ -99,4 +102,53 @@ void main() {
       expect(findMatchingSegmentIndex(dates, DateTime(2026, 5, 9)), 1);
     });
   });
+
+  group('segmentsAreOverview', () {
+    test('null segments are not an overview', () {
+      expect(segmentsAreOverview(null), isFalse);
+    });
+
+    test('an empty segment list is not an overview', () {
+      expect(segmentsAreOverview(const []), isFalse);
+    });
+
+    test('fixed segments only are not an overview', () {
+      expect(segmentsAreOverview([_fixedSegment(), _fixedSegment()]), isFalse);
+    });
+
+    test('a list of overview segments is an overview', () {
+      expect(segmentsAreOverview([_overviewSegment(), _overviewSegment()]), isTrue);
+    });
+
+    test('a mixed list containing one overview segment is an overview', () {
+      // Defensive: the builder never mixes them today, but treating "any overview
+      // card present" as overview keeps the scroll from targeting a card.
+      expect(segmentsAreOverview([_fixedSegment(), _overviewSegment()]), isTrue);
+    });
+  });
 }
+
+FixedSegment _fixedSegment() => FixedSegment(
+  firstIndex: 0,
+  lastIndex: 1,
+  startOffset: 0,
+  endOffset: 100,
+  firstAssetIndex: 0,
+  bucket: TimeBucket(date: DateTime(2026, 4, 3), assetCount: 1),
+  tileHeight: 100,
+  columnCount: 4,
+  headerExtent: 40,
+  spacing: 2,
+  header: HeaderType.day,
+);
+
+TimelineOverviewSegment _overviewSegment() => TimelineOverviewSegment(
+  firstIndex: 0,
+  lastIndex: 0,
+  startOffset: 0,
+  endOffset: 100,
+  firstAssetIndex: 0,
+  bucket: TimeBucket(date: DateTime(2026, 1), assetCount: 12),
+  groupBy: GroupAssetsBy.year,
+  header: HeaderType.none,
+);
