@@ -459,6 +459,28 @@ describe('Spaces page search URL state', () => {
     });
   });
 
+  it('narrows space suggestions by the state, lens and contributor from the URL', async () => {
+    // Inside a Space the contributor narrowing is "assets uploaded by this member": it composes
+    // inside the spaceId scope, so it can only shrink what the panel offers, never widen it.
+    const ownerId = '44444444-4444-4444-8444-444444444444';
+    mockPage.url = new URL(
+      `https://gallery.test/spaces/space-1/photos?state=Bavaria&lens=RF24-105mm%20F4%20L%20IS%20USM&owner=${ownerId}`,
+    );
+
+    renderPage();
+
+    await vi.waitFor(() =>
+      expect(sdkMock.getFilterSuggestions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spaceId: 'space-1',
+          state: 'Bavaria',
+          lensModel: 'RF24-105mm F4 L IS USM',
+          ownerId,
+        }),
+      ),
+    );
+  });
+
   it('fetches smart facets with spaceId for committed space search', async () => {
     mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?q=beach');
 

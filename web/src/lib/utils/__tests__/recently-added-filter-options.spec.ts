@@ -382,6 +382,39 @@ describe('buildRecentlyAddedSuggestionRequest', () => {
     expect(custom.takenBefore).toBe('2025-01-01T00:00:00.000Z');
   });
 
+  it('narrows the suggestion lists by state, lens and contributor', () => {
+    const request = buildRecentlyAddedSuggestionRequest({
+      ...createFilterState(),
+      state: 'Bavaria',
+      lensModel: 'RF24-105mm F4 L IS USM',
+      ownerId: 'owner-1',
+    });
+
+    expect(request).toMatchObject({
+      state: 'Bavaria',
+      lensModel: 'RF24-105mm F4 L IS USM',
+      ownerId: 'owner-1',
+    });
+  });
+
+  it('never sends the album filter or the free-text filters to the suggestion endpoint', () => {
+    // `albumId` is a SCOPE on this endpoint (it widens ownership to album participants and is
+    // mutually exclusive with spaceId / withSharedSpaces), and the three free-text filters are
+    // unindexable ILIKE / trigram predicates typed per keystroke — neither belongs on a facet list.
+    const request = buildRecentlyAddedSuggestionRequest({
+      ...createFilterState(),
+      albumId: '11111111-1111-4111-8111-111111111111',
+      description: 'birthday cake',
+      originalFileName: 'IMG_1234.jpg',
+      ocr: 'happy birthday',
+    });
+
+    expect(request).not.toHaveProperty('albumId');
+    expect(request).not.toHaveProperty('description');
+    expect(request).not.toHaveProperty('originalFileName');
+    expect(request).not.toHaveProperty('ocr');
+  });
+
   it('passes album membership flags only when true', () => {
     expect(buildRecentlyAddedSuggestionRequest({ ...createFilterState(), isNotInAlbum: true }).isNotInAlbum).toBe(true);
     expect(buildRecentlyAddedSuggestionRequest({ ...createFilterState(), isInAlbum: true }).isInAlbum).toBe(true);

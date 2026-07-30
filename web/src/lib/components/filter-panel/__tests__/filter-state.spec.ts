@@ -479,6 +479,75 @@ describe('buildFilterContext', () => {
     });
   });
 
+  it('should include the state, lens and contributor narrowings', () => {
+    const state = {
+      ...createFilterState(),
+      state: 'Bavaria',
+      lensModel: 'RF24-105mm F4 L IS USM',
+      ownerId: 'u1',
+    };
+
+    expect(buildFilterContext(state)).toEqual({
+      state: 'Bavaria',
+      lensModel: 'RF24-105mm F4 L IS USM',
+      ownerId: 'u1',
+    });
+  });
+
+  it('should exclude the whole location group for the location context but keep the lens and contributor', () => {
+    const state = {
+      ...createFilterState(),
+      country: 'Germany',
+      state: 'Bavaria',
+      city: 'Munich',
+      lensModel: 'RF24-105mm F4 L IS USM',
+      ownerId: 'u1',
+    };
+
+    // country / state / city are one filter that any location click replaces wholesale, so a city
+    // list must not be narrowed by the state the click is about to clear.
+    expect(buildFilterContext(state, ['country', 'state', 'city'])).toEqual({
+      lensModel: 'RF24-105mm F4 L IS USM',
+      ownerId: 'u1',
+    });
+  });
+
+  it('should keep the lens, state and contributor for the camera context', () => {
+    const state = {
+      ...createFilterState(),
+      make: 'Canon',
+      model: 'Canon EOS R6',
+      lensModel: 'RF24-105mm F4 L IS USM',
+      state: 'Bavaria',
+      ownerId: 'u1',
+    };
+
+    // Unlike the location group, a make/model click leaves the lens chip in place, so the model
+    // list may narrow by it.
+    expect(buildFilterContext(state, ['make', 'model'])).toEqual({
+      lensModel: 'RF24-105mm F4 L IS USM',
+      state: 'Bavaria',
+      ownerId: 'u1',
+    });
+  });
+
+  it('should never carry the album filter or the free-text filters into a suggestion request', () => {
+    const state = {
+      ...createFilterState(),
+      albumId: 'a1',
+      description: 'birthday cake',
+      originalFileName: 'IMG_1234.jpg',
+      ocr: 'happy birthday',
+      rating: 4,
+    };
+
+    // `albumId` on the suggestion endpoints is a SCOPE that widens ownership to album participants
+    // and is mutually exclusive with spaceId / withSharedSpaces — spreading it would 400 the
+    // request. The three free-text filters are unindexable ILIKE / trigram predicates typed
+    // per keystroke, not facet values. Exact match so adding either one here has to be deliberate.
+    expect(buildFilterContext(state)).toEqual({ rating: 4 });
+  });
+
   it('should return undefined when only mediaType is all and nothing else is set', () => {
     const state = createFilterState();
     expect(buildFilterContext(state)).toBeUndefined();

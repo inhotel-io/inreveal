@@ -162,6 +162,23 @@ export function getActiveFilterCount(state: FilterState): number {
   );
 }
 
+/**
+ * The active filter set, in the shape the suggestion endpoints take, so a second-level suggestion
+ * list (cities under a country, models under a make) describes the assets the user is actually
+ * looking at rather than their whole library (#858).
+ *
+ * Every key here MUST be a declared query param on BOTH `/search/suggestions` and
+ * `/search/suggestions/filters` — the dependent providers spread this object straight into the
+ * former, and an undeclared param is silently stripped by the server's validation pipe, which looks
+ * exactly like "the list didn't narrow" with no error anywhere.
+ *
+ * `albumId` is deliberately absent: on those endpoints `albumId` is a *scope* that widens ownership
+ * to album participants and is mutually exclusive with `spaceId` / `withSharedSpaces`, so spreading
+ * the panel's album *filter* into them would 400 every /photos and Space suggestion request. The
+ * three free-text filters (`description`, `originalFileName`, `ocr`) are absent too: they are typed
+ * character by character and compile to unindexable ILIKE / trigram scans, so they belong on the
+ * query, not on a facet list that refires per keystroke.
+ */
 export type FilterContext = {
   takenAfter?: string;
   takenBefore?: string;
@@ -172,9 +189,13 @@ export type FilterContext = {
   isNotInAlbum?: boolean;
   isInAlbum?: boolean;
   country?: string;
+  state?: string;
   city?: string;
   make?: string;
   model?: string;
+  lensModel?: string;
+  /** Contributor narrowing. Composes inside the caller's scope; it can only shrink the set. */
+  ownerId?: string;
   mediaType?: AssetTypeEnum;
 };
 
@@ -280,6 +301,10 @@ export function buildFilterContext(
     context.country = state.country;
   }
 
+  if (includes('state') && state.state) {
+    context.state = state.state;
+  }
+
   if (includes('city') && state.city) {
     context.city = state.city;
   }
@@ -290,6 +315,14 @@ export function buildFilterContext(
 
   if (includes('model') && state.model) {
     context.model = state.model;
+  }
+
+  if (includes('lensModel') && state.lensModel) {
+    context.lensModel = state.lensModel;
+  }
+
+  if (includes('ownerId') && state.ownerId) {
+    context.ownerId = state.ownerId;
   }
 
   if (includes('mediaType') && state.mediaType && state.mediaType !== 'all') {

@@ -198,9 +198,12 @@
     const response = await getFilterSuggestions({
       personIds: nextFilters.personIds.length > 0 ? nextFilters.personIds : undefined,
       country: nextFilters.country,
+      state: nextFilters.state,
       city: nextFilters.city,
       make: nextFilters.make,
       model: nextFilters.model,
+      lensModel: nextFilters.lensModel,
+      ownerId: nextFilters.ownerId,
       tagIds: nextFilters.tagIds.length > 0 ? nextFilters.tagIds : undefined,
       rating: nextFilters.rating,
       mediaType:

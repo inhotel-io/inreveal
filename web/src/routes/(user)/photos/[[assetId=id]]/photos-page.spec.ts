@@ -594,6 +594,44 @@ describe('Photos page search URL state', () => {
     });
   });
 
+  // End-to-end for the narrowing path: URL → FilterState → suggestion request. A state, lens or
+  // contributor filter only ever ARRIVES this way (contextual filter, typed search or a link), so a
+  // panel that did not forward it would show suggestion lists describing the whole library.
+  it('narrows the photos suggestion lists by the state, lens and contributor from the URL', async () => {
+    const ownerId = '44444444-4444-4444-8444-444444444444';
+    mockPage.url = new URL(
+      `https://gallery.test/photos?state=Bavaria&lens=RF24-105mm%20F4%20L%20IS%20USM&owner=${ownerId}`,
+    );
+
+    renderPage();
+
+    await vi.waitFor(() =>
+      expect(sdkMock.getFilterSuggestions).toHaveBeenCalledWith(
+        expect.objectContaining({
+          state: 'Bavaria',
+          lensModel: 'RF24-105mm F4 L IS USM',
+          ownerId,
+          withSharedSpaces: true,
+        }),
+      ),
+    );
+  });
+
+  it('never sends the album filter or the free-text filters to the photos suggestion endpoint', async () => {
+    // `albumId` there is a SCOPE the server rejects alongside `withSharedSpaces` (a 400 that would
+    // empty every list), and the free-text filters are ILIKE / trigram predicates, not facets.
+    const albumId = '11111111-1111-4111-8111-111111111111';
+    mockPage.url = new URL(`https://gallery.test/photos?albumId=${albumId}&description=cake&filename=IMG_1.jpg&ocr=hi`);
+
+    renderPage();
+
+    await vi.waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
+    const request = sdkMock.getFilterSuggestions.mock.calls[0][0];
+    for (const key of ['albumId', 'description', 'originalFileName', 'ocr']) {
+      expect(request).not.toHaveProperty(key);
+    }
+  });
+
   it('does not fetch smart facets when the committed query is empty', async () => {
     mockPage.url = new URL('https://gallery.test/photos');
 
