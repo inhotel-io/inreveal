@@ -69,12 +69,19 @@ Create `web/src/lib/actions/__test__/clamp-overflow.spec.ts`:
 ```ts
 import { clampOverflow } from '$lib/actions/clamp-overflow';
 
-/** happy-dom has no layout engine, so heights are defined explicitly and stay writable for re-measures. */
+/**
+ * happy-dom has no layout engine, so heights are supplied by the test.
+ *
+ * They are driven through a mutable `metrics` object behind getters rather than assigned onto the
+ * element: `scrollHeight` is `readonly` in lib.dom.d.ts and happy-dom exposes only a getter, so
+ * `node.scrollHeight = 100` fails `pnpm check:typescript` even though it would work at runtime.
+ */
 function makeNode(scrollHeight: number, clientHeight: number) {
   const node = document.createElement('div');
-  Object.defineProperty(node, 'scrollHeight', { configurable: true, writable: true, value: scrollHeight });
-  Object.defineProperty(node, 'clientHeight', { configurable: true, writable: true, value: clientHeight });
-  return node;
+  const metrics = { scrollHeight, clientHeight };
+  Object.defineProperty(node, 'scrollHeight', { configurable: true, get: () => metrics.scrollHeight });
+  Object.defineProperty(node, 'clientHeight', { configurable: true, get: () => metrics.clientHeight });
+  return { node, metrics };
 }
 
 let resizeCallback: (() => void) | undefined;
@@ -101,52 +108,51 @@ afterEach(() => {
 describe('clampOverflow', () => {
   it('A1: reports overflow on mount', () => {
     const onChange = vi.fn();
-    clampOverflow(makeNode(100, 40), { onChange });
+    clampOverflow(makeNode(100, 40).node, { onChange });
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
   it('A2: reports fit on mount without deduping the first call away', () => {
     const onChange = vi.fn();
-    clampOverflow(makeNode(40, 40), { onChange });
+    clampOverflow(makeNode(40, 40).node, { onChange });
     expect(onChange).toHaveBeenCalledWith(false);
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
   it('A3: measures before the observer is even wired up', () => {
     const onChange = vi.fn();
-    clampOverflow(makeNode(100, 40), { onChange });
+    clampOverflow(makeNode(100, 40).node, { onChange });
     // Ordering, not just occurrence: the mount verdict must not depend on the observer firing.
     expect(onChange.mock.invocationCallOrder[0]).toBeLessThan(observe.mock.invocationCallOrder[0]);
   });
 
   it('A4: treats content shorter than the box as a fit', () => {
     const onChange = vi.fn();
-    clampOverflow(makeNode(39, 40), { onChange });
+    clampOverflow(makeNode(39, 40).node, { onChange });
     expect(onChange).toHaveBeenCalledWith(false);
   });
 
   it('A5: observes the node it was applied to', () => {
-    const node = makeNode(40, 40);
+    const { node } = makeNode(40, 40);
     clampOverflow(node, { onChange: vi.fn() });
     expect(observe).toHaveBeenCalledWith(node);
   });
 
   it('A6: re-measures when the observer fires', () => {
-    const node = makeNode(40, 40);
+    const { node, metrics } = makeNode(40, 40);
     const onChange = vi.fn();
     clampOverflow(node, { onChange });
     onChange.mockClear();
 
-    node.scrollHeight = 100;
+    metrics.scrollHeight = 100;
     resizeCallback?.();
 
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
   it('A7: suppresses unchanged verdicts', () => {
-    const node = makeNode(100, 40);
     const onChange = vi.fn();
-    clampOverflow(node, { onChange });
+    clampOverflow(makeNode(100, 40).node, { onChange });
 
     resizeCallback?.();
     resizeCallback?.();
@@ -155,19 +161,19 @@ describe('clampOverflow', () => {
   });
 
   it('A8: re-measures on update', () => {
-    const node = makeNode(40, 40);
+    const { node, metrics } = makeNode(40, 40);
     const onChange = vi.fn();
     const action = clampOverflow(node, { onChange, key: 'short' });
     onChange.mockClear();
 
-    node.scrollHeight = 100;
+    metrics.scrollHeight = 100;
     action.update?.({ onChange, key: 'a much longer name' });
 
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
   it('A9: disconnects the observer on destroy', () => {
-    const action = clampOverflow(makeNode(40, 40), { onChange: vi.fn() });
+    const action = clampOverflow(makeNode(40, 40).node, { onChange: vi.fn() });
     action.destroy?.();
     expect(disconnect).toHaveBeenCalled();
   });
@@ -176,7 +182,7 @@ describe('clampOverflow', () => {
     vi.stubGlobal('ResizeObserver', undefined);
     const onChange = vi.fn();
 
-    expect(() => clampOverflow(makeNode(100, 40), { onChange })).not.toThrow();
+    expect(() => clampOverflow(makeNode(100, 40).node, { onChange })).not.toThrow();
     expect(onChange).toHaveBeenCalledWith(true);
   });
 });
@@ -300,6 +306,10 @@ const LONG_NAME = 'Events/2024/Italy Summer Trip Rome Colosseum And Vatican Muse
 /**
  * happy-dom reports 0 for both metrics, so overflow is simulated on the prototype — the action reads
  * them during mount, before a test could reach the individual element.
+ *
+ * Defining on HTMLElement.prototype only *shadows* happy-dom, which defines both as getters on
+ * Element.prototype (verified in happy-dom's Element.d.ts). The afterEach delete therefore removes
+ * only this shadow and restores happy-dom's own behaviour — it does not clobber it process-wide.
  */
 function stubHeights(scrollHeight: number, clientHeight: number) {
   Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => scrollHeight });
@@ -379,7 +389,8 @@ describe('TagFilterRow', () => {
   });
 
   it('R6: opens the tooltip on non-touch hover after the 700ms delay', async () => {
-    vi.useFakeTimers();
+    // Only timers — faking requestAnimationFrame too can stall bits-ui/floating-ui during mount.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
       stubHeights(100, 40);
       const { getByTestId } = renderRow();
