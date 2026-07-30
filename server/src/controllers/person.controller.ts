@@ -21,6 +21,7 @@ import { AuthDto } from 'src/dtos/auth.dto';
 import {
   AssetFaceUpdateDto,
   DetachScopedPersonDto,
+  FaceSuggestionActionResponseDto,
   MergePersonDto,
   MergeScopedPeopleDto,
   PeopleFaceStatisticsResponseDto,
@@ -30,7 +31,6 @@ import {
   PersonCreateDto,
   PersonFacePageQueryDto,
   PersonFacePageResponseDto,
-  FaceSuggestionActionResponseDto,
   PersonFaceSuggestionPageQueryDto,
   PersonFaceSuggestionPageResponseDto,
   PersonFaceSuggestionParamsDto,

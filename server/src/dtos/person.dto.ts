@@ -258,9 +258,7 @@ const PersonFaceSuggestionPageResponseSchema = z
 // Shared by PersonController and SharedSpaceController, which already import from this module.
 const FaceSuggestionActionResponseSchema = z
   .object({
-    acted: z
-      .boolean()
-      .describe('Whether the call changed anything. False when the suggestion was already resolved.'),
+    acted: z.boolean().describe('Whether the call changed anything. False when the suggestion was already resolved.'),
   })
   .meta({ id: 'FaceSuggestionActionResponseDto' });
 
