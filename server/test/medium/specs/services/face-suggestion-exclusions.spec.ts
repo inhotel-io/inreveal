@@ -492,7 +492,7 @@ describe('reject/ignore face-level authorization (F8)', () => {
     await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(true); // positive control: scan proposed it
 
-    await expect(person.rejectFaceSuggestion(authOwner, anna.id, face.id)).resolves.toBeUndefined();
+    await expect(person.rejectFaceSuggestion(authOwner, anna.id, face.id)).resolves.toBe(true);
 
     expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(false);
   });
@@ -528,7 +528,7 @@ describe('reject/ignore face-level authorization (F8)', () => {
       personId: null,
       sourceType: SourceType.MachineLearning,
     });
-    await expect(person.rejectFaceSuggestion(auth, anna.id, liveFace.id)).resolves.toBeUndefined();
+    await expect(person.rejectFaceSuggestion(auth, anna.id, liveFace.id)).resolves.toBe(true);
     const liveRows = await ctx.database
       .selectFrom('face_person_verdict')
       .select('id')

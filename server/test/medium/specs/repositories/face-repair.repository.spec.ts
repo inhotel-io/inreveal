@@ -703,7 +703,11 @@ describe('FaceRepairRepository.getClusterFacePage', () => {
 
     expect(page.total).toBe(1);
     expect(page.faces.map((f) => f.assetFaceId)).toEqual([kept]); // positive control: the one non-excluded face
-  });
+    // Seeding 25 000 rows and running the count+page pair measures ~4.3s on an idle machine, against
+    // vitest's 5s default — so a loaded CI runner times out (it did). This is a correctness test about
+    // bind-parameter limits and exact exclusion, not a latency budget, so give it room rather than
+    // shrinking the fixture, which would stop exercising the worst case it exists for.
+  }, 60_000);
 });
 
 describe('FaceRepairRepository.getEligibleFacePage / countEligibleFaces / countAllFaces (Slice 1, S1.7)', () => {

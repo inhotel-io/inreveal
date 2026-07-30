@@ -78,6 +78,9 @@ const setupFaceDetection = (db?: Kysely<DB>) => {
       ConfigRepository,
       DatabaseRepository,
       FaceIdentityRepository,
+      // handleQueueRecognizeFaces collects orphaned verdicts (Slice 8), so this setup needs the repository
+      // too — without it the service field is undefined and the call throws at runtime.
+      FacePersonVerdictRepository,
       PersonRepository,
       SharedSpaceRepository,
     ],
@@ -205,6 +208,8 @@ const setupFaceRecognition = (db?: Kysely<DB>) => {
       ConfigRepository,
       DatabaseRepository,
       FaceIdentityRepository,
+      // handleQueueRecognizeFaces collects orphaned verdicts (Slice 8) — see setupFaceDetection above.
+      FacePersonVerdictRepository,
       PersonRepository,
       SharedSpaceRepository,
     ],

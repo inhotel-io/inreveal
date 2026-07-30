@@ -288,10 +288,10 @@ describe('SharedSpaceService space face suggestions', () => {
 
     await expect(
       sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
     await expect(
       sut.dismissSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
 
     const person = await ctx.database
       .selectFrom('shared_space_person')
@@ -373,7 +373,7 @@ describe('SharedSpaceService space face suggestions', () => {
 
     await expect(
       sut.rejectSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
 
     const row = await ctx.database
       .selectFrom('face_person_verdict')
@@ -399,7 +399,7 @@ describe('SharedSpaceService space face suggestions', () => {
 
     await expect(
       sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
 
     const lockedPerson = await ctx.database
       .selectFrom('shared_space_person')
