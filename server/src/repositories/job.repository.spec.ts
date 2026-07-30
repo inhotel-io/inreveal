@@ -250,6 +250,39 @@ describe(JobRepository.name, () => {
     );
   });
 
+  it('S9.9 supplementary (job.repository): gives up waiting after the configured timeout and logs a warning naming the queue', async () => {
+    const { sut, queue, logger } = setup();
+    // never drains — always reports a waiting job
+    queue.getJobCounts.mockResolvedValue({ ...emptyCounts(), waiting: 1 });
+
+    // a short injected timeout (not a production-length interval) — setTimeout is mocked to resolve
+    // instantly (see the file-level `vi.mock('node:timers/promises', ...)` above), so the loop spins
+    // until this many real milliseconds have actually elapsed, not 20 real seconds.
+    await sut.waitForQueueCompletion(QueueName.PeopleBackfill, { timeoutMs: 20 });
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining(QueueName.PeopleBackfill));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('20ms'));
+
+    // positive control, same test body: a queue that drains before the timeout does not warn at all
+    vi.mocked(logger.warn).mockClear();
+    queue.getJobCounts.mockReset();
+    queue.getJobCounts.mockResolvedValueOnce({ ...emptyCounts(), waiting: 1 }).mockResolvedValueOnce(emptyCounts());
+
+    await sut.waitForQueueCompletion(QueueName.PeopleBackfill, { timeoutMs: 20 });
+
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('S9.9 supplementary (pin): waitForQueueCompletion without a timeout option behaves exactly as before (no deadline check)', async () => {
+    const { sut, queue } = setup([{ ...emptyCounts(), waiting: 1 }, emptyCounts()]);
+
+    await sut.waitForQueueCompletion(QueueName.PeopleBackfill);
+
+    // control: still resolves once the queue drains, and polls exactly once via the normal path
+    expect(queue.getJobCounts).toHaveBeenCalledTimes(2);
+    expect(setTimeoutMock).toHaveBeenCalledTimes(1);
+  });
+
   it('drains delayed jobs when requested', async () => {
     const { sut, queue } = setup();
 
@@ -591,6 +624,49 @@ describe(JobRepository.name, () => {
         removeOnFail: true,
       },
     );
+  });
+
+  it('S9.8: coalesces per-person suggestion-scan jobs onto a stable per-id jobId', async () => {
+    const { sut, queue } = setup();
+    setHandlers(sut, [JobName.PersonSuggestionScan, JobName.SpacePersonSuggestionScan]);
+
+    await sut.queueAll([
+      { name: JobName.PersonSuggestionScan, data: { id: 'person-1' } },
+      { name: JobName.PersonSuggestionScan, data: { id: 'person-1' } }, // same id → same jobId (coalesces)
+      { name: JobName.PersonSuggestionScan, data: { id: 'person-2' } }, // different id → different jobId
+      { name: JobName.SpacePersonSuggestionScan, data: { id: 'space-person-1' } },
+      { name: JobName.SpacePersonSuggestionScan, data: { id: 'space-person-1' } },
+      { name: JobName.SpacePersonSuggestionScan, data: { id: 'space-person-2' } },
+    ]);
+
+    expect(queue.addBulk).not.toHaveBeenCalled();
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.PersonSuggestionScan,
+      { id: 'person-1' },
+      { jobId: 'person-suggestion-scan/person-1', removeOnComplete: true },
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.PersonSuggestionScan,
+      { id: 'person-2' },
+      { jobId: 'person-suggestion-scan/person-2', removeOnComplete: true },
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.SpacePersonSuggestionScan,
+      { id: 'space-person-1' },
+      { jobId: 'space-person-suggestion-scan/space-person-1', removeOnComplete: true },
+    );
+    expect(queue.add).toHaveBeenCalledWith(
+      JobName.SpacePersonSuggestionScan,
+      { id: 'space-person-2' },
+      { jobId: 'space-person-suggestion-scan/space-person-2', removeOnComplete: true },
+    );
+
+    const personJobIds = queue.add.mock.calls
+      .filter((call) => call[0] === JobName.PersonSuggestionScan)
+      .map((call) => (call[2] as { jobId?: string })?.jobId);
+    // two calls for person-1 produced the identical jobId (the coalescing contract); person-2's differs
+    expect(personJobIds.filter((jobId) => jobId === 'person-suggestion-scan/person-1')).toHaveLength(2);
+    expect(new Set(personJobIds).size).toBe(2);
   });
 
   it('removes a failed stable facial-recognition coordinator before requeueing it', async () => {
