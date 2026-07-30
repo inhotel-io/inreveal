@@ -89,7 +89,7 @@ describe('searchShortcuts', () => {
   });
 
   it('opens search when nothing is being edited', () => {
-    document.body.innerHTML = '';
+    document.body.replaceChildren();
     const open = vi.fn();
 
     fire(open, keydown({ key: '/' }));
@@ -98,7 +98,7 @@ describe('searchShortcuts', () => {
   });
 
   it('opens search from a shifted slash when nothing is being edited', () => {
-    document.body.innerHTML = '';
+    document.body.replaceChildren();
     const open = vi.fn();
 
     fire(open, keydown({ key: '/', shiftKey: true }));
