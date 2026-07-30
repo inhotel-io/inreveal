@@ -49,8 +49,10 @@ covered by fast unit tests and the component spec only has to prove wiring. The 
 normative; the bodies follow directly from the two rule lists that accompany them.
 
 ```ts
-export type AvatarPerson = { id: string; spacePersonId?: string | null; updatedAt?: string };
-
+// No bespoke person type: `spacePersonId?: string` is already on the SDK's PersonResponseDto
+// (packages/sdk/src/fetch-client.ts:976), and both call sites — faceManager.people and
+// asset.people — are PersonResponseDto[]. Taking the DTO directly also lets this module reuse
+// getPeopleThumbnailUrl without a cast.
 export type PersonAvatar =
   | { kind: 'representative'; url: string }
   | { kind: 'assetFace'; fallbackUrl: string }
@@ -61,13 +63,13 @@ export type PersonAvatar =
  * has no representative thumbnail they are entitled to request.
  */
 export const getRepresentativeThumbnailUrl = (
-  person: AvatarPerson,
+  person: PersonResponseDto,
   context: { isOwner: boolean; spaceId?: string },
 ): string | undefined => { ... };
 
 /** Which of the three renderings the People grid should use for this person. */
 export const resolvePersonAvatar = (input: {
-  person: AvatarPerson;
+  person: PersonResponseDto;
   isOwner: boolean;
   spaceId?: string;
   hasFaceInAsset: boolean;
