@@ -98,6 +98,26 @@ describe('AssetService', () => {
       const assetActions = getAssetActions(() => '', asset);
       expect(assetActions.SharedLinkDownload.$if?.()).toStrictEqual(true);
     });
+
+    it('should offer the share action if the user owns the asset', () => {
+      const ownerId = 'owner';
+      authManager.setUser(userAdminFactory.build({ id: ownerId }));
+      setSharedLink(undefined);
+      const asset = assetFactory.build({ ownerId });
+      const assetActions = getAssetActions(() => '', asset);
+      expect(assetActions.Share.$if?.()).toStrictEqual(true);
+    });
+
+    it('should not offer the share action if the user does not own the asset', () => {
+      // Server-side `Permission.AssetShare` is owner ∪ partner only — album or space membership
+      // grants no share access, so a shared-album/space viewer would get
+      // "Not found or no asset.share access" from POST /shared-links (#871).
+      authManager.setUser(userAdminFactory.build({ id: 'non-owner' }));
+      setSharedLink(undefined);
+      const asset = assetFactory.build({ ownerId: 'owner' });
+      const assetActions = getAssetActions(() => '', asset);
+      expect(assetActions.Share.$if?.()).toStrictEqual(false);
+    });
   });
 
   describe('normalizeAngle', () => {

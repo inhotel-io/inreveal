@@ -129,9 +129,14 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto & 
   const smartSearchEnabled = featureFlagsManager.value.smartSearch;
 
   const Share: ActionItem = {
+    // `isOwner`, not just `authUser`: server-side `Permission.AssetShare` is owner ∪ partner only,
+    // so album or space membership grants no share access. Without the ownership check a viewer of
+    // a shared album/space was offered the button and POST /shared-links answered
+    // "Not found or no asset.share access" only after the form was filled in (#871). Matches the
+    // owner-only narrowing the bulk CreateSharedLinkAction already applies to its selection.
     title: $t('share'),
     icon: mdiShareVariantOutline,
-    $if: () => !!(authUser && !asset.isTrashed && asset.visibility !== AssetVisibility.Locked),
+    $if: () => isOwner && !asset.isTrashed && asset.visibility !== AssetVisibility.Locked,
     onAction: () => modalManager.show(SharedLinkCreateModal, { assetIds: [asset.id] }),
   };
 
