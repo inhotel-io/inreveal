@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { AssetVisibility, JobStatus, SharedSpaceRole, SourceType, SystemMetadataKey } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
@@ -395,5 +396,140 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
 
     expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, timelineFace.id)).toBe(true); // positive control
     expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, lockedFace.id)).toBe(false);
+  });
+});
+
+// F8 (Slice 4): reject/ignore/dismiss must authorize the FACE, not just the person. verdictOpts stamps every
+// row with the target's identity, and face_identity.id is a CROSS-OWNER key (a cross-owner merge repoints two
+// different owners' personal people onto one identity — see identity-merge-propagation.service.ts). The
+// anti-join in getPendingForPerson matches on identityId with no ownership filter, so a row written against a
+// face the caller does not own can suppress ANOTHER owner's suggestion queue for that same face.
+describe('reject/ignore face-level authorization (F8)', () => {
+  it(
+    "S4.4: A cannot reject a face in B's library even when a cross-owner merge has put A's and B's " +
+      '"Anna" on one identity',
+    async () => {
+      const { sut: person, ctx } = setupPerson();
+      const { user: userA } = await ctx.newUser();
+      const { user: userB } = await ctx.newUser();
+      const authA = authFor(userA);
+      const authB = authFor(userB);
+
+      // A's own Anna — no anchor face needed here, only an identity to merge onto.
+      const { person: annaA } = await ctx.newPerson({ ownerId: userA.id, name: 'Anna' });
+
+      // B's own Anna — anchored so a scan for her can find candidate face F.
+      const annaB = await newAnchoredPerson(ctx, userB.id, 'Anna');
+      const bIdentity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(annaB.id);
+
+      // Establish the shared identity the way production actually creates one — do NOT hand-write two person
+      // rows carrying the same identityId. A space A owns/edits projects B's Anna as a space-person profile
+      // carrying B's identity; naming that profile as a merge source for A's own person then re-points B's
+      // PERSONAL person onto the surviving identity. This is exactly the "collapses a same-space profile
+      // conflict and re-points the other owner" path driven directly in
+      // identity-merge-propagation.service.spec.ts, here driven through the real service entry point
+      // (PersonService.mergeScopedPeople) instead of the propagation engine directly.
+      const space = await newSpace(ctx, userA.id);
+      const spaceBAnna = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: space.id,
+          name: 'Space Anna (B)',
+          type: 'person',
+          isHidden: false,
+          identityId: bIdentity.id,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await person.mergeScopedPeople(authA, {
+        target: { type: 'person', id: annaA.id },
+        sources: [{ type: 'space-person', id: spaceBAnna.id, spaceId: space.id }],
+      });
+
+      const refreshed = await ctx.database
+        .selectFrom('person')
+        .select(['id', 'identityId'])
+        .where('id', 'in', [annaA.id, annaB.id])
+        .execute();
+      const refreshedAnnaA = refreshed.find((row) => row.id === annaA.id);
+      const refreshedAnnaB = refreshed.find((row) => row.id === annaB.id);
+      // Positive control: the shared identity genuinely exists — otherwise the refusal below would be
+      // trivially true for the wrong reason (different identities, not an ownership gap).
+      expect(refreshedAnnaA?.identityId).not.toBeNull();
+      expect(refreshedAnnaA?.identityId).toBe(refreshedAnnaB?.identityId);
+
+      // F lives in B's library, unassigned, with a pending suggestion for B's Anna.
+      const { assetFace: face } = await newCandidateFace(ctx, userB.id);
+      await expect(person.handlePersonSuggestionScan({ id: annaB.id })).resolves.toBe(JobStatus.Success);
+      const before = await person.getFaceSuggestions(authB, annaB.id, { page: 1, size: 50 });
+      expect(before.items.map((item) => item.assetFaceId)).toContain(face.id); // positive control
+
+      await expect(person.rejectFaceSuggestion(authA, annaA.id, face.id)).rejects.toBeInstanceOf(BadRequestException);
+
+      const after = await person.getFaceSuggestions(authB, annaB.id, { page: 1, size: 50 });
+      expect(after.items.map((item) => item.assetFaceId)).toContain(face.id);
+    },
+  );
+
+  it('S4.6: an owner can reject a face in their own library even though it is also space-shared with another user', async () => {
+    const { sut: person, ctx } = setupPerson();
+    const { user: owner } = await ctx.newUser();
+    const { user: viewer } = await ctx.newUser();
+    const authOwner = authFor(owner);
+    const anna = await newAnchoredPerson(ctx, owner.id, 'Anna');
+
+    const space = await newSpace(ctx, owner.id);
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: viewer.id, role: SharedSpaceRole.Viewer });
+
+    const { assetFace: face } = await newCandidateFace(ctx, owner.id);
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: face.assetId, addedById: owner.id });
+
+    await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
+    expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(true); // positive control: scan proposed it
+
+    await expect(person.rejectFaceSuggestion(authOwner, anna.id, face.id)).resolves.toBeUndefined();
+
+    expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(false);
+  });
+
+  it('S4.7: rejecting a face whose asset is in the trash 400s and writes no row', async () => {
+    const { sut: person, ctx } = setupPerson();
+    const { user } = await ctx.newUser();
+    const auth = authFor(user);
+    const anna = await newAnchoredPerson(ctx, user.id, 'Anna');
+
+    const { asset: trashedAsset } = await ctx.newAsset({ ownerId: user.id, deletedAt: new Date() });
+    const { assetFace: trashedFace } = await ctx.newAssetFace({
+      assetId: trashedAsset.id,
+      personId: null,
+      sourceType: SourceType.MachineLearning,
+    });
+
+    await expect(person.rejectFaceSuggestion(auth, anna.id, trashedFace.id)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    const rows = await ctx.database
+      .selectFrom('face_person_verdict')
+      .select('id')
+      .where('assetFaceId', '=', trashedFace.id)
+      .execute();
+    expect(rows).toHaveLength(0);
+
+    // Positive control, same test body: an otherwise-identical face on a NOT-trashed asset succeeds and
+    // writes a row — proves the refusal above is about the trashed asset, not a broken fixture.
+    const { asset: liveAsset } = await ctx.newAsset({ ownerId: user.id });
+    const { assetFace: liveFace } = await ctx.newAssetFace({
+      assetId: liveAsset.id,
+      personId: null,
+      sourceType: SourceType.MachineLearning,
+    });
+    await expect(person.rejectFaceSuggestion(auth, anna.id, liveFace.id)).resolves.toBeUndefined();
+    const liveRows = await ctx.database
+      .selectFrom('face_person_verdict')
+      .select('id')
+      .where('assetFaceId', '=', liveFace.id)
+      .execute();
+    expect(liveRows).toHaveLength(1);
   });
 });
