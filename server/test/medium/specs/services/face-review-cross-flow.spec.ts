@@ -277,12 +277,11 @@ const flaggedFaceIds = async (repair: FaceRepairService, ownerId: string): Promi
 };
 
 describe('face review cross-flow: a decision in one engine is honoured by the other', () => {
-  it('leak 1 — a confirmed suggestion is never re-flagged by the cleanup scan', async () => {
+  it('leak 1a — a human placement is never re-flagged by the cleanup scan', async () => {
     const { sut: repair, ctx } = setupRepair();
     const { sut: person } = setupPerson();
     const { user } = await ctx.newUser();
     const auth = factory.auth({ user });
-    const verdictRepo = ctx.get(FacePersonVerdictRepository);
 
     // Bob owns the "first-axis" look. Anna's cluster has been contaminated with three first-axis faces.
     await buildCluster(ctx, user.id, axisEmbedding('first'), 10, 'Bob');
@@ -292,40 +291,65 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     // Baseline: the cleanup scan flags all three leaked faces (toward Bob).
     expect(await flaggedFaceIds(repair, user.id)).toEqual(new Set(leaked));
 
-    // Seed a genuine PENDING suggestion row for (Anna, leaked[0]) — the real precondition a confirm click
-    // drains. Positive control: assert it exists before confirming, so the drain assertion below actually
-    // means something.
-    await verdictRepo.upsertPending([{ personId: anna.id, assetFaceId: leaked[0], distance: 0.55 }]);
-    expect(await pendingFor(ctx, 'personId', anna.id, leaked[0])).toBe(true);
+    // A user places ONE of those faces on Anna by hand (it genuinely is a young/rare photo of her). This
+    // fixture leaves the face already assigned to Anna (leakFacesInto sets asset_face.personId = anna.id), so
+    // the applicable human-placement path is reassignFacesById — the suggestion-confirm path requires an
+    // UNASSIGNED face and is exercised separately in leak 1b below. Asserting asset_face.personId === anna.id
+    // here would prove nothing: the fixture already put it there before this call ran.
+    await person.reassignFacesById(auth, anna.id, { id: leaked[0] });
 
-    // A user confirms ONE of those faces as Anna (it genuinely is a young/rare photo of her) via the REAL
-    // confirm path only — no separate reassign call, so this drives exactly what a suggestion-review confirm
-    // click does (the previous version of this test called reassignFacesById first, which drained the queue
-    // row itself and made the confirm below a no-op — see the inline comment that used to sit here).
-    await person.confirmFaceSuggestion(auth, anna.id, leaked[0]);
-
-    // All three post-conditions of a real confirm: the face is reassigned, a manual identity link exists for
-    // it, and the pending suggestion row is drained.
-    const face = await db
-      .selectFrom('asset_face')
-      .select('personId')
-      .where('id', '=', leaked[0])
-      .executeTakeFirstOrThrow();
-    expect(face.personId).toBe(anna.id);
+    // The reassignment left a manual identity link for the face — the durable record a re-scan must respect.
     const link = await db
       .selectFrom('face_identity_face')
       .select('source')
       .where('assetFaceId', '=', leaked[0])
       .executeTakeFirst();
     expect(link?.source).toBe('manual');
-    expect(await pendingFor(ctx, 'personId', anna.id, leaked[0])).toBe(false);
 
-    // Re-scan: the confirmed face is no longer flagged; the other two still are. Before the unification this
-    // was the ping-pong — an admin would be asked to move the user's confirmed face away, unrecoverably.
-    const afterConfirm = await flaggedFaceIds(repair, user.id);
-    expect(afterConfirm.has(leaked[0])).toBe(false);
-    expect(afterConfirm.has(leaked[1])).toBe(true);
-    expect(afterConfirm.has(leaked[2])).toBe(true);
+    // Re-scan: the placed face is no longer flagged; the other two still are (positive control). Before the
+    // unification this was the ping-pong — an admin would be asked to move the user's placed face away,
+    // unrecoverably.
+    const afterPlacement = await flaggedFaceIds(repair, user.id);
+    expect(afterPlacement.has(leaked[0])).toBe(false);
+    expect(afterPlacement.has(leaked[1])).toBe(true);
+    expect(afterPlacement.has(leaked[2])).toBe(true);
+  });
+
+  it('leak 1b — a suggestion confirm writes the human placement and drains the queue', async () => {
+    const { sut: person, ctx } = setupSuggestionPerson();
+    const { user } = await ctx.newUser();
+    const auth = factory.auth({ user });
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
+
+    // An anchored named person and an UNASSIGNED candidate face — the real precondition a suggestion-review
+    // confirm click acts on (unlike leak 1a's fixture, this face has no personId yet).
+    const anna = await newSuggestionAnchoredPerson(ctx, user.id, 'Anna');
+    const { assetFace: face } = await newSuggestionCandidateFace(ctx, user.id);
+
+    // Seed a genuine PENDING suggestion row inside the open band (maxDistance, suggestions.maxDistance] =
+    // (0.5, 0.8] — the real precondition a confirm click drains. Positive control: assert it exists before
+    // confirming, so the drain assertion below actually means something.
+    await verdictRepo.upsertPending([{ personId: anna.id, assetFaceId: face.id, distance: 0.6 }]);
+    expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(true);
+
+    // Nothing but the real confirm path.
+    await person.confirmFaceSuggestion(auth, anna.id, face.id);
+
+    // All three post-conditions of a real confirm: the face is reassigned, a manual identity link exists for
+    // it, and the pending suggestion row is drained.
+    const assetFace = await db
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', face.id)
+      .executeTakeFirstOrThrow();
+    expect(assetFace.personId).toBe(anna.id);
+    const link = await db
+      .selectFrom('face_identity_face')
+      .select('source')
+      .where('assetFaceId', '=', face.id)
+      .executeTakeFirst();
+    expect(link?.source).toBe('manual');
+    expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(false);
   });
 
   it("leak 4/5 — a user's rejection suppresses a later cleanup flag toward that same person", async () => {
