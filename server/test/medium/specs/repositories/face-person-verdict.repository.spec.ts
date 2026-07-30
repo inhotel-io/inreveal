@@ -8,7 +8,7 @@ import { PersonRepository } from 'src/repositories/person.repository';
 import { DB } from 'src/schema';
 import { FacePersonVerdictStatus } from 'src/schema/tables/face-person-verdict.table';
 import { BaseService } from 'src/services/base.service';
-import { newMediumService } from 'test/medium.factory';
+import { mediumFactory, newMediumService } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -68,6 +68,28 @@ const makeSpaceFixture = async (ctx: ReturnType<typeof setup>['ctx']) => {
     .returningAll()
     .executeTakeFirstOrThrow();
   return { user, space, spacePerson };
+};
+
+// S8.10 fixture: `count` asset_face rows with no face_search/embedding needed — neither
+// deleteOrphanedVerdicts nor clearNegativeForTarget reads embeddings. Bulk-inserted in
+// BULK_CHUNK_SIZE-sized batches (matches the seedFacesBulk idiom in face-repair.resolve.spec.ts) so a
+// 5 000-row fixture does not itself become the slow part of the test.
+const seedAssetFacesBulk = async (count: number, ownerId: string): Promise<string[]> => {
+  const assets = Array.from({ length: count }, () => mediumFactory.assetInsert({ ownerId }));
+  for (let index = 0; index < assets.length; index += 1000) {
+    await defaultDatabase
+      .insertInto('asset')
+      .values(assets.slice(index, index + 1000))
+      .execute();
+  }
+  const faces = assets.map((asset) => mediumFactory.assetFaceInsert({ assetId: asset.id, personId: null }));
+  for (let index = 0; index < faces.length; index += 1000) {
+    await defaultDatabase
+      .insertInto('asset_face')
+      .values(faces.slice(index, index + 1000))
+      .execute();
+  }
+  return faces.map((face) => face.id);
 };
 
 const setup = (db?: Kysely<DB>) => {
@@ -2154,6 +2176,240 @@ describe('FacePersonVerdictRepository', () => {
       expect(await getRowOrUndefined(personA.id, faceA.id)).toBeUndefined();
       expect(await getRowOrUndefined(personA.id, faceB.id)).toBeUndefined();
       expect(await getRowOrUndefined(personB.id, faceC.id)).toEqual(rowC); // positive control: untouched
+    });
+  });
+
+  // Slice 8 (F15): a human placing a face on a target deletes any rejected/ignored row for THAT target —
+  // the two facts are contradictory and the newer one wins. Verdicts against other targets are untouched.
+  describe('clearNegativeForTarget (F15)', () => {
+    it('S8.2-repo — clears a row matched by personId and leaves a DIFFERENT person row for the same face untouched', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const { person: r } = await ctx.newPerson({ ownerId: user.id, name: 'R' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await sut.markRejected(q.id, face.id);
+      await sut.markIgnored(r.id, face.id);
+      expect(await getRowOrUndefined(q.id, face.id)).toBeDefined(); // positive control: exists before clearing
+      expect(await getRowOrUndefined(r.id, face.id)).toBeDefined(); // positive control: exists before clearing
+
+      const cleared = await sut.clearNegativeForTarget({ personId: q.id }, [face.id]);
+
+      expect(cleared).toBe(1);
+      expect(await getRowOrUndefined(q.id, face.id)).toBeUndefined(); // cleared: same target
+      expect(await getRowOrUndefined(r.id, face.id)).toBeDefined(); // scoping: a different target survives
+    });
+
+    it('clears a row matched by spacePersonId only', async () => {
+      const { ctx, sut } = setup();
+      const { spacePerson, user } = await makeSpaceFixture(ctx);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await sut.markRejectedForSpacePerson(spacePerson.id, face.id);
+      expect(await getSpaceRow(spacePerson.id, face.id)).toBeDefined(); // positive control
+
+      const cleared = await sut.clearNegativeForTarget({ spacePersonId: spacePerson.id }, [face.id]);
+
+      expect(cleared).toBe(1);
+      await expect(getSpaceRow(spacePerson.id, face.id)).rejects.toThrow();
+    });
+
+    it('S8.3-repo — clears an identity-keyed row (personId and spacePersonId both NULL) matched by identityId alone', async () => {
+      const { ctx, sut } = setup();
+      const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const identity = await faceIdentityRepository.ensurePersonIdentity(q.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await defaultDatabase
+        .insertInto('face_person_verdict')
+        .values({
+          assetFaceId: face.id,
+          personId: null,
+          spacePersonId: null,
+          identityId: identity.id,
+          status: 'rejected',
+          source: 'cleanup',
+        })
+        .execute();
+
+      const rowExists = () =>
+        defaultDatabase
+          .selectFrom('face_person_verdict')
+          .select('id')
+          .where('assetFaceId', '=', face.id)
+          .where('identityId', '=', identity.id)
+          .where('status', 'in', ['rejected', 'ignored'])
+          .executeTakeFirst()
+          .then((row) => row !== undefined);
+      expect(await rowExists()).toBe(true); // positive control
+
+      const cleared = await sut.clearNegativeForTarget({ identityId: identity.id }, [face.id]);
+
+      expect(cleared).toBe(1);
+      expect(await rowExists()).toBe(false);
+    });
+
+    it('never touches a pending row — only rejected/ignored are in scope', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await sut.upsertPending([{ personId: q.id, assetFaceId: face.id, distance: 0.6 }]);
+      expect(await getRowStatus(q.id, face.id)).toBe('pending'); // positive control
+
+      const cleared = await sut.clearNegativeForTarget({ personId: q.id }, [face.id]);
+
+      expect(cleared).toBe(0);
+      expect(await getRowStatus(q.id, face.id)).toBe('pending');
+    });
+
+    it('S8.10a — clears the matching rows out of an assetFaceIds list far larger than the bind-parameter ceiling', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: null });
+      const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id, personId: null });
+
+      await sut.markRejected(q.id, faceA.id);
+      await sut.markIgnored(q.id, faceB.id);
+
+      // Far larger than Postgres's 65 535 bind-parameter ceiling — mirrors the removeVerdicts (F20) test
+      // above. Fake ids are cheap filler; the bind count is a function of list length, not of matches.
+      const filler = Array.from({ length: 70_000 }, () => randomUUID());
+      const cleared = await sut.clearNegativeForTarget({ personId: q.id }, [faceA.id, faceB.id, ...filler]);
+
+      expect(cleared).toBe(2);
+      expect(await getRowOrUndefined(q.id, faceA.id)).toBeUndefined();
+      expect(await getRowOrUndefined(q.id, faceB.id)).toBeUndefined();
+    });
+  });
+
+  // Slice 8 (F16): a row with all three keys NULL is unreachable by every read predicate and is collected
+  // by the PersonCleanup reaper. Rows retaining any one key are kept.
+  describe('deleteOrphanedVerdicts (F16)', () => {
+    it('S8.7 — deletes an all-keys-NULL row and keeps rows retaining personId, spacePersonId, or identityId alone', async () => {
+      const { ctx, sut } = setup();
+      const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Kept Person' });
+      const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const spacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({ spaceId: space.id, name: 'Kept Space Person' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const shapes = ['orphan', 'personOnly', 'spacePersonOnly', 'identityOnly'] as const;
+      const faceIdByShape = {} as Record<(typeof shapes)[number], string>;
+      for (const shape of shapes) {
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        faceIdByShape[shape] = assetFace.id;
+      }
+
+      await defaultDatabase
+        .insertInto('face_person_verdict')
+        .values([
+          {
+            assetFaceId: faceIdByShape.orphan,
+            personId: null,
+            spacePersonId: null,
+            identityId: null,
+            status: 'rejected',
+            source: 'cleanup',
+          },
+          {
+            assetFaceId: faceIdByShape.personOnly,
+            personId: person.id,
+            spacePersonId: null,
+            identityId: null,
+            status: 'rejected',
+            source: 'cleanup',
+          },
+          {
+            assetFaceId: faceIdByShape.spacePersonOnly,
+            personId: null,
+            spacePersonId: spacePerson.id,
+            identityId: null,
+            status: 'rejected',
+            source: 'cleanup',
+          },
+          {
+            assetFaceId: faceIdByShape.identityOnly,
+            personId: null,
+            spacePersonId: null,
+            identityId: identity.id,
+            status: 'rejected',
+            source: 'cleanup',
+          },
+        ])
+        .execute();
+
+      const remainingIds = async () => {
+        const rows = await defaultDatabase
+          .selectFrom('face_person_verdict')
+          .select('assetFaceId')
+          .where('assetFaceId', 'in', Object.values(faceIdByShape))
+          .execute();
+        return new Set(rows.map((row) => row.assetFaceId));
+      };
+      const before = await remainingIds();
+      for (const shape of shapes) {
+        expect(before.has(faceIdByShape[shape])).toBe(true); // positive control: all four exist before GC
+      }
+
+      await sut.deleteOrphanedVerdicts();
+
+      const after = await remainingIds();
+      expect(after.has(faceIdByShape.orphan)).toBe(false); // collected: no key left at all
+      expect(after.has(faceIdByShape.personOnly)).toBe(true); // kept: personId alone is a live target
+      expect(after.has(faceIdByShape.spacePersonOnly)).toBe(true); // kept: spacePersonId alone is a live target
+      expect(after.has(faceIdByShape.identityOnly)).toBe(true); // kept: identityId alone is a live target
+    });
+
+    it('S8.10b — collects 5 000 fully-orphaned rows in bounded chunks', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const faceIds = await seedAssetFacesBulk(5000, user.id);
+
+      const rows = faceIds.map((assetFaceId) => ({
+        assetFaceId,
+        personId: null,
+        spacePersonId: null,
+        identityId: null,
+        status: 'rejected' as const,
+        source: 'cleanup' as const,
+      }));
+      for (let index = 0; index < rows.length; index += 1000) {
+        await defaultDatabase
+          .insertInto('face_person_verdict')
+          .values(rows.slice(index, index + 1000))
+          .execute();
+      }
+
+      const remainingCount = async () =>
+        defaultDatabase
+          .selectFrom('face_person_verdict')
+          .select((eb) => eb.fn.countAll<string>().as('c'))
+          .where('assetFaceId', 'in', faceIds)
+          .executeTakeFirstOrThrow()
+          .then((row) => Number(row.c));
+      expect(await remainingCount()).toBe(5000); // positive control: all 5 000 exist before GC
+
+      await sut.deleteOrphanedVerdicts();
+
+      expect(await remainingCount()).toBe(0);
     });
   });
 });

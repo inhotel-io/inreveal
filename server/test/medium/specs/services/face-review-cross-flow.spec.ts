@@ -23,7 +23,7 @@ import { clearConfigCache } from 'src/utils/config';
 import { MediumTestContext, newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
-import { Mocked } from 'vitest';
+import { Mocked, vi } from 'vitest';
 
 // Slice 7 — cross-flow integration. This is the slice that would have caught every leak in the design's
 // defect inventory: it drives BOTH engines against ONE database and asserts that a decision made in one is
@@ -223,6 +223,23 @@ const pendingFor = async (
     .where(column, '=', targetId)
     .where('assetFaceId', '=', assetFaceId)
     .where('status', '=', 'pending')
+    .executeTakeFirst();
+  return row !== undefined;
+};
+
+// Slice 8: a rejected/ignored row matched by whichever key the caller supplies.
+const negativeExists = async (
+  ctx: MediumTestContext,
+  column: 'personId' | 'spacePersonId' | 'identityId',
+  targetId: string,
+  assetFaceId: string,
+) => {
+  const row = await ctx.database
+    .selectFrom('face_person_verdict')
+    .select('id')
+    .where(column, '=', targetId)
+    .where('assetFaceId', '=', assetFaceId)
+    .where('status', 'in', ['rejected', 'ignored'])
     .executeTakeFirst();
   return row !== undefined;
 };
@@ -821,5 +838,348 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     await expect(person.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'spacePersonId', spaceO.id, face.id)).toBe(false);
     expect(await pendingFor(ctx, 'spacePersonId', spaceO.id, control.id)).toBe(true);
+  });
+
+  // Slice 8 (F15, F16) — the verdict table never states a fact the rest of the system contradicts, and it
+  // does not grow without bound.
+  describe('Slice 8 — verdict lifecycle: clearing and collection (F15, F16)', () => {
+    it('S8.1 — a negative verdict no longer lists "F is not Q" once the owner places F on Q', async () => {
+      const { sut: person, ctx } = setupPerson();
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+
+      const { person: holder } = await ctx.newPerson({ ownerId: user.id, name: 'Holder' });
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const qIdentity = await faceIdentityRepo.ensurePersonIdentity(q.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: holder.id });
+
+      // Given: an admin kept F away from Q — the stay bucket's write shape, a durable rejected verdict.
+      await verdictRepo.markRejected(q.id, face.id, {
+        identityId: qIdentity.id,
+        source: 'cleanup',
+        actorId: user.id,
+      });
+
+      // Positive control: the resolutions page DOES list "F is not Q" before the placement.
+      const before = await verdictRepo.listNegativeVerdicts();
+      expect(before.some((r) => r.assetFaceId === face.id && r.personId === q.id)).toBe(true);
+
+      // When: the owner later places F on Q through the face editor.
+      await person.reassignFacesById(auth, q.id, { id: face.id });
+
+      // Then: the resolutions page no longer lists it.
+      const after = await verdictRepo.listNegativeVerdicts();
+      expect(after.some((r) => r.assetFaceId === face.id && r.personId === q.id)).toBe(false);
+    });
+
+    it('S8.2 — the same placement leaves a rejected verdict against a DIFFERENT person untouched (scoping control)', async () => {
+      const { sut: person, ctx } = setupPerson();
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+
+      const { person: holder } = await ctx.newPerson({ ownerId: user.id, name: 'Holder' });
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const { person: r } = await ctx.newPerson({ ownerId: user.id, name: 'R' });
+      const qIdentity = await faceIdentityRepo.ensurePersonIdentity(q.id);
+      const rIdentity = await faceIdentityRepo.ensurePersonIdentity(r.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: holder.id });
+
+      await verdictRepo.markRejected(q.id, face.id, {
+        identityId: qIdentity.id,
+        source: 'cleanup',
+        actorId: user.id,
+      });
+      await verdictRepo.markRejected(r.id, face.id, {
+        identityId: rIdentity.id,
+        source: 'cleanup',
+        actorId: user.id,
+      });
+      expect(await negativeExists(ctx, 'personId', q.id, face.id)).toBe(true); // positive control
+      expect(await negativeExists(ctx, 'personId', r.id, face.id)).toBe(true); // positive control
+
+      await person.reassignFacesById(auth, q.id, { id: face.id });
+
+      expect(await negativeExists(ctx, 'personId', q.id, face.id)).toBe(false); // cleared: same target
+      expect(await negativeExists(ctx, 'personId', r.id, face.id)).toBe(true); // scoping: different target survives
+    });
+
+    it('S8.3 — identity-keyed clearing: a NULL-personId verdict against the target identity is cleared', async () => {
+      const { sut: person, ctx } = setupPerson();
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+
+      const { person: holder } = await ctx.newPerson({ ownerId: user.id, name: 'Holder' });
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const qIdentity = await faceIdentityRepo.ensurePersonIdentity(q.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: face } = await ctx.newAssetFace({ assetId: asset.id, personId: holder.id });
+
+      // A verdict recorded with only the identity (personId NULL) — the shape a decline against a
+      // since-deleted-and-recreated suspected owner leaves behind.
+      await ctx.database
+        .insertInto('face_person_verdict')
+        .values({
+          assetFaceId: face.id,
+          personId: null,
+          spacePersonId: null,
+          identityId: qIdentity.id,
+          status: 'rejected',
+          source: 'cleanup',
+        })
+        .execute();
+      expect(await negativeExists(ctx, 'identityId', qIdentity.id, face.id)).toBe(true); // positive control
+
+      await person.reassignFacesById(auth, q.id, { id: face.id });
+
+      expect(await negativeExists(ctx, 'identityId', qIdentity.id, face.id)).toBe(false);
+    });
+
+    // Note on this test's shape: a negative verdict matching a space confirm's target (by spacePersonId OR
+    // by identityId) can never coexist, in this codebase, with a pending row for that SAME (target, face)
+    // pair — hasPendingForSpacePerson/claimPendingForSpacePerson apply the IDENTICAL match (excludeNegativeVerdict)
+    // to decide whether the row is even visible as pending, so a confirm can only ever reach the transaction
+    // when no such negative exists yet. clearNegativeForTarget's call from inside the confirm is therefore
+    // defense-in-depth (it also protects against a future change that decouples the two gates), not something
+    // a natural end-to-end fixture can force to delete a row — verified instead as a WIRING assertion: the
+    // right method is called with the right target descriptor and face id. The matcher's own correctness
+    // (spacePersonId / identityId / personId branches, and the different-target scoping) is exhaustively
+    // covered directly at the repository layer (face-person-verdict.repository.spec.ts) and via the personal
+    // face-editor path above (S8.1-S8.3), which has no such pending-row precondition to fight.
+    it('S8.4 — a space confirm calls clearNegativeForTarget scoped to the space person and its identity', async () => {
+      const { sut: space, ctx } = setupSpace();
+      await enableSpaceSuggestionBand(ctx);
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const { user: owner } = await ctx.newUser();
+      const { user: editor } = await ctx.newUser();
+      const editorAuth = factory.auth({ user: editor });
+
+      const s = await newSuggestionSpace(ctx, owner.id);
+      await ctx.newSharedSpaceMember({ spaceId: s.id, userId: editor.id, role: SharedSpaceRole.Editor });
+      const spaceAnna = await newSuggestionAnchoredSpacePerson(ctx, {
+        spaceId: s.id,
+        ownerId: owner.id,
+        name: 'Space Anna',
+      });
+
+      const { assetFace: face } = await newSuggestionCandidateFace(ctx, owner.id);
+      await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: face.assetId, addedById: owner.id });
+
+      await verdictRepo.upsertPendingForSpacePerson([
+        { spacePersonId: spaceAnna.id, assetFaceId: face.id, distance: 0.6 },
+      ]);
+      expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, face.id)).toBe(true); // positive control
+
+      const clearSpy = vi.spyOn(verdictRepo, 'clearNegativeForTarget');
+
+      await space.confirmSpacePersonFaceSuggestion(editorAuth, s.id, spaceAnna.id, face.id);
+
+      const identity = await faceIdentityRepo.ensureSpacePersonIdentity(spaceAnna.id);
+      expect(clearSpy).toHaveBeenCalledWith(
+        { spacePersonId: spaceAnna.id, identityId: identity.id },
+        [face.id],
+        expect.anything(),
+      );
+    });
+
+    it('S8.5 — a cleanup move clears a negative for (Q, F); the lock bucket clears a negative for the reviewed person', async () => {
+      const { sut: repair, ctx } = setupRepair();
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+
+      // Move half: F moves from `holder` to Q. A rejected verdict directly keyed to (Q, F) predates the
+      // move (an earlier decline against Q, now contradicted by it).
+      const { person: holder } = await ctx.newPerson({ ownerId: user.id, name: 'Holder' });
+      const { person: q } = await ctx.newPerson({ ownerId: user.id, name: 'Q' });
+      const qIdentity = await faceIdentityRepo.ensurePersonIdentity(q.id);
+      const { assetFace: moveFace } = await seedSuggestionFace(ctx, {
+        ownerId: user.id,
+        personId: holder.id,
+        embedding: SUGGESTION_CANDIDATE,
+      });
+      await verdictRepo.markRejected(q.id, moveFace.id, {
+        identityId: qIdentity.id,
+        source: 'cleanup',
+        actorId: user.id,
+      });
+      expect(await negativeExists(ctx, 'personId', q.id, moveFace.id)).toBe(true); // positive control
+
+      await repair.executeRepair({
+        toRepair: [{ assetFaceId: moveFace.id, currentPersonId: holder.id, suspectedOwnerId: q.id }],
+        reviewOnlyFaces: [],
+        reviewOnlyPersonIds: [],
+        unAttributableFaces: [],
+        perPerson: [],
+      });
+
+      expect(await negativeExists(ctx, 'personId', q.id, moveFace.id)).toBe(false); // cleared by the move
+
+      // Lock half: F2 sits on `reviewed`; a rejected verdict directly keyed to (reviewed, F2) predates the
+      // lock.
+      const { person: reviewed } = await ctx.newPerson({ ownerId: user.id, name: 'Reviewed' });
+      const reviewedIdentity = await faceIdentityRepo.ensurePersonIdentity(reviewed.id);
+      const { assetFace: lockFace } = await seedSuggestionFace(ctx, {
+        ownerId: user.id,
+        personId: reviewed.id,
+        embedding: SUGGESTION_CANDIDATE,
+      });
+      await verdictRepo.markRejected(reviewed.id, lockFace.id, {
+        identityId: reviewedIdentity.id,
+        source: 'cleanup',
+        actorId: user.id,
+      });
+      expect(await negativeExists(ctx, 'personId', reviewed.id, lockFace.id)).toBe(true); // positive control
+
+      await repair.resolveFaces(
+        { personId: reviewed.id, moveToPerson: [], stay: [], lock: [lockFace.id], detach: [], unknown: [] },
+        user.id,
+      );
+
+      expect(await negativeExists(ctx, 'personId', reviewed.id, lockFace.id)).toBe(false); // cleared by the lock
+    });
+
+    it('S8.6 — after Q is deleted and re-created sharing the same identity, a later scan offers F again', async () => {
+      const { sut: person, ctx } = setupSuggestionPerson();
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const auth = factory.auth({ user });
+
+      // Given: the S8.1 sequence — admin declines F toward Q1, the owner then places F on Q1 (cleared).
+      const { person: holder } = await ctx.newPerson({ ownerId: user.id, name: 'Holder' });
+      const q1 = await newSuggestionAnchoredPerson(ctx, user.id, 'Q');
+      const q1Identity = await faceIdentityRepo.ensurePersonIdentity(q1.id);
+      const { assetFace: face } = await seedSuggestionFace(ctx, {
+        ownerId: user.id,
+        personId: holder.id,
+        embedding: SUGGESTION_CANDIDATE,
+      });
+      await verdictRepo.markRejected(q1.id, face.id, {
+        identityId: q1Identity.id,
+        source: 'cleanup',
+        actorId: user.id,
+      });
+      await person.reassignFacesById(auth, q1.id, { id: face.id });
+      expect(await negativeExists(ctx, 'personId', q1.id, face.id)).toBe(false); // sanity: S8.1's fix ran
+
+      // When: a reset unassigns F (strips its manual identity link and its personId — scoped to just this
+      // one face here, mirroring unassignFaces's two effects without perturbing sibling fixtures in this
+      // shared-DB file) and Q is deleted and re-created, sharing the same identity (an
+      // identity-reconciliation re-link, not a fresh identity).
+      await faceIdentityRepo.unlinkFaces([face.id]);
+      await ctx.database.updateTable('asset_face').set({ personId: null }).where('id', '=', face.id).execute();
+
+      await ctx.database.deleteFrom('person').where('id', '=', q1.id).execute();
+      const faceAfterDelete = await ctx.database
+        .selectFrom('asset_face')
+        .select('personId')
+        .where('id', '=', face.id)
+        .executeTakeFirstOrThrow();
+      expect(faceAfterDelete.personId).toBeNull(); // sanity: the face is genuinely unassigned
+
+      const q2 = await newSuggestionAnchoredPerson(ctx, user.id, 'Q');
+      await ctx.database.updateTable('person').set({ identityId: q1Identity.id }).where('id', '=', q2.id).execute();
+
+      // Then: a suggestion scan offers F again — it was permanently suppressed before this slice.
+      await expect(person.handlePersonSuggestionScan({ id: q2.id })).resolves.toBe(JobStatus.Success);
+      expect(await pendingFor(ctx, 'personId', q2.id, face.id)).toBe(true);
+    });
+
+    it('S8.9 — the reaper runs after the identity GC, so a row whose only remaining key is a GC-removed identity is collected', async () => {
+      const { sut: person, ctx } = setupPerson();
+      const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+      jobMock.waitForQueueCompletion.mockResolvedValue();
+      jobMock.empty.mockResolvedValue();
+      jobMock.queue.mockResolvedValue();
+      jobMock.queueAll.mockResolvedValue();
+      jobMock.getJobCounts.mockResolvedValue({
+        active: 0,
+        waiting: 0,
+        delayed: 0,
+        paused: 0,
+        completed: 0,
+        failed: 0,
+      });
+      const metadata = ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(
+        SystemMetadataRepository,
+      );
+      metadata.get.mockResolvedValue({ machineLearning: { facialRecognition: { enabled: true, minFaces: 1 } } } as any);
+      metadata.set.mockResolvedValue();
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+
+      // A person P with exactly ONE ML face: unassignFaces empties it, so handlePersonCleanup deletes P as
+      // faceless, and its identity — referenced by nothing else — becomes GC-eligible in the SAME run.
+      const { person: p } = await ctx.newPerson({ ownerId: user.id, name: 'P' });
+      const pIdentity = await faceIdentityRepo.ensurePersonIdentity(p.id);
+      const { asset: pAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAssetFace({ assetId: pAsset.id, personId: p.id, sourceType: SourceType.MachineLearning });
+
+      // The row under test: identityId-only (personId/spacePersonId already NULL), against a face unrelated
+      // to P's own — its ONLY remaining key is P's identity, which only becomes NULL once the identity GC
+      // (deleteUnreferencedIdentities) runs.
+      const { asset: targetAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace: targetFace } = await ctx.newAssetFace({
+        assetId: targetAsset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+      await ctx.database
+        .insertInto('face_person_verdict')
+        .values({
+          assetFaceId: targetFace.id,
+          personId: null,
+          spacePersonId: null,
+          identityId: pIdentity.id,
+          status: 'rejected',
+          source: 'cleanup',
+        })
+        .execute();
+
+      // Positive control: a verdict with a LIVE target survives the whole run. `live` needs a face the
+      // forced reset does NOT unassign (a Manual-source face — unassignFaces below is scoped to
+      // sourceType=MachineLearning), or `live` itself would go faceless and get swept by the SAME
+      // handlePersonCleanup call, making this control vacuous.
+      const { person: live } = await ctx.newPerson({ ownerId: user.id, name: 'Live' });
+      const { asset: liveAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      await ctx.newAssetFace({ assetId: liveAsset.id, personId: live.id, sourceType: SourceType.Manual });
+      const { assetFace: liveFace } = await ctx.newAssetFace({
+        assetId: liveAsset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+      await verdictRepo.markRejected(live.id, liveFace.id, { source: 'cleanup', actorId: user.id });
+
+      // Row-existence by assetFaceId alone, NOT by identityId=pIdentity.id: the identity GC's ON DELETE SET
+      // NULL degrades that column to NULL as a SEPARATE effect from the reaper actually deleting the row —
+      // asserting on `identityId = pIdentity.id` would read `false` the instant the column is nulled even if
+      // the row itself survives uncollected, silently passing regardless of the reaper's call position. This
+      // is the exact trap the ordering mutation below caught on the first attempt at this test.
+      const anyVerdictRowFor = async (assetFaceId: string) => {
+        const row = await ctx.database
+          .selectFrom('face_person_verdict')
+          .select('id')
+          .where('assetFaceId', '=', assetFaceId)
+          .executeTakeFirst();
+        return row !== undefined;
+      };
+
+      expect(await negativeExists(ctx, 'identityId', pIdentity.id, targetFace.id)).toBe(true); // positive control
+      expect(await anyVerdictRowFor(targetFace.id)).toBe(true); // positive control
+
+      await expect(person.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
+
+      expect(await anyVerdictRowFor(targetFace.id)).toBe(false); // collected — the row itself is gone
+      expect(await negativeExists(ctx, 'personId', live.id, liveFace.id)).toBe(true); // live target kept
+    });
   });
 });

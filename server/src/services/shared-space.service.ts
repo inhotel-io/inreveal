@@ -1359,6 +1359,16 @@ export class SharedSpaceService extends BaseService {
         trx,
       );
       await this.facePersonVerdictRepository.resolveAssignedFace(assetFaceId, trx);
+      // Slice 8 (F15): the editor just stated a fact ("this face IS this space person") that contradicts
+      // any durable rejected/ignored row for this SAME target. As with the personal confirm,
+      // claimPendingForSpacePerson's own eligibility gate already refuses the claim whenever such a row
+      // exists (identical spacePersonId/identityId match), so this call is defense-in-depth rather than
+      // something a fresh confirm can currently observe deleting a row. Scoped to this space person only.
+      await this.facePersonVerdictRepository.clearNegativeForTarget(
+        { spacePersonId: person.id, identityId: identity.id },
+        [assetFaceId],
+        trx,
+      );
       // D3: write the space projection so getAssignedFaceIdsForSpace excludes this face from the same space's
       // next scan, for every space person — not just this one. addPersonFaces is onConflict().doNothing(), so
       // this is idempotent if a concurrent face-match backfill already wrote the same row.

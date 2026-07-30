@@ -278,7 +278,11 @@ export class PersonService extends BaseService {
 
         await this.personRepository.reassignFace(face.id, personId);
         await this.facePersonVerdictRepository.resolveAssignedFace(face.id);
-        await this.replaceFaceIdentity(personId, face.id, 'manual');
+        const identityId = await this.replaceFaceIdentity(personId, face.id, 'manual');
+        // Slice 8 (F15): the owner just stated a fact ("this face IS this person") that contradicts any
+        // durable rejected/ignored row for this SAME target — the newer human decision wins. Scoped to
+        // `personId` only: a negative recorded against a DIFFERENT person for this face must survive.
+        await this.facePersonVerdictRepository.clearNegativeForTarget({ personId, identityId }, [face.id]);
       }
 
       result.push(mapPerson(person));
@@ -298,7 +302,10 @@ export class PersonService extends BaseService {
 
     await this.personRepository.reassignFace(face.id, personId);
     await this.facePersonVerdictRepository.resolveAssignedFace(face.id);
-    await this.replaceFaceIdentity(personId, face.id, 'manual');
+    const identityId = await this.replaceFaceIdentity(personId, face.id, 'manual');
+    // Slice 8 (F15): same clearing as reassignFaces above — scoped to `personId`, so a negative recorded
+    // against a DIFFERENT person for this face survives.
+    await this.facePersonVerdictRepository.clearNegativeForTarget({ personId, identityId }, [face.id]);
     if (person.faceAssetId === null) {
       await this.createNewFeaturePhoto([person.id]);
     }
@@ -485,6 +492,17 @@ export class PersonService extends BaseService {
       const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId, trx);
       await this.faceIdentityRepository.replaceFaceIdentity(
         { assetFaceId: face.id, identityId: identity.id, source: 'manual' },
+        trx,
+      );
+      // Slice 8 (F15): confirming this suggestion states a fact ("this face IS this person") that
+      // contradicts any durable rejected/ignored row for this SAME target. In practice claimPending's own
+      // eligibility gate (a few lines up) already refuses the claim whenever such a row exists — it applies
+      // the identical personId/identityId match to decide the row is even pending — so this call is
+      // defense-in-depth against that gate ever being relaxed independently, not something a fresh confirm
+      // can currently observe deleting a row. Scoped to this target only — see clearNegativeForTarget.
+      await this.facePersonVerdictRepository.clearNegativeForTarget(
+        { personId, identityId: identity.id },
+        [face.id],
         trx,
       );
       return claimed;
@@ -1355,6 +1373,13 @@ export class PersonService extends BaseService {
       await this.sharedSpaceRepository.deleteAllPersonFaces();
       await this.sharedSpaceRepository.deleteAllPersons();
       await this.faceIdentityRepository.deleteUnreferencedIdentities();
+      // Slice 8 (F16): the reaper for face_person_verdict rows deleteUnreferencedIdentities is what nulls a
+      // row's LAST remaining key (personId/spacePersonId are already NULL by this point, via the person and
+      // space-person wipes above) — a row is only fully orphaned once this line has run, so the reaper must
+      // run strictly after it, not from inside handlePersonCleanup a few lines up (which runs BEFORE the
+      // space-person wipe and before this identity GC — see the ordering test in
+      // face-review-cross-flow.spec.ts for the discriminating case).
+      await this.facePersonVerdictRepository.deleteOrphanedVerdicts();
     } else if (hasPendingRecognitionWork) {
       this.logger.debug(
         `Skipping facial recognition queueing because recognition work is already pending ` +
