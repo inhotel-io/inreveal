@@ -117,17 +117,27 @@ export class FaceRepairDeclineRepository {
   // Remove declines by row id and/or by face natural key. The declined-page "Undo" sends ids; the review
   // screen's in-place undecline sends faces (it knows the (assetFaceId, suspectedOwnerId) pair but not the
   // server-generated row id). Returns the total number of rows removed.
+  //
+  // F20: chunked at 1000, matching the idiom every other bulk face path in the sibling repositories uses.
+  // The resolutions-remove DTO's clusterMuteIds is capped at MAX_RESOLVE_FACES (25 000) but a direct
+  // caller is not bounded by the DTO at all — one id is one bind parameter, so an unchunked IN-list
+  // breaks at Postgres's 65 535-parameter ceiling.
   async removeClusterMutes(input: { ids?: string[] }): Promise<number> {
     const ids = input.ids ?? [];
     if (ids.length === 0) {
       return 0;
     }
-    const rows = await this.db
-      .deleteFrom('face_repair_decline')
-      .where('id', 'in', ids)
-      .where('type', '=', 'person')
-      .returning('id')
-      .execute();
-    return rows.length;
+    let removed = 0;
+    for (let index = 0; index < ids.length; index += 1000) {
+      const chunk = ids.slice(index, index + 1000);
+      const rows = await this.db
+        .deleteFrom('face_repair_decline')
+        .where('id', 'in', chunk)
+        .where('type', '=', 'person')
+        .returning('id')
+        .execute();
+      removed += rows.length;
+    }
+    return removed;
   }
 }

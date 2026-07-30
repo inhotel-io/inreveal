@@ -465,18 +465,26 @@ export class FacePersonVerdictRepository {
     }));
   }
 
+  // F20: chunked at BULK_CHUNK_SIZE, matching drainPendingForFaces/markRejectedMany in this file. The
+  // resolutions-remove DTO's verdictIds is capped at MAX_RESOLVE_FACES (25 000) but a direct caller is not
+  // bounded by the DTO at all — one id is one bind parameter, so an unchunked IN-list breaks at Postgres's
+  // 65 535-parameter ceiling.
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async removeVerdicts(ids: string[]): Promise<number> {
     if (ids.length === 0) {
       return 0;
     }
-    const rows = await this.db
-      .deleteFrom('face_person_verdict')
-      .where('id', 'in', ids)
-      .where('status', 'in', ['rejected', 'ignored'])
-      .returning('id')
-      .execute();
-    return rows.length;
+    let removed = 0;
+    for (let index = 0; index < ids.length; index += BULK_CHUNK_SIZE) {
+      const rows = await this.db
+        .deleteFrom('face_person_verdict')
+        .where('id', 'in', ids.slice(index, index + BULK_CHUNK_SIZE))
+        .where('status', 'in', ['rejected', 'ignored'])
+        .returning('id')
+        .execute();
+      removed += rows.length;
+    }
+    return removed;
   }
 
   @GenerateSql({ params: [[DummyValue.UUID]] })

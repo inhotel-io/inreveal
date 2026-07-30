@@ -1,4 +1,5 @@
 import { Kysely } from 'kysely';
+import { randomUUID } from 'node:crypto';
 import { AssetVisibility, SharedSpaceRole } from 'src/enum';
 import {
   FaceIdentityRepository,
@@ -4638,6 +4639,47 @@ describe(FaceIdentityRepository.name, () => {
       // Positive control built in: faceB is a genuinely DIFFERENT id in the same call and must still get its
       // own row — proving the fix only merges the DUPLICATE, not the whole batch.
       expect(rows.map((r) => r.assetFaceId).sort()).toEqual([faceA.id, faceB.id].sort());
+    });
+  });
+
+  // S10.3 (F20): the unconfirm DTO's assetFaceIds now goes up to MAX_RESOLVE_FACES (25 000), so this write
+  // path must chunk its IN-list rather than send one unchunked statement. The filler below is far larger
+  // than Postgres's 65 535 bind-parameter ceiling (unrelated, non-existent ids — a NOT/IN's bind count is a
+  // function of list length, not of whether rows match) so the test proves the chunking is real: it would
+  // fail with a bind-parameter error today, before chunking.
+  describe('demoteManualFaceLinks (F20)', () => {
+    it('demotes only the requested manual links, chunked, without a bind-parameter error on a huge request', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const identity = await sut.ensurePersonIdentity(person.id);
+
+      const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: manualFaceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: person.id });
+      await sut.linkFace({ assetFaceId: manualFaceA.id, identityId: identity.id, source: 'manual' });
+
+      const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: manualFaceB } = await ctx.newAssetFace({ assetId: assetB.id, personId: person.id });
+      await sut.linkFace({ assetFaceId: manualFaceB.id, identityId: identity.id, source: 'manual' });
+
+      // Positive control: a manual link that is NOT in the request — must stay 'manual'.
+      const { asset: assetC } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: untouchedManualFace } = await ctx.newAssetFace({ assetId: assetC.id, personId: person.id });
+      await sut.linkFace({ assetFaceId: untouchedManualFace.id, identityId: identity.id, source: 'manual' });
+
+      const filler = Array.from({ length: 70_000 }, () => randomUUID());
+      const demoted = await sut.demoteManualFaceLinks([manualFaceA.id, manualFaceB.id, ...filler]);
+
+      expect(demoted).toBe(2);
+      const rows = await ctx.database
+        .selectFrom('face_identity_face')
+        .select(['assetFaceId', 'source'])
+        .where('assetFaceId', 'in', [manualFaceA.id, manualFaceB.id, untouchedManualFace.id])
+        .execute();
+      const sourceOf = Object.fromEntries(rows.map((r) => [r.assetFaceId, r.source]));
+      expect(sourceOf[manualFaceA.id]).toBe('ml');
+      expect(sourceOf[manualFaceB.id]).toBe('ml');
+      expect(sourceOf[untouchedManualFace.id]).toBe('manual'); // positive control: untouched
     });
   });
 });

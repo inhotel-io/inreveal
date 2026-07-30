@@ -137,9 +137,17 @@ export const FaceRepairPersonFacesSchema = z
   .meta({ id: 'FaceRepairPersonFacesDto' });
 export class FaceRepairPersonFacesDto extends createZodDto(FaceRepairPersonFacesSchema) {}
 
-// Upper bound on every per-request face/owner array (C4). These endpoints are all admin-only, so this is a
-// backstop against a runaway payload rather than a hostile-input guard: every DB write path chunks its
-// IN-lists/inserts at 1000 internally, so this bound governs payload size and page weight, not statement size.
+// Upper bound on every per-request face/owner array (C4, F20). These endpoints are all admin-only, so this is
+// a backstop against a runaway payload rather than a hostile-input guard: every DB write path this bound
+// feeds chunks its IN-lists/inserts at 1000 internally, so this bound governs payload size and page weight,
+// not statement size — EXCEPT `getClusterFacePage`'s `excludeFaceIds`, which is a single unchunked `NOT IN`.
+// That is deliberate, not an oversight: chunking a `NOT IN` requires ANDing the chunks (excluded from EVERY
+// chunk), not ORing them like an `IN`'s chunks — gluing an OR across chunks like a normal `IN` would silently
+// turn "exclude these" into "exclude almost nothing". At the 25 000 cap below, one un-chunked `NOT IN` clause
+// plus the query's handful of other predicates stays at ~25 010 bind parameters — comfortably under Postgres's
+// 65 535 ceiling for the single statement it's compiled into (this query is built once as `base` and executed
+// twice, as a count and a page, but those are two independent round trips, each with its own bind-parameter
+// budget, not one combined statement). So the correct fix here is the cap itself, not chunking.
 //
 // This was 1000 on the assumption that a single reviewed person never has a realistic selection that large,
 // because whole-cluster moves go through `entireCluster` (server-enumerated, no client array). That assumption
@@ -249,8 +257,8 @@ export const FaceRepairResolutionsRemoveRequestSchema = z
     // z.uuid() (version-agnostic), NOT z.uuidv4(): these are UUID **v7** row ids
     // (@PrimaryGeneratedUuidV7Column). z.uuidv4() rejecting v7 ids is the exact regression that broke
     // decline "Undo" before.
-    verdictIds: z.array(z.uuid()).min(1).optional(),
-    clusterMuteIds: z.array(z.uuid()).min(1).optional(),
+    verdictIds: z.array(z.uuid()).min(1).max(MAX_RESOLVE_FACES).optional(),
+    clusterMuteIds: z.array(z.uuid()).min(1).max(MAX_RESOLVE_FACES).optional(),
   })
   // Strict: a client still sending the retired `declineIds`/`lockIds`/`faces` shape must get a 400 rather
   // than have its keys stripped and silently perform a no-op undo.
@@ -260,7 +268,7 @@ export class FaceRepairResolutionsRemoveRequestDto extends createZodDto(FaceRepa
 
 export const FaceRepairUnconfirmRequestSchema = z
   .object({
-    assetFaceIds: z.array(z.uuid()).min(1),
+    assetFaceIds: z.array(z.uuid()).min(1).max(MAX_RESOLVE_FACES),
   })
   .meta({ id: 'FaceRepairUnconfirmRequestDto' });
 export class FaceRepairUnconfirmRequestDto extends createZodDto(FaceRepairUnconfirmRequestSchema) {}
@@ -272,7 +280,7 @@ export class FaceRepairResolutionsRemovedDto extends createZodDto(FaceRepairReso
 
 export const FaceRepairClusterFacesRequestSchema = z
   .object({
-    excludeFaceIds: z.array(z.uuidv4()).default([]),
+    excludeFaceIds: z.array(z.uuidv4()).max(MAX_RESOLVE_FACES).default([]),
     page: z.number().int().min(0),
     size: z.number().int().min(1).max(200),
   })
