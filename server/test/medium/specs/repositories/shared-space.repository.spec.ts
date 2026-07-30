@@ -3910,6 +3910,48 @@ describe(SharedSpaceRepository.name, () => {
 
       expect(ids).toContain(included.id);
     });
+
+    // S9.7 (pin — verified already correct against Slice 9's plan; see Implementation step 2). The
+    // reachability EXISTS is already scoped per-space via `spaceAssetPathBranches(..., { scope: {
+    // spaceIdRef: 'shared_space_person.spaceId' } })`, so a candidate asset added to one space does
+    // not make a person of a sibling space scannable, even though both spaces share an owner and a
+    // face-recognition-enabled flag.
+    it('S9.7 (pin): yields only space people whose candidate is reachable in that space, not merely present in a sibling space', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space: spaceA } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+      const { space: spaceB } = await ctx.newSharedSpace({ createdById: user.id, faceRecognitionEnabled: true });
+
+      // The candidate asset is reachable ONLY from space A (never added to space B).
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newSharedSpaceAsset({ spaceId: spaceA.id, assetId: asset.id, addedById: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      await ctx.database
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: newEmbedding() })
+        .execute();
+
+      const reachable = await sut.createPerson({
+        spaceId: spaceA.id,
+        name: 'Reachable',
+        type: 'person',
+        isHidden: false,
+      });
+      const notReachable = await sut.createPerson({
+        spaceId: spaceB.id,
+        name: 'Not Reachable',
+        type: 'person',
+        isHidden: false,
+      });
+
+      const ids: string[] = [];
+      for await (const row of sut.getScannableSpacePeopleWithUnassignedFaces()) {
+        ids.push(row.id);
+      }
+
+      expect(ids).toContain(reachable.id);
+      expect(ids).not.toContain(notReachable.id);
+    });
   });
 
   describe('getFilteredMapMarkers — space filter interaction', () => {

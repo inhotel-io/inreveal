@@ -572,10 +572,15 @@ describe(PersonService.name, () => {
         await expect(getSpacePeople(ctx, [enabledSpace.id, disabledSpace.id])).resolves.toEqual([]);
 
         const queuedJobs = jobMock.queueAll.mock.calls.flatMap(([jobs]) => jobs);
+        // The PeopleBackfill wait is a separate, time-bounded call: a suggestion sweep can outlive a
+        // forced recognition run, and the unbounded poll used to park that job indefinitely.
         expect(jobMock.waitForQueueCompletion).toHaveBeenCalledWith(
           QueueName.ThumbnailGeneration,
           QueueName.FaceDetection,
+        );
+        expect(jobMock.waitForQueueCompletion).toHaveBeenCalledWith(
           QueueName.PeopleBackfill,
+          expect.objectContaining({ timeoutMs: expect.any(Number) }),
         );
         expect(jobMock.empty).toHaveBeenCalledWith(QueueName.FacialRecognition, true);
         expect(jobMock.queueAll).toHaveBeenCalledWith([

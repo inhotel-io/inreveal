@@ -76,6 +76,15 @@ const PERSON_SUGGESTION_EMBEDDING_SAMPLE = 20;
 const PERSON_SUGGESTION_NUM_RESULTS = 100;
 
 /**
+ * S9 (F19): upper bound on how long a forced `handleQueueRecognizeFaces` run waits for the
+ * concurrency-1 PeopleBackfill queue before giving up and proceeding anyway. PeopleBackfill also
+ * carries the person/space-person suggestion-scan sweep (F17/F18), which can legitimately take a
+ * while on a large library — generous enough not to abandon a real drain in progress, bounded so a
+ * forced recognition run is never wedged indefinitely behind it.
+ */
+const PEOPLE_BACKFILL_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
  * Upper bound on full re-scan passes one backfill chain may take when getBackfillWork() keeps
  * reporting identity work. Repair passes are designed to converge in one or two passes; work that
  * is still outstanding at the cap indicates a convergence bug, and re-queueing would otherwise
@@ -1314,11 +1323,17 @@ export class PersonService extends BaseService {
       }
     }
 
-    await this.jobRepository.waitForQueueCompletion(
-      QueueName.ThumbnailGeneration,
-      QueueName.FaceDetection,
-      ...(force ? [QueueName.PeopleBackfill] : []),
-    );
+    await this.jobRepository.waitForQueueCompletion(QueueName.ThumbnailGeneration, QueueName.FaceDetection);
+
+    if (force) {
+      // S9 (F19): a separate, bounded wait — PersonSuggestionScanQueueAll/SpacePersonSuggestionScanQueueAll
+      // (F17/F18) can keep the concurrency-1 PeopleBackfill queue busy indefinitely, and this forced
+      // recognition run must proceed rather than park forever behind that sweep. Bounding only this call
+      // leaves the ThumbnailGeneration/FaceDetection wait above (and every other call site) unbounded.
+      await this.jobRepository.waitForQueueCompletion(QueueName.PeopleBackfill, {
+        timeoutMs: PEOPLE_BACKFILL_WAIT_TIMEOUT_MS,
+      });
+    }
 
     if (force) {
       await this.jobRepository.empty(QueueName.FacialRecognition, true);

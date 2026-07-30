@@ -2209,7 +2209,7 @@ describe(PersonService.name, () => {
       expect(mocks.person.vacuum).toHaveBeenCalledWith({ reindexVectors: false });
     });
 
-    it('force recognition waits for thumbnail, face detection, and people backfill before draining and clearing identities', async () => {
+    it('force recognition waits for thumbnail, face detection, and (separately, boundedly) people backfill before draining and clearing identities', async () => {
       const face = AssetFaceFactory.create();
       mocks.job.getJobCounts.mockResolvedValue(recognitionCounts());
       mocks.person.getAllFaces.mockReturnValue(makeStream([face]));
@@ -2220,14 +2220,19 @@ describe(PersonService.name, () => {
 
       await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
 
+      // S9 (F19): PeopleBackfill is waited on in its OWN call, with a bounded timeout, so a hung
+      // sweep there can never delay ThumbnailGeneration/FaceDetection's own (unbounded) wait.
       expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledWith(
         QueueName.ThumbnailGeneration,
         QueueName.FaceDetection,
-        QueueName.PeopleBackfill,
       );
-      expect(mocks.job.waitForQueueCompletion.mock.invocationCallOrder[0]).toBeLessThan(
-        mocks.job.empty.mock.invocationCallOrder[0],
-      );
+      expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledWith(QueueName.PeopleBackfill, {
+        timeoutMs: expect.any(Number),
+      });
+      expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledTimes(2);
+
+      const lastWaitCallOrder = mocks.job.waitForQueueCompletion.mock.invocationCallOrder.at(-1)!;
+      expect(lastWaitCallOrder).toBeLessThan(mocks.job.empty.mock.invocationCallOrder[0]);
       expect(mocks.job.empty.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.person.unassignFaces.mock.invocationCallOrder[0],
       );
@@ -2239,6 +2244,74 @@ describe(PersonService.name, () => {
       );
       expect(mocks.job.empty.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.sharedSpace.deleteAllPersons.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('S9.9: passes a bounded timeout on the forced PeopleBackfill wait, as its own call', async () => {
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 1,
+        waiting: 0,
+        paused: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+      });
+      mocks.person.getAll.mockReturnValue(makeStream());
+      mocks.person.getAllFaces.mockReturnValue(makeStream([]));
+      mocks.person.getAllWithoutFaces.mockResolvedValue([]);
+      mocks.sharedSpace.deleteAllPersonFaces.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.deleteAllPersons.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue([]);
+
+      await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledWith(
+        QueueName.PeopleBackfill,
+        expect.objectContaining({ timeoutMs: expect.any(Number) }),
+      );
+      const [, options] = mocks.job.waitForQueueCompletion.mock.calls.find(
+        (call) => call[0] === QueueName.PeopleBackfill,
+      )!;
+      expect((options as { timeoutMs: number }).timeoutMs).toBeGreaterThan(0);
+    });
+
+    it('S9.10 (pin): the non-forced path never waits on PeopleBackfill at all', async () => {
+      mocks.job.getJobCounts.mockResolvedValue(recognitionCounts({ waiting: 87_000 }));
+      mocks.person.getAllFaces.mockReturnValue(makeStream([AssetFaceFactory.create()]));
+
+      await expect(sut.handleQueueRecognizeFaces({ force: false })).resolves.toBe(JobStatus.Skipped);
+
+      for (const call of mocks.job.waitForQueueCompletion.mock.calls) {
+        expect(call).not.toContain(QueueName.PeopleBackfill);
+      }
+      expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledTimes(1);
+      expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledWith(
+        QueueName.ThumbnailGeneration,
+        QueueName.FaceDetection,
+      );
+
+      // positive control, same test body: the forced path DOES wait on PeopleBackfill
+      mocks.job.waitForQueueCompletion.mockClear();
+      mocks.job.getJobCounts.mockResolvedValue({
+        active: 1,
+        waiting: 0,
+        paused: 0,
+        completed: 0,
+        failed: 0,
+        delayed: 0,
+      });
+      mocks.person.getAll.mockReturnValue(makeStream());
+      mocks.person.getAllFaces.mockReturnValue(makeStream([]));
+      mocks.person.getAllWithoutFaces.mockResolvedValue([]);
+      mocks.sharedSpace.deleteAllPersonFaces.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.deleteAllPersons.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.getSpaceIdsWithFaceRecognitionEnabled.mockResolvedValue([]);
+
+      await expect(sut.handleQueueRecognizeFaces({ force: true })).resolves.toBe(JobStatus.Success);
+
+      expect(mocks.job.waitForQueueCompletion).toHaveBeenCalledWith(
+        QueueName.PeopleBackfill,
+        expect.objectContaining({ timeoutMs: expect.any(Number) }),
       );
     });
 

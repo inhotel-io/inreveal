@@ -1036,6 +1036,25 @@ export class PersonRepository {
       .execute();
   }
 
+  /**
+   * Slice 9 (F17): a person is only "scannable" — worth queueing `PersonSuggestionScan` for — when
+   * BOTH cheap `EXISTS` checks below hold. Neither is the KNN the scan job itself performs, so
+   * together they cannot tell whether any candidate actually falls within the configured distance
+   * band for this specific person — that would need a per-person embedding search, which this
+   * pre-check deliberately avoids (`handlePersonSuggestionScan` still does that work). A person who
+   * passes both checks but whose real candidates all sit outside the band still gets a job that
+   * finds nothing and returns early; that residual waste is not what this narrows.
+   *
+   * What it does remove: the previous predicate only correlated on `asset.ownerId = person.ownerId`,
+   * so a single unassigned face anywhere in the owner's library queued a scan for every named,
+   * visible, non-pet person that owner has — regardless of whether that person has ever been seen
+   * in a photo. That is fixed by requiring the person to have at least one of their own assigned,
+   * live, visible faces with an embedding (the exact precondition `getAssignedFaceEmbeddings` needs
+   * before `handlePersonSuggestionScan` will do any work — a person with none is always Skipped
+   * immediately, so queueing them can never do anything). The owner-side `EXISTS` keeps the
+   * ownership correlation but is narrowed to `reviewableAssetVisibility` (Slice 1) so a Locked or
+   * Hidden stray face no longer counts as a candidate the scan would never actually search against.
+   */
   getScannablePeopleWithUnassignedFaces() {
     return this.db
       .selectFrom('person')
@@ -1047,6 +1066,17 @@ export class PersonRepository {
         eb.exists(
           eb
             .selectFrom('asset_face')
+            .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
+            .select('asset_face.id')
+            .whereRef('asset_face.personId', '=', 'person.id')
+            .where('asset_face.deletedAt', 'is', null)
+            .where('asset_face.isVisible', 'is', true),
+        ),
+      )
+      .where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('asset_face')
             .innerJoin('asset', 'asset.id', 'asset_face.assetId')
             .select('asset_face.id')
             .whereRef('asset.ownerId', '=', 'person.ownerId')
@@ -1054,7 +1084,8 @@ export class PersonRepository {
             .where('asset_face.personId', 'is', null)
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', 'is', true)
-            .where('asset_face.sourceType', '=', SourceType.MachineLearning),
+            .where('asset_face.sourceType', '=', SourceType.MachineLearning)
+            .where((eb2) => reviewableAssetVisibility(eb2)),
         ),
       )
       .stream();

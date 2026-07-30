@@ -45,6 +45,16 @@ const linkManually = async (ctx: ReturnType<typeof setup>['ctx'], input: { owner
   return { person, identity };
 };
 
+// Slice 9 (F17) helper, shared across the getScannablePeopleWithUnassignedFaces describe block
+// below: being scannable requires the person to have their own reference face (an assigned, live,
+// visible face with an embedding — mirrors getAssignedFaceEmbeddings) in addition to the owner
+// having a reviewable unassigned ML candidate somewhere. This gives a person that reference face.
+const giveOwnFace = async (ctx: ReturnType<typeof setup>['ctx'], assetId: string, personId: string) => {
+  const { result: faceId } = await ctx.newAssetFace({ assetId, personId });
+  await ctx.database.insertInto('face_search').values({ faceId, embedding: newEmbedding() }).execute();
+  return faceId;
+};
+
 describe(PersonRepository.name, () => {
   describe('getByName', () => {
     it('matches names case-insensitively', async () => {
@@ -1011,7 +1021,7 @@ describe(PersonRepository.name, () => {
   });
 
   describe('getScannablePeopleWithUnassignedFaces', () => {
-    it('streams only named, non-hidden, type=person people whose owner has an unassigned ML face', async () => {
+    it('streams only named, non-hidden, type=person people with their own reference face whose owner has an unassigned ML face', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
       const { user: otherUser } = await ctx.newUser();
@@ -1022,8 +1032,9 @@ describe(PersonRepository.name, () => {
       const { person: pet } = await ctx.newPerson({ ownerId: user.id, name: 'Rex', isHidden: false, type: 'pet' });
       const { person: otherOwner } = await ctx.newPerson({ ownerId: otherUser.id, name: 'Bob', isHidden: false });
 
-      // user owns an unassigned ML face → `named` is eligible
+      // user owns an unassigned ML face, and `named` has their own reference face → `named` is eligible
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await giveOwnFace(ctx, asset.id, named.id);
       await ctx.newAssetFace({ assetId: asset.id, personId: null });
       // otherUser has NO unassigned face → `otherOwner` excluded
       const { asset: a2 } = await ctx.newAsset({ ownerId: otherUser.id });
@@ -1046,7 +1057,7 @@ describe(PersonRepository.name, () => {
       const { user } = await ctx.newUser();
       const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Carol', isHidden: false });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
-      await ctx.newAssetFace({ assetId: asset.id, personId: person.id }); // assigned
+      await giveOwnFace(ctx, asset.id, person.id); // Carol has her own reference face (also the "assigned" face)
       await ctx.newAssetFace({ assetId: asset.id, personId: null, deletedAt: new Date() }); // deleted
       await ctx.newAssetFace({ assetId: asset.id, personId: null, isVisible: false }); // invisible
 
@@ -1062,6 +1073,7 @@ describe(PersonRepository.name, () => {
       const { user } = await ctx.newUser();
       const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Dave', isHidden: false });
       const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await giveOwnFace(ctx, asset.id, person.id);
       // Create an unassigned face with non-ML sourceType
       await ctx.newAssetFace({ assetId: asset.id, personId: null, sourceType: SourceType.Manual });
 
@@ -1070,6 +1082,157 @@ describe(PersonRepository.name, () => {
         ids.push(p.id);
       }
       expect(ids).not.toContain(person.id);
+    });
+
+    // S9.1 (BDD) / S9.2 (red proof folded in once green — see slice 9 plan). Before this slice's
+    // fix, the EXISTS correlated only on `asset.ownerId = person.ownerId`, so all three named
+    // people below streamed (proved by temporarily reverting the person-reference-face EXISTS and
+    // re-running this test: it failed with `ids` containing all three ids, not just alice's).
+    it('S9.1: given an owner with three named people, only the one with their own reference face is scannable', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { person: alice } = await ctx.newPerson({ ownerId: user.id, name: 'Alice', isHidden: false });
+      const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob', isHidden: false });
+      const { person: carol } = await ctx.newPerson({ ownerId: user.id, name: 'Carol', isHidden: false });
+
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await giveOwnFace(ctx, asset.id, alice.id); // only Alice has a reference face of her own
+      await ctx.newAssetFace({ assetId: asset.id, personId: null }); // owner has an unassigned ML candidate
+
+      // This suite's medium DB is not truncated between tests, so scope the equality check to just
+      // this test's three people rather than asserting on the raw (file-wide) stream contents.
+      const relevantIds = new Set([alice.id, bob.id, carol.id]);
+      const ids: string[] = [];
+      for await (const p of sut.getScannablePeopleWithUnassignedFaces()) {
+        if (relevantIds.has(p.id)) {
+          ids.push(p.id);
+        }
+      }
+
+      expect(ids).toEqual([alice.id]);
+      expect(ids).not.toContain(bob.id);
+      expect(ids).not.toContain(carol.id);
+    });
+
+    it('S9.3: a person whose only unassigned candidate is on a Locked asset is not yielded (Slice 1 composition)', async () => {
+      const { ctx, sut } = setup();
+      // Owner-scoped gate 2 (an unassigned reviewable ML candidate exists somewhere in the owner's
+      // library) is not itself person-specific — so the positive control needs its OWN owner, or its
+      // genuine candidate would leak into `locked`'s gate 2 and defeat this test.
+      const { user: lockedOwner } = await ctx.newUser();
+      const { user: reviewableOwner } = await ctx.newUser();
+
+      const { person: locked } = await ctx.newPerson({ ownerId: lockedOwner.id, name: 'Locked Only', isHidden: false });
+      const { asset: lockedAsset } = await ctx.newAsset({
+        ownerId: lockedOwner.id,
+        visibility: AssetVisibility.Locked,
+      });
+      await giveOwnFace(ctx, lockedAsset.id, locked.id);
+      await ctx.newAssetFace({ assetId: lockedAsset.id, personId: null }); // only candidate is on a Locked asset
+
+      // positive control: a person of a DIFFERENT owner with a reviewable (default timeline) candidate is yielded
+      const { person: reviewable } = await ctx.newPerson({
+        ownerId: reviewableOwner.id,
+        name: 'Reviewable',
+        isHidden: false,
+      });
+      const { asset: timelineAsset } = await ctx.newAsset({ ownerId: reviewableOwner.id });
+      await giveOwnFace(ctx, timelineAsset.id, reviewable.id);
+      await ctx.newAssetFace({ assetId: timelineAsset.id, personId: null });
+
+      const ids: string[] = [];
+      for await (const p of sut.getScannablePeopleWithUnassignedFaces()) {
+        ids.push(p.id);
+      }
+
+      expect(ids).not.toContain(locked.id);
+      expect(ids).toContain(reviewable.id);
+    });
+
+    it.each([
+      ['soft-deleted', { deletedAt: new Date() }],
+      ['invisible', { isVisible: false }],
+      ['non-ML', { sourceType: SourceType.Manual }],
+    ] as const)('S9.4: a person whose only unassigned candidate is %s is not yielded', async (_label, overrides) => {
+      const { ctx, sut } = setup();
+      // Same reasoning as S9.3: the control needs its own owner so its genuine candidate cannot
+      // leak into the excluded person's (owner-scoped) gate 2.
+      const { user: excludedOwner } = await ctx.newUser();
+      const { user: controlOwner } = await ctx.newUser();
+
+      const { person: excluded } = await ctx.newPerson({
+        ownerId: excludedOwner.id,
+        name: 'Excluded',
+        isHidden: false,
+      });
+      const { asset } = await ctx.newAsset({ ownerId: excludedOwner.id });
+      await giveOwnFace(ctx, asset.id, excluded.id);
+      await ctx.newAssetFace({ assetId: asset.id, personId: null, ...overrides });
+
+      // positive control: a person of a DIFFERENT owner with a live, visible, ML unassigned candidate is yielded
+      const { person: control } = await ctx.newPerson({ ownerId: controlOwner.id, name: 'Control', isHidden: false });
+      const { asset: controlAsset } = await ctx.newAsset({ ownerId: controlOwner.id });
+      await giveOwnFace(ctx, controlAsset.id, control.id);
+      await ctx.newAssetFace({ assetId: controlAsset.id, personId: null });
+
+      const ids: string[] = [];
+      for await (const p of sut.getScannablePeopleWithUnassignedFaces()) {
+        ids.push(p.id);
+      }
+
+      expect(ids).not.toContain(excluded.id);
+      expect(ids).toContain(control.id);
+    });
+
+    it('S9.5 (pin): hidden, unnamed, and pet people remain excluded even with their own reference face and an owner candidate', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+
+      const { person: hidden } = await ctx.newPerson({ ownerId: user.id, name: 'Hidden', isHidden: true });
+      const { person: unnamed } = await ctx.newPerson({ ownerId: user.id, name: '', isHidden: false });
+      const { person: pet } = await ctx.newPerson({ ownerId: user.id, name: 'Rex', isHidden: false, type: 'pet' });
+      const { person: control } = await ctx.newPerson({ ownerId: user.id, name: 'Control', isHidden: false });
+
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      for (const person of [hidden, unnamed, pet, control]) {
+        await giveOwnFace(ctx, asset.id, person.id);
+      }
+      await ctx.newAssetFace({ assetId: asset.id, personId: null }); // shared unassigned candidate
+
+      const ids: string[] = [];
+      for await (const p of sut.getScannablePeopleWithUnassignedFaces()) {
+        ids.push(p.id);
+      }
+
+      expect(ids).not.toContain(hidden.id);
+      expect(ids).not.toContain(unnamed.id);
+      expect(ids).not.toContain(pet.id);
+      expect(ids).toContain(control.id);
+    });
+
+    it('S9.6: owner A having an unassigned face does not make owner B people scannable', async () => {
+      const { ctx, sut } = setup();
+      const { user: ownerA } = await ctx.newUser();
+      const { user: ownerB } = await ctx.newUser();
+
+      const { person: personA } = await ctx.newPerson({ ownerId: ownerA.id, name: 'Owner A Person', isHidden: false });
+      const { person: personB } = await ctx.newPerson({ ownerId: ownerB.id, name: 'Owner B Person', isHidden: false });
+
+      const { asset: assetA } = await ctx.newAsset({ ownerId: ownerA.id });
+      await giveOwnFace(ctx, assetA.id, personA.id);
+      await ctx.newAssetFace({ assetId: assetA.id, personId: null }); // only owner A has an unassigned candidate
+
+      const { asset: assetB } = await ctx.newAsset({ ownerId: ownerB.id });
+      await giveOwnFace(ctx, assetB.id, personB.id); // personB has their own reference face too, but no candidate
+
+      const ids: string[] = [];
+      for await (const p of sut.getScannablePeopleWithUnassignedFaces()) {
+        ids.push(p.id);
+      }
+
+      expect(ids).toContain(personA.id);
+      expect(ids).not.toContain(personB.id);
     });
   });
 

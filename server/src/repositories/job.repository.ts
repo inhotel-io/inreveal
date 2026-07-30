@@ -20,6 +20,11 @@ type JobMapItem = {
   label: string;
 };
 
+export interface WaitForQueueCompletionOptions {
+  /** S9 (F19): give up waiting after this many milliseconds instead of polling forever. */
+  timeoutMs?: number;
+}
+
 const WORKER_WATCH_INTERVAL_MS = 30_000;
 
 const FORCE_FACIAL_RECOGNITION_QUEUE_ALL_JOB_ID = `${JobName.FacialRecognitionQueueAll}/force`;
@@ -469,7 +474,22 @@ export class JobRepository {
     return this.queueAll([item]);
   }
 
-  async waitForQueueCompletion(...queues: QueueName[]): Promise<void> {
+  /**
+   * S9 (F19): the trailing-options form keeps every existing call site's variadic syntax
+   * (`waitForQueueCompletion(a, b, c)`) byte-identical — only a caller that explicitly appends a
+   * trailing options object opts into the bounded wait. Without `timeoutMs` this is the original
+   * unbounded `while (pending.length > 0)` poll; with it, a forced recognition run that gives up
+   * waiting still proceeds instead of parking indefinitely while F17/F18's suggestion sweep keeps
+   * the PeopleBackfill queue busy.
+   */
+  async waitForQueueCompletion(
+    ...args: [...queues: QueueName[]] | [...queues: QueueName[], options: WaitForQueueCompletionOptions]
+  ): Promise<void> {
+    const maybeOptions = args.at(-1);
+    const hasOptions = typeof maybeOptions === 'object' && maybeOptions !== null;
+    const { timeoutMs } = hasOptions ? (maybeOptions as WaitForQueueCompletionOptions) : {};
+    const queues = (hasOptions ? args.slice(0, -1) : args) as QueueName[];
+
     const getPending = async () => {
       const results = await Promise.all(
         queues.map(async (name) => {
@@ -482,9 +502,18 @@ export class JobRepository {
       return results.filter(({ pending }) => pending > 0);
     };
 
+    const deadline = timeoutMs === undefined ? undefined : Date.now() + timeoutMs;
     let pending = await getPending();
 
     while (pending.length > 0) {
+      if (deadline !== undefined && Date.now() >= deadline) {
+        const names = pending.map(({ name }) => name).join(', ');
+        this.logger.warn(
+          `Gave up waiting for ${names} queue(s) to finish after ${timeoutMs}ms; proceeding without waiting`,
+        );
+        return;
+      }
+
       const blocked = pending[0];
       const message =
         `Waiting for ${blocked.name} queue to finish ` +
@@ -556,6 +585,15 @@ export class JobRepository {
       }
       case JobName.SpacePersonSuggestionScanQueueAll: {
         return { jobId: 'space-person-suggestion-scan/all', removeOnComplete: true, removeOnFail: true };
+      }
+      case JobName.PersonSuggestionScan: {
+        // S9.8: a per-id jobId so a re-entrant QueueAll sweep (F18 — FaceIdentityBackfill re-queues
+        // both QueueAll jobs on every drain) coalesces onto the in-flight job for the same person
+        // instead of stacking a duplicate on the concurrency-1 PeopleBackfill queue.
+        return { jobId: `person-suggestion-scan/${item.data.id}`, removeOnComplete: true };
+      }
+      case JobName.SpacePersonSuggestionScan: {
+        return { jobId: `space-person-suggestion-scan/${item.data.id}`, removeOnComplete: true };
       }
       case JobName.VersionCheck: {
         return { deduplication: { id: JobName.VersionCheck } };
