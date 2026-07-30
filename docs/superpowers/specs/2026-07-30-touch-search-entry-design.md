@@ -32,8 +32,10 @@ Separately, we want `/` to open search, matching the GitHub/Gmail/Slack conventi
 | 6 | The iPad modal keeps its **current large centred size** | Already comfortable, needs no new CSS; full-bleed styling can follow if it reads cramped |
 | 7 | Chip visibility uses `{#if}` on `mediaQueryManager.pointerCoarse`, not a CSS media query | jsdom does not evaluate CSS media queries, so `{#if}` is the testable form |
 
-Decision 7 costs a one-frame flash: `MediaQuery` has no SSR value, so the chip renders during SSR
-and is removed on hydration. Accepted in exchange for real assertions.
+Decision 7 does not cost a flash: `web/src/routes/+layout.ts:9` sets `export const ssr = false`, so
+this app never server-renders any route. `MediaQuery` having no SSR value would only matter if there
+were an SSR pass to read it during — there isn't, so the chip's first render is already
+client-side and already has the real `pointerCoarse` value.
 
 Decision 4 covers `pointerType === 'touch'` only. `'pen'` keeps the dropdown — an Apple Pencil tap
 on a tablet arguably wants the modal too, but a Surface pen paired with a keyboard does not, and pen
@@ -43,7 +45,7 @@ input on this surface is rare. Pinned by test so the choice is deliberate rather
 
 | Interaction | Before | After |
 |---|---|---|
-| Tap nav search bar (finger) | focus → inline dropdown, soft keyboard covers it | **modal palette**, no soft keyboard |
+| Tap nav search bar (finger) | focus → inline dropdown, soft keyboard covers it | **modal palette**; its own input autofocuses, so the keyboard opens against the modal instead |
 | Click nav search bar (mouse / trackpad / pen) | inline dropdown | unchanged |
 | Tab to nav search bar | inline dropdown | unchanged |
 | `Ctrl+K` / `⌘K` | modal palette | unchanged |
@@ -67,7 +69,9 @@ The `preventDefault()` is load-bearing for two reasons, and both belong in a cod
 
 - it suppresses the focus that would otherwise fire `onfocus={openDropdown}`, which calls
   `manager.open('dropdown')` and clobbers `presentation` straight back to `'dropdown'`;
-- it stops iOS raising the soft keyboard against an input that is about to be covered by the modal.
+- it stops iOS raising the soft keyboard against *this inline input*, which the modal is about to
+  cover. The modal's own `Command.Input` autofocuses once it opens, so the keyboard still appears —
+  just against the modal's input instead of this one.
 
 **Hide the chip on coarse pointers.** Wrap the `<kbd>` block (L652–656) in
 `{#if !mediaQueryManager.pointerCoarse}`. `mediaQueryManager` is already imported at L24. The
@@ -267,7 +271,7 @@ by the unit tests above.
 | Risk | Mitigation |
 |---|---|
 | Users relying on `/` → Explore lose it | Sidebar entry unchanged; `/` = search is the stronger convention |
-| One-frame chip flash on touch after hydration | Accepted for testability; swap to a CSS variant if it proves visible |
+| ~~One-frame chip flash on touch after hydration~~ — does not apply | `web/src/routes/+layout.ts:9` sets `ssr = false`; there is no SSR render pass, so there is nothing for hydration to reconcile away |
 | `preventDefault()` on pointerdown blocks focus more broadly than intended | Guarded to `pointerType === 'touch'`; mouse, pen, and keyboard paths each covered by test |
 | A browser focuses the nav input by a path `preventDefault()` misses | The `openDropdown` early-return holds the invariant independently |
 | Upstream edits conflict on rebase | Pure deletions in two files, three lines total |

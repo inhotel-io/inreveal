@@ -499,8 +499,10 @@
       return;
     }
     // preventDefault is load-bearing: it suppresses the focus this tap would
-    // otherwise produce on pointer release, and it stops iOS raising the soft
-    // keyboard against an input the modal is about to cover.
+    // otherwise produce on pointer release, so iOS never raises the soft
+    // keyboard against this inline input, which the modal is about to cover.
+    // The modal's own Command.Input autofocuses once it opens, so the keyboard
+    // still appears — just against the modal's input rather than this one.
     event.preventDefault();
     manager.open('modal');
   }
