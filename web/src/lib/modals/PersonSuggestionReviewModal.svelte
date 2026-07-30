@@ -25,11 +25,15 @@
 
   type PageReq = { page: number; size: number };
 
-  // F24: the server now states explicitly whether an action endpoint acted (200) or was a no-op (204) —
-  // see person.controller.ts / shared-space.controller.ts. The modal reads THIS instead of inferring intent
-  // from an error status code (the old `{ status: 400 }` check this replaced conflated the one genuinely
-  // benign no-op case with a real authorization failure, which also 400s via requireAccess).
-  type FaceSuggestionActionResult = { status: 200 | 204 };
+  // F24: the server states explicitly whether an action endpoint acted or was a no-op — see
+  // person.controller.ts / shared-space.controller.ts. The modal reads THIS instead of inferring intent from
+  // an error status code (the old `{ status: 400 }` check this replaced conflated the one genuinely benign
+  // no-op case with a real authorization failure, which also 400s via requireAccess).
+  //
+  // S11b: the signal is the response BODY, not the status code. @oazapfts/runtime's ok() resolves to the
+  // body and throws away the numeric status for every success code, so the generated SDK cannot surface a
+  // 200-vs-204 distinction at all — every action endpoint answers 200 with `{ acted }`.
+  type FaceSuggestionActionResult = { acted: boolean };
 
   interface Props {
     person: PersonResponseDto;
@@ -155,7 +159,7 @@
   // F24: stop inferring intent from a status code. The one thing the OLD code got dangerously wrong — treating
   // every `{ status: 400 }` as "already resolved" — is gone: EVERY 4xx/5xx now surfaces via handleError, with
   // the face left unacted so it can be retried. The acted/no-op distinction comes from the resolved value on
-  // the SUCCESS path only (200 vs 204), which the server states explicitly.
+  // the SUCCESS path only (`acted`), which the server states explicitly in the body.
   async function act(kind: 'confirm' | 'dismiss' | 'ignore') {
     if (busy || !current || currentActed) {
       return;
@@ -167,9 +171,9 @@
         kind === 'confirm' ? await confirm(face) : kind === 'dismiss' ? await dismiss(face) : await ignore(face);
       actedFaceIds.add(face);
       busy = false;
-      // 200 = acted; 204 = no-op (already resolved, feature disabled, ...). Only `confirm` has a counter/toast
-      // — dismiss/ignore mark the face acted and advance identically either way.
-      if (kind === 'confirm' && result.status === 200) {
+      // acted = the call changed something; !acted = no-op (already resolved, feature disabled, ...). Only
+      // `confirm` has a counter/toast — dismiss/ignore mark the face acted and advance identically either way.
+      if (kind === 'confirm' && result.acted) {
         confirmed++;
         toastManager.primary($t('face_suggestion_confirmed_toast', { values: { count: 1 } }));
       }
@@ -177,8 +181,8 @@
     } catch (error) {
       busy = false;
       // A genuine failure (400 auth/ownership, 403, 500, network drop, ...): surface it and leave `current`
-      // exactly as it was so the user can retry. No status code is inspected here — the server's success path
-      // (200/204, handled above) is the ONLY acted/no-op signal now.
+      // exactly as it was so the user can retry. No status code is inspected here — the server's success-path
+      // `acted` field (handled above) is the ONLY acted/no-op signal now.
       handleError(error, $t('errors.unable_to_process_face_suggestion'));
     }
   }

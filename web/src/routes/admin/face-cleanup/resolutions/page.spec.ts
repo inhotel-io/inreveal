@@ -309,6 +309,10 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
     // Total matches the server total (3), not just what's loaded so far (2).
     expect(screen.getByTestId('resolutions-load-more')).toHaveTextContent('1');
+    // S11b: the FIRST load asks for page 1 explicitly. Until the SDK carried page/size, this page
+    // re-requested the server's default page every time and de-duplicated by id, so "Load more" was a
+    // silent no-op that this test could not tell apart from working pagination.
+    expect(getFaceRepairResolutions).toHaveBeenNthCalledWith(1, expect.objectContaining({ page: 1 }));
 
     // The space-person row (Casper) renders a thumbnail — the KNOWN GAP the comment in this file used to
     // describe. Positive control in the same test: the personal row (Berta) already renders one too, via the
@@ -325,6 +329,9 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     await fireEvent.click(screen.getByTestId('resolutions-load-more'));
 
     await waitFor(() => expect(getFaceRepairResolutions).toHaveBeenCalledTimes(2));
+    // S11b: and "Load more" asks for page 2 — the assertion that actually distinguishes real paging from
+    // re-fetching page 1 and filtering duplicates out client-side.
+    expect(getFaceRepairResolutions).toHaveBeenNthCalledWith(2, expect.objectContaining({ page: 2 }));
     await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(3));
     // Page 1's rows are still there — load-more APPENDS, it does not replace.
     expect(screen.getByText('not Casper')).toBeInTheDocument();

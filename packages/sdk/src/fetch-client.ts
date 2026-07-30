@@ -1876,6 +1876,10 @@ export type PersonFaceSuggestionPageResponseDto = {
     /** Total in-band pending suggestions for this person */
     total: number;
 };
+export type FaceSuggestionActionResponseDto = {
+    /** Whether the call changed anything. False when the suggestion was already resolved. */
+    acted: boolean;
+};
 export type PersonFaceResponseDto = {
     /** Asset ID containing the face */
     assetId: string;
@@ -6986,7 +6990,10 @@ export function confirmPersonFaceSuggestion({ assetFaceId, id }: {
     assetFaceId: string;
     id: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/confirm`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceSuggestionActionResponseDto;
+    }>(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/confirm`, {
         ...opts,
         method: "POST"
     }));
@@ -6998,7 +7005,10 @@ export function dismissPersonFaceSuggestion({ assetFaceId, id }: {
     assetFaceId: string;
     id: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/dismiss`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceSuggestionActionResponseDto;
+    }>(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/dismiss`, {
         ...opts,
         method: "POST"
     }));
@@ -7010,7 +7020,10 @@ export function ignorePersonFaceSuggestion({ assetFaceId, id }: {
     assetFaceId: string;
     id: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/ignore`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceSuggestionActionResponseDto;
+    }>(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/ignore`, {
         ...opts,
         method: "POST"
     }));
@@ -7022,7 +7035,10 @@ export function rejectPersonFaceSuggestion({ assetFaceId, id }: {
     assetFaceId: string;
     id: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/reject`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceSuggestionActionResponseDto;
+    }>(`/people/${encodeURIComponent(id)}/face-suggestions/${encodeURIComponent(assetFaceId)}/reject`, {
         ...opts,
         method: "POST"
     }));
@@ -8545,7 +8561,10 @@ export function confirmSpacePersonFaceSuggestion({ assetFaceId, id, personId }: 
     id: string;
     personId: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/confirm`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceSuggestionActionResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/confirm`, {
         ...opts,
         method: "POST"
     }));
@@ -8558,7 +8577,10 @@ export function dismissSpacePersonFaceSuggestion({ assetFaceId, id, personId }: 
     id: string;
     personId: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/dismiss`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceSuggestionActionResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/dismiss`, {
         ...opts,
         method: "POST"
     }));
@@ -8571,7 +8593,10 @@ export function ignoreSpacePersonFaceSuggestion({ assetFaceId, id, personId }: {
     id: string;
     personId: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/ignore`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceSuggestionActionResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/ignore`, {
         ...opts,
         method: "POST"
     }));
@@ -8584,7 +8609,10 @@ export function rejectSpacePersonFaceSuggestion({ assetFaceId, id, personId }: {
     id: string;
     personId: string;
 }, opts?: Oazapfts.RequestOpts) {
-    return oazapfts.ok(oazapfts.fetchText(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/reject`, {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: FaceSuggestionActionResponseDto;
+    }>(`/shared-spaces/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/face-suggestions/${encodeURIComponent(assetFaceId)}/reject`, {
         ...opts,
         method: "POST"
     }));

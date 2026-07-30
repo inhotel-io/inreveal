@@ -315,16 +315,19 @@ describe(PersonController.name, () => {
     // person-level PersonUpdate is what's published; PersonCreate stays a service-level check (see the
     // comment on confirmFaceSuggestion in person.service.ts).
     // S11.8/F24: the modal must stop inferring "already resolved" from a status code that also means "you're
-    // not allowed to do this" (F24) — so the service's acted/no-op boolean is now what selects 200 vs 204,
-    // not a fixed @HttpCode default.
-    it('should publish PersonUpdate and respond with 200 when the service reports it acted', async () => {
+    // not allowed to do this" (F24) — so the service's acted/no-op boolean is what reports the outcome.
+    // S11b/F24: that outcome lives in the BODY, not the status code. @oazapfts/runtime's ok() resolves to the
+    // response body and discards the status for EVERY 2xx, so a 200-vs-204 contract is structurally
+    // unreadable by any generated client. Both codes are 200; `acted` carries the signal.
+    it('should publish PersonUpdate and report acted: true when the service acted', async () => {
       service.confirmFaceSuggestion.mockResolvedValue(true);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/confirm`)
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(200);
+      expect(body).toEqual({ acted: true });
       expect(ctx.authenticate).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({ permission: Permission.PersonUpdate }),
@@ -333,17 +336,18 @@ describe(PersonController.name, () => {
       expect(service.confirmFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
     });
 
-    it('should respond with 204 when the service reports a no-op', async () => {
+    it('should report acted: false on a no-op, still as 200 with a readable body', async () => {
       service.confirmFaceSuggestion.mockResolvedValue(false);
 
-      const { status, text } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/confirm`)
         .set('Authorization', `Bearer token`);
 
-      expect(status).toBe(204);
-      // A 204 response must carry no body — otherwise a client naively truthy-checking the body would
-      // mis-read a no-op as acted.
-      expect(text).toBe('');
+      // Explicitly NOT 204: a 204 carries no body, and oazapfts would hand the caller `undefined`
+      // for both outcomes — the exact reason the previous contract could not ship.
+      expect(status).toBe(200);
+      expect(status).not.toBe(204);
+      expect(body).toEqual({ acted: false });
     });
   });
 
@@ -354,7 +358,7 @@ describe(PersonController.name, () => {
     it('POST reject should require person update permission and respond with 200 when acted', async () => {
       service.rejectFaceSuggestion.mockResolvedValue(true);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/reject`)
         .set('Authorization', `Bearer token`);
 
@@ -364,23 +368,26 @@ describe(PersonController.name, () => {
           metadata: expect.objectContaining({ permission: Permission.PersonUpdate }),
         }),
       );
+      expect(body).toEqual({ acted: true });
       expect(service.rejectFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
     });
 
-    it('POST reject should respond with 204 when the service reports a no-op', async () => {
+    it('POST reject should report acted: false on a no-op, still as 200', async () => {
       service.rejectFaceSuggestion.mockResolvedValue(false);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/reject`)
         .set('Authorization', `Bearer token`);
 
-      expect(status).toBe(204);
+      expect(status).toBe(200);
+      expect(status).not.toBe(204);
+      expect(body).toEqual({ acted: false });
     });
 
     it('POST ignore should require person update permission and respond with 200 when acted', async () => {
       service.ignoreFaceSuggestion.mockResolvedValue(true);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/ignore`)
         .set('Authorization', `Bearer token`);
 
@@ -390,23 +397,26 @@ describe(PersonController.name, () => {
           metadata: expect.objectContaining({ permission: Permission.PersonUpdate }),
         }),
       );
+      expect(body).toEqual({ acted: true });
       expect(service.ignoreFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
     });
 
-    it('POST ignore should respond with 204 when the service reports a no-op', async () => {
+    it('POST ignore should report acted: false on a no-op, still as 200', async () => {
       service.ignoreFaceSuggestion.mockResolvedValue(false);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/ignore`)
         .set('Authorization', `Bearer token`);
 
-      expect(status).toBe(204);
+      expect(status).toBe(200);
+      expect(status).not.toBe(204);
+      expect(body).toEqual({ acted: false });
     });
 
     it('POST dismiss should require person update permission and respond with 200 when acted', async () => {
       service.dismissFaceSuggestion.mockResolvedValue(true);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/dismiss`)
         .set('Authorization', `Bearer token`);
 
@@ -416,17 +426,20 @@ describe(PersonController.name, () => {
           metadata: expect.objectContaining({ permission: Permission.PersonUpdate }),
         }),
       );
+      expect(body).toEqual({ acted: true });
       expect(service.dismissFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
     });
 
-    it('POST dismiss should respond with 204 when the service reports a no-op', async () => {
+    it('POST dismiss should report acted: false on a no-op, still as 200', async () => {
       service.dismissFaceSuggestion.mockResolvedValue(false);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/dismiss`)
         .set('Authorization', `Bearer token`);
 
-      expect(status).toBe(204);
+      expect(status).toBe(200);
+      expect(status).not.toBe(204);
+      expect(body).toEqual({ acted: false });
     });
 
     it('POST reject should validate assetFaceId independently', async () => {

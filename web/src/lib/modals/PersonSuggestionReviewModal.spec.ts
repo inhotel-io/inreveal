@@ -24,13 +24,16 @@ vi.mock('@immich/ui', async (importOriginal: () => Promise<typeof import('@immic
   };
 });
 
-// F24: the server now states explicitly, via the response status, whether an action endpoint acted (200) or
-// was a no-op (204) — see person.controller.ts / shared-space.controller.ts. The modal's confirm/dismiss/
-// ignore props resolve to `{ status: 200 | 204 }` on success and REJECT for every 4xx/5xx (including what
+// F24: the server states explicitly whether an action endpoint acted or was a no-op — see
+// person.controller.ts / shared-space.controller.ts. S11b moved that signal out of the status code and into
+// the response BODY (`{ acted }`, always under 200), because @oazapfts/runtime's ok() resolves to the body
+// and discards the status for every success code, so a 200-vs-204 contract cannot be read by the generated
+// SDK at all. The modal's confirm/dismiss/ignore props resolve to `{ acted: boolean }` on success and
+// REJECT for every 4xx/5xx (including what
 // used to be misread as "already resolved": a 400 is now always a genuine failure — see access.ts
 // requireAccess).
-const acted = (): { status: 200 } => ({ status: 200 });
-const noOp = (): { status: 204 } => ({ status: 204 });
+const acted = (): { acted: boolean } => ({ acted: true });
+const noOp = (): { acted: boolean } => ({ acted: false });
 const authFailure = () => Object.assign(new Error('Not found or no access'), { status: 400 });
 const serverError = () => Object.assign(new Error('Internal Server Error'), { status: 500 });
 
@@ -234,7 +237,7 @@ describe('PersonSuggestionReviewModal', () => {
     expect(screen.queryByTestId('suggestion-reviewed-badge')).not.toBeInTheDocument();
   });
 
-  // S11.4: the same three cases (400 fails, 204 no-op, 200 acted) for dismiss and ignore.
+  // S11.4: the same three cases (400 fails, acted:false no-op, acted:true) for dismiss and ignore.
   it('S11.4: dismiss rejected with { status: 400 } surfaces via handleError, does not mark acted, does not advance', async () => {
     const dismiss = vi.fn().mockRejectedValue(authFailure());
     const onClose = vi.fn();
@@ -261,23 +264,23 @@ describe('PersonSuggestionReviewModal', () => {
     expect(screen.getByTestId('suggestion-ignore-btn')).not.toBeDisabled();
   });
 
-  // S11.2: a 204 (no-op) resolution still marks the face acted and advances — but shows no toast and does not
+  // S11.2: an acted:false (no-op) resolution still marks the face acted and advances — but shows no toast and does not
   // increment `confirmed` (positive control: the default acted() resolution in "Same person calls confirm..."
   // above DOES increment/close with confirmed:2 via the identical click path).
-  it('S11.2: confirm resolving 204 marks acted and advances without a toast or incrementing the counter', async () => {
+  it('S11.2: confirm resolving acted:false marks acted and advances without a toast or incrementing the counter', async () => {
     const confirm = vi.fn().mockResolvedValue(noOp());
     const onClose = vi.fn();
     setup({ confirm, onClose });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
 
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> 204
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> 204
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> acted:false
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> acted:false
     await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 0 }));
     expect(handleError).not.toHaveBeenCalled();
     expect(toastManager.primary).not.toHaveBeenCalled();
   });
 
-  it('S11.4: dismiss resolving 204 marks acted and advances', async () => {
+  it('S11.4: dismiss resolving acted:false marks acted and advances', async () => {
     const dismiss = vi.fn().mockResolvedValue(noOp());
     setup({ dismiss });
     await waitFor(() => screen.getByTestId('suggestion-different-btn'));
@@ -286,7 +289,7 @@ describe('PersonSuggestionReviewModal', () => {
     expect(handleError).not.toHaveBeenCalled();
   });
 
-  it('S11.4: ignore resolving 204 marks acted and advances', async () => {
+  it('S11.4: ignore resolving acted:false marks acted and advances', async () => {
     const ignore = vi.fn().mockResolvedValue(noOp());
     setup({ ignore });
     await waitFor(() => screen.getByTestId('suggestion-ignore-btn'));
@@ -295,19 +298,19 @@ describe('PersonSuggestionReviewModal', () => {
     expect(handleError).not.toHaveBeenCalled();
   });
 
-  // S11.3: confirm resolving 200 increments the counter AND shows the success toast (positive control on the
-  // toast call itself — the 204 case above asserts it is NOT called under otherwise-identical conditions).
-  it('S11.3: confirm resolving 200 increments the counter and shows the success toast', async () => {
+  // S11.3: confirm resolving acted:true increments the counter AND shows the success toast (positive control on
+  // the toast call itself — the acted:false case above asserts it is NOT called under identical conditions).
+  it('S11.3: confirm resolving acted:true increments the counter and shows the success toast', async () => {
     const confirm = vi.fn().mockResolvedValue(acted());
     const onClose = vi.fn();
     setup({ confirm, onClose });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
 
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> 200
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> acted:true
     await waitFor(() => expect(toastManager.primary).toHaveBeenCalledTimes(1));
     expect(toastManager.primary).toHaveBeenCalledWith('face_suggestion_confirmed_toast');
 
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> 200
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> acted:true
     await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 2 }));
     expect(toastManager.primary).toHaveBeenCalledTimes(2);
   });
@@ -445,19 +448,19 @@ describe('PersonSuggestionReviewModal', () => {
   });
 
   // F24: the mixed-sequence property the OLD 400-based "already resolved" test used to cover, now expressed
-  // with the real signal (204 no-op, then a genuine 200 acted) — a no-op must not inflate `confirmed`.
-  it('a 204 no-op followed by a real 200 confirm only counts the real one', async () => {
+  // with the real signal (acted:false no-op, then a genuine acted:true) — a no-op must not inflate `confirmed`.
+  it('an acted:false no-op followed by a real acted:true confirm only counts the real one', async () => {
     const confirm = vi.fn().mockResolvedValueOnce(noOp()).mockResolvedValueOnce(acted());
     const onClose = vi.fn();
     setup({ confirm, onClose });
     await waitFor(() => screen.getByTestId('suggestion-same-btn'));
 
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> 204, advance silently
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f1 -> acted:false, advance silently
     await waitFor(() => expect(screen.getByTestId('suggestion-progress')).toHaveAttribute('data-current', '2'));
     expect(handleError).not.toHaveBeenCalled();
     expect(toastManager.primary).not.toHaveBeenCalled();
 
-    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> 200, confirms for real
+    await userEvent.click(screen.getByTestId('suggestion-same-btn')); // f2 -> acted:true, confirms for real
     // Only the real confirm counts — the no-op on f1 must not inflate the confirmed count.
     await waitFor(() => expect(onClose).toHaveBeenCalledWith({ confirmed: 1 }));
     expect(toastManager.primary).toHaveBeenCalledTimes(1);

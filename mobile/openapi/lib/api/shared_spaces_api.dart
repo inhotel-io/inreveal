@@ -184,7 +184,7 @@ class SharedSpacesApi {
 
   /// Confirm a face suggestion for a person in a shared space
   ///
-  /// Assign the suggested face to the space person. Idempotent. 204 if there was nothing to do.
+  /// Assign the suggested face to the space person. Idempotent — the response reports whether it acted.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -229,7 +229,7 @@ class SharedSpacesApi {
 
   /// Confirm a face suggestion for a person in a shared space
   ///
-  /// Assign the suggested face to the space person. Idempotent. 204 if there was nothing to do.
+  /// Assign the suggested face to the space person. Idempotent — the response reports whether it acted.
   ///
   /// Parameters:
   ///
@@ -241,11 +241,19 @@ class SharedSpacesApi {
   ///
   /// * [String] personId (required):
   ///   Space person ID
-  Future<void> confirmSpacePersonFaceSuggestion(String assetFaceId, String id, String personId, { Future<void>? abortTrigger, }) async {
+  Future<FaceSuggestionActionResponseDto?> confirmSpacePersonFaceSuggestion(String assetFaceId, String id, String personId, { Future<void>? abortTrigger, }) async {
     final response = await confirmSpacePersonFaceSuggestionWithHttpInfo(assetFaceId, id, personId, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceSuggestionActionResponseDto',) as FaceSuggestionActionResponseDto;
+    
+    }
+    return null;
   }
 
   /// Create a shared space
@@ -467,7 +475,7 @@ class SharedSpacesApi {
 
   /// Dismiss a face suggestion for a person in a shared space
   ///
-  /// Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -512,7 +520,7 @@ class SharedSpacesApi {
 
   /// Dismiss a face suggestion for a person in a shared space
   ///
-  /// Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Parameters:
   ///
@@ -524,11 +532,19 @@ class SharedSpacesApi {
   ///
   /// * [String] personId (required):
   ///   Space person ID
-  Future<void> dismissSpacePersonFaceSuggestion(String assetFaceId, String id, String personId, { Future<void>? abortTrigger, }) async {
+  Future<FaceSuggestionActionResponseDto?> dismissSpacePersonFaceSuggestion(String assetFaceId, String id, String personId, { Future<void>? abortTrigger, }) async {
     final response = await dismissSpacePersonFaceSuggestionWithHttpInfo(assetFaceId, id, personId, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceSuggestionActionResponseDto',) as FaceSuggestionActionResponseDto;
+    
+    }
+    return null;
   }
 
   /// Get all shared spaces
@@ -1799,7 +1815,7 @@ class SharedSpacesApi {
 
   /// Ignore a face suggestion for a person in a shared space
   ///
-  /// Ignore this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Ignore this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1844,7 +1860,7 @@ class SharedSpacesApi {
 
   /// Ignore a face suggestion for a person in a shared space
   ///
-  /// Ignore this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Ignore this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Parameters:
   ///
@@ -1856,11 +1872,19 @@ class SharedSpacesApi {
   ///
   /// * [String] personId (required):
   ///   Space person ID
-  Future<void> ignoreSpacePersonFaceSuggestion(String assetFaceId, String id, String personId, { Future<void>? abortTrigger, }) async {
+  Future<FaceSuggestionActionResponseDto?> ignoreSpacePersonFaceSuggestion(String assetFaceId, String id, String personId, { Future<void>? abortTrigger, }) async {
     final response = await ignoreSpacePersonFaceSuggestionWithHttpInfo(assetFaceId, id, personId, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceSuggestionActionResponseDto',) as FaceSuggestionActionResponseDto;
+    
+    }
+    return null;
   }
 
   /// Link an album to a shared space
@@ -2083,7 +2107,7 @@ class SharedSpacesApi {
 
   /// Reject a face suggestion for a person in a shared space
   ///
-  /// Reject this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Reject this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -2128,7 +2152,7 @@ class SharedSpacesApi {
 
   /// Reject a face suggestion for a person in a shared space
   ///
-  /// Reject this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Reject this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Parameters:
   ///
@@ -2140,11 +2164,19 @@ class SharedSpacesApi {
   ///
   /// * [String] personId (required):
   ///   Space person ID
-  Future<void> rejectSpacePersonFaceSuggestion(String assetFaceId, String id, String personId, { Future<void>? abortTrigger, }) async {
+  Future<FaceSuggestionActionResponseDto?> rejectSpacePersonFaceSuggestion(String assetFaceId, String id, String personId, { Future<void>? abortTrigger, }) async {
     final response = await rejectSpacePersonFaceSuggestionWithHttpInfo(assetFaceId, id, personId, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceSuggestionActionResponseDto',) as FaceSuggestionActionResponseDto;
+    
+    }
+    return null;
   }
 
   /// Remove assets from a shared space

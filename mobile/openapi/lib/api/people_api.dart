@@ -18,7 +18,7 @@ class PeopleApi {
 
   /// Confirm a face suggestion
   ///
-  /// Assign the suggested face to the person. Idempotent. 204 if there was nothing to do.
+  /// Assign the suggested face to the person. Idempotent — the response reports whether it acted.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -59,7 +59,7 @@ class PeopleApi {
 
   /// Confirm a face suggestion
   ///
-  /// Assign the suggested face to the person. Idempotent. 204 if there was nothing to do.
+  /// Assign the suggested face to the person. Idempotent — the response reports whether it acted.
   ///
   /// Parameters:
   ///
@@ -68,11 +68,19 @@ class PeopleApi {
   ///
   /// * [String] id (required):
   ///   Person ID
-  Future<void> confirmPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+  Future<FaceSuggestionActionResponseDto?> confirmPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
     final response = await confirmPersonFaceSuggestionWithHttpInfo(assetFaceId, id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceSuggestionActionResponseDto',) as FaceSuggestionActionResponseDto;
+    
+    }
+    return null;
   }
 
   /// Create a person
@@ -282,7 +290,7 @@ class PeopleApi {
 
   /// Dismiss a face suggestion
   ///
-  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -323,7 +331,7 @@ class PeopleApi {
 
   /// Dismiss a face suggestion
   ///
-  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Parameters:
   ///
@@ -332,11 +340,19 @@ class PeopleApi {
   ///
   /// * [String] id (required):
   ///   Person ID
-  Future<void> dismissPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+  Future<FaceSuggestionActionResponseDto?> dismissPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
     final response = await dismissPersonFaceSuggestionWithHttpInfo(assetFaceId, id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceSuggestionActionResponseDto',) as FaceSuggestionActionResponseDto;
+    
+    }
+    return null;
   }
 
   /// Get all people
@@ -1056,7 +1072,7 @@ class PeopleApi {
 
   /// Ignore a face suggestion
   ///
-  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1097,7 +1113,7 @@ class PeopleApi {
 
   /// Ignore a face suggestion
   ///
-  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Ignore this suggestion for the person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Parameters:
   ///
@@ -1106,11 +1122,19 @@ class PeopleApi {
   ///
   /// * [String] id (required):
   ///   Person ID
-  Future<void> ignorePersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+  Future<FaceSuggestionActionResponseDto?> ignorePersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
     final response = await ignorePersonFaceSuggestionWithHttpInfo(assetFaceId, id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceSuggestionActionResponseDto',) as FaceSuggestionActionResponseDto;
+    
+    }
+    return null;
   }
 
   /// Merge people
@@ -1294,7 +1318,7 @@ class PeopleApi {
 
   /// Reject a face suggestion
   ///
-  /// Reject this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Reject this suggestion for the person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1335,7 +1359,7 @@ class PeopleApi {
 
   /// Reject a face suggestion
   ///
-  /// Reject this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.
+  /// Reject this suggestion for the person. The face stays unassigned. Idempotent — the response reports whether it acted.
   ///
   /// Parameters:
   ///
@@ -1344,11 +1368,19 @@ class PeopleApi {
   ///
   /// * [String] id (required):
   ///   Person ID
-  Future<void> rejectPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
+  Future<FaceSuggestionActionResponseDto?> rejectPersonFaceSuggestion(String assetFaceId, String id, { Future<void>? abortTrigger, }) async {
     final response = await rejectPersonFaceSuggestionWithHttpInfo(assetFaceId, id, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'FaceSuggestionActionResponseDto',) as FaceSuggestionActionResponseDto;
+    
+    }
+    return null;
   }
 
   /// Update people

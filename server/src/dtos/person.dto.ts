@@ -251,10 +251,24 @@ const PersonFaceSuggestionPageResponseSchema = z
   })
   .meta({ id: 'PersonFaceSuggestionPageResponseDto' });
 
+// S11b (F24): the outcome of a suggestion action travels in the BODY, not the status code.
+// @oazapfts/runtime's ok() resolves to the response body and discards the numeric status for every
+// success code, so a 200-vs-204 contract is structurally unreadable by any generated client — the
+// caller cannot tell "I acted" from "there was nothing to do". Both are 200; `acted` is the signal.
+// Shared by PersonController and SharedSpaceController, which already import from this module.
+const FaceSuggestionActionResponseSchema = z
+  .object({
+    acted: z
+      .boolean()
+      .describe('Whether the call changed anything. False when the suggestion was already resolved.'),
+  })
+  .meta({ id: 'FaceSuggestionActionResponseDto' });
+
 export class PersonFaceSuggestionPageQueryDto extends createZodDto(PersonFaceSuggestionPageQuerySchema) {}
 export class PersonFaceSuggestionParamsDto extends createZodDto(PersonFaceSuggestionParamsSchema) {}
 export class PersonFaceSuggestionResponseDto extends createZodDto(PersonFaceSuggestionResponseSchema) {}
 export class PersonFaceSuggestionPageResponseDto extends createZodDto(PersonFaceSuggestionPageResponseSchema) {}
+export class FaceSuggestionActionResponseDto extends createZodDto(FaceSuggestionActionResponseSchema) {}
 
 export class AssetFaceResponseDto extends createZodDto(AssetFaceResponseSchema) {}
 

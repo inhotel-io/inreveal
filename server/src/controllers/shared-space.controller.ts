@@ -22,6 +22,7 @@ import {
   PeopleFaceStatisticsResponseDto,
   PersonFacePageQueryDto,
   PersonFacePageResponseDto,
+  FaceSuggestionActionResponseDto,
   PersonFaceSuggestionPageQueryDto,
   PersonFaceSuggestionPageResponseDto,
   PersonStatisticsResponseDto,
@@ -464,23 +465,23 @@ export class SharedSpaceController {
     return this.service.getSpacePersonFaceSuggestions(auth, id, personId, dto);
   }
 
-  // S11 (F24): the response code explicitly reports acted (200) vs no-op (204) via the service's return
-  // value — see the parallel comment on PersonController's confirm/reject/ignore/dismiss endpoints.
+  // S11 (F24): the response explicitly reports acted vs no-op via the service's return value.
+  // S11b (F24): it reports it in the `acted` field of the BODY, always under 200 — a 200-vs-204 status
+  // signal is unreadable through @oazapfts/runtime's ok(). See the parallel comment on PersonController's
+  // confirm/reject/ignore/dismiss endpoints.
   @Post(':id/people/:personId/face-suggestions/:assetFaceId/confirm')
   @Authenticated({ permission: Permission.SharedSpaceUpdate })
   @HttpCode(HttpStatus.OK)
   @Endpoint({
     summary: 'Confirm a face suggestion for a person in a shared space',
-    description: 'Assign the suggested face to the space person. Idempotent. 204 if there was nothing to do.',
+    description: 'Assign the suggested face to the space person. Idempotent — the response reports whether it acted.',
     history: new HistoryBuilder().added('v2').stable('v2'),
   })
   async confirmSpacePersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, personId, assetFaceId }: SpacePersonFaceSuggestionParamsDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
-    const acted = await this.service.confirmSpacePersonFaceSuggestion(auth, id, personId, assetFaceId);
-    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
+  ): Promise<FaceSuggestionActionResponseDto> {
+    return { acted: await this.service.confirmSpacePersonFaceSuggestion(auth, id, personId, assetFaceId) };
   }
 
   @Post(':id/people/:personId/face-suggestions/:assetFaceId/reject')
@@ -489,16 +490,14 @@ export class SharedSpaceController {
   @Endpoint({
     summary: 'Reject a face suggestion for a person in a shared space',
     description:
-      'Reject this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
+      'Reject this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.',
     history: new HistoryBuilder().added('v2').stable('v2'),
   })
   async rejectSpacePersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, personId, assetFaceId }: SpacePersonFaceSuggestionParamsDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
-    const acted = await this.service.rejectSpacePersonFaceSuggestion(auth, id, personId, assetFaceId);
-    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
+  ): Promise<FaceSuggestionActionResponseDto> {
+    return { acted: await this.service.rejectSpacePersonFaceSuggestion(auth, id, personId, assetFaceId) };
   }
 
   @Post(':id/people/:personId/face-suggestions/:assetFaceId/ignore')
@@ -507,16 +506,14 @@ export class SharedSpaceController {
   @Endpoint({
     summary: 'Ignore a face suggestion for a person in a shared space',
     description:
-      'Ignore this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
+      'Ignore this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.',
     history: new HistoryBuilder().added('v2').stable('v2'),
   })
   async ignoreSpacePersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, personId, assetFaceId }: SpacePersonFaceSuggestionParamsDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
-    const acted = await this.service.ignoreSpacePersonFaceSuggestion(auth, id, personId, assetFaceId);
-    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
+  ): Promise<FaceSuggestionActionResponseDto> {
+    return { acted: await this.service.ignoreSpacePersonFaceSuggestion(auth, id, personId, assetFaceId) };
   }
 
   @Post(':id/people/:personId/face-suggestions/:assetFaceId/dismiss')
@@ -525,16 +522,14 @@ export class SharedSpaceController {
   @Endpoint({
     summary: 'Dismiss a face suggestion for a person in a shared space',
     description:
-      'Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
+      'Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.',
     history: new HistoryBuilder().added('v2').stable('v2'),
   })
   async dismissSpacePersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, personId, assetFaceId }: SpacePersonFaceSuggestionParamsDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
-    const acted = await this.service.dismissSpacePersonFaceSuggestion(auth, id, personId, assetFaceId);
-    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
+  ): Promise<FaceSuggestionActionResponseDto> {
+    return { acted: await this.service.dismissSpacePersonFaceSuggestion(auth, id, personId, assetFaceId) };
   }
 
   @Get(':id/people/:personId')

@@ -515,16 +515,8 @@
     }
   }
 
-  // F24/S11: the server now reports 200 (acted) vs 204 (no-op) explicitly for these actions — see
-  // shared-space.controller.ts. The generated SDK does not yet expose that distinction (`oazapfts.ok()`
-  // discards the status code for every 2xx — see @oazapfts/runtime); regenerating the OpenAPI spec/SDK is
-  // tracked separately. Until then, any call that resolves without throwing is reported as `acted` (200) —
-  // this still fixes the dangerous part of the old bug: a genuine 4xx/5xx now always rejects through to the
-  // modal's handleError path instead of being misread as a benign no-op.
-  const toActionResult = async (call: Promise<unknown>): Promise<{ status: 200 | 204 }> => {
-    await call;
-    return { status: 200 };
-  };
+  // F24/S11b: these endpoints answer 200 with `{ acted }` — the signal is in the body because
+  // `oazapfts.ok()` discards the status code for every 2xx. They pass straight through to the modal.
 
   async function openSuggestionReview() {
     const currentSpaceId = space.id;
@@ -538,15 +530,11 @@
       loadPage: ({ page, size }: { page: number; size: number }) =>
         getSpacePersonFaceSuggestions({ id: currentSpaceId, personId: currentPersonId, page, size }),
       confirm: (assetFaceId: string) =>
-        toActionResult(
-          confirmSpacePersonFaceSuggestion({ id: currentSpaceId, personId: currentPersonId, assetFaceId }),
-        ),
+        confirmSpacePersonFaceSuggestion({ id: currentSpaceId, personId: currentPersonId, assetFaceId }),
       dismiss: (assetFaceId: string) =>
-        toActionResult(
-          dismissSpacePersonFaceSuggestion({ id: currentSpaceId, personId: currentPersonId, assetFaceId }),
-        ),
+        dismissSpacePersonFaceSuggestion({ id: currentSpaceId, personId: currentPersonId, assetFaceId }),
       ignore: (assetFaceId: string) =>
-        toActionResult(ignoreSpacePersonFaceSuggestion({ id: currentSpaceId, personId: currentPersonId, assetFaceId })),
+        ignoreSpacePersonFaceSuggestion({ id: currentSpaceId, personId: currentPersonId, assetFaceId }),
     });
 
     await loadSuggestionSummary(currentSpaceId, currentPersonId);

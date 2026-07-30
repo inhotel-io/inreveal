@@ -156,7 +156,7 @@ export class FaceRepairAdminController {
     history: new HistoryBuilder().added('v1'),
   })
   getFaceRepairResolutions(@Query() dto: FaceRepairResolutionsQueryDto): Promise<FaceRepairResolutionsListDto> {
-    return this.service.listResolutions(dto) as unknown as Promise<FaceRepairResolutionsListDto>;
+    return this.service.listResolutions(dto);
   }
 
   @Post('resolutions/remove')

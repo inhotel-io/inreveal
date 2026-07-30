@@ -30,6 +30,7 @@ import {
   PersonCreateDto,
   PersonFacePageQueryDto,
   PersonFacePageResponseDto,
+  FaceSuggestionActionResponseDto,
   PersonFaceSuggestionPageQueryDto,
   PersonFaceSuggestionPageResponseDto,
   PersonFaceSuggestionParamsDto,
@@ -336,26 +337,28 @@ export class PersonController {
   // stays service-level (see the comment on confirmFaceSuggestion in person.service.ts). Do not drop it
   // there on the assumption this decorator covers it.
   //
-  // S11 (F24): the response code now EXPLICITLY reports whether the call acted (200) or was a no-op (204) —
-  // the service's return value, not a fixed default. The web modal used to infer "already resolved" from a
-  // 400, which is indistinguishable from a genuine authorization failure (see the comment that used to sit
-  // here and on PersonSuggestionReviewModal.svelte). @HttpCode's default only covers the case nothing below
-  // overrides it via the passthrough response.
+  // S11 (F24): the response EXPLICITLY reports whether the call acted or was a no-op — the service's return
+  // value, not a fixed default. The web modal used to infer "already resolved" from a 400, which is
+  // indistinguishable from a genuine authorization failure (see the comment that used to sit here and on
+  // PersonSuggestionReviewModal.svelte).
+  //
+  // S11b (F24): that report is the `acted` field of the BODY, always under 200 — NOT a 200-vs-204 status
+  // code. @oazapfts/runtime's ok() resolves to the body and throws away the numeric status for every
+  // success code, so no generated client can read a status-code signal. Do not "simplify" this back to
+  // @HttpCode + res.status(): it compiles, tests green against supertest, and is unusable from the SDK.
   @Post(':id/face-suggestions/:assetFaceId/confirm')
   @Authenticated({ permission: Permission.PersonUpdate })
   @HttpCode(HttpStatus.OK)
   @Endpoint({
     summary: 'Confirm a face suggestion',
-    description: 'Assign the suggested face to the person. Idempotent. 204 if there was nothing to do.',
+    description: 'Assign the suggested face to the person. Idempotent — the response reports whether it acted.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
   async confirmPersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, assetFaceId }: PersonFaceSuggestionParamsDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
-    const acted = await this.service.confirmFaceSuggestion(auth, id, assetFaceId);
-    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
+  ): Promise<FaceSuggestionActionResponseDto> {
+    return { acted: await this.service.confirmFaceSuggestion(auth, id, assetFaceId) };
   }
 
   @Post(':id/face-suggestions/:assetFaceId/reject')
@@ -364,16 +367,14 @@ export class PersonController {
   @Endpoint({
     summary: 'Reject a face suggestion',
     description:
-      'Reject this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
+      'Reject this suggestion for the person. The face stays unassigned. Idempotent — the response reports whether it acted.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
   async rejectPersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, assetFaceId }: PersonFaceSuggestionParamsDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
-    const acted = await this.service.rejectFaceSuggestion(auth, id, assetFaceId);
-    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
+  ): Promise<FaceSuggestionActionResponseDto> {
+    return { acted: await this.service.rejectFaceSuggestion(auth, id, assetFaceId) };
   }
 
   @Post(':id/face-suggestions/:assetFaceId/ignore')
@@ -382,16 +383,14 @@ export class PersonController {
   @Endpoint({
     summary: 'Ignore a face suggestion',
     description:
-      'Ignore this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
+      'Ignore this suggestion for the person. The face stays unassigned. Idempotent — the response reports whether it acted.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
   async ignorePersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, assetFaceId }: PersonFaceSuggestionParamsDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
-    const acted = await this.service.ignoreFaceSuggestion(auth, id, assetFaceId);
-    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
+  ): Promise<FaceSuggestionActionResponseDto> {
+    return { acted: await this.service.ignoreFaceSuggestion(auth, id, assetFaceId) };
   }
 
   @Post(':id/face-suggestions/:assetFaceId/dismiss')
@@ -400,15 +399,13 @@ export class PersonController {
   @Endpoint({
     summary: 'Dismiss a face suggestion',
     description:
-      'Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent. 204 if there was nothing to do.',
+      'Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent — the response reports whether it acted.',
     history: new HistoryBuilder().added('v1').beta('v1'),
   })
   async dismissPersonFaceSuggestion(
     @Auth() auth: AuthDto,
     @Param() { id, assetFaceId }: PersonFaceSuggestionParamsDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<void> {
-    const acted = await this.service.dismissFaceSuggestion(auth, id, assetFaceId);
-    res.status(acted ? HttpStatus.OK : HttpStatus.NO_CONTENT);
+  ): Promise<FaceSuggestionActionResponseDto> {
+    return { acted: await this.service.dismissFaceSuggestion(auth, id, assetFaceId) };
   }
 }

@@ -38,8 +38,11 @@
 
   type SourceFilter = 'all' | VerdictSource;
 
+  const PAGE_SIZE = 50;
+
   let resolutions = $state<ResolutionItem[]>([]);
   let total = $state(0);
+  let page = $state(1);
   let loading = $state(true);
   let loadingMore = $state(false);
   let loadError = $state(false);
@@ -79,14 +82,10 @@
     return $t('admin.face_cleanup_unnamed');
   };
 
-  // Slice 11 (F23): the server now paginates listNegativeVerdicts (page/size, capped at 200 — see
-  // face-person-verdict.repository.ts and face-repair.dto.ts FaceRepairResolutionsQuerySchema). The
-  // generated SDK's getFaceRepairResolutions() does not yet accept page/size — the OpenAPI spec and SDK need
-  // regenerating from the new paginated contract (tracked separately, out of scope here; see
-  // server/src/controllers/face-repair-admin.controller.ts). Until then every call re-requests the server's
-  // default page; rows already loaded are filtered out by id before appending, so clicking "Load more" is a
-  // safe no-op today rather than a duplicate-inducing bug — this becomes real incremental pagination as soon
-  // as the SDK exposes page/size.
+  // Slice 11 (F23): the server paginates listNegativeVerdicts (page/size, capped at 200 — see
+  // face-person-verdict.repository.ts and face-repair.dto.ts FaceRepairResolutionsQuerySchema), with a stable
+  // `createdAt desc, id desc` order so a later page cannot repeat or skip a row a caller already has.
+  // `total` is the server's count of ALL matching rows, not of the page — `hasMore` compares against it.
   const load = async (isFirstPage: boolean) => {
     if (isFirstPage) {
       loading = true;
@@ -94,13 +93,12 @@
     } else {
       loadingMore = true;
     }
+    const requestedPage = isFirstPage ? 1 : page + 1;
     try {
-      const result = await getFaceRepairResolutions();
-      const dto = result as unknown as { total: number; resolutions: ResolutionItem[] };
-      const existingIds = new Set(resolutions.map((r) => r.id));
-      const newOnes = (dto?.resolutions ?? []).filter((r) => !existingIds.has(r.id));
-      resolutions = isFirstPage ? (dto?.resolutions ?? []) : [...resolutions, ...newOnes];
-      total = dto?.total ?? resolutions.length;
+      const dto = await getFaceRepairResolutions({ page: requestedPage, size: PAGE_SIZE });
+      resolutions = isFirstPage ? dto.resolutions : [...resolutions, ...dto.resolutions];
+      total = dto.total;
+      page = requestedPage;
     } catch (error) {
       // D17: a failed load is not the same as a genuinely empty resolutions list — render a distinct error
       // state (below) with a Retry, rather than the reassuring "no decisions recorded yet" empty card. A

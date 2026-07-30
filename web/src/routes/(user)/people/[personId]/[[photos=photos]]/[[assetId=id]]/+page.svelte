@@ -465,39 +465,24 @@
       ? getSpacePersonFaceSuggestions({ id: target.spaceId, personId: target.personId, page, size })
       : getPersonFaceSuggestions({ id: target.personId, page, size });
 
-  // F24/S11: the server now reports 200 (acted) vs 204 (no-op) explicitly for these four actions — see
-  // person.controller.ts / shared-space.controller.ts. The generated SDK does not yet expose that
-  // distinction: `oazapfts.ok()` resolves to the response body only, discarding the status code, for every
-  // 2xx (see @oazapfts/runtime). Regenerating the OpenAPI spec/SDK from the server's new contract is tracked
-  // separately (out of scope for this change — see the slice notes); until then, any call that resolves
-  // without throwing is reported as `acted` (200). This still fixes the dangerous part of the old bug: a
-  // genuine 4xx/5xx now always rejects through to the modal's handleError path instead of being misread as a
-  // benign no-op.
-  const toActionResult = async (call: Promise<unknown>): Promise<{ status: 200 | 204 }> => {
-    await call;
-    return { status: 200 };
-  };
-
+  // F24/S11b: the four action endpoints answer 200 with `{ acted }` — the acted/no-op signal is in the body
+  // precisely because `oazapfts.ok()` resolves to the body and discards the status code for every 2xx, so a
+  // 200-vs-204 contract could never reach a caller. These pass straight through to the modal; a genuine
+  // 4xx/5xx still rejects into its handleError path.
   const confirmSuggestion = (target: SuggestionTarget, assetFaceId: string) =>
-    toActionResult(
-      target.type === 'space'
-        ? confirmSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
-        : confirmPersonFaceSuggestion({ id: target.personId, assetFaceId }),
-    );
+    target.type === 'space'
+      ? confirmSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
+      : confirmPersonFaceSuggestion({ id: target.personId, assetFaceId });
 
   const dismissSuggestion = (target: SuggestionTarget, assetFaceId: string) =>
-    toActionResult(
-      target.type === 'space'
-        ? dismissSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
-        : dismissPersonFaceSuggestion({ id: target.personId, assetFaceId }),
-    );
+    target.type === 'space'
+      ? dismissSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
+      : dismissPersonFaceSuggestion({ id: target.personId, assetFaceId });
 
   const ignoreSuggestion = (target: SuggestionTarget, assetFaceId: string) =>
-    toActionResult(
-      target.type === 'space'
-        ? ignoreSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
-        : ignorePersonFaceSuggestion({ id: target.personId, assetFaceId }),
-    );
+    target.type === 'space'
+      ? ignoreSpacePersonFaceSuggestion({ id: target.spaceId, personId: target.personId, assetFaceId })
+      : ignorePersonFaceSuggestion({ id: target.personId, assetFaceId });
 
   const loadSuggestionSummary = async (currentPerson: PersonResponseDto) => {
     try {

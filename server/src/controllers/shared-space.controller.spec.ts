@@ -243,16 +243,19 @@ describe(SharedSpaceController.name, () => {
       expect(service.getSpacePersonFaceSuggestions).not.toHaveBeenCalled();
     });
 
-    // S11.8/F24: the response code now explicitly reports acted (200) vs no-op (204) via the service's
-    // return value — see the parallel PersonController comment.
+    // S11.8/F24: the service's acted/no-op return value reports the outcome.
+    // S11b/F24: it reports it in the BODY, not the status code — @oazapfts/runtime's ok() resolves to the
+    // body and discards the status for every 2xx, so 200-vs-204 is unreadable by a generated client.
+    // See the parallel PersonController comment.
     it('POST confirm should require shared-space update permission and respond with 200 when acted', async () => {
       service.confirmSpacePersonFaceSuggestion.mockResolvedValue(true);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/shared-spaces/${spaceId}/people/${personId}/face-suggestions/${assetFaceId}/confirm`)
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(200);
+      expect(body).toEqual({ acted: true });
       expect(ctx.authenticate).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({ permission: Permission.SharedSpaceUpdate }),
@@ -261,25 +264,29 @@ describe(SharedSpaceController.name, () => {
       expect(service.confirmSpacePersonFaceSuggestion).toHaveBeenCalledWith(undefined, spaceId, personId, assetFaceId);
     });
 
-    it('POST confirm should respond with 204 when the service reports a no-op', async () => {
+    it('POST confirm should report acted: false on a no-op, still as 200 with a readable body', async () => {
       service.confirmSpacePersonFaceSuggestion.mockResolvedValue(false);
 
-      const { status, text } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/shared-spaces/${spaceId}/people/${personId}/face-suggestions/${assetFaceId}/confirm`)
         .set('Authorization', `Bearer token`);
 
-      expect(status).toBe(204);
-      expect(text).toBe('');
+      // Explicitly NOT 204: a 204 carries no body, so oazapfts hands the caller `undefined` for both
+      // outcomes — the reason the previous contract could not ship.
+      expect(status).toBe(200);
+      expect(status).not.toBe(204);
+      expect(body).toEqual({ acted: false });
     });
 
     it('POST dismiss should require shared-space update permission and respond with 200 when acted', async () => {
       service.dismissSpacePersonFaceSuggestion.mockResolvedValue(true);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/shared-spaces/${spaceId}/people/${personId}/face-suggestions/${assetFaceId}/dismiss`)
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(200);
+      expect(body).toEqual({ acted: true });
       expect(ctx.authenticate).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({ permission: Permission.SharedSpaceUpdate }),
@@ -288,24 +295,27 @@ describe(SharedSpaceController.name, () => {
       expect(service.dismissSpacePersonFaceSuggestion).toHaveBeenCalledWith(undefined, spaceId, personId, assetFaceId);
     });
 
-    it('POST dismiss should respond with 204 when the service reports a no-op', async () => {
+    it('POST dismiss should report acted: false on a no-op, still as 200', async () => {
       service.dismissSpacePersonFaceSuggestion.mockResolvedValue(false);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/shared-spaces/${spaceId}/people/${personId}/face-suggestions/${assetFaceId}/dismiss`)
         .set('Authorization', `Bearer token`);
 
-      expect(status).toBe(204);
+      expect(status).toBe(200);
+      expect(status).not.toBe(204);
+      expect(body).toEqual({ acted: false });
     });
 
     it('POST reject should require shared-space update permission and respond with 200 when acted', async () => {
       service.rejectSpacePersonFaceSuggestion.mockResolvedValue(true);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/shared-spaces/${spaceId}/people/${personId}/face-suggestions/${assetFaceId}/reject`)
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(200);
+      expect(body).toEqual({ acted: true });
       expect(ctx.authenticate).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({ permission: Permission.SharedSpaceUpdate }),
@@ -314,24 +324,27 @@ describe(SharedSpaceController.name, () => {
       expect(service.rejectSpacePersonFaceSuggestion).toHaveBeenCalledWith(undefined, spaceId, personId, assetFaceId);
     });
 
-    it('POST reject should respond with 204 when the service reports a no-op', async () => {
+    it('POST reject should report acted: false on a no-op, still as 200', async () => {
       service.rejectSpacePersonFaceSuggestion.mockResolvedValue(false);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/shared-spaces/${spaceId}/people/${personId}/face-suggestions/${assetFaceId}/reject`)
         .set('Authorization', `Bearer token`);
 
-      expect(status).toBe(204);
+      expect(status).toBe(200);
+      expect(status).not.toBe(204);
+      expect(body).toEqual({ acted: false });
     });
 
     it('POST ignore should require shared-space update permission and respond with 200 when acted', async () => {
       service.ignoreSpacePersonFaceSuggestion.mockResolvedValue(true);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/shared-spaces/${spaceId}/people/${personId}/face-suggestions/${assetFaceId}/ignore`)
         .set('Authorization', `Bearer token`);
 
       expect(status).toBe(200);
+      expect(body).toEqual({ acted: true });
       expect(ctx.authenticate).toHaveBeenCalledWith(
         expect.objectContaining({
           metadata: expect.objectContaining({ permission: Permission.SharedSpaceUpdate }),
@@ -340,14 +353,16 @@ describe(SharedSpaceController.name, () => {
       expect(service.ignoreSpacePersonFaceSuggestion).toHaveBeenCalledWith(undefined, spaceId, personId, assetFaceId);
     });
 
-    it('POST ignore should respond with 204 when the service reports a no-op', async () => {
+    it('POST ignore should report acted: false on a no-op, still as 200', async () => {
       service.ignoreSpacePersonFaceSuggestion.mockResolvedValue(false);
 
-      const { status } = await request(ctx.getHttpServer())
+      const { status, body } = await request(ctx.getHttpServer())
         .post(`/shared-spaces/${spaceId}/people/${personId}/face-suggestions/${assetFaceId}/ignore`)
         .set('Authorization', `Bearer token`);
 
-      expect(status).toBe(204);
+      expect(status).toBe(200);
+      expect(status).not.toBe(204);
+      expect(body).toEqual({ acted: false });
     });
 
     it('POST confirm should validate assetFaceId independently', async () => {

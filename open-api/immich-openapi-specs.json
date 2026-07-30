@@ -10843,7 +10843,7 @@
     },
     "/people/{id}/face-suggestions/{assetFaceId}/confirm": {
       "post": {
-        "description": "Assign the suggested face to the person. Idempotent. 204 if there was nothing to do.",
+        "description": "Assign the suggested face to the person. Idempotent — the response reports whether it acted.",
         "operationId": "confirmPersonFaceSuggestion",
         "parameters": [
           {
@@ -10871,6 +10871,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionActionResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -10905,7 +10912,7 @@
     },
     "/people/{id}/face-suggestions/{assetFaceId}/dismiss": {
       "post": {
-        "description": "Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
+        "description": "Compatibility alias for rejecting this suggestion. The face stays unassigned. Idempotent — the response reports whether it acted.",
         "operationId": "dismissPersonFaceSuggestion",
         "parameters": [
           {
@@ -10933,6 +10940,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionActionResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -10967,7 +10981,7 @@
     },
     "/people/{id}/face-suggestions/{assetFaceId}/ignore": {
       "post": {
-        "description": "Ignore this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
+        "description": "Ignore this suggestion for the person. The face stays unassigned. Idempotent — the response reports whether it acted.",
         "operationId": "ignorePersonFaceSuggestion",
         "parameters": [
           {
@@ -10995,6 +11009,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionActionResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -11029,7 +11050,7 @@
     },
     "/people/{id}/face-suggestions/{assetFaceId}/reject": {
       "post": {
-        "description": "Reject this suggestion for the person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
+        "description": "Reject this suggestion for the person. The face stays unassigned. Idempotent — the response reports whether it acted.",
         "operationId": "rejectPersonFaceSuggestion",
         "parameters": [
           {
@@ -11057,6 +11078,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionActionResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -17811,7 +17839,7 @@
     },
     "/shared-spaces/{id}/people/{personId}/face-suggestions/{assetFaceId}/confirm": {
       "post": {
-        "description": "Assign the suggested face to the space person. Idempotent. 204 if there was nothing to do.",
+        "description": "Assign the suggested face to the space person. Idempotent — the response reports whether it acted.",
         "operationId": "confirmSpacePersonFaceSuggestion",
         "parameters": [
           {
@@ -17850,6 +17878,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionActionResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -17884,7 +17919,7 @@
     },
     "/shared-spaces/{id}/people/{personId}/face-suggestions/{assetFaceId}/dismiss": {
       "post": {
-        "description": "Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
+        "description": "Compatibility alias for rejecting this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.",
         "operationId": "dismissSpacePersonFaceSuggestion",
         "parameters": [
           {
@@ -17923,6 +17958,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionActionResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -17957,7 +17999,7 @@
     },
     "/shared-spaces/{id}/people/{personId}/face-suggestions/{assetFaceId}/ignore": {
       "post": {
-        "description": "Ignore this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
+        "description": "Ignore this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.",
         "operationId": "ignoreSpacePersonFaceSuggestion",
         "parameters": [
           {
@@ -17996,6 +18038,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionActionResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -18030,7 +18079,7 @@
     },
     "/shared-spaces/{id}/people/{personId}/face-suggestions/{assetFaceId}/reject": {
       "post": {
-        "description": "Reject this suggestion for the space person. The face stays unassigned. Idempotent. 204 if there was nothing to do.",
+        "description": "Reject this suggestion for the space person. The face stays unassigned. Idempotent — the response reports whether it acted.",
         "operationId": "rejectSpacePersonFaceSuggestion",
         "parameters": [
           {
@@ -18069,6 +18118,13 @@
         ],
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaceSuggestionActionResponseDto"
+                }
+              }
+            },
             "description": ""
           }
         },
@@ -27407,6 +27463,18 @@
         },
         "required": [
           "assetFaceIds"
+        ],
+        "type": "object"
+      },
+      "FaceSuggestionActionResponseDto": {
+        "properties": {
+          "acted": {
+            "description": "Whether the call changed anything. False when the suggestion was already resolved.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "acted"
         ],
         "type": "object"
       },
