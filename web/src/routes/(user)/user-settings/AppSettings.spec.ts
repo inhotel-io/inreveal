@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 import { screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { get } from 'svelte/store';
+import { getVisualViewportMock } from '$lib/__mocks__/visual-viewport.mock';
 import { cropFacesFromAsset } from '$lib/stores/preferences.store';
 import { renderWithTooltips } from '$tests/helpers';
 import AppSettings from './AppSettings.svelte';
@@ -12,13 +13,9 @@ describe('AppSettings — crop faces switch', () => {
     // happy-dom does not implement window.visualViewport; SettingsLanguageSelector renders a
     // Combobox that reads the bare global identifier unconditionally, which throws a
     // ReferenceError (not just `undefined`) before optional chaining ever runs, and also wires up
-    // resize/scroll listeners on it.
-    vi.stubGlobal('visualViewport', {
-      height: 800,
-      width: 800,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    });
+    // resize/scroll listeners on it. Same helper AssetChangeDateModal.spec.ts and
+    // SearchAddAllToCollectionModal.spec.ts already use for the identical Combobox dependency.
+    vi.stubGlobal('visualViewport', getVisualViewportMock());
   });
 
   // The test harness's svelte-i18n instance (see src/test-data/setup.ts) is initialised with
