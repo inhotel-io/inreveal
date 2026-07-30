@@ -35,6 +35,8 @@ These were confirmed empirically in this worktree. Do not re-litigate them; buil
 | `fireEvent.pointerDown(el, { pointerType: 'pen' })` delivers `'pen'` | probed, passing |
 | `fireEvent.pointerDown(el)` yields `pointerType === ''` | probed, passing |
 
+**The plan itself was dry-run before being finalised.** Task 1's tests were applied against unmodified source and produced exactly the failures Step 2 claims (`3 failed | 20 passed`). Task 3's module and spec were written and run in full (`20 passed`). Both were then reverted, so the tree is clean and every task still starts from RED. Every line number, code block, and expected tally below is copied from that run — not estimated.
+
 ## File Structure
 
 | File | Responsibility |
@@ -137,12 +139,13 @@ import { fireEvent, render, screen } from '@testing-library/svelte';
 
 Run: `pnpm exec vitest run src/lib/components/global-search/__tests__/global-search-input-trigger.spec.ts`
 
-Expected: 3 failures.
-- `opens the modal palette when the search field is tapped` — fails because the touch tap focuses the input, `openDropdown` fires, and `presentation` is `'dropdown'`.
-- `does not focus the search field when it is tapped` — fails because nothing prevents the tap's default.
-- `does not let focus downgrade an open modal to the inline dropdown` — fails because `openDropdown` flips `presentation` to `'dropdown'`.
+Expected — this exact tally, confirmed by running it: **`Tests  3 failed | 20 passed (23)`**
 
-The two `pointerType` tests (`pen`, none) should already **pass** — they pin behaviour that must survive the change. If either fails here, stop and re-read the file; something else is wrong.
+- `opens the modal palette when the search field is tapped` — `AssertionError: expected "open" to be called with arguments: [ 'modal' ]`. The touch tap focuses the input, `openDropdown` fires, and `presentation` is `'dropdown'`.
+- `does not focus the search field when it is tapped` — fails because nothing prevents the tap's default.
+- `does not let focus downgrade an open modal to the inline dropdown` — `AssertionError: expected 'dropdown' to be 'modal'`.
+
+The two `pointerType` tests (`pen`, none) **pass already** — they pin behaviour that must survive the change. If either fails here, stop and re-read the file; something else is wrong.
 
 - [ ] **Step 3: Add the touch handler and the modal guard**
 
@@ -527,9 +530,7 @@ Write the null check as `element !== null && …`, not `element?.closest(…) !=
 
 Run: `pnpm exec vitest run src/lib/utils/search-shortcut.spec.ts`
 
-Expected: PASS, 17 tests.
-
-If `does not open search while typing in a textarea` or the search-input test fails on the `expect(document.activeElement).toBe(field)` line, happy-dom did not apply focus; switch that assertion's setup to append the element to `document.body` before calling `focus()` rather than assigning `innerHTML`.
+Expected — confirmed by running it: **`Tests  20 passed (20)`**. (Twenty, not fourteen: the `it.each` block expands to six.) happy-dom applies focus correctly here, so the two `expect(document.activeElement).toBe(field)` sanity assertions pass as written.
 
 - [ ] **Step 5: Commit**
 
@@ -543,7 +544,7 @@ git commit -m "feat(web): add / shortcut descriptors for global search"
 ### Task 4: Wire `/` in, remove `/` → Explore, and document it
 
 **Files:**
-- Modify: `web/src/routes/+layout.svelte:4` (import) and `:279-306` (the `use:shortcuts` array)
+- Modify: `web/src/routes/+layout.svelte:4` (import) and `:279-307` (the `use:shortcuts` array, closing `]}` on 307)
 - Modify: `web/src/lib/components/timeline/actions/TimelineKeyboardActions.svelte:2`, `:17`, `:119`
 - Modify: `web/src/lib/components/shared-components/gallery-viewer/GalleryViewer.svelte:274`
 - Modify: `web/src/lib/modals/ShortcutsModal.svelte:35`
