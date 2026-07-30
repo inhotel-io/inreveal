@@ -629,7 +629,7 @@ describe(MemoryService.name, () => {
             score: 100,
             assetIds: ['a-1'],
             memoryAt: DateTime.fromISO('2023-07-15T00:00:00Z'),
-            ...(visibleForDays === undefined ? {} : { visibleForDays }),
+            ...(visibleForDays !== undefined && { visibleForDays }),
           },
         ]),
       };

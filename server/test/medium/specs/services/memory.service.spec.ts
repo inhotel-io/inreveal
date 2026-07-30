@@ -840,7 +840,7 @@ describe(MemoryService.name, () => {
 
       // Title/dedupeKey/context are ordered by person id (D6) — the ids are random UUIDs, so
       // derive the expected order from the created people rather than hardcoding "Anna & Ben".
-      const [first, second] = [anna, ben].toSorted((a, b) => (a.id < b.id ? -1 : 1));
+      const [first, second] = [anna, ben].toSorted((a, b) => (a.id === b.id ? 0 : a.id < b.id ? -1 : 1));
 
       expect(memories).toEqual([
         expect.objectContaining({
@@ -1183,7 +1183,7 @@ describe(MemoryService.name, () => {
 
       const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
       expect(memories).toHaveLength(2);
-      expect(memories.map((memory) => (memory.data as { ruleId?: string }).ruleId).toSorted()).toEqual([
+      expect(memories.map((memory) => (memory.data as { ruleId: string }).ruleId).toSorted()).toEqual([
         'dummy_a',
         'dummy_b',
       ]);

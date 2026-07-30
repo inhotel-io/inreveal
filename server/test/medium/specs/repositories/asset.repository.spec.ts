@@ -928,7 +928,7 @@ describe(AssetRepository.name, () => {
       });
 
       expect(result).toHaveLength(2);
-      expect(result.map((r) => r.year).toSorted()).toEqual([2022, 2023]);
+      expect(result.map((r) => r.year).toSorted((left, right) => left - right)).toEqual([2022, 2023]);
     });
 
     it('unions multiple months', async () => {

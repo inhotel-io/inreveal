@@ -24,7 +24,7 @@ const SEASON_START_MONTH: Record<number, Season> = { 3: 'spring', 6: 'summer', 9
 
 /** The meteorological season a calendar month belongs to. */
 export const seasonOf = (month: number): Season => {
-  if (month === 12 || month === 1 || month === 2) {
+  if ([12, 1, 2].includes(month)) {
     return 'winter';
   }
   if (month >= 3 && month <= 5) {

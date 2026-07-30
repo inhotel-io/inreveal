@@ -72,10 +72,13 @@ export const dominantBy = <T>(items: T[], key: (item: T) => string): DominantGro
     // The first group is always captured by the length comparison (length >= 1 > 0), so the
     // tie-break below never runs on iteration 1 — meaning a legitimate empty-string key is
     // compared like any other and still wins a tie by being lexicographically smallest.
-    if (group.length > bestItems.length || (group.length === bestItems.length && groupKey < bestKey)) {
-      bestKey = groupKey;
-      bestItems = group;
+    const isBetter = group.length > bestItems.length || (group.length === bestItems.length && groupKey < bestKey);
+    if (!isBetter) {
+      continue;
     }
+
+    bestKey = groupKey;
+    bestItems = group;
   }
 
   return { key: bestKey, items: bestItems, ratio: bestItems.length / items.length };
@@ -140,7 +143,7 @@ export const pairCounts = (rows: FaceRow[]): PairStat[] => {
   >();
 
   for (const [assetId, subjects] of subjectsByAsset) {
-    const subjectList = [...subjects.values()];
+    const subjectList = subjects.values().toArray();
     for (let i = 0; i < subjectList.length; i++) {
       for (let j = i + 1; j < subjectList.length; j++) {
         const [a, b] =
@@ -155,13 +158,16 @@ export const pairCounts = (rows: FaceRow[]): PairStat[] => {
     }
   }
 
-  const stats: PairStat[] = [...pairs.values()].map(({ a, b, assets }) => {
-    const sortedAssets = [...assets.entries()]
-      .map(([id, localDateTime]) => ({ id, localDateTime }))
-      .sort((left, right) => left.localDateTime.getTime() - right.localDateTime.getTime());
-    const distinctDays = new Set(sortedAssets.map((asset) => asset.localDateTime.toISOString().slice(0, 10))).size;
-    return { a, b, assets: sortedAssets, distinctDays };
-  });
+  const stats: PairStat[] = pairs
+    .values()
+    .map(({ a, b, assets }) => {
+      const sortedAssets = [...assets]
+        .map(([id, localDateTime]) => ({ id, localDateTime }))
+        .sort((left, right) => left.localDateTime.getTime() - right.localDateTime.getTime());
+      const distinctDays = new Set(sortedAssets.map((asset) => asset.localDateTime.toISOString().slice(0, 10))).size;
+      return { a, b, assets: sortedAssets, distinctDays };
+    })
+    .toArray();
 
   return stats.sort((left, right) => {
     if (right.assets.length !== left.assets.length) {
