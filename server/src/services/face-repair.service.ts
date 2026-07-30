@@ -20,6 +20,7 @@ import {
   tallyReattribution,
 } from 'src/utils/face-repair';
 import { ImmichMediaResponse } from 'src/utils/file';
+import { spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
 
 export interface ReattributionCandidate extends ReattributionTally {
   assetFaceId: string;
@@ -381,6 +382,7 @@ export class FaceRepairService extends BaseService {
           maxDistance: options.maxDistance,
           numResults: options.voteWindow,
           hasPerson: true,
+          visibility: spaceVisibleAssetVisibilities,
         });
         // searchFaces includes the query face itself — drop it by id.
         const neighbors = matches

@@ -2,6 +2,7 @@ import { Kysely, sql, Transaction } from 'kysely';
 import { InjectKysely } from 'nestjs-kysely';
 import { SourceType } from 'src/enum';
 import { DB } from 'src/schema';
+import { reviewableAssetVisibility } from 'src/utils/face-review';
 
 export interface EligibleFaceRow {
   assetFaceId: string;
@@ -126,6 +127,7 @@ export class FaceRepairRepository {
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', '=', true)
       .where('asset.deletedAt', 'is', null)
+      .where((eb) => reviewableAssetVisibility(eb))
       .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', options.ownerId!))
       .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
       .$if(!!options.personIds && options.personIds.length > 0, (qb) =>
@@ -162,6 +164,7 @@ export class FaceRepairRepository {
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', '=', true)
       .where('asset.deletedAt', 'is', null)
+      .where((eb) => reviewableAssetVisibility(eb))
       .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', options.ownerId!))
       .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
       .$if(!!options.personIds && options.personIds.length > 0, (qb) =>
@@ -185,6 +188,7 @@ export class FaceRepairRepository {
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', '=', true)
       .where('asset.deletedAt', 'is', null)
+      .where((eb) => reviewableAssetVisibility(eb))
       .$if(!!options.ownerId, (qb) => qb.where('asset.ownerId', '=', options.ownerId!))
       .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
       .executeTakeFirstOrThrow();
@@ -223,6 +227,7 @@ export class FaceRepairRepository {
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', '=', true)
       .where('asset.deletedAt', 'is', null)
+      .where((eb) => reviewableAssetVisibility(eb))
       .$if(options.excludeFaceIds.length > 0, (qb) => qb.where('asset_face.id', 'not in', options.excludeFaceIds));
 
     const { count } = await base.select((eb) => eb.fn.countAll().as('count')).executeTakeFirstOrThrow();
@@ -262,6 +267,7 @@ export class FaceRepairRepository {
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', '=', true)
       .where('asset.deletedAt', 'is', null)
+      .where((eb) => reviewableAssetVisibility(eb))
       .execute();
     return new Set(rows.map((row) => row.assetFaceId));
   }

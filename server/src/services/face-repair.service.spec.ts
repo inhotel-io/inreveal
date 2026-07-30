@@ -74,5 +74,13 @@ describe(FaceRepairService.name, () => {
 
       await expect(sut.getAdminFaceThumbnail('face-1')).rejects.toThrow(NotFoundException);
     });
+
+    // Slice 1 (F1): the visibility refusal for a Locked-asset face lives in the repository query
+    // (getFaceByIdIncludingTombstoned now joins asset and filters on reviewableAssetVisibility — see
+    // person.repository.spec.ts for the query-level proof that actually exercises the DB), not in this
+    // service — this method has NO service-level change. A Locked-asset id takes the exact same path as
+    // the "unknown face id" case above (repository's executeTakeFirstOrThrow throws, caught here as a
+    // NotFoundException), which is already covered; adding a second mock-only test for it here would only
+    // assert that a mock rejects, not that the real filtering exists — deliberately not duplicated.
   });
 });

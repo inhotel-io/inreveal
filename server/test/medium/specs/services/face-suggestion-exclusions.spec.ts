@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { JobStatus, SharedSpaceRole, SourceType, SystemMetadataKey } from 'src/enum';
+import { AssetVisibility, JobStatus, SharedSpaceRole, SourceType, SystemMetadataKey } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -107,9 +107,12 @@ const authFor = (user: { id: string; name: string; email: string }) => factory.a
 
 const seedFace = async (
   ctx: MediumTestContext,
-  input: { ownerId: string; personId?: string | null; embedding: string },
+  input: { ownerId: string; personId?: string | null; embedding: string; visibility?: AssetVisibility },
 ) => {
-  const { asset } = await ctx.newAsset({ ownerId: input.ownerId });
+  const { asset } = await ctx.newAsset({
+    ownerId: input.ownerId,
+    ...(input.visibility ? { visibility: input.visibility } : {}),
+  });
   const { assetFace } = await ctx.newAssetFace({
     assetId: asset.id,
     personId: input.personId ?? null,
@@ -351,5 +354,46 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
     expect(after.items.map((item) => item.assetFaceId)).not.toContain(face.id);
     const afterSpace = await verdictRepo.getPendingForSpacePerson(space.id, spaceO.id, bandOpts);
     expect(afterSpace.items.map((item) => item.assetFaceId)).not.toContain(face.id);
+  });
+
+  // Slice 1 (F2): the suggestion scans must not propose faces on Locked/Hidden assets. S1.4 and S1.5.
+  it('S1.4: handlePersonSuggestionScan proposes only the timeline candidate, not the one on a locked asset', async () => {
+    const { sut: person, ctx } = setupPerson();
+    const { user } = await ctx.newUser();
+    const anna = await newAnchoredPerson(ctx, user.id, 'Anna');
+
+    const { assetFace: lockedFace } = await seedFace(ctx, {
+      ownerId: user.id,
+      embedding: CANDIDATE,
+      visibility: AssetVisibility.Locked,
+    });
+    const { assetFace: timelineFace } = await seedFace(ctx, { ownerId: user.id, embedding: CANDIDATE });
+
+    await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
+
+    expect(await pendingFor(ctx, 'personId', anna.id, timelineFace.id)).toBe(true); // positive control
+    expect(await pendingFor(ctx, 'personId', anna.id, lockedFace.id)).toBe(false);
+  });
+
+  it('S1.5: handleSpacePersonSuggestionScan proposes only the timeline candidate, not the one on a locked asset', async () => {
+    const { sut: person, ctx } = setupPerson();
+    const { user } = await ctx.newUser();
+
+    const space = await newSpace(ctx, user.id);
+    const spaceAnna = await newAnchoredSpacePerson(ctx, { spaceId: space.id, ownerId: user.id, name: 'Space Anna' });
+
+    const { assetFace: lockedFace } = await seedFace(ctx, {
+      ownerId: user.id,
+      embedding: CANDIDATE,
+      visibility: AssetVisibility.Locked,
+    });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: lockedFace.assetId, addedById: user.id });
+    const { assetFace: timelineFace } = await seedFace(ctx, { ownerId: user.id, embedding: CANDIDATE });
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: timelineFace.assetId, addedById: user.id });
+
+    await expect(person.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
+
+    expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, timelineFace.id)).toBe(true); // positive control
+    expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, lockedFace.id)).toBe(false);
   });
 });

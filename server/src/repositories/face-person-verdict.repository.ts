@@ -5,6 +5,7 @@ import { DummyValue, GenerateSql } from 'src/decorators';
 import { AssetVisibility } from 'src/enum';
 import { DB } from 'src/schema';
 import { FacePersonVerdictSource } from 'src/schema/tables/face-person-verdict.table';
+import { reviewableAssetVisibility } from 'src/utils/face-review';
 import { spaceAssetPathBranches } from 'src/utils/shared-space-album-scope';
 
 export interface NegativeVerdictListRow {
@@ -667,10 +668,12 @@ export class FacePersonVerdictRepository {
     return !!row;
   }
 
-  // D9: pure RBAC reachability for a face's asset in a space — is this face's asset in the space at all —
-  // decoupled from the display-state/pending gates that hasPendingForSpacePerson bundles in. Used to gate
-  // space reject/ignore so a drained-but-still-reachable face can still be resolved (no silent no-op), while
-  // a face whose asset has genuinely left the space is still refused.
+  // D9/F3 (Slice 1): reachability for a face's asset in a space, gated exactly like the display-state gates
+  // getPendingForSpacePerson already applies — display state and reachability are not separable here,
+  // because a face whose asset the caller can no longer see (trashed, offline, Locked/Hidden) or whose face
+  // row itself is not currently shown (tombstoned, invisible) must not be a valid verdict target either.
+  // Used to gate space reject/ignore so a drained-but-still-reachable face can still be resolved (no silent
+  // no-op), while a face whose asset has genuinely left the space, or is no longer reviewable, is refused.
   @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID] })
   async isFaceReachableInSpace(spaceId: string, assetFaceId: string): Promise<boolean> {
     const row = await this.db
@@ -678,6 +681,11 @@ export class FacePersonVerdictRepository {
       .innerJoin('asset', 'asset.id', 'asset_face.assetId')
       .select('asset_face.id')
       .where('asset_face.id', '=', assetFaceId)
+      .where('asset_face.deletedAt', 'is', null)
+      .where('asset_face.isVisible', 'is', true)
+      .where('asset.deletedAt', 'is', null)
+      .where('asset.isOffline', 'is', false)
+      .where((eb) => reviewableAssetVisibility(eb))
       .where((eb) =>
         eb.or(
           spaceAssetPathBranches(eb as unknown as ExpressionBuilder<DB, keyof DB>, {

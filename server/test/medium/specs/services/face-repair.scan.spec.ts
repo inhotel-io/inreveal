@@ -1,4 +1,5 @@
 import { Kysely } from 'kysely';
+import { AssetVisibility } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
@@ -335,5 +336,65 @@ describe('FaceRepairService.handleFaceRepairScan', () => {
     expect(destination.ownerMissing).toBe(false);
     expect(destination.count).toBeGreaterThan(0);
     expect(destination.count).not.toBe(destination.ownerFaceCount);
+  });
+
+  // Slice 1 (F1): a cluster contaminated with a Locked-asset leaked face and a Timeline leaked face — only
+  // the Timeline one may be flagged for repair. S1.10.
+  it('S1.10: only the timeline leaked face is flagged, not the one on a locked asset (control: the timeline face IS flagged)', async () => {
+    const { sut, ctx } = setup();
+    const scanRepo = ctx.get(FaceRepairScanRepository);
+    const { user } = await ctx.newUser();
+
+    // Karina-main: 10 first-axis faces (the reference cluster).
+    const karinaData = mediumFactory.personInsert({ ownerId: user.id, name: 'Karina' });
+    await db.insertInto('person').values(karinaData).execute();
+    for (let i = 0; i < 10; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: karinaData.id });
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('first') })
+        .execute();
+    }
+
+    // Alexia: 8 genuine second-axis faces + 2 leaked first-axis faces (one timeline, one locked).
+    const alexiaData = mediumFactory.personInsert({ ownerId: user.id, name: 'Alexia' });
+    await db.insertInto('person').values(alexiaData).execute();
+    for (let i = 0; i < 8; i++) {
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: alexiaData.id });
+      await db
+        .insertInto('face_search')
+        .values({ faceId: assetFace.id, embedding: axisEmbedding('second') })
+        .execute();
+    }
+    const { asset: timelineAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+    const { assetFace: timelineLeakedFace } = await ctx.newAssetFace({
+      assetId: timelineAsset.id,
+      personId: alexiaData.id,
+    });
+    await db
+      .insertInto('face_search')
+      .values({ faceId: timelineLeakedFace.id, embedding: axisEmbedding('first') })
+      .execute();
+
+    const { asset: lockedAsset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Locked });
+    const { assetFace: lockedLeakedFace } = await ctx.newAssetFace({
+      assetId: lockedAsset.id,
+      personId: alexiaData.id,
+    });
+    await db
+      .insertInto('face_search')
+      .values({ faceId: lockedLeakedFace.id, embedding: axisEmbedding('first') })
+      .execute();
+
+    const scan = await scanRepo.createScan({ requestedBy: null, params: PARAMS });
+    await sut.handleFaceRepairScan({ scanId: scan.id });
+
+    const flaggedFaces = await scanRepo.getScanFlaggedFaces(scan.id, alexiaData.id);
+    const flaggedIds = flaggedFaces.map((f) => f.assetFaceId);
+
+    expect(flaggedIds).toContain(timelineLeakedFace.id); // positive control
+    expect(flaggedIds).not.toContain(lockedLeakedFace.id);
   });
 });
