@@ -806,8 +806,17 @@ export class FaceRepairService extends BaseService {
       throw new ConflictException('Refusing to apply while a scan is in progress');
     }
 
-    // E7: a face may resolve only one way in a single request. moveToPerson's groups flatten to one bucket.
-    const overlapping = findOverlappingIds([moveFaceIds, stay, lock, detach, unknown]);
+    // E7/F14: a face may resolve only one way in a single request. Each moveToPerson group is its OWN bucket
+    // here — flattening every group's faceIds into one bucket (as this used to) hides a face routed to two
+    // different destinations, because findOverlappingIds only reports ids that repeat ACROSS buckets, and its
+    // within-bucket de-duplication would silently absorb the collision into a single flattened bucket.
+    const overlapping = findOverlappingIds([
+      ...moveToPerson.map((group) => group.faceIds),
+      stay,
+      lock,
+      detach,
+      unknown,
+    ]);
     if (overlapping.length > 0) {
       throw new BadRequestException('A face cannot be resolved more than one way in the same request');
     }
@@ -985,26 +994,34 @@ export class FaceRepairService extends BaseService {
       // the suggestion engine can see it too: if this face is later unassigned, it must not be proposed as
       // that same person.
       const ownerTokens = await this.faceIdentityRepository.getPersonVerdictTokens([...liveOwnerIds]);
-      // One chunked multi-row upsert, not one round-trip per face: `stay` is bounded by the resolve DTO's
-      // 25 000-face cap, and a per-face loop at that size is a request that times out rather than applies.
-      declined = await this.facePersonVerdictRepository.markRejectedMany(
-        declineFaces.map((face) => ({
-          personId: face.suspectedOwnerId,
-          assetFaceId: face.assetFaceId,
-          identityId:
-            ownerTokens
-              .get(face.suspectedOwnerId)
-              ?.find((token) => token.startsWith('identity:'))
-              ?.slice('identity:'.length) ?? null,
-        })),
-        { source: 'cleanup', actorId: resolvedBy },
-      );
-      // Slice 9 (D14/leak 3): a stayed face is settled — drain ANY still-pending suggestion row for it
-      // (not just the (suspectedOwnerId, face) pairing markRejected above just resolved), same as the
-      // aggregate drain used to before it was split per-bucket. Scoped to the raw `stay` bucket, not
-      // `declineFaces` — a dangling-owner stay still counts as settled even though no decline was written
-      // for it (see the comment above).
-      await this.facePersonVerdictRepository.drainPendingForFaces(stay);
+      // Slice 7 (F12): the decline write and its pending-queue drain are wrapped in one transaction — this
+      // bucket used to be two separate autocommit statements, so a failure between them (or mid-chunk inside
+      // markRejectedMany's own chunk loop) could record a partial "keep here". Same shape as `lock` and
+      // `detach` below. `markRejectedMany` threads `trx` through every one of its internal chunks, so the
+      // whole multi-chunk write is one atomic unit, not just its last statement.
+      await this.databaseRepository.transaction(async (trx) => {
+        // One chunked multi-row upsert, not one round-trip per face: `stay` is bounded by the resolve DTO's
+        // 25 000-face cap, and a per-face loop at that size is a request that times out rather than applies.
+        declined = await this.facePersonVerdictRepository.markRejectedMany(
+          declineFaces.map((face) => ({
+            personId: face.suspectedOwnerId,
+            assetFaceId: face.assetFaceId,
+            identityId:
+              ownerTokens
+                .get(face.suspectedOwnerId)
+                ?.find((token) => token.startsWith('identity:'))
+                ?.slice('identity:'.length) ?? null,
+          })),
+          { source: 'cleanup', actorId: resolvedBy },
+          trx,
+        );
+        // Slice 9 (D14/leak 3): a stayed face is settled — drain ANY still-pending suggestion row for it
+        // (not just the (suspectedOwnerId, face) pairing markRejected above just resolved), same as the
+        // aggregate drain used to before it was split per-bucket. Scoped to the raw `stay` bucket, not
+        // `declineFaces` — a dangling-owner stay still counts as settled even though no decline was written
+        // for it (see the comment above).
+        await this.facePersonVerdictRepository.drainPendingForFaces(stay, trx);
+      });
     }
 
     // Confirm/lock (Slice 3, state 4): durably, owner-agnostically lock each `lock`-bucket face to this
@@ -1163,7 +1180,8 @@ export class FaceRepairService extends BaseService {
     // each bucket's own transaction, above — `move`/`unknown` via executeRepair's per-route transaction,
     // `stay` alongside its decline write, `lock` and `detach` alongside their identity-link writes — rather
     // than aggregated here after the fact, so a bucket that rolls back never loses its drain and a bucket
-    // that commits never keeps a stale one.
+    // that commits never keeps a stale one. (Slice 7/F12: `stay` used to be two separate autocommit
+    // statements despite this comment already claiming otherwise — it is now genuinely wrapped, above.)
     // Compare against `resolvable` (the decline/lock-filtered pending set the review page shows), NOT the raw
     // `flaggedIds`: a face declined or locked in a PRIOR resolve is already settled and is filtered out of the
     // review UI, so the admin can never re-submit it here — measuring the drain against the raw snapshot would

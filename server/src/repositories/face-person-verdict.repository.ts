@@ -320,6 +320,7 @@ export class FacePersonVerdictRepository {
   async markRejectedMany(
     rows: Array<{ personId: string; assetFaceId: string; identityId?: string | null }>,
     opts?: { source?: FacePersonVerdictSource; actorId?: string | null },
+    db: Kysely<DB> | Transaction<DB> = this.db,
   ): Promise<number> {
     if (rows.length === 0) {
       return 0;
@@ -330,7 +331,7 @@ export class FacePersonVerdictRepository {
 
     let written = 0;
     for (let index = 0; index < deduplicated.length; index += BULK_CHUNK_SIZE) {
-      const result = await this.db
+      const result = await db
         .insertInto('face_person_verdict')
         .values(
           deduplicated.slice(index, index + BULK_CHUNK_SIZE).map((row) => ({

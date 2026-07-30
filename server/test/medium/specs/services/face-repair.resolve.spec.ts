@@ -22,7 +22,7 @@ import { SystemMetadataRepository } from 'src/repositories/system-metadata.repos
 import { DB } from 'src/schema';
 import { FaceRepairResolveErrorCode, FaceRepairService } from 'src/services/face-repair.service';
 import { applyVerdictFilters } from 'src/utils/face-repair';
-import { newMediumService } from 'test/medium.factory';
+import { mediumFactory, newMediumService } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
 import { Mocked, vi } from 'vitest';
 
@@ -124,6 +124,36 @@ const seedFlaggedSnapshot = async (
 const personIdsOf = async (faceIds: string[]): Promise<Record<string, string | null>> => {
   const rows = await db.selectFrom('asset_face').select(['id', 'personId']).where('id', 'in', faceIds).execute();
   return Object.fromEntries(rows.map((r) => [r.id, r.personId]));
+};
+
+// Bulk equivalent of seedFace, for tests that need enough faces to span more than one of
+// markRejectedMany's/replaceFaceIdentities' internal 1000-row chunks (S7.2). Built with plain bulk
+// inserts (not one newAsset/newAssetFace round trip per face) so seeding thousands of faces stays fast.
+const seedFacesBulk = async (ctx: Ctx, ownerId: string, personId: string, count: number): Promise<string[]> => {
+  const assets = Array.from({ length: count }, () => mediumFactory.assetInsert({ ownerId }));
+  for (let index = 0; index < assets.length; index += 1000) {
+    await db
+      .insertInto('asset')
+      .values(assets.slice(index, index + 1000))
+      .execute();
+  }
+  const faces = assets.map((asset) =>
+    mediumFactory.assetFaceInsert({ assetId: asset.id, personId, sourceType: SourceType.MachineLearning }),
+  );
+  for (let index = 0; index < faces.length; index += 1000) {
+    await db
+      .insertInto('asset_face')
+      .values(faces.slice(index, index + 1000))
+      .execute();
+  }
+  const searchRows = faces.map((face) => ({ faceId: face.id, embedding: EMBEDDING }));
+  for (let index = 0; index < searchRows.length; index += 1000) {
+    await db
+      .insertInto('face_search')
+      .values(searchRows.slice(index, index + 1000))
+      .execute();
+  }
+  return faces.map((face) => face.id);
 };
 
 beforeAll(async () => {
@@ -2747,5 +2777,386 @@ describe('FaceRepairService.resolveFaces: boundary cases (C10)', () => {
     expect(result.moved).toBe(1);
     const byId = await personIdsOf([a]);
     expect(byId[a]).toBe(owner.id);
+  });
+});
+
+// ── Slice 7: cleanup resolve atomicity and duplicate-id safety (F12, F13, F14) ─────────────────────
+
+const pendingRowsFor = (assetFaceIds: string[]) =>
+  db
+    .selectFrom('face_person_verdict')
+    .select(['assetFaceId', 'status'])
+    .where('assetFaceId', 'in', assetFaceIds)
+    .where('status', '=', 'pending')
+    .execute();
+
+describe('FaceRepairService.resolveFaces: stay bucket is transactional (F12)', () => {
+  it('rolls back the whole stay bucket when drainPendingForFaces throws — no verdict rows written, and the pending row is intact', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
+    // A pending suggestion row for f1, so the drain has something to remove — and so we can tell whether it
+    // ran at all.
+    await verdictRepo.upsertPending([{ personId: ownerA.id, assetFaceId: f1, distance: 0.4 }]);
+
+    const drainSpy = vi.spyOn(verdictRepo, 'drainPendingForFaces').mockRejectedValueOnce(new Error('boom-stay'));
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow('boom-stay');
+
+    drainSpy.mockRestore();
+
+    // Absence: markRejectedMany's insert (which ran BEFORE the throwing drain, inside the same transaction)
+    // was rolled back — no negative verdict row exists.
+    const declineRows = await declineRowsFor(f1, ownerA.id);
+    expect(declineRows).toHaveLength(0);
+    // The pending row is untouched — the drain that would have removed it never committed either.
+    const pending = await pendingRowsFor([f1]);
+    expect(pending).toHaveLength(1);
+
+    // Positive control, same call, no fault injection: the bucket really does write and drain when nothing
+    // throws — proves the assertions above are not vacuously true for some unrelated reason (e.g. the face
+    // being ineligible).
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [f1], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+    expect(result.declined).toBe(1);
+    const declineRowsAfter = await declineRowsFor(f1, ownerA.id);
+    expect(declineRowsAfter).toHaveLength(1);
+    const pendingAfter = await pendingRowsFor([f1]);
+    expect(pendingAfter).toHaveLength(0);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: stay bucket rollback spans every internal chunk (F12)', () => {
+  it('rolls back ALL chunks of a stay bucket larger than one internal 1000-row chunk, not just the last one', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+
+    // 2100 faces -> markRejectedMany's own internal chunk loop runs THREE 1000-row statements
+    // (1000 + 1000 + 100) inside the one wrapping transaction before drainPendingForFaces below throws.
+    const faceIds = await seedFacesBulk(ctx, user.id, source.id, 2100);
+    await seedFlaggedSnapshot(
+      scanRepo,
+      user.id,
+      source.id,
+      faceIds.map((assetFaceId) => ({ assetFaceId, suspectedOwnerId: ownerA.id })),
+    );
+
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
+    const drainSpy = vi.spyOn(verdictRepo, 'drainPendingForFaces').mockRejectedValueOnce(new Error('boom-mid-chunk'));
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: faceIds, lock: [], detach: [], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow('boom-mid-chunk');
+
+    drainSpy.mockRestore();
+
+    // If the transaction boundary were wrong — e.g. only the LAST internal chunk ran inside `trx` and the
+    // earlier ones autocommitted directly against `this.db` (the pre-fix shape) — the first 2000 rows would
+    // have survived. Assert exactly zero, not "2000 out of 2100".
+    const rows = await db
+      .selectFrom('face_person_verdict')
+      .select('id')
+      .where('personId', '=', ownerA.id)
+      .where('status', 'in', ['rejected', 'ignored'])
+      .execute();
+    expect(rows).toHaveLength(0);
+
+    // Positive control, same bucket, no fault injection: every one of the 2100 rows really does get written
+    // across all three internal chunks when nothing throws.
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: faceIds, lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+    expect(result.declined).toBe(2100);
+    const rowsAfter = await db
+      .selectFrom('face_person_verdict')
+      .select('id')
+      .where('personId', '=', ownerA.id)
+      .where('status', 'in', ['rejected', 'ignored'])
+      .execute();
+    expect(rowsAfter).toHaveLength(2100);
+  }, 30_000);
+});
+
+// S7.3 (pin): the happy path is unaffected by wrapping `stay` in a transaction — it still writes one negative
+// per face against its OWN stored suspected owner (not the other face's), and drains every pending row for
+// those faces. Allowed to pass on first run per the pin-test exception protocol (spec §2) — see "Pin evidence"
+// in the final report for the mutate/red/revert/green cycle this test was put through.
+describe('FaceRepairService.resolveFaces: stay happy path (S7.3 pin)', () => {
+  it('writes one rejected verdict per face against its OWN stored suspected owner, and drains every pending row for those faces', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: ownerB } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const f2 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: f1, suspectedOwnerId: ownerA.id },
+      { assetFaceId: f2, suspectedOwnerId: ownerB.id },
+    ]);
+
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
+    await verdictRepo.upsertPending([
+      { personId: ownerA.id, assetFaceId: f1, distance: 0.4 },
+      { personId: ownerB.id, assetFaceId: f2, distance: 0.4 },
+    ]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [f1, f2], lock: [], detach: [], unknown: [] },
+      user.id,
+    );
+    expect(result.declined).toBe(2);
+
+    const rowsA = await declineRowsFor(f1, ownerA.id);
+    expect(rowsA).toHaveLength(1);
+    const rowsB = await declineRowsFor(f2, ownerB.id);
+    expect(rowsB).toHaveLength(1);
+    // Each face's OWN suspected owner, not the other one's — the cross combination must not exist.
+    const cross = await declineRowsFor(f1, ownerB.id);
+    expect(cross).toHaveLength(0);
+
+    const pending = await pendingRowsFor([f1, f2]);
+    expect(pending).toHaveLength(0);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: a face routed to two moveToPerson destinations is rejected (F14)', () => {
+  it('throws BadRequestException when the same face appears in two different moveToPerson groups, and commits nothing', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: destQ } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: destR } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: destQ.id }]);
+
+    await expect(
+      sut.resolveFaces(
+        {
+          personId: source.id,
+          moveToPerson: [
+            { destinationPersonId: destQ.id, faceIds: [f1], lock: false },
+            { destinationPersonId: destR.id, faceIds: [f1], lock: false },
+          ],
+          stay: [],
+          lock: [],
+          detach: [],
+          unknown: [],
+        },
+        user.id,
+      ),
+    ).rejects.toThrow(new BadRequestException('A face cannot be resolved more than one way in the same request'));
+
+    // Nothing committed: face untouched, no verdict written for either destination, no manual link, person
+    // still in the scan snapshot.
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+    const rowsQ = await declineRowsFor(f1, destQ.id);
+    expect(rowsQ).toHaveLength(0);
+    const rowsR = await declineRowsFor(f1, destR.id);
+    expect(rowsR).toHaveLength(0);
+    const linked = await manualLinkFor(f1);
+    expect(linked).toHaveLength(0);
+    const latest = await scanRepo.getLatestScan();
+    const snapshotPersonIds = ((latest!.persons as unknown as RepairScanPerson[]) ?? []).map((p) => p.personId);
+    expect(snapshotPersonIds).toContain(source.id);
+  });
+
+  // Positive control for the case above: TWO distinct faces routed to TWO distinct destinations in the same
+  // request are perfectly legitimate and must still succeed — proves the 400 above is genuinely about the
+  // SAME face in two groups, not about having more than one moveToPerson group at all.
+  it('does NOT reject two different faces routed to two different destinations in the same request', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: destQ } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: destR } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    const f2 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: f1, suspectedOwnerId: destQ.id },
+      { assetFaceId: f2, suspectedOwnerId: destR.id },
+    ]);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [
+          { destinationPersonId: destQ.id, faceIds: [f1], lock: false },
+          { destinationPersonId: destR.id, faceIds: [f2], lock: false },
+        ],
+        stay: [],
+        lock: [],
+        detach: [],
+        unknown: [],
+      },
+      user.id,
+    );
+    expect(result.moved).toBe(2);
+    const byId = await personIdsOf([f1, f2]);
+    expect(byId[f1]).toBe(destQ.id);
+    expect(byId[f2]).toBe(destR.id);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: duplicate id within a single lock bucket is absorbed (F13)', () => {
+  it('succeeds when the same face id is repeated in the lock bucket, writing exactly one manual link and raising no 21000 error', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [f1, f1], detach: [], unknown: [] },
+      user.id,
+    );
+
+    // `locked` counts the requested lock bucket length (unchanged, pre-existing behaviour, not part of this
+    // fix) — what this fix guarantees is that exactly one row is actually written and no 21000 is raised.
+    expect(result.locked).toBe(2);
+    expect(result.moved).toBe(0);
+    const rows = await manualLinkFor(f1);
+    expect(rows).toHaveLength(1);
+  });
+});
+
+describe('FaceRepairService.resolveFaces: combined move + stay + duplicated lock in one request (F12, F13)', () => {
+  it('applies all three buckets; the move and the stay both commit, and the duplicated lock id writes one link', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: moveDest } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: stayOwner } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const fMove = await seedFace(ctx, user.id, source.id);
+    const fStay = await seedFace(ctx, user.id, source.id);
+    const fLock = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [
+      { assetFaceId: fMove, suspectedOwnerId: moveDest.id },
+      { assetFaceId: fStay, suspectedOwnerId: stayOwner.id },
+      { assetFaceId: fLock, suspectedOwnerId: moveDest.id },
+    ]);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: moveDest.id, faceIds: [fMove], lock: false }],
+        stay: [fStay],
+        lock: [fLock, fLock],
+        detach: [],
+        unknown: [],
+      },
+      user.id,
+    );
+
+    expect(result.moved).toBe(1);
+    expect(result.declined).toBe(1);
+    expect(result.locked).toBe(2);
+
+    const byId = await personIdsOf([fMove, fStay, fLock]);
+    expect(byId[fMove]).toBe(moveDest.id);
+    expect(byId[fStay]).toBe(source.id);
+    expect(byId[fLock]).toBe(source.id);
+
+    const declines = await declineRowsFor(fStay, stayOwner.id);
+    expect(declines).toHaveLength(1);
+    const lockRows = await manualLinkFor(fLock);
+    expect(lockRows).toHaveLength(1);
+  });
+});
+
+// S7.9 (pin): `lock` and `detach` were already transactional before this slice — unrelated to F12/F13/F14.
+// Allowed to pass on first run per the pin-test exception protocol; see "Pin evidence" in the final report.
+describe('FaceRepairService.resolveFaces: lock and detach remain transactional (S7.9 pin)', () => {
+  it('rolls back the lock bucket entirely when drainPendingForFaces throws mid-transaction', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
+    const drainSpy = vi.spyOn(verdictRepo, 'drainPendingForFaces').mockRejectedValueOnce(new Error('boom-lock'));
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow('boom-lock');
+
+    drainSpy.mockRestore();
+
+    const rows = await manualLinkFor(f1);
+    expect(rows).toHaveLength(0);
+
+    // Positive control, same request, no fault injection: it really does write the link.
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+      user.id,
+    );
+    expect(result.locked).toBe(1);
+    const rowsAfter = await manualLinkFor(f1);
+    expect(rowsAfter).toHaveLength(1);
+  });
+
+  it('rolls back the detach bucket entirely when drainPendingForFaces throws mid-transaction', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
+    const drainSpy = vi.spyOn(verdictRepo, 'drainPendingForFaces').mockRejectedValueOnce(new Error('boom-detach'));
+
+    await expect(
+      sut.resolveFaces(
+        { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [f1], unknown: [] },
+        user.id,
+      ),
+    ).rejects.toThrow('boom-detach');
+
+    drainSpy.mockRestore();
+
+    // Still on source, not detached — the update+delete pair rolled back together.
+    const byId = await personIdsOf([f1]);
+    expect(byId[f1]).toBe(source.id);
+
+    // Positive control, same request, no fault injection: it really does detach.
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [], detach: [f1], unknown: [] },
+      user.id,
+    );
+    expect(result.detached).toBe(1);
+    const byIdAfter = await personIdsOf([f1]);
+    expect(byIdAfter[f1]).toBeNull();
   });
 });
