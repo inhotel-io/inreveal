@@ -143,6 +143,19 @@ class PersonalMergeUpdateBuilder {
     return this;
   }
 
+  // `retargetVerdictPersonId`'s survivor-promotion step is an aliased `updateTable(...).from(...)`
+  // correlated update over `face_person_verdict`. These personal-merge fixtures never seed verdicts and
+  // don't assert on them, so — like the generic branches of `execute()` below — these only need to
+  // satisfy the chained call shape without throwing. Real coverage for that statement lives in
+  // `test/medium/specs/services/face-verdict.merge-durability.spec.ts`, against a real database.
+  from(_table: string) {
+    return this;
+  }
+
+  whereRef(_left: string, _operator: string, _right: string) {
+    return this;
+  }
+
   execute() {
     if (this.table === 'person' && this.whereColumn === 'id') {
       for (const person of this.db.people) {
@@ -322,6 +335,16 @@ class SharedSpaceMergeUpdateBuilder {
   where(column: string, _operator: string, value: string) {
     this.whereColumn = column;
     this.whereValue = value;
+    return this;
+  }
+
+  // Chainable no-ops for `retargetVerdictSpacePersonId`'s aliased correlated update — see the twin
+  // comment on PersonalMergeUpdateBuilder above.
+  from(_table: string) {
+    return this;
+  }
+
+  whereRef(_left: string, _operator: string, _right: string) {
     return this;
   }
 
