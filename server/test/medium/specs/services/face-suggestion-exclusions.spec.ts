@@ -95,6 +95,10 @@ const setupSpace = () =>
       FaceIdentityRepository,
       ConfigRepository,
       SystemMetadataRepository,
+      // Slice 5 (F10): confirmSpacePersonFaceSuggestion wraps its writes in
+      // this.databaseRepository.transaction(...) — without this, databaseRepository is undefined on the sut
+      // and every confirm call throws.
+      DatabaseRepository,
     ],
     mock: [LoggingRepository, JobRepository],
   });

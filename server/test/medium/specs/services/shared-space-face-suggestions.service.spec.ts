@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Kysely } from 'kysely';
 import { AssetVisibility, SharedSpaceRole, SystemMetadataKey } from 'src/enum';
 import { ConfigRepository } from 'src/repositories/config.repository';
+import { DatabaseRepository } from 'src/repositories/database.repository';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
 import { JobRepository } from 'src/repositories/job.repository';
@@ -13,6 +14,7 @@ import { SharedSpaceService } from 'src/services/shared-space.service';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
+import { vi } from 'vitest';
 
 let defaultDatabase: Kysely<DB>;
 
@@ -29,6 +31,10 @@ const setup = (db?: Kysely<DB>) =>
       FaceIdentityRepository,
       ConfigRepository,
       SystemMetadataRepository,
+      // Slice 5 (F10): confirmSpacePersonFaceSuggestion wraps its writes in
+      // this.databaseRepository.transaction(...) — without this, databaseRepository is undefined on the sut
+      // and every confirm call throws.
+      DatabaseRepository,
     ],
     mock: [LoggingRepository, JobRepository],
   });
@@ -447,5 +453,133 @@ describe('SharedSpaceService space face suggestions', () => {
       .where('assetFaceId', '=', fx.assetFace.id)
       .executeTakeFirst();
     expect(unlockedRow).toBeUndefined(); // drained
+  });
+
+  // Slice 5 (F10): confirmSpacePersonFaceSuggestion's four writes used to be autocommit — a crash between
+  // any two of them left a 'manual'-linked face attached to nobody, excluded from every read with no repair
+  // path. Wrapped in one transaction so a failure anywhere rolls back everything.
+  describe('confirmSpacePersonFaceSuggestion transactional atomicity (Slice 5, F10)', () => {
+    it('S5.8 — fault injection: addPersonFaces throws inside the transaction, all four writes roll back', async () => {
+      const { ctx, sut } = setup();
+      const fx = await createSuggestionFixture(ctx);
+      const addPersonFacesSpy = vi
+        .spyOn(ctx.get(SharedSpaceRepository), 'addPersonFaces')
+        .mockRejectedValue(new Error('boom: addPersonFaces'));
+
+      await expect(
+        sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
+      ).rejects.toThrow('boom: addPersonFaces');
+
+      const row = await ctx.database
+        .selectFrom('face_person_verdict')
+        .select('status')
+        .where('spacePersonId', '=', fx.spacePerson.id)
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .executeTakeFirst();
+      expect(row?.status).toBe('pending'); // the claim's delete rolled back too
+
+      const link = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('assetFaceId')
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .executeTakeFirst();
+      expect(link).toBeUndefined(); // no manual link survives
+
+      const sspf = await ctx.database
+        .selectFrom('shared_space_person_face')
+        .select('assetFaceId')
+        .where('personId', '=', fx.spacePerson.id)
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .executeTakeFirst();
+      expect(sspf).toBeUndefined();
+
+      addPersonFacesSpy.mockRestore();
+
+      // Positive control, same fixture: with the fault removed, the identical call now succeeds and writes
+      // all four — proving the fixture and the confirm path are otherwise healthy, not that everything 400s.
+      await sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id);
+      const linkAfterRetry = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('source')
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .executeTakeFirstOrThrow();
+      expect(linkAfterRetry.source).toBe('manual');
+    });
+
+    it('S5.9 — fault injection: replaceFaceIdentity throws inside the transaction, same all-or-nothing assertion', async () => {
+      const { ctx, sut } = setup();
+      const fx = await createSuggestionFixture(ctx);
+      const replaceFaceIdentitySpy = vi
+        .spyOn(ctx.get(FaceIdentityRepository), 'replaceFaceIdentity')
+        .mockRejectedValue(new Error('boom: replaceFaceIdentity'));
+
+      await expect(
+        sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
+      ).rejects.toThrow('boom: replaceFaceIdentity');
+
+      const row = await ctx.database
+        .selectFrom('face_person_verdict')
+        .select('status')
+        .where('spacePersonId', '=', fx.spacePerson.id)
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .executeTakeFirst();
+      expect(row?.status).toBe('pending'); // the claim rolled back
+
+      const link = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('assetFaceId')
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .executeTakeFirst();
+      expect(link).toBeUndefined();
+
+      const sspf = await ctx.database
+        .selectFrom('shared_space_person_face')
+        .select('assetFaceId')
+        .where('personId', '=', fx.spacePerson.id)
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .executeTakeFirst();
+      expect(sspf).toBeUndefined();
+
+      replaceFaceIdentitySpy.mockRestore();
+
+      // Positive control, same fixture: the identical call now succeeds once the fault is removed.
+      await sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id);
+      const linkAfterRetry = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('source')
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .executeTakeFirstOrThrow();
+      expect(linkAfterRetry.source).toBe('manual');
+    });
+
+    it('S5.10 (pin): a double-submit resolves exactly once — the losing claim finds nothing left to do', async () => {
+      const { ctx, sut } = setup();
+      const fx = await createSuggestionFixture(ctx);
+      const replaceFaceIdentitySpy = vi.spyOn(ctx.get(FaceIdentityRepository), 'replaceFaceIdentity');
+
+      await Promise.all([
+        sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
+        sut.confirmSpacePersonFaceSuggestion(authFor(fx.reviewer), fx.space.id, fx.spacePerson.id, fx.assetFace.id),
+      ]);
+
+      // Whichever call wins the claim writes the link; the other finds claimed === 0 (either at the outer
+      // hasPendingForSpacePerson gate or the inner claimed check) and never reaches replaceFaceIdentity again.
+      expect(replaceFaceIdentitySpy).toHaveBeenCalledTimes(1);
+
+      const links = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('assetFaceId')
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .execute();
+      expect(links).toHaveLength(1); // positive control: the winning call's write is still there, exactly once
+
+      const sspfRows = await ctx.database
+        .selectFrom('shared_space_person_face')
+        .select('assetFaceId')
+        .where('personId', '=', fx.spacePerson.id)
+        .where('assetFaceId', '=', fx.assetFace.id)
+        .execute();
+      expect(sspfRows).toHaveLength(1);
+    });
   });
 });

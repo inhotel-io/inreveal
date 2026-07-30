@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { AssetVisibility, JobStatus, SharedSpaceRole, SourceType, SystemMetadataKey } from 'src/enum';
+import { AssetVisibility, JobName, JobStatus, SharedSpaceRole, SourceType, SystemMetadataKey } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -18,6 +18,7 @@ import { DB } from 'src/schema';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import { PersonService } from 'src/services/person.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
+import { IFacialRecognitionJob } from 'src/types';
 import { clearConfigCache } from 'src/utils/config';
 import { MediumTestContext, newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
@@ -138,6 +139,10 @@ const setupSpace = () =>
       FaceIdentityRepository,
       ConfigRepository,
       SystemMetadataRepository,
+      // Slice 5 (F10): confirmSpacePersonFaceSuggestion wraps its writes in
+      // this.databaseRepository.transaction(...) — without this, databaseRepository is undefined on the sut
+      // and every confirm call throws.
+      DatabaseRepository,
     ],
     mock: [LoggingRepository, JobRepository],
   });
@@ -277,6 +282,199 @@ const flaggedFaceIds = async (repair: FaceRepairService, ownerId: string): Promi
 };
 
 describe('face review cross-flow: a decision in one engine is honoured by the other', () => {
+  // Slice 5 (F9/F10) — the revert chain, traced end to end: a space suggestion confirm never writes
+  // asset_face.personId (space people are a projection over personal people), so non-forced recognition's
+  // `{ personId: null }` filter alone does not exclude a confirmed-but-still-unassigned face. Without the
+  // fix, the next non-forced pass re-queues it, recognition clusters it onto a different (often brand new)
+  // personal person and repoints its face_identity_face.identityId, and processSpaceFaceMatch then deletes
+  // the confirmed shared_space_person_face row once it sees the identity moved.
+  //
+  // Placed FIRST in this describe block deliberately: getAllFaces has no owner scoping, so
+  // handleQueueRecognizeFaces sweeps the WHOLE asset_face table. Running before the other tests in this file
+  // seed their own unassigned faces keeps this test's queued-job set small and its assertions unambiguous.
+  describe('Slice 5 — a human placement survives the next recognition pass (F9, F10)', () => {
+    it('S5.4/S5.5 — a confirmed space suggestion is not re-queued, re-clustered, or reverted by the next non-forced recognition pass', async () => {
+      const { sut: person, ctx } = setupSuggestionPerson();
+      const { sut: space, ctx: spaceCtx } = setupSpace();
+      await enableSpaceSuggestionBand(spaceCtx);
+      const { user: owner } = await ctx.newUser();
+      const { user: editor } = await ctx.newUser();
+      const editorAuth = factory.auth({ user: editor });
+
+      const s = await newSuggestionSpace(ctx, owner.id);
+      await ctx.newSharedSpaceMember({ spaceId: s.id, userId: editor.id, role: SharedSpaceRole.Editor });
+      const spaceAnna = await newSuggestionAnchoredSpacePerson(ctx, {
+        spaceId: s.id,
+        ownerId: owner.id,
+        name: 'Space Anna',
+      });
+
+      // The face the editor is about to confirm. It sits outside maxDistance (that's WHY it was a
+      // suggestion, not an exact match) and its asset must be a real space asset for the confirm's
+      // reachability check to accept it.
+      const { assetFace: face } = await newSuggestionCandidateFace(ctx, owner.id);
+      await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: face.assetId, addedById: owner.id });
+
+      // A positive control: an ordinary unassigned ML face, never confirmed by anyone. Proves the scan
+      // below genuinely queues faces rather than vacuously producing zero jobs.
+      const { assetFace: control } = await seedSuggestionFace(ctx, {
+        ownerId: owner.id,
+        embedding: axisEmbedding('first'),
+      });
+
+      const verdictRepo = ctx.get(FacePersonVerdictRepository);
+      await verdictRepo.upsertPendingForSpacePerson([
+        { spacePersonId: spaceAnna.id, assetFaceId: face.id, distance: 0.6 },
+      ]);
+      expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, face.id)).toBe(true); // positive control: pending row exists before confirm
+
+      // Given: an editor has confirmed F on space person S.
+      await space.confirmSpacePersonFaceSuggestion(editorAuth, s.id, spaceAnna.id, face.id);
+
+      const spacePersonAfterConfirm = await ctx.database
+        .selectFrom('shared_space_person')
+        .select('identityId')
+        .where('id', '=', spaceAnna.id)
+        .executeTakeFirstOrThrow();
+      const confirmedIdentityId = spacePersonAfterConfirm.identityId;
+      expect(confirmedIdentityId).toEqual(expect.any(String));
+
+      const linkAfterConfirm = await ctx.database
+        .selectFrom('face_identity_face')
+        .select(['identityId', 'source'])
+        .where('assetFaceId', '=', face.id)
+        .executeTakeFirstOrThrow();
+      expect(linkAfterConfirm).toEqual({ identityId: confirmedIdentityId, source: 'manual' });
+
+      const sspfAfterConfirm = await ctx.database
+        .selectFrom('shared_space_person_face')
+        .select('assetFaceId')
+        .where('personId', '=', spaceAnna.id)
+        .where('assetFaceId', '=', face.id)
+        .executeTakeFirst();
+      expect(sspfAfterConfirm).toBeDefined(); // positive control: the confirm actually wrote the projection row
+
+      // When: a non-forced handleQueueRecognizeFaces runs and every queued handleRecognizeFaces job is
+      // executed.
+      const jobMock = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
+      jobMock.waitForQueueCompletion.mockResolvedValue();
+      jobMock.getJobCounts.mockResolvedValue({ active: 0, waiting: 0, delayed: 0, paused: 0, completed: 0, failed: 0 });
+      const metadata = ctx.getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(
+        SystemMetadataRepository,
+      );
+      metadata.set.mockResolvedValue();
+
+      await expect(person.handleQueueRecognizeFaces({ force: false })).resolves.toBe(JobStatus.Success);
+
+      const queuedRecognitionJobs: IFacialRecognitionJob[] = [];
+      for (const [batch] of jobMock.queueAll.mock.calls) {
+        for (const job of batch) {
+          if (job.name === JobName.FacialRecognition) {
+            queuedRecognitionJobs.push(job.data);
+          }
+        }
+      }
+      const queuedIds = queuedRecognitionJobs.map((job) => job.id);
+
+      // Then: F was not queued — the mechanism this slice adds.
+      expect(queuedIds).not.toContain(face.id);
+      // Positive control, same call: an ordinary face IS queued — the scan is not vacuously empty.
+      expect(queuedIds).toContain(control.id);
+
+      // Execute every job the scan actually queued (this includes spaceAnna's own anchor face and the
+      // control — a genuine full non-forced pass, not a hand-picked subset).
+      for (const job of queuedRecognitionJobs) {
+        await person.handleRecognizeFaces(job);
+      }
+
+      // Drive any resulting shared-space match jobs to completion too — this is the step that, pre-fix,
+      // deletes the confirmed shared_space_person_face row once a re-recognized face's identity has moved.
+      const queuedSpaceMatchJobs: { spaceId: string; assetId: string }[] = [];
+      for (const [job] of jobMock.queue.mock.calls) {
+        if (job.name === JobName.SharedSpaceFaceMatch) {
+          queuedSpaceMatchJobs.push({ spaceId: job.data.spaceId, assetId: job.data.assetId });
+        }
+      }
+      for (const job of queuedSpaceMatchJobs) {
+        await space.handleSharedSpaceFaceMatch({ spaceId: job.spaceId, assetId: job.assetId });
+      }
+
+      // Then: shared_space_person_face still holds (S, F).
+      const sspfAfter = await ctx.database
+        .selectFrom('shared_space_person_face')
+        .select('assetFaceId')
+        .where('personId', '=', spaceAnna.id)
+        .where('assetFaceId', '=', face.id)
+        .executeTakeFirst();
+      expect(sspfAfter).toBeDefined();
+
+      // Then: face_identity_face.identityId is still S's identity.
+      const linkAfter = await ctx.database
+        .selectFrom('face_identity_face')
+        .select(['identityId', 'source'])
+        .where('assetFaceId', '=', face.id)
+        .executeTakeFirstOrThrow();
+      expect(linkAfter).toEqual({ identityId: confirmedIdentityId, source: 'manual' });
+
+      // F itself was never touched by recognition at all.
+      const faceAfter = await ctx.database
+        .selectFrom('asset_face')
+        .select('personId')
+        .where('id', '=', face.id)
+        .executeTakeFirstOrThrow();
+      expect(faceAfter.personId).toBeNull();
+    });
+
+    it('S5.6 — a face carrying an ml/owner-person/backfill link is still queued by non-forced recognition (control for S5.1)', async () => {
+      const { ctx } = setupPerson();
+      const personRepo = ctx.get(PersonRepository);
+      const faceIdentityRepo = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+      const linkedFaceIds: string[] = [];
+      for (const source of ['ml', 'owner-person', 'backfill'] as const) {
+        const { assetFace } = await ctx.newAssetFace({
+          assetId: asset.id,
+          personId: null,
+          sourceType: SourceType.MachineLearning,
+        });
+        const { person } = await ctx.newPerson({ ownerId: user.id });
+        const identity = await faceIdentityRepo.ensurePersonIdentity(person.id);
+        await faceIdentityRepo.replaceFaceIdentity({ assetFaceId: assetFace.id, identityId: identity.id, source });
+        linkedFaceIds.push(assetFace.id);
+      }
+
+      // Absence control, same call: a genuinely manual-linked face IS excluded — only 'manual' is special.
+      const { assetFace: manualFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+      const { person: manualPerson } = await ctx.newPerson({ ownerId: user.id });
+      const manualIdentity = await faceIdentityRepo.ensurePersonIdentity(manualPerson.id);
+      await faceIdentityRepo.replaceFaceIdentity({
+        assetFaceId: manualFace.id,
+        identityId: manualIdentity.id,
+        source: 'manual',
+      });
+
+      const ids: string[] = [];
+      for await (const face of personRepo.getAllFaces({
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+        excludeManuallyPlaced: true,
+      })) {
+        ids.push(face.id);
+      }
+
+      for (const id of linkedFaceIds) {
+        expect(ids).toContain(id);
+      }
+      expect(ids).not.toContain(manualFace.id);
+    });
+  });
+
   it('leak 1a — a human placement is never re-flagged by the cleanup scan', async () => {
     const { sut: repair, ctx } = setupRepair();
     const { sut: person } = setupPerson();
