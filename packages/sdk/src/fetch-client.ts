@@ -2443,6 +2443,8 @@ export type ServerFeaturesDto = {
     sidecar: boolean;
     /** Whether smart search is enabled */
     smartSearch: boolean;
+    /** Whether smart search has an active relevance cutoff (clip.maxDistance) */
+    smartSearchHasCutoff: boolean;
     /** Sync stream request types this server accepts. Absent on servers that predate capability signalling; clients fall back to version-based gating. */
     syncRequestTypes?: string[];
     /** Whether trash feature is enabled */
