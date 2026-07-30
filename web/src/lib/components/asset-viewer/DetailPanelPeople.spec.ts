@@ -101,24 +101,23 @@ const settleCrop = async () => {
   await tick();
 };
 
-// NOTE on what these tests do and do NOT prove (#796).
+// NOTE on what these tests do and do NOT prove.
 //
-// These exercise the component's GATE given a people list. They deliberately mock
-// `faceManager.people`, so a passing "non-owner sees people" test does NOT mean the info panel's
-// People section works for a shared-album recipient in production — it does not.
+// These exercise the component's gate and avatar resolution given a people list. They mock
+// `faceManager`, so they prove client logic only — never the server contract.
 //
-// The server redacts the identity before the client ever sees it, on BOTH sources:
-//   • GET /faces  — mapFaces() nulls `person` unless `person.ownerId === auth.user.id`, and
-//                   faceManager.people is built from `face.person`, so it is empty for a viewer.
-//   • getAssetInfo — AssetService.get hard-sets `people = []` for a non-owner with no space.
-// Both are pinned by real-database tests: server/test/medium/specs/services/person.service.spec.ts
-// ("getFacesById (non-owner read access)") and .../asset.service.spec.ts ("get (shared-album
-// recipient)").
+// History: before #818 the server redacted identity from non-owners on both sources, so the
+// People section was empty for a shared-album recipient no matter what the client did. That is
+// fixed — `mapFaces` (server/src/dtos/person.dto.ts) now maps `person` for anyone with
+// Permission.AssetRead, and `AssetService.get` filters only hidden people for a non-owner with
+// no space. The server side is pinned by real-database tests:
+// server/test/medium/specs/services/person.service.spec.ts and .../asset.service.spec.ts.
 //
-// Lifting the client gate here is the necessary half of the fix, not the sufficient one. Making
-// People actually appear for a viewer requires a server-side RBAC change (exposing person identity
-// to non-owners with read access, with hidden-person filtering and a person-thumbnail endpoint a
-// non-owner may call) — a privacy decision, not a display fix.
+// Avatar-URL reachability is NOT symmetric across viewers, and that asymmetry is load-bearing
+// for the crop-vs-profile-face setting: /people/{id}/thumbnail is guarded by
+// Permission.PersonRead, which server/src/utils/access.ts resolves as owner ∪ shared-space
+// member. A viewer who is neither (album share, partner share) has no representative face to
+// fall back to, which is why they stay on the asset crop unconditionally.
 describe('DetailPanelPeople', () => {
   beforeEach(() => {
     faceManagerMock.people = [];
@@ -140,10 +139,9 @@ describe('DetailPanelPeople', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument();
   });
 
-  it('renders nothing for a non-owner given the empty list the server actually serves today', () => {
-    // The production shape for a shared-album recipient: GET /faces comes back with person: null
-    // on every face, so faceManager.people is empty. This is the #796 symptom, and it is why the
-    // gate change above is not on its own a fix.
+  it('renders nothing for a non-owner when handed an empty people list', () => {
+    // Pre-#818 this was the production shape for a shared-album recipient. It no longer is; the
+    // test is kept because the empty-list gate itself still matters.
     faceManagerMock.people = [];
     faceManagerMock.data = [{ id: 'face-1' }];
 
@@ -332,6 +330,20 @@ describe('DetailPanelPeople', () => {
       expect(src).not.toContain('/shared-spaces/');
       expect(src).not.toContain('undefined');
       expect(src).toContain('/assets/asset-1/');
+    });
+
+    it('renders an avatar for a person with no name', async () => {
+      // Untagged faces are the common case and render alt="" — which strips the img role, so this
+      // must be asserted structurally, never through getByRole('img') or getByText.
+      faceManagerMock.people = [person('')];
+      faceManagerMock.facesByPersonId = new Map();
+
+      const { container } = renderPanel({ isOwner: true });
+      await tick();
+
+      const img = container.querySelector('img');
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute('src')).toContain('/people/');
     });
   });
 });
