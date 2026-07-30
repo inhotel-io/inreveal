@@ -117,12 +117,8 @@ jobs:
       - name: Install dependencies
         run: mise //mobile:install:ci
 
-      - name: Generate translation file
-        run: mise //mobile:codegen:translation
-
-      - name: Generate platform APIs
-        run: mise //mobile:codegen:pigeon
-        working-directory: ./mobile
+      - name: Perform codegen
+        run: mise //mobile:codegen
 
       - name: Build Android App Bundle
         working-directory: ./mobile
@@ -211,11 +207,8 @@ jobs:
       - name: Install dependencies
         run: mise //mobile:install:ci
 
-      - name: Generate translation files
-        run: mise //mobile:codegen:translation
-
-      - name: Generate platform APIs
-        run: mise //mobile:codegen:pigeon
+      - name: Perform codegen
+        run: mise //mobile:codegen
 
       - name: Resolve iOS Swift Packages
         working-directory: ./mobile
