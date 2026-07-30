@@ -208,7 +208,7 @@ describe('face verdict merge durability (D1)', () => {
     expect(rows[0]).toMatchObject({ personId: robert.id, identityId: robertIdentity.id, status: 'rejected' });
   });
 
-  it('survivor wins on collision regardless of which side is pending vs rejected', async () => {
+  it('survivor wins on collision when the survivor holds the negative', async () => {
     const { ctx, sut, faceIdentityRepository, facePersonVerdictRepository } = setup();
     const { user } = await ctx.newUser();
     const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
@@ -232,6 +232,44 @@ describe('face verdict merge durability (D1)', () => {
     const rows = await verdictRow(faceId);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ personId: robert.id, identityId: robertIdentity.id, status: 'rejected' });
+  });
+
+  // The dangerous inverse of the case above, and a live defect (Slice 6's red test — do not fix here): source
+  // (Bob) holds a human REJECTED verdict, survivor (Robert) only holds a machine PENDING suggestion. The
+  // collision delete in face-verdict-merge.ts's retargetVerdictPersonId has no status filter, so today it
+  // drops the SOURCE row unconditionally and keeps the survivor's row — meaning the human's rejection is
+  // discarded and the machine's mere suggestion survives the merge. This test pins the CORRECT behaviour
+  // (the negative must win regardless of which side holds it) and is expected to fail until that's fixed.
+  it('a source negative outranks a survivor pending row', async () => {
+    const { ctx, sut, faceIdentityRepository, facePersonVerdictRepository } = setup();
+    const { user } = await ctx.newUser();
+    const { person: bob } = await ctx.newPerson({ ownerId: user.id, name: 'Bob' });
+    const { person: robert } = await ctx.newPerson({ ownerId: user.id, name: 'Robert' });
+    const faceId = await seedFace(ctx, user.id);
+    const bobIdentity = await faceIdentityRepository.ensurePersonIdentity(bob.id);
+    const robertIdentity = await faceIdentityRepository.ensurePersonIdentity(robert.id);
+    // Source (Bob) REJECTED F — a human decision. Survivor (Robert) only has a PENDING suggestion.
+    await facePersonVerdictRepository.markRejected(bob.id, faceId, {
+      identityId: bobIdentity.id,
+      source: 'cleanup',
+      actorId: user.id,
+    });
+    await defaultDatabase
+      .insertInto('face_person_verdict')
+      .values({
+        personId: robert.id,
+        assetFaceId: faceId,
+        identityId: robertIdentity.id,
+        status: 'pending',
+        distance: 0.4,
+      })
+      .execute();
+
+    await sut.mergePersonalPeople(factory.auth({ user }), robert.id, [bob.id]);
+
+    const rows = await verdictRow(faceId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ personId: robert.id, status: 'rejected' });
   });
 
   it('GC (deleteUnreferencedIdentities) degrades an identity-only verdict to SET NULL, never deletes', async () => {

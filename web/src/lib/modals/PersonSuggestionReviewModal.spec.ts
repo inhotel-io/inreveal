@@ -1,6 +1,6 @@
 import type { PersonFaceSuggestionPageResponseDto, PersonResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PersonSuggestionReviewModal from '$lib/modals/PersonSuggestionReviewModal.svelte';
@@ -83,10 +83,47 @@ describe('PersonSuggestionReviewModal', () => {
       expect(screen.getByTestId('suggestion-progress')).toHaveTextContent('face_suggestion_progress'),
     );
     expect(screen.getByTestId('suggestion-full-photo')).toBeInTheDocument();
-    expect(screen.getByTestId('suggestion-highlight')).toBeInTheDocument();
+    // Before the full photo has loaded (happy-dom never fires `onload` on its own — nothing here dispatches
+    // it), only the placeholder renders. The REAL overlay (`suggestion-highlight`) and its computed geometry
+    // are covered by the dedicated test below, once `load` is dispatched explicitly.
+    expect(screen.getByTestId('suggestion-highlight-placeholder')).toBeInTheDocument();
+    expect(screen.queryByTestId('suggestion-highlight')).not.toBeInTheDocument();
     // reference image uses getPeopleThumbnailUrl output, NOT an asset media url
     const ref = screen.getByTestId('suggestion-reference') as HTMLImageElement;
     expect(ref.getAttribute('src')).toContain('/api/people/p1/thumbnail');
+  });
+
+  it('renders the real highlight overlay (not the placeholder) with geometry computed from the loaded photo', async () => {
+    setup();
+    await waitFor(() => screen.getByTestId('suggestion-full-photo'));
+    const img = screen.getByTestId('suggestion-full-photo') as HTMLImageElement;
+
+    // A 1000x500 natural image rendered into a 400x300 box: scaleToFit picks the narrower-fitting axis
+    // (400/1000 = 0.4 vs 300/500 = 0.6, so 0.4 wins), so the photo is horizontally full-bleed (400 wide) and
+    // letterboxed top/bottom (200 tall, centered with a 50px offset on each side). happy-dom has no layout
+    // engine, so both the "client" size and the "natural" size have to be stubbed explicitly — width/height
+    // reflect content attributes (settable directly); naturalWidth/naturalHeight have no public setter.
+    img.width = 400;
+    img.height = 300;
+    Object.defineProperty(img, 'naturalWidth', { value: 1000, configurable: true });
+    Object.defineProperty(img, 'naturalHeight', { value: 500, configurable: true });
+
+    await fireEvent.load(img);
+
+    await waitFor(() => expect(screen.getByTestId('suggestion-highlight')).toBeInTheDocument());
+    expect(screen.queryByTestId('suggestion-highlight-placeholder')).not.toBeInTheDocument();
+
+    // f1's box is (10,10)-(40,40) in a 100x100 metadata space, i.e. normalized 0.1..0.4 on both axes.
+    // Expected pixel geometry, worked out independently of the component's own arithmetic:
+    //   contentWidth = 1000 * 0.4 = 400, contentHeight = 500 * 0.4 = 200
+    //   offsetX = (400 - 400) / 2 = 0,    offsetY = (300 - 200) / 2 = 50
+    //   left = 0.1 * 400 + 0 = 40,   top    = 0.1 * 200 + 50 = 70
+    //   width = 0.4 * 400 - 40 = 120, height = 0.4 * 200 + 50 - 70 = 60
+    const overlay = screen.getByTestId('suggestion-highlight');
+    expect(overlay.style.left).toBe('40px');
+    expect(overlay.style.top).toBe('70px');
+    expect(overlay.style.width).toBe('120px');
+    expect(overlay.style.height).toBe('60px');
   });
 
   it('Same person calls confirm then advances; last item closes with confirmed count', async () => {

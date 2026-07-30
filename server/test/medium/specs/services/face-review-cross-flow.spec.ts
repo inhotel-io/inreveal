@@ -282,6 +282,7 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     const { sut: person } = setupPerson();
     const { user } = await ctx.newUser();
     const auth = factory.auth({ user });
+    const verdictRepo = ctx.get(FacePersonVerdictRepository);
 
     // Bob owns the "first-axis" look. Anna's cluster has been contaminated with three first-axis faces.
     await buildCluster(ctx, user.id, axisEmbedding('first'), 10, 'Bob');
@@ -291,12 +292,33 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     // Baseline: the cleanup scan flags all three leaked faces (toward Bob).
     expect(await flaggedFaceIds(repair, user.id)).toEqual(new Set(leaked));
 
-    // A user confirms ONE of those faces as Anna (it genuinely is a young/rare photo of her). Confirm writes
-    // the human-placement record — the manual identity link — via the real PersonService path.
-    await person.reassignFacesById(auth, anna.id, { id: leaked[0] });
-    // confirmFaceSuggestion is idempotent when there is no pending row (there is none here — we assigned
-    // directly above to reach the manual-link state a confirm produces). The link is what matters.
+    // Seed a genuine PENDING suggestion row for (Anna, leaked[0]) — the real precondition a confirm click
+    // drains. Positive control: assert it exists before confirming, so the drain assertion below actually
+    // means something.
+    await verdictRepo.upsertPending([{ personId: anna.id, assetFaceId: leaked[0], distance: 0.55 }]);
+    expect(await pendingFor(ctx, 'personId', anna.id, leaked[0])).toBe(true);
+
+    // A user confirms ONE of those faces as Anna (it genuinely is a young/rare photo of her) via the REAL
+    // confirm path only — no separate reassign call, so this drives exactly what a suggestion-review confirm
+    // click does (the previous version of this test called reassignFacesById first, which drained the queue
+    // row itself and made the confirm below a no-op — see the inline comment that used to sit here).
     await person.confirmFaceSuggestion(auth, anna.id, leaked[0]);
+
+    // All three post-conditions of a real confirm: the face is reassigned, a manual identity link exists for
+    // it, and the pending suggestion row is drained.
+    const face = await db
+      .selectFrom('asset_face')
+      .select('personId')
+      .where('id', '=', leaked[0])
+      .executeTakeFirstOrThrow();
+    expect(face.personId).toBe(anna.id);
+    const link = await db
+      .selectFrom('face_identity_face')
+      .select('source')
+      .where('assetFaceId', '=', leaked[0])
+      .executeTakeFirst();
+    expect(link?.source).toBe('manual');
+    expect(await pendingFor(ctx, 'personId', anna.id, leaked[0])).toBe(false);
 
     // Re-scan: the confirmed face is no longer flagged; the other two still are. Before the unification this
     // was the ping-pong — an admin would be asked to move the user's confirmed face away, unrecoverably.
@@ -443,19 +465,28 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
       identityId: identity.id,
     });
 
-    // Forward: a PERSONAL rejection suppresses the SPACE scan.
+    // Forward: a PERSONAL rejection suppresses the SPACE scan. A CONTROL face — seeded identically but never
+    // rejected — is picked up by the SAME scan call: its pending row is the positive control that this run
+    // genuinely produces suggestions when nothing suppresses them (JobStatus.Success alone proves nothing —
+    // handleSpacePersonSuggestionScan returns Success even when its candidate map ends up empty).
     const { assetFace: faceOne } = await newSuggestionCandidateFace(ctx, user.id);
     await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceOne.assetId, addedById: user.id });
+    const { assetFace: faceOneControl } = await newSuggestionCandidateFace(ctx, user.id);
+    await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceOneControl.assetId, addedById: user.id });
     await person.rejectFaceSuggestion(auth, anna.id, faceOne.id);
     await expect(person.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, faceOne.id)).toBe(false);
+    expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, faceOneControl.id)).toBe(true);
 
-    // Reverse: a SPACE rejection suppresses the PERSONAL scan.
+    // Reverse: a SPACE rejection suppresses the PERSONAL scan. Same control-face pattern.
     const { assetFace: faceTwo } = await newSuggestionCandidateFace(ctx, user.id);
     await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceTwo.assetId, addedById: user.id });
+    const { assetFace: faceTwoControl } = await newSuggestionCandidateFace(ctx, user.id);
+    await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceTwoControl.assetId, addedById: user.id });
     await space.rejectSpacePersonFaceSuggestion(auth, s.id, spaceAnna.id, faceTwo.id);
     await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'personId', anna.id, faceTwo.id)).toBe(false);
+    expect(await pendingFor(ctx, 'personId', anna.id, faceTwoControl.id)).toBe(true);
   });
 
   it('keep-here suppresses a later suggestion', async () => {
@@ -534,17 +565,39 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
       user.id,
     );
 
+    // Intermediate fact this whole test depends on — the "keep here" write actually produced a durable
+    // NEGATIVE verdict against O, rather than the rest of the test just assuming it did.
+    const stayedVerdict = await ctx.database
+      .selectFrom('face_person_verdict')
+      .select(['status'])
+      .where('personId', '=', o.id)
+      .where('assetFaceId', '=', face.id)
+      .executeTakeFirst();
+    expect(stayedVerdict?.status).toBe('rejected');
+
     // Later, the kept face is unassigned (e.g. a reset) — the exact shape a suggestion-scan candidate has.
     await ctx.database.updateTable('asset_face').set({ personId: null }).where('id', '=', face.id).execute();
     await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: face.assetId, addedById: user.id });
 
+    // A CONTROL face, seeded identically (same embedding, same space) but never kept-here, is the positive
+    // control: the same two scan calls below must still propose IT, proving the calls genuinely run a search
+    // rather than vacuously returning Success with an empty candidate map.
+    const { assetFace: control } = await seedSuggestionFace(ctx, {
+      ownerId: user.id,
+      personId: null,
+      embedding: SUGGESTION_CANDIDATE,
+    });
+    await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: control.assetId, addedById: user.id });
+
     await expect(person.handlePersonSuggestionScan({ id: o.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'personId', o.id, face.id)).toBe(false);
+    expect(await pendingFor(ctx, 'personId', o.id, control.id)).toBe(true);
 
     // The same keep-here decision, honoured in a DIFFERENT scope that shares O's identity — a space person
     // is a distinct (spacePersonId, assetFaceId) row from O's own, so this is not covered by the
     // same-target "never resurrect" upsert guard the personal assertion above could already pass on alone.
     await expect(person.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'spacePersonId', spaceO.id, face.id)).toBe(false);
+    expect(await pendingFor(ctx, 'spacePersonId', spaceO.id, control.id)).toBe(true);
   });
 });
