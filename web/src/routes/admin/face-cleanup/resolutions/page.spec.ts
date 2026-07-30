@@ -112,7 +112,8 @@ const SUGGESTION_ROW = {
 };
 
 // A verdict recorded against a shared-space person, never a personal person — must render with the space
-// named (D15 1.4a).
+// named (D15 1.4a). Also carries a representativeFaceId projection (F23/S11.17) so it can render a
+// thumbnail the same way a personal target's row already does.
 const SPACE_PERSON_ROW = {
   id: 'verdict-3',
   assetFaceId: 'face-3',
@@ -123,6 +124,7 @@ const SPACE_PERSON_ROW = {
   personThumbnailFaceId: null,
   spacePersonId: 'space-person-1',
   spacePersonName: 'Casper',
+  spacePersonThumbnailFaceId: 'repr-face-1',
   spaceName: 'Family Trip',
   actorId: 'admin-1',
   actorName: 'Admin',
@@ -152,6 +154,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      total: 2,
       resolutions: [CLEANUP_ROW, SUGGESTION_ROW],
     } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
     vi.mocked(removeFaceRepairResolutions).mockResolvedValue({ removed: 1 });
@@ -191,6 +194,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
 
   it('renders a space-person verdict with its space named, and a fully-orphaned verdict falls back to "unnamed"', async () => {
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      total: 2,
       resolutions: [SPACE_PERSON_ROW, ORPHANED_ROW],
     } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
 
@@ -230,6 +234,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     };
 
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      total: 2,
       resolutions: [deletedTargetRow, ORPHANED_ROW],
     } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
 
@@ -283,8 +288,54 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     });
   });
 
+  // Slice 11 (F23): the server now paginates (see face-person-verdict.repository.ts listNegativeVerdicts) —
+  // the page renders page 1, offers a "Load more" once more exist, and a space-person row (previously a KNOWN
+  // GAP left by Slice 12) renders a thumbnail via the same face-keyed admin route a personal row already
+  // uses.
+  it('S11.18: renders page 1, loads more on demand, tracks the server total, and a space-person row renders a thumbnail', async () => {
+    const page2Row = { ...SUGGESTION_ROW, id: 'verdict-page2', assetFaceId: 'face-page2', personName: 'Zed' };
+    vi.mocked(getFaceRepairResolutions)
+      .mockResolvedValueOnce({
+        total: 3,
+        resolutions: [SPACE_PERSON_ROW, CLEANUP_ROW],
+      } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>)
+      .mockResolvedValueOnce({
+        total: 3,
+        resolutions: [page2Row],
+      } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
+    // Total matches the server total (3), not just what's loaded so far (2).
+    expect(screen.getByTestId('resolutions-load-more')).toHaveTextContent('1');
+
+    // The space-person row (Casper) renders a thumbnail — the KNOWN GAP the comment in this file used to
+    // describe. Positive control in the same test: the personal row (Berta) already renders one too, via the
+    // SAME face-keyed helper, proving the assertion actually distinguishes "has an img" from "doesn't".
+    const rows = screen.getAllByTestId('resolution-row');
+    const spaceRow = rows.find((r) => within(r).queryByText('not Casper'))!;
+    const personalRow = rows.find((r) => within(r).queryByText('not Berta'))!;
+    expect(within(spaceRow).getByTestId('target-thumbnail')).toHaveAttribute(
+      'src',
+      expect.stringContaining('repr-face-1'),
+    );
+    expect(within(personalRow).getByTestId('target-thumbnail')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByTestId('resolutions-load-more'));
+
+    await waitFor(() => expect(getFaceRepairResolutions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(3));
+    // Page 1's rows are still there — load-more APPENDS, it does not replace.
+    expect(screen.getByText('not Casper')).toBeInTheDocument();
+    expect(screen.getByText('not Berta')).toBeInTheDocument();
+    expect(screen.getByText('not Zed')).toBeInTheDocument();
+    // Every row now loaded — the "Load more" affordance is gone.
+    expect(screen.queryByTestId('resolutions-load-more')).not.toBeInTheDocument();
+  });
+
   it('shows the empty state when there are no verdicts', async () => {
-    vi.mocked(getFaceRepairResolutions).mockResolvedValue({ resolutions: [] } as unknown as Awaited<
+    vi.mocked(getFaceRepairResolutions).mockResolvedValue({ total: 0, resolutions: [] } as unknown as Awaited<
       ReturnType<typeof getFaceRepairResolutions>
     >);
 
@@ -302,6 +353,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
   // the previous test; this test's own body also covers it via `rows-present-then-filtered`.
   it('shows a distinct "filter excluded everything" message when rows exist but none match the active filter', async () => {
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      total: 1,
       resolutions: [CLEANUP_ROW],
     } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
 
@@ -334,6 +386,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(screen.queryByText('No decisions recorded yet')).not.toBeInTheDocument();
 
     vi.mocked(getFaceRepairResolutions).mockResolvedValueOnce({
+      total: 2,
       resolutions: [CLEANUP_ROW, SUGGESTION_ROW],
     } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
     await fireEvent.click(screen.getByTestId('load-error-retry'));

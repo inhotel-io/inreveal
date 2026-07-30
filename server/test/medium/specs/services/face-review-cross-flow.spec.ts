@@ -864,15 +864,15 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
       });
 
       // Positive control: the resolutions page DOES list "F is not Q" before the placement.
-      const before = await verdictRepo.listNegativeVerdicts();
-      expect(before.some((r) => r.assetFaceId === face.id && r.personId === q.id)).toBe(true);
+      const before = await verdictRepo.listNegativeVerdicts({ page: 1, size: 50 });
+      expect(before.items.some((r) => r.assetFaceId === face.id && r.personId === q.id)).toBe(true);
 
       // When: the owner later places F on Q through the face editor.
       await person.reassignFacesById(auth, q.id, { id: face.id });
 
       // Then: the resolutions page no longer lists it.
-      const after = await verdictRepo.listNegativeVerdicts();
-      expect(after.some((r) => r.assetFaceId === face.id && r.personId === q.id)).toBe(false);
+      const after = await verdictRepo.listNegativeVerdicts({ page: 1, size: 50 });
+      expect(after.items.some((r) => r.assetFaceId === face.id && r.personId === q.id)).toBe(false);
     });
 
     it('S8.2 — the same placement leaves a rejected verdict against a DIFFERENT person untouched (scoping control)', async () => {

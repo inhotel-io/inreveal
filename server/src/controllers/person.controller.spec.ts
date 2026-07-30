@@ -314,7 +314,12 @@ describe(PersonController.name, () => {
     // (on the person) AND PersonCreate (on the face) — the guard can only carry one permission, so the
     // person-level PersonUpdate is what's published; PersonCreate stays a service-level check (see the
     // comment on confirmFaceSuggestion in person.service.ts).
-    it('should publish PersonUpdate and respond with 200', async () => {
+    // S11.8/F24: the modal must stop inferring "already resolved" from a status code that also means "you're
+    // not allowed to do this" (F24) — so the service's acted/no-op boolean is now what selects 200 vs 204,
+    // not a fixed @HttpCode default.
+    it('should publish PersonUpdate and respond with 200 when the service reports it acted', async () => {
+      service.confirmFaceSuggestion.mockResolvedValue(true);
+
       const { status } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/confirm`)
         .set('Authorization', `Bearer token`);
@@ -327,13 +332,28 @@ describe(PersonController.name, () => {
       );
       expect(service.confirmFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
     });
+
+    it('should respond with 204 when the service reports a no-op', async () => {
+      service.confirmFaceSuggestion.mockResolvedValue(false);
+
+      const { status, text } = await request(ctx.getHttpServer())
+        .post(`/people/${personId}/face-suggestions/${assetFaceId}/confirm`)
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(204);
+      // A 204 response must carry no body — otherwise a client naively truthy-checking the body would
+      // mis-read a no-op as acted.
+      expect(text).toBe('');
+    });
   });
 
   describe('face suggestion routes', () => {
     const personId = '00000000-0000-4000-8000-000000000001';
     const assetFaceId = '00000000-0000-4000-8000-000000000002';
 
-    it('POST reject should require person update permission and respond with 200', async () => {
+    it('POST reject should require person update permission and respond with 200 when acted', async () => {
+      service.rejectFaceSuggestion.mockResolvedValue(true);
+
       const { status } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/reject`)
         .set('Authorization', `Bearer token`);
@@ -347,7 +367,19 @@ describe(PersonController.name, () => {
       expect(service.rejectFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
     });
 
-    it('POST ignore should require person update permission and respond with 200', async () => {
+    it('POST reject should respond with 204 when the service reports a no-op', async () => {
+      service.rejectFaceSuggestion.mockResolvedValue(false);
+
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/people/${personId}/face-suggestions/${assetFaceId}/reject`)
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(204);
+    });
+
+    it('POST ignore should require person update permission and respond with 200 when acted', async () => {
+      service.ignoreFaceSuggestion.mockResolvedValue(true);
+
       const { status } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/ignore`)
         .set('Authorization', `Bearer token`);
@@ -361,7 +393,19 @@ describe(PersonController.name, () => {
       expect(service.ignoreFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
     });
 
-    it('POST dismiss should require person update permission and respond with 200', async () => {
+    it('POST ignore should respond with 204 when the service reports a no-op', async () => {
+      service.ignoreFaceSuggestion.mockResolvedValue(false);
+
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/people/${personId}/face-suggestions/${assetFaceId}/ignore`)
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(204);
+    });
+
+    it('POST dismiss should require person update permission and respond with 200 when acted', async () => {
+      service.dismissFaceSuggestion.mockResolvedValue(true);
+
       const { status } = await request(ctx.getHttpServer())
         .post(`/people/${personId}/face-suggestions/${assetFaceId}/dismiss`)
         .set('Authorization', `Bearer token`);
@@ -373,6 +417,16 @@ describe(PersonController.name, () => {
         }),
       );
       expect(service.dismissFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
+    });
+
+    it('POST dismiss should respond with 204 when the service reports a no-op', async () => {
+      service.dismissFaceSuggestion.mockResolvedValue(false);
+
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/people/${personId}/face-suggestions/${assetFaceId}/dismiss`)
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(204);
     });
 
     it('POST reject should validate assetFaceId independently', async () => {

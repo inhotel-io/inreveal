@@ -2412,4 +2412,112 @@ describe('FacePersonVerdictRepository', () => {
       expect(await remainingCount()).toBe(0);
     });
   });
+
+  // Slice 11 (F23, folded in from Slice 12's server-side gap): listNegativeVerdicts is unscoped by design (the
+  // admin resolutions page lists every outstanding verdict), so it now needs server-side pagination, and the
+  // page projects a space-person target's representative face id alongside the existing personal
+  // faceAssetId, so the resolutions page can render a thumbnail for BOTH target kinds.
+  describe('listNegativeVerdicts (pagination + space-person thumbnail, S11.16/S11.17)', () => {
+    // Unscoped by design — clear before AND after each test. `beforeEach` matters just as much as `afterEach`
+    // here: this file's earlier describe blocks (markRejected/markIgnored, space-person suggestion methods,
+    // clearNegativeForTarget, ...) each write 'rejected'/'ignored' rows and clean up only their OWN
+    // personId/assetFaceId pair, not the whole table — by the time this block runs, hundreds of leftover
+    // verdict rows can already be sitting in `face_person_verdict`, which would inflate this describe's exact
+    // total/page-size assertions.
+    beforeEach(async () => {
+      await defaultDatabase.deleteFrom('face_person_verdict').execute();
+    });
+    afterEach(async () => {
+      await defaultDatabase.deleteFrom('face_person_verdict').execute();
+    });
+
+    it('S11.16: pages a 5-row result set with a stable tie-break, and reports the true total', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Target' });
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+
+      const base = new Date('2026-01-01T00:00:00.000Z').getTime();
+      const rows: { assetFaceId: string; createdAt: Date }[] = [];
+      for (let index = 0; index < 5; index++) {
+        const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+        rows.push({ assetFaceId: assetFace.id, createdAt: new Date(base + index * 60_000) });
+      }
+      for (const row of rows) {
+        await defaultDatabase
+          .insertInto('face_person_verdict')
+          .values({
+            personId: person.id,
+            assetFaceId: row.assetFaceId,
+            status: 'rejected',
+            source: 'cleanup',
+            createdAt: row.createdAt,
+          })
+          .execute();
+      }
+      // Newest createdAt first — row index 4 (latest) sorts first.
+      const expectedOrder = rows.toReversed().map((r) => r.assetFaceId);
+
+      const page1 = await sut.listNegativeVerdicts({ page: 1, size: 2 });
+      expect(page1.total).toBe(5);
+      expect(page1.items.map((i) => i.assetFaceId)).toEqual(expectedOrder.slice(0, 2));
+
+      const page2 = await sut.listNegativeVerdicts({ page: 2, size: 2 });
+      expect(page2.total).toBe(5);
+      expect(page2.items.map((i) => i.assetFaceId)).toEqual(expectedOrder.slice(2, 4));
+
+      const page3 = await sut.listNegativeVerdicts({ page: 3, size: 2 });
+      expect(page3.total).toBe(5);
+      expect(page3.items).toHaveLength(1);
+      expect(page3.items.map((i) => i.assetFaceId)).toEqual(expectedOrder.slice(4, 5));
+
+      // Ordering stable across pages: concatenating every page reproduces the full set exactly, no
+      // duplicates and no gaps.
+      const allIds = [...page1.items, ...page2.items, ...page3.items].map((i) => i.assetFaceId);
+      expect(allIds).toEqual(expectedOrder);
+    });
+
+    it('S11.17: a space-person-targeted verdict exposes its representative face id; a personal one still exposes person.faceAssetId', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: personalFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const { assetFace: spaceFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const { assetFace: reprFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Personal' });
+      await defaultDatabase
+        .updateTable('person')
+        .set({ faceAssetId: reprFace.id })
+        .where('id', '=', person.id)
+        .execute();
+
+      const { space } = await ctx.newSharedSpace({ createdById: user.id, name: 'Trip' });
+      const spacePerson = await defaultDatabase
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: space.id,
+          name: 'Casper',
+          type: 'person',
+          isHidden: false,
+          representativeFaceId: reprFace.id,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      await sut.markRejected(person.id, personalFace.id, { source: 'cleanup', actorId: user.id });
+      await sut.markRejectedForSpacePerson(spacePerson.id, spaceFace.id, { source: 'cleanup', actorId: user.id });
+
+      const { items } = await sut.listNegativeVerdicts({ page: 1, size: 10 });
+      const personalRow = items.find((i) => i.assetFaceId === personalFace.id);
+      const spaceRow = items.find((i) => i.assetFaceId === spaceFace.id);
+
+      expect(personalRow?.personThumbnailFaceId).toBe(reprFace.id);
+      expect(spaceRow?.spacePersonThumbnailFaceId).toBe(reprFace.id);
+      // Positive/negative control in the same body: the two projections are genuinely independent, not one
+      // value copied onto both fields.
+      expect(personalRow?.spacePersonThumbnailFaceId).toBeNull();
+      expect(spaceRow?.personThumbnailFaceId).toBeNull();
+    });
+  });
 });

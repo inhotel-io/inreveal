@@ -22,6 +22,9 @@
     personThumbnailFaceId: string | null;
     spacePersonId: string | null;
     spacePersonName: string | null;
+    // Slice 11 (F23): the space-person twin of personThumbnailFaceId, projected from
+    // shared_space_person.representativeFaceId — see face-person-verdict.repository.ts listNegativeVerdicts.
+    spacePersonThumbnailFaceId: string | null;
     spaceName: string | null;
     actorId: string | null;
     actorName: string | null;
@@ -36,9 +39,13 @@
   type SourceFilter = 'all' | VerdictSource;
 
   let resolutions = $state<ResolutionItem[]>([]);
+  let total = $state(0);
   let loading = $state(true);
+  let loadingMore = $state(false);
   let loadError = $state(false);
   let sourceFilter = $state<SourceFilter>('all');
+
+  const hasMore = $derived(resolutions.length < total);
 
   const filtered = $derived(
     sourceFilter === 'all' ? resolutions : resolutions.filter((r) => r.source === sourceFilter),
@@ -46,7 +53,9 @@
 
   // A negative-verdict face has no person↔face join by construction (that's what "not this person" means) —
   // the old person-scoped route's `getRepresentativeFaceForUpdate` join returns nothing for these rows,
-  // 404-ing the row's thumbnail structurally. Face-keyed, admin-gated, no join required.
+  // 404-ing the row's thumbnail structurally. Face-keyed, admin-gated, no join required. The space-person
+  // twin (F23) uses the exact same face-keyed route — there is no equivalent space-scoped thumbnail route
+  // available to an admin who may not be a member of the space the verdict was recorded in.
   const faceThumbnailUrl = (faceId: string) => getAdminFaceThumbnailUrl(faceId);
   const personThumbUrl = (personId: string, thumbnailFaceId: string | null) =>
     thumbnailFaceId ? getAdminFaceThumbnailUrl(thumbnailFaceId) : `/api${getPeopleThumbnailPath(personId)}`;
@@ -70,23 +79,56 @@
     return $t('admin.face_cleanup_unnamed');
   };
 
-  const load = async () => {
-    loadError = false;
+  // Slice 11 (F23): the server now paginates listNegativeVerdicts (page/size, capped at 200 — see
+  // face-person-verdict.repository.ts and face-repair.dto.ts FaceRepairResolutionsQuerySchema). The
+  // generated SDK's getFaceRepairResolutions() does not yet accept page/size — the OpenAPI spec and SDK need
+  // regenerating from the new paginated contract (tracked separately, out of scope here; see
+  // server/src/controllers/face-repair-admin.controller.ts). Until then every call re-requests the server's
+  // default page; rows already loaded are filtered out by id before appending, so clicking "Load more" is a
+  // safe no-op today rather than a duplicate-inducing bug — this becomes real incremental pagination as soon
+  // as the SDK exposes page/size.
+  const load = async (isFirstPage: boolean) => {
+    if (isFirstPage) {
+      loading = true;
+      loadError = false;
+    } else {
+      loadingMore = true;
+    }
     try {
       const result = await getFaceRepairResolutions();
-      const dto = result as unknown as { resolutions: ResolutionItem[] };
-      resolutions = dto?.resolutions ?? [];
+      const dto = result as unknown as { total: number; resolutions: ResolutionItem[] };
+      const existingIds = new Set(resolutions.map((r) => r.id));
+      const newOnes = (dto?.resolutions ?? []).filter((r) => !existingIds.has(r.id));
+      resolutions = isFirstPage ? (dto?.resolutions ?? []) : [...resolutions, ...newOnes];
+      total = dto?.total ?? resolutions.length;
     } catch (error) {
       // D17: a failed load is not the same as a genuinely empty resolutions list — render a distinct error
-      // state (below) with a Retry, rather than the reassuring "no decisions recorded yet" empty card.
-      loadError = true;
-      handleError(error, $t('admin.face_cleanup_resolutions_load_error'));
+      // state (below) with a Retry, rather than the reassuring "no decisions recorded yet" empty card. A
+      // failed load-more, unlike a failed first load, is not fatal to the page — the rows already shown stay
+      // exactly as they were; only the first page's failure gets the full error state.
+      if (isFirstPage) {
+        loadError = true;
+        handleError(error, $t('admin.face_cleanup_resolutions_load_error'));
+      } else {
+        handleError(error, $t('admin.face_cleanup_resolutions_load_error'));
+      }
     } finally {
-      loading = false;
+      if (isFirstPage) {
+        loading = false;
+      } else {
+        loadingMore = false;
+      }
     }
   };
 
-  onMount(load);
+  const handleLoadMore = () => {
+    if (loadingMore || !hasMore) {
+      return;
+    }
+    void load(false);
+  };
+
+  onMount(() => load(true));
 
   const handleUndo = async (item: ResolutionItem) => {
     try {
@@ -94,7 +136,7 @@
         faceRepairResolutionsRemoveRequestDto: { verdictIds: [item.id] },
       });
       toastManager.success($t('admin.face_cleanup_resolutions_undo_success'));
-      await load();
+      await load(true);
     } catch {
       toastManager.danger($t('admin.face_cleanup_undo_error'));
     }
@@ -152,7 +194,7 @@
         data-testid="load-error-banner"
       >
         <span class="flex-1">{$t('admin.face_cleanup_resolutions_load_error')}</span>
-        <Button color="secondary" size="small" onclick={load} data-testid="load-error-retry">
+        <Button color="secondary" size="small" onclick={() => load(true)} data-testid="load-error-retry">
           {$t('retry')}
         </Button>
       </div>
@@ -216,21 +258,23 @@
               </div>
             </div>
 
-            <!-- Target person thumbnail.
-                 KNOWN GAP (slice-12, F30 item 3): a space-person target never renders one, because
-                 `FaceRepairResolutionsListDto` (server/src/dtos/face-repair.dto.ts `ResolutionItemSchema`,
-                 fed by `FacePersonVerdictRepository.listNegativeVerdicts`) selects `person.faceAssetId as
-                 personThumbnailFaceId` for a personal target but has no equivalent projection for a
-                 space-person target — `shared_space_person.representativeFaceId` exists in the schema but
-                 isn't selected here. Fixing this needs a server-side DTO/repository change (out of scope for
-                 this web-only slice — see the slice-12 report's Deviations); once that field exists, add a
-                 `{:else if item.spacePersonId}` branch here using the same face-keyed
-                 `getAdminFaceThumbnailUrl`, which works for any assetFaceId regardless of target kind. -->
+            <!-- Target person thumbnail. A space-person target (F23) renders one too, via the same face-keyed
+                 admin route a personal target uses — there is no equivalent space-scoped thumbnail route
+                 available to an admin who may not be a member of the space the verdict was recorded in, and
+                 (unlike a personal target) there is no fallback when representativeFaceId is null. -->
             {#if item.personId}
               <img
                 src={personThumbUrl(item.personId, item.personThumbnailFaceId)}
                 alt=""
                 class="size-8 flex-none rounded-full bg-gray-100 object-cover dark:bg-gray-700"
+                data-testid="target-thumbnail"
+              />
+            {:else if item.spacePersonId && item.spacePersonThumbnailFaceId}
+              <img
+                src={faceThumbnailUrl(item.spacePersonThumbnailFaceId)}
+                alt=""
+                class="size-8 flex-none rounded-full bg-gray-100 object-cover dark:bg-gray-700"
+                data-testid="target-thumbnail"
               />
             {/if}
 
@@ -241,6 +285,22 @@
           </div>
         {/each}
       </div>
+
+      {#if hasMore}
+        <div class="mt-4 flex justify-center">
+          <Button
+            color="secondary"
+            size="small"
+            disabled={loadingMore}
+            onclick={handleLoadMore}
+            data-testid="resolutions-load-more"
+          >
+            {loadingMore
+              ? $t('loading')
+              : $t('admin.face_cleanup_resolutions_load_more', { values: { count: total - resolutions.length } })}
+          </Button>
+        </div>
+      {/if}
     {/if}
   </div>
 </AdminPageLayout>

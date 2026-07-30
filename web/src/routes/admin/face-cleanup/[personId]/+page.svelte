@@ -84,6 +84,11 @@
   let restPage = $state(0);
   let restHasMore = $state(false);
   let restLoading = $state(false);
+  // F25: a failed rest-of-cluster load used to be swallowed silently (`catch { /* graceful */ }`), leaving
+  // `restTotal` at whatever it was before the failed call (0 on the very first load) while the flagged grid
+  // rendered normally — "Move entire cluster" would then confirm moving a count far smaller than the real
+  // cluster. Tracked explicitly so the whole-cluster action can be disabled while it is true.
+  let restLoadError = $state(false);
   const restSelected = new SvelteSet<string>();
 
   // An entire-cluster move covers ALL eligible faces: the Rest (which excludes the flagged ids) plus the
@@ -141,6 +146,12 @@
   // when there is no destination to begin with.
   const noDestination = $derived(!destinationId);
   const canBulkMove = $derived(!!destinationId && !isSelfDestination);
+  // F25: "Move entire cluster" additionally requires a successful rest-of-cluster load — the confirmation
+  // names `clusterTotal` (restTotal + flaggedFaces.length), and a failed load leaves `restTotal` understating
+  // the real cluster by however many faces failed to load. Scoped to this one action only: select-all and
+  // per-tile staging are unaffected (restFaces is empty on a failed load regardless, so there is nothing to
+  // stage from it either way).
+  const canMoveEntireCluster = $derived(canBulkMove && !restLoadError);
   // Staged rest faces are KEPT even once their destination stops being usable — discarding a page of
   // deliberate selection over a dropdown mis-click (e.g. accidentally picking the reviewed cluster itself in
   // "Choose someone else…") was considered and rejected: a mis-click must not destroy real work. Apply is
@@ -274,6 +285,9 @@
       return;
     }
     restLoading = true;
+    // F25: cleared on every attempt (including a Retry) — a fresh success must re-enable the whole-cluster
+    // action.
+    restLoadError = false;
     try {
       const result = await getFaceRepairClusterFaces({
         personId,
@@ -288,7 +302,9 @@
       restHasMore = result.hasMore;
       restPage += 1;
     } catch {
-      // graceful — leave the Rest section empty
+      // F25: no longer silently swallowed — restTotal/clusterTotal would otherwise understate the real
+      // cluster while "Move entire cluster" stays clickable and names the wrong count.
+      restLoadError = true;
     } finally {
       restLoading = false;
     }
@@ -301,7 +317,7 @@
   };
 
   const handleMoveEntireCluster = () => {
-    if (!canBulkMove) {
+    if (!canMoveEntireCluster) {
       return;
     }
     void confirmMoveEntireCluster();
@@ -311,7 +327,7 @@
   // `role="dialog"`, `aria-modal`, a focus trap, Escape-to-cancel and backdrop dismissal for free — none of
   // which the previous inline `fixed inset-0` div had.
   const confirmMoveEntireCluster = async () => {
-    if (!canBulkMove || !destinationId) {
+    if (!canMoveEntireCluster || !destinationId) {
       return;
     }
     const confirmed = await modalManager.show(ConfirmModal, {
@@ -323,7 +339,7 @@
         values: { count: clusterTotal.toLocaleString() },
       }),
     });
-    if (!confirmed || !canBulkMove || !destinationId) {
+    if (!confirmed || !canMoveEntireCluster || !destinationId) {
       return;
     }
     await commitResolve({ personId, entireCluster: { destinationPersonId: destinationId } });
@@ -752,7 +768,7 @@
           <Button
             color="secondary"
             size="small"
-            disabled={!canBulkMove}
+            disabled={!canMoveEntireCluster}
             onclick={handleMoveEntireCluster}
             data-testid="move-entire-btn"
           >
@@ -760,7 +776,24 @@
           </Button>
         </div>
 
-        {#if restTotal === 0 && !restLoading}
+        {#if restLoadError}
+          <!-- F25: distinct from "rest-empty" below — a load FAILURE, not a genuinely empty cluster. Rendering
+               the empty state here would misleadingly imply the cluster has no other faces at all. -->
+          <div
+            class="flex items-center gap-3 px-4 py-6 text-sm text-red-700 dark:text-red-400"
+            data-testid="rest-load-error"
+          >
+            <span class="flex-1">{$t('admin.face_cleanup_review_rest_load_error')}</span>
+            <Button
+              color="secondary"
+              size="small"
+              onclick={() => void loadRestPage()}
+              data-testid="rest-load-error-retry"
+            >
+              {$t('retry')}
+            </Button>
+          </div>
+        {:else if restTotal === 0 && !restLoading}
           <div class="py-12 text-center text-sm text-gray-400" data-testid="rest-empty">
             {$t('admin.face_cleanup_review_rest_empty')}
           </div>

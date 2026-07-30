@@ -71,6 +71,15 @@ export type FacePersonVerdictSource = 'suggestion' | 'cleanup';
   where: '"identityId" IS NOT NULL',
 })
 @Index({ name: 'face_person_verdict_assetFaceId_idx', columns: ['assetFaceId'] })
+// Slice 11 (F23): backs the admin resolutions page's listNegativeVerdicts — `WHERE status IN ('rejected',
+// 'ignored') ORDER BY createdAt DESC, id DESC LIMIT/OFFSET`, unscoped by any owner/person id. Without this,
+// that query sorts the whole table on every page request. No WHERE predicate (plain, not partial): an IN(...)
+// predicate does not round-trip through pg_get_expr (see face_repair_scan_in_flight_uq's migration comment),
+// and status only has 3 possible values, so a partial index would save little anyway.
+@Index({
+  name: 'face_person_verdict_status_createdAt_id_idx',
+  columns: ['status', 'createdAt', 'id'],
+})
 @Index({
   name: 'face_person_verdict_personId_assetFaceId_uq',
   columns: ['personId', 'assetFaceId'],

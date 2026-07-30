@@ -4,7 +4,7 @@
   import { createScanTriageModel, type ScanTriageModel } from './scan-triage.svelte';
   import ConfidentLane from './ConfidentLane.svelte';
   import { declineFaceRepair, getFaceRepairPersonFaces, getLatestScan, resolveFaces, triggerScan } from '@immich/sdk';
-  import { Button, Icon, modalManager, toastManager } from '@immich/ui';
+  import { Button, ConfirmModal, Icon, modalManager, toastManager } from '@immich/ui';
   import { mdiClose, mdiRefresh, mdiTune } from '@mdi/js';
   import AdvancedScanModal, { type AdvancedScanParams } from './AdvancedScanModal.svelte';
   import ReviewFirstLane from './ReviewFirstLane.svelte';
@@ -72,6 +72,11 @@
   let applying = $state(false);
   let applyError = $state<string | null>(null);
   let pollTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+  // S11.13/F27: stopPolling() only clears a PENDING setTimeout — a fetchLatestScan() call that already fired
+  // and is awaiting its network response is untouched by that clearTimeout, and scheduleNextPoll's `.then`
+  // unconditionally re-arms the next poll regardless. Checked at the top of that `.then` so an in-flight
+  // fetch settling after unmount cannot restart polling.
+  let destroyed = false;
 
   // The triage view-model is rebuilt through setScan; the admin's confident-lane exclusions carry over across
   // refetches/dismissals (see createScanTriageModel's `prev`) instead of resetting.
@@ -153,6 +158,11 @@
   const scheduleNextPoll = () => {
     pollTimer = setTimeout(() => {
       void fetchLatestScan().then(() => {
+        // S11.13/F27: the component may have been destroyed WHILE this fetch was in flight — stopPolling()'s
+        // clearTimeout only cancels a still-pending setTimeout, not an already-fired one awaiting its promise.
+        if (destroyed) {
+          return;
+        }
         if (scan && !isActive(scan.status)) {
           stopPolling();
           return;
@@ -201,7 +211,10 @@
 
   onMount(loadInitial);
 
-  onDestroy(() => stopPolling());
+  onDestroy(() => {
+    destroyed = true;
+    stopPolling();
+  });
 
   const runScan = async (params?: AdvancedScanParams) => {
     scanning = true;
@@ -262,25 +275,66 @@
     await resolveFaces({ faceRepairResolveRequestDto: { personId, moveToPerson } });
   };
 
+  // A human-readable label for a bulk-approve failure listing — falls back to the raw id for an unnamed
+  // cluster, same fallback shape handleDismiss's lookup already uses.
+  const personLabel = (personId: string): string =>
+    scan?.persons.find((p) => p.personId === personId)?.personName ?? personId;
+
   // Bulk-approve the confident lane's non-excluded clusters — the same per-person resolve as before, now
   // driven by the triage model's approvedIds (confident minus the admin's spot-check exclusions).
+  //
+  // F26: two fixes. (1) This used to fire with no confirmation at all — the single-row dismiss beside it at
+  // least has a native `confirm()`, this had nothing — so a ConfirmModal now gates it, naming the cluster
+  // count, matching the pattern [personId]/+page.svelte's "Move entire cluster" already established. (2) It
+  // used to await `Promise.all`, which rejects on the FIRST failure — a genuine partial success (most of the
+  // batch applied, one cluster failed) was reported as a blanket "apply_error", discarding which clusters
+  // actually succeeded. `Promise.allSettled` lets every call finish and the banner reports exactly what
+  // happened, naming the clusters that failed.
   const handleApprove = async () => {
     if (!vm || vm.approvedCount === 0 || applying) {
+      return;
+    }
+    const ids = vm.approvedIds;
+    const confirmed = await modalManager.show(ConfirmModal, {
+      title: $t('admin.face_cleanup_confident_approve_confirm_title', { values: { count: ids.length } }),
+      prompt: $t('admin.face_cleanup_confident_approve_confirm_body', { values: { count: ids.length } }),
+      confirmText: $t('admin.face_cleanup_confident_approve_confirm_cta', { values: { count: ids.length } }),
+    });
+    if (!confirmed) {
       return;
     }
     applying = true;
     applyError = null;
     try {
-      const ids = vm.approvedIds;
-      await Promise.all(ids.map((personId) => resolvePersonToOwners(personId)));
-      toastManager.success($t('admin.face_cleanup_apply_success', { values: { count: ids.length } }));
-    } catch (error: unknown) {
-      const status = (error as { status?: number }).status;
-      applyError = status === 409 ? $t('admin.face_cleanup_apply_conflict') : $t('admin.face_cleanup_apply_error');
+      const results = await Promise.allSettled(ids.map((personId) => resolvePersonToOwners(personId)));
+      const failed = results
+        .map((result, index) => ({ result, personId: ids[index] }))
+        .filter(
+          (entry): entry is { result: PromiseRejectedResult; personId: string } => entry.result.status === 'rejected',
+        );
+      const appliedCount = results.length - failed.length;
+
+      if (failed.length === 0) {
+        toastManager.success($t('admin.face_cleanup_apply_success', { values: { count: appliedCount } }));
+      } else if (
+        appliedCount === 0 &&
+        failed.every(({ result }) => (result.reason as { status?: number })?.status === 409)
+      ) {
+        // Every single call failed the SAME systemic way (a scan/recognition job is active) — keep the more
+        // actionable conflict message rather than a bare "0 applied, N failed" listing.
+        applyError = $t('admin.face_cleanup_apply_conflict');
+      } else {
+        applyError = $t('admin.face_cleanup_confident_approve_partial', {
+          values: {
+            applied: appliedCount,
+            failed: failed.length,
+            names: failed.map(({ personId }) => personLabel(personId)).join(', '),
+          },
+        });
+      }
     } finally {
-      // Refetch even on a partial/total failure: Promise.all rejects on the FIRST rejection, but sibling
-      // resolves already in flight can still have landed server-side — skipping this on error left the lanes
-      // showing stale pre-apply state even though some persons genuinely resolved (D17).
+      // Refetch even on a partial/total failure — some clusters can genuinely have resolved server-side even
+      // when others failed, so skipping this left the lanes showing stale pre-apply state (D17).
       await fetchLatestScan();
       applying = false;
     }

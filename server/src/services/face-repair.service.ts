@@ -742,9 +742,11 @@ export class FaceRepairService extends BaseService {
   // also writes, so a global list of them would be unbounded and meaningless. Un-confirming a placement is
   // offered per-person on the cleanup review page instead, where the set is bounded and the admin is actually
   // asking "why did this face disappear from my queue?".
-  async listResolutions() {
-    const resolutions = await this.facePersonVerdictRepository.listNegativeVerdicts();
-    return { resolutions };
+  // Slice 11 (F23): unscoped (no owner/person filter), so this now paginates — see
+  // FacePersonVerdictRepository.listNegativeVerdicts.
+  async listResolutions(opts: { page: number; size: number }) {
+    const { total, items } = await this.facePersonVerdictRepository.listNegativeVerdicts(opts);
+    return { total, resolutions: items };
   }
 
   async removeResolutions(input: { verdictIds?: string[]; clusterMuteIds?: string[] }): Promise<{ removed: number }> {

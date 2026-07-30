@@ -1146,6 +1146,65 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     });
   });
 
+  // ---- F25: a failed rest-of-cluster load must not leave "Move entire cluster" naming a count it can't back up ----
+  describe('Rest-load failure disables the whole-cluster action (F25)', () => {
+    it('S11.9: with the rest-load failed, the whole-cluster action is disabled with an explanation, and the flagged grid still renders', async () => {
+      vi.mocked(getFaceRepairClusterFaces).mockRejectedValue(new Error('network blip'));
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeDisabled());
+      expect(screen.getByTestId('rest-load-error')).toBeInTheDocument();
+      // Positive control: the flagged grid (unrelated to the rest-of-cluster load) still renders normally —
+      // the failure is scoped to the rest section, not a full-page failure.
+      expect(screen.getAllByTestId('face-tile')).toHaveLength(3);
+    });
+
+    it('retrying a failed rest-load re-enables the whole-cluster action once it succeeds', async () => {
+      vi.mocked(getFaceRepairClusterFaces)
+        .mockRejectedValueOnce(new Error('network blip'))
+        .mockResolvedValueOnce({
+          faces: [{ assetFaceId: 'rest-1' }],
+          total: 1,
+          hasMore: false,
+        } as unknown as FaceRepairClusterFacesResponseDto);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('rest-load-error')).toBeInTheDocument());
+      expect(screen.getByTestId('move-entire-btn')).toBeDisabled();
+
+      await fireEvent.click(screen.getByTestId('rest-load-error-retry'));
+
+      await waitFor(() => expect(screen.queryByTestId('rest-load-error')).not.toBeInTheDocument());
+      expect(screen.getByTestId('move-entire-btn')).toBeEnabled();
+    });
+
+    // S11.10 (pin): with a successful rest load, the confirm copy's count is restTotal + flagged.length (2 rest
+    // + 3 flagged = 5) — not just the flagged count alone. Mutated/reverted below to prove this can fail.
+    it('S11.10 (pin): with a successful rest load, the confirm copy shows restTotal + flagged.length', async () => {
+      vi.mocked(getFaceRepairClusterFaces).mockResolvedValue({
+        faces: [{ assetFaceId: 'rest-1' }, { assetFaceId: 'rest-2' }],
+        total: 2,
+        hasMore: false,
+      } as unknown as FaceRepairClusterFacesResponseDto);
+      showModal.mockResolvedValueOnce(true);
+
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getByTestId('move-entire-btn')).toBeEnabled());
+
+      await fireEvent.click(screen.getByTestId('move-entire-btn'));
+
+      await waitFor(() =>
+        expect(
+          translations.some(
+            (t) => t.key === 'admin.face_cleanup_review_move_entire_confirm_body' && t.values?.count === '5',
+          ),
+        ).toBe(true),
+      );
+    });
+  });
+
   // ---- Actions help: two entry points, one modal ----
   // The bulk bar only exists once a face is selected, so the banner (i) is the one a confused admin finds
   // before touching anything; the bulk-bar (i) is the one they reach for mid-task. The modal's own content is
