@@ -617,6 +617,11 @@ describe('face suggestions', () => {
     sdkMock.confirmPersonFaceSuggestion.mockResolvedValue(undefined as never);
     sdkMock.dismissPersonFaceSuggestion.mockResolvedValue(undefined as never);
     sdkMock.ignorePersonFaceSuggestion.mockResolvedValue(undefined as never);
+    sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue({ total: 0, items: [] });
+    sdkMock.confirmSpacePersonFaceSuggestion.mockResolvedValue(undefined as never);
+    sdkMock.dismissSpacePersonFaceSuggestion.mockResolvedValue(undefined as never);
+    sdkMock.ignoreSpacePersonFaceSuggestion.mockResolvedValue(undefined as never);
+    sdkMock.getMembers.mockResolvedValue([makeMember('current-user-id', SharedSpaceRole.Editor)]);
   });
 
   it('renders the banner when the API returns suggestions for a named owned person', async () => {
@@ -648,16 +653,138 @@ describe('face suggestions', () => {
     expect(screen.queryByTestId('person-suggestion-banner')).not.toBeInTheDocument();
   });
 
-  it('does not query suggestions for a space-scoped person (Phase 5 scope)', async () => {
+  // A space member who owns no person row for the identity reaches the shared person through this
+  // (global) route from the main People list — their primaryProfile is the space profile. Suggestions
+  // must come from the space endpoint there, not be skipped, otherwise the banner is only ever
+  // reachable inside /spaces/... and a non-owner never sees it (#834 follow-up).
+  it('loads suggestions from the space endpoint for a space-primary person', async () => {
+    sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue({
+      total: 4,
+      items: [makeSuggestion({ assetFaceId: 'face-1' })],
+    });
+
     renderPage({
       person: makePerson({
+        id: 'space-person-1',
         name: 'Alice',
-        primaryProfile: { type: 'space-person', id: 'sp1', spaceId: 'space-1' },
-      } as never),
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-suggest-banner' },
+      }),
     });
-    await new Promise((r) => setTimeout(r, 0));
+
+    await screen.findByTestId('person-suggestion-banner');
+    expect(sdkMock.getSpacePersonFaceSuggestions).toHaveBeenCalledWith({
+      id: 'space-suggest-banner',
+      personId: 'space-person-1',
+      page: 1,
+      size: 5,
+    });
     expect(sdkMock.getPersonFaceSuggestions).not.toHaveBeenCalled();
+  });
+
+  it('renders no banner for a space-primary person when the space endpoint returns total 0', async () => {
+    sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue({ total: 0, items: [] });
+
+    renderPage({
+      person: makePerson({
+        id: 'space-person-1',
+        name: 'Alice',
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-suggest-viewer' },
+      }),
+    });
+
+    await waitFor(() => expect(sdkMock.getSpacePersonFaceSuggestions).toHaveBeenCalled());
     expect(screen.queryByTestId('person-suggestion-banner')).not.toBeInTheDocument();
+  });
+
+  it('shows the space thumbnail as the banner reference for a space-primary person', async () => {
+    sdkMock.getSpacePersonFaceSuggestions.mockResolvedValue({
+      total: 1,
+      items: [makeSuggestion({ assetFaceId: 'face-1' })],
+    });
+
+    renderPage({
+      person: makePerson({
+        id: 'space-person-1',
+        name: 'Alice',
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-suggest-thumbnail' },
+      }),
+    });
+
+    const reference = await screen.findByTestId('suggestion-banner-reference');
+    expect(reference.getAttribute('src')).toContain(
+      '/shared-spaces/space-suggest-thumbnail/people/space-person-1/thumbnail',
+    );
+  });
+
+  it('opens the review modal with space SDK actions for a space-primary person', async () => {
+    let closeModal!: (value: { confirmed: number }) => void;
+    sdkMock.getSpacePersonFaceSuggestions
+      .mockResolvedValueOnce({ total: 1, items: [makeSuggestion({ assetFaceId: 'face-1' })] })
+      .mockResolvedValueOnce({ total: 0, items: [] });
+    vi.mocked(modalManager.show).mockReturnValue(
+      new Promise((resolve) => {
+        closeModal = resolve;
+      }) as never,
+    );
+
+    renderPage({
+      person: makePerson({
+        id: 'space-person-1',
+        name: 'Alice',
+        primaryProfile: { type: Type.SpacePerson, id: 'space-person-1', spaceId: 'space-suggest-modal' },
+      }),
+    });
+
+    await userEvent.click(await screen.findByTestId('suggestion-review-btn'));
+
+    const modalProps = vi.mocked(modalManager.show).mock.calls[0][1] as unknown as {
+      loadPage: (request: { page: number; size: number }) => Promise<PersonFaceSuggestionPageResponseDto>;
+      confirm: (assetFaceId: string) => Promise<void>;
+      dismiss: (assetFaceId: string) => Promise<void>;
+      ignore: (assetFaceId: string) => Promise<void>;
+    };
+
+    await modalProps.loadPage({ page: 2, size: 50 });
+    expect(sdkMock.getSpacePersonFaceSuggestions).toHaveBeenLastCalledWith({
+      id: 'space-suggest-modal',
+      personId: 'space-person-1',
+      page: 2,
+      size: 50,
+    });
+
+    await modalProps.confirm('face-1');
+    expect(sdkMock.confirmSpacePersonFaceSuggestion).toHaveBeenCalledWith({
+      id: 'space-suggest-modal',
+      personId: 'space-person-1',
+      assetFaceId: 'face-1',
+    });
+
+    await modalProps.dismiss('face-2');
+    expect(sdkMock.dismissSpacePersonFaceSuggestion).toHaveBeenCalledWith({
+      id: 'space-suggest-modal',
+      personId: 'space-person-1',
+      assetFaceId: 'face-2',
+    });
+
+    await modalProps.ignore('face-3');
+    expect(sdkMock.ignoreSpacePersonFaceSuggestion).toHaveBeenCalledWith({
+      id: 'space-suggest-modal',
+      personId: 'space-person-1',
+      assetFaceId: 'face-3',
+    });
+
+    expect(sdkMock.confirmPersonFaceSuggestion).not.toHaveBeenCalled();
+
+    closeModal({ confirmed: 0 });
+
+    await waitFor(() => {
+      expect(sdkMock.getSpacePersonFaceSuggestions).toHaveBeenLastCalledWith({
+        id: 'space-suggest-modal',
+        personId: 'space-person-1',
+        page: 1,
+        size: 5,
+      });
+    });
   });
 
   it('opens the review modal with personal SDK actions including ignore', async () => {
