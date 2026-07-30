@@ -1,6 +1,7 @@
-import type { PersonResponseDto } from '@immich/sdk';
+import { AssetTypeEnum, type AssetResponseDto, type PersonResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
-import { screen } from '@testing-library/svelte';
+import { screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import { renderWithTooltips } from '$tests/helpers';
 import { assetFactory } from '@test-data/factories/asset-factory';
 import DetailPanelPeople from './DetailPanelPeople.svelte';
@@ -53,21 +54,51 @@ const person = (name: string): PersonResponseDto =>
     updatedAt: '2026-01-01T00:00:00.000Z',
   }) as unknown as PersonResponseDto;
 
-const asset = () => assetFactory.build({ id: 'asset-1', ownerId: 'owner-1' });
+// `assetFactory` randomises `type` (see web/src/test-data/factories/asset-factory.ts), and
+// `zoomImageToBase64` takes a different code path for Image vs Video. An unpinned type is a
+// latent flake, so every asset built here pins it.
+const asset = (overrides: Partial<AssetResponseDto> = {}) =>
+  assetFactory.build({ id: 'asset-1', ownerId: 'owner-1', type: AssetTypeEnum.Image, ...overrides });
 
 const renderPanel = (props: {
   isOwner: boolean;
   spaceId?: string;
   people?: PersonResponseDto[];
   sharedLink?: boolean;
+  assetType?: AssetTypeEnum;
 }) => {
   authManagerMock.isSharedLink = props.sharedLink ?? false;
   return renderWithTooltips(DetailPanelPeople, {
-    asset: props.people ? assetFactory.build({ id: 'asset-1', ownerId: 'owner-1', people: props.people }) : asset(),
+    asset: asset({
+      ...(props.people ? { people: props.people } : {}),
+      ...(props.assetType ? { type: props.assetType } : {}),
+    }),
     isOwner: props.isOwner,
     previousRoute: '/photos',
     spaceId: props.spaceId,
   });
+};
+
+// A person as the server sends it inside a shared space: the id stays the GLOBAL person id
+// (AssetService.applySpacePeople only *adds* spacePersonId), which is why faceManager's
+// facesByPersonId lookup still matches for space members.
+const spacePerson = (name: string, spacePersonId: string): PersonResponseDto =>
+  ({ ...person(name), spacePersonId }) as unknown as PersonResponseDto;
+
+const givePersonAFace = (personId: string, faceId = 'face-1') => {
+  faceManagerMock.facesByPersonId = new Map<string, unknown[]>([[personId, [{ id: faceId }]]]);
+  faceManagerMock.data = [{ id: faceId }];
+};
+
+const CROP_DATA_URL = 'data:image/png;base64,iVBORw0KGgo=';
+
+// The {#await} block renders its PENDING branch first, which shows the same fallback URL the
+// failure case shows. Without flushing to the :then branch, a test meaning to assert the
+// resolved state silently asserts the pending state and can never fail.
+const settleCrop = async () => {
+  await waitFor(() => expect(zoomImageToBase64Mock).toHaveBeenCalled());
+  await tick();
+  await tick();
 };
 
 // NOTE on what these tests do and do NOT prove (#796).
