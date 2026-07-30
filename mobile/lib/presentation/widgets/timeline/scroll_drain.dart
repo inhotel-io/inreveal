@@ -86,3 +86,32 @@ int? findMatchingSegmentIndex(List<DateTime?> segmentDates, DateTime target) {
 /// disagree with the screen in all three cases, and a "switch to day" that
 /// changes nothing would spin until the attempt budget expired.
 bool segmentsAreOverview(List<Segment>? segments) => segments != null && segments.any((segment) => segment.isOverview);
+
+/// What to do with an in-flight scroll resolution once its async index lookup
+/// has completed.
+enum ScrollResolveOutcome {
+  /// Everything is still valid — scroll.
+  proceed,
+
+  /// A newer "view in timeline" request replaced the target mid-flight. Drop this
+  /// resolution and let the drain loop pick up the newer one.
+  abandonStale,
+
+  /// The timeline went away mid-flight. Touching the scroll controller now would
+  /// throw, so do nothing.
+  abandonUnmounted,
+}
+
+/// Decides whether a resolved scroll target is still safe to act on.
+///
+/// Unmounting dominates staleness: a dead controller must not be touched even
+/// when the target also changed.
+ScrollResolveOutcome decideScrollResolve({
+  required bool stillMounted,
+  required bool stillHasClients,
+  required bool targetUnchanged,
+}) {
+  if (!stillMounted || !stillHasClients) return ScrollResolveOutcome.abandonUnmounted;
+  if (!targetUnchanged) return ScrollResolveOutcome.abandonStale;
+  return ScrollResolveOutcome.proceed;
+}

@@ -159,6 +159,36 @@ void main() {
       expect(segmentsAreOverview([_fixedSegment(), _overviewSegment()]), isTrue);
     });
   });
+
+  group('decideScrollResolve', () {
+    ScrollResolveOutcome decide({bool stillMounted = true, bool stillHasClients = true, bool targetUnchanged = true}) =>
+        decideScrollResolve(
+          stillMounted: stillMounted,
+          stillHasClients: stillHasClients,
+          targetUnchanged: targetUnchanged,
+        );
+
+    test('proceeds when nothing changed during the await', () {
+      expect(decide(), ScrollResolveOutcome.proceed);
+    });
+
+    test('abandons when the widget unmounted during the await', () {
+      expect(decide(stillMounted: false), ScrollResolveOutcome.abandonUnmounted);
+    });
+
+    test('abandons when the scroll controller lost its clients during the await', () {
+      expect(decide(stillHasClients: false), ScrollResolveOutcome.abandonUnmounted);
+    });
+
+    test('abandons a stale resolution when a newer request replaced the target', () {
+      expect(decide(targetUnchanged: false), ScrollResolveOutcome.abandonStale);
+    });
+
+    test('unmounting dominates staleness so nothing touches a dead controller', () {
+      expect(decide(stillMounted: false, targetUnchanged: false), ScrollResolveOutcome.abandonUnmounted);
+      expect(decide(stillHasClients: false, targetUnchanged: false), ScrollResolveOutcome.abandonUnmounted);
+    });
+  });
 }
 
 FixedSegment _fixedSegment() => FixedSegment(
