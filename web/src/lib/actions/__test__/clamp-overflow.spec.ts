@@ -10,8 +10,10 @@ import { clampOverflow } from '$lib/actions/clamp-overflow';
 function makeNode(scrollHeight: number, clientHeight: number) {
   const node = document.createElement('div');
   const metrics = { scrollHeight, clientHeight };
-  Object.defineProperty(node, 'scrollHeight', { configurable: true, get: () => metrics.scrollHeight });
-  Object.defineProperty(node, 'clientHeight', { configurable: true, get: () => metrics.clientHeight });
+  Object.defineProperties(node, {
+    scrollHeight: { configurable: true, get: () => metrics.scrollHeight },
+    clientHeight: { configurable: true, get: () => metrics.clientHeight },
+  });
   return { node, metrics };
 }
 
@@ -98,9 +100,11 @@ describe('clampOverflow', () => {
     onChange.mockClear();
 
     metrics.scrollHeight = 100;
-    action.update?.({ onChange, key: 'a much longer name' });
+    const onChangeUpdated = vi.fn();
+    action.update?.({ onChange: onChangeUpdated, key: 'a much longer name' });
 
-    expect(onChange).toHaveBeenCalledWith(true);
+    expect(onChangeUpdated).toHaveBeenCalledWith(true);
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('A9: disconnects the observer on destroy', () => {
