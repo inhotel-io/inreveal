@@ -276,5 +276,62 @@ describe('DetailPanelPeople', () => {
       expect(zoomImageToBase64Mock).not.toHaveBeenCalled();
       expect(container.querySelector('img')?.getAttribute('src')).toContain('/people/');
     });
+
+    it('falls back to the space person thumbnail for a space member', async () => {
+      const bob = spacePerson('Bob', 'space-person-1');
+      givePersonAFace('person-Bob');
+      zoomImageToBase64Mock.mockResolvedValue(null);
+
+      const { container } = renderPanel({ isOwner: false, spaceId: 'space-1', people: [bob] });
+      await settleCrop();
+
+      expect(container.querySelector('img')?.getAttribute('src')).toContain(
+        '/shared-spaces/space-1/people/space-person-1/thumbnail',
+      );
+    });
+
+    it('falls back to the asset thumbnail for a viewer with no space context', async () => {
+      faceManagerMock.people = [person('Alice')];
+      givePersonAFace('person-Alice');
+      zoomImageToBase64Mock.mockResolvedValue(null);
+
+      const { container } = renderPanel({ isOwner: false });
+      await settleCrop();
+
+      const src = container.querySelector('img')?.getAttribute('src');
+      // /people/{id}/thumbnail is unreachable for this viewer — see the spec's RBAC note.
+      expect(src).not.toContain('/people/');
+      expect(src).not.toContain('/shared-spaces/');
+      expect(src).toContain('/assets/asset-1/');
+    });
+
+    it('uses the owner person thumbnail for the owner even inside a space', async () => {
+      // The owner reads faceManager.people, and mapPerson never emits spacePersonId — so the space
+      // arm cannot fire for the owner even with a spaceId prop present.
+      faceManagerMock.people = [person('Alice')];
+      faceManagerMock.facesByPersonId = new Map();
+
+      const { container } = renderPanel({ isOwner: true, spaceId: 'space-1' });
+      await tick();
+
+      const src = container.querySelector('img')?.getAttribute('src');
+      expect(src).toContain('/people/');
+      expect(src).not.toContain('/shared-spaces/');
+    });
+
+    it('never synthesises a space thumbnail URL when the space person id is missing', async () => {
+      // The server filters these out, but the client must degrade rather than request
+      // /shared-spaces/space-1/people/undefined/thumbnail.
+      const bob = person('Bob');
+      faceManagerMock.facesByPersonId = new Map();
+
+      const { container } = renderPanel({ isOwner: false, spaceId: 'space-1', people: [bob] });
+      await tick();
+
+      const src = container.querySelector('img')?.getAttribute('src');
+      expect(src).not.toContain('/shared-spaces/');
+      expect(src).not.toContain('undefined');
+      expect(src).toContain('/assets/asset-1/');
+    });
   });
 });
