@@ -128,15 +128,19 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto & 
   const isOwner = !!(authUser && authUser.id === asset.ownerId);
   const smartSearchEnabled = featureFlagsManager.value.smartSearch;
 
+  // Server-side `Permission.AssetShare` is owner ∪ partner only, so album or space membership grants
+  // no share access. Gating on `authUser` alone offered a shared-album/space viewer a button that
+  // `POST /shared-links` then rejected with "Not found or no asset.share access" (#871).
+  //
+  // `|| !asset.ownerId`: a `showMetadata: false` shared link returns SanitizedAssetResponseDto, which
+  // omits `ownerId` altogether, so ownership is unknowable client-side there — treat unknown as
+  // shareable rather than hiding the button from the owner of the asset they linked.
+  const canShare = !!authUser && (isOwner || !asset.ownerId);
+
   const Share: ActionItem = {
-    // `isOwner`, not just `authUser`: server-side `Permission.AssetShare` is owner ∪ partner only,
-    // so album or space membership grants no share access. Without the ownership check a viewer of
-    // a shared album/space was offered the button and POST /shared-links answered
-    // "Not found or no asset.share access" only after the form was filled in (#871). Matches the
-    // owner-only narrowing the bulk CreateSharedLinkAction already applies to its selection.
     title: $t('share'),
     icon: mdiShareVariantOutline,
-    $if: () => isOwner && !asset.isTrashed && asset.visibility !== AssetVisibility.Locked,
+    $if: () => canShare && !asset.isTrashed && asset.visibility !== AssetVisibility.Locked,
     onAction: () => modalManager.show(SharedLinkCreateModal, { assetIds: [asset.id] }),
   };
 

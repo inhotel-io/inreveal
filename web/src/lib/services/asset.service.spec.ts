@@ -1,4 +1,4 @@
-import { AssetEditAction, getAssetInfo, type AssetEditActionItemDto } from '@immich/sdk';
+import { AssetEditAction, getAssetInfo, type AssetEditActionItemDto, type AssetResponseDto } from '@immich/sdk';
 import { modalManager, toastManager } from '@immich/ui';
 import { vitest } from 'vitest';
 import { authManager } from '$lib/managers/auth-manager.svelte';
@@ -105,6 +105,16 @@ describe('AssetService', () => {
       setSharedLink(undefined);
       const asset = assetFactory.build({ ownerId });
       const assetActions = getAssetActions(() => '', asset);
+      expect(assetActions.Share.$if?.()).toStrictEqual(true);
+    });
+
+    it('should offer the share action if a shared link stripped the asset owner', () => {
+      // A `showMetadata: false` shared link returns SanitizedAssetResponseDto, which omits `ownerId`
+      // altogether, so ownership is unknowable client-side. The owner still has to get the button.
+      authManager.setUser(userAdminFactory.build({ id: 'owner' }));
+      setSharedLink(sharedLinkFactory.build({ allowDownload: false }));
+      const { ownerId: _, ...sanitized } = assetFactory.build();
+      const assetActions = getAssetActions(() => '', sanitized as AssetResponseDto);
       expect(assetActions.Share.$if?.()).toStrictEqual(true);
     });
 
