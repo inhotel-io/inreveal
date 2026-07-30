@@ -16,7 +16,8 @@
 - **Slice 1's pins must stay green without being edited.** If a pin needs changing to accommodate this slice, the refactor is wrong — stop and report.
 - No relative imports in new web modules; use the `$lib/` alias, matching the rest of `web/src/lib/utils/`.
 - Prettier: 120 char width, single quotes, trailing commas, semicolons.
-- `pnpm lint` runs eslint with `--max-warnings 0`.
+- `web`'s `pnpm lint` is `eslint . --concurrency 6` — **no `--max-warnings`**. Only errors fail it. The ~600 pre-existing `better-tailwindcss/enforce-consistent-class-order` warnings are tolerated; judge the gate by exit code, not by warning count.
+- IDE diagnostics reading `Cannot find name 'vi' / 'describe' / 'expect'` in `.spec.ts` files are language-server noise. `pnpm check:typescript` is the real gate and is clean.
 
 ---
 

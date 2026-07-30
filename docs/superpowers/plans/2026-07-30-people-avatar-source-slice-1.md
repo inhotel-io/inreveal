@@ -224,11 +224,11 @@ Expected: PASS, 16 tests. **These are pin tests — passing first-run is expecte
 
 For each mutation: edit `DetailPanelPeople.svelte`, run the single spec file, confirm the named test **fails**, then `git checkout web/src/lib/components/asset-viewer/DetailPanelPeople.svelte` to revert before the next mutation.
 
-| Pin                    | Mutation in `DetailPanelPeople.svelte`                                                     | Must go red                      |
-| ---------------------- | ------------------------------------------------------------------------------------------ | -------------------------------- |
-| crop resolves          | In the `{:then}` branch, change `url={faceThumbnailUrl ?? fallbackThumbnailUrl}` to `url={fallbackThumbnailUrl}` | "shows the face cropped…"        |
-| crop resolves to null  | In the `{:then}` branch, change `url={faceThumbnailUrl ?? fallbackThumbnailUrl}` to `url={faceThumbnailUrl ?? ''}` | "falls back to the person thumbnail…" |
-| no face in asset       | In the `{:else}` branch, change `url={fallbackThumbnailUrl}` to `url={getAssetUrls(asset).thumbnail}` | "uses the person thumbnail and never crops…" |
+| Pin                   | Mutation in `DetailPanelPeople.svelte`                                                                             | Must go red                                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| crop resolves         | In the `{:then}` branch, change `url={faceThumbnailUrl ?? fallbackThumbnailUrl}` to `url={fallbackThumbnailUrl}`   | "shows the face cropped…"                    |
+| crop resolves to null | In the `{:then}` branch, change `url={faceThumbnailUrl ?? fallbackThumbnailUrl}` to `url={faceThumbnailUrl ?? ''}` | "falls back to the person thumbnail…"        |
+| no face in asset      | In the `{:else}` branch, change `url={fallbackThumbnailUrl}` to `url={getAssetUrls(asset).thumbnail}`              | "uses the person thumbnail and never crops…" |
 
 Record the red output for each in the commit body.
 
@@ -329,12 +329,12 @@ Expected: PASS, 20 tests.
 
 Same revert discipline as Task 2.
 
-| Pin                          | Mutation in `getPersonFallbackThumbnailUrl`                                              | Must go red                          |
-| ---------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------ |
-| space member fallback        | Delete the `if (spaceId && person.spacePersonId) { … }` block                              | "falls back to the space person…"    |
-| viewer with no space context | Change `return isOwner ? getPeopleThumbnailUrl(person) : getAssetUrls(asset).thumbnail;` to `return getPeopleThumbnailUrl(person);` | "falls back to the asset thumbnail…" |
-| owner inside a space         | Change the space guard from `spaceId && person.spacePersonId` to `spaceId`                 | "uses the owner person thumbnail…"   |
-| missing space person id      | Change the space guard from `spaceId && person.spacePersonId` to `spaceId`                 | "never synthesises a space thumbnail URL…" |
+| Pin                          | Mutation in `getPersonFallbackThumbnailUrl`                                                                                         | Must go red                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| space member fallback        | Delete the `if (spaceId && person.spacePersonId) { … }` block                                                                       | "falls back to the space person…"          |
+| viewer with no space context | Change `return isOwner ? getPeopleThumbnailUrl(person) : getAssetUrls(asset).thumbnail;` to `return getPeopleThumbnailUrl(person);` | "falls back to the asset thumbnail…"       |
+| owner inside a space         | Change the space guard from `spaceId && person.spacePersonId` to `spaceId`                                                          | "uses the owner person thumbnail…"         |
+| missing space person id      | Change the space guard from `spaceId && person.spacePersonId` to `spaceId`                                                          | "never synthesises a space thumbnail URL…" |
 
 - [ ] **Step 4: Confirm the component is unmodified**
 

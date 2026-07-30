@@ -471,8 +471,18 @@ rather than merely _not displayed_.
   `pnpm test --run <path>`.
 - `web/pnpm check:svelte` has been observed scanning zero files locally; treat CI as the
   authority for that gate.
-- **Baseline measured 2026-07-30:** `web` is fully green at 294 files / 3987 tests / 2 skipped /
-  8 todo. Any red after a slice is that slice's doing.
+- **`web`'s `pnpm lint` is `eslint . --concurrency 6` — there is no `--max-warnings`.** Only
+  **errors** fail it. The ~600 package-wide `better-tailwindcss/enforce-consistent-class-order`
+  warnings are pre-existing and tolerated; do not chase them, and do not treat a non-empty warning
+  list as a failing gate. (CLAUDE.md's blanket "zero warnings policy" does not describe this
+  package.) Judge the gate by exit code.
+- **Branch base:** this branch is rebased onto `origin/main` (`a7390f7c057`, the v3.1.0 cutover).
+  All open PRs target `main`; the older "target the rolling branch" guidance is stale as of the
+  2026-07-30 cutover.
+- **Baseline measured 2026-07-30 on the rebased base:** `web` is green at 294 files / 4009 tests /
+  2 skipped / 8 todo, with slice 1's 8 pins included. Any red after a slice is that slice's doing.
+- **IDE `Cannot find name 'vi' / 'describe' / 'expect'` diagnostics in spec files are language-server
+  noise**, not a gate. `pnpm check:typescript` is clean; judge by that.
 
 ## 9. Out of scope
 
