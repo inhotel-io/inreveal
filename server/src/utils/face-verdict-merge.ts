@@ -1,4 +1,4 @@
-import { Kysely, Transaction } from 'kysely';
+import { Kysely, sql, Transaction } from 'kysely';
 import { DB } from 'src/schema';
 
 /**
@@ -32,6 +32,29 @@ export async function retargetVerdictPersonId(
   sourcePersonId: string,
   targetPersonId: string,
 ): Promise<void> {
+  // Strength wins, not side. A durable human negative outranks a machine suggestion: when the
+  // survivor holds only a `pending` row for this face and the source holds a `rejected`/`ignored`
+  // one, the merge must keep the human's answer. The collision delete below is status-blind, so
+  // without this a merge of two profiles of the same human re-proposes a face the user already
+  // rejected (spec §4, finding F11).
+  await db
+    .updateTable('face_person_verdict as survivor')
+    .set({
+      status: sql`src."status"`,
+      source: sql`src."source"`,
+      actorId: sql`src."actorId"`,
+      identityId: sql`coalesce(survivor."identityId", src."identityId")`,
+      distance: null,
+      updatedAt: sql`now()`,
+    })
+    .from('face_person_verdict as src')
+    .whereRef('src.assetFaceId', '=', 'survivor.assetFaceId')
+    .where('survivor.personId', '=', targetPersonId)
+    .where('survivor.status', '=', 'pending')
+    .where('src.personId', '=', sourcePersonId)
+    .where('src.status', 'in', ['rejected', 'ignored'])
+    .execute();
+
   await db
     .deleteFrom('face_person_verdict')
     .where('personId', '=', sourcePersonId)
@@ -55,6 +78,25 @@ export async function retargetVerdictSpacePersonId(
   sourceSpacePersonId: string,
   targetSpacePersonId: string,
 ): Promise<void> {
+  // Strength wins, not side — see the identical comment in retargetVerdictPersonId above.
+  await db
+    .updateTable('face_person_verdict as survivor')
+    .set({
+      status: sql`src."status"`,
+      source: sql`src."source"`,
+      actorId: sql`src."actorId"`,
+      identityId: sql`coalesce(survivor."identityId", src."identityId")`,
+      distance: null,
+      updatedAt: sql`now()`,
+    })
+    .from('face_person_verdict as src')
+    .whereRef('src.assetFaceId', '=', 'survivor.assetFaceId')
+    .where('survivor.spacePersonId', '=', targetSpacePersonId)
+    .where('survivor.status', '=', 'pending')
+    .where('src.spacePersonId', '=', sourceSpacePersonId)
+    .where('src.status', 'in', ['rejected', 'ignored'])
+    .execute();
+
   await db
     .deleteFrom('face_person_verdict')
     .where('spacePersonId', '=', sourceSpacePersonId)
