@@ -106,6 +106,15 @@ export interface GetAllFacesOptions {
   personId?: string | null;
   assetId?: string;
   sourceType?: SourceType;
+  /**
+   * Slice 5 (F9): recognition must never re-claim a face a human has already placed. Space-person
+   * confirms never write `asset_face.personId` (space people are a projection over personal people),
+   * so the `personId: null` filter alone does not exclude a confirmed-but-still-unassigned face — the
+   * durable record is the `face_identity_face` row with `source='manual'` instead. When set, excludes
+   * any face carrying one. Default off, so the force-recognition branch (which has already wiped every
+   * `face_identity_face` row via `unassignFaces` before this runs) and every other caller are unchanged.
+   */
+  excludeManuallyPlaced?: boolean;
 }
 
 export interface RepresentativeFaceListOptions {
@@ -325,6 +334,19 @@ export class PersonRepository {
       .$if(!!options.personId, (qb) => qb.where('asset_face.personId', '=', options.personId!))
       .$if(!!options.sourceType, (qb) => qb.where('asset_face.sourceType', '=', options.sourceType!))
       .$if(!!options.assetId, (qb) => qb.where('asset_face.assetId', '=', options.assetId!))
+      .$if(!!options.excludeManuallyPlaced, (qb) =>
+        qb.where((eb) =>
+          eb.not(
+            eb.exists(
+              eb
+                .selectFrom('face_identity_face')
+                .select('face_identity_face.assetFaceId')
+                .whereRef('face_identity_face.assetFaceId', '=', 'asset_face.id')
+                .where('face_identity_face.source', '=', 'manual'),
+            ),
+          ),
+        ),
+      )
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
       .stream();

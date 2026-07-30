@@ -7411,22 +7411,32 @@ describe(SharedSpaceService.name, () => {
           suggestionMaxDistance: 0.8,
         },
       );
-      expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
+      expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1', mocks.database);
       // Slice 3: the claim carries the band, so an ineligible row cannot be confirmed through it.
-      expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
-        maxDistance: 0.5,
-        suggestionMaxDistance: 0.8,
-      });
-      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith({
-        assetFaceId: 'face-1',
-        identityId: 'space-identity-1',
-        source: 'manual',
-      });
-      expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith('face-1');
+      expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith(
+        'space-person-1',
+        'face-1',
+        {
+          maxDistance: 0.5,
+          suggestionMaxDistance: 0.8,
+        },
+        mocks.database,
+      );
+      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith(
+        {
+          assetFaceId: 'face-1',
+          identityId: 'space-identity-1',
+          source: 'manual',
+        },
+        mocks.database,
+      );
+      expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith('face-1', mocks.database);
       // Slice 3 (D3): confirm writes the space projection row so the same space's next scan excludes the face.
-      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith([
-        { personId: 'space-person-1', assetFaceId: 'face-1' },
-      ]);
+      expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith(
+        [{ personId: 'space-person-1', assetFaceId: 'face-1' }],
+        undefined,
+        mocks.database,
+      );
 
       expect(mocks.facePersonVerdict.claimPendingForSpacePerson.mock.invocationCallOrder[0]).toBeLessThan(
         mocks.faceIdentity.replaceFaceIdentity.mock.invocationCallOrder[0],
@@ -7443,12 +7453,17 @@ describe(SharedSpaceService.name, () => {
       await expect(
         sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
       ).resolves.toBeUndefined();
-      expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
+      expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1', mocks.database);
       // Slice 3: the claim carries the band, so an ineligible row cannot be confirmed through it.
-      expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
-        maxDistance: 0.5,
-        suggestionMaxDistance: 0.8,
-      });
+      expect(mocks.facePersonVerdict.claimPendingForSpacePerson).toHaveBeenCalledWith(
+        'space-person-1',
+        'face-1',
+        {
+          maxDistance: 0.5,
+          suggestionMaxDistance: 0.8,
+        },
+        mocks.database,
+      );
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.facePersonVerdict.resolveAssignedFace).not.toHaveBeenCalled();
     });

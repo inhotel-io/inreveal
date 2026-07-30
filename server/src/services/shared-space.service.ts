@@ -1333,26 +1333,37 @@ export class SharedSpaceService extends BaseService {
       return;
     }
 
-    const identity = await this.faceIdentityRepository.ensureSpacePersonIdentity(person.id);
-    // Claim the queue row first so a double-submit resolves exactly once. No 'confirmed' status is written:
-    // the durable positive verdict is the manual identity link set immediately below.
-    // Slice 3 (F5): pass the SAME band `hasPendingForSpacePerson` just checked, so the claim itself is gated
-    // by the identical eligibility — not just the read that preceded it.
-    const claimed = await this.facePersonVerdictRepository.claimPendingForSpacePerson(
-      person.id,
-      assetFaceId,
-      distanceConfig,
-    );
-    if (claimed === 0) {
-      return;
-    }
+    // Slice 5 (F10): the four writes below used to be autocommit — a crash between replaceFaceIdentity and
+    // addPersonFaces left a 'manual'-linked face attached to nobody, excluded from every suggestion read and
+    // every cleanup scan, with no repair path (processSpaceFaceMatch early-returns on `!face.personId`). One
+    // transaction makes the whole confirm all-or-nothing, mirroring the personal confirm path. Every call
+    // below threads `trx` — never `this.db` inside this callback (issue #595).
+    await this.databaseRepository.transaction(async (trx) => {
+      const identity = await this.faceIdentityRepository.ensureSpacePersonIdentity(person.id, trx);
+      // Claim the queue row first so a double-submit resolves exactly once. No 'confirmed' status is written:
+      // the durable positive verdict is the manual identity link set immediately below.
+      // Slice 3 (F5): pass the SAME band `hasPendingForSpacePerson` just checked, so the claim itself is gated
+      // by the identical eligibility — not just the read that preceded it.
+      const claimed = await this.facePersonVerdictRepository.claimPendingForSpacePerson(
+        person.id,
+        assetFaceId,
+        distanceConfig,
+        trx,
+      );
+      if (claimed === 0) {
+        return;
+      }
 
-    await this.faceIdentityRepository.replaceFaceIdentity({ assetFaceId, identityId: identity.id, source: 'manual' });
-    await this.facePersonVerdictRepository.resolveAssignedFace(assetFaceId);
-    // D3: write the space projection so getAssignedFaceIdsForSpace excludes this face from the same space's
-    // next scan, for every space person — not just this one. addPersonFaces is onConflict().doNothing(), so
-    // this is idempotent if a concurrent face-match backfill already wrote the same row.
-    await this.sharedSpaceRepository.addPersonFaces([{ personId: person.id, assetFaceId }]);
+      await this.faceIdentityRepository.replaceFaceIdentity(
+        { assetFaceId, identityId: identity.id, source: 'manual' },
+        trx,
+      );
+      await this.facePersonVerdictRepository.resolveAssignedFace(assetFaceId, trx);
+      // D3: write the space projection so getAssignedFaceIdsForSpace excludes this face from the same space's
+      // next scan, for every space person — not just this one. addPersonFaces is onConflict().doNothing(), so
+      // this is idempotent if a concurrent face-match backfill already wrote the same row.
+      await this.sharedSpaceRepository.addPersonFaces([{ personId: person.id, assetFaceId }], undefined, trx);
+    });
   }
 
   // D9/D2: reachability (RBAC — is this face's asset in the space at all), not pendingness, gates a space

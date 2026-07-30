@@ -2614,7 +2614,11 @@ export class SharedSpaceRepository {
     await this.db.deleteFrom('shared_space_person').where('id', '=', id).execute();
   }
 
-  async addPersonFaces(values: Insertable<SharedSpacePersonFaceTable>[], options?: { skipRecount?: boolean }) {
+  async addPersonFaces(
+    values: Insertable<SharedSpacePersonFaceTable>[],
+    options?: { skipRecount?: boolean },
+    db: Kysely<DB> | Transaction<DB> = this.db,
+  ) {
     if (values.length === 0) {
       return [];
     }
@@ -2625,28 +2629,35 @@ export class SharedSpaceRepository {
     // parents in id order first so this agrees with every other writer, and re-drive if it still loses.
     const parentIds = [...new Set(values.map(({ personId }) => personId))].toSorted();
 
-    const result = await retryOnDeadlock(() =>
-      this.db.transaction().execute(async (trx) => {
-        await trx
-          .selectFrom('shared_space_person')
-          .select('id')
-          .where('id', 'in', parentIds)
-          .orderBy('id')
-          .forUpdate()
-          .execute();
+    const insert = async (runner: Kysely<DB> | Transaction<DB>) => {
+      await runner
+        .selectFrom('shared_space_person')
+        .select('id')
+        .where('id', 'in', parentIds)
+        .orderBy('id')
+        .forUpdate()
+        .execute();
 
-        return trx
-          .insertInto('shared_space_person_face')
-          .values(values)
-          .onConflict((oc) => oc.doNothing())
-          .returningAll()
-          .execute();
-      }),
-    );
+      return runner
+        .insertInto('shared_space_person_face')
+        .values(values)
+        .onConflict((oc) => oc.doNothing())
+        .returningAll()
+        .execute();
+    };
+
+    // Slice 5 (F10): a caller inside its own transaction (the space-confirm transaction) passes that handle
+    // here and must never trigger a second `this.db` acquisition mid-transaction (issue #595) — run directly
+    // on it instead of opening a nested retry-wrapped transaction. The deadlock retry only makes sense for
+    // the standalone (non-transactional) caller: a caller-supplied transaction that deadlocks aborts as a
+    // whole and must be re-driven by ITS caller, not retried in place here.
+    const result = db.isTransaction
+      ? await insert(db)
+      : await retryOnDeadlock(() => this.db.transaction().execute(insert));
 
     if (!options?.skipRecount && result.length > 0) {
       const personIds = [...new Set(result.map((r) => r.personId))];
-      await this.recountPersons(personIds);
+      await this.recountPersons(personIds, db);
     }
 
     return result;

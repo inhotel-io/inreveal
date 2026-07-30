@@ -2161,6 +2161,7 @@ describe(PersonService.name, () => {
       expect(mocks.person.getAllFaces).toHaveBeenCalledWith({
         personId: null,
         sourceType: SourceType.MachineLearning,
+        excludeManuallyPlaced: true,
       });
       expect(mocks.job.queueAll).toHaveBeenCalledWith([
         {
@@ -2437,6 +2438,7 @@ describe(PersonService.name, () => {
       expect(mocks.person.getAllFaces).toHaveBeenCalledWith({
         personId: null,
         sourceType: SourceType.MachineLearning,
+        excludeManuallyPlaced: true,
       });
       expect(mocks.job.queueAll).toHaveBeenCalledWith([
         {
@@ -6541,6 +6543,7 @@ describe(PersonService.name, () => {
       expect(mocks.person.getAllFaces).toHaveBeenCalledWith({
         personId: null,
         sourceType: SourceType.MachineLearning,
+        excludeManuallyPlaced: true,
       });
       expect(mocks.job.queueAll).toHaveBeenCalledWith([
         { name: JobName.FacialRecognition, data: { id: face.id, deferred: false } },

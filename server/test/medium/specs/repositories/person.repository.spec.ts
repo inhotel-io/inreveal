@@ -24,6 +24,27 @@ beforeAll(async () => {
   defaultDatabase = await getKyselyDB();
 });
 
+// Slice 5 (F9) helpers, shared across the getAllFaces describe block below.
+const collectFaceIds = async (stream: AsyncIterable<{ id: string }>) => {
+  const ids: string[] = [];
+  for await (const face of stream) {
+    ids.push(face.id);
+  }
+  return ids;
+};
+
+const linkManually = async (ctx: ReturnType<typeof setup>['ctx'], input: { ownerId: string; assetFaceId: string }) => {
+  const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+  const { person } = await ctx.newPerson({ ownerId: input.ownerId });
+  const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+  await faceIdentityRepository.replaceFaceIdentity({
+    assetFaceId: input.assetFaceId,
+    identityId: identity.id,
+    source: 'manual',
+  });
+  return { person, identity };
+};
+
 describe(PersonRepository.name, () => {
   describe('getByName', () => {
     it('matches names case-insensitively', async () => {
@@ -1086,6 +1107,118 @@ describe(PersonRepository.name, () => {
       await expect(sut.getFaceByIdIncludingTombstoned(tombstonedFace.id)).resolves.toMatchObject({
         id: tombstonedFace.id,
       });
+    });
+  });
+
+  // Slice 5 (F9): recognition must never re-claim a face a human has already placed. `excludeManuallyPlaced`
+  // is the mechanism — a NOT EXISTS anti-join against face_identity_face.source='manual'.
+  describe('getAllFaces', () => {
+    it('S5.1: excludeManuallyPlaced omits a manually-linked face and yields an unassigned control face with no link', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace: manualFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+      await linkManually(ctx, { ownerId: user.id, assetFaceId: manualFace.id });
+
+      const { assetFace: controlFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+
+      const ids = await collectFaceIds(
+        sut.getAllFaces({ personId: null, sourceType: SourceType.MachineLearning, excludeManuallyPlaced: true }),
+      );
+
+      expect(ids).not.toContain(manualFace.id);
+      expect(ids).toContain(controlFace.id); // positive control: an ordinary unassigned face IS returned
+    });
+
+    it('S5.2 (pin): the same query WITHOUT the option still yields the manually-linked face', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { assetFace: manualFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+      await linkManually(ctx, { ownerId: user.id, assetFaceId: manualFace.id });
+
+      const { assetFace: controlFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+
+      const ids = await collectFaceIds(sut.getAllFaces({ personId: null, sourceType: SourceType.MachineLearning }));
+
+      expect(ids).toContain(manualFace.id); // pin: default-off, manual-linked face still returned
+      expect(ids).toContain(controlFace.id); // positive control: the ordinary face is returned too
+    });
+
+    it('S5.3 (pin): getAllFaces({ sourceType }) — the force-branch shape — is unchanged', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const { assetFace: assignedFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: person.id,
+        sourceType: SourceType.MachineLearning,
+      });
+      const { assetFace: manualFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+      await linkManually(ctx, { ownerId: user.id, assetFaceId: manualFace.id });
+
+      // The exact shape handleQueueRecognizeFaces's force branch calls: no personId key, no
+      // excludeManuallyPlaced. Both an already-assigned face and a manually-linked one must still come back.
+      const ids = await collectFaceIds(sut.getAllFaces({ sourceType: SourceType.MachineLearning }));
+
+      expect(ids).toContain(assignedFace.id);
+      expect(ids).toContain(manualFace.id); // positive control: force branch is untouched by the new option
+    });
+
+    it('S5.7 (pin): a personal confirm is unaffected — it sets asset_face.personId, already excluded by personId: null', async () => {
+      const { ctx, sut } = setup();
+      const faceIdentityRepository = ctx.get(FaceIdentityRepository);
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const { asset } = await ctx.newAsset({ ownerId: user.id, visibility: AssetVisibility.Timeline });
+
+      // Simulate a personal confirm: asset_face.personId IS set, and a manual link exists.
+      const { assetFace: confirmedFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: person.id,
+        sourceType: SourceType.MachineLearning,
+      });
+      const identity = await faceIdentityRepository.ensurePersonIdentity(person.id);
+      await faceIdentityRepository.replaceFaceIdentity({
+        assetFaceId: confirmedFace.id,
+        identityId: identity.id,
+        source: 'manual',
+      });
+
+      const { assetFace: controlFace } = await ctx.newAssetFace({
+        assetId: asset.id,
+        personId: null,
+        sourceType: SourceType.MachineLearning,
+      });
+
+      // Deliberately WITHOUT excludeManuallyPlaced: isolates the claim to the pre-existing personId
+      // filter alone — a discriminating mutation to that filter (not to excludeManuallyPlaced) must be
+      // able to turn this red, otherwise this pin proves nothing about which filter is doing the work.
+      const ids = await collectFaceIds(sut.getAllFaces({ personId: null, sourceType: SourceType.MachineLearning }));
+
+      expect(ids).not.toContain(confirmedFace.id); // excluded by personId: null alone
+      expect(ids).toContain(controlFace.id); // positive control
     });
   });
 });

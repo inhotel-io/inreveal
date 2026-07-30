@@ -1351,8 +1351,13 @@ export class PersonService extends BaseService {
     await this.databaseRepository.prewarm(VectorIndex.Face);
 
     const lastRun = new Date().toISOString();
+    // Slice 5 (F9): excludeManuallyPlaced only applies on the non-forced branch. The forced branch already
+    // wiped every face_identity_face row via unassignFaces above, so there is nothing left to preserve —
+    // passing it there would be meaningless.
     const facePagination = this.personRepository.getAllFaces(
-      force ? { sourceType: SourceType.MachineLearning } : { personId: null, sourceType: SourceType.MachineLearning },
+      force
+        ? { sourceType: SourceType.MachineLearning }
+        : { personId: null, sourceType: SourceType.MachineLearning, excludeManuallyPlaced: true },
     );
 
     let jobs: {
