@@ -1,4 +1,5 @@
 import { Kysely } from 'kysely';
+import { randomUUID } from 'node:crypto';
 import { AssetVisibility, SourceType } from 'src/enum';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FaceRepairRepository } from 'src/repositories/face-repair.repository';
@@ -6,7 +7,7 @@ import { LoggingRepository } from 'src/repositories/logging.repository';
 import { PersonRepository } from 'src/repositories/person.repository';
 import { DB } from 'src/schema';
 import { BaseService } from 'src/services/base.service';
-import { newMediumService } from 'test/medium.factory';
+import { mediumFactory, newMediumService } from 'test/medium.factory';
 import { getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
@@ -37,6 +38,36 @@ const seedEligibleFace = async (ctx: Ctx, userId: string, personId: string): Pro
   });
   await ctx.database.insertInto('face_search').values({ faceId: assetFace.id, embedding: EMBEDDING }).execute();
   return assetFace.id;
+};
+
+// Bulk equivalent of seedEligibleFace, for S10.3 (F20): getClusterFacePage's excludeFaceIds now goes up to
+// MAX_RESOLVE_FACES (25 000). Bulk-inserted (not one newAsset/newAssetFace round trip per face, matching
+// the seedFacesBulk idiom in face-repair.resolve.spec.ts) so seeding 25 000 real eligible faces stays fast.
+const seedEligibleFacesBulk = async (ctx: Ctx, ownerId: string, personId: string, count: number): Promise<string[]> => {
+  const assets = Array.from({ length: count }, () => mediumFactory.assetInsert({ ownerId }));
+  for (let index = 0; index < assets.length; index += 1000) {
+    await ctx.database
+      .insertInto('asset')
+      .values(assets.slice(index, index + 1000))
+      .execute();
+  }
+  const faces = assets.map((asset) =>
+    mediumFactory.assetFaceInsert({ assetId: asset.id, personId, sourceType: SourceType.MachineLearning }),
+  );
+  for (let index = 0; index < faces.length; index += 1000) {
+    await ctx.database
+      .insertInto('asset_face')
+      .values(faces.slice(index, index + 1000))
+      .execute();
+  }
+  const searchRows = faces.map((face) => ({ faceId: face.id, embedding: EMBEDDING }));
+  for (let index = 0; index < searchRows.length; index += 1000) {
+    await ctx.database
+      .insertInto('face_search')
+      .values(searchRows.slice(index, index + 1000))
+      .execute();
+  }
+  return faces.map((face) => face.id);
 };
 
 describe('FaceRepairRepository.streamEligibleFaces', () => {
@@ -647,6 +678,31 @@ describe('FaceRepairRepository.getClusterFacePage', () => {
     expect(page.total).toBe(1);
     expect(page.faces.map((f) => f.assetFaceId)).toContain(timelineFaceId); // positive control
     expect(page.faces.map((f) => f.assetFaceId)).not.toContain(lockedFace.id);
+  });
+
+  // S10.3 (F20): excludeFaceIds is capped at MAX_RESOLVE_FACES (25 000) by the DTO. Unlike the three write
+  // paths above, getClusterFacePage's `NOT IN` is deliberately left as a SINGLE unchunked clause — chunking
+  // a NOT IN needs an AND across chunks (excluded from every chunk), not an OR, so it is not a drop-in
+  // reuse of the IN-chunking idiom. At the 25 000 cap, one NOT IN clause plus the query's handful of other
+  // predicates stays at ~25 010 bind parameters, comfortably under Postgres's 65 535 ceiling — so no
+  // chunking is needed here. This exercises that exact worst case with a REAL 25 000-row table (not just
+  // parameter count) and proves NOT IN excludes precisely the requested ids, not more and not fewer. Note:
+  // `base` is built once and executed twice (count, then page) — those are two independent round trips,
+  // each with its own bind-parameter budget, not one combined statement.
+  it('S10.3: completes a count+page pair with a 25 000-id excludeFaceIds list (single NOT IN, no bind-parameter error), excluding precisely the requested ids', async () => {
+    const { sut, ctx } = setup();
+    const { user } = await ctx.newUser();
+    const { person } = await ctx.newPerson({ ownerId: user.id });
+
+    const allIds = await seedEligibleFacesBulk(ctx, user.id, person.id, 25_000);
+    const [kept, ...rest] = allIds;
+    // 24 999 real ids + 1 synthetic filler id = exactly the 25 000-id cap the DTO now enforces.
+    const excludeFaceIds = [...rest, randomUUID()];
+
+    const page = await sut.getClusterFacePage(person.id, { excludeFaceIds, limit: 50, offset: 0 });
+
+    expect(page.total).toBe(1);
+    expect(page.faces.map((f) => f.assetFaceId)).toEqual([kept]); // positive control: the one non-excluded face
   });
 });
 

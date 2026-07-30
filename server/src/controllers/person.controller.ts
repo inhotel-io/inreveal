@@ -310,8 +310,13 @@ export class PersonController {
     return this.service.mergePerson(auth, id, dto);
   }
 
+  // F21: publishes the permission getFaceSuggestions actually enforces. Deliberately PersonUpdate, not
+  // PersonRead — PersonRead also resolves via access.person.checkSharedSpaceAccess (see
+  // src/utils/access.ts), which would let a space member read the owner's whole-library pending review
+  // queue (D6, see the comment on getFaceSuggestions in person.service.ts). Do not relax this back to
+  // PersonRead to "match" a shared-space caller; the service enforcement is the source of truth here.
   @Get(':id/face-suggestions')
-  @Authenticated({ permission: Permission.PersonRead })
+  @Authenticated({ permission: Permission.PersonUpdate })
   @Endpoint({
     summary: 'Get face suggestions for a person',
     description: 'Retrieve near-miss unassigned faces suggested for this person, best match first.',
@@ -325,8 +330,13 @@ export class PersonController {
     return this.service.getFaceSuggestions(auth, id, dto);
   }
 
+  // F21: publishes PersonUpdate, the person-level permission confirmFaceSuggestion enforces — not
+  // PersonReassign, which the service never checks. confirmFaceSuggestion ALSO enforces PersonCreate on
+  // the face itself (assetFaceId), but the guard can only carry one permission; that face-level check
+  // stays service-level (see the comment on confirmFaceSuggestion in person.service.ts). Do not drop it
+  // there on the assumption this decorator covers it.
   @Post(':id/face-suggestions/:assetFaceId/confirm')
-  @Authenticated({ permission: Permission.PersonReassign })
+  @Authenticated({ permission: Permission.PersonUpdate })
   @HttpCode(HttpStatus.OK)
   @Endpoint({
     summary: 'Confirm a face suggestion',

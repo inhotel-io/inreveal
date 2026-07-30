@@ -1,4 +1,5 @@
 import { Kysely } from 'kysely';
+import { randomUUID } from 'node:crypto';
 import { AssetVisibility } from 'src/enum';
 import { FaceIdentityRepository } from 'src/repositories/face-identity.repository';
 import { FacePersonVerdictRepository } from 'src/repositories/face-person-verdict.repository';
@@ -2118,6 +2119,41 @@ describe('FacePersonVerdictRepository', () => {
       await expect(sut.isFaceReachableInSpace(space.id, offlineFace.id)).resolves.toBe(false);
       await expect(sut.isFaceReachableInSpace(space.id, deletedFace.id)).resolves.toBe(false);
       await expect(sut.isFaceReachableInSpace(space.id, invisibleFace.id)).resolves.toBe(false);
+    });
+  });
+
+  // S10.3 (F20): the resolutions-remove DTO's verdictIds now goes up to MAX_RESOLVE_FACES (25 000), and
+  // removeVerdicts was completely unchunked. The filler below is far larger than Postgres's 65 535
+  // bind-parameter ceiling (non-existent ids — the bind count is a function of list length, not of whether
+  // rows match) so the test genuinely fails today, before chunking.
+  describe('removeVerdicts (F20)', () => {
+    it('removes only the requested negative verdicts, chunked, without a bind-parameter error on a huge request', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person: personA } = await ctx.newPerson({ ownerId: user.id });
+      const { person: personB } = await ctx.newPerson({ ownerId: user.id });
+      const { asset: assetA } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: faceA } = await ctx.newAssetFace({ assetId: assetA.id, personId: null });
+      const { asset: assetB } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: faceB } = await ctx.newAssetFace({ assetId: assetB.id, personId: null });
+      const { asset: assetC } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: faceC } = await ctx.newAssetFace({ assetId: assetC.id, personId: null });
+
+      await sut.markRejected(personA.id, faceA.id);
+      await sut.markIgnored(personA.id, faceB.id);
+      await sut.markRejected(personB.id, faceC.id); // positive control: not in the removal request
+
+      const rowA = await getRow(personA.id, faceA.id);
+      const rowB = await getRow(personA.id, faceB.id);
+      const rowC = await getRow(personB.id, faceC.id);
+
+      const filler = Array.from({ length: 70_000 }, () => randomUUID());
+      const removed = await sut.removeVerdicts([rowA.id, rowB.id, ...filler]);
+
+      expect(removed).toBe(2);
+      expect(await getRowOrUndefined(personA.id, faceA.id)).toBeUndefined();
+      expect(await getRowOrUndefined(personA.id, faceB.id)).toBeUndefined();
+      expect(await getRowOrUndefined(personB.id, faceC.id)).toEqual(rowC); // positive control: untouched
     });
   });
 });

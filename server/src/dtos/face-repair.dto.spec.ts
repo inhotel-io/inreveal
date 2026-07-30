@@ -1,9 +1,11 @@
 import {
   FaceRepairClusterFacesRequestSchema,
   FaceRepairDeclineRemoveRequestSchema,
+  FaceRepairResolutionsRemoveRequestSchema,
   FaceRepairResolveRequestSchema,
   FaceRepairScanStatusSchema,
   FaceRepairScanTriggerRequestSchema,
+  FaceRepairUnconfirmRequestSchema,
 } from 'src/dtos/face-repair.dto';
 import { describe, expect, it } from 'vitest';
 
@@ -217,6 +219,7 @@ describe('FaceRepairClusterFacesRequestSchema', () => {
 
 // C4: every per-request face/owner array is bounded so a runaway admin payload cannot drive unbounded work.
 const bulkUuid = (n: number) => `00000000-0000-4000-a000-${String(n).padStart(12, '0')}`;
+const bulkIds = (n: number) => Array.from({ length: n }, (_, i) => bulkUuid(i + 1));
 
 describe('FaceRepairResolveRequestSchema face-array bounds (C4)', () => {
   it('accepts a large-but-bounded bucket (25 000 faces)', () => {
@@ -258,6 +261,42 @@ describe('FaceRepairResolveRequestSchema face-array bounds (C4)', () => {
       faceIds: [bulkUuid(500_000 + i)],
     }));
     expect(FaceRepairResolveRequestSchema.safeParse({ personId: UUID_V4, moveToPerson }).success).toBe(false);
+  });
+});
+
+// S10.1/S10.2 (F20): the DTO's own comment claims every per-request face/owner array is capped at
+// MAX_RESOLVE_FACES. That was false for these four fields — three had only a `.min(1)`, and
+// excludeFaceIds had no cap at all. Table-driven over all four so the same 25 000/25 001 boundary is
+// asserted identically for each.
+describe('Per-request face/owner array bounds (F20)', () => {
+  const cases = [
+    {
+      name: 'FaceRepairUnconfirmRequestSchema.assetFaceIds',
+      parse: (ids: string[]) => FaceRepairUnconfirmRequestSchema.safeParse({ assetFaceIds: ids }),
+    },
+    {
+      name: 'FaceRepairResolutionsRemoveRequestSchema.verdictIds',
+      parse: (ids: string[]) => FaceRepairResolutionsRemoveRequestSchema.safeParse({ verdictIds: ids }),
+    },
+    {
+      name: 'FaceRepairResolutionsRemoveRequestSchema.clusterMuteIds',
+      parse: (ids: string[]) => FaceRepairResolutionsRemoveRequestSchema.safeParse({ clusterMuteIds: ids }),
+    },
+    {
+      // S10.2: this row has NO cap at all today (not even the 1000 the others started from) — the
+      // genuine red among the four.
+      name: 'FaceRepairClusterFacesRequestSchema.excludeFaceIds',
+      parse: (ids: string[]) =>
+        FaceRepairClusterFacesRequestSchema.safeParse({ excludeFaceIds: ids, page: 0, size: 50 }),
+    },
+  ];
+
+  it.each(cases)('$name accepts exactly the 25 000-id ceiling', ({ parse }) => {
+    expect(parse(bulkIds(25_000)).success).toBe(true);
+  });
+
+  it.each(cases)('$name rejects 25 001 ids', ({ parse }) => {
+    expect(parse(bulkIds(25_001)).success).toBe(false);
   });
 });
 

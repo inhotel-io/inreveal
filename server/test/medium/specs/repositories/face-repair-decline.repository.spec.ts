@@ -1,4 +1,5 @@
 import { Kysely } from 'kysely';
+import { randomUUID } from 'node:crypto';
 import { SourceType } from 'src/enum';
 import { FaceRepairDeclineRepository } from 'src/repositories/face-repair-decline.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -115,6 +116,32 @@ describe(FaceRepairDeclineRepository.name, () => {
 
   it('removeClusterMutes with no ids is a no-op', async () => {
     expect(await sut.removeClusterMutes({})).toBe(0);
+  });
+
+  // S10.3 (F20): the resolutions-remove DTO's clusterMuteIds now goes up to MAX_RESOLVE_FACES (25 000),
+  // and removeClusterMutes was completely unchunked. The filler is far larger than Postgres's 65 535
+  // bind-parameter ceiling (non-existent ids), so this genuinely fails today, before chunking.
+  it('removes only the requested cluster mutes, chunked, without a bind-parameter error on a huge request', async () => {
+    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
+    const other = await seedFaceAndPersons(db);
+    await sut.createClusterMutes({
+      persons: [
+        { personId: personP, suspectedOwnerIds: [personQ] },
+        { personId: other.personP, suspectedOwnerIds: [other.personQ] },
+      ],
+      declinedBy,
+    });
+
+    const listed = await sut.listDeclines();
+    const rowP = listed.find((r) => r.personId === personP)!;
+    const rowOther = listed.find((r) => r.personId === other.personP)!;
+
+    const filler = Array.from({ length: 70_000 }, () => randomUUID());
+    const removed = await sut.removeClusterMutes({ ids: [rowP.id, ...filler] });
+
+    expect(removed).toBe(1);
+    const remaining = await sut.listDeclines();
+    expect(remaining.map((r) => r.id)).toEqual([rowOther.id]); // positive control: untouched
   });
 
   it('cascades: deleting the person removes its cluster mute', async () => {

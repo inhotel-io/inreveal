@@ -2286,9 +2286,6 @@ export class FaceIdentityRepository {
     return this.replaceFaceIdentity(input);
   }
 
-  @GenerateSql({
-    params: [{ assetFaceId: DummyValue.UUID, identityId: DummyValue.UUID, source: 'manual' }],
-  })
   // The positive verdict read, scoped to a bounded set of faces. `source='manual'` is the durable record
   // that a human placed a face on a person — written by every human reassignment, keyed by identity so it
   // survives merges, and replaced (never accumulated) by the next human reassignment. Both face engines
@@ -2325,21 +2322,39 @@ export class FaceIdentityRepository {
 
   // Un-confirm: downgrade a human placement back to a machine one so future scans may flag the face again.
   // The identity link itself is untouched — only the claim that a human put the face there.
+  //
+  // F20: chunked at 1000, matching the idiom every other bulk face path in this file uses
+  // (replaceFaceIdentities). The unconfirm DTO's assetFaceIds is capped at MAX_RESOLVE_FACES (25 000), so
+  // an unchunked IN-list here was reachable in principle even under that cap, and any direct (non-HTTP)
+  // caller is not bounded by the DTO at all — one id is one bind parameter.
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async demoteManualFaceLinks(assetFaceIds: string[]): Promise<number> {
     if (assetFaceIds.length === 0) {
       return 0;
     }
-    const rows = await this.db
-      .updateTable('face_identity_face')
-      .set({ source: 'ml' })
-      .where('assetFaceId', 'in', assetFaceIds)
-      .where('source', '=', 'manual')
-      .returning('assetFaceId')
-      .execute();
-    return rows.length;
+    let demoted = 0;
+    for (let index = 0; index < assetFaceIds.length; index += 1000) {
+      const chunk = assetFaceIds.slice(index, index + 1000);
+      const rows = await this.db
+        .updateTable('face_identity_face')
+        .set({ source: 'ml' })
+        .where('assetFaceId', 'in', chunk)
+        .where('source', '=', 'manual')
+        .returning('assetFaceId')
+        .execute();
+      demoted += rows.length;
+    }
+    return demoted;
   }
 
+  // F22: this method previously had no SQL doc coverage of its own — its @GenerateSql decorator had been
+  // left stranded on getManualLinkedFaceIds (a stacked-decorator leftover from when that method's
+  // signature line was inserted between linkFace and this one), overwriting that method's own array-shaped
+  // decorator in the committed doc (GenerateSql is SetMetadata: overwrite, not merge; decorators apply
+  // bottom-up, so the closer one wins first and the farther one overwrites it last).
+  @GenerateSql({
+    params: [{ assetFaceId: DummyValue.UUID, identityId: DummyValue.UUID, source: 'manual' }],
+  })
   async replaceFaceIdentity(
     input: LinkFaceInput,
     db: Kysely<DB> | Transaction<DB> = this.db,

@@ -282,6 +282,53 @@ describe(PersonController.name, () => {
     });
   });
 
+  describe('GET /people/:id/face-suggestions', () => {
+    const personId = '00000000-0000-4000-8000-000000000001';
+
+    // S10.4/F21: the endpoint published Permission.PersonRead, which admits shared-space members via
+    // access.person.checkSharedSpaceAccess — but getFaceSuggestions enforces PersonUpdate (owner-only,
+    // D6), so a caller scoped exactly to what the spec documents would pass the guard and then 400 at
+    // requireAccess. The published permission must match what's enforced.
+    it('should publish PersonUpdate, matching the owner-only D6 enforcement in the service', async () => {
+      service.getFaceSuggestions.mockResolvedValue({ total: 0, items: [] });
+
+      const { status, body } = await request(ctx.getHttpServer())
+        .get(`/people/${personId}/face-suggestions`)
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(200);
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ permission: Permission.PersonUpdate }),
+        }),
+      );
+      expect(body).toEqual({ total: 0, items: [] });
+    });
+  });
+
+  describe('POST /people/:id/face-suggestions/:assetFaceId/confirm', () => {
+    const personId = '00000000-0000-4000-8000-000000000001';
+    const assetFaceId = '00000000-0000-4000-8000-000000000002';
+
+    // S10.4/F21: published Permission.PersonReassign, but confirmFaceSuggestion enforces PersonUpdate
+    // (on the person) AND PersonCreate (on the face) — the guard can only carry one permission, so the
+    // person-level PersonUpdate is what's published; PersonCreate stays a service-level check (see the
+    // comment on confirmFaceSuggestion in person.service.ts).
+    it('should publish PersonUpdate and respond with 200', async () => {
+      const { status } = await request(ctx.getHttpServer())
+        .post(`/people/${personId}/face-suggestions/${assetFaceId}/confirm`)
+        .set('Authorization', `Bearer token`);
+
+      expect(status).toBe(200);
+      expect(ctx.authenticate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({ permission: Permission.PersonUpdate }),
+        }),
+      );
+      expect(service.confirmFaceSuggestion).toHaveBeenCalledWith(undefined, personId, assetFaceId);
+    });
+  });
+
   describe('face suggestion routes', () => {
     const personId = '00000000-0000-4000-8000-000000000001';
     const assetFaceId = '00000000-0000-4000-8000-000000000002';
