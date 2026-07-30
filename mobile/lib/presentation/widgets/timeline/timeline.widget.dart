@@ -27,7 +27,7 @@ import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_bo
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.state.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_drag_region.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_scroll_target.dart';
-import 'package:immich_mobile/providers/asset_viewer/scroll_to_date_notifier.provider.dart';
+import 'package:immich_mobile/providers/asset_viewer/scroll_to_asset_notifier.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/readonly_mode.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
@@ -211,10 +211,10 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
     ref.listenManual(multiSelectProvider.select((s) => s.isEnabled), _onMultiSelectionToggled);
 
     // Drain any pending "view in timeline" request. It is latched in
-    // [scrollToDateNotifierProvider] so it survives this timeline being mounted
+    // [scrollToAssetNotifierProvider] so it survives this timeline being mounted
     // fresh by the navigation (e.g. coming from a memory or a notification)
     // before its segments have loaded and laid out.
-    scrollToDateNotifierProvider.addListener(_requestScrollDrain);
+    scrollToAssetNotifierProvider.addListener(_requestScrollDrain);
     ref.listenManual(timelineSegmentProvider, (_, __) => _requestScrollDrain());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _requestScrollDrain();
@@ -296,7 +296,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
     // A pending "view in timeline" request is about to scroll precisely — including
     // for the grouping change this very drain loop just triggered. Don't overwrite
     // its target with a position-derived anchor.
-    if (scrollToDateNotifierProvider.value != null) {
+    if (scrollToAssetNotifierProvider.value != null) {
       return;
     }
     // A card-tap drilldown sets an explicit year/month anchor right before it
@@ -352,7 +352,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    scrollToDateNotifierProvider.removeListener(_requestScrollDrain);
+    scrollToAssetNotifierProvider.removeListener(_requestScrollDrain);
     _scrollController.dispose();
     _eventSubscription?.cancel();
     super.dispose();
@@ -377,7 +377,7 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
 
   /// Ensures a single retry loop is running to apply a pending scroll request.
   void _requestScrollDrain() {
-    if (scrollToDateNotifierProvider.value == null) return;
+    if (scrollToAssetNotifierProvider.value == null) return;
     if (_scrollDrainScheduled) return;
     _scrollDrainScheduled = true;
     _scrollDrainAttempts = 0;
@@ -396,7 +396,8 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
       return;
     }
 
-    final date = scrollToDateNotifierProvider.value;
+    final target = scrollToAssetNotifierProvider.value;
+    final date = target?.date;
     final segments = ref.read(timelineSegmentProvider).valueOrNull;
     final laidOut = _scrollController.hasClients && _scrollController.position.hasContentDimensions;
     final matched = date != null && segments != null && _findSegmentForDate(segments, date) != null;
@@ -418,12 +419,12 @@ class _SliverTimelineState extends ConsumerState<_SliverTimeline> with WidgetsBi
         _daySwitchRequested = false;
       case ScrollDrainAction.scroll:
         _scrollToDate(date!, segments!);
-        scrollToDateNotifierProvider.consume();
+        scrollToAssetNotifierProvider.consume();
         _scrollDrainScheduled = false;
         _daySwitchRequested = false;
       case ScrollDrainAction.giveUp:
         // Budget exhausted: drop the request so it cannot leak into a later timeline.
-        scrollToDateNotifierProvider.consume();
+        scrollToAssetNotifierProvider.consume();
         _scrollDrainScheduled = false;
         _daySwitchRequested = false;
       case ScrollDrainAction.switchToDayGrouping:
