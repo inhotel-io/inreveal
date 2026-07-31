@@ -30931,7 +30931,18 @@
           },
           "description": {
             "description": "Album description",
-            "type": "string"
+            "type": "string",
+            "x-immich-history": [
+              {
+                "version": "v1",
+                "state": "Added"
+              },
+              {
+                "version": "v3",
+                "state": "Updated",
+                "description": "An empty string is returned instead of null for backwards compatibility; null will be returned in v4."
+              }
+            ]
           },
           "endDate": {
             "description": "End date (latest asset)",
