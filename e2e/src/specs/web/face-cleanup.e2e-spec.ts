@@ -525,7 +525,7 @@ test.describe.serial('Face Cleanup', () => {
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('[data-testid="face-tile"]')).toHaveCount(1, { timeout: 15_000 });
 
-    const dock = page.locator('[data-testid="dock"]');
+    const dock = page.locator('[data-testid="face-dock"]');
     await expect(dock).toBeVisible();
 
     const box = await dock.boundingBox();

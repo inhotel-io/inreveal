@@ -18,7 +18,9 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { t, type Translations } from 'svelte-i18n';
   import { getServerErrorMessage, handleError } from '$lib/utils/handle-error';
-  import ActionsHelpModal from './ActionsHelpModal.svelte';
+  import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
+  import FaceReviewDock from '$lib/components/face-cleanup/FaceReviewDock.svelte';
+  import type { FaceActionId } from '$lib/components/face-cleanup/face-actions';
   import type { PageData } from './$types';
   import { selectableDestinations, sortDestinations, type SuspectedOwner } from './destination';
   import DestinationCards from './DestinationCards.svelte';
@@ -238,24 +240,24 @@
     }
   };
 
-  const handleBulkOwner = () => {
-    vm.applyToSelection('owner');
-  };
+  // The six guided routes, in bar order. `owner` gains a testid it never had — every other id is preserved
+  // exactly, because e2e targets these rather than the labels.
+  const GUIDED_DOCK_ACTIONS = [
+    { id: 'owner', testId: 'bulk-owner' },
+    { id: 'stay', testId: 'bulk-stay' },
+    { id: 'lock', testId: 'bulk-lock' },
+    { id: 'other', testId: 'bulk-other' },
+    { id: 'unknown', testId: 'bulk-unknown' },
+    { id: 'detach', testId: 'bulk-detach' },
+  ] as const satisfies readonly { id: FaceActionId; testId: string }[];
 
-  const handleBulkStay = () => {
-    vm.applyToSelection('stay');
-  };
-
-  const handleBulkLock = () => {
-    vm.applyToSelection('lock');
-  };
-
-  const handleBulkDetach = () => {
-    vm.applyToSelection('detach');
-  };
-
-  const handleBulkUnknown = () => {
-    vm.applyToSelection('unknown');
+  // `other` is the only route that opens a picker first; the rest stamp the selection straight away.
+  const handleDockAction = (id: FaceActionId) => {
+    if (id === 'other') {
+      void handleBulkOther();
+      return;
+    }
+    vm.applyToSelection(id as Exclude<FaceActionId, 'other' | 'keep' | 'unmark'>);
   };
 
   // The six bulk actions carry terse labels and no explanation of what they do on apply. Two entry points open
@@ -263,7 +265,12 @@
   // bulk bar (which only exists once a face is selected, i.e. mid-task). Read-only — it never touches the
   // review model, so an open/close leaves the selection and the staged states exactly as they were.
   const handleOpenHelp = () => {
-    void modalManager.show(ActionsHelpModal, {});
+    void modalManager.show(FaceActionsHelpModal, {
+      mode: 'guided',
+      actions: ['owner', 'stay', 'lock', 'other', 'unknown', 'detach'],
+      introKey: 'admin.face_cleanup_review_help_intro',
+      footerKey: 'admin.face_cleanup_review_help_footer',
+    });
   };
 
   const handleBulkOther = async () => {
@@ -876,140 +883,75 @@
        `fixed` was rejected). The content no longer needs `pb-32` to reserve space for it either. -->
   {#snippet footer()}
     {#if !loading && flaggedFaces.length > 0}
-      <div
-        class="shrink-0 border-t border-gray-200 bg-white py-3.5 dark:border-gray-700 dark:bg-gray-900"
-        data-testid="dock"
+      <FaceReviewDock
+        mode="guided"
+        selectedCount={vm.selectedCount}
+        actions={[...GUIDED_DOCK_ACTIONS]}
+        onAction={handleDockAction}
+        onHelp={handleOpenHelp}
+        onClear={() => vm.clearSelection()}
       >
-        <div class="mx-auto flex max-w-screen-xl flex-wrap items-center gap-3.5 px-6">
-          {#if vm.selectedCount === 0}
-            <!-- Summary state -->
-            <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="tally">
-              {#each ['owner', 'stay', 'lock', 'other', 'unknown', 'detach'] as FaceState[] as state (state)}
-                {@const count = vm.tally[state]}
-                <span
-                  class={[
-                    'inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-bold dark:border-gray-700 dark:bg-gray-800',
-                    count === 0 ? 'opacity-40' : '',
-                  ].join(' ')}
-                >
-                  <Icon icon={STATE_ICON[state]} size="13" color={STATE_COLOR[state]} />
-                  <span>{count}</span>
-                  <span class="font-normal text-gray-500 dark:text-gray-400">
-                    {state === 'owner'
-                      ? destinations.length > 1
-                        ? $t('admin.face_cleanup_review_tally_owner_multi')
-                        : $t('admin.face_cleanup_review_tally_owner', { values: { name: ownerName } })
-                      : $t(`admin.face_cleanup_review_tally_${state}`)}
-                  </span>
+        {#snippet summary()}
+          <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="tally">
+            {#each ['owner', 'stay', 'lock', 'other', 'unknown', 'detach'] as FaceState[] as state (state)}
+              {@const count = vm.tally[state]}
+              <span
+                class={[
+                  'inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-bold dark:border-gray-700 dark:bg-gray-800',
+                  count === 0 ? 'opacity-40' : '',
+                ].join(' ')}
+              >
+                <Icon icon={STATE_ICON[state]} size="13" color={STATE_COLOR[state]} />
+                <span>{count}</span>
+                <span class="font-normal text-gray-500 dark:text-gray-400">
+                  {state === 'owner'
+                    ? destinations.length > 1
+                      ? $t('admin.face_cleanup_review_tally_owner_multi')
+                      : $t('admin.face_cleanup_review_tally_owner', { values: { name: ownerName } })
+                    : $t(`admin.face_cleanup_review_tally_${state}`)}
                 </span>
-              {/each}
-              {#if restSelected.size > 0}
-                <!-- Rest-of-cluster faces the admin added: part of the same Apply, so the dock must account for
-                   them too — otherwise the count lies about what the button is going to do. -->
-                <span
-                  class="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
-                  data-testid="tally-added"
-                >
-                  <span>+{restSelected.size}</span>
-                  <span class="font-normal">
-                    {canBulkMove
-                      ? $t('admin.face_cleanup_review_tally_added', { values: { name: destinationName } })
-                      : $t('admin.face_cleanup_review_tally_added_pending')}
-                  </span>
-                </span>
-              {/if}
-              <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-600">
-                <Icon icon={mdiCheckBold} size="13" />
-                {$t('admin.face_cleanup_review_tally_all_set')}
               </span>
-            </div>
-            {#if restBlocked}
-              <!-- Same pattern as the self-move/no-destination warnings next to the whole-cluster buttons
-                   above: the disabled button explains itself right next to it, rather than leaving the admin
-                   to guess why Apply won't go. -->
-              <span class="text-xs font-semibold text-red-600 dark:text-red-400" data-testid="apply-blocked-reason">
-                {$t('admin.face_cleanup_review_apply_blocked_reason')}
+            {/each}
+            {#if restSelected.size > 0}
+              <!-- Rest-of-cluster faces the admin added: part of the same Apply, so the dock must account for
+                   them too — otherwise the count lies about what the button is going to do. -->
+              <span
+                class="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-bold text-primary"
+                data-testid="tally-added"
+              >
+                <span>+{restSelected.size}</span>
+                <span class="font-normal">
+                  {canBulkMove
+                    ? $t('admin.face_cleanup_review_tally_added', { values: { name: destinationName } })
+                    : $t('admin.face_cleanup_review_tally_added_pending')}
+                </span>
               </span>
             {/if}
-            <Button color="primary" disabled={applying || restBlocked} onclick={handleApply} data-testid="apply-btn">
-              <Icon icon={mdiArrowRight} size="16" />
-              {restSelected.size > 0
-                ? $t('admin.face_cleanup_review_apply_label_added', {
-                    values: { count: vm.total, added: restSelected.size },
-                  })
-                : $t('admin.face_cleanup_review_apply_label', { values: { count: vm.total } })}
-            </Button>
-          {:else}
-            <!-- Bulk-bar state: the routing choices for the selected faces. The previous text-xs buttons on the
-                 dark bar read as small/hidden (reported) — these are larger, each with a defining inset ring and
-                 a bigger hit area; the destructive "not a face" is tinted red, apart from the routine routes. -->
-            {@const bulkBtn =
-              'inline-flex items-center gap-2 rounded-lg bg-white/10 px-3.5 py-2 text-sm font-semibold text-white ring-1 ring-white/15 ring-inset transition-colors hover:bg-white/20'}
-            <div
-              class="flex flex-1 flex-wrap items-center gap-2 rounded-2xl bg-gray-900 px-4 py-3 text-white dark:bg-gray-950"
-              data-testid="bulk-bar"
-            >
-              <span class="mr-1 text-base font-bold whitespace-nowrap">
-                {vm.selectedCount}
-                {$t('admin.face_cleanup_review_bulk_selected_suffix')}
-              </span>
-              <span class="h-6 w-px bg-white/15"></span>
-              <button type="button" onclick={handleBulkOwner} class={bulkBtn}>
-                <Icon icon={STATE_ICON.owner} size="16" />
-                {$t('admin.face_cleanup_review_bulk_owner')}
-              </button>
-              <button type="button" onclick={handleBulkStay} class={bulkBtn} data-testid="bulk-stay">
-                <Icon icon={STATE_ICON.stay} size="16" />
-                {$t('admin.face_cleanup_review_bulk_stay')}
-              </button>
-              <button type="button" onclick={handleBulkLock} class={bulkBtn} data-testid="bulk-lock">
-                <Icon icon={STATE_ICON.lock} size="16" />
-                {$t('admin.face_cleanup_review_bulk_lock')}
-              </button>
-              <button type="button" onclick={handleBulkOther} class={bulkBtn} data-testid="bulk-other">
-                <Icon icon={STATE_ICON.other} size="16" />
-                {$t('admin.face_cleanup_review_bulk_other')}
-              </button>
-              <!-- Sits next to "Move to…" because it is the same decision one step further: the admin knows the
-                 face does not belong here but has nobody to route it to. Without it the only honest-looking exits
-                 are all wrong, and the review cannot be finished. -->
-              <button type="button" onclick={handleBulkUnknown} class={bulkBtn} data-testid="bulk-unknown">
-                <Icon icon={STATE_ICON.unknown} size="16" />
-                {$t('admin.face_cleanup_review_bulk_unknown')}
-              </button>
-              <button
-                type="button"
-                onclick={handleBulkDetach}
-                class="inline-flex items-center gap-2 rounded-lg bg-red-500/15 px-3.5 py-2 text-sm font-semibold text-red-100 ring-1 ring-red-400/30 transition-colors ring-inset hover:bg-red-500/25"
-                data-testid="bulk-detach"
-              >
-                <Icon icon={STATE_ICON.detach} size="16" />
-                {$t('admin.face_cleanup_review_bulk_detach')}
-              </button>
-              <!-- Same modal as the banner's (i). A plain button rather than <IconButton>: the bar is a dark
-                 surface, and the @immich/ui ghost variant styles for the page background, not for this one. -->
-              <button
-                type="button"
-                onclick={handleOpenHelp}
-                aria-label={$t('admin.face_cleanup_review_help_open')}
-                title={$t('admin.face_cleanup_review_help_open')}
-                class="inline-flex items-center rounded-lg bg-white/10 p-2 ring-1 ring-white/15 ring-inset hover:bg-white/20"
-                data-testid="bulk-help"
-              >
-                <Icon icon={mdiInformationOutline} size="16" />
-              </button>
-              <button
-                type="button"
-                onclick={() => vm.clearSelection()}
-                class="ml-auto text-sm font-bold text-gray-300 hover:text-white"
-                data-testid="clear"
-              >
-                {$t('admin.face_cleanup_review_bulk_clear')}
-              </button>
-            </div>
+            <span class="inline-flex items-center gap-1.5 text-xs font-bold text-green-600">
+              <Icon icon={mdiCheckBold} size="13" />
+              {$t('admin.face_cleanup_review_tally_all_set')}
+            </span>
+          </div>
+          {#if restBlocked}
+            <!-- The disabled button explains itself right next to it, rather than leaving the admin to guess
+                 why Apply won't go. -->
+            <span class="text-xs font-semibold text-red-600 dark:text-red-400" data-testid="apply-blocked-reason">
+              {$t('admin.face_cleanup_review_apply_blocked_reason')}
+            </span>
           {/if}
-        </div>
-      </div>
+        {/snippet}
+
+        {#snippet apply()}
+          <Button color="primary" disabled={applying || restBlocked} onclick={handleApply} data-testid="apply-btn">
+            <Icon icon={mdiArrowRight} size="16" />
+            {restSelected.size > 0
+              ? $t('admin.face_cleanup_review_apply_label_added', {
+                  values: { count: vm.total, added: restSelected.size },
+                })
+              : $t('admin.face_cleanup_review_apply_label', { values: { count: vm.total } })}
+          </Button>
+        {/snippet}
+      </FaceReviewDock>
     {/if}
   {/snippet}
 </AdminPageLayout>

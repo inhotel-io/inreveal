@@ -11,8 +11,8 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goto } from '$app/navigation';
+import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
 import Page from './+page.svelte';
-import ActionsHelpModal from './ActionsHelpModal.svelte';
 import type { SuspectedOwner } from './destination';
 
 // Mock @immich/sdk before any imports that use it
@@ -253,7 +253,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       const tiles = screen.getAllByTestId('face-tile');
       await fireEvent.click(tiles[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(tiles[0]);
       await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
@@ -268,7 +268,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(tiles[2], { shiftKey: true });
 
       await waitFor(() => {
-        expect(screen.getByTestId('bulk-bar')).toHaveTextContent('3');
+        expect(screen.getByTestId('face-bulk-bar')).toHaveTextContent('3');
       });
     });
 
@@ -279,7 +279,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('select-all'));
 
       await waitFor(() => {
-        expect(screen.getByTestId('bulk-bar')).toHaveTextContent('3');
+        expect(screen.getByTestId('face-bulk-bar')).toHaveTextContent('3');
       });
     });
 
@@ -288,9 +288,9 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getByTestId('select-all'));
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
-      await fireEvent.click(screen.getByTestId('clear'));
+      await fireEvent.click(screen.getByTestId('face-bulk-clear'));
 
       await waitFor(() => {
         expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
@@ -303,7 +303,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getByTestId('select-all'));
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('reset'));
 
@@ -323,7 +323,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       render(Page, { props: { data: makePageData() } });
 
       await waitFor(() => {
-        expect(screen.getByTestId('dock')).toBeInTheDocument();
+        expect(screen.getByTestId('face-dock')).toBeInTheDocument();
         expect(screen.getByTestId('tally')).toBeInTheDocument();
         expect(screen.getByTestId('apply-btn')).toBeInTheDocument();
         expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
@@ -337,7 +337,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
 
       await waitFor(() => {
-        expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
+        expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument();
         expect(screen.queryByTestId('apply-btn')).not.toBeInTheDocument();
       });
     });
@@ -347,9 +347,9 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
-      await fireEvent.click(screen.getByTestId('clear'));
+      await fireEvent.click(screen.getByTestId('face-bulk-clear'));
 
       await waitFor(() => {
         expect(screen.getByTestId('apply-btn')).toBeInTheDocument();
@@ -526,7 +526,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       const tiles = screen.getAllByTestId('face-tile');
       await fireEvent.click(tiles[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('bulk-stay'));
 
@@ -585,7 +585,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       const tiles = screen.getAllByTestId('face-tile');
       await fireEvent.click(tiles[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('bulk-lock'));
 
@@ -647,7 +647,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       const tiles = screen.getAllByTestId('face-tile');
       await fireEvent.click(tiles[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('bulk-other'));
 
@@ -667,7 +667,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       const tiles = screen.getAllByTestId('face-tile');
       await fireEvent.click(tiles[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('bulk-other'));
 
@@ -767,7 +767,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(showModal).toHaveBeenCalled());
 
       // Selection (and its "owner" state) survives an uncommitted picker — the bulk bar is still showing.
-      expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument();
       expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'owner');
     });
   });
@@ -781,7 +781,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       const tiles = screen.getAllByTestId('face-tile');
       await fireEvent.click(tiles[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('bulk-detach'));
 
@@ -959,7 +959,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('bulk-unknown'));
 
@@ -1208,7 +1208,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
   // ---- Actions help: two entry points, one modal ----
   // The bulk bar only exists once a face is selected, so the banner (i) is the one a confused admin finds
   // before touching anything; the bulk-bar (i) is the one they reach for mid-task. The modal's own content is
-  // covered by ActionsHelpModal.spec.ts — here we only verify both buttons open it.
+  // covered by FaceActionsHelpModal.spec.ts — here we only verify both buttons open it.
 
   describe('Actions help modal', () => {
     it('opens the help modal from the review banner, before anything is selected', async () => {
@@ -1218,7 +1218,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
       await fireEvent.click(screen.getByTestId('banner-help'));
 
-      expect(showModal).toHaveBeenCalledWith(ActionsHelpModal, {});
+      expect(showModal).toHaveBeenCalledWith(FaceActionsHelpModal, expect.objectContaining({ mode: 'guided' }));
     });
 
     it('opens the same help modal from the bulk bar once a face is selected', async () => {
@@ -1226,11 +1226,11 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
-      await fireEvent.click(screen.getByTestId('bulk-help'));
+      await fireEvent.click(screen.getByTestId('face-bulk-help'));
 
-      expect(showModal).toHaveBeenCalledWith(ActionsHelpModal, {});
+      expect(showModal).toHaveBeenCalledWith(FaceActionsHelpModal, expect.objectContaining({ mode: 'guided' }));
     });
 
     it('keeps the selection intact when the help modal is dismissed', async () => {
@@ -1238,12 +1238,12 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
-      await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
-      await fireEvent.click(screen.getByTestId('bulk-help'));
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
+      await fireEvent.click(screen.getByTestId('face-bulk-help'));
 
       // The bar only renders while something is selected, so its survival IS the selection surviving.
-      expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
-      expect(screen.getByTestId('bulk-bar')).toHaveTextContent('1');
+      expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('face-bulk-bar')).toHaveTextContent('1');
       expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'owner');
     });
   });
@@ -1759,6 +1759,80 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       expect(
         translations.some((t) => t.key === 'admin.face_cleanup_review_tally_owner' && t.values?.name === 'Armin'),
       ).toBe(true);
+    });
+  });
+
+  describe('shared dock', () => {
+    const renderAndLoad = async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+    };
+
+    const selectFirstTile = async () => {
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
+    };
+
+    // G5 — the one button in either bar that had no testid before this change.
+    it('routes the owner action from its own testid', async () => {
+      await renderAndLoad();
+      await selectFirstTile();
+
+      await fireEvent.click(screen.getByTestId('bulk-owner'));
+
+      expect(screen.getAllByTestId('face-tile')[0]).toHaveAttribute('data-state', 'owner');
+    });
+
+    // G1
+    it('explains an action on hover, in the bar itself', async () => {
+      await renderAndLoad();
+      await selectFirstTile();
+
+      await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
+
+      expect(screen.getByTestId('face-bulk-popover')).toHaveTextContent('admin.face_cleanup_action_lock_tip');
+      expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('admin.face_cleanup_review_bulk_hint_effect');
+    });
+
+    // G4 — the page passes guided mode. Paired with the manual page's M5, this is what proves the two pages
+    // diverge; the component spec alone would pass even if both pages hard-coded one mode.
+    it('opens the help modal in guided mode, with guided’s six actions', async () => {
+      await renderAndLoad();
+
+      await fireEvent.click(screen.getByTestId('banner-help'));
+
+      expect(showModal).toHaveBeenCalledWith(
+        FaceActionsHelpModal,
+        expect.objectContaining({
+          mode: 'guided',
+          actions: ['owner', 'stay', 'lock', 'other', 'unknown', 'detach'],
+        }),
+      );
+    });
+
+    // G2 + G3
+    it('opens the same modal from the bulk bar as from the banner', async () => {
+      await renderAndLoad();
+
+      await fireEvent.click(screen.getByTestId('banner-help'));
+      const fromBanner = showModal.mock.calls.at(-1);
+
+      await selectFirstTile();
+      await fireEvent.click(screen.getByTestId('face-bulk-help'));
+      const fromBar = showModal.mock.calls.at(-1);
+
+      expect(fromBar).toEqual(fromBanner);
+    });
+
+    // R11 at the level where testids actually live — the registry has none.
+    it('gives every dock action a distinct testid', async () => {
+      await renderAndLoad();
+      await selectFirstTile();
+
+      const ids = ['bulk-owner', 'bulk-stay', 'bulk-lock', 'bulk-other', 'bulk-unknown', 'bulk-detach'];
+      for (const id of ids) {
+        expect(screen.getAllByTestId(id)).toHaveLength(1);
+      }
     });
   });
 });
