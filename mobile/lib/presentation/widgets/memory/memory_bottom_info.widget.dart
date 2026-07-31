@@ -40,6 +40,10 @@ class DriftMemoryBottomInfo extends StatelessWidget {
               minWidth: 0,
               onPressed: () async {
                 await context.maybePop();
+                if (!context.mounted) {
+                  return;
+                }
+
                 // Activate the existing timeline tab without rebuilding it (a fresh
                 // TabShellRoute would reload the timeline to the top and discard the scroll).
                 await context.navigateTo(const MainTimelineRoute());
