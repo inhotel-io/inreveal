@@ -1,5 +1,5 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
-import { STATE_COLOR, STATE_ICON } from '../../[personId]/review.svelte';
+import { FACE_ACTIONS } from '$lib/components/face-cleanup/face-actions';
 
 // Manual review has no scan (design docs/superpowers/specs/2026-07-23-manual-face-review-mode-design.md §6.4,
 // §6.5). Guided's review.svelte.ts model cannot serve this page without being rewritten, so this is a
@@ -28,22 +28,20 @@ export interface ManualResolveRequest {
   unknown: string[];
 }
 
-// The four non-`keep` states reuse guided's exact colour/icon tokens so one glyph means one thing across both
-// pages (design §6.4). `move` maps to guided's `other` token (a picked destination) — manual has no scan, so
-// there is no `owner`-suggested move to distinguish it from. `keep` deliberately has no entry here: it is
-// signalled by absence, not a 7th swatch.
+// Projected from the registry under manual's `other` → `move` rename (design §3.1). `keep` deliberately has no
+// entry: it is signalled by absence, not a 5th swatch.
 export const MANUAL_STATE_COLOR: Record<Exclude<ManualFaceState, 'keep'>, string> = {
-  move: STATE_COLOR.other,
-  lock: STATE_COLOR.lock,
-  unknown: STATE_COLOR.unknown,
-  detach: STATE_COLOR.detach,
+  move: FACE_ACTIONS.other.swatchColor!,
+  lock: FACE_ACTIONS.lock.swatchColor!,
+  unknown: FACE_ACTIONS.unknown.swatchColor!,
+  detach: FACE_ACTIONS.detach.swatchColor!,
 };
 
 export const MANUAL_STATE_ICON: Record<Exclude<ManualFaceState, 'keep'>, string> = {
-  move: STATE_ICON.other,
-  lock: STATE_ICON.lock,
-  unknown: STATE_ICON.unknown,
-  detach: STATE_ICON.detach,
+  move: FACE_ACTIONS.other.buttonIcon!,
+  lock: FACE_ACTIONS.lock.buttonIcon!,
+  unknown: FACE_ACTIONS.unknown.buttonIcon!,
+  detach: FACE_ACTIONS.detach.buttonIcon!,
 };
 
 export type ManualTally = Record<Exclude<ManualFaceState, 'keep'>, number>;

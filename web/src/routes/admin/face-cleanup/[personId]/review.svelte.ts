@@ -1,6 +1,6 @@
 import type { FaceRepairResolveRequestDto } from '@immich/sdk';
-import { mdiAccountArrowRight, mdiAccountQuestion, mdiArrowRightBold, mdiImageOff, mdiLock, mdiPin } from '@mdi/js';
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { FACE_ACTIONS, GUIDED_STATE_IDS } from '$lib/components/face-cleanup/face-actions';
 
 // Model B (full per-face resolution, docs/plans/2026-07-10-face-cleanup-full-resolution-design.md). Every
 // flagged face resolves to exactly one of six terminal states.
@@ -12,32 +12,20 @@ import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 // wrong — it plainly IS a face). The server parks these in a fresh unnamed cluster of their own.
 export type FaceState = 'owner' | 'other' | 'stay' | 'lock' | 'detach' | 'unknown';
 
-// Model B state colors (docs/plans/2026-07-10-face-cleanup-resolution-mockup.html :root vars) — the visual
-// source of truth for the review page. Lives here, next to `FaceState`, because both the page (tile badges,
-// ribbons, bulk bar, tally) and ActionsHelpModal (the per-action rails and swatches) render them: the modal's
-// swatch is what ties an explanation back to the button and the tile it describes, so the two must never
-// drift apart.
-export const STATE_COLOR: Record<FaceState, string> = {
-  owner: '#4f46e5',
-  other: '#d97706',
-  stay: '#16a34a',
-  lock: '#7c3aed',
-  detach: '#475569',
-  unknown: '#0d9488',
-};
+// Projected from the shared registry (design §3.1) rather than declared here, so the bulk bar, the tile badge,
+// the tally chip and the help modal cannot drift apart. NARROWS to the six tile states: `keep`/`unmark` have no
+// tile state and must never appear here (review.spec.ts pins these key sets).
+export const STATE_COLOR: Record<FaceState, string> = Object.fromEntries(
+  GUIDED_STATE_IDS.map((id) => [id, FACE_ACTIONS[id].swatchColor!]),
+) as Record<FaceState, string>;
 
 // One icon per state, so state is never encoded in COLOR ALONE. The tile badge used to stamp the same check
 // mark on owner/stay/other, leaving indigo-vs-violet as the only thing separating "moved away" from "locked in
 // place" — unreadable for a colorblind admin, and hard for anyone at a glance. Same icon on the tile badge, the
 // bulk-bar button, the tally chip and the help modal, so one glyph means one thing everywhere on the page.
-export const STATE_ICON: Record<FaceState, string> = {
-  owner: mdiArrowRightBold, // moves to the scan's suspected owner
-  other: mdiAccountArrowRight, // moves to a person the admin picked
-  stay: mdiPin, // stays on this person (decline)
-  lock: mdiLock, // stays, pinned against every future scan
-  detach: mdiImageOff, // not a face at all — retired entirely
-  unknown: mdiAccountQuestion, // a real person, but not one the admin can name — parked in its own cluster
-};
+export const STATE_ICON: Record<FaceState, string> = Object.fromEntries(
+  GUIDED_STATE_IDS.map((id) => [id, FACE_ACTIONS[id].buttonIcon!]),
+) as Record<FaceState, string>;
 
 export interface FlaggedFace {
   assetFaceId: string;

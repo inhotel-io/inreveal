@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { STATE_COLOR, STATE_ICON } from '../../../routes/admin/face-cleanup/[personId]/review.svelte';
+import {
+  MANUAL_STATE_COLOR,
+  MANUAL_STATE_ICON,
+} from '../../../routes/admin/face-cleanup/people/[personId]/manual-review.svelte';
 import {
   bodyKeyFor,
   effectKeyFor,
@@ -103,5 +108,31 @@ describe('FACE_ACTIONS registry', () => {
 
   it('lists exactly the six guided tile states', () => {
     expect([...GUIDED_STATE_IDS].sort()).toEqual(['detach', 'lock', 'other', 'owner', 'stay', 'unknown']);
+  });
+});
+
+// R9/R10 — the route tokens are PROJECTIONS of the registry. Asserts both halves: the values match, and the
+// projection NARROWS (keep/unmark must never leak into a tile-state map).
+describe('state tokens derived from the registry', () => {
+  it('projects exactly the six guided states, with the registry values', () => {
+    expect(Object.keys(STATE_COLOR).sort()).toEqual(['detach', 'lock', 'other', 'owner', 'stay', 'unknown']);
+    expect(Object.keys(STATE_ICON).sort()).toEqual(['detach', 'lock', 'other', 'owner', 'stay', 'unknown']);
+
+    for (const id of GUIDED_STATE_IDS) {
+      expect(STATE_COLOR[id]).toBe(FACE_ACTIONS[id].swatchColor);
+      expect(STATE_ICON[id]).toBe(FACE_ACTIONS[id].buttonIcon);
+    }
+  });
+
+  it('projects manual’s four states, renaming other → move, and leaks neither keep nor unmark', () => {
+    expect(Object.keys(MANUAL_STATE_COLOR).sort()).toEqual(['detach', 'lock', 'move', 'unknown']);
+    expect(Object.keys(MANUAL_STATE_ICON).sort()).toEqual(['detach', 'lock', 'move', 'unknown']);
+
+    expect(MANUAL_STATE_COLOR.move).toBe(FACE_ACTIONS.other.swatchColor);
+    expect(MANUAL_STATE_ICON.move).toBe(FACE_ACTIONS.other.buttonIcon);
+    for (const id of ['lock', 'unknown', 'detach'] as const) {
+      expect(MANUAL_STATE_COLOR[id]).toBe(FACE_ACTIONS[id].swatchColor);
+      expect(MANUAL_STATE_ICON[id]).toBe(FACE_ACTIONS[id].buttonIcon);
+    }
   });
 });
