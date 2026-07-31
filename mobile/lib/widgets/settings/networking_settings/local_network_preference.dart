@@ -101,7 +101,6 @@ class LocalNetworkPreference extends HookConsumerWidget {
         return;
       }
 
-
       final wifiName = await ref.read(networkProvider.notifier).getWifiName();
 
       if (wifiName == null) {

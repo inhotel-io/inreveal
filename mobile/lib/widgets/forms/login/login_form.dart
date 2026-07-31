@@ -263,7 +263,7 @@ class LoginForm extends HookConsumerWidget {
       }
     }
 
-    demoLogin() async {
+    Future<void> demoLogin() async {
       if (isDemoLoginLoading.value) {
         return;
       }
