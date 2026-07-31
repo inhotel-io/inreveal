@@ -8,7 +8,6 @@ import 'package:immich_mobile/platform/native_sync_api.g.dart';
 import 'package:immich_mobile/services/action.service.dart';
 import 'package:immich_mobile/services/api.service.dart';
 import 'package:immich_mobile/services/app_settings.service.dart';
-import 'package:immich_mobile/services/background_backup_status.service.dart';
 import 'package:immich_mobile/services/cleanup.service.dart';
 import 'package:immich_mobile/services/foreground_upload.service.dart';
 import 'package:immich_mobile/services/gcast.service.dart';
@@ -55,5 +54,3 @@ class MockCleanupService extends Mock implements CleanupService {}
 class MockBackgroundSyncManager extends Mock implements BackgroundSyncManager {}
 
 class MockToastService extends Mock implements ToastService {}
-
-class MockBackgroundBackupStatusService extends Mock implements BackgroundBackupStatusService {}
