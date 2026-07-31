@@ -38,7 +38,14 @@ describe('ActionsHelpModal', () => {
   it('names all six actions, reusing the bulk-bar labels', () => {
     render(ActionsHelpModal, { props: { onClose: vi.fn() } });
 
-    for (const name of ['→ Owner', 'Keep here', 'Confirm / lock', 'Move → person…', 'Unknown person', 'Not a face']) {
+    for (const name of [
+      'Move to owner',
+      'Keep here',
+      'Confirm & lock',
+      'Move to person…',
+      'Unknown person',
+      'Not a face',
+    ]) {
       expect(screen.getByTestId('help-actions')).toHaveTextContent(name);
     }
   });
