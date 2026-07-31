@@ -15,7 +15,8 @@
 ## Global Constraints
 
 - **Run tests with `pnpm exec vitest run <path>`, never `pnpm test -- --run <path>`** — the latter silently drops the path filter and runs the whole suite.
-- **Prettier: 120 char line width, single quotes, trailing commas, semicolons.** ESLint runs `--max-warnings 0`.
+- **Prettier: 120 char line width, single quotes, trailing commas, semicolons.** ESLint runs `--max-warnings 0` — a lint error is a task failure, so run `pnpm exec eslint <paths>` from `web/` before committing, not just the tests.
+- **Formatting `web/` files must run from `web/`:** `cd web && pnpm exec prettier --write <paths>`. Running `npx prettier` from the worktree ROOT fails on `web/` sources — the root has no `@trivago/prettier-plugin-sort-imports`, which `web/`'s config requires. Root-level `npx prettier --write` still works for `i18n/` and `docs/`.
 - **No relative imports across `lib`/`routes` boundaries** — use the `$lib/` alias.
 - **Testids split into two layers, and only the first is renamed.**
   - **Dock chrome** — the shared component's own furniture — is **normalised** to one scheme used by both modes, hardcoded in `FaceReviewDock` (there is no `testIds` prop): `face-dock`, `face-bulk-bar`, `face-bulk-clear`, `face-bulk-help`, `face-bulk-hint`. This replaces guided's `dock`/`face-bulk-bar`/`clear`/`bulk-help` and manual's `manual-review-dock`/`face-bulk-bar`/`manual-review-bulk-clear`.
@@ -495,7 +496,7 @@ Expected: PASS (9 tests).
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --write web/src/lib/components/face-cleanup/
+cd web && pnpm exec prettier --write src/lib/components/face-cleanup/ && cd ..
 git add web/src/lib/components/face-cleanup/
 git commit -m "feat(face-cleanup): add the shared face-action registry"
 ```
@@ -657,7 +658,7 @@ Expected: PASS, all three. `review.spec.ts` and `manual-review.spec.ts` must be 
 ```bash
 cd web && pnpm run check:typescript
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --write web/src/
+cd web && pnpm exec prettier --write src/ && cd ..
 git add web/src/
 git commit -m "refactor(face-cleanup): derive the state colour and icon tokens from the registry"
 ```
@@ -1254,7 +1255,7 @@ Expected: PASS (24 tests).
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --write web/src/lib/components/face-cleanup/
+cd web && pnpm exec prettier --write src/lib/components/face-cleanup/ && cd ..
 git add web/src/lib/components/face-cleanup/
 git commit -m "feat(face-cleanup): add the shared review dock with hover explanations"
 ```
@@ -1680,7 +1681,7 @@ Expected: PASS (20 tests).
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --write web/src/lib/components/face-cleanup/
+cd web && pnpm exec prettier --write src/lib/components/face-cleanup/ && cd ..
 git add web/src/lib/components/face-cleanup/
 git commit -m "feat(face-cleanup): merge the two action-help modals into one mode-aware modal"
 ```
@@ -1978,7 +1979,7 @@ no edit at all. If you found yourself changing a third, stop: the dock moved som
 ```bash
 cd web && pnpm run check:typescript
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --write web/src/
+cd web && pnpm exec prettier --write src/ && cd ..
 git add -A web/src/
 git commit -m "refactor(face-cleanup): move the guided review page onto the shared dock and modal"
 ```
@@ -2272,7 +2273,7 @@ else in the file must pass with no edit. A third edit means the dock moved somet
 ```bash
 cd web && pnpm run check:typescript
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --write web/src/
+cd web && pnpm exec prettier --write src/ && cd ..
 git add -A web/src/
 git commit -m "refactor(face-cleanup): move the manual review page onto the shared dock and modal"
 ```
@@ -2432,7 +2433,7 @@ Expected: PASS, including every pre-existing card and CTA test (L6).
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --write web/src/routes/admin/face-cleanup/
+cd web && pnpm exec prettier --write src/routes/admin/face-cleanup/ && cd ..
 git add web/src/routes/admin/face-cleanup/
 git commit -m "feat(face-cleanup): explain the console permanently on the landing page"
 ```
@@ -2791,7 +2792,7 @@ Expected: PASS — all five green, each covering a distinct spec requirement:
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --write i18n/ web/src/lib/i18n/
+npx prettier --write i18n/ && cd web && pnpm exec prettier --write src/lib/i18n/ && cd ..
 git add i18n/ web/src/lib/i18n/
 git commit -m "i18n(face-cleanup): translate the new console strings into all nine fork locales"
 ```
