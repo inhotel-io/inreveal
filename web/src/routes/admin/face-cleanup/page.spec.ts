@@ -109,14 +109,59 @@ const makePageData = (over: { scan?: unknown; users?: unknown[] } = {}) => ({
 });
 
 describe('+page.svelte (face cleanup chooser)', () => {
-  // ---- 1. first visit (no scan has ever run) ----
-  describe('first visit (scan = null)', () => {
-    it('renders the explanatory header', () => {
-      render(Page, { props: { data: makePageData({ scan: null }) } });
+  // L1–L3, L7. The intro used to render only on a first visit, so every return visit — which is every visit
+  // after the first scan — showed two cards and no explanation at all. It is now unconditional.
+  describe('the explainer', () => {
+    const SCAN_STATES = [
+      ['no scan yet', null],
+      ['pending', makeScan({ status: 'pending' })],
+      ['running', makeScan({ status: 'running' })],
+      ['failed', makeScan({ status: 'failed' })],
+      ['completed', makeScan()],
+    ] as const;
 
-      expect(screen.getByText('admin.face_cleanup_mode_first_visit_intro')).toBeInTheDocument();
+    it.each(SCAN_STATES)('explains what the page is for — %s', (_label, scan) => {
+      render(Page, { props: { data: makePageData({ scan }) } });
+
+      expect(screen.getByText('admin.face_cleanup_intro_lead')).toBeInTheDocument();
     });
 
+    // L4
+    it('covers the scan, the per-face actions, and the scan-free manual route', () => {
+      render(Page, { props: { data: makePageData({ scan: makeScan() }) } });
+
+      for (const key of [
+        'admin.face_cleanup_intro_scan_title',
+        'admin.face_cleanup_intro_scan_body',
+        'admin.face_cleanup_intro_actions_title',
+        'admin.face_cleanup_intro_actions_body',
+        'admin.face_cleanup_intro_manual_title',
+        'admin.face_cleanup_intro_manual_body',
+      ]) {
+        expect(screen.getByText(key)).toBeInTheDocument();
+      }
+    });
+
+    // L5 — read before the choice it informs.
+    it('is read before the two cards', () => {
+      render(Page, { props: { data: makePageData({ scan: makeScan() }) } });
+
+      const intro = screen.getByTestId('face-cleanup-intro');
+      const guided = screen.getByTestId('chooser-card-guided');
+
+      expect(intro.compareDocumentPosition(guided) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    // L7 — the replaced string is gone, not merely hidden.
+    it.each(SCAN_STATES)('no longer renders the retired first-visit copy — %s', (_label, scan) => {
+      render(Page, { props: { data: makePageData({ scan }) } });
+
+      expect(screen.queryByText('admin.face_cleanup_mode_first_visit_intro')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---- 1. first visit (no scan has ever run) ----
+  describe('first visit (scan = null)', () => {
     it('guided card shows "needs a scan first" and a Run first scan action to the scan dashboard', () => {
       render(Page, { props: { data: makePageData({ scan: null }) } });
 
@@ -145,12 +190,6 @@ describe('+page.svelte (face cleanup chooser)', () => {
 
   // ---- 2. returning, completed, flagged > 0 ----
   describe('returning, completed, flagged > 0', () => {
-    it('does not render the first-visit header', () => {
-      render(Page, { props: { data: makePageData({ scan: makeScan() }) } });
-
-      expect(screen.queryByText('admin.face_cleanup_mode_first_visit_intro')).not.toBeInTheDocument();
-    });
-
     it('guided card shows the flagged and affected-people counts, with a Continue action', () => {
       render(Page, {
         props: {

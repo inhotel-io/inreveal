@@ -2,7 +2,7 @@
   import AdminPageLayout from '$lib/components/layouts/AdminPageLayout.svelte';
   import { Route } from '$lib/route';
   import { Button, Icon } from '@immich/ui';
-  import { mdiAccountSearch, mdiArrowRight, mdiRadar } from '@mdi/js';
+  import { mdiAccountSearch, mdiArrowRight, mdiRadar, mdiSwapHorizontal } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -71,18 +71,30 @@
   </span>
 {/snippet}
 
+{#snippet introPoint(icon: string, slug: 'scan' | 'actions' | 'manual')}
+  <div class="flex gap-3">
+    <div
+      class="flex size-8 flex-none items-center justify-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+    >
+      <Icon {icon} size="16" />
+    </div>
+    <div class="min-w-0">
+      <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+        {$t(`admin.face_cleanup_intro_${slug}_title`)}
+      </h3>
+      <p class="mt-1 text-xs/relaxed text-gray-500 dark:text-gray-400">
+        {$t(`admin.face_cleanup_intro_${slug}_body`)}
+      </p>
+    </div>
+  </div>
+{/snippet}
+
 <AdminPageLayout breadcrumbs={[{ title: data.meta.title }]}>
   <div class="mx-auto max-w-screen-xl p-6 sm:p-8">
-    <!-- Header: first visit gets its own explanatory intro; returning shows a last-scan chip instead. -->
-    <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
-      <div class="max-w-2xl">
-        <h1 class="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">{$t('admin.face_cleanup')}</h1>
-        {#if firstVisit}
-          <p class="mt-2 text-sm/relaxed text-gray-500 dark:text-gray-400">
-            {$t('admin.face_cleanup_mode_first_visit_intro')}
-          </p>
-        {/if}
-      </div>
+    <!-- Header. The last-scan chip stays on the right; the explainer below is unconditional (design §3.4) —
+         it used to be gated on `firstVisit`, which hid it from every visit after the first scan. -->
+    <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <h1 class="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">{$t('admin.face_cleanup')}</h1>
       {#if !firstVisit && scan?.finishedAt}
         <span
           class="inline-flex flex-none items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-500 dark:bg-gray-800 dark:text-gray-400"
@@ -91,6 +103,16 @@
           {$t('admin.face_cleanup_last_scan')} · {formatDate(scan.finishedAt)}
         </span>
       {/if}
+    </div>
+
+    <div class="mb-8 max-w-4xl" data-testid="face-cleanup-intro">
+      <p class="text-sm/relaxed text-gray-500 dark:text-gray-400">{$t('admin.face_cleanup_intro_lead')}</p>
+
+      <div class="mt-5 grid gap-4 sm:grid-cols-3">
+        {@render introPoint(mdiRadar, 'scan')}
+        {@render introPoint(mdiSwapHorizontal, 'actions')}
+        {@render introPoint(mdiAccountSearch, 'manual')}
+      </div>
     </div>
 
     <!-- Two equal-weight doors, identical footprint. Neither is marked "recommended" (§6.2): we don't know
