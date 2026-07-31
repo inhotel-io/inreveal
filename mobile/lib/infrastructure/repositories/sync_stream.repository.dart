@@ -15,8 +15,8 @@ import 'package:immich_mobile/infrastructure/entities/asset_face.entity.drift.da
 import 'package:immich_mobile/infrastructure/entities/asset_ocr.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/auth_user.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/exif.entity.drift.dart';
-import 'package:immich_mobile/infrastructure/entities/local_album.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/library.entity.drift.dart';
+import 'package:immich_mobile/infrastructure/entities/local_album.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/memory.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/memory_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/partner.entity.drift.dart';
@@ -646,7 +646,7 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             color: Value(space.color),
             createdById: Value(space.createdById),
             thumbnailAssetId: Value(space.thumbnailAssetId),
-            thumbnailCropY: Value(space.thumbnailCropY?.toInt()),
+            thumbnailCropY: Value(space.thumbnailCropY),
             faceRecognitionEnabled: Value(space.faceRecognitionEnabled),
             petsEnabled: Value(space.petsEnabled),
             lastActivityAt: Value(space.lastActivityAt),
