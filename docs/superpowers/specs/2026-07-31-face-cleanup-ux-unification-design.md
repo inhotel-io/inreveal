@@ -100,9 +100,10 @@ export interface FaceActionMeta {
   readonly effectKey: ModalKey;
   /**
    * Glyph on the bulk-bar button. Present for every action that IS a button — including `unmark`, which
-   * carries `mdiUndo` today. Distinct from `swatchColor` below: a button glyph is not a tile state.
+   * carries `mdiUndo` today. `undefined` only for `keep`, which is the default rather than a button and
+   * appears solely in the help modal. Distinct from `swatchColor` below: a button glyph is not a tile state.
    */
-  readonly buttonIcon: string;
+  readonly buttonIcon: string | undefined;
   /**
    * The tile-state swatch — badge, ribbon, help-modal rail. `undefined` for `keep` and `unmark`, which
    * correspond to no coloured tile state and are signalled by ABSENCE (2026-07-23 design §6.4).
@@ -363,12 +364,21 @@ structure. Existing suites are treated as a regression contract — no assertion
 implementation pass; where a test encodes behaviour this change deliberately alters, it is rewritten to assert
 the new behaviour, and that rewrite is called out per test below.
 
-Two harness facts constrain how these are written:
+Three harness facts constrain how these are written. **The two suites use opposite i18n strategies** — get
+this wrong and every assertion in a file is vacuous:
 
-- `$t` is mocked to return the **key**, so assertions match on key names, not English. Interpolated strings
-  render as the bare key — a spec cannot assert on interpolated values, only on the key's presence.
-- `Icon` is stubbed to a no-op component. Icon identity is not observable in a page spec; it is asserted in the
-  registry spec instead.
+- **Page specs** (`page.spec.ts` × 3) mock `$t` to return the **key**, so they assert on key names, never
+  English (`admin/face-cleanup/page.spec.ts:24-35`). Interpolated strings render as the bare key, so a page
+  spec can assert a key's presence but never an interpolated value.
+- **Component specs** (`ActionsHelpModal.spec.ts:18-22`, `ManualActionsHelpModal.spec.ts:25`) register the
+  **real `en.json`** (`register` + `init` + `waitLocale`) and assert English text, so a missing or renamed key
+  fails the test instead of silently rendering the key. `FaceActionsHelpModal.spec.ts` and
+  `FaceReviewDock.spec.ts` follow this convention — it is what makes R3's key-existence guarantee observable at
+  the component level.
+- Anything rendering a bits-ui `Modal` needs the deferred body-scroll-lock drain in `afterEach`
+  (`await new Promise((r) => setTimeout(r, 500))`) before happy-dom tears `document` down.
+- `Icon` is stubbed to a no-op in page specs, so icon identity is not observable there; it is asserted in the
+  registry and dock specs instead.
 
 ### 5.1 `face-actions.spec.ts` (new — pure unit)
 
@@ -377,7 +387,7 @@ Two harness facts constrain how these are written:
 | R1  | Every `FaceActionId` has an entry — the record is total, so a new id cannot be added without meta.                                                                                                                                                                                                                                        |
 | R2  | `labelKey`, `tipKey` and every resolved body/effect key are non-empty and distinct across actions (no accidental copy-paste of one action's explanation onto another).                                                                                                                                                                    |
 | R3  | Every key the registry names — including **both** arms of every mode-dependent `ModalKey` — exists in `en.json` (reads the file, same technique as `slice-12-key-audit.spec.ts`).                                                                                                                                                         |
-| R4  | Every action has a `buttonIcon`, including `unmark`. Only `keep` and `unmark` lack a `swatchColor`. This is the F2 split: a button glyph is not a tile state.                                                                                                                                                                             |
+| R4  | Every action that can appear in a bar has a `buttonIcon` — all seven ids except `keep`, and notably including `unmark`. Only `keep` and `unmark` lack a `swatchColor`. This is the F2 split: a button glyph is not a tile state, and the two absences deliberately do not coincide.                                                       |
 | R5  | `detach` is the only `tone: 'danger'` action.                                                                                                                                                                                                                                                                                             |
 | R6  | The registry has no `move` id — manual's move button is `other`, so both modes render one label key. (Its page-level wiring is asserted in §5.6 M4.)                                                                                                                                                                                      |
 | R7  | **Mode-dependent resolution, per shared action:** `bodyKeyFor('other','guided')` → `…review_help_other_body` and `('other','manual')` → `…manual_review_help_move_body`; likewise `effectKeyFor` for `other`, and `bodyKeyFor` for `lock`. Each asserted against the exact key that mode uses today, so the merge provably loses no copy. |
