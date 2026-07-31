@@ -9,6 +9,7 @@ import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/domain/utils/event_stream.dart';
 import 'package:immich_mobile/presentation/actions/action.widget.dart';
 import 'package:immich_mobile/presentation/actions/asset_debug.action.dart';
+import 'package:immich_mobile/presentation/actions/similar_photos.action.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/archive_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/base_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/cast_action_button.widget.dart';
@@ -26,7 +27,6 @@ import 'package:immich_mobile/presentation/widgets/action_buttons/set_album_cove
 import 'package:immich_mobile/presentation/widgets/action_buttons/set_profile_picture_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/share_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/share_link_action_button.widget.dart';
-import 'package:immich_mobile/presentation/widgets/action_buttons/similar_photos_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/slideshow_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/trash_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/unarchive_action_button.widget.dart';
@@ -256,11 +256,10 @@ enum ActionButtonType {
         iconOnly: iconOnly,
         menuItem: menuItem,
       ),
-      ActionButtonType.similarPhotos => SimilarPhotosActionButton(
-        assetId: (context.asset as RemoteAsset).id,
-        iconOnly: iconOnly,
-        menuItem: menuItem,
-      ),
+      ActionButtonType.similarPhotos =>
+        menuItem
+            ? ActionMenuItem(action: SimilarPhotosAction(assetId: (context.asset as RemoteAsset).id))
+            : ActionColumnButton(action: SimilarPhotosAction(assetId: (context.asset as RemoteAsset).id)),
       ActionButtonType.setProfilePicture => SetProfilePictureActionButton(
         asset: context.asset,
         iconOnly: iconOnly,
