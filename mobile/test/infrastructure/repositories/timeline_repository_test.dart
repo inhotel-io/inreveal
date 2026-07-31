@@ -18,7 +18,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
-import 'package:intl/date_symbol_data_local.dart';
 import 'package:immich_mobile/infrastructure/entities/exif.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space.entity.drift.dart';
@@ -30,6 +29,7 @@ import 'package:immich_mobile/infrastructure/entities/shared_space_member.entity
 import 'package:immich_mobile/infrastructure/entities/user.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/timeline.repository.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 
 import '_shared_permission_matrix.dart';

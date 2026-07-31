@@ -7,6 +7,7 @@ import 'package:immich_mobile/domain/models/memory.model.dart';
 import 'package:immich_mobile/domain/models/user.model.dart';
 import 'package:immich_mobile/infrastructure/entities/asset_face.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/auth_user.entity.drift.dart';
+import 'package:immich_mobile/infrastructure/entities/library.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/local_album_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/local_asset.entity.drift.dart';
@@ -19,7 +20,6 @@ import 'package:immich_mobile/infrastructure/entities/remote_album_asset.entity.
 import 'package:immich_mobile/infrastructure/entities/remote_album_user.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_asset_cloud_id.entity.drift.dart';
-import 'package:immich_mobile/infrastructure/entities/library.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space_album.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space_album_asset.entity.drift.dart';
