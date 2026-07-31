@@ -64,7 +64,8 @@ describe('FACE_ACTIONS registry', () => {
 
   // R4 — the F2 split. A button glyph is not a tile state, and the two absences do not coincide.
   it('gives every bar action a glyph (including unmark) and withholds a swatch only from keep and unmark', () => {
-    for (const id of ALL_IDS.filter((candidate) => candidate !== 'keep')) {
+    const actionIdsExceptKeep = ALL_IDS.filter((candidate) => candidate !== 'keep');
+    for (const id of actionIdsExceptKeep) {
       expect(FACE_ACTIONS[id].buttonIcon, `${id} must have a button glyph`).toBeTruthy();
     }
     expect(FACE_ACTIONS.keep.buttonIcon).toBeUndefined();
