@@ -285,7 +285,6 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
             _removeUploadItem(taskId);
           });
         }
-        break;
       case TaskStatus.failed:
       case TaskStatus.notFound:
       case TaskStatus.canceled:
@@ -304,7 +303,6 @@ class DriftBackupNotifier extends StateNotifier<DriftBackupState> {
             ),
           },
         );
-        break;
       default:
         break;
     }
