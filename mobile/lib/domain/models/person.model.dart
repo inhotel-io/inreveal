@@ -13,6 +13,11 @@ abstract class PersonDto with _$PersonDto {
     required String name,
     required String thumbnailPath,
     DateTime? updatedAt,
+
+    /// Photo count for the picker row (`_PersonRow` "N photos" subtitle). Sourced from
+    /// [DriftPerson.numberOfAssets] with no extra network call; null hides the subtitle
+    /// (e.g. the offline local-Drift fallback path never populates it).
+    int? numberOfAssets,
   }) = _PersonDto;
 }
 
@@ -36,6 +41,11 @@ abstract class DriftPerson with _$DriftPerson {
     /// Space person must route through the editor-gated shared-space endpoint, never the
     /// owner-only person endpoint.
     String? spaceId,
+
+    /// Photo count sourced from the shared-spaces server list (`PersonResponseDto.numberOfAssets`).
+    /// Null when unavailable — the owner-scoped local Drift query and the offline fallback path
+    /// never populate it, so the picker row hides the count gracefully rather than erroring.
+    int? numberOfAssets,
   }) = _DriftPerson;
 }
 
