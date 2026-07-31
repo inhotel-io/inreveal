@@ -77,7 +77,9 @@ void main() {
       container.listen(assetExifProvider(_asset), (_, __) {});
       await container.read(assetExifProvider(_asset).future);
 
-      final result = await container.read(actionProvider.notifier).editDateTime(ActionSource.viewer, FakeBuildContext());
+      final result = await container
+          .read(actionProvider.notifier)
+          .editDateTime(ActionSource.viewer, FakeBuildContext());
 
       expect(result?.success, isTrue);
       await container.read(assetExifProvider(_asset).future);
@@ -89,7 +91,9 @@ void main() {
       container.listen(assetExifProvider(_asset), (_, __) {});
       await container.read(assetExifProvider(_asset).future);
 
-      final result = await container.read(actionProvider.notifier).editDateTime(ActionSource.timeline, FakeBuildContext());
+      final result = await container
+          .read(actionProvider.notifier)
+          .editDateTime(ActionSource.timeline, FakeBuildContext());
 
       expect(result?.success, isTrue);
       await container.read(assetExifProvider(_asset).future);
@@ -102,7 +106,9 @@ void main() {
       container.listen(assetExifProvider(_asset), (_, __) {});
       await container.read(assetExifProvider(_asset).future);
 
-      final result = await container.read(actionProvider.notifier).editDateTime(ActionSource.viewer, FakeBuildContext());
+      final result = await container
+          .read(actionProvider.notifier)
+          .editDateTime(ActionSource.viewer, FakeBuildContext());
 
       expect(result, isNull);
       await container.read(assetExifProvider(_asset).future);

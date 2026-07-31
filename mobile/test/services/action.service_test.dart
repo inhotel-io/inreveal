@@ -16,7 +16,6 @@ import '../repository.mocks.dart';
 
 class MockSharedSpaceApiRepository extends Mock implements SharedSpaceApiRepository {}
 
-
 void main() {
   late ActionService sut;
 
