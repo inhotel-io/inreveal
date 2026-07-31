@@ -44,6 +44,7 @@ it was re-typed rather than shared, and the two copies drifted. This spec makes 
 - Both modes render the _same_ dock component with the same styling, and the same wording for the same action.
 - One action registry behind the buttons, the tooltips and the help modal, so an explanation can never drift
   from the button it explains.
+- Every string ships translated into all nine fork locales in this same change — see §4.5.
 
 **Non-goals**
 
@@ -235,9 +236,40 @@ same change — a translation of the old wording left in place would be wrong, n
 | `face_cleanup_review_bulk_hint_default` | Nothing is written until you press Apply. Hover an action to see what it will do. |
 | `face_cleanup_review_bulk_hint_effect`  | `{action} · On apply: {effect}`                                                   |
 
-New keys land in `en.json` only. This is the invariant `web/src/lib/i18n/fork-string-parity.spec.ts` states
-explicitly ("new keys land in en.json alone and get translated in a later pass") and the reason that test keys
-its fork-string detection on "at least one of the nine", never "all nine".
+### 4.5 Locale coverage — all nine, in this change
+
+Every string this feature introduces or rewords ships translated in the **same change** as the code. There is
+no en-only intermediate state and no follow-up translation pass.
+
+The set is the nine fork-maintained locales, exactly as `web/src/lib/i18n/fork-string-parity.spec.ts:20`
+defines them:
+
+```
+de  es  fr  it  nl  pl  ru  zh_Hans  zh_Hant
+```
+
+**Spanish is not optional, and Chinese means both scripts.** The parity test derives a "fork string" as any
+`en.json` key that at least one translated locale carries and no upstream-Weblate locale does, then asserts
+`it.each(TRANSLATED)('%s carries every fork string')`. Translating a new key into eight of the nine therefore
+does not leave the ninth merely untranslated — it promotes the key to a fork string and turns that locale's
+parity test red. Partial coverage is a CI failure, not a smaller deliverable.
+
+This applies to three groups:
+
+1. **New keys** — §4.1 (7 landing-page keys), §4.3 (8 tip keys), §4.4 (2 hint keys). 17 keys × 9 locales.
+2. **Reworded keys** — §4.2's three changed English values. Their existing nine translations render the _old_
+   wording and are rewritten, not left alone: a stale translation is wrong, not just untranslated, and no
+   automated guard can see it (`placeholders.spec.ts` only inspects interpolation arguments).
+3. **Removed keys** — the four keys §4.1/§4.2 delete come out of all nine locale files as well as `en.json`.
+
+`face_cleanup_review_bulk_hint_effect` carries interpolation (`{action}`, `{effect}`). Every locale must keep
+both argument names verbatim and untranslated — translating an ICU argument name is the exact defect
+`placeholders.spec.ts` was written for, and it renders literal braces to the user.
+
+Note that this deliberately departs from the "new keys land in `en.json` alone and get translated in a later
+pass" convention that `fork-string-parity.spec.ts` documents in its own comments. That convention is a floor,
+not a ceiling; it exists so a feature is never _blocked_ on translation. Shipping the translations up front is
+strictly stronger and leaves nothing owed.
 
 ## 5. Testing
 
@@ -368,13 +400,15 @@ Existing tests keep their testids (`manual-review-bulk-move`, `-lock`, `-unknown
 
 ### 5.7 i18n guards
 
-| #   | Behaviour                                                                                                                                                                                                                                                                                                            |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| I1  | `slice-12-key-audit.spec.ts` passes unchanged: both pages still reference at least one `$t` key directly, and every key they reference exists in `en.json`.                                                                                                                                                          |
-| I2  | No web or mobile source references the four removed keys (`…_first_visit_intro`, `…_manual_review_bulk_move`, `…_manual_review_bulk_lock`, `…_manual_review_bulk_unknown`). Extend `slice-12-key-audit.spec.ts`'s removed-key scan, or add the equivalent guard alongside it.                                        |
-| I3  | `fork-string-parity.spec.ts` passes: the removed keys are gone from all nine locales too, not just `en.json`.                                                                                                                                                                                                        |
-| I4  | `placeholders.spec.ts` passes. It compares a locale's placeholders against `en.json`'s, so the one new interpolated key (`…_hint_effect`, carrying `{action}` and `{effect}`) is inert until translated — but the guard becomes load-bearing on that later pass, and the argument names are chosen now to be stable. |
-| I5  | `face-cleanup-plurals.spec.ts` passes — no new plural forms are introduced.                                                                                                                                                                                                                                          |
+| #   | Behaviour                                                                                                                                                                                                                                                                                                                   |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| I1  | `slice-12-key-audit.spec.ts` passes unchanged: both pages still reference at least one `$t` key directly, and every key they reference exists in `en.json`.                                                                                                                                                                 |
+| I2  | No web or mobile source references the four removed keys (`…_first_visit_intro`, `…_manual_review_bulk_move`, `…_manual_review_bulk_lock`, `…_manual_review_bulk_unknown`). Extend `slice-12-key-audit.spec.ts`'s removed-key scan, or add the equivalent guard alongside it.                                               |
+| I3  | `fork-string-parity.spec.ts` passes: every new key is present in **all nine** locales, and the four removed keys are gone from all nine too, not just `en.json`.                                                                                                                                                            |
+| I4  | `placeholders.spec.ts` passes: `…_hint_effect` carries the literal argument names `{action}` and `{effect}` in all nine translations. Because the translations ship in this change rather than later, this guard is live immediately — a locale that translated an argument name fails here.                                |
+| I5  | `face-cleanup-plurals.spec.ts` passes — no new plural forms are introduced.                                                                                                                                                                                                                                                 |
+| I6  | **Coverage assertion (new, in `face-actions.spec.ts` or alongside the parity spec):** every key the registry names, plus the intro and hint keys, resolves in all nine locale files. This states the §4.5 requirement directly rather than relying on parity's transitive "at least one locale has it" derivation.          |
+| I7  | No locale's value for the three reworded keys (§4.2) still carries the old wording's arrow-and-slash shape — `face_cleanup_review_bulk_owner` and `…_other` contain no `→`, `…_lock` no `/`. A cheap, checkable proxy for "the nine were updated, not just `en.json`"; a test cannot diff against a value it no longer has. |
 
 ### 5.8 E2E
 
@@ -392,21 +426,26 @@ Not automatable, checked by hand on the dev stack before the branch is called do
 - Light and dark theme on both docks and the intro block.
 - Hint row does not shift the dock height when swapping between the shortest and longest effect string.
 - Touch: with no hover available, the hint row and the `(i)` modal still carry the full explanation.
+- **Locale spot-check in the running app, not just in the JSON.** `de` for the longest compounds (does a
+  six-button bar still fit, or wrap acceptably), `zh_Hans` for the shortest (buttons should not collapse to
+  cramped two-character stubs), and `ru` for the intro block's line lengths. The dock is the tightest surface
+  in the feature and English is its shortest rendering — it is the one place a translation can look correct in
+  the file and wrong on screen.
 
 ## 6. Risks
 
-| Risk                                                                         | Mitigation                                                                                                                                                                                                                |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A moved `data-testid` breaks e2e silently in a suite that isn't run locally. | Testids are props on the dock, enumerated per page; §5.8 requires the e2e specs to pass unmodified.                                                                                                                       |
-| Merging two help modals loses an assertion one of them made.                 | §5.3 carries over every case from both deleted specs by name; the deletions happen in the same commit as the merged spec.                                                                                                 |
-| Changing English label values leaves stale translations in nine locales.     | §4.2 updates them in the same change.                                                                                                                                                                                     |
-| The popover reimplements a tooltip.                                          | Deliberate and scoped: ~15 lines, dark-surface styling, no `TooltipProvider` dependency, shares `hoveredId` with the hint row. Recorded here so a later reader does not "fix" it by swapping in `@immich/ui`'s `Tooltip`. |
-| The hint row makes the dock taller and pushes grid content up.               | Two reserved lines with `line-clamp-2`; the dock is a layout footer, not overlaid on the grid.                                                                                                                            |
+| Risk                                                                                      | Mitigation                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A moved `data-testid` breaks e2e silently in a suite that isn't run locally.              | Testids are props on the dock, enumerated per page; §5.8 requires the e2e specs to pass unmodified.                                                                                                                       |
+| Merging two help modals loses an assertion one of them made.                              | §5.3 carries over every case from both deleted specs by name; the deletions happen in the same commit as the merged spec.                                                                                                 |
+| Changing English label values leaves stale translations in nine locales.                  | §4.2 updates them in the same change; I7 guards the three reworded keys against keeping the old arrow/slash shape.                                                                                                        |
+| Translating into eight locales and forgetting `es` (or shipping only one Chinese script). | Not a partial success but a red build: §4.5 explains the parity test's promotion rule, and I3/I6 assert presence across all nine explicitly.                                                                              |
+| Longer translations (`de`, `ru`) overflow the six-button bar or the two-line hint clamp.  | The bar already wraps (`flex-wrap`); the hint row clamps at two lines. Verified by eye per §5.9 rather than asserted — a spec cannot see rendered width in happy-dom.                                                     |
+| The popover reimplements a tooltip.                                                       | Deliberate and scoped: ~15 lines, dark-surface styling, no `TooltipProvider` dependency, shares `hoveredId` with the hint row. Recorded here so a later reader does not "fix" it by swapping in `@immich/ui`'s `Tooltip`. |
+| The hint row makes the dock taller and pushes grid content up.                            | Two reserved lines with `line-clamp-2`; the dock is a layout footer, not overlaid on the grid.                                                                                                                            |
 
 ## 7. Out of scope / follow-ups
 
-- Translating the new `en.json` keys into the nine fork locales — a later pass, per the parity test's stated
-  invariant.
 - Unifying the two view-models (`review.svelte.ts` / `manual-review.svelte.ts`). The 2026-07-23 design §6.5
   argues they are genuinely different state machines; nothing here changes that assessment.
 - Unifying the summary halves of the two docks. Guided's rest-of-cluster chip, blocked reason and "all set"
