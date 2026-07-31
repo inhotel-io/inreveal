@@ -11,9 +11,9 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goto } from '$app/navigation';
+import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
 import { Route } from '$lib/route';
 import Page from './+page.svelte';
-import ManualActionsHelpModal from './ManualActionsHelpModal.svelte';
 import { createManualReviewModel, type ManualReviewModel } from './manual-review.svelte';
 
 // Manual review page (Slice 8, design §6.4 of
@@ -530,7 +530,7 @@ describe('+page.svelte (manual face-review page)', () => {
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-      expect(screen.getByTestId('manual-review-dock')).toBeInTheDocument();
+      expect(screen.getByTestId('face-dock')).toBeInTheDocument();
       const applyBtn = screen.getByTestId('manual-review-apply-btn');
       expect(applyBtn).toBeDisabled();
 
@@ -548,11 +548,11 @@ describe('+page.svelte (manual face-review page)', () => {
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await selectTile(0);
-      await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
       await fireEvent.click(screen.getByTestId(buttonTestId));
 
       await waitFor(() => {
-        expect(screen.queryByTestId('manual-review-bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
         expect(tileFor('f1')).toHaveAttribute('data-state', expectedState);
       });
       expect(tileFor('f2')).toHaveAttribute('data-state', 'keep');
@@ -566,7 +566,7 @@ describe('+page.svelte (manual face-review page)', () => {
         await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
         await selectTile(0);
-        await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
         await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
 
         await waitFor(() => {
@@ -587,7 +587,7 @@ describe('+page.svelte (manual face-review page)', () => {
         await fireEvent.click(screen.getByTestId('manual-review-bulk-move'));
 
         await waitFor(() => {
-          expect(screen.queryByTestId('manual-review-bulk-bar')).not.toBeInTheDocument();
+          expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
           expect(tileFor('f1')).toHaveAttribute('data-state', 'move');
         });
         expect(tileFor('f2')).toHaveAttribute('data-state', 'keep');
@@ -621,7 +621,7 @@ describe('+page.svelte (manual face-review page)', () => {
         await waitFor(() => expect(showModal).toHaveBeenCalled());
 
         // Selection (still `keep`) survives an uncommitted picker — the bulk bar is still showing.
-        expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument();
+        expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument();
         expect(tileFor('f1')).toHaveAttribute('data-state', 'keep');
       });
     });
@@ -643,7 +643,7 @@ describe('+page.svelte (manual face-review page)', () => {
 
       // Re-select only f1 and Unmark it.
       await selectTile(0);
-      await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
       await fireEvent.click(screen.getByTestId('manual-review-bulk-unmark'));
 
       await waitFor(() => {
@@ -746,7 +746,7 @@ describe('+page.svelte (manual face-review page)', () => {
         render(Page, { props: { data: makePageData() } });
         await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
         await selectTile(0);
-        await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
         await fireEvent.click(screen.getByTestId('manual-review-bulk-detach'));
       };
 
@@ -905,7 +905,7 @@ describe('+page.svelte (manual face-review page)', () => {
       expect(screen.getByTestId('manual-review-move-entire-btn')).not.toBeDisabled();
 
       await selectTile(0);
-      await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       expect(screen.getByTestId('manual-review-move-entire-btn')).toBeInTheDocument();
       expect(screen.getByTestId('manual-review-move-entire-btn')).not.toBeDisabled();
@@ -1111,16 +1111,121 @@ describe('+page.svelte (manual face-review page)', () => {
 
   // ==== Slice 10, Part B — manual actions help modal launcher ====
   // The modal's own content (naming all six actions, the Keep-writes-nothing explanation, the swatch-matches-
-  // tile rule, etc.) is covered by ManualActionsHelpModal.spec.ts against REAL i18n — this only proves the page
-  // wires a launcher to the RIGHT component.
+  // tile rule, etc.) is covered by FaceActionsHelpModal.spec.ts against REAL i18n — this only proves the page
+  // wires a launcher to the RIGHT component, in the right mode.
   describe('Slice 10 — manual actions help modal launcher', () => {
-    it('opens ManualActionsHelpModal', async () => {
+    it('opens FaceActionsHelpModal in manual mode', async () => {
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
       await fireEvent.click(screen.getByTestId('manual-review-help-open'));
 
-      expect(showModal).toHaveBeenCalledWith(ManualActionsHelpModal, {});
+      expect(showModal).toHaveBeenCalledWith(FaceActionsHelpModal, expect.objectContaining({ mode: 'manual' }));
+    });
+  });
+
+  describe('shared dock', () => {
+    const renderAndLoad = async () => {
+      render(Page, { props: { data: makePageData() } });
+      await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
+    };
+
+    const selectFirstTile = async () => {
+      await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
+      await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
+    };
+
+    // M1 — the gap this change closes: manual's bar had no help affordance at all.
+    it('offers help from inside the bulk bar, which it never used to', async () => {
+      await renderAndLoad();
+      await selectFirstTile();
+
+      expect(screen.getByTestId('face-bulk-help')).toBeInTheDocument();
+    });
+
+    // M5 — the counterpart to guided's G4.
+    it('opens the help modal in manual mode, with manual’s six actions', async () => {
+      await renderAndLoad();
+
+      await fireEvent.click(screen.getByTestId('manual-review-help-open'));
+
+      expect(showModal).toHaveBeenCalledWith(
+        FaceActionsHelpModal,
+        expect.objectContaining({
+          mode: 'manual',
+          actions: ['keep', 'other', 'lock', 'unknown', 'detach', 'unmark'],
+          defaultActionId: 'keep',
+        }),
+      );
+    });
+
+    // M6 — the two modes provably receive different subsets.
+    it('asks for neither owner nor stay, and asks for keep and unmark', async () => {
+      await renderAndLoad();
+
+      await fireEvent.click(screen.getByTestId('manual-review-help-open'));
+      const props = showModal.mock.calls.at(-1)?.[1] as { actions: string[] };
+
+      expect(props.actions).toContain('keep');
+      expect(props.actions).toContain('unmark');
+      expect(props.actions).not.toContain('owner');
+      expect(props.actions).not.toContain('stay');
+    });
+
+    // M2
+    it('opens the same modal from the grid header as from the bulk bar', async () => {
+      await renderAndLoad();
+
+      await fireEvent.click(screen.getByTestId('manual-review-help-open'));
+      const fromHeader = showModal.mock.calls.at(-1);
+
+      await selectFirstTile();
+      await fireEvent.click(screen.getByTestId('face-bulk-help'));
+      const fromBar = showModal.mock.calls.at(-1);
+
+      expect(fromBar).toEqual(fromHeader);
+    });
+
+    // M3
+    it('explains an action on hover', async () => {
+      await renderAndLoad();
+      await selectFirstTile();
+
+      await fireEvent.mouseEnter(screen.getByTestId('manual-review-bulk-lock'));
+
+      expect(screen.getByTestId('face-bulk-popover')).toHaveTextContent('admin.face_cleanup_action_lock_tip');
+    });
+
+    // M4 — the harmonisation, asserted rather than assumed.
+    it('labels its move button with the same key guided uses', async () => {
+      await renderAndLoad();
+      await selectFirstTile();
+
+      expect(screen.getByTestId('manual-review-bulk-move')).toHaveTextContent('admin.face_cleanup_review_bulk_other');
+    });
+
+    // M7 — F2 at the page level. Icon is stubbed here, so this asserts presence, not identity.
+    it('keeps a glyph on Unmark after the dock swap', async () => {
+      await renderAndLoad();
+      await selectFirstTile();
+
+      expect(screen.getByTestId('manual-review-bulk-unmark').firstElementChild).not.toBeNull();
+    });
+
+    // R11 at the level where testids actually live.
+    it('gives every dock action a distinct testid', async () => {
+      await renderAndLoad();
+      await selectFirstTile();
+
+      for (const id of [
+        'manual-review-bulk-move',
+        'manual-review-bulk-lock',
+        'manual-review-bulk-unknown',
+        'manual-review-bulk-detach',
+        'manual-review-bulk-unmark',
+      ]) {
+        expect(screen.getAllByTestId(id)).toHaveLength(1);
+      }
     });
   });
 });

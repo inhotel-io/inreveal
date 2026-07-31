@@ -14,12 +14,14 @@
     type FaceRepairResolveRequestDto,
   } from '@immich/sdk';
   import { Button, ConfirmModal, Icon, modalManager, toastManager } from '@immich/ui';
-  import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiInformationOutline, mdiUndo } from '@mdi/js';
+  import { mdiArrowLeft, mdiArrowRight, mdiClose, mdiInformationOutline } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
+  import FaceReviewDock from '$lib/components/face-cleanup/FaceReviewDock.svelte';
+  import type { FaceActionId } from '$lib/components/face-cleanup/face-actions';
   import PersonPicker from '../../[personId]/PersonPicker.svelte';
   import type { PageData } from './$types';
-  import ManualActionsHelpModal from './ManualActionsHelpModal.svelte';
   import {
     createManualReviewModel,
     MANUAL_STATE_COLOR,
@@ -45,9 +47,10 @@
   // the scan's suspected owner — has no owner to ride here, so it opens PersonPicker for an explicit destination
   // and is wired straight to `resolveFaces` with ONLY `entireCluster` populated, never through the per-face
   // model (selection can only ever cover loaded faces; entireCluster is enumerated server-side precisely so a
-  // whole-cluster move never has to). And ManualActionsHelpModal, manual's own action-legend modal — guided's
-  // ActionsHelpModal documents a different six actions (owner/stay instead of keep/Unmark) and its "names all
-  // six" test is load-bearing, so this is a deliberate fork, not a shared component.
+  // whole-cluster move never has to). And the shared FaceActionsHelpModal (docs/superpowers/specs/
+  // 2026-07-31-face-cleanup-ux-unification-design.md §3.3), passed `mode: 'manual'` and manual's own action
+  // subset (keep/other/lock/unknown/detach/unmark — no owner/stay, which both require a suspected owner manual
+  // has no scan to supply).
 
   type Props = { data: PageData };
   const { data }: Props = $props();
@@ -203,6 +206,32 @@
 
   // ---- Bulk actions (slice 9) ----
 
+  // Manual's five routes, in bar order. `other` is the registry id behind the button manual calls "Move to
+  // person…"; its testid stays `manual-review-bulk-move` because e2e targets it.
+  const MANUAL_DOCK_ACTIONS = [
+    { id: 'other', testId: 'manual-review-bulk-move' },
+    { id: 'lock', testId: 'manual-review-bulk-lock' },
+    { id: 'unknown', testId: 'manual-review-bulk-unknown' },
+    { id: 'detach', testId: 'manual-review-bulk-detach' },
+    { id: 'unmark', testId: 'manual-review-bulk-unmark' },
+  ] as const satisfies readonly { id: FaceActionId; testId: string }[];
+
+  const handleDockAction = (id: FaceActionId) => {
+    switch (id) {
+      case 'other': {
+        void handleBulkMove();
+        return;
+      }
+      case 'unmark': {
+        handleBulkUnmark();
+        return;
+      }
+      default: {
+        vm.applyToSelection(id as 'lock' | 'unknown' | 'detach');
+      }
+    }
+  };
+
   // The only bulk action that opens a modal — the other four apply straight through. `ownerId` comes from the
   // slice 3 metadata endpoint (never a scan, which manual has none of); `suggestedPersonId` is omitted, since
   // manual has no suspected owner to pre-highlight (design §6.4/§3.2).
@@ -217,18 +246,6 @@
     if (destination) {
       vm.applyToSelection('move', { personId: destination.personId, lock: destination.lock });
     }
-  };
-
-  const handleBulkLock = () => {
-    vm.applyToSelection('lock');
-  };
-
-  const handleBulkUnknown = () => {
-    vm.applyToSelection('unknown');
-  };
-
-  const handleBulkDetach = () => {
-    vm.applyToSelection('detach');
   };
 
   // The keep-default's undo (design §6.4, "A keep default needs an undo") — guided has no equivalent because
@@ -290,10 +307,18 @@
     await commitResolve({ personId, entireCluster: { destinationPersonId: destination.personId } });
   };
 
-  // Read-only — same convention as guided's handleOpenHelp: never touches the model, so opening/closing it
-  // leaves every staged mark and the current selection exactly as they were.
+  // One handler for BOTH launchers — the grid header's (i) and the new in-bar one — so the two can never
+  // disagree about which subset the modal shows. Read-only, same convention as guided's handleOpenHelp: never
+  // touches the model, so opening/closing it leaves every staged mark and the current selection exactly as
+  // they were.
   const handleOpenHelp = () => {
-    void modalManager.show(ManualActionsHelpModal, {});
+    void modalManager.show(FaceActionsHelpModal, {
+      mode: 'manual',
+      actions: ['keep', 'other', 'lock', 'unknown', 'detach', 'unmark'],
+      introKey: 'admin.face_cleanup_manual_review_help_intro',
+      footerKey: 'admin.face_cleanup_manual_review_help_footer',
+      defaultActionId: 'keep',
+    });
   };
 
   // Every resolve funnels through here, mirroring guided's commitResolve so a failure — most importantly the
@@ -621,112 +646,49 @@
        already staged could never be reached. -->
   {#snippet footer()}
     {#if !loading && vm.loadedCount > 0}
-      <div
-        class="shrink-0 border-t border-gray-200 bg-white py-3.5 dark:border-gray-700 dark:bg-gray-900"
-        data-testid="manual-review-dock"
+      <FaceReviewDock
+        mode="manual"
+        selectedCount={vm.selectedCount}
+        actions={[...MANUAL_DOCK_ACTIONS]}
+        onAction={handleDockAction}
+        onHelp={handleOpenHelp}
+        onClear={() => vm.clearSelection()}
       >
-        <div class="mx-auto flex max-w-screen-xl flex-wrap items-center gap-3.5 px-6">
-          {#if vm.selectedCount === 0}
-            <!-- Summary state -->
-            <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="manual-review-tally">
-              {#each ['move', 'lock', 'unknown', 'detach'] as const as state (state)}
-                {@const count = vm.tally[state]}
-                <span
-                  class={[
-                    'inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-bold dark:border-gray-700 dark:bg-gray-800',
-                    count === 0 ? 'opacity-40' : '',
-                  ].join(' ')}
-                  data-testid={`manual-review-tally-${state}`}
+        {#snippet summary()}
+          <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="manual-review-tally">
+            {#each ['move', 'lock', 'unknown', 'detach'] as const as state (state)}
+              {@const count = vm.tally[state]}
+              <span
+                class={[
+                  'inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-bold dark:border-gray-700 dark:bg-gray-800',
+                  count === 0 ? 'opacity-40' : '',
+                ].join(' ')}
+                data-testid={`manual-review-tally-${state}`}
+              >
+                <Icon icon={MANUAL_STATE_ICON[state]} size="13" color={MANUAL_STATE_COLOR[state]} />
+                <span>{count}</span>
+                <span class="font-normal text-gray-500 dark:text-gray-400"
+                  >{$t(`admin.face_cleanup_review_tally_${TALLY_KEY_SUFFIX[state]}`)}</span
                 >
-                  <Icon icon={MANUAL_STATE_ICON[state]} size="13" color={MANUAL_STATE_COLOR[state]} />
-                  <span>{count}</span>
-                  <span class="font-normal text-gray-500 dark:text-gray-400"
-                    >{$t(`admin.face_cleanup_review_tally_${TALLY_KEY_SUFFIX[state]}`)}</span
-                  >
-                </span>
-              {/each}
-            </div>
-            <!-- Apply is disabled while everything is `keep` (design §6.4): buildResolveRequest() returns
-                 null, and an all-keep POST would be an empty resolve the server 400s. -->
-            <Button
-              color="primary"
-              disabled={applying || !vm.hasStagedWork}
-              onclick={handleApply}
-              data-testid="manual-review-apply-btn"
-            >
-              <Icon icon={mdiArrowRight} size="16" />
-              {$t('admin.face_cleanup_review_apply_label', { values: { count: stagedCount } })}
-            </Button>
-          {:else}
-            <!-- Bulk-bar state: the five manual actions. -->
-            <div
-              class="flex flex-1 flex-wrap items-center gap-2.5 rounded-xl bg-gray-900 px-3.5 py-2.5 text-white"
-              data-testid="manual-review-bulk-bar"
-            >
-              <span class="text-sm font-bold whitespace-nowrap">
-                {vm.selectedCount}
-                {$t('admin.face_cleanup_review_bulk_selected_suffix')}
               </span>
-              <span class="h-5 w-px bg-white/15"></span>
-              <button
-                type="button"
-                onclick={handleBulkMove}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="manual-review-bulk-move"
-              >
-                <Icon icon={MANUAL_STATE_ICON.move} size="13" />
-                {$t('admin.face_cleanup_manual_review_bulk_move')}
-              </button>
-              <button
-                type="button"
-                onclick={handleBulkLock}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="manual-review-bulk-lock"
-              >
-                <Icon icon={MANUAL_STATE_ICON.lock} size="13" />
-                {$t('admin.face_cleanup_manual_review_bulk_lock')}
-              </button>
-              <button
-                type="button"
-                onclick={handleBulkUnknown}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="manual-review-bulk-unknown"
-              >
-                <Icon icon={MANUAL_STATE_ICON.unknown} size="13" />
-                {$t('admin.face_cleanup_manual_review_bulk_unknown')}
-              </button>
-              <button
-                type="button"
-                onclick={handleBulkDetach}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="manual-review-bulk-detach"
-              >
-                <Icon icon={MANUAL_STATE_ICON.detach} size="13" />
-                {$t('admin.face_cleanup_review_bulk_detach')}
-              </button>
-              <!-- The keep-default's undo (design §6.4) — no guided equivalent, since every guided face is
-                   already stamped. -->
-              <button
-                type="button"
-                onclick={handleBulkUnmark}
-                class="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold hover:bg-white/20"
-                data-testid="manual-review-bulk-unmark"
-              >
-                <Icon icon={mdiUndo} size="13" />
-                {$t('admin.face_cleanup_manual_review_bulk_unmark')}
-              </button>
-              <button
-                type="button"
-                onclick={() => vm.clearSelection()}
-                class="ml-auto text-xs font-bold text-gray-300 hover:text-white"
-                data-testid="manual-review-bulk-clear"
-              >
-                {$t('admin.face_cleanup_review_bulk_clear')}
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
+            {/each}
+          </div>
+        {/snippet}
+
+        {#snippet apply()}
+          <!-- Apply is disabled while everything is `keep`: buildResolveRequest() returns null, and an
+               all-keep POST would be an empty resolve the server 400s. -->
+          <Button
+            color="primary"
+            disabled={applying || !vm.hasStagedWork}
+            onclick={handleApply}
+            data-testid="manual-review-apply-btn"
+          >
+            <Icon icon={mdiArrowRight} size="16" />
+            {$t('admin.face_cleanup_review_apply_label', { values: { count: stagedCount } })}
+          </Button>
+        {/snippet}
+      </FaceReviewDock>
     {/if}
   {/snippet}
 </AdminPageLayout>
