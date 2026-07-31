@@ -7,6 +7,7 @@ import {
   mdiPin,
   mdiUndo,
 } from '@mdi/js';
+import type { Translations } from 'svelte-i18n';
 
 /**
  * The single source of truth behind every face-cleanup action: its button label, its hover tip, its help-modal
@@ -26,14 +27,14 @@ export type FaceReviewMode = 'guided' | 'manual';
  * meaningless in a mode that never scans; and guided's lock copy says "their owner" where manual says "this
  * person". Collapsing either ships copy describing the wrong mode.
  */
-type ModalKey = string | Readonly<Record<FaceReviewMode, string>>;
+type ModalKey = Translations | Readonly<Record<FaceReviewMode, Translations>>;
 
 export interface FaceActionMeta {
   readonly id: FaceActionId;
   /** Button label, and the help modal's heading — one key, so the two can never disagree. */
-  readonly labelKey: string;
+  readonly labelKey: Translations;
   /** One line for the hover/focus popover. Mode-independent for every action. */
-  readonly tipKey: string;
+  readonly tipKey: Translations;
   /** Help modal: what it means / when to use it. */
   readonly bodyKey: ModalKey;
   /** Help modal "On apply:", and the dock's inline hint row. */
@@ -160,13 +161,14 @@ export const FACE_ACTIONS: Readonly<Record<FaceActionId, FaceActionMeta>> = {
   },
 };
 
-const resolve = (key: ModalKey, mode: FaceReviewMode): string => (typeof key === 'string' ? key : key[mode]);
+const resolve = (key: ModalKey, mode: FaceReviewMode): Translations => (typeof key === 'string' ? key : key[mode]);
 
 /** The ONLY way body copy is read — never reach into `bodyKey` directly, or a mode-dependent key leaks. */
-export const bodyKeyFor = (id: FaceActionId, mode: FaceReviewMode): string => resolve(FACE_ACTIONS[id].bodyKey, mode);
+export const bodyKeyFor = (id: FaceActionId, mode: FaceReviewMode): Translations =>
+  resolve(FACE_ACTIONS[id].bodyKey, mode);
 
 /** The ONLY way effect copy is read. Feeds both the help modal and the dock's hint row. */
-export const effectKeyFor = (id: FaceActionId, mode: FaceReviewMode): string =>
+export const effectKeyFor = (id: FaceActionId, mode: FaceReviewMode): Translations =>
   resolve(FACE_ACTIONS[id].effectKey, mode);
 
 /**

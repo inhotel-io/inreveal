@@ -2,6 +2,7 @@
   import { Button, Icon, Modal, ModalBody, ModalFooter } from '@immich/ui';
   import { mdiInformationOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
+  import type { Translations } from 'svelte-i18n';
   import { bodyKeyFor, effectKeyFor, FACE_ACTIONS, type FaceActionId, type FaceReviewMode } from './face-actions';
 
   // ONE modal for both modes (design §3.3), replacing guided's ActionsHelpModal and manual's
@@ -15,8 +16,8 @@
   interface Props {
     mode: FaceReviewMode;
     actions: FaceActionId[];
-    introKey: string;
-    footerKey: string;
+    introKey: Translations;
+    footerKey: Translations;
     /** Renders a "(default)" badge on this action. Manual passes `keep`; guided passes nothing. */
     defaultActionId?: FaceActionId;
     onClose: () => void;

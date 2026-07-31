@@ -53,13 +53,19 @@
   const instanceId = $props.id();
   const hintId = `face-review-dock-hint-${instanceId}`;
 
-  const hintText = $derived(
-    hoveredId
-      ? $t('admin.face_cleanup_review_bulk_hint_effect', {
-          values: { action: $t(FACE_ACTIONS[hoveredId].labelKey), effect: $t(effectKeyFor(hoveredId, mode)) },
-        })
-      : $t('admin.face_cleanup_review_bulk_hint_default'),
-  );
+  const hintText = $derived.by(() => {
+    // Copied to an explicitly-annotated local first. `hoveredId`'s only assignments inside this <script> are
+    // `null` (its declaration and the reset above) — every real assignment happens in a template event
+    // handler further down — so TypeScript's control-flow analysis narrows it to `null` here, and the truthy
+    // branch below would index FACE_ACTIONS with `never`. The annotation restores the declared type.
+    const id: FaceActionId | null = hoveredId;
+    if (!id) {
+      return $t('admin.face_cleanup_review_bulk_hint_default');
+    }
+    return $t('admin.face_cleanup_review_bulk_hint_effect', {
+      values: { action: $t(FACE_ACTIONS[id].labelKey), effect: $t(effectKeyFor(id, mode)) },
+    });
+  });
 
   const actionBtn =
     'relative inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold ring-1 ring-inset transition-colors';
