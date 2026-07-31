@@ -82,30 +82,75 @@ The single source of truth. Pure data, no dependency on Svelte or on either rout
 ```ts
 export type FaceActionId = 'owner' | 'stay' | 'lock' | 'other' | 'unknown' | 'detach' | 'keep' | 'unmark';
 
+/** The two review modes. Some explanations are mode-dependent — see "Mode-dependent copy" below. */
+export type FaceReviewMode = 'guided' | 'manual';
+
+/** A key that is the same in both modes, or one key per mode. */
+type ModalKey = string | Readonly<Record<FaceReviewMode, string>>;
+
 export interface FaceActionMeta {
   readonly id: FaceActionId;
   /** Button label. Also the help modal's heading — one string, so they can never disagree. */
   readonly labelKey: string;
-  /** One line, ≤ ~90 chars. Hover/focus popover. */
+  /** One line, ≤ ~90 chars. Hover/focus popover. Mode-independent for every action. */
   readonly tipKey: string;
   /** Help modal: what it means / when to use it. */
-  readonly bodyKey: string;
+  readonly bodyKey: ModalKey;
   /** Help modal "On apply:" AND the dock's inline hint row. */
-  readonly effectKey: string;
-  /** `undefined` for `keep`/`unmark` — neither corresponds to a coloured tile state. */
-  readonly icon: string | undefined;
-  readonly color: string | undefined;
-  /** `danger` tints the button red. Only `detach`. */
+  readonly effectKey: ModalKey;
+  /**
+   * Glyph on the bulk-bar button. Present for every action that IS a button — including `unmark`, which
+   * carries `mdiUndo` today. Distinct from `swatchColor` below: a button glyph is not a tile state.
+   */
+  readonly buttonIcon: string;
+  /**
+   * The tile-state swatch — badge, ribbon, help-modal rail. `undefined` for `keep` and `unmark`, which
+   * correspond to no coloured tile state and are signalled by ABSENCE (2026-07-23 design §6.4).
+   */
+  readonly swatchColor: string | undefined;
+  /** `danger` tints the button red. Only `detach`. Rendered as `data-tone`, so it is assertable. */
   readonly tone: 'default' | 'danger';
 }
 
 export const FACE_ACTIONS: Readonly<Record<FaceActionId, FaceActionMeta>>;
+
+/** Resolves a `ModalKey` for a mode. The ONLY way body/effect copy is read. */
+export function bodyKeyFor(id: FaceActionId, mode: FaceReviewMode): string;
+export function effectKeyFor(id: FaceActionId, mode: FaceReviewMode): string;
 ```
 
-`icon` and `color` carry the values that live in `review.svelte.ts` today. That file and
-`manual-review.svelte.ts` keep exporting `STATE_COLOR` / `STATE_ICON` / `MANUAL_STATE_COLOR` /
+**Mode-dependent copy — why `ModalKey` is not just `string`.** Three of the shared actions already carry
+deliberately different explanations per mode, and collapsing them would ship copy that describes the wrong
+mode:
+
+| Action             | Guided                                                                                                                   | Manual                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `other` **body**   | `…review_help_other_body` — "instead of the one **the scan suggested**"                                                  | `…manual_review_help_move_body` — "anyone in this library, or a brand-new person" |
+| `other` **effect** | `…review_help_other_effect` — "when you're deliberately **overriding the scan** … the next scan can flag the face again" | `…manual_review_help_move_effect` — no scan mentioned; manual has none            |
+| `lock` **body**    | `…review_help_lock_body` — "don't resemble **their owner**"                                                              | `…manual_review_help_lock_body` — "don't look like **this person**"               |
+
+`lock`'s **effect**, and `unknown`/`detach`'s body and effect, are already shared verbatim between the two
+modes today and stay a plain `string`. `owner`/`stay` are guided-only and `keep`/`unmark` manual-only, so
+their keys are unambiguous. No copy is rewritten by this change — the registry simply records which key each
+mode already uses.
+
+This matters beyond the modal: §3.2's hint row renders `effectKey`, so a collapsed key would put guided's
+"the next scan can flag the face again" warning into a mode that never scans.
+
+**Token derivation.** `swatchColor` and `buttonIcon` carry the values that live in `review.svelte.ts` today.
+That file and `manual-review.svelte.ts` keep exporting `STATE_COLOR` / `STATE_ICON` / `MANUAL_STATE_COLOR` /
 `MANUAL_STATE_ICON`, now **derived from** `FACE_ACTIONS` rather than declared inline. Their existing importers
-(both pages, both view-model specs) are untouched.
+(both pages, `ActionsHelpModal` until it is deleted, and both view-model specs) are untouched.
+
+The derivation must **narrow**, not widen: two existing specs assert the exact key sets, and they stay
+unmodified as the pin —
+
+- `review.spec.ts:17-18` — `STATE_ICON` and `STATE_COLOR` cover identical key sets (the six guided states);
+- `manual-review.spec.ts:40-41` — `MANUAL_STATE_COLOR`/`MANUAL_STATE_ICON` keys are exactly
+  `['detach','lock','move','unknown']`.
+
+So `STATE_*` projects the six guided ids out of the eight, and `MANUAL_STATE_*` projects four while renaming
+`other` → `move`. Neither may leak `keep`/`unmark`.
 
 Direction of dependency is `lib/ ← routes/`, never the reverse.
 
@@ -115,34 +160,64 @@ Owns the footer shell (`shrink-0 border-t … py-3.5`), the `max-w-screen-xl` in
 summary ↔ selected swap. Rendered through `AdminPageLayout`'s `footer` snippet by both pages, exactly as
 today.
 
+**The page keeps the visibility gate.** Guided renders its dock on `!loading && flaggedFaces.length > 0`
+(`[personId]/+page.svelte:878`), manual on `!loading && vm.loadedCount > 0`
+(`people/[personId]/+page.svelte:623`). These are genuinely different conditions over different models, so the
+`{#if}` stays in each page's `footer` snippet and `FaceReviewDock` is only ever rendered when it should be
+visible. The component has no "hidden" state.
+
 ```ts
 interface DockAction {
   id: FaceActionId;
-  /** Preserved verbatim from each page — e2e targets these, not labels. */
+  /** e2e targets these, not labels — see the testid table below. */
   testId: string;
 }
 
 interface Props {
+  mode: FaceReviewMode; // resolves mode-dependent effect copy for the hint row
   selectedCount: number;
   actions: DockAction[];
   onAction: (id: FaceActionId) => void;
   onHelp: () => void;
   onClear: () => void;
   testIds: { dock: string; bar: string; clear: string; help: string; hint: string };
-  tally: Snippet; // summary half — page-specific
-  apply: Snippet; // summary half — page-specific
+  summary: Snippet; // everything left of Apply — page-specific
+  apply: Snippet; // the Apply button itself — page-specific
 }
 ```
 
 The summary half stays page-owned via snippets because the two genuinely differ: guided adds a
-rest-of-cluster chip, an apply-blocked reason and an "all set" marker that manual has no concept of.
+rest-of-cluster chip, an apply-blocked reason and an "all set" marker that manual has no concept of. It is one
+snippet (`summary`), not a `tally`/`apply` pair, because guided renders its `apply-blocked-reason` **between**
+the tally and the button (`[personId]/+page.svelte:930-932`) — a two-snippet split has nowhere to put it.
+
+**Testids.** Every id in use today is preserved so `face-cleanup.e2e-spec.ts` passes unmodified:
+
+| Page   | dock                 | bar                      | clear                      | help        | actions                                                               |
+| ------ | -------------------- | ------------------------ | -------------------------- | ----------- | --------------------------------------------------------------------- |
+| Guided | `dock`               | `bulk-bar`               | `clear`                    | `bulk-help` | `bulk-stay`, `bulk-lock`, `bulk-other`, `bulk-unknown`, `bulk-detach` |
+| Manual | `manual-review-dock` | `manual-review-bulk-bar` | `manual-review-bulk-clear` | _new_       | `manual-review-bulk-move`, `-lock`, `-unknown`, `-detach`, `-unmark`  |
+
+Two additions, both new surface rather than renames: guided's `owner` button carries **no** testid today
+(`[personId]/+page.svelte:957`) and gains `bulk-owner`; manual's bar has no help button at all and gains one
+with `manual-review-bulk-help`. `testId` is therefore required on every `DockAction`, with nothing optional.
 
 **Hover behaviour.** One `let hoveredId: FaceActionId | null = $state(null)`, set by `onmouseenter` /
 `onfocusin` on each button and cleared by `onmouseleave` / `onfocusout`. It drives two renderings:
 
 - a popover positioned above the hovered button showing `$t(FACE_ACTIONS[hoveredId].tipKey)`;
-- the **hint row** at the foot of the bar: `<Label> · On apply: <effect>`, or a neutral default when nothing
-  is hovered.
+- the **hint row** at the foot of the bar: `<Label> · On apply: <effect>` resolved via
+  `effectKeyFor(hoveredId, mode)`, or a neutral default when nothing is hovered.
+
+`hoveredId` resets to `null` whenever `selectedCount` returns to 0. Applying an action clears the selection,
+so the bar swaps to the summary while the pointer is still over where a button was; only the inner branch
+unmounts, not the component, so without an explicit reset a stale effect line greets the next selection.
+
+**Accessibility.** The popover is `aria-hidden` — it is a visual echo of text that already exists in the
+accessibility tree. Each action button carries `aria-describedby` pointing at the hint row's stable id, so a
+screen-reader user focusing a button hears its label followed by that action's effect. Without the
+association, tabbing the bar would announce six labels and no consequences, which is precisely the defect this
+change exists to fix.
 
 The popover is ~15 lines of local markup, not `@immich/ui`'s `Tooltip`. Both pages already document why they
 avoid that component: it styles for the page background rather than this dark bar, and it needs a
@@ -156,6 +231,7 @@ cannot shift the dock's height and move the buttons out from under the pointer.
 
 ```ts
 interface Props {
+  mode: FaceReviewMode; // resolves mode-dependent body/effect copy
   actions: FaceActionId[];
   introKey: string;
   footerKey: string;
@@ -165,13 +241,21 @@ interface Props {
 }
 ```
 
-Renders one row per id from `FACE_ACTIONS`: colour rail + icon + `labelKey` heading + `bodyKey` + an
-`On apply:` block carrying `effectKey`. Rows whose meta has no `color`/`icon` (`keep`, `unmark`) render the
-no-swatch treatment the manual modal has today — signalled by absence, mirroring the untouched tile.
+Renders one row per id: a `swatchColor` rail + `buttonIcon` glyph + `labelKey` heading + `bodyKeyFor(id, mode)`
 
-Guided passes `['owner','stay','lock','other','unknown','detach']` with its intro/footer keys.
-Manual passes `['keep','other','lock','unknown','detach','unmark']`, `defaultActionId: 'keep'`, and its own
-intro/footer keys.
+- an `On apply:` block carrying `effectKeyFor(id, mode)`. Rows whose meta has no `swatchColor` (`keep`,
+  `unmark`) render the no-swatch treatment the manual modal has today — signalled by absence, mirroring the
+  untouched tile — and, matching that modal, no glyph in the heading either.
+
+Guided passes `mode: 'guided'`, `['owner','stay','lock','other','unknown','detach']`, its intro/footer keys.
+Manual passes `mode: 'manual'`, `['keep','other','lock','unknown','detach','unmark']`,
+`defaultActionId: 'keep'`, and its own intro/footer keys.
+
+Both pages open it through `modalManager.show(...)`, as they do today
+(`[personId]/+page.svelte:266`, `people/[personId]/+page.svelte:296`) — but the merged modal takes required
+props, so both call sites change from `show(Modal, {})` to `show(FaceActionsHelpModal, { mode, actions, … })`.
+Manual has **two** launchers (the grid-header `(i)` at `:533` and the new in-bar one) and both must pass the
+same props; the page keeps a single `handleOpenHelp` so there is one place for them to agree.
 
 ### 3.4 Landing page intro
 
@@ -288,91 +372,99 @@ Two harness facts constrain how these are written:
 
 ### 5.1 `face-actions.spec.ts` (new — pure unit)
 
-| #   | Behaviour                                                                                                                                                                                      |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1  | Every `FaceActionId` has an entry — the record is total, so a new id cannot be added without meta.                                                                                             |
-| R2  | `labelKey`, `tipKey`, `bodyKey`, `effectKey` are non-empty and distinct across actions (no accidental copy-paste of one action's explanation onto another).                                    |
-| R3  | Every referenced key exists in `en.json` (reads the file, same technique as `slice-12-key-audit.spec.ts`).                                                                                     |
-| R4  | The six guided ids carry both `icon` and `color`; `keep` and `unmark` carry neither.                                                                                                           |
-| R5  | `detach` is the only `tone: 'danger'` action.                                                                                                                                                  |
-| R6  | `move`-equivalence: manual's move action resolves to `other`, so both modes' move button renders one label key.                                                                                |
-| R7  | `STATE_COLOR` / `STATE_ICON` re-exported from `review.svelte.ts` equal the registry's values for all six guided states (pins the derivation, so a future edit to one cannot silently diverge). |
-| R8  | `MANUAL_STATE_COLOR` / `MANUAL_STATE_ICON` equal the registry values for `other`/`lock`/`unknown`/`detach`, preserving today's documented mapping of manual `move` → guided `other`.           |
+| #   | Behaviour                                                                                                                                                                                                                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | Every `FaceActionId` has an entry — the record is total, so a new id cannot be added without meta.                                                                                                                                                                                                                                        |
+| R2  | `labelKey`, `tipKey` and every resolved body/effect key are non-empty and distinct across actions (no accidental copy-paste of one action's explanation onto another).                                                                                                                                                                    |
+| R3  | Every key the registry names — including **both** arms of every mode-dependent `ModalKey` — exists in `en.json` (reads the file, same technique as `slice-12-key-audit.spec.ts`).                                                                                                                                                         |
+| R4  | Every action has a `buttonIcon`, including `unmark`. Only `keep` and `unmark` lack a `swatchColor`. This is the F2 split: a button glyph is not a tile state.                                                                                                                                                                             |
+| R5  | `detach` is the only `tone: 'danger'` action.                                                                                                                                                                                                                                                                                             |
+| R6  | The registry has no `move` id — manual's move button is `other`, so both modes render one label key. (Its page-level wiring is asserted in §5.6 M4.)                                                                                                                                                                                      |
+| R7  | **Mode-dependent resolution, per shared action:** `bodyKeyFor('other','guided')` → `…review_help_other_body` and `('other','manual')` → `…manual_review_help_move_body`; likewise `effectKeyFor` for `other`, and `bodyKeyFor` for `lock`. Each asserted against the exact key that mode uses today, so the merge provably loses no copy. |
+| R8  | For a mode-**independent** key (`unknown`, `detach` body and effect; `lock` effect) both modes resolve to the same key — pins that the shared ones stayed shared.                                                                                                                                                                         |
+| R9  | `STATE_COLOR` / `STATE_ICON` re-exported from `review.svelte.ts` equal the registry's values for all six guided states, **and their key sets are exactly those six** — `keep`/`unmark` must not leak in. `review.spec.ts:17-18` already asserts the two cover identical key sets and stays unmodified as the second pin.                  |
+| R10 | `MANUAL_STATE_COLOR` / `MANUAL_STATE_ICON` equal the registry values for `other`/`lock`/`unknown`/`detach` under the `move` → `other` rename, **and their key sets are exactly `['detach','lock','move','unknown']`** — `manual-review.spec.ts:40-41` already asserts this and stays unmodified as the second pin.                        |
+| R11 | No two actions share a `testId` in either page's list (guards the copy-paste that would make one e2e locator match two buttons).                                                                                                                                                                                                          |
 
 ### 5.2 `FaceReviewDock.spec.ts` (new — component)
 
 Rendered directly with props, no page. Covers both halves and every hover path.
 
-**Swap**
+**Swap and actions** — flat assertions, table form.
 
-| #   | Behaviour                                                                         |
-| --- | --------------------------------------------------------------------------------- |
-| D1  | `selectedCount === 0` renders the `tally` and `apply` snippets and no action bar. |
-| D2  | `selectedCount > 0` renders the action bar and neither snippet.                   |
-| D3  | The selected count is rendered next to the `…_selected_suffix` label.             |
+| #   | Behaviour                                                                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | `selectedCount === 0` renders the `summary` and `apply` snippets and no action bar.                                                                                                                     |
+| D2  | `selectedCount > 0` renders the action bar and neither snippet.                                                                                                                                         |
+| D3  | The selected count is rendered next to the `…_selected_suffix` label.                                                                                                                                   |
+| D4  | One button per entry in `actions`, in the order given, each carrying its supplied `testId`.                                                                                                             |
+| D5  | Each button renders its registry `labelKey`.                                                                                                                                                            |
+| D6  | Clicking a button calls `onAction` once with that id, and with no other id.                                                                                                                             |
+| D7  | A `tone: 'danger'` action renders `data-tone="danger"` and every other renders `data-tone="default"` — the destructive button's distinctness as an assertable attribute rather than a class-list match. |
+| D8  | `onClear` fires from the clear button; `onHelp` fires from the help button.                                                                                                                             |
+| D9  | Clear and help are present regardless of which action subset is passed — this is the manual-mode gap being closed.                                                                                      |
+| D10 | Every action button renders its `buttonIcon`, **including `unmark`** (`mdiUndo` today) — F2's regression guard. Icon identity is asserted here, not in a page spec, because pages stub `Icon`.          |
 
-**Actions**
+**Hover, focus and the swap interaction** — stateful and order-dependent, so specified Given/When/Then.
 
-| #   | Behaviour                                                                                                                                                                                       |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D4  | One button per entry in `actions`, in the order given, each carrying its supplied `testId`.                                                                                                     |
-| D5  | Each button renders its registry `labelKey`.                                                                                                                                                    |
-| D6  | Clicking a button calls `onAction` once with that id, and with no other id.                                                                                                                     |
-| D7  | A `tone: 'danger'` action renders visually distinct from the others (asserted on the rendered class list — the destructive button is the one place where "looks different" _is_ the behaviour). |
-| D8  | `onClear` fires from the clear button; `onHelp` fires from the help button.                                                                                                                     |
-| D9  | Clear and help are present regardless of which action subset is passed — this is the manual-mode gap being closed.                                                                              |
-
-**Hover / focus**
-
-| #   | Behaviour                                                                                                                                                                        |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D10 | With nothing hovered, the hint row shows `…_hint_default` and no popover is rendered.                                                                                            |
-| D11 | `mouseenter` on an action renders a popover carrying that action's `tipKey`.                                                                                                     |
-| D12 | `mouseenter` swaps the hint row to `…_hint_effect` (the effect readout replaces the default line).                                                                               |
-| D13 | `mouseleave` restores the default hint and removes the popover.                                                                                                                  |
-| D14 | **Keyboard parity:** `focusin` produces the same popover and hint as `mouseenter`; `focusout` restores the default. A keyboard-only admin is never left without the explanation. |
-| D15 | Moving from one action straight to another (no intervening leave) shows the second action's tip, not a stale first.                                                              |
-| D16 | Exactly one popover exists at a time.                                                                                                                                            |
-| D17 | The popover is `aria-hidden` and the hint row is the accessible readout, so a screen reader gets the text once, not twice.                                                       |
-| D18 | Hovering the clear or help button does not change the hint row — they are not routing actions and have no effect copy.                                                           |
+| #   | Given                                                      | When                                                    | Then                                                                                                                                             |
+| --- | ---------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D11 | a bar with a selection and the pointer nowhere             | the dock first renders                                  | the hint row shows `…_hint_default` and no popover exists                                                                                        |
+| D12 | the pointer nowhere                                        | it enters an action button                              | a popover appears carrying that action's `tipKey`                                                                                                |
+| D13 | the pointer nowhere                                        | it enters an action button                              | the hint row swaps to `…_hint_effect` for that action, resolved for the dock's `mode`                                                            |
+| D14 | the pointer on an action                                   | it leaves                                               | the popover is gone and the hint row is back to `…_hint_default`                                                                                 |
+| D15 | keyboard focus nowhere in the bar                          | an action button receives focus                         | the same popover and hint appear as for `mouseenter` — keyboard parity                                                                           |
+| D16 | keyboard focus on an action                                | focus leaves that button                                | the popover is gone and the default hint is restored                                                                                             |
+| D17 | the pointer on action A                                    | it moves straight to action B with no intervening leave | B's tip and B's effect are shown, never a stale A                                                                                                |
+| D18 | the pointer on an action                                   | the popover is inspected                                | exactly one popover exists in the document                                                                                                       |
+| D19 | the pointer on an action                                   | the accessibility tree is inspected                     | the popover is `aria-hidden`, and the button's `aria-describedby` resolves to the hint row — one announcement, and focus reaches the effect text |
+| D20 | the pointer nowhere                                        | it enters the clear or the help button                  | the hint row is unchanged — neither is a routing action with effect copy                                                                         |
+| D21 | a selection of 2 with the pointer on an action             | the selection drops to 0 (an action was applied)        | the dock shows the summary, and the hint state is reset                                                                                          |
+| D22 | the selection has just dropped to 0 while hovered (as D21) | a new selection is made                                 | the hint row shows `…_hint_default`, not the previously hovered action's effect                                                                  |
+| D23 | a selection of 2 with the pointer on an action             | `selectedCount` rises to 5 without the pointer moving   | the popover and hint still describe the hovered action                                                                                           |
 
 **Edge cases**
 
-| #   | Behaviour                                                                                         |
-| --- | ------------------------------------------------------------------------------------------------- |
-| D19 | An empty `actions` array still renders the bar shell, the count, clear and help without throwing. |
-| D20 | A single action renders without the divider collapsing the layout.                                |
-| D21 | `selectedCount` of 1 vs many both render (no plural-only string that breaks at 1).                |
-| D22 | An action whose meta has no icon (`unmark`) renders label-only, without an empty icon slot.       |
+| #   | Behaviour                                                                                                                                                                                                   |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D24 | An empty `actions` array still renders the bar shell, the count, clear and help without throwing.                                                                                                           |
+| D25 | A single action renders without the divider collapsing the layout.                                                                                                                                          |
+| D26 | `selectedCount` of 1 vs many both render (no plural-only string that breaks at 1).                                                                                                                          |
+| D27 | An action with no `swatchColor` (`unmark`) still renders its button glyph — the swatch's absence never suppresses the icon. Pairs with D10 as the two halves of the F2 split.                               |
+| D28 | Passing the same `mode` twice with different `actions` renders different bars — no module-level state leaks between instances (the web suite sets no `clearMocks`, so cross-test leakage is a live hazard). |
 
 ### 5.3 `FaceActionsHelpModal.spec.ts` (new — replaces two deleted specs)
 
 Every assertion from `ActionsHelpModal.spec.ts` and `ManualActionsHelpModal.spec.ts` is carried over, re-aimed
 at the merged component under the mode that used to own it. Both modes are exercised in the same file.
 
-| #   | Behaviour                                                                                                                                                         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| H1  | Guided subset names exactly its six actions, reusing the bulk-bar label keys (from `ActionsHelpModal.spec.ts`).                                                   |
-| H2  | Manual subset names exactly its six: Keep (default), Move to person…, Confirm & lock, Unknown person, Not a face, Unmark (from `ManualActionsHelpModal.spec.ts`). |
-| H3  | Every rendered action explains its meaning (`bodyKey`) and its consequence (`effectKey`) — asserted for both subsets.                                             |
-| H4  | `defaultActionId` renders the "(default)" badge on exactly that action, and no badge at all when the prop is omitted.                                             |
-| H5  | Actions with a colour render a swatch; `keep` and `unmark` render the no-swatch element.                                                                          |
-| H6  | The destructive action's body warns it is irreversible and points at `unknown` as the opposite case.                                                              |
-| H7  | Intro and footer render from the passed keys, so the two modes' different framing survives the merge.                                                             |
-| H8  | Closes via the close button.                                                                                                                                      |
-| H9  | Row order follows the `actions` array, not the registry's declaration order.                                                                                      |
-| H10 | Passing an empty subset renders intro and footer without throwing.                                                                                                |
+| #   | Behaviour                                                                                                                                                                                                                                                                                                                                                         |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H1  | Guided subset names exactly its six actions, reusing the bulk-bar label keys (from `ActionsHelpModal.spec.ts`).                                                                                                                                                                                                                                                   |
+| H2  | Manual subset names exactly its six: Keep (default), Move to person…, Confirm & lock, Unknown person, Not a face, Unmark (from `ManualActionsHelpModal.spec.ts`).                                                                                                                                                                                                 |
+| H3  | Every rendered action explains its meaning (`bodyKey`) and its consequence (`effectKey`) — asserted for both subsets.                                                                                                                                                                                                                                             |
+| H4  | `defaultActionId` renders the "(default)" badge on exactly that action, and no badge at all when the prop is omitted.                                                                                                                                                                                                                                             |
+| H5  | Actions with a colour render a swatch; `keep` and `unmark` render the no-swatch element.                                                                                                                                                                                                                                                                          |
+| H6  | The destructive action's body warns it is irreversible and points at `unknown` as the opposite case.                                                                                                                                                                                                                                                              |
+| H7  | Intro and footer render from the passed keys, so the two modes' different framing survives the merge.                                                                                                                                                                                                                                                             |
+| H8  | Closes via the close button.                                                                                                                                                                                                                                                                                                                                      |
+| H9  | Row order follows the `actions` array, not the registry's declaration order.                                                                                                                                                                                                                                                                                      |
+| H10 | Passing an empty subset renders intro and footer without throwing.                                                                                                                                                                                                                                                                                                |
+| H11 | **Mode-dependent copy (F1):** rendered under `mode: 'guided'`, the `other` row carries `…review_help_other_body`/`_effect` and the `lock` row `…review_help_lock_body`; under `mode: 'manual'`, the same three become `…manual_review_help_move_body`/`_effect` and `…manual_review_help_lock_body`. Asserted per key, so a collapse to one variant fails loudly. |
+| H12 | The mode-**independent** rows (`unknown`, `detach`) render identical keys under both modes — the merge neither splits what was shared nor shares what was split.                                                                                                                                                                                                  |
+| H13 | Rendering the same subset under the two modes produces different documents. A guard against `mode` being accepted and ignored, which H11 alone would not catch if both arms happened to be wired to the same key.                                                                                                                                                 |
 
 ### 5.4 Landing page — `page.spec.ts` (amended)
 
-| #   | Behaviour                                                                                                        | Status                                                                                                                             |
-| --- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| L1  | The intro lead renders on a first visit.                                                                         | **rewritten** — was asserting `…_first_visit_intro`; now asserts `face_cleanup_intro_lead`.                                        |
-| L2  | The intro lead **also** renders on a return visit with a completed scan.                                         | **inverted** — `page.spec.ts:151` currently asserts the intro is _absent_ here. That assertion encodes the defect and is replaced. |
-| L3  | The intro renders in all five scan states (none / pending / running / failed / completed) — it is unconditional. | new                                                                                                                                |
-| L4  | All three point rows render, each with its title and body.                                                       | new                                                                                                                                |
-| L5  | The intro sits before the card grid in DOM order, so it is read first.                                           | new                                                                                                                                |
-| L6  | Every existing card/CTA assertion still passes untouched.                                                        | regression                                                                                                                         |
+| #   | Behaviour                                                                                                                      | Status                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| L1  | The intro lead renders on a first visit.                                                                                       | **rewritten** — was asserting `…_first_visit_intro`; now asserts `face_cleanup_intro_lead`.                                        |
+| L2  | The intro lead **also** renders on a return visit with a completed scan.                                                       | **inverted** — `page.spec.ts:151` currently asserts the intro is _absent_ here. That assertion encodes the defect and is replaced. |
+| L3  | The intro renders in all five scan states (none / pending / running / failed / completed) — it is unconditional.               | new                                                                                                                                |
+| L4  | All three point rows render, each with its title and body.                                                                     | new                                                                                                                                |
+| L5  | The intro sits before the card grid in DOM order, so it is read first.                                                         | new                                                                                                                                |
+| L6  | Every existing card/CTA assertion still passes untouched.                                                                      | regression                                                                                                                         |
+| L7  | `face_cleanup_mode_first_visit_intro` is rendered nowhere, in any scan state — the replaced string is gone, not merely hidden. | new                                                                                                                                |
 
 ### 5.5 Guided page — `[personId]/page.spec.ts` (amended)
 
@@ -380,42 +472,55 @@ All existing bulk-action, apply, destructive-confirm, destination and rest-of-cl
 they target `data-testid`s (`bulk-stay`, `bulk-lock`, `bulk-other`, `bulk-unknown`, `bulk-detach`, `clear`,
 `bulk-help`, `bulk-bar`, `dock`, `apply-btn`, `tally`), every one of which the dock preserves. Added:
 
-| #   | Behaviour                                                                                                                  |
-| --- | -------------------------------------------------------------------------------------------------------------------------- |
-| G1  | Hovering a bulk action shows its tip and its on-apply effect, wired through the real page.                                 |
-| G2  | The help modal opened from the bulk bar names all six guided actions (proves the page passes the right subset).            |
-| G3  | The help modal opened from the review banner and the one opened from the bulk bar are the same modal with the same subset. |
+| #   | Behaviour                                                                                                                                                                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| G1  | Hovering a bulk action shows its tip and its on-apply effect, wired through the real page.                                                                                                                                                                               |
+| G2  | The help modal opened from the bulk bar names all six guided actions (proves the page passes the right subset).                                                                                                                                                          |
+| G3  | The help modal opened from the review banner and the one opened from the bulk bar are the same modal with the same subset.                                                                                                                                               |
+| G4  | The page passes `mode: 'guided'`, so the `other` row shows the scan-referencing copy and **not** manual's. Paired with M5 below, this is what proves the two pages diverge — H11 tests the component in isolation and would pass even if both pages hard-coded one mode. |
+| G5  | The `owner` button carries the new `bulk-owner` testid and routes `onAction('owner')` — the one button in either bar that had no testid before.                                                                                                                          |
 
 ### 5.6 Manual page — `people/[personId]/page.spec.ts` (amended)
 
 Existing tests keep their testids (`manual-review-bulk-move`, `-lock`, `-unknown`, `-detach`, `-unmark`,
 `-clear`, `-bar`, `manual-review-dock`, `manual-review-apply-btn`, `manual-review-tally-*`). Added:
 
-| #   | Behaviour                                                                                                                     |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- |
-| M1  | The bulk bar now carries a help button, and it opens the merged modal with manual's subset.                                   |
-| M2  | The header help launcher and the new in-bar help open the same modal with the same subset.                                    |
-| M3  | Hovering a bulk action shows its tip and effect.                                                                              |
-| M4  | Manual's move button renders the same label key as guided's `other` button — the harmonisation, asserted rather than assumed. |
+| #   | Behaviour                                                                                                                                |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| M1  | The bulk bar now carries a help button, and it opens the merged modal with manual's subset.                                              |
+| M2  | The header help launcher and the new in-bar help open the same modal with the same subset.                                               |
+| M3  | Hovering a bulk action shows its tip and effect.                                                                                         |
+| M4  | Manual's move button renders the same label key as guided's `other` button — the harmonisation, asserted rather than assumed.            |
+| M5  | The page passes `mode: 'manual'`, so the `other`/move row shows the scan-free copy and **not** guided's. The counterpart to G4.          |
+| M6  | Manual's subset contains `keep` and `unmark` and contains neither `owner` nor `stay` — the two modes provably receive different subsets. |
+| M7  | The `unmark` button still renders its `mdiUndo` glyph after the dock swap (F2 at the page level).                                        |
 
 ### 5.7 i18n guards
 
-| #   | Behaviour                                                                                                                                                                                                                                                                                                                   |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| I1  | `slice-12-key-audit.spec.ts` passes unchanged: both pages still reference at least one `$t` key directly, and every key they reference exists in `en.json`.                                                                                                                                                                 |
-| I2  | No web or mobile source references the four removed keys (`…_first_visit_intro`, `…_manual_review_bulk_move`, `…_manual_review_bulk_lock`, `…_manual_review_bulk_unknown`). Extend `slice-12-key-audit.spec.ts`'s removed-key scan, or add the equivalent guard alongside it.                                               |
-| I3  | `fork-string-parity.spec.ts` passes: every new key is present in **all nine** locales, and the four removed keys are gone from all nine too, not just `en.json`.                                                                                                                                                            |
-| I4  | `placeholders.spec.ts` passes: `…_hint_effect` carries the literal argument names `{action}` and `{effect}` in all nine translations. Because the translations ship in this change rather than later, this guard is live immediately — a locale that translated an argument name fails here.                                |
-| I5  | `face-cleanup-plurals.spec.ts` passes — no new plural forms are introduced.                                                                                                                                                                                                                                                 |
-| I6  | **Coverage assertion (new, in `face-actions.spec.ts` or alongside the parity spec):** every key the registry names, plus the intro and hint keys, resolves in all nine locale files. This states the §4.5 requirement directly rather than relying on parity's transitive "at least one locale has it" derivation.          |
-| I7  | No locale's value for the three reworded keys (§4.2) still carries the old wording's arrow-and-slash shape — `face_cleanup_review_bulk_owner` and `…_other` contain no `→`, `…_lock` no `/`. A cheap, checkable proxy for "the nine were updated, not just `en.json`"; a test cannot diff against a value it no longer has. |
+| #   | Behaviour                                                                                                                                                                                                                                                                                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| I1  | `slice-12-key-audit.spec.ts` passes unchanged: both pages still reference at least one `$t` key directly, and every key they reference exists in `en.json`.                                                                                                                                                                                                                                |
+| I2  | No web or mobile source references the four removed keys (`…_first_visit_intro`, `…_manual_review_bulk_move`, `…_manual_review_bulk_lock`, `…_manual_review_bulk_unknown`). Extend `slice-12-key-audit.spec.ts`'s removed-key scan, or add the equivalent guard alongside it.                                                                                                              |
+| I3  | `fork-string-parity.spec.ts` passes: every new key is present in **all nine** locales.                                                                                                                                                                                                                                                                                                     |
+| I3b | **Leftover-key guard (new).** Each of the four removed keys is absent from all nine locale files _and_ `en.json`. This needs its own assertion: parity only detects a key **missing** from a locale that others still have, so a stale `face_cleanup_manual_review_bulk_move` left behind in one locale is invisible to every existing guard — the opposite direction from what I3 checks. |
+| I4  | `placeholders.spec.ts` passes: `…_hint_effect` carries the literal argument names `{action}` and `{effect}` in all nine translations. Because the translations ship in this change rather than later, this guard is live immediately — a locale that translated an argument name fails here.                                                                                               |
+| I5  | `face-cleanup-plurals.spec.ts` passes — no new plural forms are introduced.                                                                                                                                                                                                                                                                                                                |
+| I6  | **Coverage assertion (new, in `face-actions.spec.ts` or alongside the parity spec):** every key the registry names, plus the intro and hint keys, resolves in all nine locale files. This states the §4.5 requirement directly rather than relying on parity's transitive "at least one locale has it" derivation.                                                                         |
+| I7  | No locale's value for the three reworded keys (§4.2) still carries the old wording's arrow-and-slash shape — `face_cleanup_review_bulk_owner` and `…_other` contain no `→`, `…_lock` no `/`. A cheap, checkable proxy for "the nine were updated, not just `en.json`"; a test cannot diff against a value it no longer has.                                                                |
 
 ### 5.8 E2E
 
-`e2e/src/specs/web/face-cleanup.e2e-spec.ts` and `face-review-cross-engine.e2e-spec.ts` target `data-testid`
-only and must pass **unmodified**. That is the acceptance signal for the dock swap: if any testid moved, they
-fail. No new e2e is added — the change is presentational and the existing X1 test already drives every bulk
-action through the bar to a resolve payload.
+`e2e/src/specs/web/face-cleanup.e2e-spec.ts` is the testid contract and must pass **unmodified**. It drives
+both bars through the DOM — guided's `bulk-stay`/`-lock`/`-other`/`-unknown`/`-detach` (X1, `:426-442`) and
+manual's `manual-review-bulk-move`/`-lock`/`-detach` (`:937-952`) — through to an asserted resolve payload.
+That is the acceptance signal for the dock merge: if any testid moved, it fails.
+
+`face-review-cross-engine.e2e-spec.ts` is **not** part of that contract — it contains no `data-testid` at all.
+It is an API-boundary suite (S14.4, S14.5) driving `page.request.post/get` against `/api/…`, so it is
+untouched by a presentational change for a different reason and must not be cited as evidence the dock is
+correct.
+
+No new e2e is added: the change is presentational, and X1 already exercises every guided action end to end.
 
 ### 5.9 Manual verification
 
@@ -426,6 +531,9 @@ Not automatable, checked by hand on the dev stack before the branch is called do
 - Light and dark theme on both docks and the intro block.
 - Hint row does not shift the dock height when swapping between the shortest and longest effect string.
 - Touch: with no hover available, the hint row and the `(i)` modal still carry the full explanation.
+- Tab the whole bar with a screen reader on, confirming each button announces its label followed by its
+  effect via `aria-describedby`, and that the popover is never announced twice (D19 asserts the wiring; only a
+  real screen reader confirms it reads well).
 - **Locale spot-check in the running app, not just in the JSON.** `de` for the longest compounds (does a
   six-button bar still fit, or wrap acceptably), `zh_Hans` for the shortest (buttons should not collapse to
   cramped two-character stubs), and `ru` for the intro block's line lengths. The dock is the tightest surface
@@ -438,6 +546,9 @@ Not automatable, checked by hand on the dev stack before the branch is called do
 | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A moved `data-testid` breaks e2e silently in a suite that isn't run locally.              | Testids are props on the dock, enumerated per page; §5.8 requires the e2e specs to pass unmodified.                                                                                                                       |
 | Merging two help modals loses an assertion one of them made.                              | §5.3 carries over every case from both deleted specs by name; the deletions happen in the same commit as the merged spec.                                                                                                 |
+| Merging collapses mode-specific copy, so one mode describes a scan it does not have.      | The registry models it explicitly (§3.1 `ModalKey`); R7/R8, H11–H13 and G4/M5 assert it at three levels — resolver, component, page.                                                                                      |
+| `unmark` silently loses its `mdiUndo` glyph because its swatch is absent.                 | `buttonIcon` and `swatchColor` are separate fields (§3.1); D10, D27 and M7 assert the button keeps its glyph while the modal keeps its no-swatch row.                                                                     |
+| A stale removed key survives in one locale, invisible to every existing guard.            | I3b asserts absence directly — parity only detects the opposite direction.                                                                                                                                                |
 | Changing English label values leaves stale translations in nine locales.                  | §4.2 updates them in the same change; I7 guards the three reworded keys against keeping the old arrow/slash shape.                                                                                                        |
 | Translating into eight locales and forgetting `es` (or shipping only one Chinese script). | Not a partial success but a red build: §4.5 explains the parity test's promotion rule, and I3/I6 assert presence across all nine explicitly.                                                                              |
 | Longer translations (`de`, `ru`) overflow the six-button bar or the two-line hint clamp.  | The bar already wraps (`flex-wrap`); the hint row clamps at two lines. Verified by eye per §5.9 rather than asserted — a spec cannot see rendered width in happy-dom.                                                     |
