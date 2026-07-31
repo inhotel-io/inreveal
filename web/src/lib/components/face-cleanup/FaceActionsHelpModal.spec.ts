@@ -52,15 +52,19 @@ describe('FaceActionsHelpModal — guided', () => {
   it('names all six actions, reusing the bulk-bar labels', () => {
     renderModal(GUIDED);
 
-    for (const name of [
-      'Move to owner',
-      'Keep here',
-      'Confirm & lock',
-      'Move to person…',
-      'Unknown person',
-      'Not a face',
-    ]) {
-      expect(screen.getByTestId('help-actions')).toHaveTextContent(name);
+    // Scoped to each action's OWN row (`help-row-<id>`), not the shared `help-actions` container: "Keep
+    // here" also appears inside lock's body ("Like Keep here, but permanent…") and "Unknown person" also
+    // appears inside detach's effect ("Use Unknown person instead…"), so a container-wide assertion would
+    // still pass on a neighbour's copy even if a row's own label vanished.
+    for (const [id, name] of [
+      ['owner', 'Move to owner'],
+      ['stay', 'Keep here'],
+      ['lock', 'Confirm & lock'],
+      ['other', 'Move to person…'],
+      ['unknown', 'Unknown person'],
+      ['detach', 'Not a face'],
+    ] as const) {
+      expect(screen.getByTestId(`help-row-${id}`)).toHaveTextContent(name);
     }
   });
 
@@ -132,8 +136,19 @@ describe('FaceActionsHelpModal — manual', () => {
   it('names exactly this mode’s six actions: Keep (default), Move to person…, Confirm & lock, Unknown person, Not a face, Unmark', () => {
     renderModal(MANUAL);
 
-    for (const name of ['Keep', 'Move to person…', 'Confirm & lock', 'Unknown person', 'Not a face', 'Unmark']) {
-      expect(screen.getByTestId('help-actions')).toHaveTextContent(name);
+    // Scoped to each action's OWN row, not the shared `help-actions` container: "Keep" also appears inside
+    // lock's body ("Like Keep, but permanent…") and "Unknown person" also appears inside detach's effect
+    // ("Use Unknown person instead…"), so a container-wide assertion would still pass on a neighbour's copy
+    // even if a row's own label vanished.
+    for (const [id, name] of [
+      ['keep', 'Keep'],
+      ['other', 'Move to person…'],
+      ['lock', 'Confirm & lock'],
+      ['unknown', 'Unknown person'],
+      ['detach', 'Not a face'],
+      ['unmark', 'Unmark'],
+    ] as const) {
+      expect(screen.getByTestId(`help-row-${id}`)).toHaveTextContent(name);
     }
     expect(screen.getByTestId('help-actions')).not.toHaveTextContent('Move to owner');
   });
@@ -220,14 +235,20 @@ describe('FaceActionsHelpModal — mode-dependent copy', () => {
     expect(screen.getByText(/genuinely don't look like this person/)).toBeInTheDocument();
   });
 
-  // H12
+  // H12 — both fully-shared actions (`unknown`, `detach`) must stay shared after the merge.
   it('keeps the shared explanations identical across both modes', () => {
     const guided = renderModal(GUIDED);
     const guidedUnknown = screen.getByText(/you don't know whose it is/).textContent;
+    const guidedDetachBody = screen.getByText(/a poster, a statue, a reflection/).textContent;
+    const guidedDetachEffect = screen.getByText(/gone from face recognition, not returned to the pool/).textContent;
     guided.unmount();
 
     renderModal(MANUAL);
     expect(screen.getByText(/you don't know whose it is/).textContent).toBe(guidedUnknown);
+    expect(screen.getByText(/a poster, a statue, a reflection/).textContent).toBe(guidedDetachBody);
+    expect(screen.getByText(/gone from face recognition, not returned to the pool/).textContent).toBe(
+      guidedDetachEffect,
+    );
   });
 
   // H13 — a guard against `mode` being accepted and ignored.
