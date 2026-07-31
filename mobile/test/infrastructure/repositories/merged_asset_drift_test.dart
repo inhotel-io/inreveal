@@ -3,6 +3,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/infrastructure/entities/merged_asset.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/remote_asset.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space_album_asset.entity.drift.dart';
@@ -11,7 +12,6 @@ import 'package:immich_mobile/infrastructure/entities/shared_space_asset.entity.
 import 'package:immich_mobile/infrastructure/entities/shared_space_library.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/shared_space_member.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/entities/user.entity.drift.dart';
-import 'package:immich_mobile/infrastructure/entities/merged_asset.drift.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 
 // Polls `predicate` on the event loop for up to `timeout` before failing the
