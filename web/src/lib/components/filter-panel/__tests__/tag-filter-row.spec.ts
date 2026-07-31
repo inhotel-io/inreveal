@@ -1,42 +1,14 @@
 import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { tick } from 'svelte';
-import { compile } from 'tailwindcss';
-import { readFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import path from 'node:path';
 import { getResizeObserverMock } from '$lib/__mocks__/resize-observer.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
+import { compileUtilities } from '@test-data/tailwind';
 import TagFilterRowNonDefaultProvider from '../tag-filter-row-non-default-provider.test-wrapper.svelte';
 import TagFilterRowToggleChecked from '../tag-filter-row-toggle-checked.test-wrapper.svelte';
 import TagFilterRow from '../tag-filter-row.svelte';
 
 const LONG_NAME = 'Events/2024/Italy Summer Trip Rome Colosseum And Vatican Museums';
-
-/**
- * Compiles a list of utility class names through the project's real Tailwind and returns the
- * generated CSS.
- *
- * This exists because a misspelt utility is invisible to every other kind of assertion. Tailwind
- * silently emits nothing for a name it does not recognise — no error, no warning — so the element
- * still carries the token in its class attribute and `toContain('...')` still passes while the
- * declaration was never generated. That is precisely how `wrap-break-words` (the real v4 name is
- * `wrap-break-word`; `break-words` was the v3 name) shipped: tag names containing a space or a
- * hyphen wrapped anyway on those natural break opportunities, so only pure-underscore names such as
- * `Bilder_Nordlichter_Originalbilder_DMY` visibly clipped. happy-dom has no layout engine and no
- * stylesheet resolution, so it cannot catch this either.
- */
-async function compileUtilities(classes: string[]): Promise<string> {
-  const require = createRequire(import.meta.url);
-  const compiler = await compile('@import "tailwindcss";', {
-    base: process.cwd(),
-    loadStylesheet: async (id: string) => {
-      const file = id === 'tailwindcss' ? require.resolve('tailwindcss/index.css') : id;
-      return { path: file, base: path.dirname(file), content: await readFile(file, 'utf8') };
-    },
-  });
-  return compiler.build(classes);
-}
 
 // The only two non-closed values bits-ui's tooltip state machine produces (tooltip.svelte.js:
 // #stateAttr returns "delayed-open" or "instant-open" whenever the trigger is open). Asserting
