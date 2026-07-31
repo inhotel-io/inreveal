@@ -56,14 +56,18 @@
         {/if}
       </div>
 
-      <!-- wrap-break-words is required, not cosmetic: without it an unbreakable token overflows
-           horizontally and clampOverflow reports a false "fits". -->
+      <!-- wrap-break-word is required, not cosmetic: without it an unbreakable token (a tag name
+           with no space or hyphen to break on, e.g. Bilder_Nordlichter_Originalbilder_DMY) overflows
+           horizontally, gets clipped by the panel, and clampOverflow reports a false "fits" — so the
+           row loses its tooltip too. Note the singular `word`: Tailwind v4 renamed v3's
+           `break-words`, and emits nothing at all for a name it does not recognise, so a misspelling
+           here fails silently. R14 compiles this label's classes to catch exactly that. -->
       <!-- key includes `checked`, not just `name`: selecting a row flips its class from
            `text-gray-500 dark:text-gray-300` (font-weight 400) to `font-medium` (500), which changes
            the label's text metrics without changing its border box — so ResizeObserver never fires
            for this — and without `checked` here the action's update() never re-measures either. -->
       <span
-        class="wrap-break-words line-clamp-2 flex-1 text-left"
+        class="line-clamp-2 flex-1 text-left wrap-break-word"
         use:clampOverflow={{ onChange: (overflowing) => (isOverflowing = overflowing), key: `${name}|${checked}` }}
       >
         {name}

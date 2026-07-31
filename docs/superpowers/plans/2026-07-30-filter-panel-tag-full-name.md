@@ -17,8 +17,9 @@
 - **`data-testid="tags-item-{id}"` must remain on the element that receives the click.** `e2e/src/specs/web/album.e2e-spec.ts` and `e2e/src/specs/web/spaces-filter-panel.e2e-spec.ts` click that selector.
 - **No new i18n strings.** The tooltip content is the tag name itself.
 - **Scope is tags only.** Do not touch `people-filter.svelte`, `camera-filter.svelte`, or `location-filter.svelte`.
-- **This repo has no `prettier-plugin-tailwindcss`**, so Tailwind class order is preserved exactly as written. Keep `line-clamp-2` and `wrap-break-words` on the label together.
-- **`wrap-break-words` is load-bearing, not cosmetic.** Without it a single unbreakable token overflows horizontally rather than vertically, `scrollHeight === clientHeight`, and the tooltip silently never appears.
+- **Tailwind class order is linted, not formatted.** This repo has no `prettier-plugin-tailwindcss`, so prettier leaves class order alone — but eslint's `better-tailwindcss/enforce-consistent-class-order` enforces it as a warning, and CI runs `pnpm lint --max-warnings 0`. Note it can only order classes it recognises: a misspelt utility is left wherever it sits, so a passing lint is **not** evidence that a class name is real (see the next two constraints).
+- **`wrap-break-word` is load-bearing, not cosmetic.** Without it a single unbreakable token overflows horizontally rather than vertically, `scrollHeight === clientHeight`, and the tooltip silently never appears.
+- **Mind the singular `word`.** Tailwind v4 renamed v3's `break-words` to `wrap-break-word`, and emits _nothing at all_ for a class name it does not recognise — no error, no warning. The first implementation of this plan shipped `wrap-break-words`, which generated no CSS, so the label never had `overflow-wrap` and pure-underscore tag names clipped horizontally (names containing a space or a hyphen still wrapped on those natural break opportunities, which is why the breakage looked patternless). R14 now compiles the label's classes through the real Tailwind and asserts an `overflow-wrap` declaration is actually produced.
 - Server imports use the `src/` alias; **web** imports use `$lib/`. Follow the existing import style.
 
 ---
@@ -222,7 +223,7 @@ export interface ClampOverflowParams {
  * Reports whether a node's content overflows its box vertically — the standard way to detect that a
  * `line-clamp` has actually clipped something.
  *
- * Only meaningful when the node also allows mid-word breaks (`wrap-break-words`); without that, an
+ * Only meaningful when the node also allows mid-word breaks (`wrap-break-word`); without that, an
  * unbreakable token overflows horizontally instead and this reports a false "fits".
  */
 export function clampOverflow(node: HTMLElement, params: ClampOverflowParams): ActionReturn<ClampOverflowParams> {
@@ -489,11 +490,16 @@ describe('TagFilterRow', () => {
     expect(row.className).toContain('font-medium');
   });
 
-  it('R14: allows mid-word breaks on the label', () => {
+  it('R14: allows mid-word breaks on the label', async () => {
     stubHeights(0, 0);
     const { getByTestId } = renderRow();
     const label = getByTestId('tags-item-t1').querySelector('span');
-    expect(label?.className).toContain('wrap-break-words');
+    const classes = (label?.className ?? '').split(/\s+/).filter(Boolean);
+    expect(classes.length).toBeGreaterThan(0);
+
+    const css = await compileUtilities(classes);
+
+    expect(css).toContain('overflow-wrap');
   });
 
   it('R15: describes the open tooltip with the full name', async () => {
@@ -577,10 +583,10 @@ Create `web/src/lib/components/filter-panel/tag-filter-row.svelte`:
         {/if}
       </div>
 
-      <!-- wrap-break-words is required, not cosmetic: without it an unbreakable token overflows
+      <!-- wrap-break-word is required, not cosmetic: without it an unbreakable token overflows
            horizontally and clampOverflow reports a false "fits". -->
       <span
-        class="line-clamp-2 wrap-break-words flex-1 text-left"
+        class="wrap-break-word line-clamp-2 flex-1 text-left"
         use:clampOverflow={{ onChange: (overflowing) => (isOverflowing = overflowing), key: name }}
       >
         {name}
@@ -842,7 +848,7 @@ Skip this step if Steps 1–4 needed no changes.
 | `clampOverflow` action contract + A1–A10 | Task 1                          |
 | `TagFilterRow` + R1–R15                  | Task 2                          |
 | Composed `onclick` hazard                | Task 2 (R8, R9)                 |
-| `wrap-break-words` hazard                | Task 2 (R12, R14)               |
+| `wrap-break-word` hazard                 | Task 2 (R12, R14)               |
 | Class unification onto the row element   | Task 2 (R13), Task 3 (T3)       |
 | `tags-filter.svelte` wiring + T1–T5      | Task 3                          |
 | 18 existing tests stay green             | Task 3 (Step 4)                 |

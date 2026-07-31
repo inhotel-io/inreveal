@@ -11,8 +11,10 @@ export interface ClampOverflowParams {
  * Reports whether a node's content overflows its box vertically — the standard way to detect that a
  * `line-clamp` has actually clipped something.
  *
- * Only meaningful when the node also allows mid-word breaks (`wrap-break-words`); without that, an
- * unbreakable token overflows horizontally instead and this reports a false "fits".
+ * Only meaningful when the node also allows mid-word breaks (`wrap-break-word` — note the singular
+ * `word`; Tailwind v4 renamed v3's `break-words` and silently emits nothing for an unrecognised
+ * name). Without that, an unbreakable token overflows horizontally instead and this reports a false
+ * "fits".
  */
 export function clampOverflow(node: HTMLElement, params: ClampOverflowParams): ActionReturn<ClampOverflowParams> {
   let current = params;

@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { tick } from 'svelte';
+import { compile } from 'tailwindcss';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import { getResizeObserverMock } from '$lib/__mocks__/resize-observer.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import TagFilterRowNonDefaultProvider from '../tag-filter-row-non-default-provider.test-wrapper.svelte';
@@ -8,6 +12,31 @@ import TagFilterRowToggleChecked from '../tag-filter-row-toggle-checked.test-wra
 import TagFilterRow from '../tag-filter-row.svelte';
 
 const LONG_NAME = 'Events/2024/Italy Summer Trip Rome Colosseum And Vatican Museums';
+
+/**
+ * Compiles a list of utility class names through the project's real Tailwind and returns the
+ * generated CSS.
+ *
+ * This exists because a misspelt utility is invisible to every other kind of assertion. Tailwind
+ * silently emits nothing for a name it does not recognise — no error, no warning — so the element
+ * still carries the token in its class attribute and `toContain('...')` still passes while the
+ * declaration was never generated. That is precisely how `wrap-break-words` (the real v4 name is
+ * `wrap-break-word`; `break-words` was the v3 name) shipped: tag names containing a space or a
+ * hyphen wrapped anyway on those natural break opportunities, so only pure-underscore names such as
+ * `Bilder_Nordlichter_Originalbilder_DMY` visibly clipped. happy-dom has no layout engine and no
+ * stylesheet resolution, so it cannot catch this either.
+ */
+async function compileUtilities(classes: string[]): Promise<string> {
+  const require = createRequire(import.meta.url);
+  const compiler = await compile('@import "tailwindcss";', {
+    base: process.cwd(),
+    loadStylesheet: async (id: string) => {
+      const file = id === 'tailwindcss' ? require.resolve('tailwindcss/index.css') : id;
+      return { path: file, base: path.dirname(file), content: await readFile(file, 'utf8') };
+    },
+  });
+  return compiler.build(classes);
+}
 
 // The only two non-closed values bits-ui's tooltip state machine produces (tooltip.svelte.js:
 // #stateAttr returns "delayed-open" or "instant-open" whenever the trigger is open). Asserting
@@ -220,12 +249,13 @@ describe('TagFilterRow', () => {
   it('R12: attaches a tooltip whenever clampOverflow reports overflow, regardless of the name shape', async () => {
     // stubHeights(100, 40) forces the overflow verdict independent of the name it is given, so the
     // 'A'.repeat(120) unbreakable token here is inert as far as this assertion goes — this test would
-    // pass unchanged even if `wrap-break-words` were deleted from the component. It pins only that an
-    // overflowing row always gets a tooltip. The actual "wrap-break-words makes an unbreakable token
+    // pass unchanged even if the wrap utility were deleted from the component. It pins only that an
+    // overflowing row always gets a tooltip. The actual "the wrap utility makes an unbreakable token
     // overflow vertically instead of clipping horizontally" claim cannot be proven under happy-dom
     // (no layout engine); it is proven only by the real-browser probe recorded in the design spec's
-    // "Hazard: an unbreakable token defeats height-based detection" section. R14 below only pins that
-    // the class is present on the label, not the resulting behaviour.
+    // "Hazard: an unbreakable token defeats height-based detection" section. R14 below covers the
+    // half of it that *is* automatable — that the label's utility compiles to a real `overflow-wrap`
+    // declaration rather than silently to nothing.
     stubHeights(100, 40);
     const { getByTestId } = renderRow({ name: 'A'.repeat(120) });
     await tick();
@@ -240,11 +270,28 @@ describe('TagFilterRow', () => {
     expect(row.className).toContain('font-medium');
   });
 
-  it('R14: allows mid-word breaks on the label', () => {
+  it('R14: allows mid-word breaks on the label', async () => {
+    // Asserts the *compiled* result, not the class string. A name-only assertion cannot fail for a
+    // utility that does not exist (see compileUtilities above), which is how the label shipped with
+    // no `overflow-wrap` declaration at all. The class list is read off the rendered label rather
+    // than hard-coded, so this checks what the component actually emits.
+    //
+    // `overflow-wrap` (rather than the exact declaration) is the right assertion: both utilities
+    // that would satisfy the requirement produce it — `wrap-break-word` emits
+    // `overflow-wrap: break-word`, `wrap-anywhere` emits `overflow-wrap: anywhere` plus a
+    // `break-word` fallback — and this pins the behaviour rather than one spelling of it. It also
+    // genuinely fails when absent: none of the label's other utilities emit `overflow-wrap`
+    // (verified against Tailwind 4.3.2 — `line-clamp-2` emits only `overflow`, `display`,
+    // `-webkit-box-orient` and `-webkit-line-clamp`), and neither does Tailwind's base layer.
     stubHeights(0, 0);
     const { getByTestId } = renderRow();
     const label = getByTestId('tags-item-t1').querySelector('span');
-    expect(label?.className).toContain('wrap-break-words');
+    const classes = (label?.className ?? '').split(/\s+/).filter(Boolean);
+    expect(classes.length).toBeGreaterThan(0);
+
+    const css = await compileUtilities(classes);
+
+    expect(css).toContain('overflow-wrap');
   });
 
   it('R15: shows the complete tag name in the open tooltip content', async () => {
