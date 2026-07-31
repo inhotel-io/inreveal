@@ -17,7 +17,12 @@
 - **Run tests with `pnpm exec vitest run <path>`, never `pnpm test -- --run <path>`** — the latter silently drops the path filter and runs the whole suite.
 - **Prettier: 120 char line width, single quotes, trailing commas, semicolons.** ESLint runs `--max-warnings 0`.
 - **No relative imports across `lib`/`routes` boundaries** — use the `$lib/` alias.
-- **Every `data-testid` in use today is preserved.** `e2e/src/specs/web/face-cleanup.e2e-spec.ts` must pass unmodified; it is the acceptance signal for the dock merge. Two ids are _added_ (`bulk-owner`, `manual-review-bulk-help`); none are renamed or removed.
+- **Testids split into two layers, and only the first is renamed.**
+  - **Dock chrome** — the shared component's own furniture — is **normalised** to one scheme used by both modes, hardcoded in `FaceReviewDock` (there is no `testIds` prop): `face-dock`, `face-bulk-bar`, `face-bulk-clear`, `face-bulk-help`, `face-bulk-hint`. This replaces guided's `dock`/`face-bulk-bar`/`clear`/`bulk-help` and manual's `manual-review-dock`/`face-bulk-bar`/`manual-review-bulk-clear`.
+  - **Action testids are preserved verbatim** — `bulk-stay`, `bulk-lock`, `bulk-other`, `bulk-unknown`, `bulk-detach`, `manual-review-bulk-move`, `-lock`, `-unknown`, `-detach`, `-unmark`. They identify _which action_, not which dock, and are passed per-page. `bulk-owner` is the one addition.
+  - Grid-header ids (`manual-review-help-open`, `manual-review-clear-selection`, `banner-help`) are not dock chrome and do not change.
+- **The e2e suite changes by exactly one line.** `e2e/src/specs/web/face-cleanup.e2e-spec.ts:528` (`page.locator('[data-testid="dock"]')` → `face-dock`) is the **only** permitted edit to `e2e/`. Every action locator it drives must still pass untouched — that is what proves the dock merge moved nothing. If a second e2e line needs changing, stop and escalate.
+- **Test-driven, strictly, in every task including the refactors.** No test is written after the code it covers, and every test is observed failing for the right reason before the implementation lands. Where a refactor's replacement values are identical to the originals (Task 3), the test is proven to have teeth by landing a deliberately wrong implementation first, watching it go red, then correcting it — the wrong version is never committed.
 - **Two opposite i18n test harnesses.** Page specs (`page.spec.ts`) mock `$t` to echo the **key** and assert on key names. Component specs register the **real `en.json`** and assert on **English text**. Never mix them within a file.
 - **Any spec rendering a bits-ui `Modal` needs the scroll-lock drain:** `afterEach(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });`
 - **The web vitest config sets no `clearMocks`** — reset mock call history explicitly in `beforeEach` where a test asserts on call counts.
@@ -510,16 +515,16 @@ git commit -m "feat(face-cleanup): add the shared face-action registry"
 - Consumes: `FACE_ACTIONS`, `GUIDED_STATE_IDS` from Task 2.
 - Produces: `STATE_COLOR`, `STATE_ICON`, `MANUAL_STATE_COLOR`, `MANUAL_STATE_ICON` keep their current names, types and key sets. Every existing importer is untouched.
 
-> **This task is a refactor, not a red-green cycle.** The values the registry supplies are byte-identical to the literals being replaced, so a test written first would pass first — there is no honest red step, and staging a fake one (corrupting a constant to watch it fail) is theatre, not TDD. The safety net is the two existing specs, which stay **unmodified** and pin exactly what the refactor could break:
->
-> - `review.spec.ts:17-18` — `STATE_ICON` keys === `STATE_COLOR` keys;
-> - `manual-review.spec.ts:40-41` — `MANUAL_STATE_*` keys are exactly `['detach','lock','move','unknown']`.
->
-> The new assertions below are a **characterisation test**: they pin the derivation so a later edit to the registry cannot silently diverge from the route tokens. Write them after the refactor and confirm the whole set is green together.
+**Test-first, with a proven-red step.** The registry's values are byte-identical to the literals being replaced, so a test written first would pass first — vacuously. The cure is not to skip the red step but to _earn_ it: land the projection **deliberately wrong**, watch the test fail for the right reason, then correct it. The wrong version is never committed.
+
+Two existing specs are the additional guard rail and must not be edited at any point in this task:
+
+- `review.spec.ts:17-18` — `STATE_ICON` keys === `STATE_COLOR` keys;
+- `manual-review.spec.ts:40-41` — `MANUAL_STATE_*` keys are exactly `['detach','lock','move','unknown']`.
 
 The derivation must **narrow**, not widen — `keep` and `unmark` have no tile state and must never appear in either map.
 
-- [ ] **Step 1: Record the safety net is green before touching anything**
+- [ ] **Step 1: Record the guard rail is green before touching anything**
 
 ```bash
 cd web && pnpm exec vitest run \
@@ -527,66 +532,11 @@ cd web && pnpm exec vitest run \
   'src/routes/admin/face-cleanup/people/[personId]/manual-review.spec.ts'
 ```
 
-Expected: PASS. These two specs are the refactor's guard rail and must not be edited at any point in this task.
+Expected: PASS.
 
-- [ ] **Step 2: Replace the inline declarations in `review.svelte.ts`**
+- [ ] **Step 2: Write the characterisation test FIRST — extend the import block at the TOP of `face-actions.spec.ts`**
 
-Replace the `STATE_COLOR` and `STATE_ICON` object literals (keep the surrounding comments — they explain why one glyph means one thing everywhere):
-
-```ts
-import { FACE_ACTIONS, GUIDED_STATE_IDS } from '$lib/components/face-cleanup/face-actions';
-
-// Projected from the shared registry (design §3.1) rather than declared here, so the bulk bar, the tile badge,
-// the tally chip and the help modal cannot drift apart. NARROWS to the six tile states: `keep`/`unmark` have no
-// tile state and must never appear here (review.spec.ts pins these key sets).
-export const STATE_COLOR: Record<FaceState, string> = Object.fromEntries(
-  GUIDED_STATE_IDS.map((id) => [id, FACE_ACTIONS[id].swatchColor!]),
-) as Record<FaceState, string>;
-
-export const STATE_ICON: Record<FaceState, string> = Object.fromEntries(
-  GUIDED_STATE_IDS.map((id) => [id, FACE_ACTIONS[id].buttonIcon!]),
-) as Record<FaceState, string>;
-```
-
-Remove the now-unused `@mdi/js` imports from this file.
-
-- [ ] **Step 3: Replace the inline declarations in `manual-review.svelte.ts`**
-
-```ts
-import { FACE_ACTIONS } from '$lib/components/face-cleanup/face-actions';
-
-// Projected from the registry under manual's `other` → `move` rename (design §3.1). `keep` deliberately has no
-// entry: it is signalled by absence, not a 5th swatch.
-export const MANUAL_STATE_COLOR: Record<Exclude<ManualFaceState, 'keep'>, string> = {
-  move: FACE_ACTIONS.other.swatchColor!,
-  lock: FACE_ACTIONS.lock.swatchColor!,
-  unknown: FACE_ACTIONS.unknown.swatchColor!,
-  detach: FACE_ACTIONS.detach.swatchColor!,
-};
-
-export const MANUAL_STATE_ICON: Record<Exclude<ManualFaceState, 'keep'>, string> = {
-  move: FACE_ACTIONS.other.buttonIcon!,
-  lock: FACE_ACTIONS.lock.buttonIcon!,
-  unknown: FACE_ACTIONS.unknown.buttonIcon!,
-  detach: FACE_ACTIONS.detach.buttonIcon!,
-};
-```
-
-Keep the existing `STATE_COLOR`/`STATE_ICON` import from `../../[personId]/review.svelte` only if still referenced; otherwise remove it.
-
-- [ ] **Step 4: Confirm the safety net still passes, unmodified**
-
-```bash
-cd web && pnpm exec vitest run \
-  'src/routes/admin/face-cleanup/[personId]/review.spec.ts' \
-  'src/routes/admin/face-cleanup/people/[personId]/manual-review.spec.ts'
-```
-
-Expected: PASS. If either fails, the projection widened or a value moved — fix the projection, never the spec.
-
-- [ ] **Step 5: Add the characterisation test — extend the import block at the TOP of `face-actions.spec.ts`**
-
-`prettier-plugin-organize-imports` rewrites the import block on format, so these must join the existing imports at the top of the file rather than being appended at the bottom:
+`prettier-plugin-organize-imports` rewrites the import block on format, so these join the existing imports at the top rather than being appended:
 
 ```ts
 import { STATE_COLOR, STATE_ICON } from '../../../routes/admin/face-cleanup/[personId]/review.svelte';
@@ -599,9 +549,8 @@ import {
 Then append this block at the end of the file:
 
 ```ts
-// R9/R10. NOT a red-green pair: the projected values are identical to the literals they replaced, so this
-// passes the moment the refactor lands. It exists to pin the derivation — a later edit to a registry colour or
-// glyph that forgets the route tokens (or a projection that widens to include keep/unmark) fails here.
+// R9/R10 — the route tokens are PROJECTIONS of the registry. Asserts both halves: the values match, and the
+// projection NARROWS (keep/unmark must never leak into a tile-state map).
 describe('state tokens derived from the registry', () => {
   it('projects exactly the six guided states, with the registry values', () => {
     expect(Object.keys(STATE_COLOR).sort()).toEqual(['detach', 'lock', 'other', 'owner', 'stay', 'unknown']);
@@ -627,6 +576,71 @@ describe('state tokens derived from the registry', () => {
 });
 ```
 
+- [ ] **Step 3: Prove the test has teeth — land a deliberately WRONG projection and watch it go red**
+
+Temporarily replace `STATE_COLOR` in `review.svelte.ts` with a projection that **widens** — the exact defect this test exists to catch:
+
+```ts
+import { FACE_ACTIONS } from '$lib/components/face-cleanup/face-actions';
+
+// DELIBERATELY WRONG — widens over all eight ids instead of narrowing to the six tile states.
+// This is a throwaway step to prove the test fails for the right reason. DO NOT COMMIT.
+export const STATE_COLOR = Object.fromEntries(
+  Object.values(FACE_ACTIONS).map((meta) => [meta.id, meta.swatchColor]),
+) as Record<FaceState, string>;
+```
+
+```bash
+cd web && pnpm exec vitest run src/lib/components/face-cleanup/face-actions.spec.ts
+```
+
+Expected: **FAIL** on `projects exactly the six guided states` — the received key list contains `keep` and `unmark`. If it passes, the test is vacuous and must be strengthened before you go on. **Do not commit this state.**
+
+- [ ] **Step 4: Correct the projection in `review.svelte.ts`**
+
+Replace the `STATE_COLOR` and `STATE_ICON` object literals (keep the surrounding comments — they explain why one glyph means one thing everywhere):
+
+```ts
+import { FACE_ACTIONS, GUIDED_STATE_IDS } from '$lib/components/face-cleanup/face-actions';
+
+// Projected from the shared registry (design §3.1) rather than declared here, so the bulk bar, the tile badge,
+// the tally chip and the help modal cannot drift apart. NARROWS to the six tile states: `keep`/`unmark` have no
+// tile state and must never appear here (review.spec.ts pins these key sets).
+export const STATE_COLOR: Record<FaceState, string> = Object.fromEntries(
+  GUIDED_STATE_IDS.map((id) => [id, FACE_ACTIONS[id].swatchColor!]),
+) as Record<FaceState, string>;
+
+export const STATE_ICON: Record<FaceState, string> = Object.fromEntries(
+  GUIDED_STATE_IDS.map((id) => [id, FACE_ACTIONS[id].buttonIcon!]),
+) as Record<FaceState, string>;
+```
+
+Remove the now-unused `@mdi/js` imports from this file.
+
+- [ ] **Step 5: Replace the inline declarations in `manual-review.svelte.ts`**
+
+```ts
+import { FACE_ACTIONS } from '$lib/components/face-cleanup/face-actions';
+
+// Projected from the registry under manual's `other` → `move` rename (design §3.1). `keep` deliberately has no
+// entry: it is signalled by absence, not a 5th swatch.
+export const MANUAL_STATE_COLOR: Record<Exclude<ManualFaceState, 'keep'>, string> = {
+  move: FACE_ACTIONS.other.swatchColor!,
+  lock: FACE_ACTIONS.lock.swatchColor!,
+  unknown: FACE_ACTIONS.unknown.swatchColor!,
+  detach: FACE_ACTIONS.detach.swatchColor!,
+};
+
+export const MANUAL_STATE_ICON: Record<Exclude<ManualFaceState, 'keep'>, string> = {
+  move: FACE_ACTIONS.other.buttonIcon!,
+  lock: FACE_ACTIONS.lock.buttonIcon!,
+  unknown: FACE_ACTIONS.unknown.buttonIcon!,
+  detach: FACE_ACTIONS.detach.buttonIcon!,
+};
+```
+
+Keep the existing `STATE_COLOR`/`STATE_ICON` import from `../../[personId]/review.svelte` only if still referenced; otherwise remove it.
+
 - [ ] **Step 6: Run the registry spec plus both existing view-model specs**
 
 ```bash
@@ -636,7 +650,7 @@ cd web && pnpm exec vitest run \
   'src/routes/admin/face-cleanup/people/[personId]/manual-review.spec.ts'
 ```
 
-Expected: PASS, all three.
+Expected: PASS, all three. `review.spec.ts` and `manual-review.spec.ts` must be **unmodified** — if either needed an edit, the projection is wrong, not the spec.
 
 - [ ] **Step 7: Typecheck, then commit**
 
@@ -680,12 +694,11 @@ git commit -m "refactor(face-cleanup): derive the state colour and icon tokens f
     onAction: (id: FaceActionId) => void;
     onHelp: () => void;
     onClear: () => void;
-    testIds: DockTestIds;
     summary: Snippet;
     apply: Snippet;
   }
   ```
-  Tasks 7 and 8 render `<FaceReviewDock … />` with exactly these props.
+  Tasks 6 and 7 render `<FaceReviewDock … />` with exactly these props.
 
 The **page** keeps the `{#if}` visibility gate; this component has no hidden state.
 
@@ -711,8 +724,6 @@ beforeAll(async () => {
   await waitLocale('en');
 });
 
-const TEST_IDS = { dock: 'dock', bar: 'bulk-bar', clear: 'clear', help: 'bulk-help', hint: 'bulk-hint' };
-
 const GUIDED_ACTIONS = [
   { id: 'owner', testId: 'bulk-owner' },
   { id: 'stay', testId: 'bulk-stay' },
@@ -731,7 +742,6 @@ const renderDock = (over: Record<string, unknown> = {}) =>
       onAction: vi.fn(),
       onHelp: vi.fn(),
       onClear: vi.fn(),
-      testIds: TEST_IDS,
       ...over,
     },
   });
@@ -743,14 +753,14 @@ describe('FaceReviewDock — summary and actions', () => {
 
     expect(screen.getByTestId('harness-summary')).toBeInTheDocument();
     expect(screen.getByTestId('harness-apply')).toBeInTheDocument();
-    expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
   });
 
   // D2
   it('swaps to the action bar once a face is selected', () => {
     renderDock({ selectedCount: 1 });
 
-    expect(screen.getByTestId('bulk-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument();
     expect(screen.queryByTestId('harness-summary')).not.toBeInTheDocument();
     expect(screen.queryByTestId('harness-apply')).not.toBeInTheDocument();
   });
@@ -759,7 +769,7 @@ describe('FaceReviewDock — summary and actions', () => {
   it('reports how many faces the actions will apply to', () => {
     renderDock({ selectedCount: 7 });
 
-    expect(screen.getByTestId('bulk-bar')).toHaveTextContent('7 selected');
+    expect(screen.getByTestId('face-bulk-bar')).toHaveTextContent('7 selected');
   });
 
   // D4
@@ -770,7 +780,7 @@ describe('FaceReviewDock — summary and actions', () => {
       expect(screen.getByTestId(action.testId)).toBeInTheDocument();
     }
     const rendered = screen.getAllByRole('button').map((button) => button.dataset.testid);
-    expect(rendered.filter((id) => id?.startsWith('bulk-') && id !== 'bulk-help')).toEqual(
+    expect(rendered.filter((id) => id?.startsWith('bulk-') && id !== 'face-bulk-help')).toEqual(
       GUIDED_ACTIONS.map((action) => action.testId),
     );
   });
@@ -812,8 +822,8 @@ describe('FaceReviewDock — summary and actions', () => {
     const onHelp = vi.fn();
     renderDock({ onClear, onHelp });
 
-    await fireEvent.click(screen.getByTestId('clear'));
-    await fireEvent.click(screen.getByTestId('bulk-help'));
+    await fireEvent.click(screen.getByTestId('face-bulk-clear'));
+    await fireEvent.click(screen.getByTestId('face-bulk-help'));
 
     expect(onClear).toHaveBeenCalledTimes(1);
     expect(onHelp).toHaveBeenCalledTimes(1);
@@ -823,8 +833,8 @@ describe('FaceReviewDock — summary and actions', () => {
   it('offers clear and help whatever subset of actions it was given', () => {
     renderDock({ actions: [{ id: 'unmark', testId: 'manual-review-bulk-unmark' }] });
 
-    expect(screen.getByTestId('clear')).toBeInTheDocument();
-    expect(screen.getByTestId('bulk-help')).toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-clear')).toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-help')).toBeInTheDocument();
   });
 
   // D10 — F2's regression guard. Icon identity is observable here because this spec does not stub Icon.
@@ -841,8 +851,8 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
   it('given nothing hovered, shows the neutral hint and no popover', () => {
     renderDock();
 
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
-    expect(screen.queryByTestId('bulk-popover')).not.toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
+    expect(screen.queryByTestId('face-bulk-popover')).not.toBeInTheDocument();
   });
 
   // D12 + D13
@@ -851,11 +861,11 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
 
     await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
 
-    expect(screen.getByTestId('bulk-popover')).toHaveTextContent(
+    expect(screen.getByTestId('face-bulk-popover')).toHaveTextContent(
       'Pin these here permanently, so no future scan can flag them.',
     );
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Confirm & lock');
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('the face is pinned to this person');
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Confirm & lock');
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('the face is pinned to this person');
   });
 
   // D13 (mode arm) — guided resolves the scan-referencing effect copy.
@@ -864,7 +874,7 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
 
     await fireEvent.mouseEnter(screen.getByTestId('bulk-other'));
 
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('the next scan can flag the face again');
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('the next scan can flag the face again');
   });
 
   // D13 (mode arm) — manual resolves the scan-free copy for the SAME action id.
@@ -873,7 +883,7 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
 
     await fireEvent.mouseEnter(screen.getByTestId('manual-review-bulk-move'));
 
-    const hint = screen.getByTestId('bulk-hint');
+    const hint = screen.getByTestId('face-bulk-hint');
     expect(hint).toHaveTextContent('so recognition never routes the face back here later');
     expect(hint).not.toHaveTextContent('the next scan can flag the face again');
   });
@@ -885,8 +895,8 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
     await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
     await fireEvent.mouseLeave(screen.getByTestId('bulk-lock'));
 
-    expect(screen.queryByTestId('bulk-popover')).not.toBeInTheDocument();
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
+    expect(screen.queryByTestId('face-bulk-popover')).not.toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
   });
 
   // D15 — keyboard parity.
@@ -895,8 +905,8 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
 
     await fireEvent.focusIn(screen.getByTestId('bulk-detach'));
 
-    expect(screen.getByTestId('bulk-popover')).toHaveTextContent('Irreversible');
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Not a face');
+    expect(screen.getByTestId('face-bulk-popover')).toHaveTextContent('Irreversible');
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Not a face');
   });
 
   // D16
@@ -906,8 +916,8 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
     await fireEvent.focusIn(screen.getByTestId('bulk-detach'));
     await fireEvent.focusOut(screen.getByTestId('bulk-detach'));
 
-    expect(screen.queryByTestId('bulk-popover')).not.toBeInTheDocument();
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
+    expect(screen.queryByTestId('face-bulk-popover')).not.toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
   });
 
   // D17 — sliding along the bar with no intervening leave.
@@ -917,9 +927,9 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
     await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
     await fireEvent.mouseEnter(screen.getByTestId('bulk-unknown'));
 
-    expect(screen.getByTestId('bulk-popover')).toHaveTextContent('Real faces, but not this person');
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Unknown person');
-    expect(screen.getByTestId('bulk-hint')).not.toHaveTextContent('Pin these here permanently');
+    expect(screen.getByTestId('face-bulk-popover')).toHaveTextContent('Real faces, but not this person');
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Unknown person');
+    expect(screen.getByTestId('face-bulk-hint')).not.toHaveTextContent('Pin these here permanently');
   });
 
   // D18
@@ -928,7 +938,7 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
 
     await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
 
-    expect(screen.getAllByTestId('bulk-popover')).toHaveLength(1);
+    expect(screen.getAllByTestId('face-bulk-popover')).toHaveLength(1);
   });
 
   // D19 — one announcement, and focus reaches the effect text.
@@ -937,21 +947,21 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
 
     await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
 
-    expect(screen.getByTestId('bulk-popover')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('face-bulk-popover')).toHaveAttribute('aria-hidden', 'true');
     const describedBy = screen.getByTestId('bulk-lock').getAttribute('aria-describedby');
     expect(describedBy).toBeTruthy();
-    expect(document.getElementById(describedBy!)).toBe(screen.getByTestId('bulk-hint'));
+    expect(document.getElementById(describedBy!)).toBe(screen.getByTestId('face-bulk-hint'));
   });
 
   // D20
   it('given the pointer enters clear or help, leaves the hint row alone', async () => {
     renderDock();
 
-    await fireEvent.mouseEnter(screen.getByTestId('clear'));
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
+    await fireEvent.mouseEnter(screen.getByTestId('face-bulk-clear'));
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
 
-    await fireEvent.mouseEnter(screen.getByTestId('bulk-help'));
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
+    await fireEvent.mouseEnter(screen.getByTestId('face-bulk-help'));
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
   });
 
   // D21 + D22 — applying an action clears the selection, so the bar unmounts while still hovered.
@@ -965,8 +975,8 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
 
     await rerender({ selectedCount: 3 });
 
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
-    expect(screen.queryByTestId('bulk-popover')).not.toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Nothing is written until you press Apply.');
+    expect(screen.queryByTestId('face-bulk-popover')).not.toBeInTheDocument();
   });
 
   // D23 — growing the selection must not clear a live hover.
@@ -976,7 +986,7 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
     await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
     await rerender({ selectedCount: 5 });
 
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Confirm & lock');
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Confirm & lock');
   });
 });
 
@@ -985,10 +995,10 @@ describe('FaceReviewDock — edge cases', () => {
   it('renders the bar shell with no actions at all', () => {
     renderDock({ actions: [] });
 
-    expect(screen.getByTestId('bulk-bar')).toHaveTextContent('2 selected');
-    expect(screen.getByTestId('clear')).toBeInTheDocument();
-    expect(screen.getByTestId('bulk-help')).toBeInTheDocument();
-    expect(screen.getByTestId('bulk-hint')).toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-bar')).toHaveTextContent('2 selected');
+    expect(screen.getByTestId('face-bulk-clear')).toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-help')).toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-hint')).toBeInTheDocument();
   });
 
   // D25
@@ -1002,7 +1012,7 @@ describe('FaceReviewDock — edge cases', () => {
   it('renders a selection of one as readily as many', () => {
     renderDock({ selectedCount: 1 });
 
-    expect(screen.getByTestId('bulk-bar')).toHaveTextContent('1 selected');
+    expect(screen.getByTestId('face-bulk-bar')).toHaveTextContent('1 selected');
   });
 
   // D27 — the other half of the F2 split: no swatch must not suppress the glyph.
@@ -1018,26 +1028,20 @@ describe('FaceReviewDock — edge cases', () => {
 
   // D28 — no module-level state leaks between instances (the suite sets no clearMocks). Every testid in the
   // second dock is distinct, INCLUDING `dock`: two elements sharing one testid would make a later
-  // `getByTestId('dock')` throw "found multiple elements" from an unrelated test.
+  // `getByTestId('face-dock')` throw "found multiple elements" from an unrelated test.
   it('keeps two docks independent', async () => {
     renderDock({ actions: [{ id: 'lock', testId: 'bulk-lock' }] });
-    renderDock({
-      mode: 'manual',
-      actions: [{ id: 'unmark', testId: 'manual-review-bulk-unmark' }],
-      testIds: {
-        dock: 'dock-2',
-        bar: 'bulk-bar-2',
-        clear: 'clear-2',
-        help: 'bulk-help-2',
-        hint: 'bulk-hint-2',
-      },
-    });
+    renderDock({ mode: 'manual', actions: [{ id: 'unmark', testId: 'manual-review-bulk-unmark' }] });
+
+    // Both docks render the same normalised chrome testids, so index the pair rather than aliasing them.
+    const hints = screen.getAllByTestId('face-bulk-hint');
+    expect(hints).toHaveLength(2);
 
     await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
 
-    // The first dock describes what was hovered; the second is untouched by it.
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('Confirm & lock');
-    expect(screen.getByTestId('bulk-hint-2')).toHaveTextContent('Nothing is written until you press Apply.');
+    // The first dock describes what was hovered; the second is untouched by it — no module-level state leak.
+    expect(hints[0]).toHaveTextContent('Confirm & lock');
+    expect(hints[1]).toHaveTextContent('Nothing is written until you press Apply.');
   });
 });
 ```
@@ -1106,7 +1110,6 @@ Create `web/src/lib/components/face-cleanup/FaceReviewDock.svelte`:
     onAction: (id: FaceActionId) => void;
     onHelp: () => void;
     onClear: () => void;
-    testIds: { dock: string; bar: string; clear: string; help: string; hint: string };
     /** Everything left of Apply while nothing is selected. Guided renders a tally, a rest-of-cluster chip and a
      *  blocked reason; manual renders four tally chips. One snippet, not a tally/apply pair, because guided's
      *  blocked reason sits BETWEEN the tally and the button and would have nowhere to live in a two-way split. */
@@ -1114,7 +1117,7 @@ Create `web/src/lib/components/face-cleanup/FaceReviewDock.svelte`:
     apply: Snippet;
   }
 
-  const { mode, selectedCount, actions, onAction, onHelp, onClear, testIds, summary, apply }: Props = $props();
+  const { mode, selectedCount, actions, onAction, onHelp, onClear, summary, apply }: Props = $props();
 
   // Drives BOTH the popover and the hint row, so the two can never describe different actions.
   let hoveredId: FaceActionId | null = $state(null);
@@ -1151,7 +1154,7 @@ Create `web/src/lib/components/face-cleanup/FaceReviewDock.svelte`:
 
 <div
   class="shrink-0 border-t border-gray-200 bg-white py-3.5 dark:border-gray-700 dark:bg-gray-900"
-  data-testid={testIds.dock}
+  data-testid="face-dock"
 >
   <div class="mx-auto flex max-w-screen-xl flex-wrap items-center gap-3.5 px-6">
     {#if selectedCount === 0}
@@ -1160,7 +1163,7 @@ Create `web/src/lib/components/face-cleanup/FaceReviewDock.svelte`:
     {:else}
       <div
         class="flex flex-1 flex-col gap-2 rounded-2xl bg-gray-900 px-4 py-3 text-white dark:bg-gray-950"
-        data-testid={testIds.bar}
+        data-testid="face-bulk-bar"
       >
         <div class="flex flex-wrap items-center gap-2">
           <span class="mr-1 text-base font-bold whitespace-nowrap">
@@ -1195,7 +1198,7 @@ Create `web/src/lib/components/face-cleanup/FaceReviewDock.svelte`:
                      accessibility tree via aria-describedby — announcing both would say it twice. -->
                 <span
                   class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-56 -translate-x-1/2 rounded-lg bg-gray-800 px-3 py-2 text-xs/relaxed font-normal text-gray-100 shadow-lg ring-1 ring-white/10"
-                  data-testid="bulk-popover"
+                  data-testid="face-bulk-popover"
                   aria-hidden="true"
                 >
                   {$t(meta.tipKey)}
@@ -1209,7 +1212,7 @@ Create `web/src/lib/components/face-cleanup/FaceReviewDock.svelte`:
             onclick={onHelp}
             aria-label={$t('admin.face_cleanup_review_help_open')}
             class="inline-flex items-center rounded-lg bg-white/10 p-2 ring-1 ring-white/15 ring-inset hover:bg-white/20"
-            data-testid={testIds.help}
+            data-testid="face-bulk-help"
           >
             <Icon icon={mdiInformationOutline} size="16" />
           </button>
@@ -1218,7 +1221,7 @@ Create `web/src/lib/components/face-cleanup/FaceReviewDock.svelte`:
             type="button"
             onclick={onClear}
             class="ml-auto text-sm font-bold text-gray-300 hover:text-white"
-            data-testid={testIds.clear}
+            data-testid="face-bulk-clear"
           >
             {$t('admin.face_cleanup_review_bulk_clear')}
           </button>
@@ -1229,7 +1232,7 @@ Create `web/src/lib/components/face-cleanup/FaceReviewDock.svelte`:
         <p
           id={hintId}
           class="line-clamp-2 min-h-8 text-xs/relaxed text-gray-300"
-          data-testid={testIds.hint}
+          data-testid="face-bulk-hint"
         >
           {hintText}
         </p>
@@ -1696,7 +1699,7 @@ git commit -m "feat(face-cleanup): merge the two action-help modals into one mod
 **Interfaces:**
 
 - Consumes: `FaceReviewDock`, `FaceActionsHelpModal`, `FaceActionId` from Tasks 2/4/5.
-- Produces: nothing new. Existing testids `dock`, `bulk-bar`, `bulk-stay`, `bulk-lock`, `bulk-other`, `bulk-unknown`, `bulk-detach`, `bulk-help`, `clear`, `apply-btn`, `tally` are preserved; `bulk-owner` is added.
+- Produces: **action** testids unchanged (`bulk-stay`, `bulk-lock`, `bulk-other`, `bulk-unknown`, `bulk-detach`), plus the new `bulk-owner`. Page-owned ids `apply-btn`, `tally`, `tally-added`, `apply-blocked-reason`, `banner-help` unchanged. **Chrome** testids move to the normalised scheme: `dock`→`face-dock`, `bulk-bar`→`face-bulk-bar`, `clear`→`face-bulk-clear`, `bulk-help`→`face-bulk-help`.
 
 > **Mostly a refactor.** Moving the bulk bar into the shared component has no red step of its own — the existing suite (selection, bulk actions, apply, destructive confirm, destinations, rest-of-cluster) is its guard rail and must keep passing untouched. Only the five new assertions below are written test-first.
 
@@ -1707,7 +1710,31 @@ git commit -m "feat(face-cleanup): merge the two action-help modals into one mod
 - `$t` is mocked to echo keys, so assert key names, not English.
 - The `banner-help` testid is at `[personId]/+page.svelte:610`.
 
-- [ ] **Step 1: Rewrite the two existing help-modal assertions**
+- [ ] **Step 1: Rename the chrome testids this page's spec and the e2e suite reference**
+
+Mechanical, and it must happen before the new tests so they query the right ids. In
+`[personId]/page.spec.ts`: `getByTestId('bulk-bar')` → `'face-bulk-bar'` (18 sites), `getByTestId('dock')` →
+`'face-dock'` (1), `getByTestId('clear')` → `'face-bulk-clear'` (2), `getByTestId('bulk-help')` →
+`'face-bulk-help'` (2). Action ids (`bulk-stay`, `bulk-lock`, `bulk-other`, `bulk-unknown`, `bulk-detach`) and
+page ids (`apply-btn`, `tally`, `banner-help`) are **not** touched.
+
+Then the single permitted e2e edit — `e2e/src/specs/web/face-cleanup.e2e-spec.ts:528`:
+
+```ts
+const dock = page.locator('[data-testid="face-dock"]');
+```
+
+That is the **only** line in `e2e/` this whole plan may change. Every action locator in that file must still
+pass untouched.
+
+```bash
+cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/[personId]/page.spec.ts'
+```
+
+Expected: FAIL — the renamed queries find nothing yet, because the page still renders the old ids. That failure
+is the red step for the rename; Step 4 makes it green.
+
+- [ ] **Step 2: Rewrite the two existing help-modal assertions**
 
 `page.spec.ts:1222` and `:1234` both assert `expect(showModal).toHaveBeenCalledWith(ActionsHelpModal, {})`. The merged modal takes real props, so both must change — this is the one place in this task where an existing assertion is deliberately rewritten rather than preserved:
 
@@ -1718,7 +1745,7 @@ expect(showModal).toHaveBeenCalledWith(FaceActionsHelpModal, expect.objectContai
 Swap the file's `import ActionsHelpModal from './ActionsHelpModal.svelte';` for
 `import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';`.
 
-- [ ] **Step 2: Append the new tests**
+- [ ] **Step 3: Append the new tests**
 
 ```ts
 describe('shared dock', () => {
@@ -1729,7 +1756,7 @@ describe('shared dock', () => {
 
   const selectFirstTile = async () => {
     await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
-    await waitFor(() => expect(screen.getByTestId('bulk-bar')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
   };
 
   // G5 — the one button in either bar that had no testid before this change.
@@ -1749,8 +1776,8 @@ describe('shared dock', () => {
 
     await fireEvent.mouseEnter(screen.getByTestId('bulk-lock'));
 
-    expect(screen.getByTestId('bulk-popover')).toHaveTextContent('admin.face_cleanup_action_lock_tip');
-    expect(screen.getByTestId('bulk-hint')).toHaveTextContent('admin.face_cleanup_review_bulk_hint_effect');
+    expect(screen.getByTestId('face-bulk-popover')).toHaveTextContent('admin.face_cleanup_action_lock_tip');
+    expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('admin.face_cleanup_review_bulk_hint_effect');
   });
 
   // G4 — the page passes guided mode. Paired with the manual page's M5, this is what proves the two pages
@@ -1777,7 +1804,7 @@ describe('shared dock', () => {
     const fromBanner = showModal.mock.calls.at(-1);
 
     await selectFirstTile();
-    await fireEvent.click(screen.getByTestId('bulk-help'));
+    await fireEvent.click(screen.getByTestId('face-bulk-help'));
     const fromBar = showModal.mock.calls.at(-1);
 
     expect(fromBar).toEqual(fromBanner);
@@ -1796,7 +1823,7 @@ describe('shared dock', () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify they fail**
+- [ ] **Step 4: Run to verify they fail**
 
 ```bash
 cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/[personId]/page.spec.ts'
@@ -1804,7 +1831,7 @@ cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/[personId]/page.sp
 
 Expected: FAIL — no `bulk-owner`, no `bulk-popover`, and `modalManager.show` is called with `ActionsHelpModal, {}`.
 
-- [ ] **Step 4: Replace the footer snippet's bulk-bar branch**
+- [ ] **Step 5: Replace the footer snippet's bulk-bar branch**
 
 In `[personId]/+page.svelte`, replace the whole `{#snippet footer()}` body (`:877-1014`) with:
 
@@ -1818,7 +1845,6 @@ In `[personId]/+page.svelte`, replace the whole `{#snippet footer()}` body (`:87
         onAction={handleDockAction}
         onHelp={handleOpenHelp}
         onClear={() => vm.clearSelection()}
-        testIds={{ dock: 'dock', bar: 'bulk-bar', clear: 'clear', help: 'bulk-help', hint: 'bulk-hint' }}
       >
         {#snippet summary()}
           <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="tally">
@@ -1889,7 +1915,7 @@ That markup is the current `:886-941` moved verbatim — same testids (`tally`, 
 `apply-blocked-reason`, `apply-btn`), same conditions, same strings. Nothing about the summary half changes;
 it simply moves inside the snippet.
 
-- [ ] **Step 5: Add the action list and the dispatcher to the `<script>` block**
+- [ ] **Step 6: Add the action list and the dispatcher to the `<script>` block**
 
 ```ts
 import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
@@ -1929,7 +1955,7 @@ const handleOpenHelp = () => {
 Delete the now-unused `handleBulkOwner`, `handleBulkStay`, `handleBulkLock`, `handleBulkUnknown`,
 `handleBulkDetach` and the `ActionsHelpModal` import.
 
-- [ ] **Step 6: Delete the old modal and its spec**
+- [ ] **Step 7: Delete the old modal and its spec**
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
@@ -1937,7 +1963,7 @@ git rm 'web/src/routes/admin/face-cleanup/[personId]/ActionsHelpModal.svelte' \
        'web/src/routes/admin/face-cleanup/[personId]/ActionsHelpModal.spec.ts'
 ```
 
-- [ ] **Step 7: Run the guided page spec and the e2e locator contract**
+- [ ] **Step 8: Run the guided page spec and the e2e locator contract**
 
 ```bash
 cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/[personId]/'
@@ -1947,7 +1973,7 @@ Expected: PASS. Exactly **two** pre-existing assertions were rewritten (Step 1's
 test in the file — selection, apply, destructive confirm, destinations, rest-of-cluster — must still pass with
 no edit at all. If you found yourself changing a third, stop: the dock moved something it shouldn't have.
 
-- [ ] **Step 8: Typecheck and commit**
+- [ ] **Step 9: Typecheck and commit**
 
 ```bash
 cd web && pnpm run check:typescript
@@ -1971,7 +1997,7 @@ git commit -m "refactor(face-cleanup): move the guided review page onto the shar
 **Interfaces:**
 
 - Consumes: `FaceReviewDock`, `FaceActionsHelpModal` from Tasks 4/5.
-- Produces: existing testids preserved (`manual-review-dock`, `manual-review-bulk-bar`, `-move`, `-lock`, `-unknown`, `-detach`, `-unmark`, `-clear`, `manual-review-apply-btn`, `manual-review-tally-*`); `manual-review-bulk-help` is added.
+- Produces: **action** testids unchanged (`manual-review-bulk-move`, `-lock`, `-unknown`, `-detach`, `-unmark`). Page-owned ids `manual-review-apply-btn`, `manual-review-tally-*`, `manual-review-help-open`, `manual-review-clear-selection` unchanged. **Chrome** testids move to the normalised scheme: `manual-review-dock`→`face-dock`, `manual-review-bulk-bar`→`face-bulk-bar`, `manual-review-bulk-clear`→`face-bulk-clear`, and the bar's new help button is `face-bulk-help`.
 
 > **Mostly a refactor**, same as Task 6 — the existing suite is the guard rail; only the new assertions are written first.
 
@@ -1981,7 +2007,21 @@ git commit -m "refactor(face-cleanup): move the guided review page onto the shar
 - Assert modal calls through **`showModal`** (`page.spec.ts:182`), never `vi.mocked(modalManager.show)`.
 - This file stubs `Icon` to a no-op, so glyph **identity** is not observable here — M7 asserts only that an element renders. Identity is covered by `FaceReviewDock.spec.ts` D10/D27, which does not stub `Icon`.
 
-- [ ] **Step 1: Rewrite the existing help-launcher assertion**
+- [ ] **Step 1: Rename the chrome testids this page's spec references**
+
+In `people/[personId]/page.spec.ts`: `getByTestId('manual-review-bulk-bar')` → `'face-bulk-bar'` (6 sites),
+`getByTestId('manual-review-dock')` → `'face-dock'` (1). Action ids (`manual-review-bulk-move`, `-lock`,
+`-unknown`, `-detach`, `-unmark`) and grid-header ids (`manual-review-help-open`,
+`manual-review-clear-selection`, `manual-review-apply-btn`, `manual-review-tally-*`) are **not** touched. No
+e2e change belongs to this task — Task 6 already made the one permitted edit.
+
+```bash
+cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/people/[personId]/page.spec.ts'
+```
+
+Expected: FAIL — the renamed queries find nothing yet. Step 5 makes it green.
+
+- [ ] **Step 2: Rewrite the existing help-launcher assertion**
 
 `page.spec.ts:1123` asserts `expect(showModal).toHaveBeenCalledWith(ManualActionsHelpModal, {})`. Replace with:
 
@@ -1992,7 +2032,7 @@ expect(showModal).toHaveBeenCalledWith(FaceActionsHelpModal, expect.objectContai
 Swap the file's `import ManualActionsHelpModal from './ManualActionsHelpModal.svelte';` for
 `import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';`.
 
-- [ ] **Step 2: Append the new tests**
+- [ ] **Step 3: Append the new tests**
 
 ```ts
 describe('shared dock', () => {
@@ -2003,7 +2043,7 @@ describe('shared dock', () => {
 
   const selectFirstTile = async () => {
     await fireEvent.click(screen.getAllByTestId('face-tile')[0]);
-    await waitFor(() => expect(screen.getByTestId('manual-review-bulk-bar')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
   };
 
   // M1 — the gap this change closes: manual's bar had no help affordance at all.
@@ -2011,7 +2051,7 @@ describe('shared dock', () => {
     await renderAndLoad();
     await selectFirstTile();
 
-    expect(screen.getByTestId('manual-review-bulk-help')).toBeInTheDocument();
+    expect(screen.getByTestId('face-bulk-help')).toBeInTheDocument();
   });
 
   // M5 — the counterpart to guided's G4.
@@ -2051,7 +2091,7 @@ describe('shared dock', () => {
     const fromHeader = showModal.mock.calls.at(-1);
 
     await selectFirstTile();
-    await fireEvent.click(screen.getByTestId('manual-review-bulk-help'));
+    await fireEvent.click(screen.getByTestId('face-bulk-help'));
     const fromBar = showModal.mock.calls.at(-1);
 
     expect(fromBar).toEqual(fromHeader);
@@ -2064,7 +2104,7 @@ describe('shared dock', () => {
 
     await fireEvent.mouseEnter(screen.getByTestId('manual-review-bulk-lock'));
 
-    expect(screen.getByTestId('bulk-popover')).toHaveTextContent('admin.face_cleanup_action_lock_tip');
+    expect(screen.getByTestId('face-bulk-popover')).toHaveTextContent('admin.face_cleanup_action_lock_tip');
   });
 
   // M4 — the harmonisation, asserted rather than assumed.
@@ -2101,7 +2141,7 @@ describe('shared dock', () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify they fail**
+- [ ] **Step 4: Run to verify they fail**
 
 ```bash
 cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/people/[personId]/page.spec.ts'
@@ -2109,7 +2149,7 @@ cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/people/[personId]/
 
 Expected: FAIL — no `manual-review-bulk-help`, and `modalManager.show` receives `ManualActionsHelpModal, {}`.
 
-- [ ] **Step 4: Replace the footer snippet's bulk-bar branch**
+- [ ] **Step 5: Replace the footer snippet's bulk-bar branch**
 
 ```svelte
   {#snippet footer()}
@@ -2121,13 +2161,6 @@ Expected: FAIL — no `manual-review-bulk-help`, and `modalManager.show` receive
         onAction={handleDockAction}
         onHelp={handleOpenHelp}
         onClear={() => vm.clearSelection()}
-        testIds={{
-          dock: 'manual-review-dock',
-          bar: 'manual-review-bulk-bar',
-          clear: 'manual-review-bulk-clear',
-          help: 'manual-review-bulk-help',
-          hint: 'manual-review-bulk-hint',
-        }}
       >
         {#snippet summary()}
           <div class="flex flex-1 flex-wrap items-center gap-3.5" data-testid="manual-review-tally">
@@ -2168,7 +2201,7 @@ Expected: FAIL — no `manual-review-bulk-help`, and `modalManager.show` receive
   {/snippet}
 ```
 
-- [ ] **Step 5: Add the action list, dispatcher and help handler to the `<script>` block**
+- [ ] **Step 6: Add the action list, dispatcher and help handler to the `<script>` block**
 
 ```ts
 import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
@@ -2217,7 +2250,7 @@ const handleOpenHelp = () => {
 Delete the now-unused `handleBulkLock`, `handleBulkUnknown`, `handleBulkDetach`, the `ManualActionsHelpModal`
 import, and the `mdiUndo` import if it is no longer referenced.
 
-- [ ] **Step 6: Delete the old modal and its spec**
+- [ ] **Step 7: Delete the old modal and its spec**
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
@@ -2225,7 +2258,7 @@ git rm 'web/src/routes/admin/face-cleanup/people/[personId]/ManualActionsHelpMod
        'web/src/routes/admin/face-cleanup/people/[personId]/ManualActionsHelpModal.spec.ts'
 ```
 
-- [ ] **Step 7: Run the manual page spec**
+- [ ] **Step 8: Run the manual page spec**
 
 ```bash
 cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/people/[personId]/'
@@ -2234,7 +2267,7 @@ cd web && pnpm exec vitest run 'src/routes/admin/face-cleanup/people/[personId]/
 Expected: PASS. Exactly **one** pre-existing assertion was rewritten (Step 1's help-launcher props); everything
 else in the file must pass with no edit. A third edit means the dock moved something it shouldn't have.
 
-- [ ] **Step 8: Typecheck and commit**
+- [ ] **Step 9: Typecheck and commit**
 
 ```bash
 cd web && pnpm run check:typescript
@@ -2790,11 +2823,12 @@ pass as evidence.
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-git diff --stat HEAD -- e2e/
+git diff --stat e8cf0381168 -- e2e/
 ```
 
-Expected: **empty output** — the e2e suite must not have been touched. Then, against a running `make e2e`
-stack:
+Expected: **exactly one file, one changed line** — `face-cleanup.e2e-spec.ts:528`, the `dock` → `face-dock`
+locator. Anything more means an action locator moved, which is the one thing this refactor must not do. Verify
+with `git diff e8cf0381168 -- e2e/` before continuing. Then, against a running `make e2e` stack:
 
 ```bash
 make e2e-web-dev
@@ -2830,6 +2864,8 @@ git push origin feat/face-review-unified
 
 **Two existing assertions are deliberately rewritten**, and only these two: `[personId]/page.spec.ts:1222` and `:1234`, plus `people/[personId]/page.spec.ts:1123`, all of which assert `showModal` was called with the old modal component and an empty props object. Every other pre-existing assertion in both files must survive untouched — that is the refactor's contract.
 
-**Tasks 3, 6 and 7 are refactors, not red-green cycles.** Their bulk is code motion whose safety net is the existing suite plus e2e; only their genuinely new assertions are written test-first. The plan says so at each task rather than staging a theatrical failure.
+**Every task is strictly test-first**, per the pre-flight ruling. Tasks 3, 6 and 7 are largely code motion, so each earns its red step explicitly: Task 3 lands a deliberately widening projection to prove the characterisation test has teeth (never committed); Tasks 6 and 7 rename the chrome testids in their specs first, which goes red against the un-migrated page, then migrate the page to green.
+
+**Dock chrome testids are normalised** (`face-dock`, `face-bulk-bar`, `face-bulk-clear`, `face-bulk-help`, `face-bulk-hint`), per the pre-flight ruling, which removes the `testIds` prop entirely. Action testids stay per-page, so `e2e/` changes by exactly one line — Task 6 Step 1.
 
 **Type consistency.** `FaceActionId`, `FaceReviewMode`, `FaceActionMeta`, `FACE_ACTIONS`, `bodyKeyFor`, `effectKeyFor`, `GUIDED_STATE_IDS` are defined in Task 2 and used under exactly those names in Tasks 3–7. `DockAction`/`Props` in Task 4 match the `<FaceReviewDock>` invocations in Tasks 6 and 7 field for field. `FaceActionsHelpModal`'s five props in Task 5 match both `modalManager.show` calls. `buttonIcon`/`swatchColor` (not `icon`/`color`) are used consistently from Task 2 onward.
