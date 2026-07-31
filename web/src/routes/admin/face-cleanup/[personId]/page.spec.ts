@@ -256,7 +256,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() => expect(screen.getByTestId('face-bulk-bar')).toBeInTheDocument());
 
       await fireEvent.click(tiles[0]);
-      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument());
     });
 
     it('shift-click selects the whole range between the last click and this one', async () => {
@@ -293,7 +293,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('face-bulk-clear'));
 
       await waitFor(() => {
-        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
         expect(screen.getByTestId('tally')).toBeInTheDocument();
       });
     });
@@ -308,7 +308,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('reset'));
 
       await waitFor(() => {
-        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
         for (const tile of screen.getAllByTestId('face-tile')) {
           expect(tile).toHaveAttribute('data-state', 'owner');
         }
@@ -326,7 +326,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
         expect(screen.getByTestId('face-dock')).toBeInTheDocument();
         expect(screen.getByTestId('tally')).toBeInTheDocument();
         expect(screen.getByTestId('apply-btn')).toBeInTheDocument();
-        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
       });
     });
 
@@ -353,7 +353,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('apply-btn')).toBeInTheDocument();
-        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
       });
     });
   });
@@ -532,7 +532,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       await waitFor(() => {
         // Bulk actions clear the selection, swapping the dock back to the summary.
-        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
         expect(screen.getByTestId('tally')).toBeInTheDocument();
       });
 
@@ -591,7 +591,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       await waitFor(() => {
         // Bulk actions clear the selection, swapping the dock back to the summary.
-        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
         expect(screen.getByTestId('tally')).toBeInTheDocument();
       });
 
@@ -672,7 +672,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('bulk-other'));
 
       await waitFor(() => {
-        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
         expect(screen.getByTestId('tally')).toBeInTheDocument();
       });
 
@@ -698,7 +698,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       const tiles = screen.getAllByTestId('face-tile');
       await fireEvent.click(tiles[0]); // face-1, suspected owner-a
       await fireEvent.click(screen.getByTestId('bulk-other'));
-      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('apply-btn'));
 
@@ -732,7 +732,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       const tiles = screen.getAllByTestId('face-tile');
       await fireEvent.click(tiles[0]); // face-1, suspected owner-a
       await fireEvent.click(screen.getByTestId('bulk-other'));
-      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument());
 
       await fireEvent.click(screen.getByTestId('apply-btn'));
 
@@ -787,7 +787,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       await waitFor(() => {
         // Bulk actions clear the selection, swapping the dock back to the summary.
-        expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
         expect(screen.getByTestId('tally')).toBeInTheDocument();
       });
 
@@ -963,7 +963,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       await fireEvent.click(screen.getByTestId('bulk-unknown'));
 
-      await waitFor(() => expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument());
 
       const refreshedTiles = screen.getAllByTestId('face-tile');
       expect(refreshedTiles[0]).toHaveAttribute('data-state', 'unknown');
@@ -1215,7 +1215,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       render(Page, { props: { data: makePageData() } });
       await waitFor(() => expect(screen.getAllByTestId('face-tile')).toHaveLength(3));
 
-      expect(screen.queryByTestId('bulk-bar')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('face-bulk-bar')).not.toBeInTheDocument();
       await fireEvent.click(screen.getByTestId('banner-help'));
 
       expect(showModal).toHaveBeenCalledWith(FaceActionsHelpModal, expect.objectContaining({ mode: 'guided' }));
@@ -1262,7 +1262,7 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       expect(screen.getByText('admin.face_cleanup_review_no_flagged')).toBeInTheDocument();
     });
     expect(screen.queryAllByTestId('face-tile')).toHaveLength(0);
-    expect(screen.queryByTestId('dock')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('face-dock')).not.toBeInTheDocument();
   });
 
   // ---- D17: a failed INITIAL load must not render as the reassuring "no flagged faces" empty state ----
