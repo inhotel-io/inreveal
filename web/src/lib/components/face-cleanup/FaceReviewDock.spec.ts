@@ -71,9 +71,7 @@ describe('FaceReviewDock — summary and actions', () => {
       expect(screen.getByTestId(action.testId)).toBeInTheDocument();
     }
     const rendered = screen.getAllByRole('button').map((button) => button.dataset.testid);
-    expect(rendered.filter((id) => id?.startsWith('bulk-') && id !== 'face-bulk-help')).toEqual(
-      GUIDED_ACTIONS.map((action) => action.testId),
-    );
+    expect(rendered.filter((id) => id?.startsWith('bulk-'))).toEqual(GUIDED_ACTIONS.map((action) => action.testId));
   });
 
   // D5
@@ -220,7 +218,7 @@ describe('FaceReviewDock — hover, focus and the swap', () => {
 
     expect(screen.getByTestId('face-bulk-popover')).toHaveTextContent('Real faces, but not this person');
     expect(screen.getByTestId('face-bulk-hint')).toHaveTextContent('Unknown person');
-    expect(screen.getByTestId('face-bulk-hint')).not.toHaveTextContent('Pin these here permanently');
+    expect(screen.getByTestId('face-bulk-hint')).not.toHaveTextContent('pinned to this person');
   });
 
   // D18

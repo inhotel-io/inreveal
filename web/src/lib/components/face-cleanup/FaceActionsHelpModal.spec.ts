@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import FaceActionsHelpModal from './FaceActionsHelpModal.svelte';
@@ -148,7 +148,15 @@ describe('FaceActionsHelpModal — manual', () => {
       ['detach', 'Not a face'],
       ['unmark', 'Unmark'],
     ] as const) {
-      expect(screen.getByTestId(`help-row-${id}`)).toHaveTextContent(name);
+      const row = screen.getByTestId(`help-row-${id}`);
+      if (id === 'keep') {
+        // keep's own effect copy ("Keep is what lets you ignore them") also contains the word "Keep", so a
+        // row-wide text match would still pass even if the heading itself vanished — assert against the
+        // heading specifically.
+        expect(within(row).getByRole('heading')).toHaveTextContent(name);
+      } else {
+        expect(row).toHaveTextContent(name);
+      }
     }
     expect(screen.getByTestId('help-actions')).not.toHaveTextContent('Move to owner');
   });

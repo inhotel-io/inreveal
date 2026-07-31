@@ -1821,6 +1821,9 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await fireEvent.click(screen.getByTestId('face-bulk-help'));
       const fromBar = showModal.mock.calls.at(-1);
 
+      // `.at(-1)` alone can't tell "the bar's launcher opened its own call" from "the bar's launcher is
+      // dead and this is still the banner's call" — pin down the call count too.
+      expect(showModal).toHaveBeenCalledTimes(2);
       expect(fromBar).toEqual(fromBanner);
     });
 

@@ -78,6 +78,11 @@ describe('S12.10: $t keys referenced by slice-12-touched files exist in en.json'
 // The seven keys this slice removed from en.json (and every locale that carried them) — F31 item 1. The other
 // two orphaned keys named in the plan (`face_suggestion_confirmed_toast`, `face_suggestion_all_done`) are
 // deliberately NOT in this list: this slice leaves them in place for Slice 11 to wire up.
+//
+// The four `face_cleanup_mode_first_visit_intro` / `face_cleanup_manual_review_bulk_{move,lock,unknown}` keys
+// below were retired later, by the console-unification pass that moved the manual review page onto the shared
+// dock and modal (superseded by `face_cleanup_review_bulk_*` and the harmonised mode-picker copy) — added here
+// rather than to a new list because this is the existing guard for exactly this class of regression.
 const REMOVED_KEYS = [
   'admin.face_cleanup_people_load_more',
   'admin.face_cleanup_resolutions_declines_empty',
@@ -86,6 +91,10 @@ const REMOVED_KEYS = [
   'admin.face_cleanup_resolutions_locked_to',
   'admin.face_cleanup_resolutions_locks_empty',
   'admin.face_cleanup_resolutions_locks_heading',
+  'admin.face_cleanup_mode_first_visit_intro',
+  'admin.face_cleanup_manual_review_bulk_move',
+  'admin.face_cleanup_manual_review_bulk_lock',
+  'admin.face_cleanup_manual_review_bulk_unknown',
 ];
 
 const walkFiles = (dir: string, exts: string[]): string[] => {

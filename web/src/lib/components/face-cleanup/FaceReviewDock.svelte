@@ -128,6 +128,7 @@
             type="button"
             onclick={onHelp}
             aria-label={$t('admin.face_cleanup_review_help_open')}
+            title={$t('admin.face_cleanup_review_help_open')}
             class="inline-flex items-center rounded-lg bg-white/10 p-2 ring-1 ring-white/15 ring-inset hover:bg-white/20"
             data-testid="face-bulk-help"
           >
