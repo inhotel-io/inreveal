@@ -41,7 +41,7 @@ class _DriftBackupPageState extends ConsumerState<DriftBackupPage> {
   void initState() {
     super.initState();
 
-    WakelockPlus.enable();
+    unawaited(WakelockPlus.enable());
 
     final currentUser = ref.read(currentUserProvider);
     if (currentUser == null) {
@@ -65,9 +65,9 @@ class _DriftBackupPageState extends ConsumerState<DriftBackupPage> {
   }
 
   @override
-  dispose() {
+  void dispose() {
     super.dispose();
-    WakelockPlus.disable();
+    unawaited(WakelockPlus.disable());
   }
 
   @override
@@ -109,7 +109,7 @@ class _DriftBackupPageState extends ConsumerState<DriftBackupPage> {
         title: Text(context.t.backup_controller_page_backup),
         leading: IconButton(
           onPressed: () {
-            context.maybePop(true);
+            unawaited(context.maybePop(true));
           },
           splashRadius: 24,
           icon: const Icon(Icons.arrow_back_ios_rounded),
@@ -117,7 +117,7 @@ class _DriftBackupPageState extends ConsumerState<DriftBackupPage> {
         actions: [
           IconButton(
             onPressed: () {
-              context.pushRoute(const DriftBackupOptionsRoute());
+              unawaited(context.pushRoute(const DriftBackupOptionsRoute()));
             },
             icon: const Icon(Icons.settings_outlined),
             tooltip: context.t.backup_options,
@@ -205,8 +205,8 @@ class _BackupFooterState extends ConsumerState<_BackupFooter> with WidgetsBindin
     }
   }
 
-  void showPermissionsDialog() {
-    showDialog(
+  Future<void> showPermissionsDialog() {
+    return showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         content: Text(context.t.notification_permission_dialog_content),
@@ -223,7 +223,7 @@ class _BackupFooterState extends ConsumerState<_BackupFooter> with WidgetsBindin
             expanded: false,
             onPressed: () {
               ContextHelper(context).pop();
-              openAppSettings();
+              unawaited(openAppSettings());
             },
           ),
         ],
@@ -231,8 +231,8 @@ class _BackupFooterState extends ConsumerState<_BackupFooter> with WidgetsBindin
     );
   }
 
-  void showBatteryOptimizationInfo() {
-    showDialog<void>(
+  Future<void> showBatteryOptimizationInfo() {
+    return showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext ctx) {
@@ -277,11 +277,13 @@ class _BackupFooterState extends ConsumerState<_BackupFooter> with WidgetsBindin
                 style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.onSurfaceSecondary),
               ),
               onPressed: () {
-                ref.read(notificationPermissionProvider.notifier).requestNotificationPermission().then((p) {
-                  if (p == PermissionStatus.permanentlyDenied) {
-                    showPermissionsDialog();
-                  }
-                });
+                unawaited(
+                  ref.read(notificationPermissionProvider.notifier).requestNotificationPermission().then((p) {
+                    if (p == PermissionStatus.permanentlyDenied) {
+                      unawaited(showPermissionsDialog());
+                    }
+                  }),
+                );
               },
             ),
           if (notificationStatus != PermissionStatus.granted && batteryOptimizationStatus != PermissionStatus.granted)
