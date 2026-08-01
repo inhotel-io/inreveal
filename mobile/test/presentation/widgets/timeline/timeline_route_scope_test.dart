@@ -269,31 +269,58 @@ void main() {
     expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.day);
   });
 
-  testWidgets('persistGrouping: true follows and writes the persisted setting', (tester) async {
+  testWidgets('sharedGrouping: true opens at All and never writes the Group by setting', (tester) async {
     await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
 
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
           home: TimelineRouteScope(
-            persistGrouping: true,
+            sharedGrouping: true,
             child: Consumer(
               builder: (context, ref, child) =>
-                  Text('grouping:${ref.watch(timelineGroupingProvider).name}', key: const Key('persist-probe')),
+                  Text('grouping:${ref.watch(timelineGroupingProvider).name}', key: const Key('shared-probe')),
             ),
           ),
         ),
       ),
     );
 
-    expect(find.text('grouping:month'), findsOneWidget);
+    expect(find.text('grouping:day'), findsOneWidget);
 
-    final ref = ProviderScope.containerOf(tester.element(find.byKey(const Key('persist-probe'))));
+    final ref = ProviderScope.containerOf(tester.element(find.byKey(const Key('shared-probe'))));
     await tester.runAsync(() => ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year));
     await tester.pump();
 
-    expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.year);
     expect(find.text('grouping:year'), findsOneWidget);
+    expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.month);
+  });
+
+  testWidgets('route service buckets by the Group by setting while the selector shows All', (tester) async {
+    await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
+    final groupings = <GroupAssetsBy>[];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: TimelineRouteScope(
+            timelineServiceBuilder: (ref, temporalScope, groupBy) {
+              groupings.add(groupBy);
+              return _emptyService(TimelineOrigin.main);
+            },
+            child: Consumer(
+              builder: (context, ref, child) {
+                ref.watch(timelineServiceProvider);
+                return Text('grouping:${ref.watch(timelineGroupingProvider).name}');
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('grouping:day'), findsOneWidget);
+    expect(groupings, [GroupAssetsBy.month]);
   });
 
   testWidgets('timelineServiceProvider rebuilds with the route-local grouping', (tester) async {

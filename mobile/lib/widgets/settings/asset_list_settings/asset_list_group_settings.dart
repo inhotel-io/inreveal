@@ -16,7 +16,9 @@ class GroupSettings extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groupBy = useValueNotifier(ref.watch(appConfigProvider.select((s) => s.timeline.groupAssetsBy)));
+    final groupBy = useValueNotifier(
+      normalizeGridGrouping(ref.watch(appConfigProvider.select((s) => s.timeline.groupAssetsBy))),
+    );
 
     Future<void> updateAppSettings(GroupAssetsBy groupBy) async {
       await ref.read(settingsProvider).write(.timelineGroupAssetsBy, groupBy);
@@ -43,10 +45,6 @@ class GroupSettings extends HookConsumerWidget {
             SettingsRadioGroup(
               title: 'asset_list_layout_settings_group_by_month_day'.t(context: context),
               value: GroupAssetsBy.day,
-            ),
-            SettingsRadioGroup(
-              title: 'year'.t(context: context),
-              value: GroupAssetsBy.year,
             ),
             SettingsRadioGroup(
               title: 'month'.t(context: context),

@@ -408,7 +408,7 @@ void main() {
           child: TimelineRouteScope(
             timelineServiceBuilder: buildPhotosTimelineRouteService,
             // Mirrors MainTimelinePage: the Photos route follows the persisted grouping.
-            persistGrouping: true,
+            sharedGrouping: true,
             child: Directionality(
               textDirection: TextDirection.ltr,
               child: Consumer(builder: (context, ref, child) => Text(ref.watch(timelineServiceProvider).origin.name)),

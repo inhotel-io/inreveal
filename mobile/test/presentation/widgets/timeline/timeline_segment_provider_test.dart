@@ -1,11 +1,17 @@
+import 'package:drift/drift.dart' as drift;
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
+import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
+import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/fixed/segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/overview/overview_segment.model.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.state.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
+import 'package:immich_mobile/providers/timeline/timeline_grouping.provider.dart';
 
 void main() {
   ProviderContainer containerFor(GroupAssetsBy groupBy, {bool dateless = false}) {
@@ -110,5 +116,101 @@ void main() {
     final segments = await container.read(timelineSegmentProvider.future);
 
     expect(segments, isEmpty);
+  });
+
+  // The "Photo Grid" -> "Group by" setting is a header-granularity choice, not the
+  // Years/Months/All overview selector (#903). With the selector on "All" the grid must
+  // stay a grid, and only the header granularity follows the setting.
+  group('grid grouping follows the persisted Group by setting', () {
+    late Drift db;
+
+    setUpAll(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      db = Drift(drift.DatabaseConnection(NativeDatabase.memory(), closeStreamsSynchronously: true));
+      await SettingsRepository.ensureInitialized(db);
+    });
+
+    setUp(() async {
+      await SettingsRepository.instance.clear(SettingsKey.values);
+    });
+
+    tearDownAll(() async {
+      await SettingsRepository.instance.clear(SettingsKey.values);
+      await db.close();
+    });
+
+    ProviderContainer settingsBackedContainer() {
+      final service = TimelineService((
+        assetSource: (offset, count) async => const [],
+        bucketSource: () => Stream.value([
+          TimeBucket(date: DateTime(2025, 7), assetCount: 4),
+          TimeBucket(date: DateTime(2025, 6), assetCount: 2),
+        ]),
+        origin: TimelineOrigin.main,
+      ));
+
+      final container = ProviderContainer(
+        overrides: [
+          timelineServiceProvider.overrideWithValue(service),
+          // No groupBy: the provider must resolve it from the selector + the setting.
+          timelineArgsProvider.overrideWithValue(const TimelineArgs(maxWidth: 390, maxHeight: 800, columnCount: 3)),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await service.dispose();
+      });
+      return container;
+    }
+
+    test('month setting renders a grid with month-only headers', () async {
+      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
+      final container = settingsBackedContainer();
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
+      expect(segments, everyElement(isA<FixedSegment>()));
+      expect(segments.map((segment) => segment.header), everyElement(HeaderType.month));
+    });
+
+    test('month + day setting renders a grid with day headers', () async {
+      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.day);
+      final container = settingsBackedContainer();
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
+      expect(segments, everyElement(isA<FixedSegment>()));
+      expect(segments.map((segment) => segment.header), everyElement(HeaderType.monthAndDay));
+    });
+
+    test('a leftover year setting falls back to the month + day grid', () async {
+      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.year);
+      final container = settingsBackedContainer();
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
+      expect(segments, everyElement(isA<FixedSegment>()));
+      expect(segments.map((segment) => segment.header), everyElement(HeaderType.monthAndDay));
+    });
+
+    test('selecting Months still renders the overview cards', () async {
+      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
+      final container = settingsBackedContainer();
+      await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
+      expect(segments, everyElement(isA<TimelineOverviewSegment>()));
+    });
+
+    test('selecting Years still renders the overview cards', () async {
+      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
+      final container = settingsBackedContainer();
+      await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year);
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
+      expect(segments, everyElement(isA<TimelineOverviewSegment>()));
+    });
   });
 }

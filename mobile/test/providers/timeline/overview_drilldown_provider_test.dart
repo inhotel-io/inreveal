@@ -16,6 +16,7 @@ import 'package:immich_mobile/infrastructure/repositories/store.repository.dart'
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
+import 'package:immich_mobile/providers/timeline/timeline_grouping.provider.dart';
 import 'package:immich_mobile/providers/timeline/zoom_anchor.provider.dart';
 
 void main() {
@@ -56,13 +57,16 @@ void main() {
 
     expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.year(2024));
     expect(container.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.year(2025));
-    expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.month);
+    expect(container.read(timelineGroupingProvider), GroupAssetsBy.month);
+    // Drilldown is view state: the "Group by" setting must not move with it.
+    expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.day);
     expect(container.read(photosFilterProvider).context, 'paris');
     await Future<void>.delayed(Duration.zero);
     expect(scrollEvents, 0);
   });
 
   test('month activation groups by day, stores a month anchor, and leaves temporal scope unchanged', () async {
+    await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
     container.read(timelineTemporalScopeProvider.notifier).setYear(2024);
     var scrollEvents = 0;
     final subscription = EventStream.shared.listen<ScrollToTopEvent>((_) => scrollEvents++);
@@ -75,21 +79,22 @@ void main() {
 
     expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.year(2024));
     expect(container.read(timelineZoomAnchorProvider), TimelineZoomAnchor.month(year: 2025, month: 3));
+    expect(container.read(timelineGroupingProvider), GroupAssetsBy.day);
     expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.day);
     await Future<void>.delayed(Duration.zero);
     expect(scrollEvents, 0);
   });
 
-  test('year activation stores the anchor before publishing the grouping setting change', () async {
+  test('year activation stores the anchor before publishing the grouping change', () async {
     final anchorsSeenAtGroupingChange = <TimelineZoomAnchor>[];
-    // The drilldown sets the zoom anchor before writing the grouping setting; capture the
-    // anchor at the moment the published config flips to month grouping.
-    final subscription = SettingsRepository.instance.watchConfig().listen((config) {
-      if (config.timeline.groupAssetsBy == GroupAssetsBy.month) {
+    // The drilldown sets the zoom anchor before changing the grouping; capture the anchor at
+    // the moment the grouping flips to month.
+    final subscription = container.listen(timelineGroupingProvider, (previous, next) {
+      if (next == GroupAssetsBy.month) {
         anchorsSeenAtGroupingChange.add(container.read(timelineZoomAnchorProvider));
       }
     });
-    addTearDown(subscription.cancel);
+    addTearDown(subscription.close);
 
     await container.read(sharedTimelineOverviewDrilldownProvider)(
       TimeBucket(date: DateTime(2025), assetCount: 4),
@@ -101,8 +106,8 @@ void main() {
   });
 
   for (final groupBy in [GroupAssetsBy.day, GroupAssetsBy.auto, GroupAssetsBy.none]) {
-    test('$groupBy grouping is ignored and leaves anchors, scope, and settings unchanged', () async {
-      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.year);
+    test('$groupBy grouping is ignored and leaves anchors, scope, and grouping unchanged', () async {
+      await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year);
       container.read(timelineTemporalScopeProvider.notifier).setYear(2024);
 
       await container.read(sharedTimelineOverviewDrilldownProvider)(
@@ -112,7 +117,7 @@ void main() {
 
       expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.year(2024));
       expect(container.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.none());
-      expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.year);
+      expect(container.read(timelineGroupingProvider), GroupAssetsBy.year);
     });
   }
 

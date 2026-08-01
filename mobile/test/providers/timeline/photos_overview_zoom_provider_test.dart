@@ -16,6 +16,7 @@ import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/timeline/overview_drilldown.provider.dart';
 import 'package:immich_mobile/providers/timeline/temporal_scope.provider.dart';
+import 'package:immich_mobile/providers/timeline/timeline_grouping.provider.dart';
 import 'package:immich_mobile/providers/timeline/zoom_anchor.provider.dart';
 
 void main() {
@@ -57,7 +58,9 @@ void main() {
       GroupAssetsBy.year,
     );
 
-    expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.month);
+    expect(container.read(timelineGroupingProvider), GroupAssetsBy.month);
+    // Drilldown is view state: the "Group by" setting must not move with it.
+    expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.day);
     expect(container.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.year(2025));
     expect(container.read(timelineTemporalScopeProvider), TimelineTemporalScope.month(year: 2024, month: 12));
     expect(container.read(photosFilterProvider), beforeFilter);
@@ -72,13 +75,14 @@ void main() {
       ..setLocation(SearchLocationFilter(country: 'France'))
       ..setRating(4);
     final beforeFilter = container.read(photosFilterProvider);
+    await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
 
     await container.read(photosTimelineOverviewDrilldownProvider)(
       TimeBucket(date: DateTime(2025, 3), assetCount: 4),
       GroupAssetsBy.month,
     );
 
-    expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.day);
+    expect(container.read(timelineGroupingProvider), GroupAssetsBy.day);
     expect(container.read(timelineZoomAnchorProvider), TimelineZoomAnchor.month(year: 2025, month: 3));
     expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
     expect(container.read(photosFilterProvider), beforeFilter);
@@ -88,7 +92,7 @@ void main() {
 
   for (final groupBy in [GroupAssetsBy.day, GroupAssetsBy.auto, GroupAssetsBy.none]) {
     test('Photos $groupBy activation is ignored', () async {
-      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.year);
+      await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year);
       container.read(photosFilterProvider.notifier).setText('paris');
       final beforeFilter = container.read(photosFilterProvider);
 
@@ -97,7 +101,7 @@ void main() {
         groupBy,
       );
 
-      expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.year);
+      expect(container.read(timelineGroupingProvider), GroupAssetsBy.year);
       expect(container.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.none());
       expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
       expect(container.read(photosFilterProvider), beforeFilter);

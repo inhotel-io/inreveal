@@ -45,13 +45,11 @@ class TimelineFactory {
 
   const TimelineFactory({required this._timelineRepository, required this._settingsRepository});
 
-  GroupAssetsBy get groupBy {
-    final group = _settingsRepository.appConfig.timeline.groupAssetsBy;
-    // We do not support auto grouping in the new timeline yet, fallback to day grouping.
-    // Fallback only: timeline routes pass groupBy explicitly from timelineGroupingProvider,
-    // which is the canonical normalization (it additionally maps `none` to day).
-    return group == GroupAssetsBy.auto ? GroupAssetsBy.day : group;
-  }
+  /// Fallback only: timeline routes pass groupBy explicitly from
+  /// `timelineBucketGroupingProvider`. The persisted setting is a grid header granularity, so
+  /// anything other than month (legacy `auto`/`none`, or `year` from the removed Year option)
+  /// falls back to day.
+  GroupAssetsBy get groupBy => normalizeGridGrouping(_settingsRepository.appConfig.timeline.groupAssetsBy);
 
   TimelineService main(
     List<String> timelineUsers,
