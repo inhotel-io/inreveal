@@ -988,7 +988,7 @@ git commit -m "fix(face-cleanup): give the guided review page a full trail and a
 **Interfaces:**
 
 - Consumes: `faceCleanupBreadcrumbs` from Task 1.
-- Produces: after this task, `admin.face_cleanup_review_back` has **zero** references in `web/` — which Task 9 relies on.
+- Produces: after this task, `admin.face_cleanup_review_back` has **zero references in source** — `web/src` and `mobile/lib`, which is what Task 9 relies on. It is still present as data in all ten `i18n/*.json` files; deleting it there is Task 9's job. Those two scopes are not the same thing, so do not read a clean source grep as meaning the locale files are already done.
 
 **Genuinely red.** The crumb is labelled `Face cleanup` and points at `/scan`.
 
@@ -1290,7 +1290,9 @@ cd web && pnpm check:typescript && pnpm check:svelte && pnpm lint
 
 Expected: all clean. `check:svelte` is the gate that catches a `t` parameter widened to `string` (Global Constraint 1) — if it reports "Argument of type 'string' is not assignable to parameter of type 'Translations'", that is exactly the failure the constraint warns about.
 
-`check:svelte` can scan zero files locally while still working in CI. Treat a local pass as weak evidence and rely on CI for it.
+**Run the package scripts, not raw `svelte-check`.** `check:svelte` is `svelte-check --no-tsconfig …`, so it checks `.svelte` files only. A bare `npx svelte-check` (with tsconfig) additionally pulls in `.ts` spec files and reports ~228 **pre-existing** errors on this branch — mostly `Type '{ meta: … }' is not assignable to type 'never'` on `render(Page, { props: { data } })` calls, a pattern every face-cleanup spec already had before this work. That is not the gate and is not caused by this change; do not chase it.
+
+Baseline measured on this branch at Task 8: `pnpm check:svelte` → **591 files, 0 errors, 0 warnings**; `pnpm check:typescript` → **clean**. Both should still read that way at the end of Task 10.
 
 Prettier must be run **from `web/` for web files** and **from the repo root for everything else** — they
 are two different Prettier configs. Running a `web/src/...` path from the root dies with
