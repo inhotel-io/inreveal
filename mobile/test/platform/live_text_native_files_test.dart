@@ -16,8 +16,13 @@ void main() {
       final appDelegate = read('ios/Runner/AppDelegate.swift');
 
       expect(appDelegate, contains('if #available(iOS 16.0, *)'));
-      expect(appDelegate, contains('immich/live_text_overlay'));
+      expect(appDelegate, contains('LiveTextPlatformViewFactory.viewType'));
       expect(appDelegate, contains('LiveTextHostApiSetup.setUp'));
+      expect(
+        read('ios/Runner/LiveText/LiveTextPlatformViewFactory.swift'),
+        contains('static let viewType = "immich/live_text_overlay"'),
+        reason: 'the Dart side hardcodes this exact view type',
+      );
     });
 
     test('support probe honours ImageAnalyzer.isSupported, not just the OS version', () {

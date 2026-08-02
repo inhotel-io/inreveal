@@ -3,23 +3,23 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		038B770AD37A30E45F5C60D9 /* LiveTextPlatformViewFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FE1D7F3AC0C06282A071DF0 /* LiveTextPlatformViewFactory.swift */; };
-		0E575E0571FF036E9B9BEBD9 /* LiveTextPassthroughView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39030D092A37B4264811055E /* LiveTextPassthroughView.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
-		2B662B218D086FED59B28B76 /* LiveTextPlatformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E17D714BEDDA4A74C5FAD8F /* LiveTextPlatformView.swift */; };
+		3142F5C83B7776C08C94A99B /* LiveTextPassthroughView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BB97AB1E3EDD7ABA79D17E1 /* LiveTextPassthroughView.swift */; };
+		3523FEC8807253333F14E37B /* LiveText.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9786627BFF9EBAAF5995083 /* LiveText.g.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		467DA6EAF83F3481F8BD94AB /* Pods_ShareExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8AB817AA297EDEC88B23F3F6 /* Pods_ShareExtension.framework */; };
+		50FE92C3E6B1011D57CE6195 /* LiveTextApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD335BA7A2CDDAA6A8FFA1C3 /* LiveTextApiImpl.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
-		7BB95494E242E82920615496 /* LiveText.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9338D5B2CC5661E9FDB8A674 /* LiveText.g.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A01DD69B2F7F43B40049AB63 /* ImageRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A01DD6982F7F43B40049AB63 /* ImageRequest.swift */; };
+		B0974B601E8EA3C96398B443 /* LiveTextPlatformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0C8B1440C9C4004A6DFF6D /* LiveTextPlatformView.swift */; };
 		B21E34AA2E5AFD2B0031FDB9 /* BackgroundWorkerApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21E34A92E5AFD210031FDB9 /* BackgroundWorkerApiImpl.swift */; };
 		B21E34AC2E5B09190031FDB9 /* BackgroundWorker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21E34AB2E5B09100031FDB9 /* BackgroundWorker.swift */; };
 		B25D377A2E72CA15008B6CA7 /* Connectivity.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = B25D37782E72CA15008B6CA7 /* Connectivity.g.swift */; };
@@ -28,11 +28,11 @@
 		B2EE00022E72CA15008B6CA7 /* PermissionApi.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2EE00012E72CA15008B6CA7 /* PermissionApi.g.swift */; };
 		B2EE00042E72CA15008B6CA7 /* PermissionApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2EE00032E72CA15008B6CA7 /* PermissionApiImpl.swift */; };
 		D3BED739C0BC29BB32E18EB2 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CC499FBCE6B29B2DAFED7130 /* Pods_Runner.framework */; };
+		DC8FE9F3D3B6B8003050DC83 /* LiveTextPlatformViewFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AACCFA56DA606447113933A /* LiveTextPlatformViewFactory.swift */; };
 		F02538E92DFBCBDD008C3FA3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		F0B57D3A2DF764BD00DC5BCC /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F0B57D392DF764BD00DC5BCC /* WidgetKit.framework */; };
 		F0B57D3C2DF764BD00DC5BCC /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F0B57D3B2DF764BD00DC5BCC /* SwiftUI.framework */; };
 		F0B57D492DF764BE00DC5BCC /* WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F0B57D382DF764BD00DC5BCC /* WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		F9ED93BE76208866E4339707 /* LiveTextApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1ED4BCE20644F0142D128F7 /* LiveTextApiImpl.swift */; };
 		FAC6F89B2D287C890078CB2F /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = FAC6F8902D287C890078CB2F /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		FAC6F8B72D287F120078CB2F /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAC6F8B52D287F120078CB2F /* ShareViewController.swift */; };
 		FAC6F8B92D287F120078CB2F /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FAC6F8B32D287F120078CB2F /* MainInterface.storyboard */; };
@@ -93,20 +93,18 @@
 		10B378D23F917891A0F23E33 /* Pods-ShareExtension.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ShareExtension.release.xcconfig"; path = "Target Support Files/Pods-ShareExtension/Pods-ShareExtension.release.xcconfig"; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
-		39030D092A37B4264811055E /* LiveTextPassthroughView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTextPassthroughView.swift; sourceTree = "<group>"; };
+		1BB97AB1E3EDD7ABA79D17E1 /* LiveTextPassthroughView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTextPassthroughView.swift; sourceTree = "<group>"; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
-		3E17D714BEDDA4A74C5FAD8F /* LiveTextPlatformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTextPlatformView.swift; sourceTree = "<group>"; };
+		4AACCFA56DA606447113933A /* LiveTextPlatformViewFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTextPlatformViewFactory.swift; sourceTree = "<group>"; };
 		51516E0F2A0000000000C0F1 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 		614A7F5DC5DB09E89E4FCBE8 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		681FBA560D5D2ADDE4F0B59E /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		6D160F04A389B9FFBC557803 /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
-		6FE1D7F3AC0C06282A071DF0 /* LiveTextPlatformViewFactory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTextPlatformViewFactory.swift; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
 		8AB817AA297EDEC88B23F3F6 /* Pods_ShareExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_ShareExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		9338D5B2CC5661E9FDB8A674 /* LiveText.g.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveText.g.swift; sourceTree = "<group>"; };
 		937632897A02DE9C249F20A6 /* Pods-ShareExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ShareExtension.debug.xcconfig"; path = "Target Support Files/Pods-ShareExtension/Pods-ShareExtension.debug.xcconfig"; sourceTree = "<group>"; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
@@ -116,6 +114,7 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A01DD6982F7F43B40049AB63 /* ImageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageRequest.swift; sourceTree = "<group>"; };
+		AB0C8B1440C9C4004A6DFF6D /* LiveTextPlatformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTextPlatformView.swift; sourceTree = "<group>"; };
 		B21E34A92E5AFD210031FDB9 /* BackgroundWorkerApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundWorkerApiImpl.swift; sourceTree = "<group>"; };
 		B21E34AB2E5B09100031FDB9 /* BackgroundWorker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundWorker.swift; sourceTree = "<group>"; };
 		B25D37782E72CA15008B6CA7 /* Connectivity.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Connectivity.g.swift; sourceTree = "<group>"; };
@@ -125,7 +124,8 @@
 		B2EE00032E72CA15008B6CA7 /* PermissionApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionApiImpl.swift; sourceTree = "<group>"; };
 		C4A6A71F33CE37B3C913115C /* Pods-ShareExtension.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ShareExtension.profile.xcconfig"; path = "Target Support Files/Pods-ShareExtension/Pods-ShareExtension.profile.xcconfig"; sourceTree = "<group>"; };
 		CC499FBCE6B29B2DAFED7130 /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		D1ED4BCE20644F0142D128F7 /* LiveTextApiImpl.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTextApiImpl.swift; sourceTree = "<group>"; };
+		CD335BA7A2CDDAA6A8FFA1C3 /* LiveTextApiImpl.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTextApiImpl.swift; sourceTree = "<group>"; };
+		E9786627BFF9EBAAF5995083 /* LiveText.g.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveText.g.swift; sourceTree = "<group>"; };
 		F0B57D382DF764BD00DC5BCC /* WidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0B57D392DF764BD00DC5BCC /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		F0B57D3B2DF764BD00DC5BCC /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
@@ -258,19 +258,6 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		8B4F55E402AB09C0D267BDE5 /* LiveText */ = {
-			isa = PBXGroup;
-			children = (
-				9338D5B2CC5661E9FDB8A674 /* LiveText.g.swift */,
-				D1ED4BCE20644F0142D128F7 /* LiveTextApiImpl.swift */,
-				39030D092A37B4264811055E /* LiveTextPassthroughView.swift */,
-				3E17D714BEDDA4A74C5FAD8F /* LiveTextPlatformView.swift */,
-				6FE1D7F3AC0C06282A071DF0 /* LiveTextPlatformViewFactory.swift */,
-			);
-			name = LiveText;
-			path = Runner/LiveText;
-			sourceTree = "<group>";
-		};
 		9740EEB11CF90186004384FC /* Flutter */ = {
 			isa = PBXGroup;
 			children = (
@@ -328,7 +315,7 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				FED3B1952E253E9B0030FD97 /* Images */,
-				8B4F55E402AB09C0D267BDE5 /* LiveText */,
+				EC157C6BFC2E5A500A586B64 /* LiveText */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -359,6 +346,19 @@
 				B2EE00012E72CA15008B6CA7 /* PermissionApi.g.swift */,
 			);
 			path = Permission;
+			sourceTree = "<group>";
+		};
+		EC157C6BFC2E5A500A586B64 /* LiveText */ = {
+			isa = PBXGroup;
+			children = (
+				E9786627BFF9EBAAF5995083 /* LiveText.g.swift */,
+				CD335BA7A2CDDAA6A8FFA1C3 /* LiveTextApiImpl.swift */,
+				1BB97AB1E3EDD7ABA79D17E1 /* LiveTextPassthroughView.swift */,
+				AB0C8B1440C9C4004A6DFF6D /* LiveTextPlatformView.swift */,
+				4AACCFA56DA606447113933A /* LiveTextPlatformViewFactory.swift */,
+			);
+			name = LiveText;
+			path = Runner/LiveText;
 			sourceTree = "<group>";
 		};
 		FAC6F8B62D287F120078CB2F /* ShareExtension */ = {
@@ -402,7 +402,6 @@
 				FAC6F89A2D287C890078CB2F /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				513DA7292DED6106813332F4 /* [CP] Embed Pods Frameworks */,
-				7B51F56363AF3348E9672E0F /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -576,23 +575,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		7B51F56363AF3348E9672E0F /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Copy Pods Resources";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 		8EC9CF3E20AF32BF24D4F3E1 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -675,11 +657,11 @@
 				B21E34AA2E5AFD2B0031FDB9 /* BackgroundWorkerApiImpl.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				B2BE315F2E5E5229006EEF88 /* BackgroundWorker.g.swift in Sources */,
-				7BB95494E242E82920615496 /* LiveText.g.swift in Sources */,
-				F9ED93BE76208866E4339707 /* LiveTextApiImpl.swift in Sources */,
-				0E575E0571FF036E9B9BEBD9 /* LiveTextPassthroughView.swift in Sources */,
-				2B662B218D086FED59B28B76 /* LiveTextPlatformView.swift in Sources */,
-				038B770AD37A30E45F5C60D9 /* LiveTextPlatformViewFactory.swift in Sources */,
+				3523FEC8807253333F14E37B /* LiveText.g.swift in Sources */,
+				50FE92C3E6B1011D57CE6195 /* LiveTextApiImpl.swift in Sources */,
+				3142F5C83B7776C08C94A99B /* LiveTextPassthroughView.swift in Sources */,
+				B0974B601E8EA3C96398B443 /* LiveTextPlatformView.swift in Sources */,
+				DC8FE9F3D3B6B8003050DC83 /* LiveTextPlatformViewFactory.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

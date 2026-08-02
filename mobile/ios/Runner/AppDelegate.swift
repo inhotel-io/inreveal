@@ -40,7 +40,7 @@ import native_video_player
       registry.registrar(forPlugin: "LiveTextPlatformView")!
         .register(
           LiveTextPlatformViewFactory(messenger: messenger, registry: liveTextRegistry),
-          withId: "immich/live_text_overlay"
+          withId: LiveTextPlatformViewFactory.viewType
         )
     }
   }
