@@ -12,6 +12,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/sve
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goto } from '$app/navigation';
 import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
+import { Route } from '$lib/route';
 import Page from './+page.svelte';
 import type { SuspectedOwner } from './destination';
 
@@ -1837,5 +1838,86 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
         expect(screen.getAllByTestId(id)).toHaveLength(1);
       }
     });
+  });
+
+  it('renders a three-level breadcrumb trail with a working root and guided link', async () => {
+    vi.mocked(getLatestScan).mockResolvedValue(
+      makeCompletedScan([makeScanPerson({ personName: 'Aurelia' })]) as unknown as object,
+    );
+
+    render(Page, { props: { data: makePageData() } });
+
+    const trail = () => within(screen.getByTestId('breadcrumbs'));
+
+    await waitFor(() => {
+      expect(trail().getByText('Aurelia')).toBeInTheDocument();
+    });
+
+    // The root must go to the landing page — it used to be labelled "Face cleanup" while pointing at /scan.
+    expect(trail().getByRole('link', { name: 'admin.face_cleanup' })).toHaveAttribute('href', Route.faceCleanup());
+    // The guided level used to be missing from this trail entirely.
+    expect(trail().getByRole('link', { name: 'admin.face_cleanup_mode_guided' })).toHaveAttribute(
+      'href',
+      Route.faceCleanupScan(),
+    );
+    expect(trail().getAllByRole('link')).toHaveLength(2);
+  });
+
+  it.each([
+    ['an empty name', ''],
+    // `' '.repeat(3)` rather than a literal '   ' — the zero-warnings lint gate's unicorn/prefer-string-repeat.
+    ['a whitespace-only name', ' '.repeat(3)],
+  ])('falls back to the unnamed label for %s rather than a blank crumb', async (_label, personName) => {
+    vi.mocked(getLatestScan).mockResolvedValue(
+      makeCompletedScan([makeScanPerson({ personName })]) as unknown as object,
+    );
+
+    render(Page, { props: { data: makePageData() } });
+
+    // Wait for the scan to RESOLVE before asserting. `waitFor` runs its first attempt synchronously, so an
+    // assertion made straight after `render` is satisfied by the transient pre-resolution fallback (what the
+    // loading-state test below pins) and would pass whether or not the name guard exists at all.
+    await waitFor(() => expect(screen.getByTestId('flagged-grid')).toBeInTheDocument());
+
+    expect(
+      within(screen.getByTestId('breadcrumbs')).getByText('admin.face_cleanup_review_unnamed'),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the unnamed fallback in the trail until the scan resolves', async () => {
+    vi.mocked(getLatestScan).mockResolvedValue(
+      makeCompletedScan([makeScanPerson({ personName: 'Aurelia' })]) as unknown as object,
+    );
+
+    render(Page, { props: { data: makePageData() } });
+
+    // Accepted pre-existing behaviour, pinned so a later refactor cannot turn the transient leaf into an
+    // empty crumb. Mirrors the sibling assertion on people/[personId].
+    expect(
+      within(screen.getByTestId('breadcrumbs')).getByText('admin.face_cleanup_review_unnamed'),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('breadcrumbs')).getByText('Aurelia')).toBeInTheDocument();
+    });
+  });
+
+  // Not `async`: the back link is rendered unconditionally, so nothing here awaits, and the zero-warnings
+  // lint gate's @typescript-eslint/require-await rejects an async function with no await.
+  it('labels the in-page back link with where it actually goes', () => {
+    vi.mocked(getLatestScan).mockResolvedValue(
+      makeCompletedScan([makeScanPerson({ personName: 'Aurelia' })]) as unknown as object,
+    );
+
+    render(Page, { props: { data: makePageData() } });
+
+    // Two links share this name and href by design — the crumb and the in-page back link. Exclude the trail
+    // and assert on what is left, so this test is about the in-page link specifically.
+    const backLinks = screen
+      .getAllByRole('link', { name: 'admin.face_cleanup_mode_guided' })
+      .filter((link) => !screen.getByTestId('breadcrumbs').contains(link));
+
+    expect(backLinks).toHaveLength(1);
+    expect(backLinks[0]).toHaveAttribute('href', Route.faceCleanupScan());
   });
 });

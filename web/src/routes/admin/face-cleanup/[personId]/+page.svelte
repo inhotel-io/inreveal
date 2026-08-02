@@ -21,6 +21,7 @@
   import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
   import FaceReviewDock from '$lib/components/face-cleanup/FaceReviewDock.svelte';
   import type { FaceActionId } from '$lib/components/face-cleanup/face-actions';
+  import { faceCleanupBreadcrumbs, guidedCrumb } from '../breadcrumbs';
   import type { PageData } from './$types';
   import { selectableDestinations, sortDestinations, type SuspectedOwner } from './destination';
   import DestinationCards from './DestinationCards.svelte';
@@ -118,7 +119,11 @@
   let vm = $derived(createReviewModel(flaggedFaces));
 
   // Derived person metadata
-  const personName = $derived(scanPerson?.personName ?? $t('admin.face_cleanup_review_unnamed'));
+  // Trim-checked, not `??`: an empty or whitespace-only name must not render as a blank breadcrumb crumb or
+  // a blank heading. Matches people/[personId]/+page.svelte, which has guarded this since it shipped.
+  const personName = $derived(
+    scanPerson?.personName?.trim() ? scanPerson.personName : $t('admin.face_cleanup_review_unnamed'),
+  );
   const faceCount = $derived(scanPerson?.faceCount ?? 0);
   const destinations = $derived(sortDestinations(scanPerson?.suspectedOwners ?? []));
   const selectable = $derived(selectableDestinations(destinations));
@@ -515,9 +520,7 @@
   };
 </script>
 
-<AdminPageLayout
-  breadcrumbs={[{ title: $t('admin.face_cleanup'), href: Route.faceCleanupScan() }, { title: personName }]}
->
+<AdminPageLayout breadcrumbs={faceCleanupBreadcrumbs($t, guidedCrumb($t), { title: personName })}>
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Back link -->
     <a
@@ -525,7 +528,7 @@
       class="mb-5 inline-flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
     >
       <Icon icon={mdiArrowLeft} size="16" />
-      {$t('admin.face_cleanup_review_back')}
+      {$t('admin.face_cleanup_mode_guided')}
     </a>
 
     <!-- Title row -->
@@ -578,7 +581,7 @@
         <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_review_no_flagged')}</div>
         <p class="mt-2 text-sm text-gray-400">{$t('admin.face_cleanup_review_no_flagged_sub')}</p>
         <div class="mt-4">
-          <Button color="secondary" onclick={handleCancel}>{$t('admin.face_cleanup_review_back')}</Button>
+          <Button color="secondary" onclick={handleCancel}>{$t('admin.face_cleanup_mode_guided')}</Button>
         </div>
       </div>
     {:else}
