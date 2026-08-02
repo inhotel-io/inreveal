@@ -1187,7 +1187,11 @@ In `web/src/lib/i18n/slice-12-key-audit.spec.ts`, add to its `REMOVED_KEYS` arra
 cd web && pnpm test --run src/lib/i18n/face-cleanup-i18n-coverage.spec.ts src/lib/i18n/slice-12-key-audit.spec.ts
 ```
 
-Expected: the two **removal** assertions FAIL (the key is still in all 10 locale files). The new `BREADCRUMB_KEYS` presence assertions **PASS** immediately — that is correct and expected; they exist to stay green.
+Expected — and the three groups behave differently, because the two guards check different things:
+
+- **`face-cleanup-i18n-coverage.spec.ts`'s removal assertion FAILS ×10**, once per locale: `en.json still carries: face_cleanup_review_back`. This is the red that Step 3 turns green.
+- **`slice-12-key-audit.spec.ts`'s new entry PASSES immediately.** It guards _references_, walking `web/src` and `mobile/lib` — and Task 8 already removed the last one. It never opens a locale file, so "the key is still in the JSON" is irrelevant to it. It is a regression guard against a future reference, not a driver here. To prove it discriminates, append `face_cleanup_review_back` in a comment to any file under `web/src`, watch it fail, and revert.
+- **The `BREADCRUMB_KEYS` presence assertions PASS immediately** — the four labels are already translated everywhere. Also a guard, not a driver. Prove it by deleting one breadcrumb key from one locale, confirming exactly one test fails and names the right locale and key, then restoring.
 
 - [ ] **Step 3: Delete the key from all ten locale files**
 
