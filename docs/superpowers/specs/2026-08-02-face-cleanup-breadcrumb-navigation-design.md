@@ -146,8 +146,8 @@ the one crumb that is never a link. It is pinned by test rather than changed.
 The two mode pages get breadcrumbs only. They do not get an in-page `← Face cleanup` link: the breadcrumb
 bar already answers the need, and a second back affordance directly beneath it is noise.
 
-The person pages keep the in-page back link they already have, but two labels are corrected to match where
-they actually lead:
+The person and resolutions pages keep the in-page back affordances they already have, but all three call
+sites are corrected to match where they actually lead:
 
 - `/[personId]` — the `←` link above the heading and the "no flagged faces" empty-state button both
   navigate to `/scan`. Both are relabelled from `admin.face_cleanup_review_back` ("Face cleanup") to
@@ -311,7 +311,7 @@ Two rules keep these from becoming assertions that cannot fail:
   expected link exists. Otherwise `/[personId]` passes with the guided level silently missing, which is one
   of the two defects being fixed.
 
-### 3b. Person-name leaf tests — the two `[personId]` page specs
+### 4. Person-name leaf tests — the two `[personId]` page specs
 
 - `/[personId]` — a `personName` of `''` and of `'   '` each render the `admin.face_cleanup_review_unnamed`
   fallback as the leaf, not a blank crumb. Red today: `??` passes both through.
@@ -319,14 +319,14 @@ Two rules keep these from becoming assertions that cannot fail:
   resolves, it is the person's name. Pins the accepted loading behaviour so a later refactor cannot turn
   the transient leaf into an empty crumb or a crash.
 
-### 4. i18n guard — `web/src/lib/i18n/face-cleanup-i18n-coverage.spec.ts` (extended)
+### 5. i18n coverage guard — `web/src/lib/i18n/face-cleanup-i18n-coverage.spec.ts` (extended)
 
 - A `BREADCRUMB_KEYS` list — the four labels above — gets its own per-locale presence assertion across
   `en` + the nine. It is kept separate from the file's existing `NEW_KEYS`, which means "introduced by this
   feature"; these four predate it and are being pinned, not added.
 - `face_cleanup_review_back` joins the existing `REMOVED_KEYS`, asserting all 10 files have dropped it.
 
-### 5. Retired-key reference guard — `web/src/lib/i18n/slice-12-key-audit.spec.ts` (extended)
+### 6. Retired-key reference guard — `web/src/lib/i18n/slice-12-key-audit.spec.ts` (extended)
 
 `admin.face_cleanup_review_back` joins that file's `REMOVED_KEYS`, which walks `web/` and `mobile/`
 asserting nothing references it any more. Fully qualified, matching the entries already there.
