@@ -188,6 +188,10 @@ Mechanical, no behaviour change:
 - `overview_drilldown.provider.dart` — `.set(months)` / `.set(all)` replace `.set(month)` / `.set(day)`
 - `overview_card.dart`, `overview_segment_builder.dart` — take the mode; the builder maps it to
   `HeaderType`
+- `overview_segment.model.dart` — `TimelineOverviewSegment.mode` is `TimelineOverviewMode`, passed through
+  to the drilldown call and the representative-cache key
+- `overview_representative_cache.provider.dart` — `TimelineOverviewRepresentativeCacheNotifier.keyFor`
+  takes `TimelineOverviewMode`, not `GroupAssetsBy`
 - `timeline_grouping_anchor.dart` — `previousGroupBy` → `previousMode`
 - `timeline_route_scope.dart` — overrides `timelineOverviewModeProvider`, reads the spec
 - `timeline_scroll_target.dart` — the guards become `when mode == TimelineOverviewMode.all` / `.months`
