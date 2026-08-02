@@ -110,7 +110,7 @@ vi.mock('$app/stores', () => ({
 
 // Mock AdminPageLayout to a simple pass-through that renders children
 vi.mock('$lib/components/layouts/AdminPageLayout.svelte', async () => {
-  const { default: stub } = await import('@test-data/mocks/sidebar.stub.svelte');
+  const { default: stub } = await import('@test-data/mocks/admin-page-layout.stub.svelte');
   return { default: stub };
 });
 
