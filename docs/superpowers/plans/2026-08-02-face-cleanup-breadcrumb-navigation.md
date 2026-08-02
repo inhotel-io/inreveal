@@ -61,7 +61,7 @@ These apply to **every** task. Read them once, then assume them.
 | `web/src/lib/i18n/slice-12-key-audit.spec.ts`           | Record the retired key (reference guard).                   |
 | `i18n/{en,de,es,fr,it,nl,pl,ru,zh_Hans,zh_Hant}.json`   | Delete `admin.face_cleanup_review_back`.                    |
 
-**Task order is deliberate.** Task 1 builds the tool. Task 2 makes breadcrumbs visible to tests at all — without it every page test fails for the uninteresting reason that the current stub discards the prop. Tasks 3-6 fix one page each. Task 7 fixes the guided person page (the largest). Task 8 retires the key. Task 9 pins i18n. Task 10 is the final gate.
+**Task order is deliberate.** Task 1 builds the tool. Task 2 makes breadcrumbs visible to tests at all — without it every page test fails for the uninteresting reason that the current stub discards the prop. Tasks 3-6 take one page each (3 and 6 are adoptions of an already-correct trail; 4 and 5 are real fixes). Task 7 is the guided person page — the largest, with three distinct defects. Task 8 reparents Resolutions and, in doing so, orphans the retired key. Task 9 deletes that key and pins the four labels. Task 10 is the final gate.
 
 ---
 
@@ -279,7 +279,7 @@ git commit -m "feat(face-cleanup): add a breadcrumb builder that owns the consol
 - Consumes: nothing from Task 1.
 - Produces: a stub accepting `breadcrumbs: BreadcrumbItem[]`, `children?: Snippet`, `footer?: Snippet`, rendering the trail inside `data-testid="breadcrumbs"`. Every later task queries it via `within(screen.getByTestId('breadcrumbs'))`.
 
-**Why this task exists:** the six specs currently stub `AdminPageLayout` with `@test-data/mocks/sidebar.stub.svelte`, which accepts only `ariaLabel`, `children` and `footer` — it silently discards `breadcrumbs`. No existing test can see a crumb. This task changes no production code and adds no assertions of its own; it is what makes Tasks 3-7 possible.
+**Why this task exists:** the six specs currently stub `AdminPageLayout` with `@test-data/mocks/sidebar.stub.svelte`, which accepts only `ariaLabel`, `children` and `footer` — it silently discards `breadcrumbs`. No existing test can see a crumb. This task changes no production code and adds no assertions of its own; it is what makes Tasks 3-8 possible.
 
 - [ ] **Step 1: Create the stub**
 
