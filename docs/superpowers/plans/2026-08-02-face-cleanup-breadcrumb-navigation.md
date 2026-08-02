@@ -32,7 +32,11 @@ These apply to **every** task. Read them once, then assume them.
 
 7. **Prettier and ESLint are separate CI gates.** Green ESLint does not imply green Prettier. Both are run in Task 10.
 
-8. **Do not add `Co-Authored-By` or `Generated-with` trailers to any commit.**
+8. **Test code is subject to the same zero-warning ESLint gate as production code.** Three rules have already bitten this plan's own test snippets: `unicorn/prefer-string-repeat` (write `' '.repeat(3)`, never a literal `'   '`), `@typescript-eslint/require-await` (do not declare a test callback `async` unless it actually awaits), and `@typescript-eslint/no-unused-vars` with `varsIgnorePattern: '^_$'` (an unused binding must be named exactly `_`). Run `npx eslint --max-warnings 0` from `web/` on every file you touch, including specs.
+
+9. **`waitFor` runs its first attempt synchronously.** An assertion placed immediately after `render` is evaluated against the pre-fetch state, so any test asserting a post-fetch value must first await something that only appears once the fetch resolves. Several assertions in this plan would otherwise pass whether or not the fix exists. Where a step says to await a specific element before asserting, that line is load-bearing — do not remove it as redundant.
+
+10. **Do not add `Co-Authored-By` or `Generated-with` trailers to any commit.**
 
 ---
 
@@ -820,17 +824,20 @@ it('renders a three-level breadcrumb trail with a working root and guided link',
 
 it.each([
   ['an empty name', ''],
-  ['a whitespace-only name', '   '],
+  // `' '.repeat(3)`, not a literal '   ' — eslint's unicorn/prefer-string-repeat errors on repeated
+  // whitespace, and `pnpm lint` runs with --max-warnings 0.
+  ['a whitespace-only name', ' '.repeat(3)],
 ])('falls back to the unnamed label for %s rather than a blank crumb', async (_label, personName) => {
   vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([makeScanPerson({ personName })]) as unknown as object);
 
   render(Page, { props: { data: makePageData() } });
 
-  await waitFor(() => {
-    expect(
-      within(screen.getByTestId('breadcrumbs')).getByText('admin.face_cleanup_review_unnamed'),
-    ).toBeInTheDocument();
-  });
+  // Wait for the scan to RESOLVE before asserting. `waitFor` runs its first attempt synchronously, so an
+  // assertion made straight after `render` is satisfied by the transient pre-resolution fallback (what the
+  // loading-state test below pins) and would pass whether or not the name guard exists at all.
+  await waitFor(() => expect(screen.getByTestId('flagged-grid')).toBeInTheDocument());
+
+  expect(within(screen.getByTestId('breadcrumbs')).getByText('admin.face_cleanup_review_unnamed')).toBeInTheDocument();
 });
 
 it('shows the unnamed fallback in the trail until the scan resolves', async () => {
@@ -850,7 +857,9 @@ it('shows the unnamed fallback in the trail until the scan resolves', async () =
 });
 ```
 
-`within`, `waitFor`, `Route`, `getLatestScan`, `makeCompletedScan` and `makeScanPerson` are already imported/defined in this file. Add `within` to the testing-library import if absent.
+`within`, `waitFor`, `getLatestScan`, `makeCompletedScan` and `makeScanPerson` are already imported/defined in this file. **`Route` is not** — add `import { Route } from '$lib/route';`.
+
+**Why the `waitFor(flagged-grid)` line is load-bearing.** Without it these two cases pass whether or not the guard exists, which is worse than having no test. `waitFor` runs its first attempt synchronously; at that instant `scanPerson` is still `null`, so `personName` is already the fallback and the assertion is satisfied before the scan ever resolves. Verified during execution: with the guard reverted to `??`, the corrected tests fail (`2 failed | 84 passed`); with the naive version they passed both before and after the fix, while a DOM probe showed the trail really did render `<span></span>` and `<span>   </span>`.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -928,8 +937,10 @@ The relabel above changes a user-visible navigation label with nothing asserting
 edit cannot silently restore "Face cleanup" on a link that goes to Guided cleanup — the exact mismatch this
 whole change exists to remove. Scoped **outside** the breadcrumbs so it cannot accidentally assert the crumb:
 
+Note this callback is **not** `async` — the back link renders unconditionally, so there is nothing to await, and an `async` arrow with no `await` errors under `@typescript-eslint/require-await` at `--max-warnings 0`.
+
 ```ts
-it('labels the in-page back link with where it actually goes', async () => {
+it('labels the in-page back link with where it actually goes', () => {
   vi.mocked(getLatestScan).mockResolvedValue(
     makeCompletedScan([makeScanPerson({ personName: 'Aurelia' })]) as unknown as object,
   );
