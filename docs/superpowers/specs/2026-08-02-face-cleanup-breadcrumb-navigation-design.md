@@ -294,11 +294,17 @@ Each subpage asserts the trail a user can actually click, by role and accessible
 - `/people` — a link named `admin.face_cleanup` → `/admin/face-cleanup`; leaf
   `admin.face_cleanup_mode_manual` not a link.
 - `/people/[personId]` — the existing trail, now asserted rather than assumed.
-- `/resolutions` — a link named `admin.face_cleanup` → `/admin/face-cleanup` (not `/scan`); leaf
-  `admin.face_cleanup_resolutions_title` not a link.
+- `/resolutions` — a link named **`Face cleanup`** → `/admin/face-cleanup` (not `/scan`); leaf
+  **`Resolutions`** not a link.
 - landing — its single crumb is present and is **not** a link.
 
-`$t` is mocked to return raw keys in these specs, so accessible names are `admin.face_cleanup` and so on.
+**The six specs do not share one i18n strategy, and the accessible names differ accordingly.** Five mock
+`svelte-i18n` so `$t` returns the raw key, giving names like `admin.face_cleanup`.
+`resolutions/page.spec.ts` does not: it registers the real `$i18n/en.json` and awaits `waitLocale('en')`
+(lines 41-44), so its names are the real English strings — `Face cleanup`, `Resolutions`. Writing raw keys
+into that file's assertions yields a test that can never match. It also re-registers a synthetic locale
+mid-file (lines 420-443), so any breadcrumb test added there must sit in a block that runs under `en`.
+
 Every query is scoped with `within(screen.getByTestId('breadcrumbs'))` — see the stub above for why that is
 mandatory rather than tidy.
 
