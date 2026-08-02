@@ -4,6 +4,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { init, locale, register, waitLocale } from 'svelte-i18n';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Route } from '$lib/route';
 import Page from './+page.svelte';
 
 // Unified resolutions manage page: NEGATIVE verdicts only ("this face is not that person"), from BOTH
@@ -357,6 +358,29 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument();
   });
 
+  it('sends the empty-state button to the console landing page', async () => {
+    vi.mocked(getFaceRepairResolutions).mockResolvedValue({ total: 0, resolutions: [] } as unknown as Awaited<
+      ReturnType<typeof getFaceRepairResolutions>
+    >);
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    // Real en.json is loaded in this file — 'No decisions recorded yet' is the actual value of
+    // admin.face_cleanup_resolutions_empty, matching the sibling empty-state test above.
+    await waitFor(() => {
+      expect(screen.getByText('No decisions recorded yet')).toBeInTheDocument();
+    });
+
+    // The button used to point at /scan while being labelled "Face cleanup". Exclude the trail so this is
+    // about the button, not the crumb that now shares its name and href.
+    const buttons = screen
+      .getAllByRole('link', { name: 'Face cleanup' })
+      .filter((link) => !screen.getByTestId('breadcrumbs').contains(link));
+
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toHaveAttribute('href', Route.faceCleanup());
+  });
+
   // S12.6/F30: the empty state used to branch on the FILTERED list alone, so a filter that excludes every row
   // rendered the same "no decisions recorded yet" as a genuinely empty account — telling the admin their
   // filter selection had erased history that is actually still there. Positive control (never-recorded) is
@@ -405,6 +429,21 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
       expect(screen.getAllByTestId('resolution-row')).toHaveLength(2);
       expect(screen.queryByTestId('load-error-banner')).not.toBeInTheDocument();
     });
+  });
+
+  it('renders a breadcrumb trail back to the face cleanup landing page', async () => {
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    const trail = within(screen.getByTestId('breadcrumbs'));
+
+    // Real en.json is loaded in this file, so these are English strings, not raw keys.
+    // The root used to point at /scan; Resolutions is a peer of the two modes, not a child of guided.
+    await waitFor(() => {
+      expect(trail.getByRole('link', { name: 'Face cleanup' })).toHaveAttribute('href', Route.faceCleanup());
+    });
+
+    expect(trail.getByText('Resolutions')).toBeInTheDocument();
+    expect(trail.getAllByRole('link')).toHaveLength(1);
   });
 
   // S12.8/F30: the three filter-chip labels were built once, at component init, into a plain (non-reactive)

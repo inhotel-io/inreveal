@@ -7,6 +7,7 @@
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
   import { handleError } from '$lib/utils/handle-error';
+  import { faceCleanupBreadcrumbs } from '../breadcrumbs';
 
   // A single negative-verdict row: "this face is NOT that person", from either engine. Human PLACEMENTS are
   // deliberately not listed here (the server omits them) — they are unbounded and are undone in context on
@@ -150,12 +151,7 @@
   ]);
 </script>
 
-<AdminPageLayout
-  breadcrumbs={[
-    { title: $t('admin.face_cleanup'), href: Route.faceCleanupScan() },
-    { title: $t('admin.face_cleanup_resolutions_title') },
-  ]}
->
+<AdminPageLayout breadcrumbs={faceCleanupBreadcrumbs($t, { title: $t('admin.face_cleanup_resolutions_title') })}>
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Header -->
     <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
@@ -202,7 +198,7 @@
       <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
         <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_resolutions_empty')}</div>
         <div class="mt-4">
-          <Button color="secondary" href={Route.faceCleanupScan()}>{$t('admin.face_cleanup_review_back')}</Button>
+          <Button color="secondary" href={Route.faceCleanup()}>{$t('admin.face_cleanup')}</Button>
         </div>
       </div>
     {:else if filtered.length === 0}
