@@ -10,6 +10,7 @@
   import { mdiAccountCircleOutline, mdiMagnify } from '@mdi/js';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { faceCleanupBreadcrumbs, manualCrumb } from '../breadcrumbs';
   import type { PageData } from './$types';
 
   // Manual people browser (§6.3): owner selector → paginated people grid via getFaceRepairOwnerPeople. Zero
@@ -176,7 +177,7 @@
   };
 </script>
 
-<AdminPageLayout breadcrumbs={[{ title: data.meta.title }]}>
+<AdminPageLayout breadcrumbs={faceCleanupBreadcrumbs($t, manualCrumb($t))}>
   <div class="mx-auto max-w-screen-xl p-6">
     <div class="mb-6">
       <h1 class="text-2xl font-semibold tracking-tight">{$t('admin.face_cleanup_mode_browse_people')}</h1>

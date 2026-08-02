@@ -530,4 +530,17 @@ describe('+page.svelte (manual face-cleanup people browser)', () => {
     expect(screen.getByTestId('person-tile-p2')).toBeInTheDocument();
     expect(screen.getByTestId('person-tile-p3')).toBeInTheDocument();
   });
+
+  // ---- 13. breadcrumbs ----
+  it('renders a breadcrumb trail back to the face cleanup landing page', () => {
+    render(Page, { props: { data: makePageData([makeUser('u1', 'Alice')]) } });
+
+    const trail = within(screen.getByTestId('breadcrumbs'));
+
+    const root = trail.getByRole('link', { name: 'admin.face_cleanup' });
+    expect(root).toHaveAttribute('href', Route.faceCleanup());
+
+    expect(trail.getByText('admin.face_cleanup_mode_manual')).toBeInTheDocument();
+    expect(trail.getAllByRole('link')).toHaveLength(1);
+  });
 });
