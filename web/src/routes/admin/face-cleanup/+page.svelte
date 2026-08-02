@@ -4,6 +4,7 @@
   import { Button, Icon } from '@immich/ui';
   import { mdiAccountSearch, mdiArrowRight, mdiRadar, mdiSwapHorizontal } from '@mdi/js';
   import { t } from 'svelte-i18n';
+  import { faceCleanupBreadcrumbs } from './breadcrumbs';
   import type { PageData } from './$types';
 
   // Local types for the loosely-typed SDK response (mirrors scan/+page.svelte).
@@ -89,7 +90,7 @@
   </div>
 {/snippet}
 
-<AdminPageLayout breadcrumbs={[{ title: data.meta.title }]}>
+<AdminPageLayout breadcrumbs={faceCleanupBreadcrumbs($t)}>
   <div class="mx-auto max-w-screen-xl p-6 sm:p-8">
     <!-- Header. The last-scan chip stays on the right; the explainer below is unconditional (design §3.4) —
          it used to be gated on `firstVisit`, which hid it from every visit after the first scan. -->

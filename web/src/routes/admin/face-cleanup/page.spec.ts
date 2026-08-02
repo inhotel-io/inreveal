@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/svelte';
+import { render, screen, within } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { Route } from '$lib/route';
 import Page from './+page.svelte';
@@ -326,5 +326,17 @@ describe('+page.svelte (face cleanup chooser)', () => {
 
     expect(screen.getByTestId('chooser-guided-cta')).toHaveAttribute('href', Route.faceCleanupScan());
     expect(screen.getByTestId('chooser-manual-cta')).toHaveAttribute('href', Route.faceCleanupPeople());
+  });
+
+  // ---- 8. breadcrumbs ----
+  it('renders a single breadcrumb that does not link to itself', () => {
+    render(Page, { props: { data: makePageData() } });
+
+    const trail = within(screen.getByTestId('breadcrumbs'));
+
+    // Present, and NOT a link. Written this way rather than as `queryByRole('link')` returning null, which
+    // would also pass if the crumb had vanished entirely — the failure this is meant to catch.
+    expect(trail.getByText('admin.face_cleanup')).toBeInTheDocument();
+    expect(trail.queryAllByRole('link')).toHaveLength(0);
   });
 });
