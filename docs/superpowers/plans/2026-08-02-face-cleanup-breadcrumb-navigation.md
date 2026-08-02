@@ -905,7 +905,35 @@ to:
 
 Their destinations are already correct and do not change. After this step, `grep -rn "face_cleanup_review_back" web/src` must return only `resolutions/+page.svelte:205` — Task 8 handles that one.
 
-- [ ] **Step 6: Run to verify all three pass**
+- [ ] **Step 6: Pin the relabelled back link**
+
+The relabel above changes a user-visible navigation label with nothing asserting it. Add a test so a later
+edit cannot silently restore "Face cleanup" on a link that goes to Guided cleanup — the exact mismatch this
+whole change exists to remove. Scoped **outside** the breadcrumbs so it cannot accidentally assert the crumb:
+
+```ts
+it('labels the in-page back link with where it actually goes', async () => {
+  vi.mocked(getLatestScan).mockResolvedValue(
+    makeCompletedScan([makeScanPerson({ personName: 'Aurelia' })]) as unknown as object,
+  );
+
+  render(Page, { props: { data: makePageData() } });
+
+  // Two links share this name and href by design — the crumb and the in-page back link. Exclude the trail
+  // and assert on what is left, so this test is about the in-page link specifically.
+  const backLinks = screen
+    .getAllByRole('link', { name: 'admin.face_cleanup_mode_guided' })
+    .filter((link) => !screen.getByTestId('breadcrumbs').contains(link));
+
+  expect(backLinks).toHaveLength(1);
+  expect(backLinks[0]).toHaveAttribute('href', Route.faceCleanupScan());
+});
+```
+
+Run it — it fails before Step 5's relabel and passes after. If Step 5 is already applied, confirm it passes
+now and note that it was not observed red.
+
+- [ ] **Step 7: Run to verify all three pass**
 
 ```bash
 cd web && pnpm test --run 'src/routes/admin/face-cleanup/[personId]/page.spec.ts'
@@ -913,7 +941,7 @@ cd web && pnpm test --run 'src/routes/admin/face-cleanup/[personId]/page.spec.ts
 
 Expected: PASS, whole file. Watch for pre-existing tests that asserted on the old back-link text — if one breaks, update its expected string to `admin.face_cleanup_mode_guided`; do not revert the relabel.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add 'web/src/routes/admin/face-cleanup/[personId]'
@@ -1018,7 +1046,41 @@ Expected: PASS.
 
 Note the collision this creates on purpose: with an empty resolutions list, the page now has **two** links named `Face cleanup` pointing at `/admin/face-cleanup` — the crumb and the empty-state button. The `within(...)` scoping in Step 1 is what keeps the assertion unambiguous. If a pre-existing test in this file breaks with "found multiple elements", scope it the same way rather than weakening it.
 
-- [ ] **Step 5: Confirm the key is now orphaned**
+- [ ] **Step 5: Pin the retargeted empty-state button**
+
+Like the guided page's back link, this changes a user-visible navigation target with nothing asserting it.
+Add this immediately after the existing `it('shows the empty state when there are no verdicts', …)` at
+line 347, whose fixture and empty-state string it deliberately mirrors:
+
+```ts
+it('sends the empty-state button to the console landing page', async () => {
+  vi.mocked(getFaceRepairResolutions).mockResolvedValue({ total: 0, resolutions: [] } as unknown as Awaited<
+    ReturnType<typeof getFaceRepairResolutions>
+  >);
+
+  render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+  // Real en.json is loaded in this file — 'No decisions recorded yet' is the actual value of
+  // admin.face_cleanup_resolutions_empty, matching the sibling empty-state test above.
+  await waitFor(() => {
+    expect(screen.getByText('No decisions recorded yet')).toBeInTheDocument();
+  });
+
+  // The button used to point at /scan while being labelled "Face cleanup". Exclude the trail so this is
+  // about the button, not the crumb that now shares its name and href.
+  const buttons = screen
+    .getAllByRole('link', { name: 'Face cleanup' })
+    .filter((link) => !screen.getByTestId('breadcrumbs').contains(link));
+
+  expect(buttons).toHaveLength(1);
+  expect(buttons[0]).toHaveAttribute('href', Route.faceCleanup());
+});
+```
+
+This test fails before Step 3's retarget (the button's href is `/admin/face-cleanup/scan`) and passes
+after. If Step 3 is already applied, confirm it passes and note it was not observed red.
+
+- [ ] **Step 6: Confirm the key is now orphaned**
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase && grep -rn "face_cleanup_review_back" web/src mobile/lib
@@ -1026,7 +1088,7 @@ cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase && grep -rn "face_cl
 
 Expected: **no output.** If anything remains, fix that call site before proceeding — Task 9 deletes the key.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add web/src/routes/admin/face-cleanup/resolutions
@@ -1101,38 +1163,33 @@ Expected: the two **removal** assertions FAIL (the key is still in all 10 locale
 
 - [ ] **Step 3: Delete the key from all ten locale files**
 
-From the repo root:
+The key occupies exactly one line in each of the ten files (verified — `grep -c` returns 1 everywhere, e.g. `i18n/de.json:260`). A line-oriented delete is therefore exact and, unlike re-serialising the JSON, cannot reformat the rest of the file. Do **not** parse-and-rewrite these files: a whole-file reformat buries the one real change in thousands of lines of noise.
+
+Note the BSD `sed` invocation — on macOS `-i` requires an explicit empty backup suffix (`-i ''`); the GNU form (`sed -i`) fails here.
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
 for f in en de es fr it nl pl ru zh_Hans zh_Hant; do
-  python3 - "$f" <<'PY'
-import json, sys, collections
-code = sys.argv[1]
-path = f"i18n/{code}.json"
-with open(path, encoding="utf-8") as fh:
-    data = json.load(fh, object_pairs_hook=collections.OrderedDict)
-data["admin"].pop("face_cleanup_review_back", None)
-with open(path, "w", encoding="utf-8") as fh:
-    json.dump(data, fh, ensure_ascii=False, indent=2)
-    fh.write("\n")
-PY
+  sed -i '' '/"face_cleanup_review_back":/d' "i18n/$f.json"
 done
 git diff --stat i18n/
 ```
 
-Expected: 10 files changed, 10 deletions. Verify with `grep -rl '"face_cleanup_review_back"' i18n/` returning nothing.
+Expected: **10 files changed, 10 deletions, zero insertions.** Any insertion means something reformatted — `git checkout -- i18n/` and investigate before retrying.
 
-- [ ] **Step 4: Re-format the locale files**
-
-The re-serialisation above may not match the repo's Prettier settings exactly. Normalise:
+Confirm it is gone everywhere:
 
 ```bash
-cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase && npx prettier --write 'i18n/{en,de,es,fr,it,nl,pl,ru,zh_Hans,zh_Hant}.json'
-git diff --stat i18n/
+grep -rl '"face_cleanup_review_back"' i18n/ ; echo "exit=$? (1 = found nowhere, which is what we want)"
 ```
 
-Expected: still 10 files, still 10 deletions. **If the diff grew beyond ~10 lines, the rewrite reformatted whole files** — revert (`git checkout -- i18n/`) and redo Step 3 with a line-oriented deletion instead, so the diff stays minimal and reviewable.
+- [ ] **Step 4: Confirm the locale files are still Prettier-clean**
+
+```bash
+cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase && npx prettier --check 'i18n/*.json'
+```
+
+Expected: "All matched files use Prettier code style!" — a `sed` line-delete leaves formatting untouched, so this passes with no `--write` needed. Verified in advance against `i18n/de.json`. If it reports a problem, the deletion did more than remove one line.
 
 - [ ] **Step 5: Run the four i18n guards**
 
@@ -1191,6 +1248,11 @@ cd web && pnpm test --run
 Expected: PASS. Pay particular attention to `src/lib/components/shared-components/side-bar/user-sidebar.spec.ts` and `src/lib/components/shared-components/gallery-viewer/GalleryViewer.spec.ts` — they share `sidebar.stub.svelte`, which Task 2 deliberately left untouched. If either fails, the stub was edited when it should not have been.
 
 Never accept "it's flaky, re-run it". A failure here is a real defect, usually leaked state between test files.
+
+If a failure looks unrelated to breadcrumbs, **establish a baseline before chasing it**: stash the work
+(`git stash`), re-run the same command, and compare. A failure present on the untouched branch is
+pre-existing and not yours to fix inside this change — say so explicitly rather than silently absorbing it.
+Restore with `git stash pop`.
 
 - [ ] **Step 3: Typecheck, lint, format**
 
