@@ -68,6 +68,30 @@ void main() {
     expect(countScrubberSnapSegments(segments, GroupAssetsBy.day), 2);
   });
 
+  test('B-3: month granularity labels month+year', () {
+    final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
+
+    final scrubberSegments = buildScrubberSegments(
+      layoutSegments: segments,
+      timelineHeight: 300,
+      groupBy: GroupAssetsBy.month,
+    );
+
+    expect(scrubberSegments.first.scrollLabel, isNot(matches(RegExp(r'^\d{4}$'))));
+  });
+
+  test('B-4: day granularity labels month+year, same as month', () {
+    final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
+
+    final scrubberSegments = buildScrubberSegments(
+      layoutSegments: segments,
+      timelineHeight: 300,
+      groupBy: GroupAssetsBy.day,
+    );
+
+    expect(scrubberSegments.first.scrollLabel, isNot(matches(RegExp(r'^\d{4}$'))));
+  });
+
   test('empty layout returns empty scrubber segments', () {
     expect(buildScrubberSegments(layoutSegments: [], timelineHeight: 300, groupBy: GroupAssetsBy.year), isEmpty);
   });

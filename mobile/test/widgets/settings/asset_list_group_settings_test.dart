@@ -11,6 +11,7 @@ import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/widgets/settings/asset_list_settings/asset_list_group_settings.dart';
+import 'package:immich_mobile/widgets/settings/settings_radio_list_tile.dart';
 
 import '../../test_utils.dart';
 import '../../widget_tester_extensions.dart';
@@ -78,5 +79,18 @@ void main() {
 
     final radioGroup = tester.widget<RadioGroup<GroupAssetsBy>>(find.byType(RadioGroup<GroupAssetsBy>));
     expect(radioGroup.groupValue, GroupAssetsBy.day);
+  });
+
+  testWidgets('a stored year value falls back to Month + day selected', (tester) async {
+    // The Year option shipped in a fork build, so a real user can have `year` stored.
+    // It must resolve to a selected radio, not an empty selection.
+    await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.year);
+
+    await tester.pumpConsumerWidget(const GroupSettings());
+    await tester.pumpAndSettle();
+
+    final tile = tester.widget<SettingsRadioListTile<GroupAssetsBy>>(find.byType(SettingsRadioListTile<GroupAssetsBy>));
+
+    expect(tile.groupBy, GroupAssetsBy.day);
   });
 }

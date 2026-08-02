@@ -96,6 +96,21 @@ void main() {
     expect(segments.map((segment) => segment.header), everyElement(HeaderType.month));
   });
 
+  // S-6 ("a pinned groupBy renders the flat grid and never the overview") is not added here:
+  // once `pinnedGroupBy` is set, `timeline.state.dart` forces `spec.mode` to `all` internally and
+  // never evaluates `timelineGroupingSpecProvider`, so the container's seeded `mode` argument is
+  // unobservable. The two tests above already prove FixedSegment-only rendering for a pinned
+  // `day` and `month` groupBy (including the not-TimelineOverviewSegment and header assertions) —
+  // a third case only varying the (irrelevant) seeded mode would be a duplicate.
+  test('S-7: with a pinned groupBy, changing the mode afterwards is ignored', () async {
+    final container = containerFor(TimelineOverviewMode.all, pinnedGroupBy: GroupAssetsBy.day);
+    await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.years);
+
+    final segments = await container.read(timelineSegmentProvider.future);
+
+    expect(segments, everyElement(isA<FixedSegment>()));
+  });
+
   // Slice 3: date-less bucket fallback tests
 
   test('date-less buckets in months mode fall back to fixed grid segments', () async {
@@ -190,6 +205,44 @@ void main() {
       });
       return container;
     }
+
+    ProviderContainer emptyBucketContainer() {
+      final service = TimelineService((
+        assetSource: (offset, count) async => const [],
+        bucketSource: () => Stream.value(const <Bucket>[]),
+        origin: TimelineOrigin.main,
+      ));
+
+      final container = ProviderContainer(
+        overrides: [
+          timelineServiceProvider.overrideWithValue(service),
+          timelineArgsProvider.overrideWithValue(const TimelineArgs(maxWidth: 390, maxHeight: 800, columnCount: 3)),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await service.dispose();
+      });
+      return container;
+    }
+
+    test('S-4: empty buckets in Months mode produce no segments and do not throw', () async {
+      final container = emptyBucketContainer();
+      await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
+      expect(segments, isEmpty);
+    });
+
+    test('S-5: empty buckets in All mode with the month setting produce no segments', () async {
+      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
+      final container = emptyBucketContainer();
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
+      expect(segments, isEmpty);
+    });
 
     test('month setting renders a grid with month-only headers', () async {
       await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);

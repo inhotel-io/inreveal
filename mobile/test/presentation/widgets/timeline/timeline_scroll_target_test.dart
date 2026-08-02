@@ -117,6 +117,22 @@ void main() {
     );
   });
 
+  test('Z-6: findTimelineZoomAnchorSegment resolves a month anchor in All mode over month-granularity segments', () {
+    // Regression guard: if the anchor is handed spec.groupBy instead of spec.mode, a
+    // Group by = Month library makes the granularity `month`, the `all` guard stops
+    // matching, and drilling from Months into All silently fails to scroll.
+    final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
+
+    final target = findTimelineZoomAnchorSegment(
+      segments,
+      TimelineZoomAnchor.month(year: 2026, month: 3),
+      TimelineOverviewMode.all,
+    );
+
+    expect(target, isNotNull);
+    expect((target!.bucket as TimeBucket).date, DateTime(2026, 3));
+  });
+
   test('findTimelineZoomAnchorSegment ignores non-time bucket segments', () {
     final segments = [_nonTimeSegment(0, 100), _segment(DateTime(2025, 3), 100, 200)];
 
