@@ -1231,4 +1231,37 @@ describe('+page.svelte (manual face-review page)', () => {
       }
     });
   });
+
+  it('renders the full breadcrumb trail down to the person', async () => {
+    vi.mocked(getFaceRepairPersonMetadata).mockResolvedValue(makeMetadata({ name: 'Aurelia' }));
+
+    render(Page, { props: { data: makePageData() } });
+
+    const trail = () => within(screen.getByTestId('breadcrumbs'));
+
+    await waitFor(() => {
+      expect(trail().getByText('Aurelia')).toBeInTheDocument();
+    });
+
+    expect(trail().getByRole('link', { name: 'admin.face_cleanup' })).toHaveAttribute('href', Route.faceCleanup());
+    expect(trail().getByRole('link', { name: 'admin.face_cleanup_mode_manual' })).toHaveAttribute(
+      'href',
+      Route.faceCleanupPeople(),
+    );
+    // Two links and an unlinked leaf — the leaf must never be clickable.
+    expect(trail().getAllByRole('link')).toHaveLength(2);
+  });
+
+  it('shows the unnamed fallback in the trail until metadata resolves', async () => {
+    vi.mocked(getFaceRepairPersonMetadata).mockResolvedValue(makeMetadata({ name: 'Aurelia' }));
+
+    render(Page, { props: { data: makePageData() } });
+
+    // Accepted pre-existing behaviour: the leaf is the fallback before the fetch resolves, never blank.
+    expect(within(screen.getByTestId('breadcrumbs')).getByText('admin.face_cleanup_unnamed')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('breadcrumbs')).getByText('Aurelia')).toBeInTheDocument();
+    });
+  });
 });

@@ -20,6 +20,7 @@
   import FaceActionsHelpModal from '$lib/components/face-cleanup/FaceActionsHelpModal.svelte';
   import FaceReviewDock from '$lib/components/face-cleanup/FaceReviewDock.svelte';
   import type { FaceActionId } from '$lib/components/face-cleanup/face-actions';
+  import { faceCleanupBreadcrumbs, manualCrumb } from '../../breadcrumbs';
   import PersonPicker from '../../[personId]/PersonPicker.svelte';
   import type { PageData } from './$types';
   import {
@@ -411,13 +412,7 @@
   };
 </script>
 
-<AdminPageLayout
-  breadcrumbs={[
-    { title: $t('admin.face_cleanup'), href: Route.faceCleanup() },
-    { title: $t('admin.face_cleanup_mode_manual'), href: Route.faceCleanupPeople() },
-    { title: personName },
-  ]}
->
+<AdminPageLayout breadcrumbs={faceCleanupBreadcrumbs($t, manualCrumb($t), { title: personName })}>
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Back link -->
     <a
