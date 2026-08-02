@@ -24,6 +24,8 @@ import native_video_player
     AppDelegate.registerPlugins(with: engineBridge.pluginRegistry, messenger: messenger)
   }
 
+  private static let liveTextRegistry = LiveTextViewRegistry()
+
   public static func registerPlugins(with registry: FlutterPluginRegistry, messenger: FlutterBinaryMessenger) {
     NativeSyncApiImpl.register(with: registry.registrar(forPlugin: NativeSyncApiImpl.name)!)
     PermissionApiSetup.setUp(binaryMessenger: messenger, api: PermissionApiImpl())
@@ -32,6 +34,15 @@ import native_video_player
     BackgroundWorkerFgHostApiSetup.setUp(binaryMessenger: messenger, api: BackgroundWorkerApiImpl())
     ConnectivityApiSetup.setUp(binaryMessenger: messenger, api: ConnectivityApiImpl())
     NetworkApiSetup.setUp(binaryMessenger: messenger, api: NetworkApiImpl())
+    LiveTextHostApiSetup.setUp(binaryMessenger: messenger, api: LiveTextApiImpl(registry: liveTextRegistry))
+
+    if #available(iOS 16.0, *) {
+      registry.registrar(forPlugin: "LiveTextPlatformView")!
+        .register(
+          LiveTextPlatformViewFactory(messenger: messenger, registry: liveTextRegistry),
+          withId: "immich/live_text_overlay"
+        )
+    }
   }
 
   public static func cancelPlugins(with engine: FlutterEngine) {
