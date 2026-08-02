@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/ocr.model.dart';
@@ -9,6 +10,8 @@ import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
+import 'package:immich_mobile/platform/live_text_api.g.dart';
+import 'package:immich_mobile/presentation/widgets/asset_viewer/live_text_callback_dispatcher.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/live_text_overlay.widget.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/ocr_overlay.widget.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/ocr_overlay_switcher.widget.dart';
@@ -122,6 +125,61 @@ void main() {
       expect(find.byType(LiveTextOverlay), findsOneWidget);
 
       tester.widget<LiveTextOverlay>(find.byType(LiveTextOverlay)).onAnalysisComplete(false);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(OcrOverlay), findsOneWidget);
+      expect(find.byType(LiveTextOverlay), findsNothing);
+    });
+
+    testWidgets('falls back to the server overlay when native delivers "no text" through the real dispatcher', (
+      tester,
+    ) async {
+      // Unlike the test above (which calls `onAnalysisComplete` directly on
+      // the widget prop, skipping the dispatcher entirely), this drives the
+      // actual native -> Flutter path: the production `_defaultPlatformView`
+      // builder (a real `UiKitView`), the `LiveTextCallbackDispatcher.register`
+      // call it triggers on creation, and the exact Pigeon channel
+      // `LiveTextFlutterApi.setUp` binds a handler to.
+      int? capturedViewId;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform_views,
+        (call) async {
+          if (call.method == 'create') {
+            capturedViewId = (call.arguments! as Map)['id'] as int;
+          }
+          return null;
+        },
+      );
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform_views,
+          null,
+        );
+        // Defensive: the assertions below already expect the overlay to have
+        // unregistered itself via dispose, but don't let a failure upstream
+        // leak a listener into later tests sharing this singleton.
+        final viewId = capturedViewId;
+        if (viewId != null) {
+          LiveTextCallbackDispatcher.instance.unregister(viewId);
+        }
+      });
+
+      await pump(tester, supported: true);
+      expect(find.byType(LiveTextOverlay), findsOneWidget);
+
+      final viewId = capturedViewId;
+      expect(viewId, isNotNull, reason: 'the real UiKitView must have been created and registered with the dispatcher');
+      expect(LiveTextCallbackDispatcher.instance.listenerCount, greaterThan(0));
+
+      // Deliver the message on the exact channel + codec that
+      // `LiveTextFlutterApi.setUp` installs a handler for -- precisely what
+      // native invokes when analysis completes.
+      final message = LiveTextFlutterApi.pigeonChannelCodec.encodeMessage(<Object?>[viewId, false]);
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+        'dev.flutter.pigeon.immich_mobile.LiveTextFlutterApi.onAnalysisComplete',
+        message,
+        (_) {},
+      );
       await tester.pumpAndSettle();
 
       expect(find.byType(OcrOverlay), findsOneWidget);

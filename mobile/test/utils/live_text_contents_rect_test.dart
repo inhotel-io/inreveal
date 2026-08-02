@@ -1,4 +1,3 @@
-// mobile/test/utils/live_text_contents_rect_test.dart
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';

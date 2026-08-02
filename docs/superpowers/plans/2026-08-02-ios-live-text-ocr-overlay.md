@@ -24,6 +24,14 @@
 - **Docs prettier is a CI gate.** Run `npx prettier --write` on any markdown under `docs/` before committing.
 - **TDD is strict, with two declared exceptions.** Every task writes a failing test, runs it to see it fail, implements the minimum, re-runs, and commits. The exceptions are **Task 1** (a throwaway spike whose only output is a go/no-go verdict) and **Task 3** (pure Pigeon codegen — there is no hand-written logic to test; its output is exercised by Tasks 4–8). Do not skip the "run it and watch it fail" step anywhere else: several of these tests would pass vacuously against a stub, and watching them fail first is what proves they bind to real behaviour.
 
+## Build status
+
+Tasks 2, 3, 4, 6, 7, and 8 are implemented, reviewed, and merged — the Dart side of this plan.
+
+Tasks 1, 5, and 9 are **not done**: Task 1 is the GO/NO-GO device spike, Task 5 is the native Swift shell, and Task 9 is device verification. Tasks 1 and 9 require a physical iPhone.
+
+Consequence today: `LiveTextHostApi` has no registered iOS implementation, so the support probe fails and every user falls back to the existing server-OCR overlay on both platforms. No behaviour change ships until Task 5 lands.
+
 ---
 
 ## File Structure

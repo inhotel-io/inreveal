@@ -1,4 +1,3 @@
-// mobile/test/presentation/widgets/asset_viewer/live_text_callback_dispatcher_test.dart
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/live_text_callback_dispatcher.dart';
 
