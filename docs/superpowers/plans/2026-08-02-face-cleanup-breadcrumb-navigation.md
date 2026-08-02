@@ -61,7 +61,7 @@ These apply to **every** task. Read them once, then assume them.
 | `web/src/lib/i18n/slice-12-key-audit.spec.ts`           | Record the retired key (reference guard).                   |
 | `i18n/{en,de,es,fr,it,nl,pl,ru,zh_Hans,zh_Hant}.json`   | Delete `admin.face_cleanup_review_back`.                    |
 
-**Task order is deliberate.** Task 1 builds the tool. Task 2 makes breadcrumbs visible to tests at all — without it every page test fails for the uninteresting reason that the current stub discards the prop. Tasks 3-6 take one page each (3 and 6 are adoptions of an already-correct trail; 4 and 5 are real fixes). Task 7 is the guided person page — the largest, with three distinct defects. Task 8 reparents Resolutions and, in doing so, orphans the retired key. Task 9 deletes that key and pins the four labels. Task 10 is the final gate.
+**Task order is deliberate.** Task 1 builds the tool. Task 2 makes breadcrumbs visible to tests at all — without it every page test fails for the uninteresting reason that the current stub discards the prop. Tasks 3-6 take one page each. Tasks 4 and 5 are real fixes with fully red tests. Task 6 adopts an already-correct trail and its test is green throughout. Task 3 is in between — its link-count assertion is green from the start but its text assertion is red, because the landing crumb's text moves from a fixture literal to a translated key (see Task 3's framing note). Task 7 is the guided person page — the largest, with three distinct defects. Task 8 reparents Resolutions and, in doing so, orphans the retired key. Task 9 deletes that key and pins the four labels. Task 10 is the final gate.
 
 ---
 
@@ -398,13 +398,18 @@ git commit -m "test(face-cleanup): render breadcrumbs in the admin page layout s
 - Consumes: `faceCleanupBreadcrumbs` from Task 1.
 - Produces: nothing later tasks depend on.
 
-**Honest framing:** this test is **green from the start** — the landing page already renders one unlinked crumb, so nothing about it is red-first. It is a regression guard for the pattern the other four pages are being moved onto, and it pins "the landing page must not link to itself". Write it, watch it pass, and do not mistake that for the TDD cycle in Tasks 4-7.
+**Honest framing — this test is HALF red, and the two halves fail for different reasons.** Corrected after execution; the original claim that it was "green from the start" was wrong.
+
+- The `queryAllByRole('link')).toHaveLength(0)` half **is** green from the start. The landing page already renders one crumb with no href, so this half is a pure regression guard.
+- The `getByText('admin.face_cleanup')` half **is genuinely red**, and not for the reason the other pages are. Pre-change the crumb's title comes from `data.meta.title`, and this spec's fixture hard-codes that as the literal English `'Face cleanup'` (`page.spec.ts:108`). Post-change it comes from `$t('admin.face_cleanup')`, which this file's raw-key mock renders as the key itself. So the crumb text changes from `Face cleanup` to `admin.face_cleanup` purely by moving to the builder.
+
+Expect Step 2 to fail with `Unable to find an element with the text: admin.face_cleanup`, showing `<span>Face cleanup</span>` in the DOM dump. That is correct and expected — do **not** weaken the assertion to `'Face cleanup'` to make it green early. The test as written is the correct post-change assertion.
 
 **i18n:** raw-key mock — accessible names are `admin.face_cleanup`.
 
 - [ ] **Step 1: Write the test**
 
-Add to `web/src/routes/admin/face-cleanup/page.spec.ts`, inside the existing `describe('+page.svelte (face cleanup chooser)', …)` block. `screen`, `within`, and `render` are already imported there.
+Add to `web/src/routes/admin/face-cleanup/page.spec.ts`, inside the existing `describe('+page.svelte (face cleanup chooser)', …)` block. `screen` and `render` are already imported there; `within` is **not** — add it to the `@testing-library/svelte` import.
 
 ```ts
 it('renders a single breadcrumb that does not link to itself', () => {
@@ -421,13 +426,22 @@ it('renders a single breadcrumb that does not link to itself', () => {
 
 If `within` is not in the file's `@testing-library/svelte` import list, add it.
 
-- [ ] **Step 2: Run it — expect PASS, and understand why**
+- [ ] **Step 2: Run it — expect a FAIL on the text, not on the link count**
 
 ```bash
 cd web && pnpm test --run src/routes/admin/face-cleanup/page.spec.ts
 ```
 
-Expected: PASS. The page already passes `[{ title: data.meta.title }]`, which has no href.
+Expected: **FAIL**, `1 failed | 23 passed (24)`, with:
+
+```
+TestingLibraryElementError: Unable to find an element with the text: admin.face_cleanup.
+<nav data-testid="breadcrumbs">
+  <span>Face cleanup</span>
+</nav>
+```
+
+The DOM dump is the confirmation you want: the crumb is already a `<span>` and not an `<a>` (so the link-count half of the assertion was always going to pass), and the text is the fixture's literal `'Face cleanup'` rather than the raw key. Step 3 changes the text source, not the link-ness.
 
 - [ ] **Step 3: Move the page onto the builder**
 

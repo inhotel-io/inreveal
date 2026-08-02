@@ -223,13 +223,20 @@ fixed, two are being pinned. Written honestly:
 3. **The four genuinely-red page tests** — `/scan`, `/[personId]`, `/people`, `/resolutions`. Each fails
    against current code for the reason the page is being changed: no root link at all on the two mode
    pages, a root link pointing at `/scan` on the other two.
-4. **The two characterization tests** — landing and `/people/[personId]`. These go green the moment the
-   stub lands, with **zero** production change: the landing page already renders one unlinked crumb, and
-   `/people/[personId]` already renders the correct three-level trail. They are regression guards for the
-   pattern the other four are being moved onto, not drivers. Writing them as though they were red would
-   misrepresent what this change does.
-5. **The guided empty-name test** — red: `??` lets `''` through today.
-6. **The i18n guards** — the removal assertions are red until the key is deleted; the `BREADCRUMB_KEYS`
+4. **`/people/[personId]` is a pure characterization test** — green the moment the stub lands, with **zero**
+   production change, because that page already renders the correct three-level trail and already builds it
+   from `$t(...)`. It is a regression guard for the pattern the other pages are being moved onto, not a
+   driver.
+5. **The landing page test is half red** (corrected during execution — it was originally specced as a second
+   pure characterization test). Its link-count half is green from the start: the crumb is already an
+   unlinked `<span>`. Its text half is red, because pre-change the crumb's title comes from
+   `data.meta.title` — which the spec fixture hard-codes as the literal `'Face cleanup'` — and post-change
+   it comes from `$t('admin.face_cleanup')`, which the raw-key mock renders as the key. Moving to the
+   builder changes the crumb's text source, not its link-ness.
+6. **The guided empty-name test** — red: `??` lets `''` through today.
+7. **The relabelled back-link tests** — red: both the guided page's `←` link and the resolutions empty-state
+   button currently carry a label that names somewhere other than where they go.
+8. **The i18n guards** — the removal assertions are red until the key is deleted; the `BREADCRUMB_KEYS`
    presence assertions are green from the start (the keys are already translated) and exist to stay that
    way.
 
