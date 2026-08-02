@@ -44,8 +44,8 @@ contained.
 | `timeline_grouping_anchor.dart`                                | `header.widget.dart` (20+/5-)                |
 | `timeline_scroll_target.dart`                                  | `fixed/segment_builder.dart` (1+/0-)         |
 | `overview_card.dart`, `overview_segment_builder.dart`          | `segment_builder.dart` (1+/0-)               |
-| `scrubber.dart`, `scrubber_segments.dart`                      | `timeline.state.dart`, `timeline.model.dart` |
-| `timeline_grouping.provider.dart`, `timeline_route_scope.dart` |                                              |
+| `scrubber_segments.dart`                                       | `scrubber.widget.dart` (45+/82-)             |
+| `timeline_grouping.provider.dart`, `timeline_route_scope.dart` | `timeline.state.dart`, `timeline.model.dart` |
 
 ## Problem statement
 
@@ -188,7 +188,6 @@ Mechanical, no behaviour change:
 - `overview_drilldown.provider.dart` — `.set(months)` / `.set(all)` replace `.set(month)` / `.set(day)`
 - `overview_card.dart`, `overview_segment_builder.dart` — take the mode; the builder maps it to
   `HeaderType`
-- `scrubber.dart`, `scrubber_segments.dart` — take the mode
 - `timeline_grouping_anchor.dart` — `previousGroupBy` → `previousMode`
 - `timeline_route_scope.dart` — overrides `timelineOverviewModeProvider`, reads the spec
 - `timeline_scroll_target.dart` — the guards become `when mode == TimelineOverviewMode.all` / `.months`
@@ -196,17 +195,40 @@ Mechanical, no behaviour change:
 The last one is the payoff: the guard finally states what it means, and passing a header granularity there
 stops compiling.
 
+**The scrubber chain is deliberately excluded.** `scrubber.widget.dart` is upstream-owned (45+/82-) and
+its `groupBy` parameter feeds `buildScrubberSegments`, `countScrubberSnapSegments` and
+`findScrubberLayoutSegmentIndex` in `scrubber_segments.dart`, all of which use it as a pure
+_granularity_ — `scrubber_segments.dart:45` special-cases only `GroupAssetsBy.year`. That is upstream's
+meaning of the type, so the whole chain stays on `GroupAssetsBy` and simply receives `spec.groupBy`.
+Retyping it would push a fork type into an upstream constructor for no benefit.
+
 ### 5. Upstream files touched by item 4
 
 Only `timeline.widget.dart`, at three lines (223 `listenManual`, 472, 611), in a file already 280+/64-
-diverged. Those sites split: the **mode** feeds the zoom anchor, `spec.groupBy` feeds the scrubber.
+diverged. Those sites split: the **mode** feeds the zoom anchor and `_onGroupingChanged`, while
+`spec.groupBy` feeds the scrubber. `_onGroupingChanged(GroupAssetsBy? previous, GroupAssetsBy next)` at
+line 292 changes signature to take the mode.
 
 That split is a small correctness improvement in its own right. Today the scrubber receives the selector
 position while rendering segments built at the _bucket_ granularity. It is harmless at present because
 `day` and `month` take the same branch in `scrubber_segments.dart` — only `year` is special-cased — but it
 is wrong on paper, and the retype fixes it at no extra cost.
 
-### 6. Settings screen
+### 6. Invariant: `normalizeGridGrouping` applies to the persisted setting only
+
+`GroupAssetsBy.none` is **not** a dead legacy value. `timeline_query.provider.dart:54` passes it
+deliberately:
+
+```dart
+final effectiveGroupBy = isRelevance ? GroupAssetsBy.none : (groupBy ?? factory.groupBy);
+```
+
+A relevance-sorted smart search has no meaningful date order, so it queries flat. `normalizeGridGrouping`
+must therefore be applied **only** where the persisted setting is read — `timelineGridGroupingProvider`,
+`TimelineFactory.groupBy` and the settings screen — and never to a grouping a caller passed explicitly.
+Normalizing an explicit `none` to `day` would silently re-introduce date bucketing into relevance search.
+
+### 7. Settings screen
 
 `asset_list_group_settings.dart` watches `timelineGridGroupingProvider` rather than re-normalizing
 `appConfigProvider` itself. The line count barely moves; the point is that the definition of what the
@@ -216,26 +238,65 @@ setting means lives in exactly one place instead of two.
 
 ### TDD discipline
 
-This is a refactor of working code, so the usual TDD ordering needs one adjustment: **the behaviour is
-already specified by the existing suite.** The rule for this work is therefore:
+**The governing rule: no scenario in this spec is done until it has been observed failing.** A test that
+has only ever been green is an untested test. Refactoring is where that bites hardest, because a test can
+pass for reasons entirely unrelated to the thing it claims to guard.
 
-1. **Characterise before you change.** For each behaviour below that is not already asserted, write the
-   test against the _current_ implementation and watch it pass. That is the safety net. Only then retype.
-2. **RED first for anything genuinely new.** The `timelineGroupingSpecProvider` mapping, the pinned-grouping
-   path and the legacy-value cases are new behaviour with no existing coverage. Write those tests first,
-   run them, and confirm they fail for the stated reason before writing the provider.
-3. **One behaviour per test.** No test asserts both "which builder ran" and "at what granularity" unless
-   the scenario is specifically about their interaction.
-4. **Mutation-check every test not written RED-first.** A characterisation test that passes against the
-   old code proves nothing until you have seen it fail. Revert the specific line it guards, confirm the
-   red, restore. This is not optional — it is the only evidence a characterisation test is load-bearing.
-   Two tests in #911 were caught this way.
-5. **No assertion that cannot fail.** Watch for the usual shapes: asserting a setting nothing writes any
-   more, substring matches that collide with other numbers on screen, and querying a widget that is absent
-   in both the pass and fail case.
-6. **A behavioural rewrite of an existing test is a red flag.** Nothing in this design changes what the app
-   does. If a test needs its _assertions_ changed rather than just its _names_, stop: the retype has
-   changed semantics somewhere it should not have.
+Each scenario reaches red by exactly one of two routes, and the route is not the implementer's choice —
+it follows from whether the behaviour exists today:
+
+- **Route A — write-first (new behaviour).** No production code exists yet. Write the test, run it, watch
+  it fail with the expected message, then write the minimum code to pass. Applies to the
+  `timelineGroupingSpecProvider` mapping (M-1…M-7), the pinned-grouping path (S-6, S-7), the empty-bucket
+  cases (S-4, S-5) and Z-6.
+- **Route B — characterise, then mutate (existing behaviour).** Write the test against the _current_
+  implementation and watch it pass. Then break the specific line it claims to guard, re-run, and confirm
+  it goes red for the right reason. Restore. **The mutation step is the test.** Skipping it leaves a test
+  that would survive the very regression it was written to catch — two such tests were caught this way in
+  #911.
+
+The full loop per slice:
+
+1. Pick one scenario. Determine its route.
+2. Get it red — write-first, or characterise-then-mutate.
+3. Write the minimum production code to get it green.
+4. Refactor with the test green.
+5. Run the whole file, then the whole suite. A green scenario that broke a neighbour is not done.
+
+Additional rules that hold throughout:
+
+- **No production line before a failing test names it.** If you find yourself editing `lib/` with nothing
+  red, stop and go back to step 1.
+- **One behaviour per test.** No test asserts both "which builder ran" and "at what granularity" unless
+  the scenario is specifically about their interaction.
+- **No assertion that cannot fail.** Watch for the usual shapes: asserting a setting nothing writes any
+  more, substring matches that collide with other numbers on screen, and querying a widget that is absent
+  in both the pass and fail case.
+- **A behavioural rewrite of an existing test is a red flag.** Nothing in this design changes what the app
+  does. If a test needs its _assertions_ changed rather than just its _names_, stop: the retype has
+  changed semantics somewhere it should not have.
+
+### Mutation matrix
+
+Route B scenarios are only as good as the mutation used to prove them. These are the mutations that must
+produce a red, and the scenario that must catch each. If a mutation stays green, the guard is missing.
+
+| Mutation                                                                           | Must break                                                                   |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `timelineGroupingSpecProvider`: make `all` return a hard-coded `day`               | G-1, M-4                                                                     |
+| `timelineGroupingSpecProvider`: make `months` read the grid setting                | G-3, M-5                                                                     |
+| Drop `dependencies: [timelineOverviewModeProvider]` from the spec provider         | R-4                                                                          |
+| `TimelineRouteScope`: stop overriding the mode provider                            | R-1, R-2                                                                     |
+| `TimelineRouteScope`: pass `sharedGrouping: true` to a detail route                | R-1                                                                          |
+| Restore the selector's write to `SettingsKey.timelineGroupAssetsBy`                | G-5                                                                          |
+| `timeline.state.dart`: feed the overview builder on `isDateless`                   | S-2, S-3                                                                     |
+| `timeline.widget.dart`: feed the zoom anchor `spec.groupBy` instead of `spec.mode` | **Z-6**                                                                      |
+| `timeline.widget.dart`: feed the scrubber `spec.mode` instead of `spec.groupBy`    | compile error — the scrubber stays typed `GroupAssetsBy`, which is the point |
+| `normalizeGridGrouping`: return the input unchanged                                | L-3, F-3                                                                     |
+| Apply `normalizeGridGrouping` to the explicit groupBy in `timeline_query.provider` | **Q-1**                                                                      |
+
+The two bolded rows are the mutations most likely to happen by accident during this refactor, because both
+look like tidy-ups. Neither is caught by any test that exists today.
 
 ### BDD scenarios
 
@@ -274,7 +335,10 @@ fail.
 #### Legacy and out-of-range persisted values
 
 The Year radio shipped in a fork build, so `year` can be sitting in a real user's store. `auto` and `none`
-are upstream legacy values. None of them are reachable through the UI any more.
+are upstream legacy values. None of the three is reachable through the settings UI any more.
+
+These rows are about the value **as a persisted setting**. They say nothing about `GroupAssetsBy.none` as
+an explicitly passed query grouping, which is live — see §6 and Q-1.
 
 | #   | Given stored `timelineGroupAssetsBy` | Then `normalizeGridGrouping` | And the settings screen shows | File                                  |
 | --- | ------------------------------------ | ---------------------------- | ----------------------------- | ------------------------------------- |
@@ -345,15 +409,74 @@ would stop matching an `all`-mode guard and drilling from Months into All would 
 This scenario did not exist before this design and must be written RED against a deliberately wrong
 implementation first.
 
+#### Filtered and search-backed timelines
+
+The Photos timeline is frequently search-backed, and that path chooses its own grouping. These guard the
+§6 invariant and the filter/grouping interaction.
+
+| #   | Given                                                    | When                  | Then                                                         | File                                             |
+| --- | -------------------------------------------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------------ |
+| Q-1 | a smart filter sorted by **relevance**                   | the service is built  | `groupBy` is `GroupAssetsBy.none` — mode and setting ignored | `timeline_query_provider_test.dart`              |
+| Q-2 | a smart filter sorted by **newest**                      | the service is built  | `groupBy` is the spec grouping, not `none`                   | `timeline_query_provider_test.dart`              |
+| Q-3 | a non-smart filter                                       | the service is built  | `groupBy` is the spec grouping; descending                   | `timeline_query_provider_test.dart`              |
+| Q-4 | a filter is active, mode = **Months**                    | segments are built    | month overview segments; asset counts sum to the total       | `timeline_filter_grouping_integration_test.dart` |
+| Q-5 | a filter is active, mode = **All**, Group by = **Month** | segments are built    | month buckets on the grid — #903 under a filter              | `timeline_filter_grouping_integration_test.dart` |
+| Q-6 | a filter is active                                       | the mode changes      | the service is rebuilt at the new granularity                | `timeline_filter_grouping_integration_test.dart` |
+| Q-7 | no filter                                                | the timeline is built | it delegates to the main-library service                     | `timeline_query_provider_test.dart`              |
+
+**Q-1 is the guard for the `none` invariant** and has no equivalent today. Route A: write it before
+touching `normalizeGridGrouping`'s call sites, and confirm it goes red if the explicit grouping is
+normalized.
+
+#### The grouping pill
+
+| #   | Given                      | When                    | Then                                         | File                                      |
+| --- | -------------------------- | ----------------------- | -------------------------------------------- | ----------------------------------------- |
+| P-1 | the pill is rendered       | —                       | three segments: Years, Months, All           | `timeline_grouping_bottom_pill_test.dart` |
+| P-2 | no surrounding route scope | a segment is tapped     | the root mode updates                        | `timeline_grouping_bottom_pill_test.dart` |
+| P-3 | RTL locale                 | a segment is tapped     | the mode still updates                       | `timeline_grouping_bottom_pill_test.dart` |
+| P-4 | multiselect is enabled     | —                       | the pill hides, and reappears when it ends   | `timeline_grouping_bottom_pill_test.dart` |
+| P-5 | the pill is rendered       | semantics are inspected | exactly the three selector buttons, no extra | `timeline_grouping_bottom_pill_test.dart` |
+
+P-4 and P-5 are pure Route B carry-overs — they do not touch grouping semantics, but they live in a file
+the rename edits, so they must be re-run and must not need assertion changes.
+
+#### Photos-filter overview activation
+
+The pill is not the only writer of the mode. Activating a year or month card from the Photos filter drives
+the same `overview_drilldown.provider.dart`.
+
+| #   | Given                     | When                          | Then                                                             | File                                      |
+| --- | ------------------------- | ----------------------------- | ---------------------------------------------------------------- | ----------------------------------------- |
+| A-1 | the Photos filter         | a **year** card is activated  | mode becomes **Months** with a year anchor, nothing else changes | `photos_overview_zoom_provider_test.dart` |
+| A-2 | the Photos filter         | a **month** card is activated | mode becomes **All** with a month anchor                         | `photos_overview_zoom_provider_test.dart` |
+| A-3 | the Photos filter         | an unrecognised value arrives | it is ignored; the mode is unchanged                             | `photos_overview_zoom_provider_test.dart` |
+| A-4 | a year card was activated | the filter subheader renders  | no temporal chip is added                                        | `filter_subheader_test.dart`              |
+
+A-1 and A-2 assert "nothing else changes" — specifically that no filter chip and no temporal scope is
+written as a side effect. That is the behaviour A-4 checks from the other side.
+
 #### Scrubber labels
 
-| #   | Given                                | Then                                      | File                          |
-| --- | ------------------------------------ | ----------------------------------------- | ----------------------------- |
-| B-1 | mode = **Years**                     | labels are year-only (`DateFormat.y`)     | `scrubber_segments_test.dart` |
-| B-2 | mode = **Months**                    | labels are month+year (`DateFormat.yMMM`) | `scrubber_segments_test.dart` |
-| B-3 | mode = **All**, Group by = **Month** | labels are month+year                     | `scrubber_segments_test.dart` |
+The scrubber chain stays on `GroupAssetsBy` (§4) and receives `spec.groupBy`, so these are expressed in
+terms of what the user sets, with the resolved grouping named for clarity.
 
-B-3 pins the behaviour that makes the §5 scrubber change safe.
+| #   | Given                                        | Then                                      | File                          |
+| --- | -------------------------------------------- | ----------------------------------------- | ----------------------------- |
+| B-1 | mode = **Years** (`spec.groupBy` = `year`)   | labels are year-only (`DateFormat.y`)     | `scrubber_segments_test.dart` |
+| B-2 | mode = **Months** (`spec.groupBy` = `month`) | labels are month+year (`DateFormat.yMMM`) | `scrubber_segments_test.dart` |
+| B-3 | mode = **All**, Group by = **Month**         | labels are month+year                     | `scrubber_segments_test.dart` |
+| B-4 | mode = **All**, Group by = **Month + day**   | labels are month+year                     | `scrubber_segments_test.dart` |
+| B-5 | date-less segments                           | no scrubber segments are produced         | `scrubber_segments_test.dart` |
+
+B-3 is the one that fails if the scrubber is handed `spec.mode` instead of `spec.groupBy`: with mode =
+**All** the mode-based call would pass `all`, which is not `year`, so the labels happen to come out the
+same — B-3 alone therefore cannot distinguish them. **B-1 is the discriminating case**: passing a mode
+where `GroupAssetsBy` is expected would not compile at all after the retype, which is the real guarantee.
+Keep B-3 and B-4 as behaviour pins, and rely on the type for the rest.
+
+B-5 pins the existing early return at `scrubber_segments.dart:41`, which is the scrubber's own date-less
+guard and is independent of grouping.
 
 #### `TimelineFactory.groupBy` fallback
 
@@ -376,7 +499,16 @@ All 12 fork-only test files touched by #911 need the rename applied. Rules:
 - The mock timeline-service factories in `main_timeline_zoom_test.dart` must keep honouring the `groupBy`
   the production code passes them rather than re-reading the setting. #911 already fixed this; do not let
   the retype reintroduce it, or the tests will shadow the wiring instead of exercising it.
-- Any test whose _assertions_ change is escalated, not edited. See TDD rule 6.
+- `scrubber_segments_test.dart` and `timeline_query_provider_test.dart` keep using `GroupAssetsBy`
+  throughout — neither the scrubber chain (§4) nor the explicit query grouping (§6) is retyped. A rename
+  applied there is a sign the boundary has been crossed.
+- Any test whose _assertions_ change is escalated, not edited. See the last rule under TDD discipline.
+
+All 12 files must be re-run after the rename even where no scenario in this spec names them, because the
+rename touches shared fixtures. The five that carry no new scenarios of their own —
+`filter_subheader_test.dart` beyond A-4, and the untouched cases in
+`timeline_grouping_bottom_pill_test.dart` and `timeline_query_provider_test.dart` — are Route B
+carry-overs: they must pass unchanged.
 
 ### Gates
 
