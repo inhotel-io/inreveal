@@ -81,6 +81,21 @@ void main() {
     expect(segments, everyElement(isA<FixedSegment>()));
   });
 
+  // The one behaviour this refactor deliberately changed: a pinned `TimelineArgs.groupBy` (the
+  // cleanup preview) always means the FLAT GRID at that granularity, even when the zoom level
+  // would otherwise render overview cards. Mode and pinned grouping disagree on purpose here —
+  // years would mean year cards, but the pinned month must win and produce a month-header grid.
+  // Without the pinned short-circuit in `timeline.state.dart` this renders overview cards.
+  test('a pinned groupBy wins over the zoom level and renders the grid, not overview cards', () async {
+    final container = containerFor(TimelineOverviewMode.years, pinnedGroupBy: GroupAssetsBy.month);
+
+    final segments = await container.read(timelineSegmentProvider.future);
+
+    expect(segments, everyElement(isA<FixedSegment>()));
+    expect(segments, everyElement(isNot(isA<TimelineOverviewSegment>())));
+    expect(segments.map((segment) => segment.header), everyElement(HeaderType.month));
+  });
+
   // Slice 3: date-less bucket fallback tests
 
   test('date-less buckets in months mode fall back to fixed grid segments', () async {
