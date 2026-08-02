@@ -86,9 +86,12 @@ These apply to **every** task. Read them once, then assume them.
 
 Create `web/src/routes/admin/face-cleanup/breadcrumbs.spec.ts`:
 
+Import order matters — `prettier-plugin-organize-imports` puts the `@immich/ui` type import **before**
+`vitest`. The order below is the one Prettier settles on; writing `vitest` first fails `prettier --check`.
+
 ```ts
-import { describe, expect, it } from 'vitest';
 import type { BreadcrumbItem } from '@immich/ui';
+import { describe, expect, it } from 'vitest';
 import { Route } from '$lib/route';
 import { faceCleanupBreadcrumbs, faceCleanupRootCrumb, guidedCrumb, manualCrumb } from './breadcrumbs';
 
@@ -229,7 +232,7 @@ export const faceCleanupBreadcrumbs = (t: Translate, ...tail: BreadcrumbItem[]):
     if (index < trail.length - 1) {
       return { ...crumb };
     }
-    // Named exactly `_`, not `_dropped`. web/eslint.config.js:105-110 sets
+    // Named exactly `_`, not `_dropped`. web/eslint.config.js:106-111 sets
     // `varsIgnorePattern: '^_$'` — an anchored single underscore. `_dropped` fails the
     // zero-warnings lint gate; `_` passes. Verified against the real config.
     const { href: _, ...withoutHref } = crumb;
@@ -1264,12 +1267,26 @@ Expected: all clean. `check:svelte` is the gate that catches a `t` parameter wid
 
 `check:svelte` can scan zero files locally while still working in CI. Treat a local pass as weak evidence and rely on CI for it.
 
+Prettier must be run **from `web/` for web files** and **from the repo root for everything else** — they
+are two different Prettier configs. Running a `web/src/...` path from the root dies with
+`Cannot find package '@trivago/prettier-plugin-sort-imports' imported from <root>/noop.js`, because the
+root config's plugins are not resolvable there. Both invocations below were verified.
+
 ```bash
+# web files — MUST run from web/
+cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase/web
+npx prettier --check 'src/routes/admin/face-cleanup/**/*.{ts,svelte}' 'src/test-data/mocks/admin-page-layout.stub.svelte' 'src/lib/i18n/*.ts'
+
+# locale + docs — run from the repo root
 cd /Users/pierre/dev/gallery/.claude/worktrees/pr834-rebase
-npx prettier --check 'web/src/routes/admin/face-cleanup/**/*.{ts,svelte}' 'web/src/test-data/mocks/admin-page-layout.stub.svelte' 'web/src/lib/i18n/*.ts' 'i18n/*.json' 'docs/superpowers/**/*.md'
+npx prettier --check 'i18n/*.json' 'docs/superpowers/**/*.md'
 ```
 
-Expected: clean. ESLint green does not imply Prettier green — they are separate CI gates.
+Expected: both clean. ESLint green does not imply Prettier green — they are separate CI gates.
+
+Note the first glob still contains `**` but no bracketed route segment, so it is safe; the zero-match glob
+trap (Global Constraint 3) applies to `[personId]`-style paths, and Prettier reports "No files matching the
+pattern were found" rather than passing silently.
 
 - [ ] **Step 4: Verify the trails by hand**
 
