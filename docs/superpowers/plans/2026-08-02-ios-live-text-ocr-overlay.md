@@ -1340,8 +1340,6 @@ Two deliberate seams: `previewUrl` is passed in rather than built inside (keeps 
 
 ```dart
 // mobile/test/presentation/widgets/asset_viewer/live_text_overlay_test.dart
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/platform/live_text_api.g.dart';
@@ -1474,14 +1472,17 @@ void main() {
       addTearDown(controller.dispose);
 
       await pump(tester, controller: controller);
-      clearInteractions(api);
-
-      // Same value twice: the second must be deduped by the _lastRect guard.
       controller.scale = 2.0;
       await tester.pump();
       clearInteractions(api);
 
-      controller.scale = 2.0;
+      // Re-pump with identical props: didUpdateWidget calls _pushContentsRect
+      // directly, bypassing the controller's own equality short-circuit, so this
+      // genuinely exercises the widget's _lastRect guard.
+      await tester.pumpConsumerWidgetRaw(
+        subject(controller: controller, captureOnCreated: (_) {}),
+        overrides: [liveTextHostApiProvider.overrideWithValue(api)],
+      );
       await tester.pump();
 
       verifyNever(() => api.setContentsRect(any(), any(), any(), any(), any()));
@@ -1634,7 +1635,6 @@ Expected: FAIL — `Error when reading 'lib/presentation/widgets/asset_viewer/li
 ```dart
 // mobile/lib/presentation/widgets/asset_viewer/live_text_overlay.widget.dart
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

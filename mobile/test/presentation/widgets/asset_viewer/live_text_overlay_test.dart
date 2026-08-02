@@ -130,14 +130,17 @@ void main() {
       addTearDown(controller.dispose);
 
       await pump(tester, controller: controller);
-      clearInteractions(api);
-
-      // Same value twice: the second must be deduped by the _lastRect guard.
       controller.scale = 2.0;
       await tester.pump();
       clearInteractions(api);
 
-      controller.scale = 2.0;
+      // Re-pump with identical props: didUpdateWidget calls _pushContentsRect
+      // directly, bypassing the controller's own equality short-circuit, so this
+      // genuinely exercises the widget's _lastRect guard.
+      await tester.pumpConsumerWidgetRaw(
+        subject(controller: controller, captureOnCreated: (_) {}),
+        overrides: [liveTextHostApiProvider.overrideWithValue(api)],
+      );
       await tester.pump();
 
       verifyNever(() => api.setContentsRect(any(), any(), any(), any(), any()));
