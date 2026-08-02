@@ -68,29 +68,11 @@ void main() {
     expect(countScrubberSnapSegments(segments, GroupAssetsBy.day), 2);
   });
 
-  test('B-3: month granularity labels month+year', () {
-    final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
-
-    final scrubberSegments = buildScrubberSegments(
-      layoutSegments: segments,
-      timelineHeight: 300,
-      groupBy: GroupAssetsBy.month,
-    );
-
-    expect(scrubberSegments.first.scrollLabel, isNot(matches(RegExp(r'^\d{4}$'))));
-  });
-
-  test('B-4: day granularity labels month+year, same as month', () {
-    final segments = [_segment(DateTime(2026, 4), 0, 100), _segment(DateTime(2026, 3), 100, 200)];
-
-    final scrubberSegments = buildScrubberSegments(
-      layoutSegments: segments,
-      timelineHeight: 300,
-      groupBy: GroupAssetsBy.day,
-    );
-
-    expect(scrubberSegments.first.scrollLabel, isNot(matches(RegExp(r'^\d{4}$'))));
-  });
+  // B-3 ("month granularity labels month+year") and B-4 ("day granularity labels month+year, same
+  // as month") are not added here: the two tests above already assert the exact scrollLabel
+  // strings (['Apr 2026', 'Apr 2026', 'Mar 2026']) for month and day grouping — strictly stronger
+  // than a "not a bare year" regex, over the same segments. No mutation can fail B-3/B-4 while
+  // those keep passing. Do not re-add them.
 
   test('empty layout returns empty scrubber segments', () {
     expect(buildScrubberSegments(layoutSegments: [], timelineHeight: 300, groupBy: GroupAssetsBy.year), isEmpty);

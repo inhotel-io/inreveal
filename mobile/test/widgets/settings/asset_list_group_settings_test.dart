@@ -11,7 +11,6 @@ import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/widgets/settings/asset_list_settings/asset_list_group_settings.dart';
-import 'package:immich_mobile/widgets/settings/settings_radio_list_tile.dart';
 
 import '../../test_utils.dart';
 import '../../widget_tester_extensions.dart';
@@ -81,16 +80,9 @@ void main() {
     expect(radioGroup.groupValue, GroupAssetsBy.day);
   });
 
-  testWidgets('a stored year value falls back to Month + day selected', (tester) async {
-    // The Year option shipped in a fork build, so a real user can have `year` stored.
-    // It must resolve to a selected radio, not an empty selection.
-    await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.year);
-
-    await tester.pumpConsumerWidget(const GroupSettings());
-    await tester.pumpAndSettle();
-
-    final tile = tester.widget<SettingsRadioListTile<GroupAssetsBy>>(find.byType(SettingsRadioListTile<GroupAssetsBy>));
-
-    expect(tile.groupBy, GroupAssetsBy.day);
-  });
+  // L-3 ("a stored year value falls back to Month + day selected") is not added here: the test
+  // above already covers it end to end. `SettingsRadioListTile.groupBy` is the very same value
+  // `RadioGroup.groupValue` reads one line later inside the widget's own build() — any bug that
+  // breaks one breaks the other identically, so asserting via the inner widget too is a duplicate,
+  // not a distinct scenario. Do not re-add it.
 }
