@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/models/timeline_grouping.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/domain/models/timeline_zoom_anchor.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
@@ -44,7 +45,7 @@ void main() {
     await db.close();
   });
 
-  test('Photos year activation changes grouping and anchor only', () async {
+  test('Photos years activation changes the mode and anchor only', () async {
     container.read(photosFilterProvider.notifier)
       ..setText('paris')
       ..toggleTag('tag-1')
@@ -55,10 +56,10 @@ void main() {
 
     await container.read(photosTimelineOverviewDrilldownProvider)(
       TimeBucket(date: DateTime(2025), assetCount: 4),
-      GroupAssetsBy.year,
+      TimelineOverviewMode.years,
     );
 
-    expect(container.read(timelineGroupingProvider), GroupAssetsBy.month);
+    expect(container.read(timelineOverviewModeProvider), TimelineOverviewMode.months);
     // Drilldown is view state: the "Group by" setting must not move with it.
     expect(SettingsRepository.instance.appConfig.timeline.groupAssetsBy, GroupAssetsBy.day);
     expect(container.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.year(2025));
@@ -70,19 +71,19 @@ void main() {
     expect(container.read(photosFilterProvider).mediaType, AssetType.video);
   });
 
-  test('Photos month activation changes grouping and anchor only', () async {
+  test('Photos months activation changes the mode and anchor only', () async {
     container.read(photosFilterProvider.notifier)
       ..setLocation(SearchLocationFilter(country: 'France'))
       ..setRating(4);
     final beforeFilter = container.read(photosFilterProvider);
-    await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
 
     await container.read(photosTimelineOverviewDrilldownProvider)(
       TimeBucket(date: DateTime(2025, 3), assetCount: 4),
-      GroupAssetsBy.month,
+      TimelineOverviewMode.months,
     );
 
-    expect(container.read(timelineGroupingProvider), GroupAssetsBy.day);
+    expect(container.read(timelineOverviewModeProvider), TimelineOverviewMode.all);
     expect(container.read(timelineZoomAnchorProvider), TimelineZoomAnchor.month(year: 2025, month: 3));
     expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
     expect(container.read(photosFilterProvider), beforeFilter);
@@ -90,21 +91,19 @@ void main() {
     expect(container.read(photosFilterProvider).rating.rating.unwrapOrNull, 4);
   });
 
-  for (final groupBy in [GroupAssetsBy.day, GroupAssetsBy.auto, GroupAssetsBy.none]) {
-    test('Photos $groupBy activation is ignored', () async {
-      await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year);
-      container.read(photosFilterProvider.notifier).setText('paris');
-      final beforeFilter = container.read(photosFilterProvider);
+  test('Photos all activation is ignored', () async {
+    await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.years);
+    container.read(photosFilterProvider.notifier).setText('paris');
+    final beforeFilter = container.read(photosFilterProvider);
 
-      await container.read(photosTimelineOverviewDrilldownProvider)(
-        TimeBucket(date: DateTime(2025, 3), assetCount: 4),
-        groupBy,
-      );
+    await container.read(photosTimelineOverviewDrilldownProvider)(
+      TimeBucket(date: DateTime(2025, 3), assetCount: 4),
+      TimelineOverviewMode.all,
+    );
 
-      expect(container.read(timelineGroupingProvider), GroupAssetsBy.year);
-      expect(container.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.none());
-      expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
-      expect(container.read(photosFilterProvider), beforeFilter);
-    });
-  }
+    expect(container.read(timelineOverviewModeProvider), TimelineOverviewMode.years);
+    expect(container.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.none());
+    expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
+    expect(container.read(photosFilterProvider), beforeFilter);
+  });
 }

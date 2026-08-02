@@ -315,7 +315,7 @@ void main() {
           timelineTemporalScopeProvider.overrideWith(TimelineTemporalScopeNotifier.new),
           timelineServiceProvider.overrideWith((ref) {
             final temporalScope = ref.watch(timelineTemporalScopeProvider);
-            return buildPhotosTimelineRouteService(ref, temporalScope, ref.watch(timelineGroupingProvider));
+            return buildPhotosTimelineRouteService(ref, temporalScope, ref.watch(timelineGroupingSpecProvider).groupBy);
           }),
         ],
       );
@@ -363,7 +363,7 @@ void main() {
           timelineTemporalScopeProvider.overrideWith(TimelineTemporalScopeNotifier.new),
           timelineServiceProvider.overrideWith((ref) {
             final temporalScope = ref.watch(timelineTemporalScopeProvider);
-            return buildPhotosTimelineRouteService(ref, temporalScope, ref.watch(timelineGroupingProvider));
+            return buildPhotosTimelineRouteService(ref, temporalScope, ref.watch(timelineGroupingSpecProvider).groupBy);
           }),
         ],
       );

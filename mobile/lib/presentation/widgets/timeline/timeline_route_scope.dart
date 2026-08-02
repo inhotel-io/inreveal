@@ -40,15 +40,15 @@ class TimelineRouteScope extends StatelessWidget {
       overrides: [
         timelineTemporalScopeProvider.overrideWith(TimelineTemporalScopeNotifier.new),
         timelineZoomAnchorProvider.overrideWith(TimelineZoomAnchorNotifier.new),
-        if (!sharedGrouping) timelineGroupingProvider.overrideWith(TimelineGroupingNotifier.new),
+        if (!sharedGrouping) timelineOverviewModeProvider.overrideWith(TimelineOverviewModeNotifier.new),
         timelineOverviewDrilldownProvider.overrideWith((ref) => ref.watch(sharedTimelineOverviewDrilldownProvider)),
         timelineOverviewRepresentativeCacheProvider.overrideWith(TimelineOverviewRepresentativeCacheNotifier.new),
         if (timelineServiceBuilder != null)
           timelineServiceProvider.overrideWith((ref) {
             final temporalScope = ref.watch(timelineTemporalScopeProvider);
-            // The bucket granularity, not the selector's view mode: on "All" the query must
-            // group by the persisted "Group by" setting so month-only headers get month buckets.
-            final groupBy = ref.watch(timelineBucketGroupingProvider);
+            // The bucket granularity, not the zoom level: on "All" the query must group by the
+            // persisted "Group by" setting so month-only headers get month buckets.
+            final groupBy = ref.watch(timelineGroupingSpecProvider).groupBy;
             final service = timelineServiceBuilder!(ref, temporalScope, groupBy);
             ref.onDispose(service.dispose);
             return service;

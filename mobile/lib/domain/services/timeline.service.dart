@@ -47,7 +47,7 @@ class TimelineFactory {
   const TimelineFactory({required this._timelineRepository, required this._settingsRepository});
 
   /// Fallback only: timeline routes pass groupBy explicitly from
-  /// `timelineBucketGroupingProvider`. The persisted setting is a grid header granularity, so
+  /// `timelineGroupingSpecProvider`. The persisted setting is a grid header granularity, so
   /// anything other than month (legacy `auto`/`none`, or `year` from the removed Year option)
   /// falls back to day.
   GroupAssetsBy get groupBy => normalizeGridGrouping(_settingsRepository.appConfig.timeline.groupAssetsBy);

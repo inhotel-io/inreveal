@@ -8,6 +8,7 @@ import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/models/timeline_grouping.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/domain/models/timeline_zoom_anchor.model.dart';
 import 'package:immich_mobile/domain/models/user.model.dart';
@@ -96,7 +97,7 @@ void main() {
 
     await _pumpPhotosTimeline(tester, factory);
     final ref = ProviderScope.containerOf(tester.element(find.byType(Timeline)));
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.years);
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('2025, 8 photos, show months'));
@@ -104,7 +105,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
-    expect(ref.read(timelineGroupingProvider), GroupAssetsBy.month);
+    expect(ref.read(timelineOverviewModeProvider), TimelineOverviewMode.months);
     expect(ref.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
     expect(ref.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.none());
     expect(_scrollPixels(tester), greaterThan(0));
@@ -130,7 +131,7 @@ void main() {
 
     await _pumpPhotosTimeline(tester, factory);
     final ref = ProviderScope.containerOf(tester.element(find.byType(Timeline)));
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('March 2025, 9 photos, show days'));
@@ -138,7 +139,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
-    expect(ref.read(timelineGroupingProvider), GroupAssetsBy.day);
+    expect(ref.read(timelineOverviewModeProvider), TimelineOverviewMode.all);
     expect(ref.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
     expect(ref.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.none());
     expect(_scrollPixels(tester), greaterThan(0));
@@ -167,7 +168,7 @@ void main() {
 
     await _pumpPhotosTimeline(tester, factory);
     final ref = ProviderScope.containerOf(tester.element(find.byType(Timeline)));
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.years);
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('2025, 8 photos, show months'));
@@ -175,7 +176,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
-    expect(ref.read(timelineGroupingProvider), GroupAssetsBy.month);
+    expect(ref.read(timelineOverviewModeProvider), TimelineOverviewMode.months);
     expect(find.bySemanticsLabel('December 2024, 8 photos, show days'), findsOneWidget);
     expect(find.bySemanticsLabel('June 2025, 8 photos, show days'), findsOneWidget);
     expect(find.bySemanticsLabel('February 2026, 8 photos, show days'), findsOneWidget);
@@ -220,13 +221,13 @@ void main() {
     final scrolledOffset = _scrollPixels(tester);
     expect(scrolledOffset, greaterThan(0));
 
-    // Switch grouping the same way the selector does.
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    // Switch the zoom level the same way the selector does.
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
-    expect(ref.read(timelineGroupingProvider), GroupAssetsBy.month);
+    expect(ref.read(timelineOverviewModeProvider), TimelineOverviewMode.months);
     // Position preserved: not reset to the most recent content at the top.
     expect(_scrollPixels(tester), greaterThan(0));
     // Landed on the old content: the previously visible month is rendered while
@@ -265,20 +266,20 @@ void main() {
 
     // At this point the day timeline is loaded at the top — Jun 9 is visible.
     // Step 1: switch to Months (no card tap — simulates the grouping selector).
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
-    expect(ref.read(timelineGroupingProvider), GroupAssetsBy.month);
+    expect(ref.read(timelineOverviewModeProvider), TimelineOverviewMode.months);
 
     // Step 2: switch back to All without tapping any card.
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.day);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.all);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
-    expect(ref.read(timelineGroupingProvider), GroupAssetsBy.day);
+    expect(ref.read(timelineOverviewModeProvider), TimelineOverviewMode.all);
 
     // The timeline must have resolved back to the Jun 9 segment (not Jun 1).
     // Both segments are in the day timeline, so the anchor date drives which one
@@ -322,7 +323,7 @@ void main() {
     final ref = ProviderScope.containerOf(tester.element(find.byType(Timeline)));
 
     // Switch to Months — Jun 9 remembered.
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
@@ -338,12 +339,12 @@ void main() {
     // Switch back to All. The top-visible month is no longer June (user scrolled
     // past it), so the remembered Jun 9 is outside the top bucket's period and
     // must be dropped in favour of the bucket's truncated date.
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.day);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.all);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
     await tester.pumpAndSettle();
 
-    expect(ref.read(timelineGroupingProvider), GroupAssetsBy.day);
+    expect(ref.read(timelineOverviewModeProvider), TimelineOverviewMode.all);
     // lastPositionDate was overwritten with the top-visible month's bucket date
     // (NOT Jun 9, since the user scrolled away from June). A negative assertion is used
     // deliberately: the exact top-visible month depends on viewport/card-extent layout math,

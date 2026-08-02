@@ -21,6 +21,7 @@ import 'package:immich_mobile/domain/models/search_result.model.dart';
 import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/models/timeline_grouping.model.dart';
 import 'package:immich_mobile/domain/models/user.model.dart';
 import 'package:immich_mobile/domain/services/search.service.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
@@ -101,13 +102,13 @@ ProviderContainer _makeContainer({required SearchService search, required Drift 
       // can be read without a widget tree.
       timelineArgsProvider.overrideWith((_) => const TimelineArgs(maxWidth: 375, maxHeight: 812, columnCount: 3)),
       // Mirrors the Photos page's TimelineRouteScope wiring: the service is rebuilt from the
-      // temporal scope and the bucket grouping (selector view mode, or the persisted
+      // temporal scope and the bucket granularity (the zoom level, or the persisted
       // "Group by" setting while the selector is on All).
       timelineServiceProvider.overrideWith((ref) {
         final service = buildPhotosTimelineRouteService(
           ref,
           ref.watch(timelineTemporalScopeProvider),
-          ref.watch(timelineBucketGroupingProvider),
+          ref.watch(timelineGroupingSpecProvider).groupBy,
         );
         ref.onDispose(service.dispose);
         return service;
@@ -159,7 +160,7 @@ void main() {
 
     // Set a non-smart, non-empty filter (notInAlbum=true → no context → non-smart).
     container.read(photosFilterProvider.notifier).setNotInAlbum(true);
-    await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
 
     // Keep `photosFilterSearchProvider` (autoDispose) alive for the duration of
     // this test by subscribing a listener.  Without a listener the autoDispose
@@ -229,7 +230,7 @@ void main() {
     addTearDown(sub.close);
 
     // Selecting Months groups the filtered results by month.
-    await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
     await container.read(photosFilterSearchProvider.notifier).firstLoad;
 
     final monthBuckets = await container.read(timelineServiceProvider).watchBuckets().first;
@@ -237,7 +238,7 @@ void main() {
     expect(monthBuckets.length, 2, reason: 'Month grouping: 2024-03 + 2024-01');
 
     // Back to All: with the default "Month + day" setting the service regroups by day.
-    await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.day);
+    await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.all);
     await container.read(photosFilterSearchProvider.notifier).firstLoad;
 
     final dayBuckets = await container.read(timelineServiceProvider).watchBuckets().first;
@@ -268,7 +269,7 @@ void main() {
     }
 
     // Selecting Years groups the filtered results by year.
-    await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year);
+    await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.years);
     await container.read(photosFilterSearchProvider.notifier).firstLoad;
 
     final yearBuckets = await container.read(timelineServiceProvider).watchBuckets().first;
@@ -297,7 +298,7 @@ void main() {
     final sub = container.listen(photosFilterSearchProvider, (_, __) {});
     addTearDown(sub.close);
 
-    expect(container.read(timelineGroupingProvider), GroupAssetsBy.day, reason: 'Selector opens on All');
+    expect(container.read(timelineOverviewModeProvider), TimelineOverviewMode.all, reason: 'Selector opens on All');
     await container.read(photosFilterSearchProvider.notifier).firstLoad;
 
     final buckets = await container.read(timelineServiceProvider).watchBuckets().first;
@@ -315,8 +316,8 @@ void main() {
   //
   // The drill-down handler lives in `sharedTimelineOverviewDrilldownProvider`
   // and is fully tested by `overview_drilldown_provider_test.dart`.  The handler
-  // calls `timelineGroupingProvider.notifier.set(...)` (persisted via the root
-  // notifier on the Photos page; route-local elsewhere) and sets a
+  // calls `timelineOverviewModeProvider.notifier.set(...)` (the root notifier on the
+  // Photos page; route-local elsewhere) and sets a
   // zoom anchor — it does NOT inspect the timeline service at all, so the
   // filtered vs unfiltered distinction makes no difference to the handler logic.
   //
@@ -324,7 +325,7 @@ void main() {
   // `TimelineOverviewCard` would require a full `EasyLocalization` + Flutter
   // widget tree (the card uses `Semantics` labels via localized month names), and
   // the value added would be duplicating what the zoom test already covers (it
-  // exercises the exact same tap → GroupAssetsBy.day + anchor path on the same
+  // exercises the exact same tap → TimelineOverviewMode.all + anchor path on the same
   // handler).  The load-bearing acceptance is fully covered by tests 1 and 2.
   // ---------------------------------------------------------------------------
 }

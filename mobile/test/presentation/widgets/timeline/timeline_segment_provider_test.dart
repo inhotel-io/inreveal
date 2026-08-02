@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/models/timeline_grouping.model.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
@@ -13,8 +14,20 @@ import 'package:immich_mobile/presentation/widgets/timeline/timeline.state.dart'
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
 import 'package:immich_mobile/providers/timeline/timeline_grouping.provider.dart';
 
+/// Seeds [timelineOverviewModeProvider] so a test can start at a given zoom level.
+class _SeededOverviewMode extends TimelineOverviewModeNotifier {
+  _SeededOverviewMode(this._seed);
+
+  final TimelineOverviewMode _seed;
+
+  @override
+  TimelineOverviewMode build() => _seed;
+}
+
 void main() {
-  ProviderContainer containerFor(GroupAssetsBy groupBy, {bool dateless = false}) {
+  /// [pinnedGroupBy] pins `TimelineArgs.groupBy` (the cleanup preview), which always means the
+  /// flat grid at that granularity; otherwise the zoom level comes from [mode].
+  ProviderContainer containerFor(TimelineOverviewMode mode, {bool dateless = false, GroupAssetsBy? pinnedGroupBy}) {
     final service = TimelineService((
       assetSource: (offset, count) async => const [],
       bucketSource: dateless
@@ -30,8 +43,9 @@ void main() {
       overrides: [
         timelineServiceProvider.overrideWithValue(service),
         timelineArgsProvider.overrideWithValue(
-          TimelineArgs(maxWidth: 390, maxHeight: 800, columnCount: 3, groupBy: groupBy),
+          TimelineArgs(maxWidth: 390, maxHeight: 800, columnCount: 3, groupBy: pinnedGroupBy),
         ),
+        timelineOverviewModeProvider.overrideWith(() => _SeededOverviewMode(mode)),
       ],
     );
     addTearDown(() async {
@@ -41,8 +55,8 @@ void main() {
     return container;
   }
 
-  test('year grouping uses overview segments', () async {
-    final container = containerFor(GroupAssetsBy.year);
+  test('years mode uses overview segments', () async {
+    final container = containerFor(TimelineOverviewMode.years);
 
     final segments = await container.read(timelineSegmentProvider.future);
 
@@ -51,16 +65,16 @@ void main() {
     expect(segments.last.firstAssetIndex, 2);
   });
 
-  test('month grouping uses overview segments', () async {
-    final container = containerFor(GroupAssetsBy.month);
+  test('months mode uses overview segments', () async {
+    final container = containerFor(TimelineOverviewMode.months);
 
     final segments = await container.read(timelineSegmentProvider.future);
 
     expect(segments, everyElement(isA<TimelineOverviewSegment>()));
   });
 
-  test('day grouping stays on fixed grid segments', () async {
-    final container = containerFor(GroupAssetsBy.day);
+  test('a pinned day groupBy stays on fixed grid segments', () async {
+    final container = containerFor(TimelineOverviewMode.all, pinnedGroupBy: GroupAssetsBy.day);
 
     final segments = await container.read(timelineSegmentProvider.future);
 
@@ -69,31 +83,31 @@ void main() {
 
   // Slice 3: date-less bucket fallback tests
 
-  test('date-less buckets with month setting fall back to fixed grid segments', () async {
-    final container = containerFor(GroupAssetsBy.month, dateless: true);
+  test('date-less buckets in months mode fall back to fixed grid segments', () async {
+    final container = containerFor(TimelineOverviewMode.months, dateless: true);
 
     final segments = await container.read(timelineSegmentProvider.future);
 
     expect(segments, everyElement(isA<FixedSegment>()));
   });
 
-  test('date-less buckets with year setting fall back to fixed grid segments', () async {
-    final container = containerFor(GroupAssetsBy.year, dateless: true);
+  test('date-less buckets in years mode fall back to fixed grid segments', () async {
+    final container = containerFor(TimelineOverviewMode.years, dateless: true);
 
     final segments = await container.read(timelineSegmentProvider.future);
 
     expect(segments, everyElement(isA<FixedSegment>()));
   });
 
-  test('TimeBuckets with month setting still use overview segments', () async {
-    final container = containerFor(GroupAssetsBy.month);
+  test('TimeBuckets in months mode still use overview segments', () async {
+    final container = containerFor(TimelineOverviewMode.months);
 
     final segments = await container.read(timelineSegmentProvider.future);
 
     expect(segments, everyElement(isA<TimelineOverviewSegment>()));
   });
 
-  test('empty bucket list with month setting produces no segments and no throw', () async {
+  test('empty bucket list in months mode produces no segments and no throw', () async {
     final service = TimelineService((
       assetSource: (offset, count) async => const [],
       bucketSource: () => Stream.value(const <Bucket>[]),
@@ -103,9 +117,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         timelineServiceProvider.overrideWithValue(service),
-        timelineArgsProvider.overrideWithValue(
-          const TimelineArgs(maxWidth: 390, maxHeight: 800, columnCount: 3, groupBy: GroupAssetsBy.month),
-        ),
+        timelineArgsProvider.overrideWithValue(const TimelineArgs(maxWidth: 390, maxHeight: 800, columnCount: 3)),
+        timelineOverviewModeProvider.overrideWith(() => _SeededOverviewMode(TimelineOverviewMode.months)),
       ],
     );
     addTearDown(() async {
@@ -196,7 +209,7 @@ void main() {
     test('selecting Months still renders the overview cards', () async {
       await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
       final container = settingsBackedContainer();
-      await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+      await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
 
       final segments = await container.read(timelineSegmentProvider.future);
 
@@ -206,7 +219,7 @@ void main() {
     test('selecting Years still renders the overview cards', () async {
       await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
       final container = settingsBackedContainer();
-      await container.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.year);
+      await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.years);
 
       final segments = await container.read(timelineSegmentProvider.future);
 

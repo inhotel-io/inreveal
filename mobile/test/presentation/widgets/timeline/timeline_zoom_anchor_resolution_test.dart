@@ -8,6 +8,7 @@ import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/models/timeline_grouping.model.dart';
 import 'package:immich_mobile/domain/models/timeline_zoom_anchor.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/domain/services/timeline.service.dart';
@@ -54,7 +55,7 @@ void main() {
     await db.close();
   });
 
-  testWidgets('resolves a year anchor in month grouping and clears it after scrolling', (tester) async {
+  testWidgets('resolves a year anchor in months mode and clears it after scrolling', (tester) async {
     final service = _service([
       TimeBucket(date: DateTime(2026, 4), assetCount: 8),
       TimeBucket(date: DateTime(2026, 3), assetCount: 8),
@@ -69,7 +70,7 @@ void main() {
 
     await _pumpTimeline(tester, service);
     final ref = ProviderScope.containerOf(tester.element(find.byType(Timeline)));
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
     await tester.pumpAndSettle();
 
     ref.read(timelineZoomAnchorProvider.notifier).setYear(2025);
@@ -81,7 +82,7 @@ void main() {
     expect(_scrollPixels(tester), greaterThan(0));
   });
 
-  testWidgets('resolves a month anchor in day grouping and clears it after scrolling', (tester) async {
+  testWidgets('resolves a month anchor in all mode and clears it after scrolling', (tester) async {
     final service = _service([
       TimeBucket(date: DateTime(2025, 5, 2), assetCount: 9),
       TimeBucket(date: DateTime(2025, 4, 2), assetCount: 9),
@@ -120,8 +121,8 @@ void main() {
 
     await _pumpTimeline(tester, service);
     final ref = ProviderScope.containerOf(tester.element(find.byType(Timeline)));
-    // The selector stays on All: the month grouping comes from the setting, not the selector.
-    expect(ref.read(timelineGroupingProvider), GroupAssetsBy.day);
+    // The selector stays on All: the month bucketing comes from the setting, not the selector.
+    expect(ref.read(timelineOverviewModeProvider), TimelineOverviewMode.all);
 
     ref.read(timelineZoomAnchorProvider.notifier).setMonth(year: 2025, month: 3);
     await tester.pump();
@@ -143,7 +144,7 @@ void main() {
 
     await _pumpTimeline(tester, service);
     final ref = ProviderScope.containerOf(tester.element(find.byType(Timeline)));
-    await ref.read(timelineGroupingProvider.notifier).set(GroupAssetsBy.month);
+    await ref.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
     await tester.pumpAndSettle();
 
     ref.read(timelineZoomAnchorProvider.notifier).setYear(2025);

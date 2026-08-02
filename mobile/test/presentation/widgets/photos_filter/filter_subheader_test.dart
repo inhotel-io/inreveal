@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/models/timeline_grouping.model.dart';
 import 'package:immich_mobile/domain/models/timeline_temporal_scope.model.dart';
 import 'package:immich_mobile/domain/models/timeline_zoom_anchor.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
@@ -103,20 +104,20 @@ void main() {
       expect(find.text('clear_all'.tr()), findsOneWidget);
     });
 
-    testWidgets('does not render a temporal chip from Photos year activation', (tester) async {
+    testWidgets('does not render a temporal chip from Photos years activation', (tester) async {
       await tester.pumpConsumerWidget(_scroll(const PhotosFilterSubheader()));
       await tester.pumpAndSettle();
       final container = ProviderScope.containerOf(tester.element(find.byType(CustomScrollView)));
 
       await container.read(photosTimelineOverviewDrilldownProvider)(
         TimeBucket(date: DateTime(2025), assetCount: 4),
-        GroupAssetsBy.year,
+        TimelineOverviewMode.years,
       );
       await tester.pumpAndSettle();
 
       expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
       expect(container.read(timelineZoomAnchorProvider), const TimelineZoomAnchor.year(2025));
-      expect(container.read(timelineGroupingProvider), GroupAssetsBy.month);
+      expect(container.read(timelineOverviewModeProvider), TimelineOverviewMode.months);
       expect(find.byKey(const Key('photos-filter-subheader')), findsNothing);
       expect(find.text('2025'), findsNothing);
       expect(find.text('Mar 2025'), findsNothing);
@@ -131,7 +132,7 @@ void main() {
 
       await container.read(photosTimelineOverviewDrilldownProvider)(
         TimeBucket(date: DateTime(2025), assetCount: 4),
-        GroupAssetsBy.year,
+        TimelineOverviewMode.years,
       );
       await tester.pumpAndSettle();
 
@@ -153,14 +154,14 @@ void main() {
 
       await container.read(photosTimelineOverviewDrilldownProvider)(
         TimeBucket(date: DateTime(2025), assetCount: 4),
-        GroupAssetsBy.year,
+        TimelineOverviewMode.years,
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Mar 2025'), findsOneWidget);
       expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
       expect(container.read(photosFilterProvider).date.takenAfter, DateTime(2025, 3));
-      expect(container.read(timelineGroupingProvider), GroupAssetsBy.month);
+      expect(container.read(timelineOverviewModeProvider), TimelineOverviewMode.months);
 
       await tester.drag(find.byType(Scrollable).last, const Offset(-120, 0));
       await tester.pumpAndSettle();
@@ -171,7 +172,7 @@ void main() {
       expect(container.read(photosFilterProvider).date.takenAfter, isNull);
       expect(container.read(photosFilterProvider).date.takenBefore, isNull);
       expect(container.read(timelineTemporalScopeProvider), const TimelineTemporalScope.none());
-      expect(container.read(timelineGroupingProvider), GroupAssetsBy.month);
+      expect(container.read(timelineOverviewModeProvider), TimelineOverviewMode.months);
     });
 
     testWidgets('temporal scope alone does not render as a filter chip', (tester) async {
