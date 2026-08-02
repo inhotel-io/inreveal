@@ -493,7 +493,7 @@ void main() {
       expect(container.read(timelineGroupingSpecProvider).groupBy, GroupAssetsBy.day);
 
       await setGridSetting(GroupAssetsBy.month);
-      await container.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
       expect(container.read(timelineGroupingSpecProvider).groupBy, GroupAssetsBy.month);
     });
 
@@ -503,7 +503,7 @@ void main() {
       expect(container.read(timelineGroupingSpecProvider).groupBy, GroupAssetsBy.month);
 
       await setGridSetting(GroupAssetsBy.month);
-      await container.pump();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
       expect(container.read(timelineGroupingSpecProvider).groupBy, GroupAssetsBy.month);
     });
 
@@ -514,7 +514,15 @@ void main() {
 }
 ```
 
-If `container.pump()` is unavailable in this Riverpod version, use `await Future<void>.delayed(Duration.zero)` — match whatever the existing timeline provider tests already do.
+**On the awaits in M-6 and M-7:** those two assert live propagation of a setting change, which travels
+Drift stream → `appConfigProvider` → `timelineGridGroupingProvider` → the spec. `Duration.zero` is not
+always enough for the Drift stream to emit; 5 ms matches what `timeline_query_provider_test.dart` already
+uses for the same reason. `ProviderContainer.pump()` exists in Riverpod 2.6.1 but is used nowhere in this
+repo — stick to the delay idiom the suite already uses (see `overview_drilldown_provider_test.dart:64`).
+
+If M-6 or M-7 proves flaky, do **not** just lengthen the delay. Every other test in this file writes the
+setting _before_ creating the container, sidestepping propagation entirely; if live propagation cannot be
+asserted reliably, say so and drop to that pattern rather than shipping a timing-dependent test.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1018,7 +1026,9 @@ In `main_timeline_zoom_test.dart`, the mock timeline-service factories must keep
 ~/.local/share/mise/installs/flutter/3.44.8/bin/flutter test
 ```
 
-Expected: at least the Step 1 baseline, 0 failures.
+Expected: **the Step 1 baseline minus 2**, 0 failures. The drop is expected and accounted for: the `day:`,
+`auto:` and `none:` tests in `timeline_grouping_anchor_test.dart` collapse into a single `all:` test (see
+the churn table). Any other movement in the count is unexplained — investigate before continuing.
 
 - [ ] **Step 15: Mutation-check the six highest-risk guards**
 
@@ -1342,7 +1352,8 @@ Check `TimelineFactory`'s constructor parameter names against `lib/domain/servic
 ~/.local/share/mise/installs/flutter/3.44.8/bin/dart format lib
 ```
 
-Expected: 0 failures, count up by 12 over the Task 4 total.
+Expected: 0 failures, count up by **13** over the Task 4 total — S-4, S-5, S-6, S-7, Z-6, B-3, B-4, L-3,
+F-1…F-4 and the extra `none` fallback case.
 
 - [ ] **Step 11: Commit**
 
@@ -1467,5 +1478,9 @@ PR #911's body describes the original three-provider fix. Rewrite the "The fix" 
 **Two spec gaps handled here:** `overview_segment.model.dart` and `overview_representative_cache.provider.dart` are in the retype blast radius but absent from the spec's §4 list. Both are retyped in Task 4 (Steps 5 and 3); the spec is corrected in Task 6 Step 5.
 
 **Type consistency.** `TimelineOverviewMode` values are `years`/`months`/`all` everywhere — never `year`/`month`/`day`. `TimelineGroupingSpec` is a record with fields `mode` and `groupBy`. The drilldown handler's second parameter is `mode` in the typedef, implementation and call site. `TimelineOverviewSegmentBuilder` takes `mode`; its inherited `SegmentBuilder.groupBy` stays at the upstream default, unused. `TimelineArgs.groupBy`, the scrubber chain and the query layer stay `GroupAssetsBy`.
+
+**Second audit (this pass) — five further corrections.** `ProviderContainer.pump()` is used nowhere in this repo, so M-6/M-7 now use the suite's own `await Future<void>.delayed(...)` idiom, with an explicit instruction not to paper over flakiness by lengthening it. Task 4's expected test count is the baseline **minus 2**, not "at least the baseline" — the anchor-test collapse removes two. Task 5 adds **13** tests, not 12. `drift_favorite_page_test.dart` references `TimelineOverviewCard` only as a type, so it likely needs no edit. `TimelineFactory(timelineRepository:, settingsRepository:)` was confirmed against `timeline_factory_temporal_scope_test.dart:32`, and `overview_representative_cache.provider.dart` confirmed fork-only.
+
+**Verified this pass and unchanged:** `SegmentBuilder`'s constructor allows `TimelineOverviewSegmentBuilder({required super.buckets, required this.mode})` because `groupBy` has a default; `Segment.header` exists and is what the existing segment tests assert on; `overview_segment_builder_test.dart:99` and `timeline_overview_card_test.dart` do pass `groupBy:` and so are correctly listed in the churn table; the Task 2 mutation leaves `verifyNever(() => factory.groupBy)` satisfied while failing the `capturedGroupBy` expectation, so it is a clean red.
 
 **Known risk.** Task 4 leaves the tree uncompilable between Steps 2 and 12. That is inherent to a Dart type flip and cannot be avoided without a temporary shim that would be its own churn. `dart analyze` is the intermediate signal, Step 1 records the baseline, and the task ends green.
