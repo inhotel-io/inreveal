@@ -16,8 +16,9 @@
 - **All commands run from `mobile/`.**
 - **Formatter page width is 120** (`mobile/analysis_options.yaml:13`). Exceeding it changes how `dart format` wraps and can silently reindent whole blocks.
 - **Three blocking CI gates, all required:** `flutter test`, `dart analyze --fatal-infos lib test`, `dart format lib`. `dart analyze` is not a substitute for `flutter test`.
-- **Baseline: 2902 tests passing, 0 failures.** The count may only go up.
-- **No behaviour change.** Nothing in this plan alters what the app does. If an existing test needs its _assertions_ changed rather than just its _identifiers_, stop and escalate — the retype has changed semantics.
+- **Baseline: 2902 passing, 1 skipped, 0 failures** (measured on this branch, `00:59` wall clock). The passing count may only go up.
+- **No behaviour change, with one declared exception** (below). If an existing test needs its _assertions_ changed rather than just its _identifiers_, stop and escalate — unless it appears in the "Expected test churn" table, which lists every change that is legitimate.
+- **The one deliberate behaviour change: a pinned `TimelineArgs.groupBy` no longer selects the overview.** Today `timeline.state.dart` does `grouping = groupByArg ?? watch(...)`, so an explicit `groupBy: month` or `groupBy: year` renders overview cards. After this refactor a pinned grouping always means the flat grid at that granularity, because `TimelineArgs.groupBy` is upstream's field and means header granularity, not zoom level. **This is unreachable in production**: the only caller passing an explicit value is `cleanup_preview.page.dart:38`, which passes `GroupAssetsBy.day`. It is, however, reachable from tests — see the churn table.
 - **No production line before a failing test names it.** Every scenario must be observed red before it is trusted, by one of two routes: write-first for new behaviour, or characterise-then-mutate for existing behaviour.
 - **`normalizeGridGrouping` applies only where the persisted setting is read.** Never to a grouping a caller passed explicitly — `GroupAssetsBy.none` is live for relevance search.
 - **Commit after every task.** Never use `--no-verify`. Never add a `Co-Authored-By` trailer.
@@ -60,6 +61,45 @@
 | `lib/widgets/settings/asset_list_settings/asset_list_group_settings.dart` | Watch `timelineGridGroupingProvider`                 | 3+/1- → ~2+/1-       |
 | `lib/domain/services/timeline.service.dart`                               | Import moves to the new model file                   | ~unchanged           |
 | `lib/presentation/widgets/timeline/timeline.widget.dart`                  | 4 sites split between mode and `spec.groupBy`        | 280+/64- → ~284+/68- |
+
+### Test files in the blast radius — 16, not the 12 that #911 touched
+
+Enumerated with:
+
+```bash
+grep -rln "timelineGroupingProvider\|timelineBucketGroupingProvider\|findTimelineZoomAnchorSegment\|resolveGroupingChangeAnchorDate\|TimelineOverviewSegmentBuilder\|TimelineOverviewCard\|keyFor(" test/
+```
+
+| File                                                                        | Role                                        |
+| --------------------------------------------------------------------------- | ------------------------------------------- |
+| `presentation/widgets/timeline/timeline_segment_provider_test.dart`         | G-1…G-4, S-1…S-7                            |
+| `presentation/widgets/timeline/timeline_scroll_target_test.dart`            | Z-3…Z-6 — pure-function anchor guards       |
+| `presentation/widgets/timeline/timeline_grouping_anchor_test.dart`          | `resolveGroupingChangeAnchorDate`           |
+| `presentation/widgets/timeline/timeline_zoom_anchor_resolution_test.dart`   | widget-level anchor resolution              |
+| `presentation/widgets/timeline/timeline_route_scope_test.dart`              | R-1…R-5                                     |
+| `presentation/widgets/timeline/timeline_grouping_selector_test.dart`        | G-5                                         |
+| `presentation/widgets/timeline/timeline_grouping_bottom_pill_test.dart`     | P-1…P-5                                     |
+| `presentation/widgets/timeline/overview/overview_segment_builder_test.dart` | builder takes the mode                      |
+| `presentation/widgets/timeline/overview/timeline_overview_card_test.dart`   | card takes the mode                         |
+| `presentation/pages/dev/main_timeline_zoom_test.dart`                       | Z-7, Z-8                                    |
+| `presentation/pages/dev/timeline_filter_grouping_integration_test.dart`     | Q-4…Q-6                                     |
+| `presentation/pages/drift_favorite_page_test.dart`                          | route-scoped timeline                       |
+| `presentation/widgets/photos_filter/filter_subheader_test.dart`             | A-4                                         |
+| `providers/timeline/overview_drilldown_provider_test.dart`                  | Z-1, Z-2                                    |
+| `providers/timeline/photos_overview_zoom_provider_test.dart`                | A-1…A-3                                     |
+| `providers/photos_filter/timeline_query_provider_test.dart`                 | Q-1…Q-3, Q-7 — **stays on `GroupAssetsBy`** |
+
+The last five files in the list were **not** touched by #911 and are easy to miss.
+
+### Expected test churn
+
+These are the only changes beyond identifier renames that are legitimate. Anything else is an escalation.
+
+| File                                  | Change                                                                                                             | Why                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `timeline_segment_provider_test.dart` | `containerFor(GroupAssetsBy)` re-plumbed to drive `timelineOverviewModeProvider` instead of `TimelineArgs.groupBy` | Three tests (`year grouping uses overview segments`, `month grouping uses overview segments`, `TimeBuckets with month setting still use overview segments`) currently select the overview through the pinned-args path, which the declared behaviour change closes. The assertions are unchanged — only the input moves to the correct provider. |
+| `timeline_grouping_anchor_test.dart`  | The `day:`, `auto:` and `none:` tests collapse into one `all:` test                                                | `TimelineOverviewMode` has three values, not five. Nothing is lost: all three asserted the identical "always returns bucket date" behaviour.                                                                                                                                                                                                     |
+| `overview_segment_builder_test.dart`  | The `ArgumentError` case changes from `GroupAssetsBy.day` to `TimelineOverviewMode.all`                            | Same guard, narrower type.                                                                                                                                                                                                                                                                                                                       |
 
 ### Explicitly NOT changed
 
@@ -217,16 +257,10 @@ The `TimelineFactory.groupBy` getter body is unchanged:
 
 ```bash
 cd /Users/pierre/dev/gallery/.claude/worktrees/fix-903-photo-grid-group-by
-git diff --numstat upstream/main:mobile/lib/domain/models/timeline.model.dart HEAD:mobile/lib/domain/models/timeline.model.dart
+git diff --numstat upstream/main -- mobile/lib/domain/models/timeline.model.dart
 ```
 
-Expected: this still reports the pre-edit `12 2` because it compares committed trees. Instead check the working tree:
-
-```bash
-git diff --numstat upstream/main:mobile/lib/domain/models/timeline.model.dart -- mobile/lib/domain/models/timeline.model.dart
-```
-
-Expected: `2	2`.
+Expected: `2	2`. (This form diffs `upstream/main` against the **working tree** for that path, so it reflects uncommitted edits. Verified working.)
 
 ```bash
 cd mobile
@@ -251,85 +285,103 @@ Takes timeline.model.dart back to two enum values of divergence from upstream."
 
 ---
 
-## Task 2: Guard the `none` invariant before anything can break it
+## Task 2: Prove the `none` invariant is already guarded
 
-Test-only. This characterises live behaviour that later tasks must not disturb, and it must be in place _before_ `normalizeGridGrouping`'s call sites move around.
-
-**Files:**
-
-- Modify: `mobile/test/providers/photos_filter/timeline_query_provider_test.dart`
-
-**Interfaces:**
-
-- Consumes: `normalizeGridGrouping` (Task 1) — only to prove it is _not_ applied here.
-- Produces: nothing. Pure guard.
-
-**Scenarios:** Q-1 (Route B — the behaviour exists at `timeline_query.provider.dart:54`).
-
-- [ ] **Step 1: Read the existing relevance test**
-
-The file already contains `smart filter with relevance sort uses groupBy=none (flat)` around line 516-539, which captures `groupBy` from the factory call. Read it — the new test copies its capture harness exactly.
-
-- [ ] **Step 2: Write the characterisation test**
-
-Add to `mobile/test/providers/photos_filter/timeline_query_provider_test.dart`, next to the existing relevance test:
+No new test. `timeline_query_provider_test.dart:508` already carries Q-1 in full:
 
 ```dart
-    test('Q-1: relevance sort keeps groupBy=none even when the grid setting is month', () async {
-      // The persisted Group by setting must not reach a relevance-sorted search:
-      // it has no date order, so it queries flat. Normalizing `none` to `day` here
-      // would silently re-introduce date bucketing.
+    test('smart filter with relevance sort uses groupBy=none (flat)', () async {
+      ...
       when(() => factory.groupBy).thenReturn(GroupAssetsBy.month);
-      GroupAssetsBy? capturedGroupBy;
-      when(
-        () => factory.fromAssetStream(
-          any(),
-          groupBy: any(named: 'groupBy'),
-          temporalScope: any(named: 'temporalScope'),
-        ),
-      ).thenAnswer((inv) {
-        capturedGroupBy = inv.namedArguments[const Symbol('groupBy')] as GroupAssetsBy;
-        return service;
-      });
-
-      buildPhotosTimelineQuery(ref, relevanceSortedSmartFilter);
-
+      ...
       expect(capturedGroupBy, GroupAssetsBy.none);
+      verifyNever(() => factory.groupBy);
     });
 ```
 
-Match the surrounding tests' setup: reuse whatever local names they use for `factory`, `ref`, `service` and the relevance-sorted filter fixture rather than inventing new ones.
+It already stubs the persisted setting to `month` and asserts the relevance path ignores it. What has never been established is whether it would **fail** if someone normalized the explicit grouping — the exact mistake this refactor invites. Establish that now, before Task 1's `normalizeGridGrouping` move puts the function within easy reach of this file.
 
-- [ ] **Step 3: Run it and confirm it passes**
+**Files:**
+
+- Modify: none, unless Step 2 shows the guard is missing.
+
+**Interfaces:**
+
+- Consumes: nothing.
+- Produces: nothing. Verification only.
+
+**Scenarios:** Q-1 (Route B — mutation check on an existing test).
+
+- [ ] **Step 1: Run the existing test and confirm it passes**
 
 ```bash
+cd mobile
 ~/.local/share/mise/installs/flutter/3.44.8/bin/flutter test test/providers/photos_filter/timeline_query_provider_test.dart
 ```
 
-Expected: PASS. A characterisation test starts green — Step 4 is what makes it real.
+Expected: PASS.
 
-- [ ] **Step 4: Mutate to prove the test bites**
+- [ ] **Step 2: Mutate to prove it bites**
 
-Temporarily edit `mobile/lib/providers/photos_filter/timeline_query.provider.dart:54` to normalize the explicit grouping — the exact mistake this guards:
+Temporarily edit `mobile/lib/providers/photos_filter/timeline_query.provider.dart:54`, wrapping the whole expression so the explicit `none` gets normalized:
 
 ```dart
   final effectiveGroupBy = normalizeGridGrouping(isRelevance ? GroupAssetsBy.none : (groupBy ?? factory.groupBy));
 ```
 
-Re-run the file.
+Add the `timeline.model.dart` import if the analyzer asks for it. Re-run the file.
 
 Expected: FAIL — `Expected: <GroupAssetsBy.none> Actual: <GroupAssetsBy.day>`.
 
-**Revert the mutation.** Re-run and confirm PASS.
+- [ ] **Step 3: Revert the mutation**
 
-- [ ] **Step 5: Commit**
+Restore line 54 exactly:
 
-```bash
-git add mobile/test/providers/photos_filter/timeline_query_provider_test.dart
-git commit -m "test(mobile): pin relevance search to flat grouping regardless of the grid setting"
+```dart
+  final effectiveGroupBy = isRelevance ? GroupAssetsBy.none : (groupBy ?? factory.groupBy);
 ```
 
----
+Re-run the file. Expected: PASS.
+
+- [ ] **Step 4: Only if Step 2 stayed green, add the missing guard**
+
+If the mutation did not produce a red, the existing test is not load-bearing. Add this next to it and repeat Steps 2-3 against the new test:
+
+```dart
+    test('Q-1: relevance sort keeps groupBy=none even when the grid setting is month', () async {
+      final factory = _MockFactory();
+      final search = _MockSearch();
+      final fake = _FakeService();
+      when(() => search.search(any(), 1)).thenAnswer((_) async => const SearchResult(assets: []));
+      when(() => factory.groupBy).thenReturn(GroupAssetsBy.month);
+      GroupAssetsBy? capturedGroupBy;
+      when(
+        () => factory.fromAssetStream(
+          any(),
+          any(),
+          TimelineOrigin.search,
+          groupBy: any(named: 'groupBy'),
+          descending: any(named: 'descending'),
+        ),
+      ).thenAnswer((inv) {
+        capturedGroupBy = inv.namedArguments[const Symbol('groupBy')] as GroupAssetsBy;
+        return fake;
+      });
+
+      final container = _container(factory: factory, search: search, user: _user('u1'));
+      container.read(photosFilterProvider.notifier).setText('paris');
+      addTearDown(container.dispose);
+
+      container.read(photosTimelineQueryProvider);
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+
+      expect(capturedGroupBy, GroupAssetsBy.none);
+    });
+```
+
+- [ ] **Step 5: Record the result**
+
+No commit is needed if nothing changed. Note in the PR description that the relevance-search invariant was mutation-verified, so a later reader knows the guard is real rather than incidental.
 
 ## Task 3: The provider layer
 
@@ -378,11 +430,19 @@ void main() {
     await SettingsRepository.ensureInitialized(db);
   });
 
-  setUp(() {
+  // SettingsRepository.instance is a process-wide singleton: without this clear, a value
+  // written by one test leaks into the next and the failures look like ordering flakes.
+  setUp(() async {
+    await SettingsRepository.instance.clear(SettingsKey.values);
     container = ProviderContainer();
   });
 
   tearDown(() => container.dispose());
+
+  tearDownAll(() async {
+    await SettingsRepository.instance.clear(SettingsKey.values);
+    await db.close();
+  });
 
   Future<void> setGridSetting(GroupAssetsBy value) =>
       SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, value);
@@ -946,7 +1006,11 @@ Where the same literal meant **header granularity**, it stays `GroupAssetsBy`. T
 
 In `main_timeline_zoom_test.dart`, the mock timeline-service factories must keep honouring the `groupBy` the production code passes rather than re-reading the setting. #911 fixed this; do not reintroduce it.
 
-**If any test needs its assertions changed rather than its identifiers, stop and escalate.**
+**If any test needs its assertions changed rather than its identifiers, stop and escalate — unless it is one of the three rows in the "Expected test churn" table above.** Those three are pre-declared and legitimate:
+
+- `timeline_segment_provider_test.dart` — `containerFor` moves off `TimelineArgs.groupBy` onto `timelineOverviewModeProvider` for the three overview tests
+- `timeline_grouping_anchor_test.dart` — the `day:`/`auto:`/`none:` trio collapses into one `all:` test
+- `overview_segment_builder_test.dart` — the `ArgumentError` case retypes
 
 - [ ] **Step 14: Run the full suite**
 
@@ -996,12 +1060,24 @@ stops showing as reindented against upstream."
 
 ## Task 5: Fill the remaining scenario gaps
 
-Everything compiles and the retype is done. This task adds the scenarios the existing suite never covered.
+Everything compiles and the retype is done. This task adds only what the existing suite genuinely lacks.
+
+**Before writing anything, note what is already covered** — the plan's earlier drafts overstated this:
+
+| Scenario      | Already covered by                                                                                                                                                    |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G-1, G-2      | `month setting renders a grid with month-only headers`, `month + day setting renders a grid with day headers`                                                         |
+| G-3, G-4      | `selecting Months still renders the overview cards`, `selecting Years still renders the overview cards`                                                               |
+| S-1, S-2, S-3 | `date-less buckets with month setting fall back to fixed grid segments` and its year twin                                                                             |
+| B-1, B-2, B-5 | `scrubber_segments_test.dart` lines 27-78, including the empty and date-less early returns                                                                            |
+| Z-3, Z-4, Z-5 | `timeline_scroll_target_test.dart` — `resolves a year anchor in month grouping`, `resolves a month anchor in day grouping`, `ignores anchors in stale grouping modes` |
+
+Those are Route B carry-overs: they must survive Task 4's rename unchanged. Do not duplicate them.
 
 **Files:**
 
 - Modify: `mobile/test/presentation/widgets/timeline/timeline_segment_provider_test.dart`
-- Modify: `mobile/test/presentation/widgets/timeline/timeline_zoom_anchor_resolution_test.dart`
+- Modify: `mobile/test/presentation/widgets/timeline/timeline_scroll_target_test.dart`
 - Modify: `mobile/test/presentation/widgets/timeline/scrubber_segments_test.dart`
 - Modify: `mobile/test/widgets/settings/asset_list_group_settings_test.dart`
 - Create: `mobile/test/domain/services/timeline_factory_grouping_test.dart`
@@ -1011,30 +1087,53 @@ Everything compiles and the retype is done. This task adds the scenarios the exi
 - Consumes: everything from Tasks 1, 3 and 4.
 - Produces: nothing. Coverage only.
 
-**Scenarios:** S-4, S-5, S-6, S-7, Z-6, B-4, B-5, L-3, F-1…F-4.
+**Scenarios:** S-4, S-5, S-6, S-7, Z-6, B-3, B-4, L-3, F-1…F-4.
 
-- [ ] **Step 1: Write the failing empty-bucket tests (S-4, S-5)**
+- [ ] **Step 1: Write the empty-bucket-in-overview tests (S-4, S-5)**
 
-Add to `timeline_segment_provider_test.dart`. `isDateless` is `buckets.isNotEmpty && buckets.first is! TimeBucket`, so an **empty** list is _not_ dateless and an overview-mode timeline reaches `TimelineOverviewSegmentBuilder` with no buckets:
+`timeline_segment_provider_test.dart` already has `empty bucket list with month setting produces no segments and no throw`, but it drives the empty case through `TimelineArgs(groupBy: month)` — the pinned path, which after Task 4 means "All" and never reaches the overview builder. The overview-with-empty-buckets path therefore becomes uncovered. Restore it through the mode provider.
+
+Add inside the existing `group('grid grouping follows the persisted Group by setting', ...)`, which already has the Drift setup and the `settingsBackedContainer()` helper. Add an empty-bucket variant next to it:
 
 ```dart
+    ProviderContainer emptyBucketContainer() {
+      final service = TimelineService((
+        assetSource: (offset, count) async => const [],
+        bucketSource: () => Stream.value(const <Bucket>[]),
+        origin: TimelineOrigin.main,
+      ));
+
+      final container = ProviderContainer(
+        overrides: [
+          timelineServiceProvider.overrideWithValue(service),
+          timelineArgsProvider.overrideWithValue(const TimelineArgs(maxWidth: 390, maxHeight: 800, columnCount: 3)),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await service.dispose();
+      });
+      return container;
+    }
+
     test('S-4: empty buckets in Months mode produce no segments and do not throw', () async {
-      await setMode(TimelineOverviewMode.months);
-      bucketController.add(<Bucket>[]);
-      final segments = await readSegments();
+      final container = emptyBucketContainer();
+      await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.months);
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
       expect(segments, isEmpty);
     });
 
     test('S-5: empty buckets in All mode with the month setting produce no segments', () async {
-      await setGridSetting(GroupAssetsBy.month);
-      await setMode(TimelineOverviewMode.all);
-      bucketController.add(<Bucket>[]);
-      final segments = await readSegments();
+      await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.month);
+      final container = emptyBucketContainer();
+
+      final segments = await container.read(timelineSegmentProvider.future);
+
       expect(segments, isEmpty);
     });
 ```
-
-Reuse the file's existing harness names for the bucket stream and segment read.
 
 - [ ] **Step 2: Run them**
 
@@ -1042,138 +1141,200 @@ Reuse the file's existing harness names for the bucket stream and segment read.
 ~/.local/share/mise/installs/flutter/3.44.8/bin/flutter test test/presentation/widgets/timeline/timeline_segment_provider_test.dart
 ```
 
-Expected: PASS — the loop in `generate()` never runs on an empty list.
+Expected: PASS — `TimelineOverviewSegmentBuilder.generate()`'s loop never runs on an empty list.
 
-**If either throws**, that is a real pre-existing bug on `main`. Fix it here by returning early from `TimelineOverviewSegmentBuilder.generate()` on empty input, and say so in the commit message.
+**If S-4 throws**, that is a real pre-existing bug reachable from the pill on an empty library. Fix it by returning early from `generate()` on empty input and say so in the commit message.
 
 - [ ] **Step 3: Write the pinned-grouping tests (S-6, S-7)**
 
+These pin the declared behaviour change. Add at top level, next to the existing `containerFor` tests:
+
 ```dart
-    test('S-6: a pinned groupBy never reaches the overview builder', () async {
-      await setMode(TimelineOverviewMode.months);
-      setPinnedGroupBy(GroupAssetsBy.day);
-      bucketController.add(timeBuckets);
-      final segments = await readSegments();
-      expect(segments.every((s) => s is! TimelineOverviewSegment), isTrue);
-    });
+  test('S-6: a pinned groupBy renders the flat grid and never the overview', () async {
+    // TimelineArgs.groupBy is upstream's header-granularity field, not a zoom level.
+    final container = containerFor(GroupAssetsBy.month);
 
-    test('S-7: with a pinned groupBy, mode and setting changes leave the segments alone', () async {
-      setPinnedGroupBy(GroupAssetsBy.day);
-      bucketController.add(timeBuckets);
-      final before = await readSegments();
+    final segments = await container.read(timelineSegmentProvider.future);
 
-      await setMode(TimelineOverviewMode.years);
-      await setGridSetting(GroupAssetsBy.month);
-      final after = await readSegments();
+    expect(segments, everyElement(isA<FixedSegment>()));
+    expect(segments.map((segment) => segment.header), everyElement(HeaderType.month));
+  });
 
-      expect(after.length, before.length);
-      expect(after.every((s) => s is! TimelineOverviewSegment), isTrue);
-    });
+  test('S-7: with a pinned groupBy, the mode is ignored', () async {
+    final container = containerFor(GroupAssetsBy.day);
+    await container.read(timelineOverviewModeProvider.notifier).set(TimelineOverviewMode.years);
+
+    final segments = await container.read(timelineSegmentProvider.future);
+
+    expect(segments, everyElement(isA<FixedSegment>()));
+  });
 ```
+
+`containerFor` keeps its `GroupAssetsBy` parameter — it sets `TimelineArgs.groupBy`, which stays `GroupAssetsBy`.
 
 - [ ] **Step 4: Write the critical anchor test (Z-6)**
 
-Add to `timeline_zoom_anchor_resolution_test.dart`:
+This belongs in `timeline_scroll_target_test.dart`, which tests `findTimelineZoomAnchorSegment` as a pure function — not in `timeline_zoom_anchor_resolution_test.dart`, which is widget-level.
+
+Reuse the file's existing segment fixtures. The point is that a month anchor resolves in **All** mode even when the segments were built at month granularity because Group by is Month:
 
 ```dart
-    test('Z-6: a month anchor still resolves in All mode when Group by is Month', () async {
-      // Regression guard: if the anchor is fed spec.groupBy instead of spec.mode, the
-      // month setting makes the granularity `month`, the `all` guard stops matching, and
-      // drilling from Months into All silently fails to scroll.
-      await setGridSetting(GroupAssetsBy.month);
-      final segments = monthGranularitySegments;
-      final target = findTimelineZoomAnchorSegment(
-        segments,
-        const TimelineZoomMonthAnchor(year: 2026, month: 3),
-        TimelineOverviewMode.all,
-      );
-      expect(target, isNotNull);
-    });
+  test('Z-6: findTimelineZoomAnchorSegment resolves a month anchor in All mode over month-granularity segments', () {
+    // Regression guard: if the anchor is handed spec.groupBy instead of spec.mode, a
+    // Group by = Month library makes the granularity `month`, the `all` guard stops
+    // matching, and drilling from Months into All silently fails to scroll.
+    final segments = _segments([
+      TimeBucket(date: DateTime(2026, 4), assetCount: 2),
+      TimeBucket(date: DateTime(2026, 3), assetCount: 2),
+    ]);
+
+    final target = findTimelineZoomAnchorSegment(
+      segments,
+      const TimelineZoomMonthAnchor(year: 2026, month: 3),
+      TimelineOverviewMode.all,
+    );
+
+    expect(target, isNotNull);
+    expect((target!.bucket as TimeBucket).date, DateTime(2026, 3));
+  });
 ```
+
+Match the file's own fixture builder — read the top of `timeline_scroll_target_test.dart` and use whatever it already uses to turn buckets into `List<Segment>` rather than introducing `_segments` if a differently-named helper exists.
 
 - [ ] **Step 5: Run it, then mutate to prove it bites**
 
 ```bash
-~/.local/share/mise/installs/flutter/3.44.8/bin/flutter test test/presentation/widgets/timeline/timeline_zoom_anchor_resolution_test.dart
+~/.local/share/mise/installs/flutter/3.44.8/bin/flutter test test/presentation/widgets/timeline/timeline_scroll_target_test.dart
 ```
 
 Expected: PASS.
 
-Then temporarily change the test's third argument from `TimelineOverviewMode.all` to `TimelineOverviewMode.months` — simulating the anchor being handed the wrong concept. Re-run.
+Now change the test's third argument to `TimelineOverviewMode.months` — simulating the anchor being handed the granularity concept instead of the zoom level. Re-run.
 
 Expected: FAIL — `Expected: not null; Actual: <null>`.
 
 **Revert** and confirm PASS.
 
-- [ ] **Step 6: Add the scrubber pins (B-4, B-5)**
+- [ ] **Step 6: Add the scrubber granularity pins (B-3, B-4)**
+
+`scrubber_segments_test.dart` already covers year vs month formatting and both empty cases. What is missing is the pin that the scrubber follows `spec.groupBy` — that a Group by = Month library still labels month+year:
 
 ```dart
-    test('B-4: All mode with Month + day still labels month+year', () {
-      final segments = buildScrubberSegments(
-        layoutSegments: dayGranularitySegments,
-        timelineHeight: 800,
-        groupBy: GroupAssetsBy.day,
-      );
-      expect(segments.first.scrollLabel, matches(RegExp(r'^\w+ \d{4}$')));
-    });
+  test('B-3: month granularity labels month+year', () {
+    final scrubberSegments = buildScrubberSegments(
+      layoutSegments: segments,
+      timelineHeight: 300,
+      groupBy: GroupAssetsBy.month,
+    );
 
-    test('B-5: date-less layout segments produce no scrubber segments', () {
-      final segments = buildScrubberSegments(
-        layoutSegments: datelessSegments,
-        timelineHeight: 800,
-        groupBy: GroupAssetsBy.day,
-      );
-      expect(segments, isEmpty);
-    });
+    expect(scrubberSegments.first.scrollLabel, isNot(matches(RegExp(r'^\d{4}$'))));
+  });
+
+  test('B-4: day granularity labels month+year, same as month', () {
+    final scrubberSegments = buildScrubberSegments(
+      layoutSegments: segments,
+      timelineHeight: 300,
+      groupBy: GroupAssetsBy.day,
+    );
+
+    expect(scrubberSegments.first.scrollLabel, isNot(matches(RegExp(r'^\d{4}$'))));
+  });
 ```
+
+Use the file's existing `segments` fixture. Assert "not a bare year" rather than a locale-specific month name — the label comes from `DateFormat.yMMM`, whose output varies by locale.
 
 - [ ] **Step 7: Add the legacy settings test (L-3)**
 
-Add to `asset_list_group_settings_test.dart`. Assert a radio is **selected** — "renders with nothing selected" is the actual failure mode:
+`asset_list_group_settings_test.dart` uses `tester.pumpConsumerWidget(const GroupSettings())` and clears settings in `setUp`. The widget renders `SettingsRadioListTile<GroupAssetsBy>`, which wraps a `RadioGroup` — the individual `RadioListTile`s carry no `groupValue`, so assert against the `SettingsRadioListTile` itself:
 
 ```dart
-    testWidgets('L-3: a stored year value falls back to Month + day selected', (tester) async {
-      await setGridSetting(GroupAssetsBy.year);
-      await pumpGroupSettings(tester);
+  testWidgets('a stored year value falls back to Month + day selected', (tester) async {
+    // The Year option shipped in a fork build, so a real user can have `year` stored.
+    // It must resolve to a selected radio, not an empty selection.
+    await SettingsRepository.instance.write(SettingsKey.timelineGroupAssetsBy, GroupAssetsBy.year);
 
-      final monthDayTile = tester.widget<RadioListTile<GroupAssetsBy>>(
-        find.byWidgetPredicate(
-          (w) => w is RadioListTile<GroupAssetsBy> && w.value == GroupAssetsBy.day,
-        ),
-      );
-      expect(monthDayTile.groupValue, GroupAssetsBy.day);
-    });
+    await tester.pumpConsumerWidget(const GroupSettings());
+    await tester.pumpAndSettle();
+
+    final tile = tester.widget<SettingsRadioListTile<GroupAssetsBy>>(
+      find.byType(SettingsRadioListTile<GroupAssetsBy>),
+    );
+
+    expect(tile.groupBy, GroupAssetsBy.day);
+  });
 ```
 
-Match the widget type the settings screen actually renders — read `settings_radio_list_tile.dart` and assert against that type rather than assuming `RadioListTile`.
+Add the import for `package:immich_mobile/widgets/settings/settings_radio_list_tile.dart`.
 
-- [ ] **Step 8: Create the factory fallback tests (F-1…F-4)**
+- [ ] **Step 8: Mutate L-3 to prove it bites**
 
-Create `mobile/test/domain/services/timeline_factory_grouping_test.dart`, modelled on the existing `timeline_factory_temporal_scope_test.dart` in the same directory:
+Temporarily revert `asset_list_group_settings.dart` to read `appConfigProvider` directly without normalization. Re-run the file.
+
+Expected: FAIL — `Expected: <GroupAssetsBy.day> Actual: <GroupAssetsBy.year>`.
+
+**Revert** and confirm PASS.
+
+- [ ] **Step 9: Create the factory fallback tests (F-1…F-4)**
+
+Create `mobile/test/domain/services/timeline_factory_grouping_test.dart`, modelled on `timeline_factory_temporal_scope_test.dart` in the same directory, which mocks with `class _MockSettingsRepository extends Mock implements SettingsRepository {}` and stubs `when(() => settingsRepo.appConfig).thenReturn(const AppConfig())`:
 
 ```dart
-    test('F-1: month is preserved', () {
-      when(() => settingsRepository.appConfig).thenReturn(configWith(GroupAssetsBy.month));
-      expect(factory.groupBy, GroupAssetsBy.month);
-    });
+import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/domain/models/config/app_config.dart';
+import 'package:immich_mobile/domain/models/config/timeline_config.dart';
+import 'package:immich_mobile/domain/models/timeline.model.dart';
+import 'package:immich_mobile/domain/services/timeline.service.dart';
+import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
+import 'package:immich_mobile/infrastructure/repositories/timeline.repository.dart';
+import 'package:mocktail/mocktail.dart';
 
-    test('F-2: day is preserved', () {
-      when(() => settingsRepository.appConfig).thenReturn(configWith(GroupAssetsBy.day));
-      expect(factory.groupBy, GroupAssetsBy.day);
-    });
+class _MockTimelineRepository extends Mock implements DriftTimelineRepository {}
 
-    test('F-3: a stored year falls back to day', () {
-      when(() => settingsRepository.appConfig).thenReturn(configWith(GroupAssetsBy.year));
-      expect(factory.groupBy, GroupAssetsBy.day);
-    });
+class _MockSettingsRepository extends Mock implements SettingsRepository {}
 
-    test('F-4: auto falls back to day', () {
-      when(() => settingsRepository.appConfig).thenReturn(configWith(GroupAssetsBy.auto));
-      expect(factory.groupBy, GroupAssetsBy.day);
-    });
+void main() {
+  late _MockSettingsRepository settingsRepo;
+  late TimelineFactory factory;
+
+  setUp(() {
+    settingsRepo = _MockSettingsRepository();
+    factory = TimelineFactory(timelineRepository: _MockTimelineRepository(), settingsRepository: settingsRepo);
+  });
+
+  void storedSetting(GroupAssetsBy value) {
+    when(() => settingsRepo.appConfig).thenReturn(AppConfig(timeline: TimelineConfig(groupAssetsBy: value)));
+  }
+
+  test('F-1: month is preserved', () {
+    storedSetting(GroupAssetsBy.month);
+    expect(factory.groupBy, GroupAssetsBy.month);
+  });
+
+  test('F-2: day is preserved', () {
+    storedSetting(GroupAssetsBy.day);
+    expect(factory.groupBy, GroupAssetsBy.day);
+  });
+
+  test('F-3: a leftover year falls back to day', () {
+    storedSetting(GroupAssetsBy.year);
+    expect(factory.groupBy, GroupAssetsBy.day);
+  });
+
+  test('F-4: auto falls back to day', () {
+    storedSetting(GroupAssetsBy.auto);
+    expect(factory.groupBy, GroupAssetsBy.day);
+  });
+
+  test('none falls back to day as a persisted value', () {
+    storedSetting(GroupAssetsBy.none);
+    expect(factory.groupBy, GroupAssetsBy.day);
+  });
+}
 ```
 
-- [ ] **Step 9: Run everything**
+Check `TimelineFactory`'s constructor parameter names against `lib/domain/services/timeline.service.dart` before running — they are private fields (`_timelineRepository`, `_settingsRepository`) exposed as named parameters.
+
+- [ ] **Step 10: Run everything**
 
 ```bash
 ~/.local/share/mise/installs/flutter/3.44.8/bin/flutter test
@@ -1181,16 +1342,14 @@ Create `mobile/test/domain/services/timeline_factory_grouping_test.dart`, modell
 ~/.local/share/mise/installs/flutter/3.44.8/bin/dart format lib
 ```
 
-Expected: all green, count up by ~12.
+Expected: 0 failures, count up by 12 over the Task 4 total.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add mobile/test
-git commit -m "test(mobile): cover the empty-bucket, pinned-grouping and legacy-setting edges"
+git commit -m "test(mobile): cover the empty-overview, pinned-grouping and legacy-setting edges"
 ```
-
----
 
 ## Task 6: Filter and integration scenarios, then verify the outcome
 
@@ -1239,7 +1398,7 @@ for f in mobile/lib/presentation/widgets/timeline/timeline.state.dart \
          mobile/lib/domain/models/timeline.model.dart \
          mobile/lib/widgets/settings/asset_list_settings/asset_list_group_settings.dart; do
   printf "%-60s " "$(basename $f)"
-  git diff --numstat "upstream/main:$f" -- "$f" | awk '{print $1"+/"$2"-"}'
+  git diff --numstat upstream/main -- "$f" | awk '{print $1"+/"$2"-"}'
 done
 ```
 
@@ -1290,10 +1449,23 @@ PR #911's body describes the original three-provider fix. Rewrite the "The fix" 
 
 ## Self-Review
 
-**Spec coverage.** Every design section maps to a task: §1 → Task 1; §2 → Task 3; §3 → Task 4 Step 10; §4 → Task 4 Steps 2-8; §5 → Task 4 Step 9; §6 → Task 2; §7 → Task 5 Step 7. All 63 scenarios are assigned: G-1…G-5, S-1…S-3 and R-1…R-5, Z-1…Z-5, Z-7…Z-8, A-1…A-4, P-1…P-5, B-1…B-3 are existing tests migrated in Task 4 Step 13; S-4…S-7, Z-6, B-4, B-5, L-3, F-1…F-4 are added in Task 5; L-1, L-2, L-4, L-5 in Task 1; M-1…M-7 in Task 3; Q-1 in Task 2; Q-2…Q-7 in Task 6.
+**Verified against the codebase, not from memory.** Every helper, signature and file path in this plan was checked against the working tree. The audit changed the plan in six substantive ways:
 
-**Two spec gaps found and handled here:** `overview_segment.model.dart` and `overview_representative_cache.provider.dart` are in the retype blast radius but absent from the spec's §4 list. Both are retyped in Task 4 (Steps 5 and 3) and the spec is corrected in Task 6 Step 5.
+1. **A design conflict surfaced.** `timeline_segment_provider_test.dart`'s `containerFor()` drives grouping through `TimelineArgs.groupBy`, which today selects the overview. The design maps a pinned `groupByArg` to "All", so three existing tests change input. This is now a declared behaviour change in Global Constraints plus a row in the churn table, rather than something the implementer would hit as a surprise escalation.
+2. **The test blast radius is 16 files, not the 12 #911 touched.** `timeline_scroll_target_test.dart`, `timeline_grouping_anchor_test.dart`, `overview_segment_builder_test.dart`, `timeline_overview_card_test.dart` and `drift_favorite_page_test.dart` were missing.
+3. **Q-1 is already covered** by `timeline_query_provider_test.dart:508`, which even asserts `verifyNever(() => factory.groupBy)`. Task 2 became a mutation check on the existing test instead of a near-duplicate.
+4. **Several scenarios were already covered** — G-1…G-4 by the `grid grouping follows the persisted Group by setting` group, S-1…S-3, B-1, B-2, B-5, Z-3…Z-5. Task 5 now opens with what not to duplicate.
+5. **Z-6 was in the wrong file.** It belongs in `timeline_scroll_target_test.dart` (pure function), not `timeline_zoom_anchor_resolution_test.dart` (widget-level).
+6. **L-3's assertion targeted a widget that carries no such field.** `SettingsRadioListTile<T>` wraps a `RadioGroup`; its `RadioListTile`s have no `groupValue`. The assertion now reads `SettingsRadioListTile<GroupAssetsBy>.groupBy`.
 
-**Type consistency.** `TimelineOverviewMode` values are `years`/`months`/`all` everywhere — never `year`/`month`/`day`. `TimelineGroupingSpec` is a record with fields `mode` and `groupBy`; every read uses `spec.mode` or `spec.groupBy`. The drilldown handler's second parameter is `mode` in the typedef, the implementation and the call site. `TimelineOverviewSegmentBuilder` takes `mode`, not `groupBy` — its inherited `SegmentBuilder.groupBy` stays at the upstream default and is unused.
+**Real names now used throughout:** `containerFor(...)`, `settingsBackedContainer()`, `SettingsRepository.instance.write(...)` / `.clear(SettingsKey.values)`, `tester.pumpConsumerWidget(const GroupSettings())`, `_MockFactory` / `_MockSearch` / `_FakeService` / `_container(...)` / `_user(...)`, `_MockSettingsRepository` + `AppConfig(timeline: TimelineConfig(...))`, `buildScrubberSegments(layoutSegments:, timelineHeight:, groupBy:)`.
 
-**Known risk.** Task 4 leaves the tree uncompilable between Steps 2 and 12. That is inherent to a Dart type flip and cannot be avoided without a temporary shim that would itself be churn. The task ends green, `dart analyze` is the intermediate signal, and Step 1 records the baseline to return to.
+**Verified facts:** baseline is 2902 passing / 1 skipped (measured, ~59s); `analysis_options.yaml:13` sets `page_width: 120`; the 4-entry dependency list is 124 chars and the 3-entry one 96; `SettingsRepository.write<T, U extends T>(SettingsKey<T>, U)` exists; `git diff --numstat upstream/main -- <path>` diffs against the working tree correctly.
+
+**Spec coverage.** §1 → Task 1; §2 → Task 3; §3 → Task 4 Step 10; §4 → Task 4 Steps 2-8; §5 → Task 4 Step 9; §6 → Task 2; §7 → Task 5 Step 7. All 63 scenarios are assigned to a task or listed as already-covered carry-overs.
+
+**Two spec gaps handled here:** `overview_segment.model.dart` and `overview_representative_cache.provider.dart` are in the retype blast radius but absent from the spec's §4 list. Both are retyped in Task 4 (Steps 5 and 3); the spec is corrected in Task 6 Step 5.
+
+**Type consistency.** `TimelineOverviewMode` values are `years`/`months`/`all` everywhere — never `year`/`month`/`day`. `TimelineGroupingSpec` is a record with fields `mode` and `groupBy`. The drilldown handler's second parameter is `mode` in the typedef, implementation and call site. `TimelineOverviewSegmentBuilder` takes `mode`; its inherited `SegmentBuilder.groupBy` stays at the upstream default, unused. `TimelineArgs.groupBy`, the scrubber chain and the query layer stay `GroupAssetsBy`.
+
+**Known risk.** Task 4 leaves the tree uncompilable between Steps 2 and 12. That is inherent to a Dart type flip and cannot be avoided without a temporary shim that would be its own churn. `dart analyze` is the intermediate signal, Step 1 records the baseline, and the task ends green.
