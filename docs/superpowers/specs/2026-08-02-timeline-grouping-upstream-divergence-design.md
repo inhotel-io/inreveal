@@ -102,6 +102,10 @@ originally pushed `normalizeGridGrouping` into `timeline.model.dart`.
 /// date headers", and conflating the two is what caused #903.
 enum TimelineOverviewMode { years, months, all }
 
+/// What the timeline should render for the current scope: which zoom level, and
+/// the bucket/header granularity that goes with it.
+typedef TimelineGroupingSpec = ({TimelineOverviewMode mode, GroupAssetsBy groupBy});
+
 /// The persisted "Photo Grid" -> "Group by" setting, clamped to the two
 /// granularities the grid renders.
 GroupAssetsBy normalizeGridGrouping(GroupAssetsBy groupBy) =>
@@ -235,7 +239,11 @@ already specified by the existing suite.** The rule for this work is therefore:
 
 ### BDD scenarios
 
-Written Given/When/Then. Each maps to one test; the file column names where it belongs.
+Written Given/When/Then. Each maps to one test; the file column names where it belongs. A **†** marks a
+file that does not exist yet — `timeline_grouping_spec_test.dart` and `timeline_grouping_model_test.dart`
+alongside the other timeline provider/model tests, and `timeline_factory_grouping_test.dart` next to the
+existing `test/domain/services/timeline_factory_temporal_scope_test.dart`. Everything else is an existing
+fork-only file.
 
 #### The #903 guard — the setting and the pill are independent
 
@@ -253,15 +261,15 @@ fail.
 
 #### Mode → spec mapping
 
-| #   | Given                             | When                | Then                                  | File                               |
-| --- | --------------------------------- | ------------------- | ------------------------------------- | ---------------------------------- |
-| M-1 | mode = `years`                    | the spec is read    | `(years, GroupAssetsBy.year)`         | `timeline_grouping_spec_test.dart` |
-| M-2 | mode = `months`                   | the spec is read    | `(months, GroupAssetsBy.month)`       | `timeline_grouping_spec_test.dart` |
-| M-3 | mode = `all`, setting = `day`     | the spec is read    | `(all, GroupAssetsBy.day)`            | `timeline_grouping_spec_test.dart` |
-| M-4 | mode = `all`, setting = `month`   | the spec is read    | `(all, GroupAssetsBy.month)`          | `timeline_grouping_spec_test.dart` |
-| M-5 | mode = `years`, setting = `month` | the spec is read    | `groupBy` is `year` — setting ignored | `timeline_grouping_spec_test.dart` |
-| M-6 | mode = `all`                      | the setting changes | the spec's `groupBy` follows it       | `timeline_grouping_spec_test.dart` |
-| M-7 | mode = `months`                   | the setting changes | the spec is unchanged                 | `timeline_grouping_spec_test.dart` |
+| #   | Given                             | When                | Then                                  | File                                 |
+| --- | --------------------------------- | ------------------- | ------------------------------------- | ------------------------------------ |
+| M-1 | mode = `years`                    | the spec is read    | `(years, GroupAssetsBy.year)`         | `timeline_grouping_spec_test.dart` † |
+| M-2 | mode = `months`                   | the spec is read    | `(months, GroupAssetsBy.month)`       | `timeline_grouping_spec_test.dart` † |
+| M-3 | mode = `all`, setting = `day`     | the spec is read    | `(all, GroupAssetsBy.day)`            | `timeline_grouping_spec_test.dart` † |
+| M-4 | mode = `all`, setting = `month`   | the spec is read    | `(all, GroupAssetsBy.month)`          | `timeline_grouping_spec_test.dart` † |
+| M-5 | mode = `years`, setting = `month` | the spec is read    | `groupBy` is `year` — setting ignored | `timeline_grouping_spec_test.dart` † |
+| M-6 | mode = `all`                      | the setting changes | the spec's `groupBy` follows it       | `timeline_grouping_spec_test.dart` † |
+| M-7 | mode = `months`                   | the setting changes | the spec is unchanged                 | `timeline_grouping_spec_test.dart` † |
 
 #### Legacy and out-of-range persisted values
 
@@ -270,11 +278,11 @@ are upstream legacy values. None of them are reachable through the UI any more.
 
 | #   | Given stored `timelineGroupAssetsBy` | Then `normalizeGridGrouping` | And the settings screen shows | File                                  |
 | --- | ------------------------------------ | ---------------------------- | ----------------------------- | ------------------------------------- |
-| L-1 | `day`                                | `day`                        | **Month + day** selected      | `timeline_grouping_model_test.dart`   |
-| L-2 | `month`                              | `month`                      | **Month** selected            | `timeline_grouping_model_test.dart`   |
+| L-1 | `day`                                | `day`                        | **Month + day** selected      | `timeline_grouping_model_test.dart` † |
+| L-2 | `month`                              | `month`                      | **Month** selected            | `timeline_grouping_model_test.dart` † |
 | L-3 | `year` (removed option)              | `day`                        | **Month + day** selected      | `asset_list_group_settings_test.dart` |
-| L-4 | `auto` (upstream legacy)             | `day`                        | **Month + day** selected      | `timeline_grouping_model_test.dart`   |
-| L-5 | `none` (upstream legacy)             | `day`                        | **Month + day** selected      | `timeline_grouping_model_test.dart`   |
+| L-4 | `auto` (upstream legacy)             | `day`                        | **Month + day** selected      | `timeline_grouping_model_test.dart` † |
+| L-5 | `none` (upstream legacy)             | `day`                        | **Month + day** selected      | `timeline_grouping_model_test.dart` † |
 
 L-3 is the one with a real user behind it. It must assert a radio is _selected_, not merely that the
 screen renders — "renders without a selection" is exactly the failure mode.
@@ -303,7 +311,7 @@ to the chain without being declared, and it must fail if `timelineGroupingSpecPr
 | S-4 | **empty** bucket list, mode = **Months**                | no crash; segments are empty                                   | `timeline_segment_provider_test.dart` |
 | S-5 | empty bucket list, mode = **All**, Group by = **Month** | no crash; segments are empty                                   | `timeline_segment_provider_test.dart` |
 | S-6 | `groupByArg` pinned to `day`, mode = **Months**         | `FixedSegmentBuilder` with `day`; the overview is never chosen | `timeline_segment_provider_test.dart` |
-| S-7 | `groupByArg` pinned                                     | the spec provider is not watched                               | `timeline_segment_provider_test.dart` |
+| S-7 | `groupByArg` pinned to `day`                            | moving the pill and changing Group by leave the segments alone | `timeline_segment_provider_test.dart` |
 
 S-4 deserves emphasis. `isDateless` is computed as `buckets.isNotEmpty && buckets.first is! TimeBucket`,
 so an **empty** list yields `isDateless == false` and an overview-mode timeline will call
@@ -311,7 +319,9 @@ so an **empty** list yields `isDateless == false` and an overview-mode timeline 
 before touching anything; if it turns out to throw, that is a pre-existing bug to fix in this PR, not to
 introduce.
 
-S-7 guards the short-circuit described in §3 — a pinned grouping must not create a subscription.
+S-7 guards the short-circuit described in §3. Assert it observably rather than by inspecting Riverpod's
+subscription graph: with `groupByArg` pinned, move the pill and change Group by, and the emitted segments
+must not change.
 
 #### Zoom anchor and drill-down
 
@@ -349,12 +359,12 @@ B-3 pins the behaviour that makes the §5 scrubber change safe.
 
 Reached only by routes that do not pass an explicit grouping.
 
-| #   | Given stored setting | Then `TimelineFactory.groupBy` | File                         |
-| --- | -------------------- | ------------------------------ | ---------------------------- |
-| F-1 | `month`              | `month`                        | `timeline_service_test.dart` |
-| F-2 | `day`                | `day`                          | `timeline_service_test.dart` |
-| F-3 | `year`               | `day`                          | `timeline_service_test.dart` |
-| F-4 | `auto`               | `day`                          | `timeline_service_test.dart` |
+| #   | Given stored setting | Then `TimelineFactory.groupBy` | File                                    |
+| --- | -------------------- | ------------------------------ | --------------------------------------- |
+| F-1 | `month`              | `month`                        | `timeline_factory_grouping_test.dart` † |
+| F-2 | `day`                | `day`                          | `timeline_factory_grouping_test.dart` † |
+| F-3 | `year`               | `day`                          | `timeline_factory_grouping_test.dart` † |
+| F-4 | `auto`               | `day`                          | `timeline_factory_grouping_test.dart` † |
 
 ### Migrating the existing suite
 
