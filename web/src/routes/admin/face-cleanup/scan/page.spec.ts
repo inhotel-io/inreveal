@@ -8,7 +8,7 @@ import {
 } from '@immich/sdk';
 import { ConfirmModal, modalManager } from '@immich/ui';
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Route } from '$lib/route';
 import Page from './+page.svelte';
@@ -180,7 +180,7 @@ const mockFlaggedFaces = (faces: { assetFaceId: string; suspectedOwnerId: string
     flaggedFaces: faces,
   } as unknown as FaceRepairPersonFacesDto);
 
-const makePageData = () => ({ users: [], meta: { title: 'Face cleanup' } });
+const makePageData = () => ({ users: [], meta: { title: 'Guided cleanup' } });
 
 // Same cast rationale as [personId]/page.spec.ts: modalManager.show's return type depends on which component
 // is passed, so a single concrete signature has to be asserted at this call site.
@@ -695,5 +695,19 @@ describe('+page.svelte (face cleanup)', () => {
     // Still showing the running-scan state, not a load-error banner, despite the poll blip.
     expect(screen.getByText('admin.face_cleanup_scan_running')).toBeInTheDocument();
     expect(screen.queryByTestId('load-error-banner')).not.toBeInTheDocument();
+  });
+
+  it('renders a breadcrumb trail back to the face cleanup landing page', () => {
+    render(Page, { props: { data: makePageData() } });
+
+    const trail = within(screen.getByTestId('breadcrumbs'));
+
+    // The whole trail, in order — not merely "a link exists somewhere". A partial assertion would pass with
+    // the guided level missing, which is half of what this change fixes.
+    const root = trail.getByRole('link', { name: 'admin.face_cleanup' });
+    expect(root).toHaveAttribute('href', Route.faceCleanup());
+
+    expect(trail.getByText('admin.face_cleanup_mode_guided')).toBeInTheDocument();
+    expect(trail.getAllByRole('link')).toHaveLength(1); // the leaf is not a link
   });
 });

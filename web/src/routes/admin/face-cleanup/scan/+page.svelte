@@ -10,6 +10,7 @@
   import ReviewFirstLane from './ReviewFirstLane.svelte';
   import { onDestroy, onMount } from 'svelte';
   import { t } from 'svelte-i18n';
+  import { faceCleanupBreadcrumbs, guidedCrumb } from '../breadcrumbs';
   import { handleError } from '$lib/utils/handle-error';
   import type { PageData } from './$types';
 
@@ -367,7 +368,7 @@
   };
 </script>
 
-<AdminPageLayout breadcrumbs={[{ title: data.meta.title }]}>
+<AdminPageLayout breadcrumbs={faceCleanupBreadcrumbs($t, guidedCrumb($t))}>
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Header -->
     <div class="mb-6 flex flex-wrap items-start justify-between gap-6">

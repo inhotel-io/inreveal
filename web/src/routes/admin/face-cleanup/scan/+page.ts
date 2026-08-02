@@ -14,7 +14,7 @@ export const load = (async ({ url }) => {
   return {
     users,
     meta: {
-      title: $t('admin.face_cleanup'),
+      title: $t('admin.face_cleanup_mode_guided'),
     },
   };
 }) satisfies PageLoad;
