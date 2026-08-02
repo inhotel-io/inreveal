@@ -257,7 +257,6 @@
     "face_cleanup_review_apply_reason_stale": "本頁面已過期——部分人臉自開啟後已被移動。請重新載入並再次檢查",
     "face_cleanup_review_apply_reason_too_many": "單次操作的人臉過多（上限 {max}）",
     "face_cleanup_review_apply_summary": "已套用——移動 {moved} 張 · 保留 {kept} 張 · 鎖定 {locked} 張 · {unknown} 張移至新叢集 · 分離 {detached} 張 · 略過 {skipped} 張",
-    "face_cleanup_review_back": "臉孔整理",
     "face_cleanup_review_banner_body": "選出例外並重新分配：保留在此、確認並鎖定一張年齡差距大的臉孔、傳送給另一個人物、把叫不出名字的陌生人先擱置，或分離非臉孔內容。下次掃描時不會有任何內容悄悄重新出現。",
     "face_cleanup_review_banner_title": "{count} 張臉孔需要審查——套用後每一張都會離開佇列",
     "face_cleanup_review_bulk_clear": "清除",

@@ -257,7 +257,6 @@
     "face_cleanup_review_apply_reason_stale": "ta strona jest nieaktualna — część tych twarzy została przeniesiona od czasu jej otwarcia. Odśwież i sprawdź ponownie",
     "face_cleanup_review_apply_reason_too_many": "zbyt wiele twarzy jak na jedną operację (limit: {max})",
     "face_cleanup_review_apply_summary": "Zastosowano — {moved} przeniesionych · {kept} zostawionych · {locked} zablokowanych · {unknown} do nowej grupy · {detached} odłączonych · {skipped} pominiętych",
-    "face_cleanup_review_back": "Porządkowanie twarzy",
     "face_cleanup_review_banner_body": "Zaznacz wyjątki i przekieruj je: zostaw tutaj, potwierdź i zablokuj twarz z dużą różnicą wieku, wyślij do innej osoby, odłóż nieznajomego, którego nie potrafisz nazwać, albo odłącz coś, co nie jest twarzą. Nic nie pojawi się po cichu przy następnym skanowaniu.",
     "face_cleanup_review_banner_title": "{count} twarzy wymaga przeglądu — każda opuszcza kolejkę, gdy zastosujesz zmiany",
     "face_cleanup_review_bulk_clear": "Wyczyść",

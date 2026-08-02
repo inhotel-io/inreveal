@@ -257,7 +257,6 @@
     "face_cleanup_review_apply_reason_stale": "cette page n'est plus à jour — certains de ces visages ont été déplacés depuis son ouverture. Rechargez et vérifiez à nouveau",
     "face_cleanup_review_apply_reason_too_many": "trop de visages pour une seule action (limite : {max})",
     "face_cleanup_review_apply_summary": "Appliqué — {moved} déplacés · {kept} gardés · {locked} verrouillés · {unknown} vers un nouveau groupe · {detached} détachés · {skipped} ignorés",
-    "face_cleanup_review_back": "Nettoyage des visages",
     "face_cleanup_review_banner_body": "Sélectionnez les exceptions et réorientez-les : garder ici, confirmer et verrouiller un visage à grand écart d'âge, envoyer à une autre personne, mettre de côté un inconnu que vous ne pouvez pas nommer, ou détacher ce qui n'est pas un visage. Rien ne réapparaît silencieusement au prochain scan.",
     "face_cleanup_review_banner_title": "{count} visages à vérifier — chacun quitte la file dès que vous appliquez",
     "face_cleanup_review_bulk_clear": "Effacer",

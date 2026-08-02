@@ -257,7 +257,6 @@
     "face_cleanup_review_apply_reason_stale": "deze pagina is verouderd — sommige van deze gezichten zijn verplaatst sinds het openen. Herlaad en controleer opnieuw",
     "face_cleanup_review_apply_reason_too_many": "te veel gezichten voor één actie (limiet: {max})",
     "face_cleanup_review_apply_summary": "Toegepast — {moved} verplaatst · {kept} behouden · {locked} vergrendeld · {unknown} naar een nieuw cluster · {detached} losgekoppeld · {skipped} overgeslagen",
-    "face_cleanup_review_back": "Gezichten opschonen",
     "face_cleanup_review_banner_body": "Selecteer de uitzonderingen en stuur ze om: hier behouden, een gezicht met een groot leeftijdsverschil bevestigen en vergrendelen, naar een andere persoon sturen, een onbekende die je geen naam kunt geven apart zetten, of iets loskoppelen dat geen gezicht is. Niets duikt bij de volgende scan stilletjes weer op.",
     "face_cleanup_review_banner_title": "{count} gezichten moeten worden beoordeeld — elk verlaat de wachtrij zodra je toepast",
     "face_cleanup_review_bulk_clear": "Wissen",

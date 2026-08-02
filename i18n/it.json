@@ -257,7 +257,6 @@
     "face_cleanup_review_apply_reason_stale": "questa pagina non è aggiornata — alcuni di questi volti sono stati spostati da quando è stata aperta. Ricarica e ricontrolla",
     "face_cleanup_review_apply_reason_too_many": "troppi volti per una singola azione (limite: {max})",
     "face_cleanup_review_apply_summary": "Applicato: {moved} spostati · {kept} mantenuti · {locked} bloccati · {unknown} in un nuovo gruppo · {detached} scollegati · {skipped} saltati",
-    "face_cleanup_review_back": "Pulizia dei volti",
     "face_cleanup_review_banner_body": "Seleziona le eccezioni e reindirizzale: mantieni qui, conferma e blocca un volto con grande differenza d'età, invialo a un'altra persona, metti da parte uno sconosciuto a cui non sai dare un nome oppure scollega ciò che non è un volto. Nulla riappare silenziosamente alla scansione successiva.",
     "face_cleanup_review_banner_title": "{count} volti da esaminare: ognuno lascia la coda non appena applichi",
     "face_cleanup_review_bulk_clear": "Azzera",

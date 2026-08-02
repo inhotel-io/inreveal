@@ -257,7 +257,6 @@
     "face_cleanup_review_apply_reason_stale": "esta página está desactualizada: algunos de estos rostros se han movido desde que se abrió. Recarga y revisa de nuevo",
     "face_cleanup_review_apply_reason_too_many": "demasiados rostros para una sola acción (límite: {max})",
     "face_cleanup_review_apply_summary": "Aplicado: {moved} movidas · {kept} mantenidas · {locked} bloqueadas · {unknown} a un grupo nuevo · {detached} desvinculadas · {skipped} omitidas",
-    "face_cleanup_review_back": "Limpieza de caras",
     "face_cleanup_review_banner_body": "Selecciona las excepciones y redirígelas: mantener aquí, confirmar y bloquear una cara con gran diferencia de edad, enviarla a otra persona, apartar a un desconocido al que no puedes poner nombre o desvincular algo que no es una cara. Nada reaparece en silencio en el siguiente análisis.",
     "face_cleanup_review_banner_title": "{count} caras necesitan revisión: todas salen de la cola en cuanto apliques",
     "face_cleanup_review_bulk_clear": "Limpiar",

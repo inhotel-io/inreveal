@@ -83,6 +83,10 @@ describe('S12.10: $t keys referenced by slice-12-touched files exist in en.json'
 // below were retired later, by the console-unification pass that moved the manual review page onto the shared
 // dock and modal (superseded by `face_cleanup_review_bulk_*` and the harmonised mode-picker copy) — added here
 // rather than to a new list because this is the existing guard for exactly this class of regression.
+//
+// `face_cleanup_review_back` was retired by the breadcrumb pass: every page's hand-written back-link was
+// replaced by the shared breadcrumb trail (routes/admin/face-cleanup/breadcrumbs.ts), leaving the string with
+// no call site at all.
 const REMOVED_KEYS = [
   'admin.face_cleanup_people_load_more',
   'admin.face_cleanup_resolutions_declines_empty',
@@ -95,6 +99,7 @@ const REMOVED_KEYS = [
   'admin.face_cleanup_manual_review_bulk_move',
   'admin.face_cleanup_manual_review_bulk_lock',
   'admin.face_cleanup_manual_review_bulk_unknown',
+  'admin.face_cleanup_review_back',
 ];
 
 const walkFiles = (dir: string, exts: string[]): string[] => {

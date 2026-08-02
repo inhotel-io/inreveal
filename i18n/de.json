@@ -257,7 +257,6 @@
     "face_cleanup_review_apply_reason_stale": "diese Seite ist nicht mehr aktuell – einige dieser Gesichter wurden seit dem Öffnen verschoben. Bitte neu laden und erneut prüfen",
     "face_cleanup_review_apply_reason_too_many": "zu viele Gesichter für eine einzelne Aktion (Grenze: {max})",
     "face_cleanup_review_apply_summary": "Angewendet – {moved} verschoben · {kept} behalten · {locked} gesperrt · {unknown} in neuen Cluster · {detached} abgelöst · {skipped} übersprungen",
-    "face_cleanup_review_back": "Gesichtsbereinigung",
     "face_cleanup_review_banner_body": "Die Ausnahmen auswählen und umleiten: hier behalten, ein Gesicht mit großem Altersabstand bestätigen und sperren, an eine andere Person senden, eine unbekannte Person parken oder ein Nicht-Gesicht ablösen. Nichts taucht beim nächsten Scan unbemerkt wieder auf.",
     "face_cleanup_review_banner_title": "{count} Gesichter müssen geprüft werden – nach dem Anwenden verlässt jedes die Warteschlange",
     "face_cleanup_review_bulk_clear": "Aufheben",

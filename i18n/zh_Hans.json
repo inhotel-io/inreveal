@@ -257,7 +257,6 @@
     "face_cleanup_review_apply_reason_stale": "本页面已过期——部分人脸自打开后已被移动。请重新加载并再次检查",
     "face_cleanup_review_apply_reason_too_many": "单次操作的人脸过多（上限 {max}）",
     "face_cleanup_review_apply_summary": "已应用——移动 {moved} 张 · 保留 {kept} 张 · 锁定 {locked} 张 · {unknown} 张移至新聚类 · 分离 {detached} 张 · 跳过 {skipped} 张",
-    "face_cleanup_review_back": "人脸清理",
     "face_cleanup_review_banner_body": "选出例外并重新分配：保留在此、确认并锁定一张年龄差距大的人脸、发送给另一个人物、把叫不出名字的陌生人先搁置，或分离非人脸内容。下次扫描时不会有任何内容悄悄重新出现。",
     "face_cleanup_review_banner_title": "{count} 张人脸需要审查——应用后每一张都会离开队列",
     "face_cleanup_review_bulk_clear": "清除",

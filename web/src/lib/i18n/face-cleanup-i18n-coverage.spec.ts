@@ -42,6 +42,17 @@ const REMOVED_KEYS = [
   'face_cleanup_manual_review_bulk_move',
   'face_cleanup_manual_review_bulk_lock',
   'face_cleanup_manual_review_bulk_unknown',
+  'face_cleanup_review_back',
+];
+
+// The four labels the console's breadcrumb trails are built from (breadcrumbs.ts). Not new — they predate
+// the breadcrumb work and were already translated everywhere — but nothing pinned them, so a later edit
+// could drop one from a locale and ship an untranslated crumb.
+const BREADCRUMB_KEYS = [
+  'face_cleanup',
+  'face_cleanup_mode_guided',
+  'face_cleanup_mode_manual',
+  'face_cleanup_resolutions_title',
 ];
 
 describe('face cleanup i18n coverage', () => {
@@ -59,6 +70,13 @@ describe('face cleanup i18n coverage', () => {
     const leftover = REMOVED_KEYS.filter((key) => Object.hasOwn(messages, key));
 
     expect(leftover, `${code}.json still carries: ${leftover.join(', ')}`).toEqual([]);
+  });
+
+  it.each(['en', ...TRANSLATED])('%s carries every breadcrumb label', (code) => {
+    const messages = admin(code);
+    const missing = BREADCRUMB_KEYS.filter((key) => !Object.hasOwn(messages, key));
+
+    expect(missing, `${code}.json is missing: ${missing.join(', ')}`).toEqual([]);
   });
 
   // I7 — the reworded labels dropped their arrow/slash shape in every locale, not just English.
