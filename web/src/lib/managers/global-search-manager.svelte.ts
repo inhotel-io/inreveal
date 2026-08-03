@@ -1765,6 +1765,29 @@ export class GlobalSearchManager {
     });
   }
 
+  /**
+   * Navigate to the current surface filtered by `place`.
+   *
+   * PlacesResponseDto carries name / lat / lng / admin1name / admin2name. Of those only `name`
+   * maps onto a searchable-page param (`city`) — there is no `state` filter — and it is already
+   * what place-preview searches by, so the preview and the destination agree.
+   *
+   * /map is the exception: it is a place's own contextual surface, and it is not a searchable
+   * page, so the filter path would bounce the user off the map they were reading. A nameless
+   * place cannot produce a city filter at all, so it recentres too.
+   */
+  private navigateToPlaceResults(place: { name?: string; latitude: number; longitude: number }): void {
+    const city = place.name?.trim();
+    if (!city || page.url.pathname.startsWith('/map')) {
+      void goto(Route.map({ zoom: 12, lat: place.latitude, lng: place.longitude }));
+      return;
+    }
+    this.navigateToFilteredResults({
+      // `city` is single-valued, so a new place replaces whatever city was filtering the page.
+      applyFilter: (filters) => ({ ...filters, city }),
+    });
+  }
+
   async applySearchSort(sortOrder: SearchablePageSortOrder, text = this.query) {
     this.searchSortOrder = sortOrder;
 
@@ -1904,7 +1927,7 @@ export class GlobalSearchManager {
           label: p.name ?? '',
           lastUsed: now,
         });
-        void goto(Route.map({ zoom: 12, lat: p.latitude, lng: p.longitude }));
+        this.navigateToPlaceResults(p);
         break;
       }
       case 'tag': {
@@ -2059,7 +2082,7 @@ export class GlobalSearchManager {
         break;
       }
       case 'place': {
-        void goto(Route.map({ zoom: 12, lat: entry.latitude, lng: entry.longitude }));
+        this.navigateToPlaceResults({ name: entry.label, latitude: entry.latitude, longitude: entry.longitude });
         break;
       }
       case 'tag': {

@@ -1117,11 +1117,11 @@ describe('activate()', () => {
     expect(getEntries()).toHaveLength(0);
   });
 
-  it('activate("place", item) navigates to /map with hash and records recent entry', () => {
+  it('activate("place", item) filters the timeline by city and records recent entry', () => {
     const m = new GlobalSearchManager();
     m.open();
     m.activate('place', { name: 'Paris', latitude: 48.8566, longitude: 2.3522 });
-    expect(goto).toHaveBeenCalledWith('/map#12/48.8566/2.3522');
+    expect(goto).toHaveBeenCalledWith('/photos?city=Paris');
     const entries = getEntries();
     expect(entries[0]).toMatchObject({ kind: 'place', id: 'place:48.8566:2.3522', label: 'Paris' });
   });
@@ -2655,7 +2655,7 @@ describe('activateRecent()', () => {
     expect(m.isOpen).toBe(false);
   });
 
-  it('place entry navigates and closes', () => {
+  it('place entry filters the timeline by city and closes', () => {
     const m = new GlobalSearchManager();
     m.open();
     m.activateRecent({
@@ -2666,7 +2666,7 @@ describe('activateRecent()', () => {
       label: 'Paris',
       lastUsed: 1,
     });
-    expect(goto).toHaveBeenCalledWith('/map#12/48.8566/2.3522');
+    expect(goto).toHaveBeenCalledWith('/photos?city=Paris');
     expect(m.isOpen).toBe(false);
   });
 
@@ -7083,5 +7083,133 @@ describe('person activation navigation', () => {
     m.activateRecent({ kind: 'person', id: 'person:broken', label: 'Alice', lastUsed: 1 } as never);
 
     expect(goto).not.toHaveBeenCalled();
+  });
+});
+
+describe('place activation navigation', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    localStorage.clear();
+    resetRecentStore();
+    mockPage.url = new URL('https://gallery.test/photos');
+  });
+
+  const lastGoto = () => vi.mocked(goto).mock.calls.at(-1)?.[0] as string | undefined;
+  const paris = { name: 'Paris', latitude: 48.8566, longitude: 2.3522 };
+  // Route.map builds a Leaflet-style hash, not a query string: `/map#<zoom>/<lat>/<lng>`.
+  const PARIS_MAP = '/map#12/48.8566/2.3522';
+
+  it('filters the timeline by city instead of jumping to the map', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('place', paris);
+
+    expect(lastGoto()).toBe('/photos?city=Paris');
+  });
+
+  it('stays on a space timeline', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1');
+
+    m.activate('place', paris);
+
+    expect(lastGoto()).toBe('/spaces/space-1?city=Paris');
+  });
+
+  it('targets /photos from a non-searchable page', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/albums/album-1');
+
+    m.activate('place', paris);
+
+    expect(lastGoto()).toBe('/photos?city=Paris');
+  });
+
+  it('stays on /recently-added', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/recently-added');
+
+    m.activate('place', paris);
+
+    expect(lastGoto()).toBe('/recently-added?city=Paris');
+  });
+
+  it('recentres the map when the user is already on the map', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/map');
+
+    m.activate('place', paris);
+
+    expect(lastGoto()).toBe(PARIS_MAP);
+  });
+
+  it('replaces a city already filtering the page rather than accumulating', () => {
+    const m = new GlobalSearchManager();
+    m.registerSearchablePageFilters(() => ({ ...createFilterState(), city: 'Berlin' }));
+
+    m.activate('place', paris);
+
+    expect(lastGoto()).toBe('/photos?city=Paris');
+  });
+
+  it('preserves the other filters already on the page and drops a stale smart query', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/photos?q=beach');
+    m.registerSearchablePageFilters(() => ({ ...createFilterState(), personIds: ['person:p1'] }));
+
+    m.activate('place', paris);
+
+    const dest = lastGoto();
+    expect(dest).toContain('people=person%3Ap1');
+    expect(dest).toContain('city=Paris');
+    expect(dest).not.toContain('q=beach');
+  });
+
+  it('recentres the map for a nameless place, which cannot produce a city filter', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('place', { latitude: 48.8566, longitude: 2.3522 });
+
+    expect(lastGoto()).toBe(PARIS_MAP);
+  });
+
+  it('records a recent entry and closes the palette', () => {
+    const m = new GlobalSearchManager();
+    m.open();
+
+    m.activate('place', paris);
+
+    expect(getEntries().some((e) => e.kind === 'place')).toBe(true);
+    expect(m.isOpen).toBe(false);
+  });
+
+  it('routes a recent place entry to the filtered timeline too', () => {
+    const m = new GlobalSearchManager();
+
+    m.activateRecent({
+      kind: 'place',
+      id: 'place:48.8566:2.3522',
+      latitude: 48.8566,
+      longitude: 2.3522,
+      label: 'Paris',
+      lastUsed: 1,
+    });
+
+    expect(lastGoto()).toBe('/photos?city=Paris');
+  });
+
+  it('falls back to recentring the map for a recent place with no label', () => {
+    const m = new GlobalSearchManager();
+
+    m.activateRecent({
+      kind: 'place',
+      id: 'place:48.8566:2.3522',
+      latitude: 48.8566,
+      longitude: 2.3522,
+      label: '',
+      lastUsed: 1,
+    });
+
+    expect(lastGoto()).toBe(PARIS_MAP);
   });
 });
