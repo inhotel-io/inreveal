@@ -727,6 +727,9 @@ describe('sidebar-nav-group', () => {
     render(SidebarNavGroup, { title: 'Library' });
 
     expect(screen.getByText('Library')).toBeInTheDocument();
+    // Both halves, matching the rail test above: without this an implementation that
+    // renders the divider AND the header while hovering would still pass.
+    expect(screen.queryByTestId('sidebar-group-divider')).not.toBeInTheDocument();
   });
 });
 ```
