@@ -12,18 +12,23 @@ class LiveTextCallbackDispatcher implements LiveTextFlutterApi {
   static final LiveTextCallbackDispatcher instance = LiveTextCallbackDispatcher._();
 
   final Map<int, ValueChanged<bool>> _listeners = {};
+  final Map<int, ValueChanged<bool>> _selectionListeners = {};
   bool _bound = false;
 
-  void register(int viewId, ValueChanged<bool> onAnalysisComplete) {
+  void register(int viewId, ValueChanged<bool> onAnalysisComplete, {ValueChanged<bool>? onSelectionActiveChanged}) {
     if (!_bound) {
       LiveTextFlutterApi.setUp(this);
       _bound = true;
     }
     _listeners[viewId] = onAnalysisComplete;
+    if (onSelectionActiveChanged != null) {
+      _selectionListeners[viewId] = onSelectionActiveChanged;
+    }
   }
 
   void unregister(int viewId) {
     _listeners.remove(viewId);
+    _selectionListeners.remove(viewId);
   }
 
   @visibleForTesting
@@ -32,5 +37,10 @@ class LiveTextCallbackDispatcher implements LiveTextFlutterApi {
   @override
   void onAnalysisComplete(int viewId, bool hasText) {
     _listeners[viewId]?.call(hasText);
+  }
+
+  @override
+  void onSelectionActiveChanged(int viewId, bool active) {
+    _selectionListeners[viewId]?.call(active);
   }
 }

@@ -32,4 +32,12 @@ abstract class LiveTextFlutterApi {
   /// Reports whether the analysis found any text, so Flutter can fall back to
   /// the server-OCR overlay when Live Text finds nothing.
   void onAnalysisComplete(int viewId, bool hasText);
+
+  /// Reports whether a text selection is currently live.
+  ///
+  /// Flutter only hands the native view the pointers that land on text, so that
+  /// pinch/pan/page-swipe keep working everywhere else. Selection handles and
+  /// the callout sit *outside* the text quads, so while a selection exists
+  /// Flutter has to concede every pointer instead.
+  void onSelectionActiveChanged(int viewId, bool active);
 }

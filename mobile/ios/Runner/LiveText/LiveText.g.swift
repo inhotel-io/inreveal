@@ -167,6 +167,13 @@ protocol LiveTextFlutterApiProtocol {
   /// Reports whether the analysis found any text, so Flutter can fall back to
   /// the server-OCR overlay when Live Text finds nothing.
   func onAnalysisComplete(viewId viewIdArg: Int64, hasText hasTextArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// Reports whether a text selection is currently live.
+  ///
+  /// Flutter only hands the native view the pointers that land on text, so that
+  /// pinch/pan/page-swipe keep working everywhere else. Selection handles and
+  /// the callout sit *outside* the text quads, so while a selection exists
+  /// Flutter has to concede every pointer instead.
+  func onSelectionActiveChanged(viewId viewIdArg: Int64, active activeArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class LiveTextFlutterApi: LiveTextFlutterApiProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -184,6 +191,30 @@ class LiveTextFlutterApi: LiveTextFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.immich_mobile.LiveTextFlutterApi.onAnalysisComplete\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([viewIdArg, hasTextArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// Reports whether a text selection is currently live.
+  ///
+  /// Flutter only hands the native view the pointers that land on text, so that
+  /// pinch/pan/page-swipe keep working everywhere else. Selection handles and
+  /// the callout sit *outside* the text quads, so while a selection exists
+  /// Flutter has to concede every pointer instead.
+  func onSelectionActiveChanged(viewId viewIdArg: Int64, active activeArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.immich_mobile.LiveTextFlutterApi.onSelectionActiveChanged\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([viewIdArg, activeArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return
