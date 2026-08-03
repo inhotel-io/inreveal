@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/svelte';
-import { tick } from 'svelte';
+import { createRawSnippet, tick } from 'svelte';
 import SidebarShell from '$lib/components/sidebar/sidebar-shell.svelte';
 import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
 
@@ -8,11 +8,19 @@ const mocks = vi.hoisted(() => ({
   sidebarMedia: { isFullSidebar: true, isWideSidebar: false },
   sidebarStore: { isOpen: true, reset: vi.fn() },
   beforeNavigate: vi.fn(),
+  // Deliberately not the real 'top-menu-button': the shell has to resolve the id through
+  // the constant rather than hard-coding it. Mocked rather than imported because a .ts
+  // file cannot name a .svelte module export - `declare module '*.svelte'` types only the
+  // default export, so `tsc --noEmit` rejects it.
+  menuButtonId: 'test-menu-button',
 }));
 
 vi.mock('$lib/stores/sidebar-media.svelte', () => ({ sidebarMedia: mocks.sidebarMedia }));
 vi.mock('$lib/stores/sidebar.svelte', () => ({ sidebarStore: mocks.sidebarStore }));
 vi.mock('$app/navigation', () => ({ beforeNavigate: mocks.beforeNavigate }));
+vi.mock('$lib/components/shared-components/navigation-bar/NavigationBar.svelte', () => ({
+  menuButtonId: mocks.menuButtonId,
+}));
 
 const nav = () => screen.getByTestId('sidebar-parent');
 
@@ -29,6 +37,20 @@ describe('sidebar-shell', () => {
   it('reports the rail layout', () => {
     render(SidebarShell);
     expect(nav()).toHaveAttribute('data-layout', 'rail');
+  });
+
+  // The two props are the component's whole public surface, and `ariaLabel` is its only
+  // accessible name. Kept in its own render: real focusable children change what the
+  // focus trap would grab, which the trap tests below depend on.
+  it('renders its children and exposes the aria label', () => {
+    const children = createRawSnippet(() => ({
+      render: () => `<button type="button">Photos</button>`,
+    }));
+
+    render(SidebarShell, { ariaLabel: 'Primary', children });
+
+    expect(screen.getByRole('navigation', { name: 'Primary' })).toBe(nav());
+    expect(screen.getByRole('button', { name: 'Photos' })).toBeInTheDocument();
   });
 
   // Spec coverage 12. Upstream isOpen is permanently true above 850px, so a shell that
@@ -53,16 +75,21 @@ describe('sidebar-shell', () => {
   });
 
   // Spec coverage 7: the grid slot must stay at rail width so the timeline never re-lays-out.
-  it('keeps the grid slot at rail width while hover-expanded', async () => {
+  // The nav is the grid item, so the no-reflow property is that *its own box* is unchanged
+  // by hover - only the absolutely-positioned panel inside it grows. Assert the nav's class
+  // list directly: any width utility that tracks expansion would widen the slot.
+  it('does not resize its own grid slot while hover-expanded', async () => {
     render(SidebarShell);
-    expect(nav()).toHaveAttribute('data-slot-width', 'rail');
+    const collapsed = nav().className;
 
     await fireEvent.pointerEnter(nav());
 
-    // The panel grows over the content, so the slot the nav occupies has to be invariant
-    // under expansion - assert both halves, or the slot could simply track `data-expanded`.
+    // Guards against a vacuous pass: the hover has to have actually taken effect.
     expect(nav()).toHaveAttribute('data-expanded', 'true');
-    expect(nav()).toHaveAttribute('data-slot-width', 'rail');
+    expect(nav().className).toBe(collapsed);
+    // Deliberately not "the nav has no `w-` utility at all": a width that is constant per
+    // layout is fine and Task 8 may add one. What must never happen is a width that
+    // tracks expansion, which is exactly what the invariance above forbids.
   });
 
   // Spec coverage 8.
@@ -113,6 +140,25 @@ describe('sidebar-shell', () => {
     await dismiss(nav());
 
     expect(mocks.sidebarStore.reset).toHaveBeenCalled();
+  });
+
+  // Closing the overlay makes this nav inert while focus is still inside it (on the focus
+  // trap's backup sentinel). Deactivating the trap does not destroy the action, so nothing
+  // else puts focus back - the keyboard user would land on <body>.
+  it('returns focus to the navbar menu button when the overlay closes', async () => {
+    const menuButton = document.createElement('button');
+    menuButton.id = mocks.menuButtonId;
+    document.body.append(menuButton);
+    mocks.sidebarMedia.isFullSidebar = false;
+    mocks.sidebarStore.isOpen = true;
+    render(SidebarShell);
+    await tick();
+    expect(nav().contains(document.activeElement)).toBe(true);
+
+    await fireEvent.keyDown(nav(), { key: 'Escape' });
+
+    expect(document.activeElement).toBe(menuButton);
+    menuButton.remove();
   });
 
   // Spec coverage 11.
@@ -222,7 +268,9 @@ describe('sidebar-shell direction and motion', () => {
   const panel = () => screen.getByTestId('sidebar-panel');
 
   beforeEach(() => {
+    vi.clearAllMocks();
     mocks.sidebarMedia.isFullSidebar = true;
+    mocks.sidebarMedia.isWideSidebar = false;
     mocks.sidebarStore.isOpen = true;
     sidebarModeStore.mode = 'rail';
     sidebarModeStore.resetTransient();
