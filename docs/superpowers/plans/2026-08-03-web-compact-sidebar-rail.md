@@ -69,24 +69,13 @@ Why this exists: `sidebar-mode.svelte.ts` needs both breakpoints, and a module-l
 // web/src/lib/stores/sidebar-media.spec.ts
 import { sidebarMedia } from '$lib/stores/sidebar-media.svelte';
 
-const mocks = vi.hoisted(() => ({
-  mediaQueryManager: { isFullSidebar: false },
-  wide: { current: false },
-}));
+const mocks = vi.hoisted(() => ({ mediaQueryManager: { isFullSidebar: false } }));
 
 vi.mock('$lib/stores/media-query-manager.svelte', () => ({ mediaQueryManager: mocks.mediaQueryManager }));
-vi.mock('svelte/reactivity', () => ({
-  MediaQuery: class {
-    get current() {
-      return mocks.wide.current;
-    }
-  },
-}));
 
 describe('sidebarMedia', () => {
   beforeEach(() => {
     mocks.mediaQueryManager.isFullSidebar = false;
-    mocks.wide.current = false;
   });
 
   it('mirrors isFullSidebar from the upstream media query manager', () => {
@@ -95,13 +84,13 @@ describe('sidebarMedia', () => {
     expect(sidebarMedia.isFullSidebar).toBe(true);
   });
 
-  it('exposes the wide-sidebar query independently', () => {
-    expect(sidebarMedia.isWideSidebar).toBe(false);
-    mocks.wide.current = true;
-    expect(sidebarMedia.isWideSidebar).toBe(true);
+  it('exposes a boolean wide-sidebar reading', () => {
+    expect(typeof sidebarMedia.isWideSidebar).toBe('boolean');
   });
 });
 ```
+
+**Do not mock `svelte/reactivity` to vary `isWideSidebar` here.** Replacing that module supplies only `MediaQuery` and leaves `SvelteMap` / `SvelteSet` / `SvelteDate` undefined for everything else in the import graph. `isWideSidebar`'s behaviour is covered where it matters instead: Task 2 mocks this whole seam to drive the resolution matrix, and Task 10 exercises the real 1280px query at real viewports.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -384,6 +373,8 @@ git commit -m "feat(web): resolve sidebar layout from mode preference and viewpo
 
 Covers spec coverage items 15, 16, 17, 18, 24.
 
+Note one deliberate divergence from `sidebar-nav-item.stub.svelte` (Task 7): the real component always emits `data-active`, computing a prefix match when no `isActive` override is given, whereas the stub emits it only when an override exists. The stub mirrors `navbar-item.stub.svelte` so `user-sidebar.spec.ts` keeps asserting exactly what it asserts today — rows without an override are intentionally not covered there.
+
 - [ ] **Step 1: Write the failing test**
 
 ```ts
@@ -503,6 +494,18 @@ describe('sidebar-nav-item', () => {
     expect(screen.getByTestId('subtree')).toBeInTheDocument();
   });
 
+  // Spec coverage 24: long DE/NL/PL labels must clip rather than widen the panel.
+  it('truncates the label instead of wrapping', () => {
+    render(SidebarNavItem, {
+      title: 'Zuletzt hinzugefügte Fotos und Videos',
+      href: '/recently-added',
+      icon: mdiImageMultiple,
+    });
+
+    const label = screen.getByText('Zuletzt hinzugefügte Fotos und Videos');
+    expect(label.className).toContain('truncate');
+  });
+
   // Spec coverage 16: hiding is render-time only. Collapsing to the rail must not
   // write `false` back into the persisted recentAlbumsDropdown / recentSpacesDropdown flag.
   it('does not clobber the bound expanded flag when collapsed', async () => {
@@ -536,10 +539,10 @@ Expected: FAIL — cannot resolve `sidebar-nav-item.svelte`
 <script lang="ts">
   import { page } from '$app/state';
   import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
-  import { Icon, type IconProps } from '@immich/ui';
+  // @immich/ui re-exports its types (dist/index.d.ts: `export * from './types.js'`),
+  // so IconLike / IconProps come from the package rather than being redeclared here.
+  import { Icon, Link, type IconLike, type IconProps } from '@immich/ui';
   import type { Snippet } from 'svelte';
-
-  type IconLike = string | { path: string };
 
   interface Props {
     title: string;
@@ -571,18 +574,30 @@ Expected: FAIL — cannot resolve `sidebar-nav-item.svelte`
 
   const iconProps = $derived(asIconProps(icon));
   const activeIconProps = $derived(asIconProps(activeIcon));
+
+  // `bg-primary/10` cannot go through Svelte's `class:` directive - the slash is not a
+  // valid identifier there - so the active tint is composed into the class string.
+  const linkClass = $derived(
+    [
+      'hover:bg-subtle hover:text-primary flex w-full place-items-center gap-4 rounded-e-full py-3 ps-5 transition-[padding] delay-100 duration-100',
+      active ? 'bg-primary/10 text-primary' : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
 </script>
 
 <div>
-  <a
+  <!-- Link, not a raw <a>: it carries @immich/ui's shared link treatment and SvelteKit
+       integration, matching what upstream NavbarItem renders. -->
+  <Link
     {href}
-    data-active={isActive === undefined && !href ? undefined : String(active)}
+    underline={false}
+    data-active={String(active)}
     data-collapsed={String(collapsed)}
     title={collapsed ? title : undefined}
     aria-current={active ? 'page' : undefined}
-    class="hover:bg-subtle hover:text-primary flex w-full place-items-center gap-4 rounded-e-full py-3 ps-5 no-underline transition-[padding] delay-100 duration-100"
-    class:bg-primary--10={active}
-    class:text-primary={active}
+    class={linkClass}
   >
     {#if iconProps}
       <Icon size="1.375em" class="shrink-0" aria-hidden={true} {...active && activeIconProps ? activeIconProps : iconProps} />
@@ -600,7 +615,7 @@ Expected: FAIL — cannot resolve `sidebar-nav-item.svelte`
     >
       {title}
     </span>
-  </a>
+  </Link>
 
   {#if items && expanded && !collapsed}
     <div>{@render items()}</div>
@@ -611,7 +626,7 @@ Expected: FAIL — cannot resolve `sidebar-nav-item.svelte`
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm test --run src/lib/components/sidebar/sidebar-nav-item.spec.ts`
-Expected: PASS (11 tests)
+Expected: PASS (12 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -754,17 +769,23 @@ The used/available derivation is duplicated from `StorageSpace.svelte:12-21` bec
 // web/src/lib/components/shared-components/side-bar/rail-storage.spec.ts
 import '@testing-library/jest-dom';
 import RailStorage from '$lib/components/shared-components/side-bar/rail-storage.svelte';
-import StorageSpace from '$lib/components/shared-components/side-bar/StorageSpace.svelte';
 import { render, screen } from '@testing-library/svelte';
 
 const mocks = vi.hoisted(() => ({
   authManager: { authenticated: true, user: { quotaSizeInBytes: null as number | null, quotaUsageInBytes: 0 } },
-  userInteraction: { serverInfo: { diskSizeRaw: 0, diskUseRaw: 0 } },
+  userInteraction: {
+    serverInfo: { diskSizeRaw: 0, diskUseRaw: 0 } as { diskSizeRaw: number; diskUseRaw: number } | undefined,
+  },
 }));
 
 vi.mock('$lib/managers/auth-manager.svelte', () => ({ authManager: mocks.authManager }));
 vi.mock('$lib/stores/user.svelte', () => ({ userInteraction: mocks.userInteraction }));
 vi.mock('$lib/utils/auth', () => ({ requestServerInfo: vi.fn() }));
+
+const bytes = () => {
+  const node = screen.getByTestId('rail-storage');
+  return { used: Number(node.dataset.used), available: Number(node.dataset.available) };
+};
 
 describe('rail-storage', () => {
   beforeEach(() => {
@@ -773,33 +794,49 @@ describe('rail-storage', () => {
     mocks.userInteraction.serverInfo = { diskSizeRaw: 50_000_000_000, diskUseRaw: 12_000_000_000 };
   });
 
-  it('carries the storage_usage tooltip', () => {
+  it('renders the storage icon with an accessible label', () => {
     render(RailStorage);
 
-    // $t() returns raw keys under test, so assert the key is used rather than a translation.
-    expect(screen.getByTestId('rail-storage')).toHaveAttribute('title', expect.stringContaining('storage_usage'));
+    expect(screen.getByTestId('rail-storage')).toBeInTheDocument();
   });
 
-  // Spec coverage 21: guards the duplicated derivation against upstream drift.
+  // Spec coverage 21. This must assert NUMBERS, not the tooltip: under test $t() returns
+  // the raw key, so the title is the literal string 'storage_usage' for any byte values -
+  // a title comparison would pass no matter how wrong the derivation got.
   it.each`
-    quotaSize         | quotaUsed        | diskSize          | diskUse
-    ${null}           | ${0}             | ${50_000_000_000} | ${12_000_000_000}
-    ${20_000_000_000} | ${5_000_000_000} | ${50_000_000_000} | ${12_000_000_000}
-  `('reports the same bytes as StorageSpace (quota=$quotaSize)', ({ quotaSize, quotaUsed, diskSize, diskUse }) => {
+    scenario                    | quotaSize         | quotaUsed        | diskSize          | diskUse           | used              | available
+    ${'no quota, server disk'}  | ${null}           | ${0}             | ${50_000_000_000} | ${12_000_000_000} | ${12_000_000_000} | ${50_000_000_000}
+    ${'quota overrides disk'}   | ${20_000_000_000} | ${5_000_000_000} | ${50_000_000_000} | ${12_000_000_000} | ${5_000_000_000}  | ${20_000_000_000}
+    ${'zero quota is honoured'} | ${0}              | ${0}             | ${50_000_000_000} | ${12_000_000_000} | ${0}              | ${0}
+  `('derives bytes for $scenario', ({ quotaSize, quotaUsed, diskSize, diskUse, used, available }) => {
     mocks.authManager.user = { quotaSizeInBytes: quotaSize, quotaUsageInBytes: quotaUsed };
     mocks.userInteraction.serverInfo = { diskSizeRaw: diskSize, diskUseRaw: diskUse };
 
-    const rail = render(RailStorage);
-    const railTitle = screen.getByTestId('rail-storage').getAttribute('title');
-    rail.unmount();
+    render(RailStorage);
 
-    render(StorageSpace);
-    const fullTitle = document.querySelector('[title]')?.getAttribute('title');
+    expect(bytes()).toEqual({ used, available });
+  });
 
-    expect(railTitle).toBe(fullTitle);
+  it('falls back to zero when the server info has not arrived', () => {
+    mocks.userInteraction.serverInfo = undefined;
+
+    render(RailStorage);
+
+    expect(bytes()).toEqual({ used: 0, available: 0 });
+  });
+
+  it('uses server disk figures when unauthenticated even if a quota exists', () => {
+    mocks.authManager.authenticated = false;
+    mocks.authManager.user = { quotaSizeInBytes: 20_000_000_000, quotaUsageInBytes: 5_000_000_000 };
+
+    render(RailStorage);
+
+    expect(bytes()).toEqual({ used: 12_000_000_000, available: 50_000_000_000 });
   });
 });
 ```
+
+The `zero quota is honoured` row pins a genuine subtlety in the upstream expression: `quotaSizeInBytes: 0` makes `hasQuota` true (it is `!== null`), but `|| 0` then collapses the value, so both readings are `0`. Mirroring that exactly is the point — if upstream ever changes it, this row fails and the duplication gets revisited.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -822,8 +859,8 @@ Expected: FAIL — cannot resolve `rail-storage.svelte`
   import { t } from 'svelte-i18n';
 
   // Duplicated from StorageSpace.svelte because giving that upstream component a
-  // `compact` prop would add a fifth upstream file. rail-storage.spec.ts asserts both
-  // components report identical bytes, so upstream drift fails CI.
+  // `compact` prop would add a fifth upstream file. The derivation is mirrored line for
+  // line, and rail-storage.spec.ts pins it against a table of expected byte values.
   let hasQuota = $derived(authManager.user.quotaSizeInBytes !== null);
   let availableBytes = $derived(
     (hasQuota && authManager.authenticated
@@ -847,6 +884,8 @@ Expected: FAIL — cannot resolve `rail-storage.svelte`
 <div
   data-testid="rail-storage"
   class="mt-auto mb-6 flex justify-center py-2"
+  data-used={usedBytes}
+  data-available={availableBytes}
   title={$t('storage_usage', {
     values: {
       used: getByteUnitString(usedBytes, $locale, 3),
@@ -858,10 +897,12 @@ Expected: FAIL — cannot resolve `rail-storage.svelte`
 </div>
 ```
 
+`data-used` / `data-available` exist so the quota derivation is assertable. Under test `$t()` returns the raw key, so the rendered `title` is the literal string `storage_usage` with no interpolated numbers — anything asserting on the title alone could never detect a wrong byte value.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm test --run src/lib/components/shared-components/side-bar/rail-storage.spec.ts`
-Expected: PASS (3 tests)
+Expected: PASS (6 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -894,6 +935,7 @@ import '@testing-library/jest-dom';
 import SidebarShell from '$lib/components/sidebar/sidebar-shell.svelte';
 import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
 import { fireEvent, render, screen } from '@testing-library/svelte';
+import { tick } from 'svelte';
 
 const mocks = vi.hoisted(() => ({
   sidebarMedia: { isFullSidebar: true, isWideSidebar: false },
@@ -1025,16 +1067,31 @@ describe('sidebar-shell', () => {
     expect((nav() as HTMLElement).inert).toBe(false);
   });
 
-  // Spec coverage 3.
+  // Spec coverage 3. The reset runs in an $effect, which flushes in a post-render
+  // microtask - await tick() explicitly rather than relying on rerender() to flush it.
   it('clears transient flags when the layout leaves rail', async () => {
-    const { rerender } = render(SidebarShell);
+    render(SidebarShell);
     await fireEvent.pointerEnter(nav());
     expect(sidebarModeStore.hoverExpanded).toBe(true);
 
     sidebarModeStore.mode = 'expanded';
-    await rerender({});
+    await tick();
 
     expect(sidebarModeStore.hoverExpanded).toBe(false);
+    expect(sidebarModeStore.railOverlayOpen).toBe(false);
+  });
+
+  // Guards the resurface case: returning to rail must not restore a stale hover state.
+  it('does not restore stale hover state when returning to rail', async () => {
+    render(SidebarShell);
+    await fireEvent.pointerEnter(nav());
+
+    sidebarModeStore.mode = 'expanded';
+    await tick();
+    sidebarModeStore.mode = 'rail';
+    await tick();
+
+    expect(nav()).toHaveAttribute('data-expanded', 'false');
   });
 });
 ```
@@ -1144,7 +1201,7 @@ Expected: FAIL — cannot resolve `sidebar-shell.svelte`
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm test --run src/lib/components/sidebar/sidebar-shell.spec.ts`
-Expected: PASS (13 tests)
+Expected: PASS (14 tests)
 
 - [ ] **Step 5: Add the RTL and reduced-motion cases**
 
@@ -1186,7 +1243,7 @@ describe('sidebar-shell direction and motion', () => {
 - [ ] **Step 6: Run the full shell spec**
 
 Run: `pnpm test --run src/lib/components/sidebar/sidebar-shell.spec.ts`
-Expected: PASS (15 tests)
+Expected: PASS (16 tests)
 
 - [ ] **Step 7: Commit**
 
@@ -1313,7 +1370,8 @@ vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: sidebarMoc
 - [ ] **Step 3: Run the spec to verify it fails**
 
 Run: `pnpm test --run src/lib/components/shared-components/side-bar/user-sidebar.spec.ts`
-Expected: FAIL — `Failed to resolve import "$lib/components/sidebar/sidebar-shell.svelte"` (the mock target does not exist in `UserSidebar` yet)
+
+Expected: FAIL. Do not pin the exact message — `UserSidebar` still imports `Sidebar.svelte` and `@immich/ui` at this point, so the new mock targets are unused and the real components render. The failure will surface as the `data-active` / `getByRole('link')` assertions not matching, and possibly as an unresolved-module error for the not-yet-created `sidebar-shell.svelte`. **Read the actual output and confirm it fails because the real components rendered, not because a stub is malformed** — a stub typo produces a superficially similar failure and would let Step 4 "fix" the wrong thing.
 
 - [ ] **Step 4: Rewire UserSidebar**
 
@@ -1412,6 +1470,48 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: mocks.sidebarModeStore }));
 vi.mock('$lib/stores/sidebar.svelte', () => ({ sidebarStore: mocks.sidebarStore }));
+
+// NavigationBar pulls in the search trigger, notification and account panels, the avatar
+// and theme button, and calls notificationManager.refresh() on mount - a network call.
+// Everything not under test is stubbed out so this spec exercises only the sidebar wiring.
+vi.mock('$lib/stores/notification-manager.svelte', () => ({
+  notificationManager: { notifications: [], refresh: vi.fn().mockResolvedValue(undefined) },
+}));
+
+vi.mock('$lib/services/app.service', () => ({ getGlobalActions: () => ({ Cast: undefined }) }));
+
+vi.mock('$lib/managers/global-search-manager.svelte', () => ({ globalSearchManager: { open: vi.fn() } }));
+
+vi.mock('$lib/managers/auth-manager.svelte', () => ({
+  authManager: { authenticated: true, user: { name: 'Test', email: 'test@example.com' } },
+}));
+
+// Written out one by one on purpose: vi.mock is hoisted to the top of the module and
+// needs a literal path, so a loop over an array of paths silently fails to mock anything.
+vi.mock('$lib/components/global-search/global-search-input-trigger.svelte', async () => {
+  const module = await import('@test-data/mocks/noop-component.svelte');
+  return { default: module.default };
+});
+
+vi.mock('$lib/components/shared-components/navigation-bar/NotificationPanel.svelte', async () => {
+  const module = await import('@test-data/mocks/noop-component.svelte');
+  return { default: module.default };
+});
+
+vi.mock('$lib/components/shared-components/navigation-bar/AccountInfoPanel.svelte', async () => {
+  const module = await import('@test-data/mocks/noop-component.svelte');
+  return { default: module.default };
+});
+
+vi.mock('$lib/components/shared-components/UserAvatar.svelte', async () => {
+  const module = await import('@test-data/mocks/noop-component.svelte');
+  return { default: module.default };
+});
+
+vi.mock('$lib/components/shared-components/ThemeButton.svelte', async () => {
+  const module = await import('@test-data/mocks/noop-component.svelte');
+  return { default: module.default };
+});
 
 const menuButton = () => screen.getByRole('button', { name: /main_menu/i });
 
@@ -1973,3 +2073,18 @@ git commit -m "chore(web): satisfy lint and type gates for the sidebar rail"
 **Type consistency.** `SidebarMode` / `SidebarLayout` / `SIDEBAR_MODES` / `sidebarMode` / `sidebarModeStore` / `sidebarMedia` are used identically in Tasks 1–9. `layout`, `hoverExpanded`, `railOverlayOpen`, `toggleRailOverlay()`, `resetTransient()` match their Task 2 definitions everywhere. Data attributes are consistent: `data-layout`, `data-expanded`, `data-slot-width`, `data-collapsed`, `data-active`, `data-sidebar-width`, `data-column`, `data-variant`, `data-hidden`.
 
 **Placeholder scan.** No TBD/TODO and no conditionals. Every code step contains runnable code. Referenced files were verified to exist as described: `user-page-layout.spec.ts` exists (extended, not created), `navigation-bar.spec.ts` does not (created), and `web/` defines no `$routes` alias.
+
+**API verification.** Checked against the installed `@immich/ui@0.83.0` rather than assumed: `focusTrap`'s `Options.active` exists; `Link` and `internal/Button` both spread `{...restProps}` onto their final element, so `data-active` / `data-collapsed` / `data-hidden` forward as the tests require; and `dist/index.d.ts:116` re-exports the type module, so `IconLike` and `IconProps` are importable from the package root.
+
+**Review fixes folded in.** A prior review of this plan found ten defects, all corrected above:
+
+1. Task 5's parity test compared translated titles, which under test are the literal key `storage_usage` for any input — it could never fail. Replaced with a table asserting `data-used` / `data-available` numerically, plus an unauthenticated case and the `quotaSizeInBytes: 0` subtlety.
+2. Task 8's `NavigationBar` spec mocked two stores but the component pulls in five child components, `app.service`, and a network call on mount. Full mock set added.
+3. Task 3 used `class:bg-primary--10`, which is not a real class — Svelte's `class:` directive cannot express `bg-primary/10`. Now composed into a class string.
+4. Task 1's spec mocked all of `svelte/reactivity`, leaving `SvelteMap` / `SvelteSet` undefined for the import graph. Removed; `isWideSidebar` is covered via Task 2's seam mock and Task 10's real viewports.
+5. Task 3 redeclared `IconLike` locally instead of importing it.
+6. Task 3 used a raw `<a>` where upstream uses `@immich/ui`'s `Link`.
+7. Task 7 Step 3 asserted an unverified failure message; it now directs the implementer to read the real output and confirm it fails for the right reason.
+8. Coverage item 24 was mapped to Task 3 but had no test. Truncation test added.
+9. Task 6's layout-change test relied on `rerender()` to flush an `$effect`; now uses `await tick()`, with a second test covering the stale-hover resurface case.
+10. Task 3 carried dead logic in its `data-active` expression, and the intentional divergence from `sidebar-nav-item.stub.svelte` was undocumented. Both fixed.
