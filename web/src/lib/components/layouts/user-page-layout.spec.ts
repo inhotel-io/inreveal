@@ -1,7 +1,14 @@
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';
+import { createRawSnippet } from 'svelte';
 import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
 import UserPageLayoutDescriptionTrailingTestWrapper from './user-page-layout-description-trailing.test-wrapper.svelte';
+
+const layoutMocks = vi.hoisted(() => ({
+  sidebarModeStore: { layout: 'expanded' as 'overlay' | 'rail' | 'expanded' },
+}));
+
+vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: layoutMocks.sidebarModeStore }));
 
 vi.mock('$lib/components/shared-components/navigation-bar/NavigationBar.svelte', async () => {
   const module = await import('@test-data/mocks/noop-component.svelte');
@@ -45,5 +52,37 @@ describe('UserPageLayout header', () => {
     expect(titleRow).toContainElement(description);
     expect(titleRow).toContainElement(trailing);
     expect(description.nextElementSibling).toBe(trailing);
+  });
+});
+
+describe('UserPageLayout sidebar width', () => {
+  it.each`
+    layout        | width         | cssValue
+    ${'overlay'}  | ${'0'}        | ${'0px'}
+    ${'rail'}     | ${'rail'}     | ${'calc(var(--spacing) * 16)'}
+    ${'expanded'} | ${'expanded'} | ${'calc(var(--spacing) * 64)'}
+  `('sets the grid width to $width for $layout', ({ layout, width, cssValue }) => {
+    layoutMocks.sidebarModeStore.layout = layout;
+
+    render(UserPageLayout);
+
+    const grid = screen.getByTestId('user-page-grid');
+    expect(grid).toHaveAttribute('data-sidebar-width', width);
+    // Guards the actual `--sidebar-width` custom property driving `grid-cols-[var(--sidebar-width)_auto]`,
+    // not just the semantic label above - a rail/expanded value swap would otherwise pass unnoticed.
+    expect(grid.style.getPropertyValue('--sidebar-width')).toBe(cssValue);
+  });
+
+  // Spec coverage 29: /tags and /folders pass their own tree-explorer sidebar wrapping
+  // upstream Sidebar.svelte, which renders sidebar:w-64 regardless of our variable. Applying
+  // the rail width there would put a 16rem sidebar in a 4rem column.
+  it('keeps the expanded width when a custom sidebar snippet is supplied', () => {
+    layoutMocks.sidebarModeStore.layout = 'rail';
+
+    render(UserPageLayout, {
+      props: { sidebar: createRawSnippet(() => ({ render: () => `<nav data-testid="tree">tree</nav>` })) },
+    });
+
+    expect(screen.getByTestId('user-page-grid')).toHaveAttribute('data-sidebar-width', 'expanded');
   });
 });

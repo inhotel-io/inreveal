@@ -12,8 +12,8 @@
   import { globalSearchManager } from '$lib/managers/global-search-manager.svelte';
   import { Route } from '$lib/route';
   import { getGlobalActions } from '$lib/services/app.service';
-  import { mediaQueryManager } from '$lib/stores/media-query-manager.svelte';
   import { notificationManager } from '$lib/stores/notification-manager.svelte';
+  import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
   import { sidebarStore } from '$lib/stores/sidebar.svelte';
   import { ActionButton, Button, IconButton } from '@immich/ui';
   import Logo from '$lib/components/shared-components/Logo.svelte';
@@ -46,6 +46,13 @@
   });
 
   const { Cast } = $derived(getGlobalActions($t));
+
+  const isRail = $derived(sidebarModeStore.layout === 'rail');
+  const isExpandedLayout = $derived(sidebarModeStore.layout === 'expanded');
+
+  // The first column holds the hamburger AND the logo, which is why its sub-850px value is
+  // 8rem. Rail mode needs the hamburger visible, so it cannot shrink to the 4rem rail width.
+  const navColumn = $derived(isExpandedLayout ? 'wide' : 'narrow');
 </script>
 
 <svelte:window bind:innerWidth />
@@ -53,9 +60,11 @@
 <nav id="dashboard-navbar" class="h-(--navbar-height) w-dvw text-sm max-md:h-(--navbar-height-md)">
   <SkipLink text={$t('skip_to_content')} />
   <div
-    class="grid h-full grid-cols-[--spacing(32)_auto] items-center py-2 sidebar:grid-cols-[--spacing(64)_auto] {noBorder
-      ? ''
-      : 'border-b'}"
+    data-testid="navbar-grid"
+    data-column={navColumn}
+    class="grid h-full items-center py-2 {navColumn === 'wide'
+      ? 'grid-cols-[--spacing(64)_auto]'
+      : 'grid-cols-[--spacing(32)_auto]'} {noBorder ? '' : 'border-b'}"
   >
     <div class="mx-4 flex flex-row items-center gap-1">
       <IconButton
@@ -67,6 +76,10 @@
         aria-label={$t('main_menu')}
         icon={mdiMenu}
         onclick={() => {
+          if (isRail) {
+            sidebarModeStore.toggleRailOverlay();
+            return;
+          }
           sidebarStore.toggle();
         }}
         onmousedown={(event: MouseEvent) => {
@@ -75,10 +88,13 @@
             event.stopPropagation();
           }
         }}
-        class="sidebar:hidden"
+        class={isExpandedLayout ? 'hidden' : ''}
+        data-hidden={isExpandedLayout ? '' : undefined}
       />
       <a data-sveltekit-preload-data="hover" href={Route.photos()}>
-        <Logo variant={mediaQueryManager.isFullSidebar ? 'inline' : 'icon'} class="max-md:h-12" />
+        <span data-testid="navbar-logo" data-variant={isExpandedLayout ? 'inline' : 'icon'}>
+          <Logo variant={isExpandedLayout ? 'inline' : 'icon'} class="max-md:h-12" />
+        </span>
       </a>
     </div>
     <div class="flex justify-between gap-4 pe-6 lg:gap-8">

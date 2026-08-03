@@ -6,6 +6,7 @@
   import { useActions, type ActionArray } from '$lib/actions/use-actions';
   import NavigationBar from '$lib/components/shared-components/navigation-bar/NavigationBar.svelte';
   import UserSidebar from '$lib/components/shared-components/side-bar/UserSidebar.svelte';
+  import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
   import type { HeaderButtonActionItem } from '$lib/types';
   import { openFileUploadDialog } from '$lib/utils/file-uploader';
   import { Button, ContextMenuButton, HStack, isMenuItemType, type MenuItemType } from '@immich/ui';
@@ -49,6 +50,20 @@
   let scrollbarClass = $derived(scrollbar ? 'immich-scrollbar' : 'scrollbar-hidden');
   let hasHeaderRow = $derived(!!(title || buttons));
   let hasTitleClass = $derived(hasHeaderRow ? 'top-16 h-[calc(100%-(--spacing(16)))]' : 'top-0 h-full');
+
+  // /tags and /folders supply a tree explorer wrapping upstream Sidebar.svelte, which is
+  // always 16rem above 850px. Collapsing their grid column to the rail width would clip it,
+  // and a tag tree has no meaningful icon-only form, so those pages opt out of the rail.
+  const sidebarWidth = $derived.by(() => {
+    if (sidebar) {
+      return sidebarModeStore.layout === 'overlay' ? '0' : 'expanded';
+    }
+    return sidebarModeStore.layout === 'overlay' ? '0' : sidebarModeStore.layout;
+  });
+
+  const sidebarWidthValue = $derived(
+    { '0': '0px', rail: 'calc(var(--spacing) * 16)', expanded: 'calc(var(--spacing) * 64)' }[sidebarWidth],
+  );
 </script>
 
 <header>
@@ -58,7 +73,10 @@
 </header>
 <div
   tabindex="-1"
-  class="relative z-0 grid grid-cols-[--spacing(0)_auto] overflow-hidden sidebar:grid-cols-[--spacing(64)_auto]
+  data-testid="user-page-grid"
+  data-sidebar-width={sidebarWidth}
+  style:--sidebar-width={sidebarWidthValue}
+  class="relative z-0 grid grid-cols-[var(--sidebar-width)_auto] overflow-hidden
     {hideNavbar ? 'h-dvh' : 'h-[calc(100dvh-var(--navbar-height))] max-md:h-[calc(100dvh-var(--navbar-height-md))]'}
     {hideNavbar ? 'pt-(--navbar-height)' : ''}
     {hideNavbar ? 'max-md:pt-(--navbar-height-md)' : ''}"
