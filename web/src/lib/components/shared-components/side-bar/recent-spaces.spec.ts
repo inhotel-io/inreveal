@@ -161,7 +161,7 @@ describe('RecentSpaces component', () => {
 
       const seeAll = screen.getByTestId('sidebar-space-see-all-rail-1');
       expect(seeAll.className).toMatch(/ps-\[\d+px\]/);
-      expect(seeAll.className).not.toMatch(/\bps-16\b/);
+      expect(seeAll.className).not.toMatch(/\bps-19\b/);
     });
 
     it('restores the full rows while hover-expanded', async () => {
@@ -169,7 +169,7 @@ describe('RecentSpaces component', () => {
       await railWithAlbums(1);
 
       const row = screen.getByTestId('sidebar-space-rail-1');
-      expect(row.className).toContain('ps-12');
+      expect(row.className).toContain('ps-15');
       expect(row.className).not.toMatch(/ps-\[\d+px\]/);
       expect(screen.getByTestId('sidebar-space-chevron-rail-1')).toBeInTheDocument();
     });

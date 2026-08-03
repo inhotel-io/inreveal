@@ -381,15 +381,17 @@ describe('sidebar-shell direction and motion', () => {
     expect(panel().className).toContain('w-20');
   });
 
-  // The rail centres its icons on the panel's content box, so the box has to be centred in the
-  // panel. Any horizontal padding here breaks that: the scrollbar gutter only reserves at the
-  // inline-end, so a start padding of a different width lands every icon off-centre. Symmetry
-  // comes from `stable both-edges` in the theme instead, which needs no padding to match it.
-  it('keeps the panel free of horizontal padding so the gutter can centre it', () => {
+  // Rows centre their icons with a fixed start padding, which only lands on the rail's middle
+  // if it is measured from the rail's own edge. So nothing may sit in front of it: no padding
+  // on the panel, and no start-side gutter. `both-edges` did exactly that and put every icon
+  // ~8px left of centre - the reservation is the platform's scrollbar width (11px here, ~4px
+  // with macOS overlay scrollbars), so no fixed padding can compensate for it.
+  it('leaves the panel start edge clear so the rows can centre against it', () => {
     render(SidebarShell);
 
-    expect(themeSelectorsDeclaring('scrollbar-gutter: stable both-edges').some((s) => panel().matches(s))).toBe(true);
     expect(panel().className).not.toMatch(/\b(?:ps|pe|px)-\d/);
+    const gutters = themeSelectorsDeclaring('scrollbar-gutter: stable both-edges');
+    expect(gutters.some((selector) => panel().matches(selector))).toBe(false);
   });
 
   // Same stale coupling, second symptom: the theme reserves a scrollbar gutter so that

@@ -85,7 +85,7 @@ describe('sidebar-nav-item', () => {
   it('leads with the icon and gaps the label when expanded', () => {
     render(SidebarNavItem, { title: 'Photos', href: '/photos', icon: mdiImageMultiple });
 
-    expect(link().className).toContain('ps-7');
+    expect(link().className).toContain('ps-10');
     expect(link().className).toContain('gap-4');
     expect(link().className).not.toContain('justify-center');
   });

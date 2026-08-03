@@ -165,12 +165,15 @@ body {
 #sidebar {
   scrollbar-gutter: stable;
 }
-/* `both-edges` on the shell's panel, and the panel carries no horizontal padding to match: the
- * rail centres its icons on the content box, so an end-only reservation would land every icon
- * half a scrollbar left of the rail's middle. Reserving both edges keeps the box centred
- * whatever width the platform gives its scrollbar, which no fixed padding can do. */
+/* End-only on the shell's panel, and the panel carries no horizontal padding: the rail centres
+ * its icons with a fixed start padding, so that padding has to be measured from the rail's own
+ * edge. `both-edges` puts a reservation in front of it whose width is the platform's scrollbar
+ * - 11px here, ~4px with the overlay scrollbars macOS uses by default - and every icon drifts
+ * by that much. Reserving only at the end leaves the start edge at zero everywhere, so the
+ * centring holds regardless of scrollbar width, and a scrollbar appearing still cannot move
+ * start-anchored content. */
 #sidebar > div.absolute.overflow-y-auto {
-  scrollbar-gutter: stable both-edges;
+  scrollbar-gutter: stable;
 }
 /* The Spaces/Albums expand-collapse caret is an absolute sibling of the pill link — it shouldn't carry
  * its own hover background. Kill it, and instead highlight the parent item's pill when the caret is

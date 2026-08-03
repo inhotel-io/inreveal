@@ -50,11 +50,13 @@
       // the far left. Both states are one length, so the icon simply glides between them.
       // A fixed length, not `calc(50% - 11px)`: a percentage is re-resolved against the panel
       // every frame, and the panel's own width is animating at the same time, so the icon
-      // overshot to ~56px before settling. 18px centres the 22px icon in the 5rem rail given
-      // the symmetric scrollbar gutter (~11px each side); being a few px out on a platform with
-      // wider scrollbars is invisible, an overshoot is not. `gap-4` stays in both states - it
-      // sits after the icon so it cannot move it, and holding it constant removes another jump.
-      collapsed ? 'ps-[18px]' : 'ps-7',
+      // overshot to ~56px before settling.
+      // 29px = (5rem rail - 22px icon) / 2, measured from the panel's start edge. That only
+      // centres because the panel reserves its scrollbar gutter at the end only; a start-side
+      // reservation would sit in front of this padding and shift every icon by whatever the
+      // platform's scrollbar happens to be. `gap-4` stays in both states - it sits after the
+      // icon so it cannot move it, and holding it constant removes another discrete jump.
+      collapsed ? 'ps-[29px]' : 'ps-10',
       active ? 'bg-primary/10 text-primary' : '',
     ]
       .filter(Boolean)

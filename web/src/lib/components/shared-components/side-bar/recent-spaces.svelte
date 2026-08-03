@@ -140,8 +140,8 @@
         aria-current={active ? 'page' : undefined}
         data-testid="sidebar-space-{space.id}"
         class="flex w-full place-items-center gap-4 rounded-e-full py-3 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {collapsed
-          ? 'ps-[17px]'
-          : 'ps-12 group-hover:sm:pe-4 md:pe-4'} {active
+          ? 'ps-[28px]'
+          : 'ps-15 group-hover:sm:pe-4 md:pe-4'} {active
           ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
           : ''}"
       >
@@ -177,8 +177,8 @@
           aria-current={albumActive ? 'page' : undefined}
           data-testid="sidebar-space-album-{album.id}"
           class="flex w-full place-items-center gap-4 rounded-e-full py-2 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {collapsed
-            ? 'ps-[17px]'
-            : 'ps-16'} {albumActive ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary' : ''}"
+            ? 'ps-[28px]'
+            : 'ps-19'} {albumActive ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary' : ''}"
         >
           <div
             class="size-6 shrink-0 rounded-sm bg-gray-200 bg-cover dark:bg-gray-600"
@@ -207,8 +207,8 @@
             : undefined}
           data-testid="sidebar-space-see-all-{space.id}"
           class="flex w-full place-items-center rounded-e-full py-2 text-sm font-medium text-immich-primary transition-[padding] delay-100 duration-100 hover:bg-subtle dark:text-immich-dark-primary {collapsed
-            ? 'ps-[19px]'
-            : 'ps-16'}"
+            ? 'ps-[30px]'
+            : 'ps-19'}"
         >
           {#if collapsed}
             <Icon icon={mdiDotsHorizontal} size="1.25em" aria-hidden={true} />

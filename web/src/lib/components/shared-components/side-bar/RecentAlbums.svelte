@@ -35,8 +35,8 @@
     href={Route.viewAlbum(album)}
     title={album.albumName}
     class="flex w-full place-items-center gap-4 rounded-e-full py-3 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {collapsed
-      ? 'ps-[17px]'
-      : 'justify-between ps-12 group-hover:sm:pe-4 md:pe-4'}"
+      ? 'ps-[28px]'
+      : 'justify-between ps-15 group-hover:sm:pe-4 md:pe-4'}"
   >
     <div class="shrink-0">
       <div
