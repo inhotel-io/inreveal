@@ -22,7 +22,7 @@
 
   // Rail collapses to icons only; hovering or focusing floats the labels back without
   // touching the grid column, so `collapsed` follows hoverExpanded too.
-  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.hoverExpanded);
+  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.railExpanded);
 
   const active = $derived(isActive ? isActive() : page.url.pathname.startsWith(href));
 
@@ -79,12 +79,15 @@
       <button
         type="button"
         aria-label={expanded ? $t('collapse') : $t('expand')}
-        class="absolute me-2 hidden h-full rounded-lg px-0.5 hover:bg-subtle hover:text-primary md:block"
+        class="absolute inset-s-2 hidden h-full rounded-lg px-0.5 hover:bg-subtle hover:text-primary md:block"
         onclick={() => (expanded = !expanded)}
       >
+        <!-- Inset and sized to match the space rows' own chevrons: with no start inset this sat
+             ~11px from the sidebar's edge against their ~21px, and 1em read too faint beside a
+             1.375em icon. -->
         <Icon
           icon={expanded ? mdiChevronDown : mdiChevronRight}
-          size="1em"
+          size="1.25em"
           class="shrink-0 delay-100 duration-100"
           aria-hidden={true}
         />

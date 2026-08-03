@@ -69,7 +69,11 @@ vi.mock('$lib/components/sidebar/sidebar-nav-group.svelte', async () => {
 });
 
 const sidebarMocks = vi.hoisted(() => ({
-  sidebarModeStore: { layout: 'expanded' as 'overlay' | 'rail' | 'expanded', hoverExpanded: false },
+  sidebarModeStore: {
+    layout: 'expanded' as 'overlay' | 'rail' | 'expanded',
+    hoverExpanded: false,
+    railExpanded: false,
+  },
 }));
 
 vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: sidebarMocks.sidebarModeStore }));
@@ -80,6 +84,7 @@ describe('UserSidebar', () => {
     mockPage.url = new URL('https://gallery.test/photos');
     sidebarMocks.sidebarModeStore.layout = 'expanded';
     sidebarMocks.sidebarModeStore.hoverExpanded = false;
+    sidebarMocks.sidebarModeStore.railExpanded = false;
   });
 
   // The Spaces row expands into the individual spaces (and their albums), which highlight
@@ -139,6 +144,7 @@ describe('UserSidebar', () => {
     it('renders the compact rail storage indicator when collapsed to a rail', () => {
       sidebarMocks.sidebarModeStore.layout = 'rail';
       sidebarMocks.sidebarModeStore.hoverExpanded = false;
+      sidebarMocks.sidebarModeStore.railExpanded = false;
 
       render(UserSidebar);
 
@@ -149,6 +155,7 @@ describe('UserSidebar', () => {
     it('renders BottomInfo when the rail is hover-expanded', () => {
       sidebarMocks.sidebarModeStore.layout = 'rail';
       sidebarMocks.sidebarModeStore.hoverExpanded = true;
+      sidebarMocks.sidebarModeStore.railExpanded = true;
 
       render(UserSidebar);
 

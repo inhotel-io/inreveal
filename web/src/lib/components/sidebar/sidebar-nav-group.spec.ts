@@ -4,7 +4,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import SidebarNavGroup from '$lib/components/sidebar/sidebar-nav-group.svelte';
 
 const mocks = vi.hoisted(() => ({
-  sidebarModeStore: { layout: 'expanded' as 'overlay' | 'rail' | 'expanded', hoverExpanded: false },
+  sidebarModeStore: {
+    layout: 'expanded' as 'overlay' | 'rail' | 'expanded',
+    hoverExpanded: false,
+    railExpanded: false,
+  },
 }));
 
 vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: mocks.sidebarModeStore }));
@@ -17,6 +21,7 @@ describe('sidebar-nav-group', () => {
   beforeEach(() => {
     mocks.sidebarModeStore.layout = 'expanded';
     mocks.sidebarModeStore.hoverExpanded = false;
+    mocks.sidebarModeStore.railExpanded = false;
   });
 
   it('renders the text header when expanded', () => {
@@ -43,6 +48,7 @@ describe('sidebar-nav-group', () => {
   it('restores the header while hover-expanded', () => {
     mocks.sidebarModeStore.layout = 'rail';
     mocks.sidebarModeStore.hoverExpanded = true;
+    mocks.sidebarModeStore.railExpanded = true;
 
     render(SidebarNavGroup, { title: 'Library' });
 

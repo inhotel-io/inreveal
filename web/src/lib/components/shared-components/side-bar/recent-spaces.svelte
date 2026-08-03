@@ -98,7 +98,7 @@
 
   // These rows stay rendered in the rail so it keeps the sidebar's vertical rhythm; collapsed
   // they show only their thumbnail, centred, the way Google Photos' rail does.
-  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.hoverExpanded);
+  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.railExpanded);
 </script>
 
 {#each spaces as space (space.id)}
@@ -120,18 +120,22 @@
     <div class="relative">
       <!-- No chevron in the rail: it is unreadable beside a 24px thumbnail at 5rem, and the
            sub-tree it toggles is already showing. Expansion is driven from the expanded
-           sidebar and persists, exactly as the parent nav item's own chevron does. -->
+           sidebar and persists, exactly as the parent nav item's own chevron does.
+           `inset-s-7` indents it past the Spaces row's own chevron at `inset-s-2`: stacked at
+           the same inset the parent caret sat directly above its children's, reading as one
+           column rather than a hierarchy. The 20px step mirrors the rows' own indent. -->
       {#if hasAlbums && !collapsed}
         <button
           type="button"
           aria-label={expanded ? $t('collapse') : $t('expand')}
           aria-expanded={expanded}
           data-testid="sidebar-space-chevron-{space.id}"
-          class="absolute inset-s-2 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg p-0.5 hover:bg-subtle md:block"
+          class="absolute inset-s-7 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg p-0.5 hover:bg-subtle md:block"
           onclick={() => toggleAlbums(space.id)}
         >
-          <!-- 1em matches the chevron @immich/ui's NavbarItem renders for the Spaces row above. -->
-          <Icon icon={expanded ? mdiChevronDown : mdiChevronRight} size="1em" />
+          <!-- 1.25em matches the chevron the Spaces row above renders: 1em read too faint next to
+               a 1.375em nav icon and a 1.5em thumbnail. -->
+          <Icon icon={expanded ? mdiChevronDown : mdiChevronRight} size="1.25em" />
         </button>
       {/if}
       <a

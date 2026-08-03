@@ -199,7 +199,12 @@ main:has(> div.absolute.overflow-y-auto) {
   background-color: var(--immich-ui-light);
   border-radius: 16px;
   overflow: clip;
-  margin: 8px; /* chrome gutter so all four rounded corners read as a floating panel */
+  /* Chrome gutter so the rounded corners read as a floating panel - but none at the inline
+   * start, where the sidebar already provides the boundary. A gutter there widened the chrome
+   * band beyond the sidebar itself, so the rail's icons, centred in their 5rem column, sat
+   * left of centre in the grey the user actually sees. */
+  margin-block: 8px;
+  margin-inline: 0 8px;
 }
 /* Inset ONLY the page header row (title + actions: Albums, Settings, …) so it
  * clears the panel's rounded corners. Keyed on the stable page-header-title-row

@@ -92,7 +92,17 @@
   inert={isHidden}
   class="relative z-10 h-full"
   onpointerenter={() => isRail && (sidebarModeStore.pointerInside = true)}
-  onpointerleave={() => isRail && (sidebarModeStore.pointerInside = false)}
+  onpointerleave={() => {
+    if (!isRail) {
+      return;
+    }
+    sidebarModeStore.pointerInside = false;
+    // Drop the focus half too. Clicking a row - a sub-tree chevron especially - leaves focus
+    // sitting on it, and nothing takes it away until the user clicks elsewhere, so on its own
+    // the focus half pinned the rail open after the pointer had gone. A pointer leaving means a
+    // mouse user is done with it. Keyboard users never reach here: they never had a pointer in.
+    sidebarModeStore.focusInside = false;
+  }}
   onfocusin={() => isRail && (sidebarModeStore.focusInside = true)}
   onfocusout={(event) => {
     if (!isRail) {

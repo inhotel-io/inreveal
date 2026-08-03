@@ -15,7 +15,11 @@ const mockPage = vi.hoisted(() => ({ url: new URL('https://gallery.test/photos')
 vi.mock('$app/state', () => ({ page: mockPage }));
 
 const sidebarMocks = vi.hoisted(() => ({
-  sidebarModeStore: { layout: 'expanded' as 'overlay' | 'rail' | 'expanded', hoverExpanded: false },
+  sidebarModeStore: {
+    layout: 'expanded' as 'overlay' | 'rail' | 'expanded',
+    hoverExpanded: false,
+    railExpanded: false,
+  },
 }));
 vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: sidebarMocks.sidebarModeStore }));
 
@@ -44,6 +48,7 @@ describe('RecentSpaces component', () => {
     mockPage.url = new URL('https://gallery.test/photos');
     sidebarMocks.sidebarModeStore.layout = 'expanded';
     sidebarMocks.sidebarModeStore.hoverExpanded = false;
+    sidebarMocks.sidebarModeStore.railExpanded = false;
   });
 
   const renderAndFlush = async () => {
@@ -166,6 +171,7 @@ describe('RecentSpaces component', () => {
 
     it('restores the full rows while hover-expanded', async () => {
       sidebarMocks.sidebarModeStore.hoverExpanded = true;
+      sidebarMocks.sidebarModeStore.railExpanded = true;
       await railWithAlbums(1);
 
       const row = screen.getByTestId('sidebar-space-rail-1');
@@ -334,11 +340,12 @@ describe('RecentSpaces component', () => {
       sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
       await renderAndFlush();
 
-      // @immich/ui's NavbarItem renders its own expand/collapse chevron at size="1em"; the Spaces
-      // chevron sits directly above this one, so anything larger reads as a mismatched pair.
+      // The Spaces row's own chevron sits directly above this one, so the two have to stay the
+      // same size or they read as a mismatched pair. Both moved from 1em to 1.25em together:
+      // 1em was too faint beside a 1.375em nav icon and a 1.5em thumbnail.
       const icon = screen.getByTestId('sidebar-space-chevron-space-a').querySelector('svg');
-      expect(icon).toHaveAttribute('width', '1em');
-      expect(icon).toHaveAttribute('height', '1em');
+      expect(icon).toHaveAttribute('width', '1.25em');
+      expect(icon).toHaveAttribute('height', '1.25em');
     });
 
     it('shows no chevron when albumCount is undefined', async () => {

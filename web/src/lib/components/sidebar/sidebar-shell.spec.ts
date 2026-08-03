@@ -142,6 +142,21 @@ describe('sidebar-shell', () => {
     expect(nav()).toHaveAttribute('data-expanded', 'true');
   });
 
+  // Clicking a row - a sub-tree chevron especially - leaves focus sitting on it, and nothing
+  // takes it away until the user clicks elsewhere. With focus counted on its own that pinned the
+  // rail open after the pointer had left. A pointer leaving is a mouse user done with the rail,
+  // so it drops the focus half too. Keyboard users never fire this: they never had a pointer in.
+  it('collapses when the pointer leaves even though a click left focus inside', async () => {
+    render(SidebarShell);
+    await fireEvent.pointerEnter(nav());
+    await fireEvent.focusIn(nav());
+    expect(nav()).toHaveAttribute('data-expanded', 'true');
+
+    await fireEvent.pointerLeave(nav());
+
+    expect(nav()).toHaveAttribute('data-expanded', 'false');
+  });
+
   // The other half: expansion is the union of the two inputs, so it must survive until both
   // are gone - and still collapse once they are, or the rail would pin open.
   it('collapses only once both the pointer and focus have left', async () => {

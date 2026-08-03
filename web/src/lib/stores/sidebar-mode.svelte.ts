@@ -48,6 +48,16 @@ class SidebarModeStore {
   }
 
   /**
+   * Whether the rail is showing its expanded contents, by any route. Rows must read this rather
+   * than `hoverExpanded` alone: the navbar hamburger widens the panel through `railOverlayOpen`,
+   * and a row keyed off hover only would stay collapsed inside it - the panel opened to full
+   * width showing nothing but icons until the pointer happened to enter it.
+   */
+  get railExpanded(): boolean {
+    return this.hoverExpanded || this.railOverlayOpen;
+  }
+
+  /**
    * The touch and keyboard affordance, toggled by the navbar hamburger in rail mode.
    * Deliberately NOT upstream `sidebarStore.isOpen`: that is `$derived` from the 850px
    * query, so above 850px it is permanently true, and its `toggle()` only ever assigns

@@ -6,7 +6,11 @@ import { userInteraction } from '$lib/stores/user.svelte';
 import { albumFactory } from '@test-data/factories/album-factory';
 
 const sidebarMocks = vi.hoisted(() => ({
-  sidebarModeStore: { layout: 'expanded' as 'overlay' | 'rail' | 'expanded', hoverExpanded: false },
+  sidebarModeStore: {
+    layout: 'expanded' as 'overlay' | 'rail' | 'expanded',
+    hoverExpanded: false,
+    railExpanded: false,
+  },
 }));
 vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: sidebarMocks.sidebarModeStore }));
 
@@ -17,6 +21,7 @@ describe('RecentAlbums component', () => {
     vi.clearAllMocks();
     sidebarMocks.sidebarModeStore.layout = 'expanded';
     sidebarMocks.sidebarModeStore.hoverExpanded = false;
+    sidebarMocks.sidebarModeStore.railExpanded = false;
     // Module-level cache: the component only fetches when it is unset, so leaving one test's
     // albums behind silently feeds them to the next.
     userInteraction.recentAlbums = undefined;
@@ -34,6 +39,7 @@ describe('RecentAlbums component', () => {
     async ({ layout, hoverExpanded, centred, inset }) => {
       sidebarMocks.sidebarModeStore.layout = layout;
       sidebarMocks.sidebarModeStore.hoverExpanded = hoverExpanded;
+      sidebarMocks.sidebarModeStore.railExpanded = hoverExpanded;
       sdkMock.getAllAlbums.mockResolvedValueOnce([albumFactory.build()]);
       render(RecentAlbums);
       await tick();

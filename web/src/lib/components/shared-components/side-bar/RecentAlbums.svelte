@@ -27,7 +27,7 @@
 
   // These rows stay rendered in the rail so it keeps the sidebar's vertical rhythm; collapsed
   // they show only their thumbnail, centred, the way Google Photos' rail does.
-  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.hoverExpanded);
+  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.railExpanded);
 </script>
 
 {#each albums as album (album.id)}

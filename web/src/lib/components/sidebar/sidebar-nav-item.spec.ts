@@ -6,7 +6,11 @@ import SidebarNavItem from '$lib/components/sidebar/sidebar-nav-item.svelte';
 import { reactiveProps } from '@test-data/reactive-props.svelte';
 
 const mocks = vi.hoisted(() => ({
-  sidebarModeStore: { layout: 'expanded' as 'overlay' | 'rail' | 'expanded', hoverExpanded: false },
+  sidebarModeStore: {
+    layout: 'expanded' as 'overlay' | 'rail' | 'expanded',
+    hoverExpanded: false,
+    railExpanded: false,
+  },
   page: { url: new URL('https://gallery.test/photos') },
 }));
 
@@ -16,6 +20,7 @@ vi.mock('$app/state', () => ({ page: mocks.page }));
 const setLayout = (layout: 'overlay' | 'rail' | 'expanded', hoverExpanded = false) => {
   mocks.sidebarModeStore.layout = layout;
   mocks.sidebarModeStore.hoverExpanded = hoverExpanded;
+  mocks.sidebarModeStore.railExpanded = hoverExpanded;
 };
 
 describe('sidebar-nav-item', () => {
@@ -55,6 +60,20 @@ describe('sidebar-nav-item', () => {
 
   it('expands while hover-expanded even though layout is rail', () => {
     setLayout('rail', true);
+
+    render(SidebarNavItem, { title: 'Photos', href: '/photos', icon: mdiImageMultiple });
+
+    expect(link()).toHaveAttribute('data-collapsed', 'false');
+  });
+
+  // The navbar hamburger widens the panel through `railOverlayOpen`, not hover. A row keyed off
+  // hover alone stayed collapsed inside it, so tapping the hamburger opened a full-width panel
+  // showing nothing but icons until the pointer happened to wander in - which is also the only
+  // route a touch user has.
+  it('expands when the navbar hamburger opens the rail overlay', () => {
+    mocks.sidebarModeStore.layout = 'rail';
+    mocks.sidebarModeStore.hoverExpanded = false;
+    mocks.sidebarModeStore.railExpanded = true;
 
     render(SidebarNavItem, { title: 'Photos', href: '/photos', icon: mdiImageMultiple });
 
@@ -152,6 +171,21 @@ describe('sidebar-nav-item', () => {
     });
 
     expect(screen.queryByTestId('subtree')).not.toBeInTheDocument();
+  });
+
+  // The chevron is absolutely positioned, so with no start inset it sat against the sidebar's
+  // edge, ~11px in. `inset-s-2` gives it room; the space rows' own chevrons then step further in
+  // at `inset-s-7`, so a parent caret never sits directly above its children's.
+  it('insets the sub-tree chevron from the sidebar edge', () => {
+    render(SidebarNavItem, {
+      title: 'Albums',
+      href: '/albums',
+      icon: mdiImageMultiple,
+      items: createRawSnippet(() => ({ render: () => `<span>recent</span>` })),
+    });
+
+    const chevron = screen.getByRole('button', { name: /expand|collapse/i });
+    expect(chevron.className).toContain('inset-s-2');
   });
 
   it('shows the sub-tree when expanded', () => {

@@ -45,7 +45,7 @@
   import { t } from 'svelte-i18n';
   import { fly } from 'svelte/transition';
 
-  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.hoverExpanded);
+  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.railExpanded);
 </script>
 
 <Sidebar ariaLabel={$t('primary')}>

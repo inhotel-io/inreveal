@@ -8,7 +8,7 @@
 
   let { title }: Props = $props();
 
-  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.hoverExpanded);
+  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.railExpanded);
 </script>
 
 {#if collapsed}
