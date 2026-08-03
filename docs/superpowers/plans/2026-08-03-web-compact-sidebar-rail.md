@@ -147,7 +147,7 @@ git commit -m "feat(web): add sidebar media-query seam"
   - `type SidebarLayout = 'overlay' | 'rail' | 'expanded'`
   - `parseSidebarMode(text: string | null): SidebarMode` — validating parser, falls back to `'auto'`
   - `sidebarMode` — a `svelte-persisted-store` writable of `SidebarMode`, key `'sidebar-mode'`
-  - `sidebarModeStore` — singleton with `mode` (get/set), `layout: SidebarLayout`, `hoverExpanded: boolean`, `railOverlayOpen: boolean`, `toggleRailOverlay(): void`, `resetTransient(): void`
+  - `sidebarModeStore` — singleton with `mode` (get/set), `layout: SidebarLayout` (a plain getter, not `$derived`), `hoverExpanded: boolean`, `railOverlayOpen: boolean`, `toggleRailOverlay(): void`, `resetTransient(): void`
 
 Covers spec coverage items 1, 2, 4, 5.
 
@@ -334,7 +334,14 @@ class SidebarModeStore {
     sidebarMode.set(value);
   }
 
-  layout: SidebarLayout = $derived.by(() => {
+  /**
+   * A plain getter rather than `$derived.by`: `$derived` memoises against fine-grained
+   * reactive reads, so with `sidebarMedia` mocked as a plain object in tests it caches on
+   * first read and never re-runs on a viewport change. A getter recomputes on every access,
+   * which is correct here (a cheap switch) and stays reactive in production, since Svelte's
+   * tracking follows the underlying $state reads through the call rather than the getter.
+   */
+  get layout(): SidebarLayout {
     // A rail costs ~4rem, which a phone cannot spare, so below 850px every mode keeps
     // today's hidden-plus-overlay behaviour.
     if (!sidebarMedia.isFullSidebar) {
@@ -352,7 +359,7 @@ class SidebarModeStore {
         return sidebarMedia.isWideSidebar ? 'expanded' : 'rail';
       }
     }
-  });
+  }
 
   toggleRailOverlay() {
     this.railOverlayOpen = !this.railOverlayOpen;
