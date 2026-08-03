@@ -2126,3 +2126,28 @@ git commit -m "chore(web): satisfy lint and type gates for the sidebar rail"
 8. Coverage item 24 was mapped to Task 3 but had no test. Truncation test added.
 9. Task 6's layout-change test relied on `rerender()` to flush an `$effect`; now uses `await tick()`, with a second test covering the stale-hover resurface case.
 10. Task 3 carried dead logic in its `data-active` expression, and the intentional divergence from `sidebar-nav-item.stub.svelte` was undocumented. Both fixed.
+
+---
+
+## Post-implementation status
+
+All 11 tasks implemented and reviewed. Full unit suite green (4184 passed), `tsc` and
+`svelte-check` (584 files) clean, eslint 0 errors, prettier clean. Upstream footprint is exactly
+the 7 permitted files; all 12 do-not-touch files are byte-untouched.
+
+**Outstanding before merge — the four Playwright specs in
+`e2e/src/ui/specs/sidebar/sidebar-rail.e2e-spec.ts` have never been executed.** They were written
+and statically verified (every selector re-checked against source), but the only stack available
+during implementation belonged to a concurrent session and was built from different code, so
+running them would have been meaningless. They are the _only_ layer covering real CSS layout,
+RTL, reduced motion, and the rail's actual geometry — happy-dom verifies none of these. Run them
+against a stack built from this branch before merging.
+
+Two items the final review flagged as needing a browser, deliberately not fixed blind:
+
+- Rail icon centring. `sidebar-nav-item.svelte` keeps the 16rem row geometry (`gap-4 ps-5`) in
+  rail, putting the icon centre at ~39px in a 64px rail while `rail-storage.svelte` centres at
+  36px. Likely wants `justify-center` + `ps-0` when collapsed — confirm visually first.
+- `sidebar-shell.svelte` uses `h-full` on the scroll container where upstream `Sidebar.svelte`
+  used `h-max min-h-full`. Probably equivalent, but check a short viewport with both sub-trees
+  expanded.
