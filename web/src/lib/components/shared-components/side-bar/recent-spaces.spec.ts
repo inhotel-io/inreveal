@@ -145,7 +145,7 @@ describe('RecentSpaces component', () => {
       // Centred by padding, not `justify-center`, so expanding animates instead of snapping
       // the thumbnail to the row's start first. See sidebar-nav-item for the full reasoning.
       expect(row.className).not.toContain('justify-center');
-      expect(row.className).toMatch(/ps-\[\d+px\]/);
+      expect(row.className).toContain('w-12');
       expect(screen.getByTestId('sidebar-space-thumbnail-rail-1')).toBeInTheDocument();
     });
 
@@ -160,7 +160,7 @@ describe('RecentSpaces component', () => {
       await railWithAlbums(4);
 
       const seeAll = screen.getByTestId('sidebar-space-see-all-rail-1');
-      expect(seeAll.className).toMatch(/ps-\[\d+px\]/);
+      expect(seeAll.className).toContain('w-12');
       expect(seeAll.className).not.toMatch(/\bps-19\b/);
     });
 
@@ -170,7 +170,7 @@ describe('RecentSpaces component', () => {
 
       const row = screen.getByTestId('sidebar-space-rail-1');
       expect(row.className).toContain('ps-15');
-      expect(row.className).not.toMatch(/ps-\[\d+px\]/);
+      expect(row.className).not.toContain('w-12');
       expect(screen.getByTestId('sidebar-space-chevron-rail-1')).toBeInTheDocument();
     });
   });

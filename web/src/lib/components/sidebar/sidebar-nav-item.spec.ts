@@ -77,7 +77,7 @@ describe('sidebar-nav-item', () => {
     // carried it right - the icon appeared to pop in from the far left. Keeping both states a
     // single length means the expand is one continuous glide.
     expect(link().className).not.toContain('justify-center');
-    expect(link().className).toMatch(/ps-\[\d+px\]/);
+    expect(link().className).toMatch(/ps-\[[\d.]+rem\]/);
   });
 
   // The other half of the pairing: centring must be scoped to the collapsed rail, or the

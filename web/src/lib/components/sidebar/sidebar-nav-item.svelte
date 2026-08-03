@@ -43,7 +43,13 @@
   // valid identifier there - so the active tint is composed into the class string.
   const linkClass = $derived(
     [
-      'hover:bg-subtle hover:text-primary flex w-full place-items-center gap-4 rounded-e-full py-3 transition-[padding] delay-100 duration-100',
+      'hover:bg-subtle hover:text-primary flex place-items-center gap-4 rounded-e-full py-3 transition-[padding,margin,width] delay-100 duration-100',
+      // Collapsed the row is a 3rem indicator inset 1rem, matching the navigation rail Google
+      // Photos uses, rather than `w-full`. Full width made the highlight run flush to the rail's
+      // start edge with the scrollbar gutter's width left over at the end - visibly lopsided,
+      // because the panel's content box is not centred when the gutter is reserved at one end.
+      // Sizing the indicator itself sidesteps the content box entirely.
+      collapsed ? 'ms-4 w-12' : 'ms-0 w-full',
       // Centred with padding rather than `justify-center`, because `justify-content` cannot be
       // transitioned: switching it off on expand snapped the icon to the row's start and only
       // then did the padding animation carry it right, which read as the icon popping in from
@@ -51,12 +57,12 @@
       // A fixed length, not `calc(50% - 11px)`: a percentage is re-resolved against the panel
       // every frame, and the panel's own width is animating at the same time, so the icon
       // overshot to ~56px before settling.
-      // 29px = (5rem rail - 22px icon) / 2, measured from the panel's start edge. That only
-      // centres because the panel reserves its scrollbar gutter at the end only; a start-side
-      // reservation would sit in front of this padding and shift every icon by whatever the
-      // platform's scrollbar happens to be. `gap-4` stays in both states - it sits after the
-      // icon so it cannot move it, and holding it constant removes another discrete jump.
-      collapsed ? 'ps-[29px]' : 'ps-10',
+      // In rem, not px: the rail is `w-20` (5rem), so a px padding only centres at a 16px root
+      // font size and drifts for anyone who changed it. (3rem indicator - 1.375rem icon) / 2
+      // centres the icon in the indicator, and `ms-4` centres the indicator in the rail, so the
+      // icon lands on the rail's midpoint at any root size. `gap-4` stays in both states - it
+      // sits after the icon so it cannot move it, and holding it constant removes another jump.
+      collapsed ? 'ps-[0.8125rem]' : 'ps-10',
       active ? 'bg-primary/10 text-primary' : '',
     ]
       .filter(Boolean)

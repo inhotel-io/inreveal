@@ -42,7 +42,7 @@ describe('RecentAlbums component', () => {
       const row = screen.getAllByRole('link')[0];
       // Centring is a padding value, never `justify-center`: only a length can be transitioned,
       // and without that the thumbnail snapped to the row's start before sliding right.
-      expect(/ps-\[\d+px\]/.test(row.className)).toBe(centred);
+      expect(/\bw-12\b/.test(row.className)).toBe(centred);
       expect(/\bps-15\b/.test(row.className)).toBe(inset);
       expect(row.className).not.toContain('justify-center');
     },
