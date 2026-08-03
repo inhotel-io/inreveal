@@ -69,6 +69,64 @@ void main() {
       expectRect(rect, const Rect.fromLTWH(0, 0.25, 1, 0.5));
     });
 
+    group('liveTextHitsText', () {
+      // Image exactly fills the 400x800 viewport, so image units map 1:1.
+      const fullBleed = Rect.fromLTWH(0, 0, 1, 1);
+      // A line of text across the middle of the image.
+      const line = Rect.fromLTRB(0.25, 0.5, 0.75, 0.55);
+
+      bool hits(Offset position, {Rect contents = fullBleed, double margin = 8}) => liveTextHitsText(
+        position: position,
+        textRects: const [line],
+        contentsRect: contents,
+        viewportSize: viewport,
+        margin: margin,
+      );
+
+      test('a point inside a text box is a hit', () {
+        expect(hits(const Offset(200, 420)), isTrue);
+      });
+
+      test('a point well away from any text is a miss', () {
+        expect(hits(const Offset(50, 100)), isFalse);
+      });
+
+      test('no text boxes means every pointer stays with Flutter', () {
+        expect(
+          liveTextHitsText(
+            position: const Offset(200, 420),
+            textRects: const [],
+            contentsRect: fullBleed,
+            viewportSize: viewport,
+          ),
+          isFalse,
+        );
+      });
+
+      test('the margin makes near-misses count, so selection handles stay grabbable', () {
+        // 4px above the top edge of the line (y = 0.5 * 800 = 400).
+        expect(hits(const Offset(200, 396), margin: 0), isFalse);
+        expect(hits(const Offset(200, 396)), isTrue);
+      });
+
+      test('a zoomed-in image moves the hit region with the text', () {
+        const zoomed = Rect.fromLTWH(-0.5, -0.5, 2, 2);
+
+        // At 1x the line covers x 100..300, y 400..440, so this point misses.
+        expect(hits(const Offset(350, 460), margin: 0), isFalse);
+        // Zoomed 2x it covers x 0..400, y 400..480, so the same point hits.
+        expect(hits(const Offset(350, 460), contents: zoomed, margin: 0), isTrue);
+      });
+
+      test('a degenerate contents rect never claims a pointer', () {
+        expect(hits(const Offset(200, 420), contents: Rect.zero), isFalse);
+      });
+
+      test('a non-finite position never claims a pointer', () {
+        expect(hits(const Offset(double.nan, 420)), isFalse);
+      });
+    });
+
     group('degenerate input returns Rect.zero', () {
       test('zero viewport width', () {
         expect(liveTextContentsRect(imageSize: const Size(10, 10), viewportSize: const Size(0, 800)), Rect.zero);

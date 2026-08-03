@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/platform/live_text_api.g.dart';
 import 'package:immich_mobile/presentation/widgets/asset_viewer/live_text_overlay.widget.dart';
@@ -275,6 +277,72 @@ void main() {
       await tester.pump();
 
       verifyNever(() => api.loadImage(any(), any()));
+    });
+
+    testWidgets('lets siblings underneath stay hittable, so PhotoView keeps its gestures', (tester) async {
+      // The real UiKitView, not the injected test builder — hitTestBehavior is
+      // a property of that widget. Stub the platform-views channel so creating
+      // it does not reach a real iOS embedder.
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform_views,
+        (call) async => call.method == 'create' ? 0 : null,
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform_views, null),
+      );
+
+      await tester.pumpConsumerWidgetRaw(
+        LiveTextOverlay(
+          previewUrl: _previewUrl,
+          imageSize: const Size(400, 800),
+          viewportSize: const Size(400, 800),
+          onAnalysisComplete: (_) {},
+        ),
+        overrides: [liveTextHostApiProvider.overrideWithValue(api)],
+      );
+      await tester.pump();
+
+      // `opaque` (the Flutter default) absorbs the hit, so the PhotoView
+      // sibling below never enters the hit-test path and its recognizers never
+      // reach the arena — every gesture dies while OCR is on.
+      expect(
+        tester.widget<UiKitView>(find.byType(UiKitView)).hitTestBehavior,
+        PlatformViewHitTestBehavior.translucent,
+      );
+    });
+
+    testWidgets('sizes the native view to the viewport, not to an oversized parent', (tester) async {
+      const platformViewKey = ValueKey('live-text-platform-view');
+      // Smaller than the 800x600 test surface the Stack below will fill, so the
+      // two sizes genuinely differ.
+      const viewport = Size(400, 500);
+
+      await tester.pumpConsumerWidgetRaw(
+        // Mirrors asset_page.widget.dart, where the overlay is dropped into a
+        // `Positioned.fill` whose Stack is sized by the details panel rather
+        // than by the viewport.
+        Stack(
+          alignment: Alignment.topLeft,
+          children: [
+            Positioned.fill(
+              child: LiveTextOverlay(
+                previewUrl: _previewUrl,
+                imageSize: viewport,
+                viewportSize: viewport,
+                onAnalysisComplete: (_) {},
+                platformViewBuilder: (_) => const SizedBox.expand(key: platformViewKey),
+              ),
+            ),
+          ],
+        ),
+        overrides: [liveTextHostApiProvider.overrideWithValue(api)],
+      );
+      await tester.pump();
+
+      // VisionKit denormalises `contentsRect` against the native view's own
+      // bounds, so letting the view fill a taller parent drags every highlight
+      // down and stretches it past the bottom of the photo.
+      expect(tester.getSize(find.byKey(platformViewKey)), viewport);
     });
   });
 }
