@@ -4,7 +4,12 @@
 
 **Goal:** Replace the tap-one-box-at-a-time OCR overlay on iOS with Apple's native Live Text (VisionKit `ImageAnalysisInteraction`), so users can drag-select across multiple lines, copy, look up, translate, and tap data detectors — while leaving Android and server-side OCR search untouched.
 
-**Architecture:** A transparent `UiKitView` is layered over the existing Flutter `PhotoView`. Flutter keeps rendering the photo; the native view renders nothing and exists only to host an `ImageAnalysisInteraction`. Flutter pushes the image's on-screen rectangle (in unit coordinates) to native on every pan/zoom frame via `contentsRect`, which is Apple's documented mechanism for custom (non-`UIImageView`) hosts. The native view returns `nil` from `hitTest` wherever there is no text, so pinch/pan/tap still reach Flutter untouched.
+**Architecture:** A transparent `UiKitView` is layered over the existing Flutter `PhotoView`. Flutter keeps rendering the photo; the native view renders nothing and exists only to host an `ImageAnalysisInteraction`. Flutter pushes the image's on-screen rectangle (in unit coordinates) to native on every pan/zoom frame via `contentsRect`, which is Apple's documented mechanism for custom (non-`UIImageView`) hosts.
+
+**Gesture routing is decided in Dart, not in Swift.** An earlier revision of this plan claimed the native view returning `nil` from `hitTest` would let pinch/pan/tap "reach Flutter untouched". That is false, and device testing on 2026-08-03 disproved it. Flutter's gesture arena resolves _before_ UIKit hit-testing runs, so whatever Flutter awards elsewhere never reaches VisionKit at all, and whatever Flutter awards to the platform view is swallowed by UIKit even when the native `hitTest` declines it. `LiveTextPassthroughView.hitTest` still matters — it keeps VisionKit from acting on touches it was handed — but it cannot arbitrate. Two Dart-side properties do that, and both are required:
+
+- `hitTestBehavior: PlatformViewHitTestBehavior.translucent` — the overlay is a Stack **sibling above** `PhotoView`, so the default `opaque` absorbs the hit and `PhotoView` never enters the hit-test path. Its recognizers then never join the arena, and declining a gesture kills it rather than passing it down. This mirrors the `HitTestBehavior.translucent` the Flutter `OcrOverlay` already uses.
+- `gestureRecognizers: {LiveTextGestureRecognizer}` — with the default (none), the native view only receives sequences that _no_ Flutter recognizer claimed, and the asset viewer's `PageView` claims every horizontal drag, so dragging a selection handle pages to the next asset. An `EagerGestureRecognizer` over-corrects and kills pinch/pan/swipe outright. The custom recognizer claims only what is aimed at text.
 
 **Tech Stack:** Flutter 3.44.8 / Dart, Swift 5 + VisionKit, Pigeon 26.3.4 for the platform bridge, mocktail + flutter_test for tests, Riverpod for wiring.
 
@@ -147,7 +152,12 @@ target = project.targets.find { |t| t.name == "Runner" }
 raise "Runner target not found" unless target
 
 runner_group = project.main_group["Runner"]
-group = runner_group["LiveText"] || runner_group.new_group("LiveText", "Runner/LiveText")
+# The second argument is the path RELATIVE TO THE PARENT GROUP. `runner_group`
+# already contributes "Runner", so passing "Runner/LiveText" here resolves to
+# ios/Runner/Runner/LiveText — a path that does not exist. Xcode then silently
+# omits the files from the build until an explicit "Build input files cannot be
+# found" error surfaces, and a grep of project.pbxproj still shows the names.
+group = runner_group["LiveText"] || runner_group.new_group("LiveText", "LiveText")
 
 existing = target.source_build_phase.files_references.map { |r| File.basename(r.path.to_s) }
 
@@ -1112,7 +1122,12 @@ target = project.targets.find { |t| t.name == "Runner" }
 raise "Runner target not found" unless target
 
 runner_group = project.main_group["Runner"]
-group = runner_group["LiveText"] || runner_group.new_group("LiveText", "Runner/LiveText")
+# The second argument is the path RELATIVE TO THE PARENT GROUP. `runner_group`
+# already contributes "Runner", so passing "Runner/LiveText" here resolves to
+# ios/Runner/Runner/LiveText — a path that does not exist. Xcode then silently
+# omits the files from the build until an explicit "Build input files cannot be
+# found" error surfaces, and a grep of project.pbxproj still shows the names.
+group = runner_group["LiveText"] || runner_group.new_group("LiveText", "LiveText")
 
 existing = target.source_build_phase.files_references.map { |r| File.basename(r.path.to_s) }
 
