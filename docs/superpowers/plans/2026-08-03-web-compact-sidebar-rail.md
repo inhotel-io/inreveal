@@ -145,6 +145,7 @@ git commit -m "feat(web): add sidebar media-query seam"
   - `SIDEBAR_MODES: readonly ['auto', 'expanded', 'rail']`
   - `type SidebarMode = 'auto' | 'expanded' | 'rail'`
   - `type SidebarLayout = 'overlay' | 'rail' | 'expanded'`
+  - `parseSidebarMode(text: string | null): SidebarMode` — validating parser, falls back to `'auto'`
   - `sidebarMode` — a `svelte-persisted-store` writable of `SidebarMode`, key `'sidebar-mode'`
   - `sidebarModeStore` — singleton with `mode` (get/set), `layout: SidebarLayout`, `hoverExpanded: boolean`, `railOverlayOpen: boolean`, `toggleRailOverlay(): void`, `resetTransient(): void`
 
@@ -154,7 +155,13 @@ Covers spec coverage items 1, 2, 4, 5.
 
 ```ts
 // web/src/lib/stores/sidebar-mode.spec.ts
-import { sidebarMode, sidebarModeStore, type SidebarLayout, type SidebarMode } from '$lib/stores/sidebar-mode.svelte';
+import {
+  parseSidebarMode,
+  sidebarMode,
+  sidebarModeStore,
+  type SidebarLayout,
+  type SidebarMode,
+} from '$lib/stores/sidebar-mode.svelte';
 
 const mocks = vi.hoisted(() => ({ sidebarMedia: { isFullSidebar: false, isWideSidebar: false } }));
 vi.mock('$lib/stores/sidebar-media.svelte', () => ({ sidebarMedia: mocks.sidebarMedia }));
@@ -208,12 +215,22 @@ describe('sidebarModeStore', () => {
     expect(sidebarModeStore.layout).toBe('overlay');
   });
 
-  // Spec coverage 4.
-  it.each(['nonsense', '', '42'])('falls back to auto for corrupt persisted value %j', (raw) => {
-    localStorage.setItem('sidebar-mode', raw);
-
-    // Re-read through the persisted store's parser.
-    expect(['auto', 'expanded', 'rail']).toContain(sidebarModeStore.mode);
+  // Spec coverage 4. Test the parser directly: writing to localStorage after the store
+  // has been constructed does not re-run its subscriber, so asserting on
+  // `sidebarModeStore.mode` afterwards would pass on the beforeEach value no matter what
+  // the parser does - an assertion that cannot fail.
+  it.each`
+    raw             | expected
+    ${'"rail"'}     | ${'rail'}
+    ${'"expanded"'} | ${'expanded'}
+    ${'"auto"'}     | ${'auto'}
+    ${'"nonsense"'} | ${'auto'}
+    ${'42'}         | ${'auto'}
+    ${'null'}       | ${'auto'}
+    ${''}           | ${'auto'}
+    ${'{ broken'}   | ${'auto'}
+  `('parses $raw to $expected', ({ raw, expected }) => {
+    expect(parseSidebarMode(raw)).toBe(expected);
   });
 
   // Spec coverage 5: this is the bug upstream toggle() has - it must close as well as open.
@@ -268,16 +285,23 @@ export type SidebarLayout = 'overlay' | 'rail' | 'expanded';
 const isSidebarMode = (value: unknown): value is SidebarMode =>
   typeof value === 'string' && (SIDEBAR_MODES as readonly string[]).includes(value);
 
+/**
+ * Exported so the fallback is directly testable. Writing to localStorage after the store
+ * is constructed does not re-run its subscriber, so this cannot be exercised through
+ * `sidebarModeStore.mode`.
+ */
+export const parseSidebarMode = (text: string | null): SidebarMode => {
+  try {
+    const value: unknown = JSON.parse(text ?? 'null');
+    return isSidebarMode(value) ? value : 'auto';
+  } catch {
+    return 'auto';
+  }
+};
+
 export const sidebarMode = persisted<SidebarMode>('sidebar-mode', 'auto', {
   serializer: {
-    parse: (text) => {
-      try {
-        const value: unknown = JSON.parse(text);
-        return isSidebarMode(value) ? value : 'auto';
-      } catch {
-        return 'auto';
-      }
-    },
+    parse: parseSidebarMode,
     stringify: JSON.stringify,
   },
 });
@@ -346,7 +370,7 @@ export const sidebarModeStore = new SidebarModeStore();
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm test --run src/lib/stores/sidebar-mode.spec.ts`
-Expected: PASS (16 tests)
+Expected: PASS (22 tests)
 
 - [ ] **Step 5: Commit**
 
