@@ -43,7 +43,18 @@
   // valid identifier there - so the active tint is composed into the class string.
   const linkClass = $derived(
     [
-      'hover:bg-subtle hover:text-primary flex w-full place-items-center gap-4 rounded-e-full py-3 ps-5 transition-[padding] delay-100 duration-100',
+      'hover:bg-subtle hover:text-primary flex w-full place-items-center gap-4 rounded-e-full py-3 transition-[padding] delay-100 duration-100',
+      // Centred with padding rather than `justify-center`, because `justify-content` cannot be
+      // transitioned: switching it off on expand snapped the icon to the row's start and only
+      // then did the padding animation carry it right, which read as the icon popping in from
+      // the far left. Both states are one length, so the icon simply glides between them.
+      // A fixed length, not `calc(50% - 11px)`: a percentage is re-resolved against the panel
+      // every frame, and the panel's own width is animating at the same time, so the icon
+      // overshot to ~56px before settling. 18px centres the 22px icon in the 5rem rail given
+      // the symmetric scrollbar gutter (~11px each side); being a few px out on a platform with
+      // wider scrollbars is invisible, an overshoot is not. `gap-4` stays in both states - it
+      // sits after the icon so it cannot move it, and holding it constant removes another jump.
+      collapsed ? 'ps-[18px]' : 'ps-7',
       active ? 'bg-primary/10 text-primary' : '',
     ]
       .filter(Boolean)
@@ -106,7 +117,11 @@
     </Link>
   </div>
 
-  {#if items && expanded && !collapsed}
+  <!-- Rendered in the rail too, not just when expanded: the sub-tree's rows are what keep the
+       rail and the sidebar on the same vertical rhythm. Dropping them made every row below an
+       expanded Spaces/Albums jump on hover. The rows collapse to their own thumbnails - see
+       recent-spaces / RecentAlbums - which is how Google Photos' rail shows them. -->
+  {#if items && expanded}
     <div>{@render items()}</div>
   {/if}
 </div>

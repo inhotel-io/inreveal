@@ -61,7 +61,10 @@
   });
 
   const collapse = () => {
-    sidebarModeStore.hoverExpanded = false;
+    // Escape dismisses the rail outright, so both inputs are cleared - the pointer may well
+    // still be over it, and leaving that half set would re-expand immediately.
+    sidebarModeStore.pointerInside = false;
+    sidebarModeStore.focusInside = false;
     sidebarModeStore.railOverlayOpen = false;
     // The sub-850px overlay is modal, and upstream Sidebar - which this shell replaces -
     // dismissed it on Escape, so that has to survive the swap.
@@ -88,10 +91,21 @@
   data-expanded={String(isExpanded)}
   inert={isHidden}
   class="relative z-10 h-full"
-  onpointerenter={() => isRail && (sidebarModeStore.hoverExpanded = true)}
-  onpointerleave={() => isRail && (sidebarModeStore.hoverExpanded = false)}
-  onfocusin={() => isRail && (sidebarModeStore.hoverExpanded = true)}
-  onfocusout={() => isRail && (sidebarModeStore.hoverExpanded = false)}
+  onpointerenter={() => isRail && (sidebarModeStore.pointerInside = true)}
+  onpointerleave={() => isRail && (sidebarModeStore.pointerInside = false)}
+  onfocusin={() => isRail && (sidebarModeStore.focusInside = true)}
+  onfocusout={(event) => {
+    if (!isRail) {
+      return;
+    }
+    // `focusout` bubbles, so this also fires when focus moves from one row to another inside
+    // the sidebar. Treat it as leaving only when the next focus target is outside: otherwise
+    // every click on a row would report a departure. `relatedTarget` is null when focus falls
+    // to <body>, which is a real departure for the keyboard - the pointer half of the union
+    // is what keeps the rail open for a mouse still hovering it.
+    const next = event.relatedTarget;
+    sidebarModeStore.focusInside = next instanceof Node && event.currentTarget.contains(next);
+  }}
   use:clickOutside={{ onOutclick: handleOutclick, onEscape: collapse }}
   use:focusTrap={{ active: isOverlay && sidebarStore.isOpen }}
 >
@@ -103,9 +117,9 @@
   -->
   <div
     data-testid="sidebar-panel"
-    class="absolute inset-s-0 top-0 flex h-full immich-scrollbar flex-col gap-1 overflow-x-hidden overflow-y-auto bg-light ps-2 pt-8 transition-[width] duration-200 motion-reduce:transition-none"
+    class="absolute inset-s-0 top-0 flex h-full immich-scrollbar flex-col gap-1 overflow-x-hidden overflow-y-auto bg-light pt-8 transition-[width] duration-200 motion-reduce:transition-none"
     class:w-64={isExpanded}
-    class:w-16={isRail && !isExpanded}
+    class:w-20={isRail && !isExpanded}
     class:w-0={isHidden}
     class:shadow-2xl={isExpanded && layout !== 'expanded'}
   >

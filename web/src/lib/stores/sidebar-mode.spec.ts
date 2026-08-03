@@ -84,17 +84,39 @@ describe('sidebarModeStore', () => {
     expect(sidebarModeStore.railOverlayOpen).toBe(false);
   });
 
-  it('clears both transient flags on resetTransient', () => {
+  it('clears every transient flag on resetTransient', () => {
     sidebarMode.set('rail');
     setViewport('medium');
-    sidebarModeStore.hoverExpanded = true;
+    // Both halves of the union are set: clearing only one would leave the other holding the
+    // rail open, which is what `resetTransient` exists to prevent.
+    sidebarModeStore.pointerInside = true;
+    sidebarModeStore.focusInside = true;
     sidebarModeStore.toggleRailOverlay();
 
     sidebarModeStore.resetTransient();
 
+    expect(sidebarModeStore.pointerInside).toBe(false);
+    expect(sidebarModeStore.focusInside).toBe(false);
     expect(sidebarModeStore.hoverExpanded).toBe(false);
     expect(sidebarModeStore.railOverlayOpen).toBe(false);
   });
+
+  // The union is the whole point of splitting the flag: either input alone holds the rail open.
+  it.each`
+    pointerInside | focusInside | expanded
+    ${false}      | ${false}    | ${false}
+    ${true}       | ${false}    | ${true}
+    ${false}      | ${true}     | ${true}
+    ${true}       | ${true}     | ${true}
+  `(
+    'reports hoverExpanded=$expanded for pointer=$pointerInside focus=$focusInside',
+    ({ pointerInside, focusInside, expanded }) => {
+      sidebarModeStore.pointerInside = pointerInside;
+      sidebarModeStore.focusInside = focusInside;
+
+      expect(sidebarModeStore.hoverExpanded).toBe(expanded);
+    },
+  );
 
   it('writes the mode through to the persisted store', () => {
     sidebarModeStore.mode = 'rail';

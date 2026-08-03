@@ -14,6 +14,11 @@ import { sharedSpaceLinkedAlbumFactory } from '@test-data/factories/shared-space
 const mockPage = vi.hoisted(() => ({ url: new URL('https://gallery.test/photos') }));
 vi.mock('$app/state', () => ({ page: mockPage }));
 
+const sidebarMocks = vi.hoisted(() => ({
+  sidebarModeStore: { layout: 'expanded' as 'overlay' | 'rail' | 'expanded', hoverExpanded: false },
+}));
+vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: sidebarMocks.sidebarModeStore }));
+
 vi.mock('$lib/utils/handle-error', () => ({
   handleError: vi.fn(),
 }));
@@ -37,6 +42,8 @@ describe('RecentSpaces component', () => {
     recentSpaceAlbumsExpanded.set({});
     userInteraction.spaceAlbums = undefined;
     mockPage.url = new URL('https://gallery.test/photos');
+    sidebarMocks.sidebarModeStore.layout = 'expanded';
+    sidebarMocks.sidebarModeStore.hoverExpanded = false;
   });
 
   const renderAndFlush = async () => {
@@ -114,6 +121,60 @@ describe('RecentSpaces component', () => {
   // The sidebar always identifies a space by its thumbnail. New-activity is still surfaced on the
   // Spaces page (space card / table) and by the in-timeline new-assets divider, so the sidebar
   // doesn't trade the space's identity for an activity dot.
+  // The rail keeps these rows so it holds the expanded sidebar's vertical rhythm - dropping them
+  // was what made rows below an expanded Spaces jump on hover. Collapsed, a row is just its
+  // thumbnail, centred, which is how Google Photos' rail shows spaces and albums.
+  describe('rail mode', () => {
+    const railWithAlbums = async (albumCount: number) => {
+      const space = sharedSpaceFactory.build({ id: 'rail-1', albumCount, thumbnailAssetId: 'asset-rail-1' });
+      const albums = Array.from({ length: albumCount }, (_, i) =>
+        sharedSpaceLinkedAlbumFactory.build({ id: `album-${i}`, linkedAt: `2026-01-0${i + 1}T00:00:00.000Z` }),
+      );
+      sdkMock.getAllSpaces.mockResolvedValueOnce([space]);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValueOnce(albums);
+      recentSpaceAlbumsExpanded.set({ 'rail-1': true });
+      sidebarMocks.sidebarModeStore.layout = 'rail';
+      await renderAndFlush();
+      return space;
+    };
+
+    it('collapses the space row to its centred thumbnail', async () => {
+      await railWithAlbums(1);
+
+      const row = screen.getByTestId('sidebar-space-rail-1');
+      // Centred by padding, not `justify-center`, so expanding animates instead of snapping
+      // the thumbnail to the row's start first. See sidebar-nav-item for the full reasoning.
+      expect(row.className).not.toContain('justify-center');
+      expect(row.className).toMatch(/ps-\[\d+px\]/);
+      expect(screen.getByTestId('sidebar-space-thumbnail-rail-1')).toBeInTheDocument();
+    });
+
+    it('drops the chevron, which is unreadable beside a 24px thumbnail', async () => {
+      await railWithAlbums(1);
+
+      expect(screen.queryByTestId('sidebar-space-chevron-rail-1')).not.toBeInTheDocument();
+    });
+
+    it('keeps the see-all row so the rail stays a row-for-row match', async () => {
+      // Four albums: only three render, so the see-all row appears.
+      await railWithAlbums(4);
+
+      const seeAll = screen.getByTestId('sidebar-space-see-all-rail-1');
+      expect(seeAll.className).toMatch(/ps-\[\d+px\]/);
+      expect(seeAll.className).not.toMatch(/\bps-16\b/);
+    });
+
+    it('restores the full rows while hover-expanded', async () => {
+      sidebarMocks.sidebarModeStore.hoverExpanded = true;
+      await railWithAlbums(1);
+
+      const row = screen.getByTestId('sidebar-space-rail-1');
+      expect(row.className).toContain('ps-12');
+      expect(row.className).not.toMatch(/ps-\[\d+px\]/);
+      expect(screen.getByTestId('sidebar-space-chevron-rail-1')).toBeInTheDocument();
+    });
+  });
+
   describe('space thumbnail', () => {
     it('shows the space thumbnail when there are no new assets', async () => {
       const space = sharedSpaceFactory.build({

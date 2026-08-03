@@ -26,13 +26,18 @@ describe('sidebar-nav-group', () => {
     expect(screen.queryByTestId('sidebar-group-divider')).not.toBeInTheDocument();
   });
 
+  // A bare rule is 47px shorter than the header it replaced, so every row below a group jumped
+  // that far the moment the rail collapsed - and back again on hover. The header stays mounted
+  // to hold the group's height; only its ink is swapped for a rule.
   it('renders a divider instead of the header in rail mode', () => {
     mocks.sidebarModeStore.layout = 'rail';
 
     render(SidebarNavGroup, { title: 'Library' });
 
     expect(screen.getByTestId('sidebar-group-divider')).toBeInTheDocument();
-    expect(screen.queryByText('Library')).not.toBeInTheDocument();
+    const reserved = screen.getByText('Library').closest('[aria-hidden="true"]');
+    // Hidden from sight and from assistive tech, but still occupying its box.
+    expect(reserved).toHaveClass('invisible');
   });
 
   it('restores the header while hover-expanded', () => {

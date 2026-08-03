@@ -32,8 +32,20 @@ export const sidebarMode = persisted<SidebarMode>('sidebar-mode', 'auto', {
 class SidebarModeStore {
   #mode = $state<SidebarMode>('auto');
 
-  /** Pointer/focus expansion. Only meaningful while `layout === 'rail'`. */
-  hoverExpanded = $state(false);
+  /**
+   * The two inputs to rail expansion, tracked separately rather than as one flag. `focusout`
+   * bubbles, so it fires on the sidebar whenever focus moves between rows inside it - with a
+   * single flag that focus event clobbered the pointer's state, collapsing the rail out from
+   * under a pointer that had never left. Expansion is their union; neither may clear the other.
+   * Only meaningful while `layout === 'rail'`.
+   */
+  pointerInside = $state(false);
+  focusInside = $state(false);
+
+  /** Whether pointer or focus currently holds the rail open. */
+  get hoverExpanded(): boolean {
+    return this.pointerInside || this.focusInside;
+  }
 
   /**
    * The touch and keyboard affordance, toggled by the navbar hamburger in rail mode.
@@ -91,7 +103,8 @@ class SidebarModeStore {
   }
 
   resetTransient() {
-    this.hoverExpanded = false;
+    this.pointerInside = false;
+    this.focusInside = false;
     this.railOverlayOpen = false;
   }
 }

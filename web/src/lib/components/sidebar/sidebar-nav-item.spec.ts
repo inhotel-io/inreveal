@@ -61,6 +61,35 @@ describe('sidebar-nav-item', () => {
     expect(link()).toHaveAttribute('data-collapsed', 'false');
   });
 
+  // The active pill is the link itself (`w-full`), so it fills the rail's content box and is
+  // centred - but the icon inside is not. `ps-5` leads the icon in for the label, and the
+  // label stays mounted at zero width when collapsed, so its `gap-4` still occupies space
+  // after the icon. Both push the icon right of the pill's centre. With no visible label to
+  // lead, the icon has to centre instead. happy-dom cannot lay this out, so assert the
+  // classes that decide it.
+  it('centres the icon in the active pill when collapsed', () => {
+    setLayout('rail');
+
+    render(SidebarNavItem, { title: 'Photos', href: '/photos', icon: mdiImageMultiple });
+
+    // Padding, never `justify-center`: `justify-content` is not an animatable property, so
+    // dropping it on expand snapped the icon to the row's start and the padding animation then
+    // carried it right - the icon appeared to pop in from the far left. Keeping both states a
+    // single length means the expand is one continuous glide.
+    expect(link().className).not.toContain('justify-center');
+    expect(link().className).toMatch(/ps-\[\d+px\]/);
+  });
+
+  // The other half of the pairing: centring must be scoped to the collapsed rail, or the
+  // expanded sidebar loses the icon-then-label reading order the layout depends on.
+  it('leads with the icon and gaps the label when expanded', () => {
+    render(SidebarNavItem, { title: 'Photos', href: '/photos', icon: mdiImageMultiple });
+
+    expect(link().className).toContain('ps-7');
+    expect(link().className).toContain('gap-4');
+    expect(link().className).not.toContain('justify-center');
+  });
+
   it('adds a tooltip only when collapsed', () => {
     setLayout('rail');
     render(SidebarNavItem, { title: 'Photos', href: '/photos', icon: mdiImageMultiple });
@@ -92,8 +121,11 @@ describe('sidebar-nav-item', () => {
     expect(link()).toHaveAttribute('data-active', 'true');
   });
 
-  // Spec coverage 15.
-  it('hides the sub-tree in rail mode', () => {
+  // Spec coverage 15, inverted: the rail keeps the sub-tree. Dropping those rows made the rail
+  // shorter than the sidebar it expands into, so every row below an expanded Spaces or Albums
+  // jumped on hover. The rows collapse to their own thumbnails instead - the treatment Google
+  // Photos' rail uses - which keeps both states on the same vertical rhythm.
+  it('keeps the sub-tree in rail mode', () => {
     setLayout('rail');
 
     render(SidebarNavItem, {
@@ -101,6 +133,21 @@ describe('sidebar-nav-item', () => {
       href: '/albums',
       icon: mdiImageMultiple,
       expanded: true,
+      items: createRawSnippet(() => ({ render: () => `<span data-testid="subtree">recent</span>` })),
+    });
+
+    expect(screen.getByTestId('subtree')).toBeInTheDocument();
+  });
+
+  // ...but only when it is actually expanded: the rail must not force sub-trees open.
+  it('hides a collapsed sub-tree in rail mode', () => {
+    setLayout('rail');
+
+    render(SidebarNavItem, {
+      title: 'Albums',
+      href: '/albums',
+      icon: mdiImageMultiple,
+      expanded: false,
       items: createRawSnippet(() => ({ render: () => `<span data-testid="subtree">recent</span>` })),
     });
 

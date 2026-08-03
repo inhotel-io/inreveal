@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { createRawSnippet, tick } from 'svelte';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import SidebarShell from '$lib/components/sidebar/sidebar-shell.svelte';
 import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
 
@@ -23,6 +25,23 @@ vi.mock('$lib/components/shared-components/navigation-bar/NavigationBar.svelte',
 }));
 
 const nav = () => screen.getByTestId('sidebar-parent');
+
+// Every selector in gallery-theme.css whose rule carries `declaration`. Read from the
+// stylesheet rather than restated here so these tests track the theme instead of a copy of it.
+// Read off disk, not imported: Vite's CSS pipeline serves `?raw` on a .css file as an empty
+// string. Anchored to the test's own path because `process.cwd()` depends on where the runner
+// was launched from and `import.meta.url` is not a file: URL under Vite's transform.
+const themeSelectorsDeclaring = (declaration: string) => {
+  const themePath = path.resolve(expect.getState().testPath!, '../../../../styles/gallery-theme.css');
+  // Comments stripped whole-file before the comma split: the theme documents each rule above
+  // it, and a comment containing a comma would otherwise survive as an unparseable selector.
+  const css = readFileSync(themePath, 'utf8').replaceAll(/\/\*[\S\s]*?\*\//g, '');
+  return [...css.matchAll(/(?<selectors>[^{}]+)\{(?<body>[^{}]*)\}/g)]
+    .filter((rule) => rule.groups!.body.includes(declaration))
+    .flatMap((rule) => rule.groups!.selectors.split(','))
+    .map((selector) => selector.trim())
+    .filter(Boolean);
+};
 
 describe('sidebar-shell', () => {
   beforeEach(() => {
@@ -90,6 +109,51 @@ describe('sidebar-shell', () => {
     // Deliberately not "the nav has no `w-` utility at all": a width that is constant per
     // layout is fine and Task 8 may add one. What must never happen is a width that
     // tracks expansion, which is exactly what the invariance above forbids.
+  });
+
+  // `focusout` bubbles, so it fires on the nav for focus moving *between* rows as well as for
+  // focus leaving. Sharing one flag with the pointer let the focus half clobber the pointer
+  // half: clicking a row collapsed the rail and the following `focusin` re-expanded it (a
+  // visible flicker), and when no `focusin` followed - focus falling to <body> because the
+  // focused row was unmounted, which is what collapsing a sub-tree or re-rendering after
+  // navigation does - the rail stayed collapsed under a pointer that had never left.
+  it('stays expanded when focus leaves while the pointer is still inside', async () => {
+    render(SidebarShell);
+    await fireEvent.pointerEnter(nav());
+    expect(nav()).toHaveAttribute('data-expanded', 'true');
+
+    // No relatedTarget: focus fell to <body>, e.g. the focused row was just unmounted.
+    await fireEvent.focusOut(nav());
+
+    expect(nav()).toHaveAttribute('data-expanded', 'true');
+  });
+
+  it('stays expanded while focus moves between rows', async () => {
+    const children = createRawSnippet(() => ({
+      render: () => `<div><button type="button">Photos</button><button type="button">Albums</button></div>`,
+    }));
+    render(SidebarShell, { children });
+    const [, albums] = screen.getAllByRole('button');
+    await fireEvent.focusIn(nav());
+    expect(nav()).toHaveAttribute('data-expanded', 'true');
+
+    await fireEvent.focusOut(nav(), { relatedTarget: albums });
+
+    expect(nav()).toHaveAttribute('data-expanded', 'true');
+  });
+
+  // The other half: expansion is the union of the two inputs, so it must survive until both
+  // are gone - and still collapse once they are, or the rail would pin open.
+  it('collapses only once both the pointer and focus have left', async () => {
+    render(SidebarShell);
+    await fireEvent.pointerEnter(nav());
+    await fireEvent.focusIn(nav());
+
+    await fireEvent.focusOut(nav());
+    expect(nav()).toHaveAttribute('data-expanded', 'true');
+
+    await fireEvent.pointerLeave(nav());
+    expect(nav()).toHaveAttribute('data-expanded', 'false');
   });
 
   // Spec coverage 8.
@@ -166,7 +230,7 @@ describe('sidebar-shell', () => {
     render(SidebarShell);
     expect(mocks.beforeNavigate).toHaveBeenCalled();
 
-    sidebarModeStore.hoverExpanded = true;
+    sidebarModeStore.pointerInside = true;
     sidebarModeStore.toggleRailOverlay();
 
     const handler = mocks.beforeNavigate.mock.calls[0][0] as () => void;
@@ -287,6 +351,60 @@ describe('sidebar-shell direction and motion', () => {
     // `inset-s-0` is this codebase's canonical inset-inline-start utility.
     expect(panel().className).toContain('inset-s-0');
     expect(panel().className).not.toMatch(/\b(?:left|right)-0\b/);
+  });
+
+  // The fork's two-tone theme paints the sidebar surface itself, with unlayered rules in
+  // gallery-theme.css that beat the panel's own `bg-light` utility. That coupling is to the
+  // DOM shape: this shell moved the visible surface off the `<nav id="sidebar">` onto an inner
+  // panel that covers it, so a chrome rule naming only `#sidebar` paints an element the user
+  // can no longer see and leaves the panel showing `bg-light` - which in dark mode resolves to
+  // the darker *content* surface, not the chrome. happy-dom has no cascade to assert a colour
+  // against, so assert the selector reaches the panel instead.
+  it('exposes the painted surface to the fork chrome rule', () => {
+    render(SidebarShell);
+
+    const selectors = themeSelectorsDeclaring('background-color: var(--gallery-chrome)');
+    // Guards the parse: an empty or mis-split list would make the `.some` below false-y for
+    // reasons that have nothing to do with the panel.
+    expect(selectors).toContain('#sidebar');
+    expect(selectors.some((selector) => panel().matches(selector))).toBe(true);
+  });
+
+  // The collapsed rail is 5rem, matching the Material navigation rail Google Photos uses.
+  // This has to stay in lockstep with UserPageLayout's `rail` grid column (spacing * 20): the
+  // panel is absolutely positioned inside the nav, so a wider panel would overhang the column
+  // and a narrower one would leave a strip of bare page showing through.
+  it('sizes the collapsed rail to the navigation-rail width', () => {
+    render(SidebarShell);
+
+    expect(nav()).toHaveAttribute('data-expanded', 'false');
+    expect(panel().className).toContain('w-20');
+  });
+
+  // The rail centres its icons on the panel's content box, so the box has to be centred in the
+  // panel. Any horizontal padding here breaks that: the scrollbar gutter only reserves at the
+  // inline-end, so a start padding of a different width lands every icon off-centre. Symmetry
+  // comes from `stable both-edges` in the theme instead, which needs no padding to match it.
+  it('keeps the panel free of horizontal padding so the gutter can centre it', () => {
+    render(SidebarShell);
+
+    expect(themeSelectorsDeclaring('scrollbar-gutter: stable both-edges').some((s) => panel().matches(s))).toBe(true);
+    expect(panel().className).not.toMatch(/\b(?:ps|pe|px)-\d/);
+  });
+
+  // Same stale coupling, second symptom: the theme reserves a scrollbar gutter so that
+  // expanding Spaces/Albums cannot shrink the pill width and shift the side margins. That
+  // reservation only does anything on a scroll container, and this shell moved the scrolling
+  // from the nav to the panel - leaving the rule inert and the rows running flush to the
+  // sidebar's inline-end edge. `#sidebar` must keep it too: /tags and /folders opt out of the
+  // rail and still render upstream Sidebar.svelte, where the nav itself is the scroller.
+  it('reserves the scrollbar gutter on the element that actually scrolls', () => {
+    render(SidebarShell);
+
+    const selectors = themeSelectorsDeclaring('scrollbar-gutter: stable');
+    expect(selectors).toContain('#sidebar');
+    expect(panel().className).toContain('overflow-y-auto');
+    expect(selectors.some((selector) => panel().matches(selector))).toBe(true);
   });
 
   // Spec coverage 22. Assert the pairing, not just the opt-out: a bare

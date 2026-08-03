@@ -59,7 +59,7 @@ describe('UserPageLayout sidebar width', () => {
   it.each`
     layout        | width         | cssValue
     ${'overlay'}  | ${'0'}        | ${'0px'}
-    ${'rail'}     | ${'rail'}     | ${'calc(var(--spacing) * 16)'}
+    ${'rail'}     | ${'rail'}     | ${'calc(var(--spacing) * 20)'}
     ${'expanded'} | ${'expanded'} | ${'calc(var(--spacing) * 64)'}
   `('sets the grid width to $width for $layout', ({ layout, width, cssValue }) => {
     layoutMocks.sidebarModeStore.layout = layout;

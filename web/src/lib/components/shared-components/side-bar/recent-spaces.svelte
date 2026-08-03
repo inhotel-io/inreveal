@@ -6,6 +6,7 @@
     recentSpaceAlbumsExpanded,
     setSpaceAlbumsExpanded,
   } from '$lib/stores/preferences.store';
+  import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
   import { pinnedSpaceIds } from '$lib/stores/space-view.store';
   import { userInteraction } from '$lib/stores/user.svelte';
   import { getAssetMediaUrl } from '$lib/utils';
@@ -13,7 +14,7 @@
   import { handleError } from '$lib/utils/handle-error';
   import { getAllSpaces, getSharedSpaceAlbums } from '@immich/sdk';
   import { Icon } from '@immich/ui';
-  import { mdiChevronDown, mdiChevronRight } from '@mdi/js';
+  import { mdiChevronDown, mdiChevronRight, mdiDotsHorizontal } from '@mdi/js';
   import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
 
@@ -94,6 +95,10 @@
       void refreshSpaces();
     }
   });
+
+  // These rows stay rendered in the rail so it keeps the sidebar's vertical rhythm; collapsed
+  // they show only their thumbnail, centred, the way Google Photos' rail does.
+  const collapsed = $derived(sidebarModeStore.layout === 'rail' && !sidebarModeStore.hoverExpanded);
 </script>
 
 {#each spaces as space (space.id)}
@@ -113,7 +118,10 @@
          alone: with the expanded album rows inside it, `top-1/2` would centre the chevron on the
          whole group instead of on the space it belongs to. -->
     <div class="relative">
-      {#if hasAlbums}
+      <!-- No chevron in the rail: it is unreadable beside a 24px thumbnail at 5rem, and the
+           sub-tree it toggles is already showing. Expansion is driven from the expanded
+           sidebar and persists, exactly as the parent nav item's own chevron does. -->
+      {#if hasAlbums && !collapsed}
         <button
           type="button"
           aria-label={expanded ? $t('collapse') : $t('expand')}
@@ -131,7 +139,9 @@
         title={space.name}
         aria-current={active ? 'page' : undefined}
         data-testid="sidebar-space-{space.id}"
-        class="flex w-full place-items-center gap-4 rounded-e-full py-3 ps-10 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary group-hover:sm:pe-4 md:pe-4 dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {active
+        class="flex w-full place-items-center gap-4 rounded-e-full py-3 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {collapsed
+          ? 'ps-[17px]'
+          : 'ps-12 group-hover:sm:pe-4 md:pe-4'} {active
           ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
           : ''}"
       >
@@ -146,7 +156,14 @@
             data-testid="sidebar-space-thumbnail-{space.id}"
           ></div>
         </div>
-        <div class="grow truncate text-sm font-medium">
+        <!-- Kept mounted and collapsed to zero width rather than unmounted, so rail <-> expanded
+             stays a CSS transition. `grow` has to go with it or the name would still claim width. -->
+        <div
+          class="truncate text-sm font-medium"
+          class:grow={!collapsed}
+          class:w-0={collapsed}
+          class:opacity-0={collapsed}
+        >
           {space.name}
         </div>
       </a>
@@ -159,26 +176,46 @@
           title={album.albumName}
           aria-current={albumActive ? 'page' : undefined}
           data-testid="sidebar-space-album-{album.id}"
-          class="flex w-full place-items-center gap-4 rounded-e-full py-2 ps-14 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {albumActive
-            ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
-            : ''}"
+          class="flex w-full place-items-center gap-4 rounded-e-full py-2 transition-[padding] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {collapsed
+            ? 'ps-[17px]'
+            : 'ps-16'} {albumActive ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary' : ''}"
         >
           <div
-            class="size-6 rounded-sm bg-gray-200 bg-cover dark:bg-gray-600"
+            class="size-6 shrink-0 rounded-sm bg-gray-200 bg-cover dark:bg-gray-600"
             style={album.albumThumbnailAssetId
               ? `background-image:url('${getAssetMediaUrl({ id: album.albumThumbnailAssetId })}')`
               : ''}
           ></div>
-          <div class="grow truncate text-sm font-medium">{album.albumName}</div>
+          <div
+            class="truncate text-sm font-medium"
+            class:grow={!collapsed}
+            class:w-0={collapsed}
+            class:opacity-0={collapsed}
+          >
+            {album.albumName}
+          </div>
         </a>
       {/each}
       {#if (cachedAlbums?.length ?? 0) > 3}
+        <!-- Collapsed this row keeps its box and its link, showing an ellipsis instead of the
+             sentence - dropping it would put the rail a row short of the sidebar again, which is
+             the drift these thumbnails exist to remove. The label carries the accessible name. -->
         <a
           href={Route.viewSpaceAlbums({ id: space.id })}
+          title={collapsed
+            ? $t('sidebar_space_see_all_albums', { values: { count: cachedAlbums?.length ?? 0 } })
+            : undefined}
           data-testid="sidebar-space-see-all-{space.id}"
-          class="flex w-full place-items-center rounded-e-full py-2 ps-14 text-sm font-medium text-immich-primary hover:bg-subtle dark:text-immich-dark-primary"
+          class="flex w-full place-items-center rounded-e-full py-2 text-sm font-medium text-immich-primary transition-[padding] delay-100 duration-100 hover:bg-subtle dark:text-immich-dark-primary {collapsed
+            ? 'ps-[19px]'
+            : 'ps-16'}"
         >
-          {$t('sidebar_space_see_all_albums', { values: { count: cachedAlbums?.length ?? 0 } })}
+          {#if collapsed}
+            <Icon icon={mdiDotsHorizontal} size="1.25em" aria-hidden={true} />
+          {/if}
+          <span class="truncate" class:w-0={collapsed} class:opacity-0={collapsed}>
+            {$t('sidebar_space_see_all_albums', { values: { count: cachedAlbums?.length ?? 0 } })}
+          </span>
         </a>
       {/if}
     {/if}

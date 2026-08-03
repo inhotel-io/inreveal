@@ -62,7 +62,7 @@
   });
 
   const sidebarWidthValue = $derived(
-    { '0': '0px', rail: 'calc(var(--spacing) * 16)', expanded: 'calc(var(--spacing) * 64)' }[sidebarWidth],
+    { '0': '0px', rail: 'calc(var(--spacing) * 20)', expanded: 'calc(var(--spacing) * 64)' }[sidebarWidth],
   );
 </script>
 

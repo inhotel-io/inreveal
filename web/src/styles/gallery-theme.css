@@ -141,8 +141,14 @@
 body {
   background-color: var(--gallery-chrome);
 }
+/* The sidebar shell paints its surface on an inner scroll panel that is absolutely
+ * positioned over the <nav>, so recoloring the nav alone leaves the user looking at the
+ * panel's own `bg-light` — the darker *content* surface, not the chrome. Both are listed:
+ * the nav still shows through during the rail's width transition. Panel identified by its
+ * scroll-container class signature, as the <main> rule below does. */
 #dashboard-navbar,
-#sidebar {
+#sidebar,
+#sidebar > div.absolute.overflow-y-auto {
   background-color: var(--gallery-chrome);
 }
 /* Google-Photos-style sidebar nav pills: fully-rounded on BOTH sides for the hover/active background,
@@ -152,9 +158,19 @@ body {
   border-radius: 9999px;
 }
 /* Reserve the scrollbar gutter so expanding Spaces/Albums (which overflows the sidebar and shows the
- * thin scrollbar) doesn't shrink the pill width and shift the side margins. */
+ * thin scrollbar) doesn't shrink the pill width and shift the side margins. A gutter only applies to
+ * a scroll container, so it has to name whichever element scrolls: the sidebar shell scrolls its
+ * inner panel, while /tags and /folders opt out of the rail and still scroll the <nav> itself. Doubles
+ * as the inline-end breathing room opposite `ps-2` — without it the rows run flush to the edge. */
 #sidebar {
   scrollbar-gutter: stable;
+}
+/* `both-edges` on the shell's panel, and the panel carries no horizontal padding to match: the
+ * rail centres its icons on the content box, so an end-only reservation would land every icon
+ * half a scrollbar left of the rail's middle. Reserving both edges keeps the box centred
+ * whatever width the platform gives its scrollbar, which no fixed padding can do. */
+#sidebar > div.absolute.overflow-y-auto {
+  scrollbar-gutter: stable both-edges;
 }
 /* The Spaces/Albums expand-collapse caret is an absolute sibling of the pill link — it shouldn't carry
  * its own hover background. Kill it, and instead highlight the parent item's pill when the caret is
