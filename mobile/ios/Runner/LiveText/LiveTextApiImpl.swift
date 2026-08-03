@@ -39,19 +39,29 @@ final class LiveTextApiImpl: NSObject, LiveTextHostApi {
     return ImageAnalyzer.isSupported
   }
 
+  // `LiveTextPlatformView` is implicitly @MainActor because it conforms to
+  // `ImageAnalysisInteractionDelegate`. Pigeon delivers host-API calls on the
+  // platform thread, which is the main thread, so asserting that isolation is
+  // safe and keeps these methods matching the generated protocol's signatures.
   func setContentsRect(viewId: Int64, left: Double, top: Double, width: Double, height: Double) throws {
     guard #available(iOS 16.0, *) else { return }
-    registry.view(viewId)?.setContentsRect(CGRect(x: left, y: top, width: width, height: height))
+    MainActor.assumeIsolated {
+      registry.view(viewId)?.setContentsRect(CGRect(x: left, y: top, width: width, height: height))
+    }
   }
 
   func loadImage(viewId: Int64, url: String) throws {
     guard #available(iOS 16.0, *) else { return }
-    registry.view(viewId)?.loadImage(url: url)
+    MainActor.assumeIsolated {
+      registry.view(viewId)?.loadImage(url: url)
+    }
   }
 
   func dispose(viewId: Int64) throws {
     if #available(iOS 16.0, *) {
-      registry.view(viewId)?.reset()
+      MainActor.assumeIsolated {
+        registry.view(viewId)?.reset()
+      }
     }
     registry.remove(viewId: viewId)
   }

@@ -358,7 +358,7 @@
 				4AACCFA56DA606447113933A /* LiveTextPlatformViewFactory.swift */,
 			);
 			name = LiveText;
-			path = Runner/LiveText;
+			path = LiveText;
 			sourceTree = "<group>";
 		};
 		FAC6F8B62D287F120078CB2F /* ShareExtension */ = {
