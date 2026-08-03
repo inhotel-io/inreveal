@@ -140,6 +140,13 @@ describe('Route.search call sites', () => {
   // for old bookmarks, but nothing new may point at it: a palette/search-bar result belongs on
   // the surface it has context of (#922). This is a SUBSET assertion, so PRs that remove a call
   // site (#778 for the info panel, #884 for the Explore/Places tiles) do not have to edit it.
+  // If this fails, the fix is almost never to add the new file here — it's to route the result
+  // contextually (filter the surface the user is already on), the way Tasks 2-5 did for the
+  // palette. Only extend the allowlist for a genuinely new, deliberate landing-page-style link.
+  // The check is a literal substring match on `Route.search`, not an AST or type-aware scan: it
+  // does not catch computed access (`Route['search'](...)`) or an aliased import
+  // (`import { Route as R } from '$lib/route'; R.search(...)`). Neither shape exists in web/src
+  // today; if one appears, this guard will not see it.
   const ALLOWED = new Set([
     'lib/components/asset-viewer/DetailPanel.svelte',
     'lib/services/asset.service.ts',

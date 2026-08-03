@@ -7225,8 +7225,15 @@ describe('palette destination table', () => {
   const lastGoto = () => vi.mocked(goto).mock.calls.at(-1)?.[0] as string | undefined;
 
   // Pinned from /spaces/space-1 so any result kind that silently starts navigating off the
-  // surface the user was reading shows up as a diff here. Album / space / photo / nav are
-  // destinations rather than filters and are expected to leave.
+  // surface the user was reading shows up as a diff here. Album / space / nav / command are
+  // destinations rather than filters and are expected to leave; `photo` is included as a
+  // destination control alongside the three kinds (tag / person / place) whose filter-vs-
+  // destination behaviour Tasks 2-5 actually changed, so this table deliberately covers only
+  // those four kinds. The rest are pinned elsewhere, not duplicated here: album/space via
+  // activateAlbum/activateSpace (same spec file, ~line 2690-2805), nav in
+  // describe('activate navigation') (~line 4373-4423), command handlers in
+  // command-items.spec.ts (~lines 661, 910, 934), and the typed/smart-search commit path at
+  // ~line 1517.
   it.each([
     ['tag', { id: 't1', name: 'beach' }, '/spaces/space-1?tags=t1'],
     [
