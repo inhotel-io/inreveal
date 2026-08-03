@@ -2047,7 +2047,15 @@ export class GlobalSearchManager {
         break;
       }
       case 'person': {
-        void goto(Route.viewPerson({ id: entry.personId }));
+        // Recents only ever hold non-space people — activate('person') skips the addEntry for a
+        // space person — and the server builds filterId as `person:<profileId>`
+        // (face-identity.repository.ts), so this reconstruction is exact and a replayed recent
+        // lands exactly where a fresh pick lands.
+        this.navigateToPersonResults({
+          id: entry.personId,
+          filterId: `person:${entry.personId}`,
+          name: entry.label,
+        });
         break;
       }
       case 'place': {

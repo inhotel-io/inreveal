@@ -2647,11 +2647,11 @@ describe('activateRecent()', () => {
     expect(m.isOpen).toBe(false);
   });
 
-  it('person entry navigates and closes', () => {
+  it('person entry filters the timeline and closes', () => {
     const m = new GlobalSearchManager();
     m.open();
     m.activateRecent({ kind: 'person', id: 'person:p1', personId: 'p1', label: 'Alice', lastUsed: 1 });
-    expect(goto).toHaveBeenCalledWith('/people/p1');
+    expect(goto).toHaveBeenCalledWith('/photos?people=person%3Ap1');
     expect(m.isOpen).toBe(false);
   });
 
@@ -7052,5 +7052,36 @@ describe('person activation navigation', () => {
     m.activate('person', spacePerson('space-1'));
 
     expect(getEntries().some((e) => e.kind === 'person')).toBe(false);
+  });
+
+  it('routes a recent person entry to the filtered timeline too', () => {
+    const m = new GlobalSearchManager();
+
+    m.activateRecent({ kind: 'person', id: 'person:p1', personId: 'p1', label: 'Alice', lastUsed: 1 });
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+    expect(storeTypedSearchNames).toHaveBeenCalledWith('/photos?people=person%3Ap1', {
+      personNames: new Map([['person:p1', 'Alice']]),
+      tagNames: new Map(),
+    });
+  });
+
+  it('routes a recent person entry onto the space timeline it is replayed from', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1');
+
+    // Recents only ever hold personal people, so replaying one inside a space leaves the space.
+    m.activateRecent({ kind: 'person', id: 'person:p1', personId: 'p1', label: 'Alice', lastUsed: 1 });
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('ignores a corrupt person recent without navigating', () => {
+    const m = new GlobalSearchManager();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    m.activateRecent({ kind: 'person', id: 'person:broken', label: 'Alice', lastUsed: 1 } as never);
+
+    expect(goto).not.toHaveBeenCalled();
   });
 });
