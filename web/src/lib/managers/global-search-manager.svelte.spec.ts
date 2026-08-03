@@ -6978,7 +6978,7 @@ describe('person activation navigation', () => {
     expect(lastGoto()).toBe('/photos?people=person%3Aidentity-7');
   });
 
-  it('falls back to person:<id> when there is no primaryProfile', () => {
+  it('falls back to the bare id when there is no primaryProfile', () => {
     const m = new GlobalSearchManager();
 
     m.activate('person', { id: 'p9', name: 'Zoe' } as PersonResponseDto);

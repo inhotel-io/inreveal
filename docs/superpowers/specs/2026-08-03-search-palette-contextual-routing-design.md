@@ -70,7 +70,7 @@ Prefixed ids come from the existing `getPhotosPersonFilterId`, which prefers the
 
 ### 3. Place → `?city=…`, except on `/map`
 
-`PlacesResponseDto` carries `name`, `latitude`, `longitude`, `admin1name`, `admin2name`. Of those only `name` maps to a searchable-page param (`city`); there is no `state` filter. This is already what `place-preview.svelte` searches by, so the preview and the destination agree.
+`PlacesResponseDto` carries `name`, `latitude`, `longitude`, `admin1name`, `admin2name`. Of those only `name` maps to a searchable-page param (`city`); there is no `state` filter. `place-preview.svelte` searches by both `city: place.name` and `state: place.admin1name`, so for two same-named cities in different states the destination is a deliberate superset of what the preview showed.
 
 | Current page                  | Destination                                     |
 | ----------------------------- | ----------------------------------------------- |
@@ -110,31 +110,31 @@ Unit tests are vitest + `@testing-library/svelte`. Two traps apply from this rep
 
 ### Person routing
 
-| #   | Scenario                                        | Expected                                               |
-| --- | ----------------------------------------------- | ------------------------------------------------------ |
-| 1   | personal person, on `/photos`                   | `/photos?people=person:p1`                             |
-| 2   | personal person, on `/photos?tags=t1&rating=4`  | `tags` and `rating` preserved; `people` AND-ed in      |
-| 2b  | personal person, on `/photos?q=sunset&sort=asc` | stale `q` and `sort` dropped, as the tag path does     |
-| 3   | person already in the active `people` filter    | still navigates; the id appears once, not twice        |
-| 4   | space-person of A, on `/spaces/A`               | `/spaces/A?people=<bare profileId>`                    |
-| 5   | space-person of A, on `/spaces/A/photos`        | base is `/spaces/A/photos`, bare id                    |
-| 6   | space-person of **B**, on `/spaces/A`           | `/photos?people=space-person:<profileId>`              |
-| 7   | personal person, on `/spaces/A`                 | `/photos?people=person:p1`                             |
-| 8   | space-person, on `/photos`                      | `/photos?people=space-person:<profileId>`              |
-| 9   | any person, on `/spaces/A/albums/x`             | `/photos?…` — not a searchable page                    |
-| 10  | any person, on `/albums/x`                      | `/photos?…`                                            |
-| 11  | any person, on `/map`                           | `/photos?…` — matches the tag precedent                |
-| 12  | any person, on `/recently-added`                | stays on `/recently-added`, prefixed id                |
-| 13  | person with server-supplied `filterId`          | `filterId` used verbatim                               |
-| 14  | person with no `primaryProfile`                 | `person:<person.id>`                                   |
-| 15  | person name present                             | `personNames` seeded under the filter id actually used |
-| 16  | person name empty                               | nothing written to `personNames`                       |
-| 17  | `?at=<assetId>` on the current URL              | dropped from the destination                           |
-| 18  | any person                                      | palette closes after navigation                        |
-| 19  | non-space person                                | recent written, as today                               |
-| 20  | space person                                    | **no** recent written, as today                        |
-| 21  | person recent replayed                          | same destination as case 1                             |
-| 22  | recent missing `personId`                       | bails silently, no `goto`                              |
+| #   | Scenario                                        | Expected                                                                                                       |
+| --- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| 1   | personal person, on `/photos`                   | `/photos?people=person:p1`                                                                                     |
+| 2   | personal person, on `/photos?tags=t1&rating=4`  | `tags` and `rating` preserved; `people` AND-ed in                                                              |
+| 2b  | personal person, on `/photos?q=sunset&sort=asc` | stale `q` and `sort` dropped, as the tag path does                                                             |
+| 3   | person already in the active `people` filter    | still navigates; the id appears once, not twice                                                                |
+| 4   | space-person of A, on `/spaces/A`               | `/spaces/A?people=<bare profileId>`                                                                            |
+| 5   | space-person of A, on `/spaces/A/photos`        | base is `/spaces/A/photos`, bare id                                                                            |
+| 6   | space-person of **B**, on `/spaces/A`           | `/photos?people=space-person:<profileId>`                                                                      |
+| 7   | personal person, on `/spaces/A`                 | `/photos?people=person:p1`                                                                                     |
+| 8   | space-person, on `/photos`                      | `/photos?people=space-person:<profileId>`                                                                      |
+| 9   | any person, on `/spaces/A/albums/x`             | `/photos?…` — not a searchable page                                                                            |
+| 10  | any person, on `/albums/x`                      | `/photos?…`                                                                                                    |
+| 11  | any person, on `/map`                           | `/photos?…` — matches the tag precedent                                                                        |
+| 12  | any person, on `/recently-added`                | stays on `/recently-added`, prefixed id                                                                        |
+| 13  | person with server-supplied `filterId`          | `filterId` used verbatim                                                                                       |
+| 14  | person with no `primaryProfile`                 | `<person.id>` (bare — unlike the typed-search resolver's `getPersonFilterId`, which prefixes an unprefixed id) |
+| 15  | person name present                             | `personNames` seeded under the filter id actually used                                                         |
+| 16  | person name empty                               | nothing written to `personNames`                                                                               |
+| 17  | `?at=<assetId>` on the current URL              | dropped from the destination                                                                                   |
+| 18  | any person                                      | palette closes after navigation                                                                                |
+| 19  | non-space person                                | recent written, as today                                                                                       |
+| 20  | space person                                    | **no** recent written, as today                                                                                |
+| 21  | person recent replayed                          | same destination as case 1                                                                                     |
+| 22  | recent missing `personId`                       | bails silently, no `goto`                                                                                      |
 
 ### Place routing
 
@@ -183,3 +183,4 @@ On `/photos` with a tag filter already applied: ⌘K, type a person's name, Ente
 - **"View similar photos"** (`asset.service.ts:310`) — the one in-app `/search` link no open PR covers. Not a palette result. The allowlist guard lists it so it cannot multiply.
 - **Photo results** continue to open `/photos/<id>` rather than `/spaces/<sid>/photos/<id>`. The palette's photo provider searches globally, so a hit need not be in the space you are viewing.
 - **Deleting or redirecting `/search`** — it is deliberately retained as a landing page for old bookmarks, with e2e tests pinning the banner behaviour.
+- **No route to the person page below the 1024px preview-pane breakpoint** — the "Open person page" button lives in the palette's preview pane (`showPreview = $derived(mediaQueryManager.minLg)` in `global-search.svelte`), which only renders at `lg` and above. Below that width the palette has no button to reach person management. Accepted: below 1024px the palette is a quick-jump-to-filtered-timeline tool, and the person page stays reachable via `/people`.

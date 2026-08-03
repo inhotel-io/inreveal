@@ -1740,8 +1740,9 @@ export class GlobalSearchManager {
    * ids scoped to that space (space-filter-options.ts) — while /photos and /recently-added forward
    * them prefixed, `person:` / `space-person:` (photos-filter-options.ts). So a space person can
    * only filter in place on its OWN space; every other combination targets /photos with the
-   * prefixed id. This mirrors `getPersonFilterId(person, scope)` in the typed-search resolver,
-   * which already splits on exactly this distinction.
+   * prefixed id. This mirrors the scope split that `getPersonFilterId(person, scope)` in the
+   * typed-search resolver already makes — but not its unprefixed-id fallback: that resolver
+   * prefixes a bare id with `person:`, while `getPhotosPersonFilterId` here returns it bare.
    */
   private navigateToPersonResults(person: PhotosPersonFilterReference & { name?: string }): void {
     const spaceId = getCurrentSpaceTimelineId(page.url.pathname);
@@ -1769,8 +1770,9 @@ export class GlobalSearchManager {
    * Navigate to the current surface filtered by `place`.
    *
    * PlacesResponseDto carries name / lat / lng / admin1name / admin2name. Of those only `name`
-   * maps onto a searchable-page param (`city`) — there is no `state` filter — and it is already
-   * what place-preview searches by, so the preview and the destination agree.
+   * maps onto a searchable-page param (`city`) — there is no `state` filter. place-preview.svelte
+   * searches by both `city: place.name` and `state: place.admin1name`, so for two same-named
+   * cities in different states the destination is a deliberate superset of what the preview showed.
    *
    * /map is the exception: it is a place's own contextual surface, and it is not a searchable
    * page, so the filter path would bounce the user off the map they were reading. A nameless
