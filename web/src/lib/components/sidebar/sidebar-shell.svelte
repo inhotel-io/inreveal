@@ -1,0 +1,105 @@
+<script lang="ts">
+  import { beforeNavigate } from '$app/navigation';
+  import { clickOutside } from '$lib/actions/click-outside';
+  import { focusTrap } from '$lib/actions/focus-trap';
+  import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
+  import { sidebarStore } from '$lib/stores/sidebar.svelte';
+  import type { Snippet } from 'svelte';
+
+  interface Props {
+    ariaLabel?: string;
+    children?: Snippet;
+  }
+
+  let { ariaLabel, children }: Props = $props();
+
+  const layout = $derived(sidebarModeStore.layout);
+  const isRail = $derived(layout === 'rail');
+  const isOverlay = $derived(layout === 'overlay');
+
+  // In rail mode expansion comes solely from our own transient flags. Upstream
+  // `sidebarStore.isOpen` is $derived from the 850px query, so above 850px it is
+  // permanently true and would pin the rail open.
+  const isExpanded = $derived(
+    layout === 'expanded' ||
+      (isRail && (sidebarModeStore.hoverExpanded || sidebarModeStore.railOverlayOpen)) ||
+      (isOverlay && sidebarStore.isOpen),
+  );
+
+  const isHidden = $derived(isOverlay && !sidebarStore.isOpen);
+
+  // Returning to rail after a stint at another width must not resurface a stale
+  // hover state, so clear both flags whenever the layout leaves rail.
+  $effect(() => {
+    if (!isRail) {
+      sidebarModeStore.resetTransient();
+    }
+  });
+
+  const closeOverlay = () => {
+    if (isOverlay && sidebarStore.isOpen) {
+      sidebarStore.reset();
+    }
+  };
+
+  beforeNavigate(() => {
+    // The pointer is still over the rail after clicking a link, so hoverExpanded is
+    // left alone - only the explicit tap/keyboard overlay closes.
+    sidebarModeStore.railOverlayOpen = false;
+    // Upstream Sidebar closed the sub-850px overlay from onMount, which fired on every
+    // navigation because UserPageLayout remounts per page. Do it explicitly instead of
+    // relying on a remount, or the overlay covers the page the user just navigated to.
+    closeOverlay();
+  });
+
+  const collapse = () => {
+    sidebarModeStore.hoverExpanded = false;
+    sidebarModeStore.railOverlayOpen = false;
+    // The sub-850px overlay is modal, and upstream Sidebar - which this shell replaces -
+    // dismissed it on Escape, so that has to survive the swap.
+    closeOverlay();
+  };
+
+  const handleOutclick = () => {
+    if (isRail) {
+      // Only the explicit tap/keyboard overlay closes: hoverExpanded is owned by the
+      // pointer, which has already left the rail by the time a click lands elsewhere.
+      sidebarModeStore.railOverlayOpen = false;
+      return;
+    }
+    closeOverlay();
+  };
+</script>
+
+<nav
+  id="sidebar"
+  aria-label={ariaLabel}
+  tabindex="-1"
+  data-testid="sidebar-parent"
+  data-layout={layout}
+  data-expanded={String(isExpanded)}
+  data-slot-width={isRail ? 'rail' : layout}
+  inert={isHidden}
+  class="relative z-10 h-full"
+  onpointerenter={() => isRail && (sidebarModeStore.hoverExpanded = true)}
+  onpointerleave={() => isRail && (sidebarModeStore.hoverExpanded = false)}
+  onfocusin={() => isRail && (sidebarModeStore.hoverExpanded = true)}
+  onfocusout={() => isRail && (sidebarModeStore.hoverExpanded = false)}
+  use:clickOutside={{ onOutclick: handleOutclick, onEscape: collapse }}
+  use:focusTrap={{ active: isOverlay && sidebarStore.isOpen }}
+>
+  <!--
+    The nav keeps its grid slot at the rail width; this inner container is absolutely
+    positioned and grows over the content instead, so the justified timeline never reflows.
+  -->
+  <div
+    data-testid="sidebar-panel"
+    class="absolute inset-s-0 top-0 flex h-full immich-scrollbar flex-col gap-1 overflow-x-hidden overflow-y-auto bg-light ps-2 pt-8 transition-[width] duration-200 motion-reduce:transition-none"
+    class:w-64={isExpanded}
+    class:w-16={isRail && !isExpanded}
+    class:w-0={isHidden}
+    class:shadow-2xl={isExpanded && layout !== 'expanded'}
+  >
+    {@render children?.()}
+  </div>
+</nav>
