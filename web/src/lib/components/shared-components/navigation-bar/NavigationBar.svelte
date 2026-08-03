@@ -12,6 +12,7 @@
   import { globalSearchManager } from '$lib/managers/global-search-manager.svelte';
   import { Route } from '$lib/route';
   import { getGlobalActions } from '$lib/services/app.service';
+  import { mediaQueryManager } from '$lib/stores/media-query-manager.svelte';
   import { notificationManager } from '$lib/stores/notification-manager.svelte';
   import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
   import { sidebarStore } from '$lib/stores/sidebar.svelte';
@@ -28,9 +29,17 @@
     onUploadClick?: () => void;
     // TODO: remove once this is only used in <AppShellHeader>
     noBorder?: boolean;
+    /**
+     * Opt-in: size the hamburger/column/logo from `sidebarModeStore.layout` (adds the rail
+     * state). Defaults to false so callers with no rail-width sidebar of their own - namely
+     * AdminPageLayout, whose sidebar is bound only to `sidebarStore.isOpen` and pinned open
+     * above 850px regardless of `railOverlayOpen` - keep today's viewport-only behaviour
+     * (hamburger hidden, logo inline, wide column) untouched above 850px.
+     */
+    railAware?: boolean;
   };
 
-  let { onUploadClick, noBorder = false }: Props = $props();
+  let { onUploadClick, noBorder = false, railAware = false }: Props = $props();
 
   let shouldShowAccountInfoPanel = $state(false);
   let shouldShowNotificationPanel = $state(false);
@@ -47,12 +56,27 @@
 
   const { Cast } = $derived(getGlobalActions($t));
 
-  const isRail = $derived(sidebarModeStore.layout === 'rail');
-  const isExpandedLayout = $derived(sidebarModeStore.layout === 'expanded');
+  // Without `railAware`, fall back to the pre-rail, viewport-only check: no rail state
+  // exists, and "expanded" just means "at/above the 850px sidebar breakpoint" - identical to
+  // today's CSS-only `sidebar:` breakpoint behaviour for callers that never opt in.
+  const isRail = $derived(railAware && sidebarModeStore.layout === 'rail');
+  const isExpandedLayout = $derived(
+    railAware ? sidebarModeStore.layout === 'expanded' : mediaQueryManager.isFullSidebar,
+  );
 
   // The first column holds the hamburger AND the logo, which is why its sub-850px value is
   // 8rem. Rail mode needs the hamburger visible, so it cannot shrink to the 4rem rail width.
+  //
+  // Each pair below is driven from a single shared value on purpose, used for BOTH the real
+  // prop/class and the test-facing attribute: a test asserting only the semantic label (e.g.
+  // `data-column`) can't tell the two apart if they were computed by separate, duplicate
+  // ternaries, so a mutation to only the "real" side would pass silently.
   const navColumn = $derived(isExpandedLayout ? 'wide' : 'narrow');
+  const navColumnClass = $derived(
+    { wide: 'grid-cols-[--spacing(64)_auto]', narrow: 'grid-cols-[--spacing(32)_auto]' }[navColumn],
+  );
+  const menuButtonHidden = $derived(isExpandedLayout);
+  const logoVariant = $derived(isExpandedLayout ? 'inline' : 'icon');
 </script>
 
 <svelte:window bind:innerWidth />
@@ -62,9 +86,7 @@
   <div
     data-testid="navbar-grid"
     data-column={navColumn}
-    class="grid h-full items-center py-2 {navColumn === 'wide'
-      ? 'grid-cols-[--spacing(64)_auto]'
-      : 'grid-cols-[--spacing(32)_auto]'} {noBorder ? '' : 'border-b'}"
+    class="grid h-full items-center py-2 {navColumnClass} {noBorder ? '' : 'border-b'}"
   >
     <div class="mx-4 flex flex-row items-center gap-1">
       <IconButton
@@ -88,12 +110,12 @@
             event.stopPropagation();
           }
         }}
-        class={isExpandedLayout ? 'hidden' : ''}
-        data-hidden={isExpandedLayout ? '' : undefined}
+        class={menuButtonHidden ? 'hidden' : ''}
+        data-hidden={menuButtonHidden ? '' : undefined}
       />
       <a data-sveltekit-preload-data="hover" href={Route.photos()}>
-        <span data-testid="navbar-logo" data-variant={isExpandedLayout ? 'inline' : 'icon'}>
-          <Logo variant={isExpandedLayout ? 'inline' : 'icon'} class="max-md:h-12" />
+        <span data-testid="navbar-logo" data-variant={logoVariant}>
+          <Logo variant={logoVariant} class="max-md:h-12" />
         </span>
       </a>
     </div>

@@ -68,7 +68,7 @@
 
 <header>
   {#if !hideNavbar}
-    <NavigationBar onUploadClick={() => openFileUploadDialog()} />
+    <NavigationBar onUploadClick={() => openFileUploadDialog()} railAware />
   {/if}
 </header>
 <div
