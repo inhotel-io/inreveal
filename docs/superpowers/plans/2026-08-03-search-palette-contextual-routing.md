@@ -21,6 +21,7 @@ Spec: `docs/superpowers/specs/2026-08-03-search-palette-contextual-routing-desig
 - **`svelte/prefer-svelte-reactivity`** flags plain `Map`/`URL` construction. The existing code disables it inline with a comment explaining the value is ephemeral; copy that pattern verbatim where the code below shows it.
 - **Baseline on this branch: 4092 passing web tests across 300 files.** Every task ends green against the full suite or the touched files, as stated per task.
 - **Commit trailers:** do not add `Co-Authored-By` or `Generated with` trailers.
+- **Every URL string asserted in this plan was computed by running the real `buildSearchablePageUrl`, `getSearchablePageBasePath`, `getPhotosPersonFilterId`, `Route.map` and `getGlobalPersonHref`** — they are not guesses. Notably: `URLSearchParams` encodes `:` as `%3A` and `,` as `%2C`; `Route.map` emits a Leaflet hash (`/map#12/48.8566/2.3522`), not a query string; and `getSearchablePageBasePath` returns `null` for `/albums/x`, `/map` **and** `/spaces/<id>/albums/<id>`. If an assertion fails during implementation, re-derive it rather than assuming the plan is right.
 
 ---
 
@@ -228,7 +229,60 @@ git commit -m "refactor(web): funnel palette filter navigation through one helpe
   - module-level `function getCurrentSpaceTimelineId(pathname: string): string | undefined`
   - `private navigateToPersonResults(person: PhotosPersonFilterReference & { name?: string }): void`
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1a: Rewrite the three existing tests that pin the old destination**
+
+Do this **before** implementing. Three tests in the `describe('activate(...)')` block near line 1083 assert the old `/people/:id` navigation — they pin the bug. Rewriting them first means Step 2 shows every expectation of the new behaviour going red at once. Do not delete them: they also assert the recent-entry side effects, which this task does not change.
+
+Replace the test at ~line 1083:
+
+```ts
+it('activate("person", item) filters the timeline and records recent entry', () => {
+  const m = new GlobalSearchManager();
+  m.open();
+  m.activate('person', { id: 'p1', name: 'Alice' });
+  // No primaryProfile and no filterId, so getPhotosPersonFilterId falls through to the raw id.
+  expect(goto).toHaveBeenCalledWith('/photos?people=p1');
+  const entries = getEntries();
+  expect(entries[0]).toMatchObject({ kind: 'person', personId: 'p1', label: 'Alice' });
+});
+```
+
+Replace the test at ~line 1092:
+
+```ts
+it('activate("person", item) filters by the scoped filterId for an identity-backed space person', () => {
+  const m = new GlobalSearchManager();
+  m.open();
+  m.activate('person', {
+    id: 'space-person-1',
+    name: 'Alice',
+    primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
+    filterId: 'space-person:space-person-1',
+  });
+
+  // On /photos (not that space's timeline), so the prefixed id is the correct encoding.
+  expect(goto).toHaveBeenCalledWith('/photos?people=space-person%3Aspace-person-1');
+  expect(getEntries()).toHaveLength(0);
+});
+```
+
+Replace the test at ~line 1105:
+
+```ts
+it('activate("person", item) reconstructs the prefixed id for a legacy space person', () => {
+  const m = new GlobalSearchManager();
+  m.open();
+  m.activate('person', {
+    id: 'space-person-1',
+    name: 'Alice',
+    primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
+  });
+  expect(goto).toHaveBeenCalledWith('/photos?people=space-person%3Aspace-person-1');
+  expect(getEntries()).toHaveLength(0);
+});
+```
+
+- [ ] **Step 1b: Write the new failing tests**
 
 Append this `describe` block to `web/src/lib/managers/global-search-manager.svelte.spec.ts`, immediately after the closing `});` of `describe('tag activation navigation')`:
 
@@ -461,7 +515,7 @@ describe('person activation navigation', () => {
 
   it('closes the palette after navigating', () => {
     const m = new GlobalSearchManager();
-    m.isOpen = true;
+    m.open();
 
     m.activate('person', userPerson());
 
@@ -488,13 +542,17 @@ describe('person activation navigation', () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run from `web/`:
+Run the whole file from `web/` — both the rewritten tests and the new block must be red:
 
 ```bash
-npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts -t "person activation navigation"
+npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts
 ```
 
-Expected: FAIL. The first assertions report `/people/p1` where `/photos?people=person%3Ap1` was expected — `activate('person')` still calls `goto(getPersonRoute(p))`.
+Expected: FAIL with **24 red tests** — the 3 rewritten ones plus 21 of the 24 new ones. Each reports a `/people/...` destination where a `/photos?people=...` (or `/spaces/...?people=...`) one was expected, because `activate('person')` still calls `goto(getPersonRoute(p))`.
+
+Three of the new tests pass already, and that is correct: `'closes the palette after navigating'`, `'records a recent entry for a personal person'` and `'records no recent entry for a space person'` assert side effects this task does not change. They are there to pin that the rewire does not regress them.
+
+If anything outside those 24 is red, Task 1's refactor broke something — fix that before continuing.
 
 - [ ] **Step 3: Export the filter-reference type**
 
@@ -506,7 +564,7 @@ export type PhotosPersonFilterReference = {
 
 - [ ] **Step 4: Add the space-timeline helper to the manager**
 
-In `global-search-manager.svelte.ts`, **delete** the now-unused `getPersonRoute` function (lines ~157-159) and add in its place:
+In `global-search-manager.svelte.ts`, add this module-level function next to `getPersonRoute` (~line 157). `getPersonRoute` and its `getGlobalPersonHref` import stay for now — they are deleted in Step 7, once their only caller is gone, so the file keeps type-checking between steps.
 
 ```ts
 /**
@@ -524,15 +582,9 @@ function getCurrentSpaceTimelineId(pathname: string): string | undefined {
 }
 ```
 
-- [ ] **Step 5: Fix the imports**
+- [ ] **Step 5: Add the filter-id import**
 
-`getGlobalPersonHref` is now unused in the manager (eslint `--max-warnings 0` fails on an unused import). Remove this line:
-
-```ts
-import { getGlobalPersonHref } from '$lib/utils/global-person-route';
-```
-
-and add:
+Add to the imports in `global-search-manager.svelte.ts`:
 
 ```ts
 import { getPhotosPersonFilterId, type PhotosPersonFilterReference } from '$lib/utils/photos-filter-options';
@@ -601,60 +653,15 @@ In `activate()`, replace `void goto(getPersonRoute(p));` with `this.navigateToPe
       }
 ```
 
-- [ ] **Step 8: Update the three existing tests that pin the old destination**
-
-Three tests in the `describe('activate(...)')` block near line 1083 assert the old `/people/:id` navigation. They are pinning the bug, so they must be rewritten — not deleted, since they also assert the recent-entry side effects, which are unchanged.
-
-Replace the test at ~line 1083:
+`getPersonRoute` now has no callers. Delete the function (~line 157) and its import:
 
 ```ts
-it('activate("person", item) filters the timeline and records recent entry', () => {
-  const m = new GlobalSearchManager();
-  m.open();
-  m.activate('person', { id: 'p1', name: 'Alice' });
-  // No primaryProfile and no filterId, so getPhotosPersonFilterId falls through to the raw id.
-  expect(goto).toHaveBeenCalledWith('/photos?people=p1');
-  const entries = getEntries();
-  expect(entries[0]).toMatchObject({ kind: 'person', personId: 'p1', label: 'Alice' });
-});
+import { getGlobalPersonHref } from '$lib/utils/global-person-route';
 ```
 
-Replace the test at ~line 1092:
+Both must go, or eslint `--max-warnings 0` fails on the unused symbols. `getGlobalPersonHref` itself stays in `$lib/utils/global-person-route` — `/people`, `/explore` and Task 5's preview button all use it.
 
-```ts
-it('activate("person", item) filters by the scoped filterId for an identity-backed space person', () => {
-  const m = new GlobalSearchManager();
-  m.open();
-  m.activate('person', {
-    id: 'space-person-1',
-    name: 'Alice',
-    primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
-    filterId: 'space-person:space-person-1',
-  });
-
-  // On /photos (not that space's timeline), so the prefixed id is the correct encoding.
-  expect(goto).toHaveBeenCalledWith('/photos?people=space-person%3Aspace-person-1');
-  expect(getEntries()).toHaveLength(0);
-});
-```
-
-Replace the test at ~line 1105:
-
-```ts
-it('activate("person", item) reconstructs the prefixed id for a legacy space person', () => {
-  const m = new GlobalSearchManager();
-  m.open();
-  m.activate('person', {
-    id: 'space-person-1',
-    name: 'Alice',
-    primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
-  });
-  expect(goto).toHaveBeenCalledWith('/photos?people=space-person%3Aspace-person-1');
-  expect(getEntries()).toHaveLength(0);
-});
-```
-
-- [ ] **Step 9: Run the tests to verify they pass**
+- [ ] **Step 8: Run the tests to verify they pass**
 
 Run from `web/`:
 
@@ -664,7 +671,7 @@ npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts
 
 Expected: PASS — the new block plus every pre-existing test in the file, with nothing left red. This task changes `activate()` only, so the recents test `'person entry navigates and closes'` (~line 2648) still asserts `/people/p1` and still passes; Task 3 updates it.
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add web/src/lib/managers/global-search-manager.svelte.ts web/src/lib/managers/global-search-manager.svelte.spec.ts web/src/lib/utils/photos-filter-options.ts
@@ -685,7 +692,21 @@ git commit -m "fix(web): filter the current timeline from a palette person resul
 - Consumes: `navigateToPersonResults` from Task 2.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1a: Rewrite the existing recents test that pins the old destination**
+
+Do this **before** implementing, so Step 2 shows the whole expectation going red at once. The test `'person entry navigates and closes'` (~line 2648, in the recents `describe`) asserts `/people/p1`. Rewrite it — it also asserts the palette closes, which is unchanged:
+
+```ts
+it('person entry filters the timeline and closes', () => {
+  const m = new GlobalSearchManager();
+  m.open();
+  m.activateRecent({ kind: 'person', id: 'person:p1', personId: 'p1', label: 'Alice', lastUsed: 1 });
+  expect(goto).toHaveBeenCalledWith('/photos?people=person%3Ap1');
+  expect(m.isOpen).toBe(false);
+});
+```
+
+- [ ] **Step 1b: Write the new failing tests**
 
 Append to the `describe('person activation navigation')` block from Task 2, before its closing `});`:
 
@@ -724,13 +745,15 @@ it('ignores a corrupt person recent without navigating', () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run from `web/`:
+Run the whole file from `web/`:
 
 ```bash
-npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts -t "recent person entry"
+npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts
 ```
 
-Expected: FAIL — `activateRecent` still calls `goto(Route.viewPerson(...))`, producing `/people/p1`.
+Expected: FAIL with **3 red tests** — the rewritten `'person entry filters the timeline and closes'` plus the two new routing tests. Each reports `/people/p1`, because `activateRecent` still calls `goto(Route.viewPerson(...))`.
+
+`'ignores a corrupt person recent without navigating'` passes already — `isValidRecentEntry` bails before the switch, and this task does not change that. It is there to pin that the rewire does not bypass the guard.
 
 - [ ] **Step 3: Rewire the recent case**
 
@@ -760,21 +783,7 @@ with:
       }
 ```
 
-- [ ] **Step 4: Update the existing recents test that pins the old destination**
-
-The test `'person entry navigates and closes'` (~line 2648, in the recents `describe`) asserts `/people/p1`. Rewrite it — it also asserts the palette closes, which is unchanged:
-
-```ts
-it('person entry filters the timeline and closes', () => {
-  const m = new GlobalSearchManager();
-  m.open();
-  m.activateRecent({ kind: 'person', id: 'person:p1', personId: 'p1', label: 'Alice', lastUsed: 1 });
-  expect(goto).toHaveBeenCalledWith('/photos?people=person%3Ap1');
-  expect(m.isOpen).toBe(false);
-});
-```
-
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 4: Run the tests to verify they pass**
 
 Run from `web/`:
 
@@ -784,7 +793,7 @@ npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts
 
 Expected: PASS, whole file, nothing left red.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add web/src/lib/managers/global-search-manager.svelte.ts web/src/lib/managers/global-search-manager.svelte.spec.ts
@@ -805,7 +814,41 @@ git commit -m "fix(web): replay a recent person into the filtered timeline (#922
 - Consumes: `navigateToFilteredResults` from Task 1.
 - Produces: `private navigateToPlaceResults(place: { name?: string; latitude: number; longitude: number }): void`
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1a: Rewrite the two existing tests that pin the old destination**
+
+Do this **before** implementing. Replace the test at ~line 1118 (`describe('activate(...)')`):
+
+```ts
+it('activate("place", item) filters the timeline by city and records recent entry', () => {
+  const m = new GlobalSearchManager();
+  m.open();
+  m.activate('place', { name: 'Paris', latitude: 48.8566, longitude: 2.3522 });
+  expect(goto).toHaveBeenCalledWith('/photos?city=Paris');
+  const entries = getEntries();
+  expect(entries[0]).toMatchObject({ kind: 'place', id: 'place:48.8566:2.3522', label: 'Paris' });
+});
+```
+
+Replace the test at ~line 2656 (the recents `describe`):
+
+```ts
+it('place entry filters the timeline by city and closes', () => {
+  const m = new GlobalSearchManager();
+  m.open();
+  m.activateRecent({
+    kind: 'place',
+    id: 'place:48.8566:2.3522',
+    latitude: 48.8566,
+    longitude: 2.3522,
+    label: 'Paris',
+    lastUsed: 1,
+  });
+  expect(goto).toHaveBeenCalledWith('/photos?city=Paris');
+  expect(m.isOpen).toBe(false);
+});
+```
+
+- [ ] **Step 1b: Write the new failing tests**
 
 Append this `describe` block after the `describe('person activation navigation')` block:
 
@@ -849,6 +892,15 @@ describe('place activation navigation', () => {
     expect(lastGoto()).toBe('/photos?city=Paris');
   });
 
+  it('stays on /recently-added', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/recently-added');
+
+    m.activate('place', paris);
+
+    expect(lastGoto()).toBe('/recently-added?city=Paris');
+  });
+
   it('recentres the map when the user is already on the map', () => {
     const m = new GlobalSearchManager();
     mockPage.url = new URL('https://gallery.test/map');
@@ -890,7 +942,7 @@ describe('place activation navigation', () => {
 
   it('records a recent entry and closes the palette', () => {
     const m = new GlobalSearchManager();
-    m.isOpen = true;
+    m.open();
 
     m.activate('place', paris);
 
@@ -932,13 +984,15 @@ describe('place activation navigation', () => {
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run from `web/`:
+Run the whole file from `web/`:
 
 ```bash
-npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts -t "place activation navigation"
+npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts
 ```
 
-Expected: FAIL — the first test reports `/map?zoom=12&lat=48.85&lng=2.35` where `/photos?city=Paris` was expected.
+Expected: FAIL with **9 red tests** — the 2 rewritten ones plus 7 of the 11 new ones. Each reports `/map#12/48.8566/2.3522` where a `?city=Paris` destination was expected.
+
+Four of the new tests pass already, correctly: `'recentres the map when the user is already on the map'` and `'recentres the map for a nameless place…'` describe behaviour that is unchanged, and `'records a recent entry and closes the palette'` plus `'falls back to recentring the map for a recent place with no label'` assert side effects and the map fallback. They pin that the rewire does not regress them.
 
 - [ ] **Step 3: Add `navigateToPlaceResults`**
 
@@ -993,41 +1047,7 @@ with:
       }
 ```
 
-- [ ] **Step 6: Update the two existing tests that pin the old destination**
-
-Replace the test at ~line 1118 (`describe('activate(...)')`):
-
-```ts
-it('activate("place", item) filters the timeline by city and records recent entry', () => {
-  const m = new GlobalSearchManager();
-  m.open();
-  m.activate('place', { name: 'Paris', latitude: 48.8566, longitude: 2.3522 });
-  expect(goto).toHaveBeenCalledWith('/photos?city=Paris');
-  const entries = getEntries();
-  expect(entries[0]).toMatchObject({ kind: 'place', id: 'place:48.8566:2.3522', label: 'Paris' });
-});
-```
-
-Replace the test at ~line 2656 (the recents `describe`):
-
-```ts
-it('place entry filters the timeline by city and closes', () => {
-  const m = new GlobalSearchManager();
-  m.open();
-  m.activateRecent({
-    kind: 'place',
-    id: 'place:48.8566:2.3522',
-    latitude: 48.8566,
-    longitude: 2.3522,
-    label: 'Paris',
-    lastUsed: 1,
-  });
-  expect(goto).toHaveBeenCalledWith('/photos?city=Paris');
-  expect(m.isOpen).toBe(false);
-});
-```
-
-- [ ] **Step 7: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run from `web/`:
 
@@ -1037,7 +1057,7 @@ npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts
 
 Expected: PASS, whole file, nothing left red.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add web/src/lib/managers/global-search-manager.svelte.ts web/src/lib/managers/global-search-manager.svelte.spec.ts
@@ -1269,7 +1289,9 @@ Run from `web/`:
 npx vitest run src/lib/managers/global-search-manager.svelte.spec.ts -t "palette destination table"
 ```
 
-Expected: PASS. This guard documents behaviour Tasks 2–4 already implemented; it is not expected to go red first. If any row fails, the earlier task is wrong — fix that, not the table.
+Expected: PASS. This guard characterises behaviour Tasks 2–4 already implemented, so it is not expected to go red first. If any row fails, the earlier task is wrong — fix that, not the table.
+
+A guard that cannot fail is worthless, so prove it bites: temporarily change the `person` row's expected value to `'/people/p1'`, re-run, and confirm it FAILS on that row only. Restore it and re-run to confirm PASS.
 
 - [ ] **Step 3: Write the failing `Route.search` allowlist guard**
 
@@ -1317,7 +1339,7 @@ describe('Route.search call sites', () => {
 });
 ```
 
-Add the node imports at the top of `route.spec.ts` if they are not already there:
+`route.spec.ts` currently imports only `$lib/constants` and `$lib/route` — vitest globals are enabled, so `describe`/`it`/`expect` need no import. Add these three at the top:
 
 ```ts
 import { readdirSync, readFileSync, statSync } from 'node:fs';

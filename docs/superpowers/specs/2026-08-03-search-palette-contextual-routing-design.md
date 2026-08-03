@@ -143,6 +143,7 @@ Unit tests are vitest + `@testing-library/svelte`. Two traps apply from this rep
 | 23  | place, on `/photos`                          | `/photos?city=Paris`                        |
 | 24  | place, on `/spaces/A`                        | `/spaces/A?city=Paris`                      |
 | 25  | place, on `/albums/x`                        | `/photos?city=Paris`                        |
+| 25b | place, on `/recently-added`                  | `/recently-added?city=Paris`                |
 | 26  | place, on `/map`                             | `/map#12/<lat>/<lng>` — unchanged           |
 | 27  | place, on `/photos?city=Berlin`              | city replaced, not accumulated              |
 | 28  | place, on `/photos?q=beach&people=person:p1` | `people` preserved, stale `q` dropped       |
