@@ -42,5 +42,6 @@ describe('sidebar-nav-group', () => {
     render(SidebarNavGroup, { title: 'Library' });
 
     expect(screen.getByText('Library')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-group-divider')).not.toBeInTheDocument();
   });
 });
