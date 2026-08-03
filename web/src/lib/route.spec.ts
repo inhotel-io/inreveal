@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { OpenQueryParam } from '$lib/constants';
 import { Route } from '$lib/route';
 
@@ -126,5 +129,45 @@ describe('Route', () => {
     it('links to a space albums tab', () => {
       expect(Route.viewSpaceAlbums({ id: 'space-1' })).toBe('/spaces/space-1/albums');
     });
+  });
+});
+
+describe('Route.search call sites', () => {
+  // web/src/lib/ -> up 1 -> web/src
+  const SRC_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+  // Every in-app link to the deprecated /search page. The page itself is kept as a landing page
+  // for old bookmarks, but nothing new may point at it: a palette/search-bar result belongs on
+  // the surface it has context of (#922). This is a SUBSET assertion, so PRs that remove a call
+  // site (#778 for the info panel, #884 for the Explore/Places tiles) do not have to edit it.
+  const ALLOWED = new Set([
+    'lib/components/asset-viewer/DetailPanel.svelte',
+    'lib/services/asset.service.ts',
+    'routes/(user)/explore/+page.svelte',
+    'routes/(user)/places/PlacesCardGroup.svelte',
+    'routes/(user)/search/[[photos=photos]]/[[assetId=id]]/+page.svelte',
+  ]);
+
+  function walk(dir: string, found: string[] = []): string[] {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) {
+        walk(full, found);
+        continue;
+      }
+      if (!/\.(ts|svelte)$/.test(name) || /\.spec\.ts$/.test(name)) {
+        continue;
+      }
+      if (readFileSync(full, 'utf8').includes('Route.search')) {
+        found.push(relative(SRC_ROOT, full));
+      }
+    }
+    return found;
+  }
+
+  it('are a subset of the allowlist', () => {
+    const unexpected = walk(SRC_ROOT).filter((file) => !ALLOWED.has(file));
+
+    expect(unexpected).toEqual([]);
   });
 });

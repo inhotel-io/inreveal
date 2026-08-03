@@ -21,7 +21,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { goto } from '$app/navigation';
 import { createFilterState, type FilterState } from '$lib/components/filter-panel/filter-panel';
 import * as recentModule from '$lib/stores/cmdk-recent';
-import { addEntry, getEntries, __resetForTests as resetRecentStore } from '$lib/stores/cmdk-recent';
+import { addEntry, getEntries, __resetForTests as resetRecentStore, type RecentEntry } from '$lib/stores/cmdk-recent';
 import { getTypedSearchDisplayText, storeTypedSearchNames } from '$lib/utils/typed-search/typed-search-name-cache';
 import type { TypedSearchResolveContext } from '$lib/utils/typed-search/typed-search-resolver';
 import { installFakeAbortTimeout, restoreAbortTimeout } from './__tests__/fake-abort-timeout';
@@ -7211,5 +7211,65 @@ describe('place activation navigation', () => {
     });
 
     expect(lastGoto()).toBe(PARIS_MAP);
+  });
+});
+
+describe('palette destination table', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    localStorage.clear();
+    resetRecentStore();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1');
+  });
+
+  const lastGoto = () => vi.mocked(goto).mock.calls.at(-1)?.[0] as string | undefined;
+
+  // Pinned from /spaces/space-1 so any result kind that silently starts navigating off the
+  // surface the user was reading shows up as a diff here. Album / space / photo / nav are
+  // destinations rather than filters and are expected to leave.
+  it.each([
+    ['tag', { id: 't1', name: 'beach' }, '/spaces/space-1?tags=t1'],
+    [
+      'person',
+      { id: 'p1', name: 'Alice', primaryProfile: { id: 'p1', type: 'user-person' } },
+      '/photos?people=person%3Ap1',
+    ],
+    ['place', { name: 'Paris', latitude: 48.8566, longitude: 2.3522 }, '/spaces/space-1?city=Paris'],
+    ['photo', { id: 'a1', originalFileName: 'IMG_1.jpg' }, '/photos/a1'],
+  ])('activate(%s) lands on %s', (kind, item, expected) => {
+    const m = new GlobalSearchManager();
+
+    m.activate(kind as 'tag' | 'person' | 'place' | 'photo', item);
+
+    expect(lastGoto()).toBe(expected);
+  });
+
+  it.each([
+    [{ kind: 'tag', id: 'tag:t1', tagId: 't1', label: 'beach', lastUsed: 1 }, '/spaces/space-1?tags=t1'],
+    [{ kind: 'person', id: 'person:p1', personId: 'p1', label: 'Alice', lastUsed: 1 }, '/photos?people=person%3Ap1'],
+    [
+      { kind: 'place', id: 'place:48.8566:2.3522', latitude: 48.8566, longitude: 2.3522, label: 'Paris', lastUsed: 1 },
+      '/spaces/space-1?city=Paris',
+    ],
+    [{ kind: 'photo', id: 'photo:a1', assetId: 'a1', label: 'IMG_1.jpg', lastUsed: 1 }, '/photos/a1'],
+  ])('activateRecent(%o) lands on %s', (entry, expected) => {
+    const m = new GlobalSearchManager();
+
+    m.activateRecent(entry as RecentEntry);
+
+    expect(lastGoto()).toBe(expected);
+  });
+
+  it('never routes a palette result to the deprecated /search page', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('tag', { id: 't1', name: 'beach' });
+    m.activate('person', { id: 'p1', name: 'Alice' });
+    m.activate('place', { name: 'Paris', latitude: 48.8566, longitude: 2.3522 });
+    m.activate('photo', { id: 'a1' });
+
+    const destinations = vi.mocked(goto).mock.calls.map((c) => String(c[0]));
+    expect(destinations).toHaveLength(4);
+    expect(destinations.filter((d) => d.startsWith('/search'))).toEqual([]);
   });
 });
