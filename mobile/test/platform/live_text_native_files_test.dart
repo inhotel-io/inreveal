@@ -62,6 +62,23 @@ void main() {
       expect(platformView, contains('returnCacheDataElseLoad'));
     });
 
+    test('recognised text is highlighted as soon as the analysis lands', () {
+      final platformView = read('ios/Runner/LiveText/LiveTextPlatformView.swift');
+
+      expect(
+        platformView,
+        contains('selectableItemsHighlighted = true'),
+        reason:
+            'isSupplementaryInterfaceHidden hides the Apple button that would normally turn this on, '
+            'so mounting the overlay has to drive it or nothing is visibly detected until a long press',
+      );
+      expect(
+        platformView,
+        contains('selectableItemsHighlighted = false'),
+        reason: 'toggling OCR off must clear the highlight',
+      );
+    });
+
     test('analysis results are reported back to Flutter for the no-text fallback', () {
       expect(read('ios/Runner/LiveText/LiveTextPlatformView.swift'), contains('onAnalysisComplete'));
     });

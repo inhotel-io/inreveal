@@ -72,6 +72,13 @@ final class LiveTextPlatformView: NSObject, FlutterPlatformView, ImageAnalysisIn
 
         await MainActor.run {
           self.interaction.analysis = analysis
+          // Mirrors what Apple's own Live Text button does: wash every
+          // recognised region so the user can see what was detected without
+          // having to select it first. We hide that button
+          // (`isSupplementaryInterfaceHidden`) because Flutter draws the OCR
+          // toggle, so this state has to be driven from here instead — merely
+          // mounting the overlay means the user already asked for it.
+          self.interaction.selectableItemsHighlighted = true
           self.flutterApi.onAnalysisComplete(viewId: self.viewId, hasText: analysis.hasResults(for: .text)) { _ in }
         }
       } catch {
@@ -84,6 +91,7 @@ final class LiveTextPlatformView: NSObject, FlutterPlatformView, ImageAnalysisIn
     analysisTask?.cancel()
     analysisTask = nil
     interaction.resetTextSelection()
+    interaction.selectableItemsHighlighted = false
     interaction.analysis = nil
   }
 
@@ -113,5 +121,12 @@ final class LiveTextPlatformView: NSObject, FlutterPlatformView, ImageAnalysisIn
     for interactionTypes: ImageAnalysisInteraction.InteractionTypes
   ) -> Bool {
     interaction.hasActiveTextSelection || interaction.analysisHasText(at: point)
+  }
+
+  /// Flutter's gesture arena resolves before UIKit hit-testing, so Dart decides
+  /// which pointers reach us and needs to know when a selection exists: its
+  /// drag handles and callout live outside the text quads Dart matches against.
+  func textSelectionDidChange(_ interaction: ImageAnalysisInteraction) {
+    flutterApi.onSelectionActiveChanged(viewId: viewId, active: interaction.hasActiveTextSelection) { _ in }
   }
 }
