@@ -31,11 +31,11 @@ Extract a single helper and fold the existing two into it:
 
 ```ts
 private navigateToFilteredResults(options: {
+  applyFilter: (filters: FilterState) => FilterState;
   /** Override the base page. Used when the current surface cannot express the filter. */
   target?: URL;
-  applyFilter: (filters: FilterState) => FilterState;
-  personNames?: Map<string, string>;
-  tagNames?: Map<string, string>;
+  /** Omitted entirely = write nothing to the name cache; present = write, even if empty. */
+  names?: { personNames?: Map<string, string>; tagNames?: Map<string, string> };
 }): void
 ```
 
@@ -43,7 +43,7 @@ Behaviour, unchanged from what `navigateToTagResults` does today:
 
 - Base page = `options.target`, else `page.url` when `getSearchablePageBasePath` recognises it, else `new URL('/photos', page.url)`.
 - Start from `this.searchablePageFiltersProvider?.() ?? createFilterState()` so filters already on screen survive.
-- Build with `buildSearchablePageUrl(base, '', this.searchSortOrder, filters)`, falling back to `'/photos'`.
+- Build with `buildSearchablePageUrl(base, '', this.searchSortOrder, filters)`, falling back to `'/photos'`. The empty query argument drops a stale `q` (and a non-explicit `sort`) so the newly picked filter is the only constraint — this is existing tag behaviour, pinned by `'drops a stale smart query so the tag filter is the only constraint'`, and person and place inherit it.
 - Seed `storeTypedSearchNames(destination, { personNames, tagNames })` so a new chip renders a label rather than a uuid. The helper drops empty labels before storing, so every caller inherits the guard — `active-filters-bar` falls back to the raw id only for a _missing_ entry, so caching `''` renders a blank chip.
 - `goto(destination)`.
 
@@ -110,44 +110,46 @@ Unit tests are vitest + `@testing-library/svelte`. Two traps apply from this rep
 
 ### Person routing
 
-| #   | Scenario                                               | Expected                                               |
-| --- | ------------------------------------------------------ | ------------------------------------------------------ |
-| 1   | personal person, on `/photos`                          | `/photos?people=person:p1`                             |
-| 2   | personal person, on `/photos?q=beach&sort=asc&tags=t1` | `q`, `sort` and `tags` all preserved; `people` added   |
-| 3   | person already in the active `people` filter           | still navigates; the id appears once, not twice        |
-| 4   | space-person of A, on `/spaces/A`                      | `/spaces/A?people=<bare profileId>`                    |
-| 5   | space-person of A, on `/spaces/A/photos`               | base is `/spaces/A/photos`, bare id                    |
-| 6   | space-person of **B**, on `/spaces/A`                  | `/photos?people=space-person:<profileId>`              |
-| 7   | personal person, on `/spaces/A`                        | `/photos?people=person:p1`                             |
-| 8   | space-person, on `/photos`                             | `/photos?people=space-person:<profileId>`              |
-| 9   | any person, on `/spaces/A/albums/x`                    | `/photos?…` — not a searchable page                    |
-| 10  | any person, on `/albums/x`                             | `/photos?…`                                            |
-| 11  | any person, on `/map`                                  | `/photos?…` — matches the tag precedent                |
-| 12  | any person, on `/recently-added`                       | stays on `/recently-added`, prefixed id                |
-| 13  | person with server-supplied `filterId`                 | `filterId` used verbatim                               |
-| 14  | person with no `primaryProfile`                        | `person:<person.id>`                                   |
-| 15  | person name present                                    | `personNames` seeded under the filter id actually used |
-| 16  | person name empty                                      | nothing written to `personNames`                       |
-| 17  | `?at=<assetId>` on the current URL                     | dropped from the destination                           |
-| 18  | any person                                             | palette closes after navigation                        |
-| 19  | non-space person                                       | recent written, as today                               |
-| 20  | space person                                           | **no** recent written, as today                        |
-| 21  | person recent replayed                                 | same destination as case 1                             |
-| 22  | recent missing `personId`                              | bails silently, no `goto`                              |
+| #   | Scenario                                        | Expected                                               |
+| --- | ----------------------------------------------- | ------------------------------------------------------ |
+| 1   | personal person, on `/photos`                   | `/photos?people=person:p1`                             |
+| 2   | personal person, on `/photos?tags=t1&rating=4`  | `tags` and `rating` preserved; `people` AND-ed in      |
+| 2b  | personal person, on `/photos?q=sunset&sort=asc` | stale `q` and `sort` dropped, as the tag path does     |
+| 3   | person already in the active `people` filter    | still navigates; the id appears once, not twice        |
+| 4   | space-person of A, on `/spaces/A`               | `/spaces/A?people=<bare profileId>`                    |
+| 5   | space-person of A, on `/spaces/A/photos`        | base is `/spaces/A/photos`, bare id                    |
+| 6   | space-person of **B**, on `/spaces/A`           | `/photos?people=space-person:<profileId>`              |
+| 7   | personal person, on `/spaces/A`                 | `/photos?people=person:p1`                             |
+| 8   | space-person, on `/photos`                      | `/photos?people=space-person:<profileId>`              |
+| 9   | any person, on `/spaces/A/albums/x`             | `/photos?…` — not a searchable page                    |
+| 10  | any person, on `/albums/x`                      | `/photos?…`                                            |
+| 11  | any person, on `/map`                           | `/photos?…` — matches the tag precedent                |
+| 12  | any person, on `/recently-added`                | stays on `/recently-added`, prefixed id                |
+| 13  | person with server-supplied `filterId`          | `filterId` used verbatim                               |
+| 14  | person with no `primaryProfile`                 | `person:<person.id>`                                   |
+| 15  | person name present                             | `personNames` seeded under the filter id actually used |
+| 16  | person name empty                               | nothing written to `personNames`                       |
+| 17  | `?at=<assetId>` on the current URL              | dropped from the destination                           |
+| 18  | any person                                      | palette closes after navigation                        |
+| 19  | non-space person                                | recent written, as today                               |
+| 20  | space person                                    | **no** recent written, as today                        |
+| 21  | person recent replayed                          | same destination as case 1                             |
+| 22  | recent missing `personId`                       | bails silently, no `goto`                              |
 
 ### Place routing
 
-| #   | Scenario                                     | Expected                                        |
-| --- | -------------------------------------------- | ----------------------------------------------- |
-| 23  | place, on `/photos`                          | `/photos?city=Paris`                            |
-| 24  | place, on `/spaces/A`                        | `/spaces/A?city=Paris`                          |
-| 25  | place, on `/albums/x`                        | `/photos?city=Paris`                            |
-| 26  | place, on `/map`                             | `Route.map({ zoom: 12, lat, lng })` — unchanged |
-| 27  | place, on `/photos?city=Berlin`              | city replaced, not accumulated                  |
-| 28  | place, on `/photos?q=beach&people=person:p1` | `q` and `people` preserved                      |
-| 29  | place                                        | recent written and palette closed, as today     |
-| 30  | place recent replayed, non-empty label       | `?city=<label>`                                 |
-| 31  | place recent replayed, empty label           | falls back to map centring                      |
+| #   | Scenario                                     | Expected                                    |
+| --- | -------------------------------------------- | ------------------------------------------- |
+| 23  | place, on `/photos`                          | `/photos?city=Paris`                        |
+| 24  | place, on `/spaces/A`                        | `/spaces/A?city=Paris`                      |
+| 25  | place, on `/albums/x`                        | `/photos?city=Paris`                        |
+| 26  | place, on `/map`                             | `/map#12/<lat>/<lng>` — unchanged           |
+| 27  | place, on `/photos?city=Berlin`              | city replaced, not accumulated              |
+| 28  | place, on `/photos?q=beach&people=person:p1` | `people` preserved, stale `q` dropped       |
+| 28b | place with no name                           | falls back to map centring                  |
+| 29  | place                                        | recent written and palette closed, as today |
+| 30  | place recent replayed, non-empty label       | `?city=<label>`                             |
+| 31  | place recent replayed, empty label           | falls back to map centring                  |
 
 ### Preview pane
 
