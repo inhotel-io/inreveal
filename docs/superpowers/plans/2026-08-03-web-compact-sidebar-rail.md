@@ -83,12 +83,10 @@ describe('sidebarMedia', () => {
     mocks.mediaQueryManager.isFullSidebar = true;
     expect(sidebarMedia.isFullSidebar).toBe(true);
   });
-
-  it('exposes a boolean wide-sidebar reading', () => {
-    expect(typeof sidebarMedia.isWideSidebar).toBe('boolean');
-  });
 });
 ```
+
+`isWideSidebar` is deliberately left unasserted in this spec — a `typeof … === 'boolean'` check cannot fail meaningfully and is not worth defending at review.
 
 **Do not mock `svelte/reactivity` to vary `isWideSidebar` here.** Replacing that module supplies only `MediaQuery` and leaves `SvelteMap` / `SvelteSet` / `SvelteDate` undefined for everything else in the import graph. `isWideSidebar`'s behaviour is covered where it matters instead: Task 2 mocks this whole seam to drive the resolution matrix, and Task 10 exercises the real 1280px query at real viewports.
 
@@ -122,7 +120,7 @@ export const sidebarMedia = {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `pnpm test --run src/lib/stores/sidebar-media.spec.ts`
-Expected: PASS (2 tests)
+Expected: PASS (1 test)
 
 - [ ] **Step 5: Commit**
 
