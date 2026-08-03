@@ -1,11 +1,12 @@
-<!-- web/src/lib/components/sidebar/sidebar-nav-item.svelte -->
 <script lang="ts">
   import { page } from '$app/state';
   import { sidebarModeStore } from '$lib/stores/sidebar-mode.svelte';
   // @immich/ui re-exports its types (dist/index.d.ts: `export * from './types.js'`),
   // so IconLike / IconProps come from the package rather than being redeclared here.
   import { Icon, Link, type IconLike, type IconProps } from '@immich/ui';
+  import { mdiChevronDown, mdiChevronRight } from '@mdi/js';
   import type { Snippet } from 'svelte';
+  import { t } from 'svelte-i18n';
 
   interface Props {
     title: string;
@@ -51,39 +52,59 @@
 </script>
 
 <div>
-  <!-- Link, not a raw <a>: it carries @immich/ui's shared link treatment and SvelteKit
-       integration, matching what upstream NavbarItem renders. -->
-  <Link
-    {href}
-    underline={false}
-    data-active={String(active)}
-    data-collapsed={String(collapsed)}
-    title={collapsed ? title : undefined}
-    aria-current={active ? 'page' : undefined}
-    class={linkClass}
-  >
-    {#if iconProps}
-      <Icon
-        size="1.375em"
-        class="shrink-0"
-        aria-hidden={true}
-        {...active && activeIconProps ? activeIconProps : iconProps}
-      />
+  <div class="relative flex items-center">
+    <!-- Ported from upstream NavbarItem: the sub-tree collapse/expand control. Hidden
+         in rail mode - the sub-tree itself is hidden there too (see below), and there is
+         nothing to toggle when the label isn't visible. -->
+    {#if items && !collapsed}
+      <button
+        type="button"
+        aria-label={expanded ? $t('collapse') : $t('expand')}
+        class="absolute me-2 hidden h-full rounded-lg px-0.5 hover:bg-subtle hover:text-primary md:block"
+        onclick={() => (expanded = !expanded)}
+      >
+        <Icon
+          icon={expanded ? mdiChevronDown : mdiChevronRight}
+          size="1em"
+          class="shrink-0 delay-100 duration-100"
+          aria-hidden={true}
+        />
+      </button>
     {/if}
-    <!--
-      The label stays mounted in rail mode - collapsing it with width/opacity rather than
-      unmounting keeps the link's accessible name and makes rail <-> expanded a pure CSS
-      transition instead of a component swap needing a cross-fade.
-    -->
-    <span
-      class="truncate text-sm font-medium transition-all duration-200 motion-reduce:transition-none"
-      class:w-0={collapsed}
-      class:opacity-0={collapsed}
-      class:overflow-hidden={collapsed}
+
+    <!-- Link, not a raw <a>: it carries @immich/ui's shared link treatment and SvelteKit
+         integration, matching what upstream NavbarItem renders. -->
+    <Link
+      {href}
+      underline={false}
+      data-active={String(active)}
+      data-collapsed={String(collapsed)}
+      title={collapsed ? title : undefined}
+      aria-current={active ? 'page' : undefined}
+      class={linkClass}
     >
-      {title}
-    </span>
-  </Link>
+      {#if iconProps}
+        <Icon
+          size="1.375em"
+          class="shrink-0"
+          aria-hidden={true}
+          {...active && activeIconProps ? activeIconProps : iconProps}
+        />
+      {/if}
+      <!--
+        The label stays mounted in rail mode - collapsing it with width/opacity rather than
+        unmounting keeps the link's accessible name and makes rail <-> expanded a pure CSS
+        transition instead of a component swap needing a cross-fade.
+      -->
+      <span
+        class="truncate text-sm font-medium transition-all duration-200 motion-reduce:transition-none"
+        class:w-0={collapsed}
+        class:opacity-0={collapsed}
+      >
+        {title}
+      </span>
+    </Link>
+  </div>
 
   {#if items && expanded && !collapsed}
     <div>{@render items()}</div>

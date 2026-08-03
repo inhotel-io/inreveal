@@ -1,4 +1,3 @@
-<!-- web/src/routes/(user)/user-settings/sidebar-settings.svelte -->
 <script lang="ts">
   import type { ComboBoxOption } from '$lib/components/shared-components/Combobox.svelte';
   import { SIDEBAR_MODES, sidebarModeStore, type SidebarMode } from '$lib/stores/sidebar-mode.svelte';

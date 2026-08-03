@@ -11,7 +11,7 @@ const layoutMocks = vi.hoisted(() => ({
 vi.mock('$lib/stores/sidebar-mode.svelte', () => ({ sidebarModeStore: layoutMocks.sidebarModeStore }));
 
 vi.mock('$lib/components/shared-components/navigation-bar/NavigationBar.svelte', async () => {
-  const module = await import('@test-data/mocks/noop-component.svelte');
+  const module = await import('@test-data/mocks/navigation-bar-rail-aware.stub.svelte');
   return { default: module.default };
 });
 
@@ -84,5 +84,24 @@ describe('UserPageLayout sidebar width', () => {
     });
 
     expect(screen.getByTestId('user-page-grid')).toHaveAttribute('data-sidebar-width', 'expanded');
+  });
+
+  // Spec coverage 29 (navbar side). A custom sidebar snippet (/tags, /folders) keeps the
+  // grid column at the expanded width above, but the navbar's own rail-aware sizing is
+  // driven independently by the `railAware` prop - passing it unconditionally would still
+  // shrink the navbar's logo/column and surface a hamburger that calls
+  // `toggleRailOverlay()`, which those pages' upstream Sidebar.svelte has no wiring for.
+  it('does not pass railAware to the navbar when a custom sidebar snippet is supplied', () => {
+    render(UserPageLayout, {
+      props: { sidebar: createRawSnippet(() => ({ render: () => `<nav data-testid="tree">tree</nav>` })) },
+    });
+
+    expect(screen.getByTestId('navigation-bar-stub')).toHaveAttribute('data-rail-aware', 'false');
+  });
+
+  it('passes railAware to the navbar by default', () => {
+    render(UserPageLayout);
+
+    expect(screen.getByTestId('navigation-bar-stub')).toHaveAttribute('data-rail-aware', 'true');
   });
 });

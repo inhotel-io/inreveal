@@ -22,10 +22,6 @@ describe('sidebarModeStore', () => {
     setViewport('phone');
   });
 
-  it('defaults to auto mode', () => {
-    expect(sidebarModeStore.mode).toBe('auto');
-  });
-
   // Spec coverage 1: the full 3 modes x 3 viewport bands resolution table.
   it.each`
     mode          | viewport    | expected

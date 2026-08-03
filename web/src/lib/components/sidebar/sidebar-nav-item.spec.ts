@@ -1,9 +1,9 @@
 import { mdiImageMultiple } from '@mdi/js';
 import '@testing-library/jest-dom';
-import { render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
-import { reactiveProps } from '$lib/components/sidebar/reactive-props.svelte';
 import SidebarNavItem from '$lib/components/sidebar/sidebar-nav-item.svelte';
+import { reactiveProps } from '@test-data/reactive-props.svelte';
 
 const mocks = vi.hoisted(() => ({
   sidebarModeStore: { layout: 'expanded' as 'overlay' | 'rail' | 'expanded', hoverExpanded: false },
@@ -34,6 +34,10 @@ describe('sidebar-nav-item', () => {
     // Spec coverage 18. The label must stay mounted, so assert on the accessible NAME,
     // not on text presence - `getByText` would pass in both states and could never fail.
     expect(link()).toHaveAccessibleName(/photos/i);
+    // The accessible-name assertion above also passes off the `title="Photos"` tooltip
+    // attribute rail mode adds, so it alone would not notice the label `<span>` being
+    // deleted. Assert the span node itself is still there, scoped to the link.
+    expect(within(link()).getByText('Photos')).toBeInTheDocument();
   });
 
   it('marks itself collapsed only in rail mode', () => {
@@ -149,5 +153,25 @@ describe('sidebar-nav-item', () => {
     render(SidebarNavItem, props);
 
     expect(props.expanded).toBe(true);
+  });
+
+  // Upstream NavbarItem renders a chevron button (aria-label 'expand'/'collapse') that
+  // toggles the bindable `expanded` flag - this is the control recentAlbumsDropdown /
+  // recentSpacesDropdown are bound through in UserSidebar. `reactiveProps` is required here
+  // for the same reason as above: a plain object would never observe the write-back.
+  it('flips the bound expanded flag when the expand/collapse control is clicked', async () => {
+    const props = reactiveProps({
+      title: 'Albums',
+      href: '/albums',
+      icon: mdiImageMultiple,
+      expanded: true,
+      items: createRawSnippet(() => ({ render: () => `<span data-testid="subtree">recent</span>` })),
+    });
+
+    render(SidebarNavItem, props);
+
+    await fireEvent.click(screen.getByRole('button', { name: /collapse/i }));
+
+    expect(props.expanded).toBe(false);
   });
 });

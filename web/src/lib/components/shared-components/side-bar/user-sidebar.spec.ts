@@ -83,8 +83,8 @@ describe('UserSidebar', () => {
   });
 
   // The Spaces row expands into the individual spaces (and their albums), which highlight
-  // themselves. NavbarItem's default `pathname.startsWith('/spaces')` would keep the Spaces
-  // heading lit at the same time, showing two selected rows at once.
+  // themselves. SidebarNavItem's default `pathname.startsWith('/spaces')` would keep the
+  // Spaces heading lit at the same time, showing two selected rows at once.
   describe('Spaces selected state', () => {
     const spacesLink = () => screen.getByRole('link', { name: /^spaces$/i });
 

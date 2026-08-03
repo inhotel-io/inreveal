@@ -180,7 +180,7 @@ describe('NavigationBar sidebar integration', () => {
   // above 850px) with no rail concept. Without the flag, a hamburger that suddenly appears
   // and calls `toggleRailOverlay()` would be a functionally inert, newly-visible button on
   // every Admin page whenever `sidebarModeStore.layout` resolves to `rail` (the default
-  // `auto` mode, common laptop widths 850-1280px). Simulate exactly that: the store resolves
+  // `auto` mode, common laptop widths 850-1279px). Simulate exactly that: the store resolves
   // 'rail' (as it would at 900px in auto mode), but the real viewport is >=850px, so the
   // pre-rail behaviour must win.
   it('keeps the old viewport-only behaviour without railAware, even at a rail-resolving layout', () => {

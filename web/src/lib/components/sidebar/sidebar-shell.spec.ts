@@ -276,17 +276,12 @@ describe('sidebar-shell direction and motion', () => {
     sidebarModeStore.resetTransient();
   });
 
-  afterEach(() => {
-    document.documentElement.dir = 'ltr';
-  });
-
-  // Spec coverage 23: the rail is anchored with a logical property, so one class list has
-  // to carry it to the inline-start in both directions. Asserting over both makes `dir`
-  // load-bearing - an implementation that swapped `left-0`/`right-0` per direction would
-  // fail one of the two cases.
-  it.each(['ltr', 'rtl'])('anchors the panel to the inline-start in %s', (dir) => {
-    document.documentElement.dir = dir;
-
+  // Spec coverage 23: the rail is anchored with a logical inset property, so the same
+  // static class list is correct in both writing directions - there is no JS-level `dir`
+  // branch here for a test to exercise. Setting `document.documentElement.dir` does not
+  // change which classes this component emits, so real RTL placement is verified in e2e,
+  // not here.
+  it('anchors the panel to the inline-start with a logical inset utility', () => {
     render(SidebarShell);
 
     // `inset-s-0` is this codebase's canonical inset-inline-start utility.

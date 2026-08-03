@@ -1,4 +1,3 @@
-<!-- web/src/lib/components/shared-components/side-bar/rail-storage.svelte -->
 <script lang="ts">
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { locale } from '$lib/stores/preferences.store';
