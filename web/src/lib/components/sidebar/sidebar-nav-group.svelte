@@ -14,7 +14,7 @@
 {#if collapsed}
   <!-- A text heading is unreadable at 4rem, so the group boundary becomes a rule - the
        same treatment Google Photos uses in its rail. -->
-  <hr data-testid="sidebar-group-divider" class="border-subtle mx-3 my-2" />
+  <hr data-testid="sidebar-group-divider" class="mx-3 my-2 border-subtle" />
 {:else}
   <NavbarGroup {title} size="tiny" />
 {/if}
