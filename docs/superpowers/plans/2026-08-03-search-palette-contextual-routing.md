@@ -18,7 +18,7 @@ Spec: `docs/superpowers/specs/2026-08-03-search-palette-contextual-routing-desig
 - **`$t()` returns raw translation keys** in specs that do not call `init()`/`waitLocale()`. Assert on `'cmdk_open_person_page'`, never on `'Open person page'`.
 - **New i18n keys go in `i18n/en.json` only** — `i18n/` is shared by web and mobile, and en is the source locale; other locales come from Weblate.
 - **ESLint runs with `--max-warnings 0`,** and `prettier --check` is a separate CI gate from eslint. Both must pass.
-- **`svelte/prefer-svelte-reactivity`** flags plain `Map`/`URL` construction. The existing code disables it inline with a comment explaining the value is ephemeral; copy that pattern verbatim where the code below shows it.
+- **`svelte/prefer-svelte-reactivity`** flags plain `Map`/`URL` construction. The existing code disables it inline with a comment explaining the value is ephemeral; copy that pattern where the code below shows it — **but eslint also reports _unused_ disable directives as warnings, and `--max-warnings 0` turns those into failures.** The rule only fires inside the exported class, not on module-level functions. If eslint says a directive is unused, delete it; do not keep a directive the plan shows just because the plan shows it. (Verified in Task 1: the disable the plan originally placed on `withoutEmptyLabels` was unused and had to go.)
 - **Baseline on this branch: 4092 passing web tests across 300 files.** Every task ends green against the full suite or the touched files, as stated per task.
 - **Commit trailers:** do not add `Co-Authored-By` or `Generated with` trailers.
 - **Every URL string asserted in this plan was computed by running the real `buildSearchablePageUrl`, `getSearchablePageBasePath`, `getPhotosPersonFilterId`, `Route.map` and `getGlobalPersonHref`** — they are not guesses. Notably: `URLSearchParams` encodes `:` as `%3A` and `,` as `%2C`; `Route.map` emits a Leaflet hash (`/map#12/48.8566/2.3522`), not a query string; and `getSearchablePageBasePath` returns `null` for `/albums/x`, `/map` **and** `/spaces/<id>/albums/<id>`. If an assertion fails during implementation, re-derive it rather than assuming the plan is right.
@@ -136,7 +136,7 @@ Insert immediately before `private navigateToFieldResults(...)`:
 
 Replace the whole method body. Keep the docstring above it unchanged.
 
-The `switch` is written exhaustively over all four `SearchMode` values, including `smart`. TypeScript does not carry the outer `if (mode === 'smart') return;` narrowing into a closure — `mode` is a parameter, not a `const` — so a three-case switch inside `applyFilter` would fail with "not all code paths return a value". The early return preserves the old no-navigation behaviour; the `smart` case exists only to satisfy exhaustiveness.
+The early `if (mode === 'smart') return;` preserves the old no-navigation behaviour. **This repo's TypeScript _does_ carry that narrowing into the closure** (`mode` is a parameter that is never reassigned), so inside `applyFilter` the type is already `'metadata' | 'description' | 'ocr'` and the three-case switch is exhaustive. Do **not** add a `case 'smart'` — it is a hard `TS2678: Type '"smart"' is not comparable to type '"description" | "metadata" | "ocr"'`. (Verified in Task 1 by adding the branch back and running `tsc --noEmit`.)
 
 ```ts
   private navigateToFieldResults(text: string, mode: SearchMode): void {
