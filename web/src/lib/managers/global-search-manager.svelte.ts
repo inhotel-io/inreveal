@@ -32,7 +32,7 @@ import { authManager } from '$lib/managers/auth-manager.svelte';
 import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
 import { Route } from '$lib/route';
 import { addEntry, getEntries, makePlaceId, removeEntry, type RecentEntry } from '$lib/stores/cmdk-recent';
-import { getGlobalPersonHref } from '$lib/utils/global-person-route';
+import { getPhotosPersonFilterId, type PhotosPersonFilterReference } from '$lib/utils/photos-filter-options';
 import {
   buildSearchablePageUrl,
   getSearchablePageBasePath,
@@ -165,8 +165,18 @@ function withoutEmptyLabels(names?: Map<string, string>): Map<string, string> {
   return new Map([...(names ?? [])].filter(([, label]) => label.trim() !== ''));
 }
 
-function getPersonRoute(person: Pick<PersonResponseDto, 'id' | 'primaryProfile'>): string {
-  return getGlobalPersonHref(person);
+/**
+ * The space id of the current page when that page is a space *timeline* (`/spaces/<id>` or
+ * `/spaces/<id>/photos`). Deliberately not a `pathname.startsWith('/spaces/')` test:
+ * `/spaces/<id>/albums/<albumId>` is a space page but not a searchable one, so no filter can be
+ * applied in place there.
+ */
+function getCurrentSpaceTimelineId(pathname: string): string | undefined {
+  const base = getSearchablePageBasePath(pathname);
+  if (!base?.startsWith('/spaces/')) {
+    return undefined;
+  }
+  return base.split('/').filter(Boolean)[1];
 }
 
 // Entity-section keys dispatched by runBatch per scope. Navigation is intentionally
@@ -1722,6 +1732,39 @@ export class GlobalSearchManager {
     });
   }
 
+  /**
+   * Navigate to the current surface filtered by `person`.
+   *
+   * The filter-id encoding is scope-dependent, and getting it wrong yields a silently empty
+   * timeline: a space timeline forwards `personIds` to the API as `spacePersonIds` — bare profile
+   * ids scoped to that space (space-filter-options.ts) — while /photos and /recently-added forward
+   * them prefixed, `person:` / `space-person:` (photos-filter-options.ts). So a space person can
+   * only filter in place on its OWN space; every other combination targets /photos with the
+   * prefixed id. This mirrors `getPersonFilterId(person, scope)` in the typed-search resolver,
+   * which already splits on exactly this distinction.
+   */
+  private navigateToPersonResults(person: PhotosPersonFilterReference & { name?: string }): void {
+    const spaceId = getCurrentSpaceTimelineId(page.url.pathname);
+    const profile = person.primaryProfile;
+    const spaceProfileId =
+      spaceId !== undefined && profile?.type === 'space-person' && profile.spaceId === spaceId ? profile.id : undefined;
+    const filterId = spaceProfileId ?? getPhotosPersonFilterId(person);
+    // Ephemeral URL object for destination construction only; no reactive state is retained.
+    // eslint-disable-next-line svelte/prefer-svelte-reactivity
+    const target = spaceId !== undefined && spaceProfileId === undefined ? new URL('/photos', page.url) : undefined;
+    this.navigateToFilteredResults({
+      target,
+      applyFilter: (filters) => ({
+        ...filters,
+        personIds: filters.personIds.includes(filterId) ? filters.personIds : [...filters.personIds, filterId],
+      }),
+      // Ephemeral map, serialized into sessionStorage by storeTypedSearchNames; an empty name is
+      // stripped by withoutEmptyLabels so the chip falls back to the id, not a blank label.
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
+      names: { personNames: new Map([[filterId, person.name ?? '']]) },
+    });
+  }
+
   async applySearchSort(sortOrder: SearchablePageSortOrder, text = this.query) {
     this.searchSortOrder = sortOrder;
 
@@ -1848,7 +1891,7 @@ export class GlobalSearchManager {
             lastUsed: now,
           });
         }
-        void goto(getPersonRoute(p));
+        this.navigateToPersonResults(p);
         break;
       }
       case 'place': {

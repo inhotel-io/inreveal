@@ -1080,16 +1080,17 @@ describe('activate()', () => {
     expect(m.isOpen).toBe(false);
   });
 
-  it('activate("person", item) navigates to /people/:id and records recent entry', () => {
+  it('activate("person", item) filters the timeline and records recent entry', () => {
     const m = new GlobalSearchManager();
     m.open();
     m.activate('person', { id: 'p1', name: 'Alice' });
-    expect(goto).toHaveBeenCalledWith('/people/p1');
+    // No primaryProfile and no filterId, so getPhotosPersonFilterId falls through to the raw id.
+    expect(goto).toHaveBeenCalledWith('/photos?people=p1');
     const entries = getEntries();
     expect(entries[0]).toMatchObject({ kind: 'person', personId: 'p1', label: 'Alice' });
   });
 
-  it('activate("person", item) opens identity-backed space-primary people as identity-wide person detail', () => {
+  it('activate("person", item) filters by the scoped filterId for an identity-backed space person', () => {
     const m = new GlobalSearchManager();
     m.open();
     m.activate('person', {
@@ -1099,11 +1100,12 @@ describe('activate()', () => {
       filterId: 'space-person:space-person-1',
     });
 
-    expect(goto).toHaveBeenCalledWith('/people/space-person-1');
+    // On /photos (not that space's timeline), so the prefixed id is the correct encoding.
+    expect(goto).toHaveBeenCalledWith('/photos?people=space-person%3Aspace-person-1');
     expect(getEntries()).toHaveLength(0);
   });
 
-  it('activate("person", item) navigates legacy space-primary people to identity-wide person detail', () => {
+  it('activate("person", item) reconstructs the prefixed id for a legacy space person', () => {
     const m = new GlobalSearchManager();
     m.open();
     m.activate('person', {
@@ -1111,7 +1113,7 @@ describe('activate()', () => {
       name: 'Alice',
       primaryProfile: { type: 'space-person', id: 'space-person-1', spaceId: 'space-1' },
     });
-    expect(goto).toHaveBeenCalledWith('/people/space-person-1');
+    expect(goto).toHaveBeenCalledWith('/photos?people=space-person%3Aspace-person-1');
     expect(getEntries()).toHaveLength(0);
   });
 
@@ -6798,5 +6800,257 @@ describe('tag activation navigation', () => {
       personNames: new Map(),
       tagNames: new Map([['t1', 'beach']]),
     });
+  });
+});
+
+describe('person activation navigation', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    localStorage.clear();
+    resetRecentStore();
+    mockPage.url = new URL('https://gallery.test/photos');
+  });
+
+  const lastGoto = () => vi.mocked(goto).mock.calls.at(-1)?.[0] as string | undefined;
+
+  const userPerson = (overrides: Partial<PersonResponseDto> = {}) =>
+    ({
+      id: 'p1',
+      name: 'Alice',
+      primaryProfile: { id: 'p1', type: 'user-person' },
+      ...overrides,
+    }) as PersonResponseDto;
+
+  const spacePerson = (spaceId: string, overrides: Partial<PersonResponseDto> = {}) =>
+    ({
+      id: 'sp1',
+      name: 'Bob',
+      primaryProfile: { id: 'profile-1', type: 'space-person', spaceId },
+      ...overrides,
+    }) as PersonResponseDto;
+
+  it('filters the timeline instead of opening the person management page', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('preserves the filters already on the page (AND)', () => {
+    const m = new GlobalSearchManager();
+    m.registerSearchablePageFilters(() => ({ ...createFilterState(), tagIds: ['t1'], rating: 4 }));
+
+    m.activate('person', userPerson());
+
+    const dest = lastGoto();
+    expect(dest).toContain('tags=t1');
+    expect(dest).toContain('rating=4');
+    expect(dest).toContain('people=person%3Ap1');
+  });
+
+  it('drops a stale smart query so the person filter is the only constraint', () => {
+    const m = new GlobalSearchManager();
+    // Matches the existing tag behaviour — buildSearchablePageUrl is called with an empty query,
+    // which deletes both `q` and a non-explicit `sort`.
+    mockPage.url = new URL('https://gallery.test/photos?q=sunset&sort=asc');
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('does not duplicate a person already filtering the page', () => {
+    const m = new GlobalSearchManager();
+    m.registerSearchablePageFilters(() => ({ ...createFilterState(), personIds: ['person:p1'] }));
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('appends to people already filtering the page', () => {
+    const m = new GlobalSearchManager();
+    m.registerSearchablePageFilters(() => ({ ...createFilterState(), personIds: ['person:p0'] }));
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap0%2Cperson%3Ap1');
+  });
+
+  it('stays on a space timeline and uses the bare profile id for that space person', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1');
+
+    m.activate('person', spacePerson('space-1'));
+
+    expect(lastGoto()).toBe('/spaces/space-1?people=profile-1');
+  });
+
+  it('stays on the /photos sub-route of a space timeline', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos');
+
+    m.activate('person', spacePerson('space-1'));
+
+    expect(lastGoto()).toBe('/spaces/space-1/photos?people=profile-1');
+  });
+
+  it('leaves the space for /photos when the person belongs to a different space', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1');
+
+    m.activate('person', spacePerson('space-2'));
+
+    expect(lastGoto()).toBe('/photos?people=space-person%3Aprofile-1');
+  });
+
+  it('leaves the space for /photos for a personal person', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1');
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('drops the space surface filters when it leaves the space', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1');
+    // Space-scoped person ids are bare profile ids and mean nothing on /photos, so carrying the
+    // space's filter state across would produce a garbage query.
+    m.registerSearchablePageFilters(() => ({ ...createFilterState(), personIds: ['space-profile-9'] }));
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('uses the prefixed id for a space person while on /photos', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('person', spacePerson('space-2'));
+
+    expect(lastGoto()).toBe('/photos?people=space-person%3Aprofile-1');
+  });
+
+  it('targets /photos from a space page that is not a timeline', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/albums/album-1');
+
+    m.activate('person', spacePerson('space-1'));
+
+    expect(lastGoto()).toBe('/photos?people=space-person%3Aprofile-1');
+  });
+
+  it('targets /photos from a non-searchable page', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/albums/album-1');
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('targets /photos from the map, matching the tag precedent', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/map');
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('stays on /recently-added', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/recently-added');
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/recently-added?people=person%3Ap1');
+  });
+
+  it('prefers the server-supplied filterId', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('person', userPerson({ filterId: 'person:identity-7' }));
+
+    expect(lastGoto()).toBe('/photos?people=person%3Aidentity-7');
+  });
+
+  it('falls back to person:<id> when there is no primaryProfile', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('person', { id: 'p9', name: 'Zoe' } as PersonResponseDto);
+
+    expect(lastGoto()).toBe('/photos?people=p9');
+  });
+
+  it('drops a stale ?at= scroll target from the destination', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/photos?at=asset-1');
+
+    m.activate('person', userPerson());
+
+    expect(lastGoto()).toBe('/photos?people=person%3Ap1');
+  });
+
+  it('caches the person name so the filter chip is not a raw id', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('person', userPerson());
+
+    expect(storeTypedSearchNames).toHaveBeenCalledWith('/photos?people=person%3Ap1', {
+      personNames: new Map([['person:p1', 'Alice']]),
+      tagNames: new Map(),
+    });
+  });
+
+  it('caches the bare profile id as the key for an in-space person', () => {
+    const m = new GlobalSearchManager();
+    mockPage.url = new URL('https://gallery.test/spaces/space-1');
+
+    m.activate('person', spacePerson('space-1'));
+
+    expect(storeTypedSearchNames).toHaveBeenCalledWith('/spaces/space-1?people=profile-1', {
+      personNames: new Map([['profile-1', 'Bob']]),
+      tagNames: new Map(),
+    });
+  });
+
+  it('caches no name for a nameless person so the chip falls back to the id', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('person', userPerson({ name: '' }));
+
+    expect(storeTypedSearchNames).toHaveBeenCalledWith('/photos?people=person%3Ap1', {
+      personNames: new Map(),
+      tagNames: new Map(),
+    });
+  });
+
+  it('closes the palette after navigating', () => {
+    const m = new GlobalSearchManager();
+    m.open();
+
+    m.activate('person', userPerson());
+
+    expect(m.isOpen).toBe(false);
+  });
+
+  it('records a recent entry for a personal person', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('person', userPerson());
+
+    expect(getEntries().some((e) => e.kind === 'person' && e.id === 'person:p1')).toBe(true);
+  });
+
+  it('records no recent entry for a space person', () => {
+    const m = new GlobalSearchManager();
+
+    m.activate('person', spacePerson('space-1'));
+
+    expect(getEntries().some((e) => e.kind === 'person')).toBe(false);
   });
 });
