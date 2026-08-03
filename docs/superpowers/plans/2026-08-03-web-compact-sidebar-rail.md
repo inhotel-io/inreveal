@@ -868,6 +868,12 @@ describe('rail-storage', () => {
 });
 ```
 
+**Parity test (added in commit `7bcfa15` after review, per human ruling).** The table above pins
+`rail-storage`'s own code but cannot detect divergence from `StorageSpace`. A second `describe`
+block spies on `getByteUnitString`, renders BOTH components against the same mocked state, filters
+to the `maxPrecision === 3` calls (`StorageSpace` also calls it at default precision for its
+`Meter` label), and asserts identical bytes — delivering spec item 21.
+
 The `zero quota is honoured` row pins a genuine subtlety in the upstream expression: `quotaSizeInBytes: 0` makes `hasQuota` true (it is `!== null`), but `|| 0` then collapses the value, so both readings are `0`. Mirroring that exactly is the point — if upstream ever changes it, this row fails and the duplication gets revisited.
 
 - [ ] **Step 2: Run test to verify it fails**
