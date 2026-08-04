@@ -172,6 +172,12 @@ const SharedSpaceAlbumFolderUpdateSchema = z
   })
   .meta({ id: 'SharedSpaceAlbumFolderUpdateDto' });
 
+const SharedSpaceAlbumFolderMoveAlbumSchema = z
+  .object({
+    folderId: z.uuidv4().nullable().describe('Destination folder ID; null moves the album to the space root'),
+  })
+  .meta({ id: 'SharedSpaceAlbumFolderMoveAlbumDto' });
+
 const SharedSpaceAlbumParamSchema = z.object({
   id: z.uuidv4(),
   albumId: z.uuidv4(),
@@ -207,6 +213,7 @@ const SharedSpaceLinkedAlbumSchema = AlbumResponseSchema.omit({ albumUsers: true
     showInTimeline: z.boolean().describe('Include this album in the space timeline'),
     addedById: z.string().nullable().describe('User who linked the album into the space'),
     linkedAt: z.string().meta({ format: 'date-time' }).describe('Link creation timestamp'),
+    folderId: z.string().nullable().describe('Folder this album sits in within the space, or null for the root'),
   })
   .meta({ id: 'SharedSpaceLinkedAlbumDto' });
 
@@ -271,6 +278,7 @@ export class SharedSpaceAlbumLinkUpdateDto extends createZodDto(SharedSpaceAlbum
 export class SharedSpaceAlbumFolderDto extends createZodDto(SharedSpaceAlbumFolderSchema) {}
 export class SharedSpaceAlbumFolderCreateDto extends createZodDto(SharedSpaceAlbumFolderCreateSchema) {}
 export class SharedSpaceAlbumFolderUpdateDto extends createZodDto(SharedSpaceAlbumFolderUpdateSchema) {}
+export class SharedSpaceAlbumFolderMoveAlbumDto extends createZodDto(SharedSpaceAlbumFolderMoveAlbumSchema) {}
 export class SharedSpaceAlbumParamDto extends createZodDto(SharedSpaceAlbumParamSchema) {}
 export class SharedSpaceMemberParamDto extends createZodDto(SharedSpaceMemberParamSchema) {}
 export class SharedSpacePersonParamDto extends createZodDto(SharedSpacePersonParamSchema) {}
