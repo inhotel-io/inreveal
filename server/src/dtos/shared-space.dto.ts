@@ -135,6 +135,35 @@ const SharedSpaceAlbumLinkUpdateSchema = z
   })
   .meta({ id: 'SharedSpaceAlbumLinkUpdateDto' });
 
+export const SHARED_SPACE_ALBUM_FOLDER_NAME_MAX = 128;
+
+const SharedSpaceAlbumFolderSchema = z
+  .object({
+    id: z.string().describe('Folder ID'),
+    spaceId: z.string().describe('Shared space ID'),
+    parentId: z.string().nullable().describe('Parent folder ID, or null when at the space root'),
+    name: z.string().describe('Folder name'),
+    createdById: z.string().nullable().describe('User who created the folder'),
+    createdAt: z.string().meta({ format: 'date-time' }),
+    updatedAt: z.string().meta({ format: 'date-time' }),
+  })
+  .meta({ id: 'SharedSpaceAlbumFolderDto' });
+
+// .trim() documents the constraint in the OpenAPI schema; the service re-validates so that
+// the rules are testable at the service layer and enforced for any non-HTTP caller.
+const SharedSpaceAlbumFolderCreateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(SHARED_SPACE_ALBUM_FOLDER_NAME_MAX).describe('Folder name'),
+    parentId: z.uuidv4().nullable().optional().describe('Parent folder ID; omit or null for the space root'),
+  })
+  .meta({ id: 'SharedSpaceAlbumFolderCreateDto' });
+
+const SharedSpaceAlbumFolderUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(SHARED_SPACE_ALBUM_FOLDER_NAME_MAX).optional().describe('New folder name'),
+  })
+  .meta({ id: 'SharedSpaceAlbumFolderUpdateDto' });
+
 const SharedSpaceAlbumParamSchema = z.object({
   id: z.uuidv4(),
   albumId: z.uuidv4(),
@@ -231,6 +260,9 @@ export class SharedSpaceMemberMetadataContributionDto extends createZodDto(
 ) {}
 export class SharedSpaceLibraryLinkDto extends createZodDto(SharedSpaceLibraryLinkSchema) {}
 export class SharedSpaceAlbumLinkUpdateDto extends createZodDto(SharedSpaceAlbumLinkUpdateSchema) {}
+export class SharedSpaceAlbumFolderDto extends createZodDto(SharedSpaceAlbumFolderSchema) {}
+export class SharedSpaceAlbumFolderCreateDto extends createZodDto(SharedSpaceAlbumFolderCreateSchema) {}
+export class SharedSpaceAlbumFolderUpdateDto extends createZodDto(SharedSpaceAlbumFolderUpdateSchema) {}
 export class SharedSpaceAlbumParamDto extends createZodDto(SharedSpaceAlbumParamSchema) {}
 export class SharedSpaceMemberParamDto extends createZodDto(SharedSpaceMemberParamSchema) {}
 export class SharedSpacePersonParamDto extends createZodDto(SharedSpacePersonParamSchema) {}
