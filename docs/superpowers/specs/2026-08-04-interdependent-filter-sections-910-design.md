@@ -169,8 +169,33 @@ Notes on the three non-obvious rows:
 discoverability path to making the filter useful at all. Hiding the section would remove the only
 prompt to name a face.
 
-**timeline** never hides: the panel is already suppressed wholesale via its `hidden` prop when the
-scope has no assets, so a structurally empty Timeline means an empty page, not a useless section.
+**timeline** never hides. Its bucket list is the page's own data rather than a server facet, and it is
+the one section whose emptiness means "this page has no assets" rather than "this control is
+useless" — a state the surfaces already handle with the panel's `hidden` prop (photos `:609`,
+recently-added `:509`, spaces `:829`, albums `:523`/`:535`, space-albums `:349`/`:527`; the map passes
+no `hidden` and simply greys).
+
+### 4.3.1 The rating stars need a different rule from the rating section
+
+The section-level rule above is correct — no rated asset means no `rating >= N` can match, for any N.
+The **star-level** rule inside the section is not, and turning `availableRatings` on activates a
+latent bug.
+
+The rating filter is a **minimum**, not an equality: `asset_exif.rating >= options.rating`
+(`asset.repository.ts:309`, and `database.ts:897` via `ratingIsMinimum` on the smart path). But
+`rating-filter.svelte:27` computes:
+
+```ts
+const isOrphaned = availableRatings !== undefined && !availableRatings.includes(star);
+```
+
+With `ratings: [2]` — a library whose only rated assets are 2-star — stars 1 _and_ 2 both return
+results, yet star 1 would be dimmed as unavailable. The prop is dead code today, so nobody has hit
+this. Slice 5 makes it live. The correct rule follows the `>=` semantics:
+
+```ts
+const isOrphaned = availableRatings !== undefined && star > Math.max(0, ...availableRatings);
+```
 
 ### 4.4 Three overriding rules
 
@@ -179,7 +204,7 @@ scope has no assets, so a structurally empty Timeline means an empty page, not a
    photos, empties the ratings facet while `rating: 5` is applied. Greying Rating there would trap the
    user with a filter they cannot reach to clear. `hasActiveFilter(section)`
    (`filter-panel.svelte:621-659`) already exists and is the guard.
-2. **Availability is never persisted.** §5.3.
+2. **Availability is never persisted.** §6.3.
 3. **A section absent from `config.sections` is untouched** — album detail's documented omission of
    `albums` (`filter-section-parity.spec.ts`) is unrelated and stays.
 
@@ -191,13 +216,71 @@ Client-side, cached per panel instance:
   `getActiveFilterCount(filters) === 0`, that response **is** the baseline — captured for free.
 - When the panel mounts with filters already applied (a deep link such as `/photos?rating=5`, or
   restored space filters), one extra `suggestionsProvider(createFilterState())` call fires alongside.
-- The baseline is held for the component's lifetime. Scope changes — a different album, a different
-  space — remount the panel, so component lifetime **is** the cache scope. No invalidation logic.
+- The baseline is held for the component's lifetime.
 
 Rejected: a server-side `scopeFacets` block returned with every response. It adds ~8 `EXISTS`
 subqueries to every suggestions request, including the debounced refetch that fires on each filter
 tweak, to answer a question whose answer changes when the library changes. The expensive path is the
 one that repeats.
+
+#### The `{#key}` invariant this depends on
+
+"Component lifetime is the cache scope" is only true because every surface already remounts the panel
+whenever its **non-filter** scope changes — the album, the space, or the committed smart-search query,
+none of which the panel can see:
+
+| Surface        | `{#key}` expression                                                                           |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| photos         | `showSearchResults ? \`photos-search-${committedQuery}:${$lang}\` : 'photos-browse'` (`:600`) |
+| spaces         | `` `${space.id}:${showSearchResults ? …search… : 'spaces-browse'}` `` (`:822`)                |
+| recently-added | `showSearchResults ? \`recently-added-search-…\` : 'recently-added-browse'` (`:501`)          |
+| albums         | `` `picker-${album.id}` `` / `` `album-${album.id}` `` (`:517`, `:527`)                       |
+| space-albums   | `` `space-album-${album.id}` `` / `` `space-album-picker-${album.id}` `` (`:341`, `:521`)     |
+| map            | no query mode; route change remounts                                                          |
+
+This is load-bearing and invisible: deleting a `{#key}` in a later refactor would leave a stale
+baseline behind with no compile error and no failing test. §8.3 adds a guard.
+
+Even a stale baseline fails safe, which is why no `scopeKey` prop is needed. A committed query can
+only **narrow** the scope, so `facet(query) ⊆ facet(browse)`. Hiding requires _both_ the current and
+the baseline facet to be empty; a baseline from a wider scope can therefore only fail to hide, never
+hide wrongly. The same argument covers the `withSharedSpaces` coupling in §4.6.
+
+### 4.6 Degenerate inputs that must not read as "structurally empty"
+
+An all-empty facet response is currently produced by three paths that do **not** mean "this scope has
+none of these". Each has to be handled or the panel will hide every section at once.
+
+**A failed facet fetch returns an empty sentinel.** All three query-mode surfaces resolve their
+provider with `emptyFilterSuggestions()` — every array empty, `hasUnnamedPeople: false` — when the
+smart-facets request fails or is aborted:
+
+- `photos/…/+page.svelte:271-273`
+- `spaces/[spaceId]/…/+page.svelte:305-307`
+- `recently-added/…/+page.svelte:266-269`
+
+Today that renders empty pickers, which is harmless. Under this model it is indistinguishable from a
+genuinely empty scope and would hide **every** section. The `baseline === undefined` safeguard in §6.1
+does not catch it, because the sentinel is a defined object.
+
+**Fix:** the sentinel becomes a rejection. Each of the three sites throws instead of returning
+`emptyFilterSuggestions()`, so the panel's existing `.catch` (`filter-panel.svelte:167-171`) runs and
+neither `current` nor `baseline` is overwritten — the panel keeps showing the last good facets, which
+is also better behaviour than blanking the pickers. `emptyFilterSuggestions()` is then deleted from
+all three surfaces. This belongs to slice 4, not to slice 5: the gating is unsafe until it lands.
+
+**`forceEmptyResult` deliberately empties everything.** `buildFilteredAssetIds` honours it
+(`search.repository.ts:1402`); `SearchService.getSearchSuggestions` sets it when a scoped person token
+is inaccessible (#858 §2.1). Every facet then comes back empty **for the current filters only** — the
+baseline, built from an empty filter state, carries no person token and is unaffected. The sections
+grey rather than hide, which is the correct outcome. Needs a test, not a code change.
+
+**Favourites narrows the scope, not just the filter.** The photos page couples `withSharedSpaces` to
+the favourites filter (`:200`, `:230`, `:282`, `:289`) because favourites are per-user (#763): with
+`isFavorite` set, suggestions are computed over own+partner assets only, while the baseline (no
+filters) includes shared spaces. Current and baseline therefore span different scopes. By the subset
+argument above this can only produce a grey where a hide might have been justified — never a wrong
+hide. Documented and tested, not changed.
 
 ## 5. Server
 
@@ -293,7 +376,9 @@ baseline and never calls it.
 
 - Delete the `filter-panel.svelte:160-164` discard; assign `availableRatings = result.ratings` and
   `availableMediaTypes = result.mediaTypes`. Both props already exist and are already consumed
-  (`rating-filter.svelte:27`, `media-type-filter.svelte:18-24`) — nothing downstream changes.
+  (`rating-filter.svelte:27`, `media-type-filter.svelte:18-24`).
+- Fix `rating-filter.svelte:27` to the `>=` orphan rule per §4.3.1. The two changes must land in the
+  same slice: assigning `availableRatings` without the fix ships the dimming bug.
 - Capture `baseline` per §4.5.
 - Derive `availability` per section and gate **both** the render loop (`filter-panel.svelte:753`) and
   the section-toggle icon row (`filter-panel.svelte:727`) on `!== 'unavailable'`.
@@ -331,11 +416,16 @@ Six config/mapper sites forward the three new fields:
 - `web/src/lib/utils/album-filter-config.ts` (both builders)
 - `web/src/lib/utils/recently-added-filter-config.ts`
 - `web/src/lib/utils/space-search.ts` (`mapSmartSearchFacetsToFilterSuggestions`)
-- `routes/(user)/photos/[[assetId=id]]/+page.svelte` — including `emptyFilterSuggestions()`
+- `routes/(user)/photos/[[assetId=id]]/+page.svelte`
 - `routes/(user)/spaces/[spaceId]/…/+page.svelte` and `routes/(user)/albums/[albumId=id]/…/+page.svelte`
 
 Widening `FilterSuggestionsResponse` (`filter-panel.ts:80-90`) with three required booleans makes
 `tsc` name every site that has not been updated — the compiler is the checklist.
+
+The same slice removes `emptyFilterSuggestions()` from the three query-mode surfaces in favour of a
+rejection, per §4.6. Note that `tsc` will **not** catch this one: the sentinel is a plain object
+literal, so widening the type flags it as missing the new fields, and the tempting fix is to add
+`hasFavorites: false` to it — which is precisely the bug. Delete it instead.
 
 ## 7. Mobile
 
@@ -388,6 +478,12 @@ database:
 | smart-search path, each of the above                    | same verdicts via `getSmartSearchFacets`                                                                          |
 | smart-search with `isFavorite` set                      | `hasFavorites` unaffected — regression guard for the `exclude !== 'favorites'` fix                                |
 | smart-search with `isNotInAlbum` set                    | other facets (`ratings`, `tags`, …) still reflect it — proves the candidate-query move did not drop the predicate |
+| `forceEmptyResult` set                                  | all three false — §4.6, so the client greys rather than hides                                                     |
+| `withSharedSpaces` with a shared-space favourite        | `hasFavorites` true; false without the flag — locks the §4.6 scope coupling                                       |
+
+The two rows above the last are the ones that fail loudest if the §5.3 candidate-query move is done
+wrong: dropping the album predicate entirely makes the second pass trivially, so it must be paired
+with an assertion that a **non**-album facet still reflects `isNotInAlbum`.
 
 Plus unit-level fixture updates in `search.service.spec.ts` and `search.controller.spec.ts`.
 
@@ -404,6 +500,13 @@ of §4.1, plus:
 - `hasAssetsInAlbum: true, hasAssetsNotInAlbum: false` → `unavailable`, and the mirror
 - timeline and text never `unavailable`, for any input
 
+Separately, `rating-filter.svelte`'s star-level rule (§4.3.1), which is not part of the module:
+
+- `availableRatings: [2]` → stars 1 and 2 live, stars 3–5 dimmed. **This is the test that fails
+  against today's `!includes(star)` implementation** and is the reason the fix is in scope.
+- `availableRatings: [2, 5]` → stars 1–5 all live (5 is the max, everything below it matches `>=`)
+- `availableRatings: []` → all five dimmed; `availableRatings: undefined` → none dimmed (legacy path)
+
 ### 8.3 Web — panel integration
 
 In `web/src/lib/components/filter-panel/__tests__/`:
@@ -412,13 +515,26 @@ In `web/src/lib/components/filter-panel/__tests__/`:
 - an `empty` section renders `(0)`, is collapsed and is disabled
 - a section that goes unavailable is **not** written to `localStorage`, and reappears when the next
   response reports it available — the §6.3 regression guard
+- an unavailable section still appears in the stored `known` array, so PR #926's
+  "introduced since the ledger" logic cannot mistake it for a new section on the next load
 - the panel mounts with filters active → a second `suggestionsProvider` call with an empty filter
   state; mounts clean → exactly one call
 - baseline request rejects → no section is hidden
+- **a later `suggestionsProvider` rejection leaves the previous facets and baseline in place** — the
+  §4.6 sentinel guard, at panel level
 - `showAllSections` and the empty-state hint count only available sections
 - a section with an active filter survives an empty facet
 - **the legacy providers path is unaffected** — `filter-panel.spec.ts:403` (`#858 §3.3`) stays green
   without edits, and no section is ever hidden when `config.suggestionsProvider` is absent
+
+At surface level, one test per query-mode page (photos, spaces, recently-added) that a failing
+`searchSmartFacets` makes `suggestionsProvider` **reject** rather than resolve with empty arrays
+(§4.6). These fail against today's `emptyFilterSuggestions()` and are what makes slice 4 TDD rather
+than a refactor.
+
+A guard for the `{#key}` invariant in §4.5: one test per surface that changing the committed query (or
+album/space id) mounts a fresh panel — asserted by the panel re-issuing its baseline request. Without
+it, deleting a `{#key}` is a silent correctness regression.
 
 `filter-section-parity.spec.ts` guards `config.sections` parity, which this change does not touch, so
 it must stay green. Widen its `getFilterSuggestions` mock with the three new fields so the mocked
@@ -455,19 +571,22 @@ and `dart format` as separate gates:
 
 ## 9. Slices
 
-| #   | Slice                                                                               | Gate                             |
-| --- | ----------------------------------------------------------------------------------- | -------------------------------- |
-| 1   | Server facets, DTOs, `SmartFacetExclude`, candidate-query move, `make sql`          | server unit + medium             |
-| 2   | OpenAPI regen — TypeScript SDK + Dart client                                        | build                            |
-| 3   | `filter-availability.ts` + its tests, no wiring                                     | web unit                         |
-| 4   | Widen `FilterSuggestionsResponse`; six surface configs/mappers                      | web unit + `check:typescript`    |
-| 5   | Panel wiring: consume facets, baseline capture, gating, ledger separation           | web unit + `check:svelte` + lint |
-| 6   | e2e seed and assertion updates                                                      | e2e web                          |
-| 7   | Mobile: `isNotInAlbum` forwarding, section and toggle gating, manage-sections sheet | flutter test, analyze, format    |
-| 8   | Docs                                                                                | docs prettier                    |
+Each row names the test that must fail first, so the slice cannot be started implementation-first.
+
+| #   | Slice                                                                                     | First failing test                                                                | Gate                             |
+| --- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------- |
+| 1   | Server facets, DTOs, `SmartFacetExclude`, candidate-query move, `make sql`                | medium: `hasFavorites` on a library with one favourite (§8.1)                     | server unit + medium             |
+| 2   | OpenAPI regen — TypeScript SDK + Dart client                                              | none — generated output, covered by slice 1 and 4                                 | build                            |
+| 3   | `filter-availability.ts` + its tests, no wiring                                           | the §4.3 table, driven as data (§8.2)                                             | web unit                         |
+| 4   | Widen `FilterSuggestionsResponse`; six configs/mappers; delete `emptyFilterSuggestions()` | per-surface: a failing facet fetch **rejects** rather than resolving empty (§8.3) | web unit + `check:typescript`    |
+| 5   | Panel wiring: consume facets, `>=` star rule, baseline capture, gating, ledger separation | `availableRatings: [2]` keeps star 1 live (§8.2)                                  | web unit + `check:svelte` + lint |
+| 6   | e2e seed and assertion updates                                                            | a library with no videos does not render `filter-section-media`                   | e2e web                          |
+| 7   | Mobile: `isNotInAlbum` forwarding, section and toggle gating, manage-sections sheet       | provider forwards `isNotInAlbum` (§8.5)                                           | flutter test, analyze, format    |
+| 8   | Docs                                                                                      | none                                                                              | docs prettier                    |
 
 Slice 4 precedes slice 5 because widening the response type breaks every config until they are
-updated; `tsc` then enumerates the work.
+updated; `tsc` then enumerates the work. It also carries the §4.6 sentinel removal, which slice 5's
+gating depends on for safety — slice 5 must not land without it.
 
 ## 10. Sequencing and risks
 
