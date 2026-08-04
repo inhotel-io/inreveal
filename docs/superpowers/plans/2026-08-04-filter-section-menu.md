@@ -119,6 +119,15 @@ describe('filter-section-menu', () => {
     expect(screen.queryByTestId('section-menu')).toBeNull();
   });
 
+  // svelte-i18n returns the key itself for a missing translation, so without this a typo'd or
+  // unregistered key would leave the cog's only accessible name as "filter_manage_sections" and
+  // every other test here would still pass.
+  it('names the cog from a real translation', () => {
+    renderMenu();
+
+    expect(cog()).toHaveAccessibleName('Show or hide sections');
+  });
+
   it('opens on click with one row per configured section', async () => {
     renderMenu();
 
@@ -407,7 +416,7 @@ Create `web/src/lib/components/filter-panel/filter-section-menu.svelte`:
 
 - [ ] **Step 4: Add the new i18n key**
 
-The component reads `filter_manage_sections`, which does not exist yet. In `i18n/en.json`, keys are alphabetical. Add between `filter_favorites_section` and `filter_show_all_sections`:
+The component reads `filter_manage_sections`, which does not exist yet. In `i18n/en.json` keys are alphabetical, so it belongs between `filter_invalid_to_date` and `filter_name_people_hint` (currently lines 1469 and 1470):
 
 ```json
   "filter_manage_sections": "Show or hide sections",
@@ -417,9 +426,7 @@ The component reads `filter_manage_sections`, which does not exist yet. In `i18n
 
 Run: `pnpm test --run src/lib/components/filter-panel/__tests__/filter-section-menu.spec.ts`
 
-Expected: PASS, 15 tests.
-
-If `toHaveBeenCalledExactlyOnceWith` is unavailable in this vitest version, use `expect(onToggle).toHaveBeenCalledTimes(1)` plus `expect(onToggle).toHaveBeenCalledWith('people')`.
+Expected: PASS, 16 tests.
 
 - [ ] **Step 6: Confirm nothing else moved**
 
@@ -545,6 +552,59 @@ it('leaves everything visible when Show all is used with nothing hidden', async 
   expect(screen.getByTestId('filter-section-rating')).toBeTruthy();
   expect(screen.getByTestId('section-menu')).toBeTruthy();
 });
+
+// The toggles MOVED - they are not also still sitting in the header. Without this, leaving the old
+// row in place would satisfy every other test in this file: they all find a toggle either way, and
+// testing-library only throws on duplicate testids.
+it('keeps the section toggles out of the DOM until the menu is opened', async () => {
+  renderPanel(['people', 'rating']);
+
+  expect(screen.queryByTestId('section-toggle-people')).toBeNull();
+
+  await openSectionMenu();
+
+  expect(screen.getByTestId('section-toggle-people')).toBeTruthy();
+});
+
+// The aggregate dot is the only thing on screen saying "something is filtering out of sight" while
+// the menu is shut, so it is asserted with the menu closed. `personIds` is the field the existing
+// per-section dot tests at `:660-684` use.
+it('shows a dot on the cog when a hidden section still holds a filter', async () => {
+  const filters = createFilterState();
+  filters.personIds = ['person-1'];
+  renderPanel(['people', 'rating'], filters);
+
+  await openSectionMenu();
+  await fireEvent.click(screen.getByTestId('section-toggle-people'));
+  await fireEvent.keyDown(screen.getByTestId('section-menu-btn'), { key: 'Escape' });
+
+  expect(screen.queryByTestId('section-menu')).toBeNull();
+  expect(screen.getByTestId('section-menu-dot')).toBeTruthy();
+});
+
+it('shows no dot on the cog when the hidden section holds no filter', async () => {
+  renderPanel(['people', 'rating']);
+
+  await openSectionMenu();
+  await fireEvent.click(screen.getByTestId('section-toggle-people'));
+
+  expect(screen.queryByTestId('section-menu-dot')).toBeNull();
+});
+
+// Derived, not latched: showing the section again clears the cue.
+it('clears the cog dot when the hidden section is shown again', async () => {
+  const filters = createFilterState();
+  filters.personIds = ['person-1'];
+  renderPanel(['people', 'rating'], filters);
+
+  await openSectionMenu();
+  await fireEvent.click(screen.getByTestId('section-toggle-people'));
+  expect(screen.getByTestId('section-menu-dot')).toBeTruthy();
+
+  await fireEvent.click(screen.getByTestId('section-toggle-people'));
+
+  expect(screen.queryByTestId('section-menu-dot')).toBeNull();
+});
 ```
 
 And add the helper immediately below `renderPanel` (`:492-505`):
@@ -559,9 +619,11 @@ async function openSectionMenu() {
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `pnpm test --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts -t "cog"`
+Run: `pnpm test --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts`
 
-Expected: FAIL — `Unable to find an element by: [data-testid="section-menu-btn"]`.
+Expected: the 11 tests just added FAIL with `Unable to find an element by: [data-testid="section-menu-btn"]`, and every pre-existing test in the file still passes. Run the whole file rather than filtering by name — the new tests do not share a keyword, so any `-t` pattern would silently skip some of them and report green.
+
+The one exception is `renders no section cog when the config has no sections`, which passes already because nothing renders a cog yet. That is expected; it becomes meaningful once the cog exists.
 
 - [ ] **Step 3: Render the cog in the panel header**
 
@@ -657,7 +719,12 @@ grep -n "section-toggle" src/lib/components/filter-panel/__tests__/filter-panel.
                         src/lib/components/filter-panel/__tests__/filter-sections.spec.ts
 ```
 
-For each test containing one, insert `await openSectionMenu();` as the first line after its `renderPanel(...)` call, and make the test `async` if it is not already. The rule is mechanical and has no exceptions: a `section-toggle-*` testid is only in the DOM while the menu is open.
+For each test containing one, insert `await openSectionMenu();` as the first line after its `renderPanel(...)` call, and make the test `async` if it is not already. The rule is mechanical: a `section-toggle-*` testid is only in the DOM while the menu is open.
+
+Two wrinkles it does not cover, both of which appear in the localStorage-persistence tests:
+
+- **A test that renders more than once needs one `openSectionMenu()` per render.** Each render starts with the menu closed; the previous render's open state does not carry over.
+- **A test that unmounts and re-renders to assert persistence** must open the menu again before querying `aria-pressed`, and it is asserting `visibleSections` — which this change does not touch — so its expectations stay exactly as they are.
 
 `filter-sections.spec.ts` (`:1318`, `:1334`) has its own render helper and no `openSectionMenu`. Add the same helper to that file's describe block:
 
@@ -796,51 +863,13 @@ whole body."
 
 ---
 
-### Task 4: Cover the dot's lifecycle and verify
+### Task 4: Full verification
 
-The cog dot is rendered from Task 1 and wired from Task 2, but nothing yet proves it tracks a filter being applied and cleared through the real panel.
+No new behaviour and no new tests — every one is already written and green by the end of Task 3. This task exists because two of the design's claims cannot be checked by any unit test, and because `filter-panel.svelte` renders inside every timeline page's spec, so the blast radius is wider than the folder that was edited.
 
-**Files:**
+**Files:** none modified unless a gate fails.
 
-- Modify: `web/src/lib/components/filter-panel/__tests__/filter-panel.spec.ts`
-
-- [ ] **Step 1: Write the failing tests**
-
-`renderPanel(sections, filters)` takes a `createFilterState()` object as its second argument; the existing dot tests at `:660-684` set `filters.personIds = ['person-1']` for a people filter and `filters.selectedYear = 2023` for a timeline one. Add beside them, under the `// --- Active-but-Hidden Indicator ---` heading:
-
-```ts
-// The aggregate dot is the only thing on screen saying "something is filtering out of sight"
-// while the menu is shut, so it is asserted without opening the menu.
-it('shows a dot on the cog when a hidden section still holds a filter', async () => {
-  const filters = createFilterState();
-  filters.personIds = ['person-1'];
-  renderPanel(['people', 'rating'], filters);
-
-  await openSectionMenu();
-  await fireEvent.click(screen.getByTestId('section-toggle-people'));
-  await fireEvent.keyDown(screen.getByTestId('section-menu-btn'), { key: 'Escape' });
-
-  expect(screen.queryByTestId('section-menu')).toBeNull();
-  expect(screen.getByTestId('section-menu-dot')).toBeTruthy();
-});
-
-it('shows no dot on the cog when every hidden section is unfiltered', async () => {
-  renderPanel(['people', 'rating']);
-
-  await openSectionMenu();
-  await fireEvent.click(screen.getByTestId('section-toggle-people'));
-
-  expect(screen.queryByTestId('section-menu-dot')).toBeNull();
-});
-```
-
-- [ ] **Step 2: Run them**
-
-Run: `pnpm test --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts -t "dot on the cog"`
-
-Expected: PASS — the behaviour was built in Tasks 1 and 2. These tests exist to pin it through the real panel rather than the component's stub predicate. If either fails, the wiring in Task 2 Step 3 passed the wrong `hasActiveFilter`.
-
-- [ ] **Step 3: Run every gate**
+- [ ] **Step 1: Run every gate**
 
 ```bash
 pnpm test --run
@@ -851,9 +880,9 @@ npx eslint src/lib/components/filter-panel/
 
 Expected: all green. The full suite matters here because `filter-panel.svelte` is rendered by every timeline page's spec.
 
-- [ ] **Step 4: Verify in a browser — this cannot be unit tested**
+- [ ] **Step 2: Verify in a browser — this cannot be unit tested**
 
-happy-dom has no layout, so nothing above proves the popover is not clipped or painted underneath the sticky header.
+happy-dom has no layout and no cascade, so nothing above proves the popover escapes `overflow-y-auto` clipping or wins against the header's `z-5`. Both are load-bearing claims in the spec's Positioning section and both are invisible to vitest.
 
 Start the dev stack, then on `/photos`:
 
@@ -864,14 +893,13 @@ Start the dev stack, then on `/photos`:
 5. Switch to a page using `externalToggle` (any album detail page), open the menu, collapse the panel, reopen it. The menu must be shut.
 6. Set the OS to reduce motion and confirm the popover appears instantly.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit only if a gate forced a change**
+
+If every gate and every browser check passed, there is nothing to commit — Tasks 1 to 3 already landed the work. Commit only fixes this task provoked, describing what actually broke rather than restating the feature:
 
 ```bash
 git add web/src/lib/components/filter-panel/
-git commit -m "test(web): pin the section cog dot through the real filter panel
-
-The component spec proves the dot renders from its own predicate; these prove
-the panel hands it the right one, across a filter being hidden and cleared."
+git commit -m "fix(web): <what the verification pass actually turned up>"
 ```
 
 ---
@@ -886,14 +914,14 @@ the panel hands it the right one, across a filter being hidden and cleared."
 | Cog in the header beside the `Filters` label        | 2                                                                                |
 | Worded checkbox popover                             | 1                                                                                |
 | `Show all` reset in the menu                        | 1 (renders), 2 (wired)                                                           |
-| Dot on the cog, marker on the row                   | 1 (both derived), 4 (pinned through the panel)                                   |
+| Dot on the cog, marker on the row                   | 1 (both derived), 2 (wired + pinned through the panel)                           |
 | `clickOutside` on a wrapper enclosing cog + popover | 1                                                                                |
 | Stays open across toggles                           | 1                                                                                |
 | Escape returns focus to the cog                     | 1                                                                                |
 | `aria-pressed` buttons, not `role="menu"`           | 1                                                                                |
 | Logical-property anchoring                          | 1                                                                                |
 | Reduced motion via `slideMotion()`                  | 1                                                                                |
-| Renders inside the sticky header, z above 5         | 1 (class), 4 Step 4 (verified visually)                                          |
+| Renders inside the sticky header, z above 5         | 1 (class), 4 Step 2 (verified visually)                                          |
 | `filter_manage_sections` added                      | 1                                                                                |
 | `filter_show_sections_hint` reworded                | 2                                                                                |
 | Row + `sectionIcons` deleted                        | 2                                                                                |
@@ -903,10 +931,10 @@ the panel hands it the right one, across a filter being hidden and cleared."
 | Zero / one / all-hidden section boundaries          | 2                                                                                |
 | Both restore routes                                 | 2                                                                                |
 | `externalToggle` auto-close                         | 3                                                                                |
-| Dot clears when its filter clears                   | 4                                                                                |
+| Dot clears when its filter clears                   | 2                                                                                |
 | `localStorage` unavailable                          | Untouched — the existing `try`/`catch` at `:490-498` is not modified by any task |
 | No e2e churn                                        | No task — nothing under `e2e/` references these testids                          |
 
-**Placeholder scan:** none. Every code step carries the code; the only conditional instructions (Task 1 Step 5's vitest matcher fallback, Task 4 Step 1's filter-field check) name the exact file and lines to read.
+**Placeholder scan:** none. Every code step carries the code. Task 4 Step 3's commit message is intentionally open — it fires only if verification turns something up, and prescribing its wording would be prescribing the bug.
 
 **Type consistency:** the prop set in Task 1's Interfaces block matches the component in Step 3 and the call site in Task 2 Step 3 — `sections`, `visible`, `titles`, `toggleLabels`, `hasActiveFilter`, `onToggle`, `onShowAll`, `open`. `hasActiveFilter` is passed by shorthand `{hasActiveFilter}` and matches the panel's own `function hasActiveFilter(section: string): boolean` at `:621`. `openSectionMenu()` is defined in Task 2 Step 1 and used in Tasks 2, 3 and 4. The type is imported as `FilterSection` in the new file, matching `filter-panel.ts:35`.
