@@ -353,6 +353,32 @@ describe('FilterPanel', () => {
     expect(getByTestId('discovery-panel').hasAttribute('inert')).toBe(true);
   });
 
+  // Built-in collapse unmounts the panel body, taking any open menu with it. externalToggle does
+  // not - the panel stays mounted at w-0, clipped and inert - so an open menu survives the
+  // collapse and is still open on reopen unless it is explicitly closed.
+  it('closes an open section menu when collapsed in externalToggle mode', async () => {
+    const { rerender } = render(FilterPanel, {
+      props: {
+        config: { sections: ['timeline', 'people'], providers: {} },
+        timeBuckets: [],
+        externalToggle: true,
+        collapsed: false,
+      },
+    });
+
+    await fireEvent.click(screen.getByTestId('section-menu-btn'));
+    expect(screen.getByTestId('section-menu')).toBeTruthy();
+
+    await rerender({
+      config: { sections: ['timeline', 'people'], providers: {} },
+      timeBuckets: [],
+      externalToggle: true,
+      collapsed: true,
+    });
+
+    expect(screen.getByTestId('section-menu-btn')).toHaveAttribute('aria-expanded', 'false');
+  });
+
   describe('emptyText prop', () => {
     it('should show generic empty text for people section when no people', async () => {
       render(FilterPanel, {

@@ -492,6 +492,15 @@
     }
   });
 
+  // externalToggle keeps this panel mounted at w-0 while collapsed rather than unmounting it, so
+  // an open menu would survive the collapse and still be open on reopen - and in the meantime is
+  // a popover painting out of a zero-width, inert box.
+  $effect(() => {
+    if (collapsed) {
+      sectionMenuOpen = false;
+    }
+  });
+
   // Fetch data on mount via $effect
   $effect(() => {
     if (config.suggestionsProvider) {
