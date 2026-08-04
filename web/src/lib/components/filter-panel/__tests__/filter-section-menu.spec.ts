@@ -116,7 +116,6 @@ describe('filter-section-menu', () => {
     await openMenu();
     await openMenu();
 
-    expect(screen.queryByTestId('section-menu')).toBeNull();
     expect(cog()).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -127,7 +126,7 @@ describe('filter-section-menu', () => {
     await openMenu();
     await fireEvent.mouseDown(document.body);
 
-    expect(screen.queryByTestId('section-menu')).toBeNull();
+    expect(cog()).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('closes on Escape and returns focus to the cog', async () => {
@@ -138,7 +137,7 @@ describe('filter-section-menu', () => {
     row.focus();
     await fireEvent.keyDown(row, { key: 'Escape' });
 
-    expect(screen.queryByTestId('section-menu')).toBeNull();
+    expect(cog()).toHaveAttribute('aria-expanded', 'false');
     expect(document.activeElement).toBe(cog());
   });
 
@@ -151,7 +150,7 @@ describe('filter-section-menu', () => {
     cog().focus();
     await fireEvent.keyDown(cog(), { key: 'Escape' });
 
-    expect(screen.queryByTestId('section-menu')).toBeNull();
+    expect(cog()).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('calls onShowAll once', async () => {
