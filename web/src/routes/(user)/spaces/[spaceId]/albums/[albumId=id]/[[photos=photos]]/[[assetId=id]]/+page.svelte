@@ -351,7 +351,7 @@
         {/key}
       {/if}
 
-      <div class="flex flex-1 flex-col overflow-hidden pl-4">
+      <div class="flex flex-1 flex-col overflow-hidden pl-2">
         {#if !assetMultiSelectManager.selectionActive}
           <div
             class="mb-2 shrink-0 items-center gap-2 bg-transparent py-2 pe-4 dark:bg-transparent {filterCollapsed &&

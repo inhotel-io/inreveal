@@ -541,7 +541,7 @@
           </div>
         </div>
 
-        <div class="flex flex-1 flex-col overflow-hidden pl-4">
+        <div class="flex flex-1 flex-col overflow-hidden pl-2">
           {#if viewMode === AlbumPageViewMode.SELECT_ASSETS && getActiveFilterCount(pickerFilters) > 0}
             <ActiveFiltersBar
               filters={pickerFilters}
