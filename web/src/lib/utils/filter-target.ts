@@ -57,11 +57,11 @@ export function buildContextualFilterUrl(url: URL, patch: Partial<FilterState>, 
   const basePath = target?.basePath ?? '/photos';
 
   // `global` (and the non-filterable-surface fallback) start from a CLEAN slate rather than
-  // carrying the current context over. This replaces the old Route.search(...) link, which always
-  // began a fresh search. It deliberately drops the active `q` and `sort` as well as the filters:
-  // "search everywhere for THIS camera" is a new search, not the old one plus a camera. It also
-  // avoids dragging a Space's `space-person:<uuid>` scoped tokens onto /photos, where a scoped
-  // token matches nothing.
+  // carrying the current context over. This replaces the old link to the `/search` page, which
+  // always began a fresh search. It deliberately drops the active `q` and `sort` as well as the
+  // filters: "search everywhere for THIS camera" is a new search, not the old one plus a camera.
+  // It also avoids dragging a Space's `space-person:<uuid>` scoped tokens onto /photos, where a
+  // scoped token matches nothing.
   const carryOver = target !== null;
 
   const params = new URLSearchParams(carryOver ? url.searchParams : undefined);
