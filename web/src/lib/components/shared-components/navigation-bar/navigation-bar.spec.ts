@@ -142,11 +142,13 @@ describe('NavigationBar sidebar integration', () => {
     expect(mocks.sidebarModeStore.toggleRailOverlay).not.toHaveBeenCalled();
   });
 
-  // Spec coverage 27: 4rem cannot hold the hamburger and the logo together.
+  // Spec coverage 27: 4rem cannot hold the hamburger and the logo together. Rail takes 9rem
+  // rather than the overlay's 8rem because there the hamburger claims the rail's own 5rem, so
+  // 5rem + the 3rem logo fills 8rem exactly and the logo would butt against the search field.
   it.each`
     layout        | column      | columnClass
     ${'overlay'}  | ${'narrow'} | ${'grid-cols-[--spacing(32)_auto]'}
-    ${'rail'}     | ${'narrow'} | ${'grid-cols-[--spacing(32)_auto]'}
+    ${'rail'}     | ${'rail'}   | ${'grid-cols-[--spacing(36)_auto]'}
     ${'expanded'} | ${'wide'}   | ${'grid-cols-[--spacing(64)_auto]'}
   `('navbar first column is $column for $layout', ({ layout, column, columnClass }) => {
     mocks.sidebarModeStore.layout = layout;
@@ -158,6 +160,42 @@ describe('NavigationBar sidebar integration', () => {
     // The literal Tailwind class actually applied, not just the semantic label above - a
     // mutation that swaps which class maps to which label would otherwise pass unnoticed.
     expect(grid).toHaveClass(columnClass);
+  });
+
+  // The rail's hamburger takes the rail's own 5rem so the logo next to it starts exactly where
+  // the content panel starts, and so the hamburger shares a centre line with the rail icons
+  // directly beneath it. The other two layouts must keep the hamburger inline beside the logo:
+  // the sub-850px overlay has no content edge to align to, and the expanded layout hides the
+  // hamburger, so a 5rem reservation would just be a hole in front of the logo.
+  it.each`
+    layout        | slot        | slotClass
+    ${'rail'}     | ${'rail'}   | ${'flex w-20 shrink-0 justify-center'}
+    ${'overlay'}  | ${'inline'} | ${'contents'}
+    ${'expanded'} | ${'inline'} | ${'contents'}
+  `('hamburger slot is $slot for $layout', ({ layout, slot, slotClass }) => {
+    mocks.sidebarModeStore.layout = layout;
+
+    renderNavigationBar({ railAware: true });
+
+    const menuSlot = screen.getByTestId('navbar-menu-slot');
+    expect(menuSlot).toHaveAttribute('data-slot', slot);
+    expect(menuSlot.className).toBe(slotClass);
+  });
+
+  // The row's own inset is the other half of that pairing: in the rail it has to be zero, or the
+  // 5rem hamburger slot starts 1rem late and carries the logo 1rem past the content edge.
+  it.each`
+    layout        | inset
+    ${'rail'}     | ${false}
+    ${'overlay'}  | ${true}
+    ${'expanded'} | ${true}
+  `('row inset present=$inset for $layout', ({ layout, inset }) => {
+    mocks.sidebarModeStore.layout = layout;
+
+    renderNavigationBar({ railAware: true });
+
+    const row = screen.getByTestId('navbar-menu-slot').parentElement!;
+    expect(/\bmx-4\b/.test(row.className)).toBe(inset);
   });
 
   // Spec coverage 28.

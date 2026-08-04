@@ -516,7 +516,7 @@
       <main> (swallowing clicks on the trailing Upload/Add buttons) if it came first. Keeping it last
       — as the global album page does — lets it paint on top while staying pinned to the top.
     -->
-    <main class="relative h-dvh overflow-hidden pt-(--navbar-height)" data-testid="add-photos-timeline-main">
+    <main class="relative h-dvh overflow-hidden pt-(--control-bar-height)" data-testid="add-photos-timeline-main">
       <div class="flex h-full">
         {#key `space-album-picker-${album.id}`}
           <FilterPanel

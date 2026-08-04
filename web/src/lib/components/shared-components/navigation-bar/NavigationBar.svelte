@@ -66,15 +66,35 @@
 
   // The first column holds the hamburger AND the logo, which is why its sub-850px value is
   // 8rem. Rail mode needs the hamburger visible, so it cannot shrink to the 4rem rail width.
+  // Rail gets 9rem rather than the overlay's 8rem: there the hamburger claims the rail's own
+  // 5rem (see `menuSlot`) so that 5rem + a 3rem logo already fills 8rem exactly, leaving the
+  // logo touching the search field. The extra 1rem is that gap.
   //
   // Each pair below is driven from a single shared value on purpose, used for BOTH the real
   // prop/class and the test-facing attribute: a test asserting only the semantic label (e.g.
   // `data-column`) can't tell the two apart if they were computed by separate, duplicate
   // ternaries, so a mutation to only the "real" side would pass silently.
-  const navColumn = $derived(isExpandedLayout ? 'wide' : 'narrow');
+  const navColumn = $derived(isExpandedLayout ? 'wide' : isRail ? 'rail' : 'narrow');
   const navColumnClass = $derived(
-    { wide: 'grid-cols-[--spacing(64)_auto]', narrow: 'grid-cols-[--spacing(32)_auto]' }[navColumn],
+    {
+      wide: 'grid-cols-[--spacing(64)_auto]',
+      rail: 'grid-cols-[--spacing(36)_auto]',
+      narrow: 'grid-cols-[--spacing(32)_auto]',
+    }[navColumn],
   );
+
+  // In the rail layout the hamburger is given the rail's own width, so the logo beside it starts
+  // exactly where the content panel starts - the alignment the request asked for - and the
+  // hamburger itself lands on the same centre line as the rail icons directly below it. `w-20`
+  // has to track UserPageLayout's rail grid column (`--spacing(20)`); they move together.
+  // Anywhere else the hamburger keeps its 1rem inset and sits right beside the logo: the
+  // sub-850px overlay has no content edge to line up with, and the expanded layout hides the
+  // hamburger altogether. `contents` makes that wrapper vanish from layout so those two states
+  // render exactly the markup they did before.
+  const menuSlot = $derived(isRail ? 'rail' : 'inline');
+  const menuSlotClass = $derived({ rail: 'flex w-20 shrink-0 justify-center', inline: 'contents' }[menuSlot]);
+  const menuRowClass = $derived({ rail: '', inline: 'mx-4 gap-1' }[menuSlot]);
+
   const menuButtonHidden = $derived(isExpandedLayout);
   const logoVariant = $derived(isExpandedLayout ? 'inline' : 'icon');
 </script>
@@ -86,33 +106,35 @@
   <div
     data-testid="navbar-grid"
     data-column={navColumn}
-    class="grid h-full items-center py-2 {navColumnClass} {noBorder ? '' : 'border-b'}"
+    class="grid h-full items-center py-1 {navColumnClass} {noBorder ? '' : 'border-b'}"
   >
-    <div class="mx-4 flex flex-row items-center gap-1">
-      <IconButton
-        id={menuButtonId}
-        shape="round"
-        color="secondary"
-        variant="ghost"
-        size="medium"
-        aria-label={$t('main_menu')}
-        icon={mdiMenu}
-        onclick={() => {
-          if (isRail) {
-            sidebarModeStore.toggleRailOverlay();
-            return;
-          }
-          sidebarStore.toggle();
-        }}
-        onmousedown={(event: MouseEvent) => {
-          if (sidebarStore.isOpen) {
-            // stops event from reaching the default handler when clicking outside of the sidebar
-            event.stopPropagation();
-          }
-        }}
-        class={menuButtonHidden ? 'hidden' : ''}
-        data-hidden={menuButtonHidden ? '' : undefined}
-      />
+    <div class="flex flex-row items-center {menuRowClass}">
+      <div data-testid="navbar-menu-slot" data-slot={menuSlot} class={menuSlotClass}>
+        <IconButton
+          id={menuButtonId}
+          shape="round"
+          color="secondary"
+          variant="ghost"
+          size="medium"
+          aria-label={$t('main_menu')}
+          icon={mdiMenu}
+          onclick={() => {
+            if (isRail) {
+              sidebarModeStore.toggleRailOverlay();
+              return;
+            }
+            sidebarStore.toggle();
+          }}
+          onmousedown={(event: MouseEvent) => {
+            if (sidebarStore.isOpen) {
+              // stops event from reaching the default handler when clicking outside of the sidebar
+              event.stopPropagation();
+            }
+          }}
+          class={menuButtonHidden ? 'hidden' : ''}
+          data-hidden={menuButtonHidden ? '' : undefined}
+        />
+      </div>
       <a data-sveltekit-preload-data="hover" href={Route.photos()}>
         <span data-testid="navbar-logo" data-variant={logoVariant}>
           <Logo variant={logoVariant} class="max-md:h-12" />

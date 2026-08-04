@@ -504,7 +504,9 @@
 
 <div class="flex overflow-hidden" use:scrollMemoryClearer={{ routeStartsWith: Route.albums() }}>
   <div class="relative w-full shrink">
-    <main class="relative h-dvh overflow-hidden px-2 pt-(--navbar-height) max-md:pt-(--navbar-height-md) md:px-6">
+    <main
+      class="relative h-dvh overflow-hidden px-2 pt-(--control-bar-height) max-md:pt-(--control-bar-height-md) md:px-6"
+    >
       <div class="flex h-full" data-testid="discovery-timeline">
         <!-- This route doesn't use UserPageLayout, so there's no page-level card for the panel to
              blend into — its bg-light surface would otherwise read as a flush black slab running to

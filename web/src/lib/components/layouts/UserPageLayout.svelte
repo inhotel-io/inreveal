@@ -71,6 +71,9 @@
     <NavigationBar onUploadClick={() => openFileUploadDialog()} railAware={!sidebar} />
   {/if}
 </header>
+<!-- The two height sources are not interchangeable: with a navbar the grid sits *below* a real
+     3.5rem element, so it subtracts --navbar-height; with `hideNavbar` the page floats an 80px
+     ControlAppBar over itself instead and pads by --control-bar-height to clear it. -->
 <div
   tabindex="-1"
   data-testid="user-page-grid"
@@ -78,8 +81,8 @@
   style:--sidebar-width={sidebarWidthValue}
   class="relative z-0 grid grid-cols-[var(--sidebar-width)_auto] overflow-hidden
     {hideNavbar ? 'h-dvh' : 'h-[calc(100dvh-var(--navbar-height))] max-md:h-[calc(100dvh-var(--navbar-height-md))]'}
-    {hideNavbar ? 'pt-(--navbar-height)' : ''}
-    {hideNavbar ? 'max-md:pt-(--navbar-height-md)' : ''}"
+    {hideNavbar ? 'pt-(--control-bar-height)' : ''}
+    {hideNavbar ? 'max-md:pt-(--control-bar-height-md)' : ''}"
 >
   {#if sidebar}
     {@render sidebar()}
