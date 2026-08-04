@@ -138,19 +138,37 @@
       <a data-sveltekit-preload-data="hover" href={Route.photos()}>
         <span data-testid="navbar-logo" data-variant={logoVariant}>
           <!-- One step down the Logo scale (3rem -> 2.5rem). At `medium` the mark matched the
-               search field's own 48px, which read as oversized for the corner it sits in now
-               that the bar is thin. Upstream's `max-md:h-12` pins the small-screen mark at the
-               old size, which is what it is there for - it was a no-op while the base was 3rem. -->
-          <Logo variant={logoVariant} size="small" class="max-md:h-12" />
+               search field's own 48px, which read as oversized for the corner it sits in now that
+               the bar is thin. Upstream's `max-md:h-12` went with it rather than pinning small
+               screens at the old size: it was a no-op while the base was 3rem, and reviving it
+               would leave the mark biggest exactly where the bar is tightest. -->
+          <Logo variant={logoVariant} size="small" />
         </span>
       </a>
     </div>
     <div class="flex justify-between gap-4 pe-6 lg:gap-8">
-      <div class="hidden w-full max-w-5xl flex-1 sm:block tall:ps-0">
+      <!--
+        The full-width trigger is spent from `xl` up, and the magnifier below it. `xl` is 1279px,
+        the same width `sidebar-media.svelte.ts` switches `auto` mode from the expanded sidebar to
+        the rail, so the bar goes compact in step with the sidebar rather than holding a 40rem
+        field until the 639px `sm` breakpoint - the point at which the chrome starts economising
+        is the point at which the field should stop claiming the width. Nothing is lost by it:
+        the trigger is a button that opens the search palette, not an input, so the magnifier
+        reaches exactly the same place in one click.
+
+        A breakpoint rather than `isExpandedLayout`, deliberately. This is a question about how
+        much width there is, not about what the sidebar is doing, so someone who *pins* the rail
+        on a wide screen keeps their field. It also keeps the bar identical between the user and
+        admin shells at any given width, which a layout-derived condition would not: admin passes
+        no `railAware` and would resolve it against 850px instead.
+      -->
+      <div data-testid="navbar-search-trigger" class="hidden w-full max-w-5xl flex-1 tall:ps-0 xl:block">
         <GlobalSearchInputTrigger />
       </div>
 
-      <section class="flex w-full place-items-center justify-end gap-1 sm:w-auto md:gap-2">
+      <!-- `w-full` until the trigger reappears, or `justify-between` would leave this row parked
+           against the logo with a stretch of empty bar after it. -->
+      <section class="flex w-full place-items-center justify-end gap-1 md:gap-2 xl:w-auto">
         <IconButton
           color="secondary"
           shape="round"
@@ -159,7 +177,7 @@
           icon={mdiMagnify}
           onclick={() => globalSearchManager.open()}
           id="search-button"
-          class="sm:hidden"
+          class="xl:hidden"
           aria-label={$t('go_to_search')}
         />
 

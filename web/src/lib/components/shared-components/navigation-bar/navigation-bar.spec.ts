@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';
 import type { Component } from 'svelte';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import NavigationBar from '$lib/components/shared-components/navigation-bar/NavigationBar.svelte';
 
@@ -240,5 +242,75 @@ describe('NavigationBar sidebar integration', () => {
 
     expect(screen.getByTestId('navbar-logo')).toHaveAttribute('data-variant', 'inline');
     expectLogoImg('inline');
+  });
+});
+
+// The bar goes compact in step with the sidebar: the full-width search trigger is spent from
+// the same width `auto` mode stops showing the expanded sidebar and starts showing the rail.
+// That is one number living in two files, and neither knows about the other - a breakpoint
+// utility here, a MediaQuery over there - so it is asserted rather than assumed.
+describe('NavigationBar search trigger', () => {
+  const readSource = (relative: string) =>
+    readFileSync(path.resolve(expect.getState().testPath!, '../../../../../', relative), 'utf8');
+
+  const searchTrigger = () => screen.getByTestId('navbar-search-trigger');
+  const searchButton = () => screen.getByRole('button', { name: /go_to_search/i });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.sidebarModeStore.layout = 'expanded';
+    mocks.mediaQueryManager.isFullSidebar = false;
+  });
+
+  it('swaps the trigger for the magnifier at the width the sidebar becomes a rail', () => {
+    renderNavigationBar({ railAware: true });
+
+    // The breakpoint is read back off the markup rather than hard-coded, so the lookup below
+    // resolves whichever one the component actually uses.
+    const breakpoint = /\b(?<name>[a-z\d]+):block\b/.exec(searchTrigger().className)!.groups!.name;
+    const width = new RegExp(String.raw`--breakpoint-${breakpoint}:\s*(?<px>\d+)px`).exec(readSource('app.css'))!
+      .groups!.px;
+    const railThreshold = /min-width:\s*(?<px>\d+)px/.exec(readSource('lib/stores/sidebar-media.svelte.ts'))!.groups!
+      .px;
+
+    expect(width).toBe(railThreshold);
+  });
+
+  // Complementary, both ways: one of the two is always reachable and never both at once. A
+  // mutation that moved only one of the pair would otherwise leave a width with no search at
+  // all, or with two.
+  it('shows exactly one of the trigger and the magnifier at any width', () => {
+    renderNavigationBar({ railAware: true });
+
+    const breakpoint = /\b(?<name>[a-z\d]+):block\b/.exec(searchTrigger().className)!.groups!.name;
+
+    // classList rather than a substring: a bare `hidden` and the `xl:hidden` that has to be
+    // there are the same word, and only exact tokens tell them apart.
+    expect([...searchTrigger().classList]).toContain('hidden');
+    expect([...searchButton().classList]).toContain(`${breakpoint}:hidden`);
+    expect([...searchButton().classList]).not.toContain('hidden');
+  });
+
+  // The action row has to span the bar while the trigger is gone: `justify-between` with a
+  // single child parks it at the start, which would leave the icons beside the logo with the
+  // rest of the bar empty after them.
+  it('spans the action row across the bar until the trigger returns', () => {
+    renderNavigationBar({ railAware: true });
+
+    const breakpoint = /\b(?<name>[a-z\d]+):block\b/.exec(searchTrigger().className)!.groups!.name;
+    const actions = searchButton().closest('section')!;
+
+    expect(actions.className).toContain('w-full');
+    expect(actions.className).toContain(`${breakpoint}:w-auto`);
+  });
+
+  // Small screens get the same mark as everything else. Upstream pinned them at the old 3rem,
+  // which after the bar was thinned left it biggest exactly where the bar is tightest.
+  it('renders the mark at one size at every width', () => {
+    renderNavigationBar({ railAware: true });
+
+    const logoImg = screen.getByTestId('navbar-logo').querySelector('img')!;
+    expect(logoImg).toHaveClass('h-10');
+    expect(logoImg.className).not.toMatch(/:h-/);
   });
 });

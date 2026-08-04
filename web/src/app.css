@@ -113,9 +113,10 @@
        panel's `margin-block` in gallery-theme.css). Both surfaces paint --gallery-chrome, so the
        seam between them is invisible and the user reads one band - which is why the field has to
        be centred in 4rem. Centred in 3.5rem it sat 4px from the top of that band and 12px from
-       the bottom, visibly low. The md variant is held equal rather than dropped - there is nothing
-       left to shave, since the logo is 3rem on small screens too - so that the ~10 pages
-       referencing it keep working and can differ again later. */
+       the bottom, visibly low. The md variant is held equal rather than dropped - the field and
+       the gutter are the same at every width, and the logo no longer sets the floor since it is
+       2.5rem on small screens too - so that the ~10 pages referencing it keep working and can
+       differ again later. */
     --navbar-height: 4rem;
     --navbar-height-md: 4rem;
 
