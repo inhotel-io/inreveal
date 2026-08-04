@@ -1592,7 +1592,7 @@
   "filter_sheet_zero_results": "No photos match this filter",
   "filter_show_all_sections": "Show all",
   "filter_show_more": "Show {count} more",
-  "filter_show_sections_hint": "Click an icon above to show filters",
+  "filter_show_sections_hint": "Use the cog above to show filters",
   "filter_sort_newest_first": "Sort: newest first",
   "filter_sort_oldest_first": "Sort: oldest first",
   "filter_tags": "Filter tags",
