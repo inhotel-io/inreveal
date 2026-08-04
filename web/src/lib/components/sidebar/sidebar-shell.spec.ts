@@ -426,6 +426,43 @@ describe('sidebar-shell direction and motion', () => {
     expect(selectors.some((selector) => panel().matches(selector))).toBe(false);
   });
 
+  // A collapsed rail overflows readily - a long Spaces/Albums list runs past the viewport even
+  // as bare icons - but its scrollbar is unusable, because reaching for it expands the rail:
+  // the bar the pointer was aimed at is replaced by a 16rem panel before the drag can start.
+  // Only the paint is dropped, never the overflow. `scrollbar-hidden` is `scrollbar-width: none`,
+  // so the panel stays a scroll container and tabbing to a row below the fold still scrolls it
+  // into view - `overflow-y-hidden` would have taken that away. classList tokens rather than a
+  // substring: `immich-scrollbar` and `scrollbar-hidden` share a stem.
+  it('hides the scrollbar while collapsed without making the panel unscrollable', () => {
+    render(SidebarShell);
+
+    expect(nav()).toHaveAttribute('data-expanded', 'false');
+    expect(panel().classList.contains('scrollbar-hidden')).toBe(true);
+    expect(panel().classList.contains('immich-scrollbar')).toBe(false);
+    expect(panel().className).toContain('overflow-y-auto');
+  });
+
+  // The other half of that pair. At full width the pointer is already inside the panel and the
+  // bar is a target it can actually hit, so it comes back. Both routes to full width are
+  // asserted - transient hover and the permanently-expanded layout - because they reach it
+  // through different conditions and a fix keyed to only one of them would leave the other bare.
+  it('restores the scrollbar once the panel is at full width', async () => {
+    render(SidebarShell);
+
+    await fireEvent.pointerEnter(nav());
+
+    expect(nav()).toHaveAttribute('data-expanded', 'true');
+    expect(panel().classList.contains('immich-scrollbar')).toBe(true);
+    expect(panel().classList.contains('scrollbar-hidden')).toBe(false);
+
+    sidebarModeStore.mode = 'expanded';
+    await tick();
+
+    expect(nav()).toHaveAttribute('data-layout', 'expanded');
+    expect(panel().classList.contains('immich-scrollbar')).toBe(true);
+    expect(panel().classList.contains('scrollbar-hidden')).toBe(false);
+  });
+
   // Spec coverage 22. Assert the pairing, not just the opt-out: a bare
   // `motion-reduce:transition-none` with nothing to suppress would be dead markup.
   it('opts out of the width transition under reduced motion', () => {

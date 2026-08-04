@@ -124,10 +124,18 @@
     the slot; this inner container is absolutely positioned and grows over the content
     instead, so the justified timeline never reflows on hover. The slot's actual width is
     set by the grid column in the page layout, keyed off `data-layout`.
+
+    A collapsed panel hides its scrollbar. It stays scrollable - focusing a row below the fold
+    still scrolls it into view - but the bar itself is unusable there: reaching for it expands
+    the rail, so the thing being aimed at is gone before the pointer arrives. Painting one down
+    a 5rem column of icons is then pure clutter. It returns with the width, on hover and in the
+    expanded/overlay layouts, where the pointer is already inside and can work it.
   -->
   <div
     data-testid="sidebar-panel"
-    class="absolute inset-s-0 top-0 flex h-full immich-scrollbar flex-col gap-1 overflow-x-hidden overflow-y-auto bg-light pt-8 transition-[width] duration-200 motion-reduce:transition-none"
+    class="absolute inset-s-0 top-0 flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto bg-light pt-8 transition-[width] duration-200 motion-reduce:transition-none"
+    class:immich-scrollbar={isExpanded}
+    class:scrollbar-hidden={!isExpanded}
     class:w-64={isExpanded}
     class:w-20={isRail && !isExpanded}
     class:w-0={isHidden}
