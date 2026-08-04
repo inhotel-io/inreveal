@@ -137,7 +137,11 @@
       </div>
       <a data-sveltekit-preload-data="hover" href={Route.photos()}>
         <span data-testid="navbar-logo" data-variant={logoVariant}>
-          <Logo variant={logoVariant} class="max-md:h-12" />
+          <!-- One step down the Logo scale (3rem -> 2.5rem). At `medium` the mark matched the
+               search field's own 48px, which read as oversized for the corner it sits in now
+               that the bar is thin. Upstream's `max-md:h-12` pins the small-screen mark at the
+               old size, which is what it is there for - it was a no-op while the base was 3rem. -->
+          <Logo variant={logoVariant} size="small" class="max-md:h-12" />
         </span>
       </a>
     </div>
