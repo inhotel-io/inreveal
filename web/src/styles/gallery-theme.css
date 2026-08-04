@@ -198,10 +198,15 @@ main:has(> div.absolute.overflow-y-auto) {
   border-radius: 16px;
   overflow: clip;
   /* Chrome gutter so the rounded corners read as a floating panel - but none at the inline
-   * start, where the sidebar already provides the boundary. A gutter there widened the chrome
-   * band beyond the sidebar itself, so the rail's icons, centred in their 5rem column, sat
-   * left of centre in the grey the user actually sees. */
-  margin-block: 8px;
+   * start, where the sidebar already provides the boundary, and none at the top, where the
+   * navbar does. A start gutter widened the chrome band beyond the sidebar itself, so the
+   * rail's icons, centred in their 5rem column, sat left of centre in the grey the user
+   * actually sees. A top gutter did the same to the navbar: it paints the same chrome, so the
+   * two read as one band and the search field ended up 4px from the top of it and 12px from
+   * the bottom. --navbar-height carries the 8px instead, and UserPageLayout adds it to the
+   * ControlAppBar reserve on the pages that hide the navbar - so the panel's own top edge is
+   * unmoved either way, only the field inside the navbar shifts down onto the band's centre. */
+  margin-block: 0 8px;
   margin-inline: 0 8px;
 }
 /* Inset ONLY the page header row (title + actions: Albums, Settings, …) so it

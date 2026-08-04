@@ -72,8 +72,17 @@
   {/if}
 </header>
 <!-- The two height sources are not interchangeable: with a navbar the grid sits *below* a real
-     3.5rem element, so it subtracts --navbar-height; with `hideNavbar` the page floats an 80px
-     ControlAppBar over itself instead and pads by --control-bar-height to clear it. -->
+     4rem element, so it subtracts --navbar-height; with `hideNavbar` the page floats an 80px
+     ControlAppBar over itself instead and pads by --control-bar-height to clear it.
+
+     The reserve gets the content panel's 8px chrome gutter added to it. The panel drops its top
+     margin so the navbar can own that gutter and centre its search field in the band the two of
+     them form (see --navbar-height), but a hidden navbar owns nothing - the reserve is all that
+     stands between the panel and an 80px bar it would otherwise slide under, since the reserve
+     is 76px and only ever cleared the bar with the panel's margin on top of it. The literal
+     matches the gutter in gallery-theme.css; --control-bar-height itself cannot absorb it,
+     because the album, person, partner and shared-link viewers spend it on full-bleed <main>
+     elements that never had the margin. -->
 <div
   tabindex="-1"
   data-testid="user-page-grid"
@@ -81,8 +90,8 @@
   style:--sidebar-width={sidebarWidthValue}
   class="relative z-0 grid grid-cols-[var(--sidebar-width)_auto] overflow-hidden
     {hideNavbar ? 'h-dvh' : 'h-[calc(100dvh-var(--navbar-height))] max-md:h-[calc(100dvh-var(--navbar-height-md))]'}
-    {hideNavbar ? 'pt-(--control-bar-height)' : ''}
-    {hideNavbar ? 'max-md:pt-(--control-bar-height-md)' : ''}"
+    {hideNavbar ? 'pt-[calc(var(--control-bar-height)+8px)]' : ''}
+    {hideNavbar ? 'max-md:pt-[calc(var(--control-bar-height-md)+8px)]' : ''}"
 >
   {#if sidebar}
     {@render sidebar()}

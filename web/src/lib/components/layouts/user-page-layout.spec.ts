@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/svelte';
 import { createRawSnippet } from 'svelte';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import UserPageLayout from '$lib/components/layouts/UserPageLayout.svelte';
 import UserPageLayoutDescriptionTrailingTestWrapper from './user-page-layout-description-trailing.test-wrapper.svelte';
 
@@ -103,5 +105,57 @@ describe('UserPageLayout sidebar width', () => {
     render(UserPageLayout);
 
     expect(screen.getByTestId('navigation-bar-stub')).toHaveAttribute('data-rail-aware', 'true');
+  });
+});
+
+// The chrome band above the content panel is what the user sees, and the panel contributes none
+// of it: it dropped its top margin so the navbar could own that gutter and centre its search
+// field in the band the two of them form. That makes the panel's top edge depend on whatever
+// stands above it, and the two routes have to agree - with a navbar the gutter is folded into
+// --navbar-height, without one it has to be added to the ControlAppBar reserve, which is spent
+// raw by full-bleed <main> elements elsewhere and so cannot absorb it. happy-dom has no cascade
+// or layout to measure, so the coupling is asserted against the stylesheet itself.
+describe('UserPageLayout chrome above the content panel', () => {
+  // Read from gallery-theme.css rather than restated here: the point is that the layout's
+  // reserve tracks the theme's gutter, which a copy of the number would not prove.
+  const panelMarginBlock = () => {
+    const themePath = path.resolve(expect.getState().testPath!, '../../../../styles/gallery-theme.css');
+    // Comments stripped first: the theme documents each rule above it, and one of those
+    // comments names `margin-block` while explaining why the top of it is zero.
+    const css = readFileSync(themePath, 'utf8').replaceAll(/\/\*[\S\s]*?\*\//g, '');
+    const rule = /main:has\(> div\.absolute\.overflow-y-auto\)\s*\{(?<body>[^{}]*)\}/.exec(css);
+    return /margin-block:\s*(?<value>[^;]+);/.exec(rule!.groups!.body)!.groups!.value.trim();
+  };
+
+  it('leaves the panel no top margin of its own', () => {
+    const [top, bottom] = panelMarginBlock().split(/\s+/, 2);
+
+    expect(top).toBe('0');
+    // Guards a vacuous read: a one-value `margin-block` would make the split return undefined
+    // for the bottom and still satisfy the assertion above for the wrong reason.
+    expect(bottom).toMatch(/^\d+px$/);
+  });
+
+  // With a navbar the band is the navbar, full stop - no padding may sit between it and the
+  // panel, or the gutter would be counted twice and the field would look high instead of low.
+  it('takes the whole band from the navbar height when a navbar is rendered', () => {
+    render(UserPageLayout);
+
+    const grid = screen.getByTestId('user-page-grid');
+    expect(grid.className).toContain('h-[calc(100dvh-var(--navbar-height))]');
+    expect(grid.className).not.toMatch(/\bp[ty]-/);
+  });
+
+  // With the navbar hidden an 80px ControlAppBar floats over the page instead, and the reserve
+  // that clears it is 76px - it only ever cleared the bar because the panel's margin sat on top
+  // of it. Losing that margin without adding it back here slides the panel under the bar.
+  it('adds the panel gutter to the ControlAppBar reserve when the navbar is hidden', () => {
+    const [, gutter] = panelMarginBlock().split(/\s+/, 2);
+
+    render(UserPageLayout, { props: { hideNavbar: true } });
+
+    const grid = screen.getByTestId('user-page-grid');
+    expect(grid.className).toContain(`pt-[calc(var(--control-bar-height)+${gutter})]`);
+    expect(grid.className).toContain(`max-md:pt-[calc(var(--control-bar-height-md)+${gutter})]`);
   });
 });
