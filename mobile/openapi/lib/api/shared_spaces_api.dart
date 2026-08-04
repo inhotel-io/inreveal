@@ -1755,7 +1755,7 @@ class SharedSpacesApi {
 
   /// Link an album to a shared space
   ///
-  /// Link an album so its photos appear in the space. Requires space editor/owner and album owner/editor.
+  /// Link an album so its photos appear in the space. Requires space editor/owner and album owner/editor. Pass folderId to place the album directly in a folder in the same request.
   ///
   /// Note: This method returns the HTTP [Response].
   ///
@@ -1764,7 +1764,10 @@ class SharedSpacesApi {
   /// * [String] albumId (required):
   ///
   /// * [String] id (required):
-  Future<Response> linkAlbumWithHttpInfo(String albumId, String id, { Future<void>? abortTrigger, }) async {
+  ///
+  /// * [String] folderId:
+  ///   Place the newly linked album in this folder
+  Future<Response> linkAlbumWithHttpInfo(String albumId, String id, { String? folderId, Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/shared-spaces/{id}/albums/{albumId}'
       .replaceAll('{albumId}', albumId)
@@ -1776,6 +1779,10 @@ class SharedSpacesApi {
     final queryParams = <QueryParam>[];
     final headerParams = <String, String>{};
     final formParams = <String, String>{};
+
+    if (folderId != null) {
+      queryParams.addAll(_queryParams('', 'folderId', folderId));
+    }
 
     const contentTypes = <String>[];
 
@@ -1794,15 +1801,18 @@ class SharedSpacesApi {
 
   /// Link an album to a shared space
   ///
-  /// Link an album so its photos appear in the space. Requires space editor/owner and album owner/editor.
+  /// Link an album so its photos appear in the space. Requires space editor/owner and album owner/editor. Pass folderId to place the album directly in a folder in the same request.
   ///
   /// Parameters:
   ///
   /// * [String] albumId (required):
   ///
   /// * [String] id (required):
-  Future<void> linkAlbum(String albumId, String id, { Future<void>? abortTrigger, }) async {
-    final response = await linkAlbumWithHttpInfo(albumId, id, abortTrigger: abortTrigger,);
+  ///
+  /// * [String] folderId:
+  ///   Place the newly linked album in this folder
+  Future<void> linkAlbum(String albumId, String id, { String? folderId, Future<void>? abortTrigger, }) async {
+    final response = await linkAlbumWithHttpInfo(albumId, id, folderId: folderId, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
