@@ -359,7 +359,7 @@ Create `web/src/lib/components/filter-panel/filter-section-menu.svelte`:
     <Icon icon={mdiCog} size="16" />
     {#if anyHiddenAndFiltering}
       <span
-        class="absolute -top-0.5 -right-0.5 size-2 rounded-full border-[1.5px] border-light bg-immich-primary dark:bg-immich-dark-primary"
+        class="absolute -inset-e-0.5 -top-0.5 size-2 rounded-full border-[1.5px] border-light bg-immich-primary dark:bg-immich-dark-primary"
         data-testid="section-menu-dot"
       ></span>
     {/if}
