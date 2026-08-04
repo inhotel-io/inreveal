@@ -49,7 +49,7 @@ describe('RecentAlbums component', () => {
       // Centring is a padding value, never `justify-center`: only a length can be transitioned,
       // and without that the thumbnail snapped to the row's start before sliding right.
       expect(/\bw-12\b/.test(row.className)).toBe(centred);
-      expect(/\bps-15\b/.test(row.className)).toBe(inset);
+      expect(/\bps-12\b/.test(row.className)).toBe(inset);
       expect(row.className).not.toContain('justify-center');
     },
   );

@@ -121,7 +121,7 @@
       <!-- No chevron in the rail: it is unreadable beside a 24px thumbnail at 5rem, and the
            sub-tree it toggles is already showing. Expansion is driven from the expanded
            sidebar and persists, exactly as the parent nav item's own chevron does.
-           `inset-s-7` indents it past the Spaces row's own chevron at `inset-s-2`: stacked at
+           `inset-s-8` indents it past the Spaces row's own chevron at `inset-s-3`: stacked at
            the same inset the parent caret sat directly above its children's, reading as one
            column rather than a hierarchy. The 20px step mirrors the rows' own indent. -->
       {#if hasAlbums && !collapsed}
@@ -130,7 +130,7 @@
           aria-label={expanded ? $t('collapse') : $t('expand')}
           aria-expanded={expanded}
           data-testid="sidebar-space-chevron-{space.id}"
-          class="absolute inset-s-7 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg p-0.5 hover:bg-subtle md:block"
+          class="absolute inset-s-8 top-1/2 z-10 hidden -translate-y-1/2 rounded-lg p-0.5 hover:bg-subtle md:block"
           onclick={() => toggleAlbums(space.id)}
         >
           <!-- 1.25em matches the chevron the Spaces row above renders: 1em read too faint next to
@@ -138,6 +138,10 @@
           <Icon icon={expanded ? mdiChevronDown : mdiChevronRight} size="1.25em" />
         </button>
       {/if}
+      <!-- Expanded, the pill carries the sidebar's shared 0.75rem inset on both ends rather than
+           `w-full`, and its `ps-*` is 0.75rem short of the thumbnail's distance from the sidebar
+           edge to compensate - the same pairing SidebarNavItem uses, so the two indent scales stay
+           in step. -->
       <a
         href={Route.viewSpace({ id: space.id })}
         title={space.name}
@@ -145,7 +149,7 @@
         data-testid="sidebar-space-{space.id}"
         class="flex place-items-center gap-4 rounded-e-full py-3 transition-[padding,margin,width] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {collapsed
           ? 'ms-4 w-12 ps-3'
-          : 'ms-0 w-full ps-15 group-hover:sm:pe-4 md:pe-4'} {active
+          : 'mx-3 w-[calc(100%-1.5rem)] ps-12 group-hover:sm:pe-4 md:pe-4'} {active
           ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
           : ''}"
       >
@@ -182,7 +186,7 @@
           data-testid="sidebar-space-album-{album.id}"
           class="flex place-items-center gap-4 rounded-e-full py-2 transition-[padding,margin,width] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {collapsed
             ? 'ms-4 w-12 ps-3'
-            : 'ms-0 w-full ps-19'} {albumActive
+            : 'mx-3 w-[calc(100%-1.5rem)] ps-16'} {albumActive
             ? 'bg-primary/10 text-immich-primary dark:text-immich-dark-primary'
             : ''}"
         >
@@ -214,7 +218,7 @@
           data-testid="sidebar-space-see-all-{space.id}"
           class="flex place-items-center rounded-e-full py-2 text-sm font-medium text-immich-primary transition-[padding,margin,width] delay-100 duration-100 hover:bg-subtle dark:text-immich-dark-primary {collapsed
             ? 'ms-4 w-12 ps-3.5'
-            : 'ms-0 w-full ps-19'}"
+            : 'mx-3 w-[calc(100%-1.5rem)] ps-16'}"
         >
           {#if collapsed}
             <Icon icon={mdiDotsHorizontal} size="1.25em" aria-hidden={true} />

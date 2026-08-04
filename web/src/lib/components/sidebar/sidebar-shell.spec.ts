@@ -409,19 +409,21 @@ describe('sidebar-shell direction and motion', () => {
     expect(gutters.some((selector) => panel().matches(selector))).toBe(false);
   });
 
-  // Same stale coupling, second symptom: the theme reserves a scrollbar gutter so that
-  // expanding Spaces/Albums cannot shrink the pill width and shift the side margins. That
-  // reservation only does anything on a scroll container, and this shell moved the scrolling
-  // from the nav to the panel - leaving the rule inert and the rows running flush to the
-  // sidebar's inline-end edge. `#sidebar` must keep it too: /tags and /folders opt out of the
-  // rail and still render upstream Sidebar.svelte, where the nav itself is the scroller.
-  it('reserves the scrollbar gutter on the element that actually scrolls', () => {
+  // No gutter on the panel either, and this one is about the other end. The rows inset their
+  // pills with their own symmetric margin; a reserved gutter stacks on top of that at the end
+  // only, so the pill would sit 0.75rem from the start edge and 0.75rem + a scrollbar from the
+  // end - lopsided again, and worse wherever scrollbars are classic rather than overlay.
+  // Without the reservation a scrollbar just narrows the panel's content box, so the pill keeps
+  // its 0.75rem from whichever edge it meets. `#sidebar` must keep the rule regardless: /tags
+  // and /folders opt out of the rail and still render upstream Sidebar.svelte, where the nav
+  // itself is the scroller and the rows have no margin of their own.
+  it('leaves the panel end edge to the scrollbar rather than reserving a gutter', () => {
     render(SidebarShell);
 
     const selectors = themeSelectorsDeclaring('scrollbar-gutter: stable');
     expect(selectors).toContain('#sidebar');
     expect(panel().className).toContain('overflow-y-auto');
-    expect(selectors.some((selector) => panel().matches(selector))).toBe(true);
+    expect(selectors.some((selector) => panel().matches(selector))).toBe(false);
   });
 
   // Spec coverage 22. Assert the pairing, not just the opt-out: a bare

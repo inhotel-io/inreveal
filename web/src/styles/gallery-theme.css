@@ -159,20 +159,18 @@ body {
 }
 /* Reserve the scrollbar gutter so expanding Spaces/Albums (which overflows the sidebar and shows the
  * thin scrollbar) doesn't shrink the pill width and shift the side margins. A gutter only applies to
- * a scroll container, so it has to name whichever element scrolls: the sidebar shell scrolls its
- * inner panel, while /tags and /folders opt out of the rail and still scroll the <nav> itself. Doubles
- * as the inline-end breathing room opposite `ps-2` — without it the rows run flush to the edge. */
+ * a scroll container, so it has to name whichever element scrolls: /tags and /folders opt out of the
+ * rail and scroll the <nav> itself. Doubles as the inline-end breathing room opposite `ps-2` —
+ * without it the tree rows run flush to the edge.
+ *
+ * The rail shell's inner scroll panel deliberately does NOT get a gutter. Its pills are inset by
+ * their own symmetric margins, and a gutter would stack on top of the end margin only, so the pill
+ * would sit 12px from the start edge and 12px + a scrollbar from the end — the lopsided look this
+ * inset exists to fix, and worse on platforms with classic scrollbars. Without it the scrollbar
+ * simply narrows the panel's content box, so the pill keeps 12px from whichever edge it meets, the
+ * scrollbar's or the panel's. That is what Google Photos does, and it cannot shift the rail's
+ * start-anchored icons either, since a scrollbar only ever takes width from the end. */
 #sidebar {
-  scrollbar-gutter: stable;
-}
-/* End-only on the shell's panel, and the panel carries no horizontal padding: the rail centres
- * its icons with a fixed start padding, so that padding has to be measured from the rail's own
- * edge. `both-edges` puts a reservation in front of it whose width is the platform's scrollbar
- * - 11px here, ~4px with the overlay scrollbars macOS uses by default - and every icon drifts
- * by that much. Reserving only at the end leaves the start edge at zero everywhere, so the
- * centring holds regardless of scrollbar width, and a scrollbar appearing still cannot move
- * start-anchored content. */
-#sidebar > div.absolute.overflow-y-auto {
   scrollbar-gutter: stable;
 }
 /* The Spaces/Albums expand-collapse caret is an absolute sibling of the pill link — it shouldn't carry

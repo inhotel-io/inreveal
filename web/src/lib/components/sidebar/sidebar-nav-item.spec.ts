@@ -80,9 +80,9 @@ describe('sidebar-nav-item', () => {
     expect(link()).toHaveAttribute('data-collapsed', 'false');
   });
 
-  // The active pill is the link itself (`w-full`), so it fills the rail's content box and is
-  // centred - but the icon inside is not. `ps-5` leads the icon in for the label, and the
-  // label stays mounted at zero width when collapsed, so its `gap-4` still occupies space
+  // The active pill is the link itself, so in the rail it is a 3rem indicator centred in the
+  // 5rem band - but the icon inside is not. The expanded `ps-*` leads the icon in for the label,
+  // and the label stays mounted at zero width when collapsed, so its `gap-4` still occupies space
   // after the icon. Both push the icon right of the pill's centre. With no visible label to
   // lead, the icon has to centre instead. happy-dom cannot lay this out, so assert the
   // classes that decide it.
@@ -104,9 +104,23 @@ describe('sidebar-nav-item', () => {
   it('leads with the icon and gaps the label when expanded', () => {
     render(SidebarNavItem, { title: 'Photos', href: '/photos', icon: mdiImageMultiple });
 
-    expect(link().className).toContain('ps-10');
+    expect(link().className).toContain('ps-7');
     expect(link().className).toContain('gap-4');
     expect(link().className).not.toContain('justify-center');
+  });
+
+  // The pill used to be `w-full`, which ran it flush to the sidebar's start edge while the panel's
+  // reserved scrollbar gutter left a gap at the other - the ends visibly disagreed. It now carries
+  // the same 0.75rem margin at both ends (Google Photos' inset at this sidebar width) and gives
+  // that width back, so the two ends match and nothing overflows the panel. The margin comes out
+  // of the padding rather than being added to it - `ps-7` above, not `ps-10` - because the icon's
+  // distance is measured from the sidebar, not from the pill.
+  it('insets the expanded pill equally at both ends', () => {
+    render(SidebarNavItem, { title: 'Photos', href: '/photos', icon: mdiImageMultiple });
+
+    expect(link().className).toContain('mx-3');
+    expect(link().className).toContain('w-[calc(100%-1.5rem)]');
+    expect(link().className).not.toMatch(/\bw-full\b/);
   });
 
   it('adds a tooltip only when collapsed', () => {
@@ -174,8 +188,9 @@ describe('sidebar-nav-item', () => {
   });
 
   // The chevron is absolutely positioned, so with no start inset it sat against the sidebar's
-  // edge, ~11px in. `inset-s-2` gives it room; the space rows' own chevrons then step further in
-  // at `inset-s-7`, so a parent caret never sits directly above its children's.
+  // edge, ~11px in. `inset-s-3` gives it room - and lines it up with the pill's own 0.75rem
+  // margin, so it no longer overhangs the pill's rounded start cap; the space rows' own chevrons
+  // then step further in at `inset-s-8`, so a parent caret never sits directly above its children's.
   it('insets the sub-tree chevron from the sidebar edge', () => {
     render(SidebarNavItem, {
       title: 'Albums',
@@ -185,7 +200,7 @@ describe('sidebar-nav-item', () => {
     });
 
     const chevron = screen.getByRole('button', { name: /expand|collapse/i });
-    expect(chevron.className).toContain('inset-s-2');
+    expect(chevron.className).toContain('inset-s-3');
   });
 
   it('shows the sub-tree when expanded', () => {

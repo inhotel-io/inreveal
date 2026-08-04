@@ -49,7 +49,12 @@
       // start edge with the scrollbar gutter's width left over at the end - visibly lopsided,
       // because the panel's content box is not centred when the gutter is reserved at one end.
       // Sizing the indicator itself sidesteps the content box entirely.
-      collapsed ? 'ms-4 w-12' : 'ms-0 w-full',
+      //
+      // Expanded the pill is inset 0.75rem at both ends, the same inset Google Photos uses at the
+      // same 16rem sidebar width. `w-full` ran it flush to the start edge, which is what made the
+      // ends look mismatched. An explicit length rather than `w-auto`, because the width has to be
+      // interpolable: the rail expands from a 3rem indicator, and `auto` would snap.
+      collapsed ? 'ms-4 w-12' : 'mx-3 w-[calc(100%-1.5rem)]',
       // Centred with padding rather than `justify-center`, because `justify-content` cannot be
       // transitioned: switching it off on expand snapped the icon to the row's start and only
       // then did the padding animation carry it right, which read as the icon popping in from
@@ -62,7 +67,10 @@
       // centres the icon in the indicator, and `ms-4` centres the indicator in the rail, so the
       // icon lands on the rail's midpoint at any root size. `gap-4` stays in both states - it
       // sits after the icon so it cannot move it, and holding it constant removes another jump.
-      collapsed ? 'ps-[0.8125rem]' : 'ps-10',
+      // Expanded this is 0.75rem short of the icon's distance from the sidebar's edge, because the
+      // pill now starts 0.75rem in: the padding is measured from the pill, not the panel, so it has
+      // to shed exactly what the margin added or the icon and label would both slide right.
+      collapsed ? 'ps-[0.8125rem]' : 'ps-7',
       active ? 'bg-primary/10 text-primary' : '',
     ]
       .filter(Boolean)
@@ -79,12 +87,13 @@
       <button
         type="button"
         aria-label={expanded ? $t('collapse') : $t('expand')}
-        class="absolute inset-s-2 hidden h-full rounded-lg px-0.5 hover:bg-subtle hover:text-primary md:block"
+        class="absolute inset-s-3 hidden h-full rounded-lg px-0.5 hover:bg-subtle hover:text-primary md:block"
         onclick={() => (expanded = !expanded)}
       >
         <!-- Inset and sized to match the space rows' own chevrons: with no start inset this sat
              ~11px from the sidebar's edge against their ~21px, and 1em read too faint beside a
-             1.375em icon. -->
+             1.375em icon. The inset tracks the pill's own 0.75rem margin, so the caret starts
+             where the pill does rather than overhanging its rounded start cap. -->
         <Icon
           icon={expanded ? mdiChevronDown : mdiChevronRight}
           size="1.25em"

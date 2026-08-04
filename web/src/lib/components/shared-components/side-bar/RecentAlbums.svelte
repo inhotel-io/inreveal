@@ -36,7 +36,7 @@
     title={album.albumName}
     class="flex place-items-center gap-4 rounded-e-full py-3 transition-[padding,margin,width] delay-100 duration-100 hover:cursor-pointer hover:bg-subtle hover:text-immich-primary dark:text-immich-dark-fg dark:hover:bg-immich-dark-gray dark:hover:text-immich-dark-primary {collapsed
       ? 'ms-4 w-12 ps-3'
-      : 'ms-0 w-full justify-between ps-15 group-hover:sm:pe-4 md:pe-4'}"
+      : 'mx-3 w-[calc(100%-1.5rem)] justify-between ps-12 group-hover:sm:pe-4 md:pe-4'}"
   >
     <div class="shrink-0">
       <div
