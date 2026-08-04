@@ -25,8 +25,9 @@ faceted data the panel already fetches, and either hides or greys itself out acc
 
 ## 2. Decisions taken
 
-Four product decisions were settled before design. They are recorded here because two of them
-**reverse decisions previously made deliberately in code**, and a future reader needs the reason.
+Four product decisions were settled before design. They are recorded here because the work sits on top
+of two earlier deliberate decisions — §2.4 keeps one, §4.2 supersedes the other — and a future reader
+needs to know which is which, and why.
 
 ### 2.1 Hide structural, grey transient
 
@@ -50,24 +51,42 @@ Mobile's filter sheet consumes the same `/search/filter-suggestions` endpoint
 (`mobile/lib/providers/photos_filter/filter_suggestions.provider.dart`) and has the same
 always-visible sections. Both clients change in this spec so they cannot drift.
 
-### 2.4 What this reverses
+### 2.4 What this does **not** reverse: no per-star or per-button dimming
 
-**`filter-panel.svelte:160-164`** — the client currently discards the `ratings` and `mediaTypes` the
-server already sends:
+`filter-panel.svelte:160-164` discards the `ratings` and `mediaTypes` the server already sends:
 
 > Note: availableRatings and availableMediaTypes are intentionally NOT set from suggestionsProvider.
 > Hiding rating stars and media type buttons based on the current result set is too aggressive — it
 > breaks existing E2E tests and confuses users who expect these fixed options to always be visible.
 
-Two claims, handled separately. "Breaks existing E2E tests" was true and is still true — §8.4 fixes
-the seed data rather than the feature. "Confuses users who expect these fixed options to always be
-visible" is the claim #910 contradicts: the reporter is confused by the _opposite_. The comment is
-deleted, and this section is the replacement record.
+That is a **standing decision**, not an incidental comment — recorded in
+`feedback_no_dynamic_rating_media_hiding` and load-bearing on `rating_stars_section.widget.dart`,
+which cites it. Its three grounds still hold:
+
+1. **A real bug (PR #261).** Filtering `visibleStars` by `availableRatings` made the stars positional
+   liars: with `[1, 2, 3, 5]` available, clicking the fourth visible star selected rating 5. Stars
+   derive their meaning from position, unlike labelled values such as countries or tags.
+2. **It breaks e2e.** Suites click `rating-star-5` and `media-type-video` directly; hidden elements
+   time out.
+3. **Dimming specifically was rejected too**, not only hiding.
+
+**#910 does not require reversing any of it.** The issue is about _sections_ — "hide the complete
+section" — not about individual stars and buttons. This spec therefore reads `ratings` and
+`mediaTypes` **only** to decide section availability, and never assigns `availableRatings` /
+`availableMediaTypes`. All five stars keep rendering uniformly whenever the Rating section renders at
+all; all three media buttons keep rendering whenever Media does.
+
+A useful corollary: because the props stay unset, the latent `>=` mismatch inside
+`rating-filter.svelte:27` stays dead. The rating filter is a **minimum**
+(`asset.repository.ts:309`, `database.ts:897` via `ratingIsMinimum`), so `!availableRatings.includes(star)`
+would have dimmed star 1 on a library whose only rated assets are 2-star — a fourth reason the
+standing decision is the right one. §6.2 leaves that code untouched and documents why.
 
 **The #858 §3.3 carve-out** (`filter-panel.svelte:92`) excludes `country`, `city`, `make`, `model`
 and `mediaType` from `filterContext` so that a section-local filter cannot grey out its own section.
 It stops applying on every production surface — see §4.2 — while remaining in force on the legacy
-path it was written for.
+path it was written for. This is the one prior decision the spec does supersede, and only because the
+condition that motivated it becomes structurally impossible (§4.2).
 
 ## 3. Current state
 
@@ -175,27 +194,19 @@ useless" — a state the surfaces already handle with the panel's `hidden` prop 
 recently-added `:509`, spaces `:829`, albums `:523`/`:535`, space-albums `:349`/`:527`; the map passes
 no `hidden` and simply greys).
 
-### 4.3.1 The rating stars need a different rule from the rating section
+### 4.3.1 Section-level only — the facets never reach the controls
 
-The section-level rule above is correct — no rated asset means no `rating >= N` can match, for any N.
-The **star-level** rule inside the section is not, and turning `availableRatings` on activates a
-latent bug.
+`ratings` and `mediaTypes` feed `getSectionAvailability` and nothing else. Per §2.4,
+`availableRatings` and `availableMediaTypes` stay unset, so:
 
-The rating filter is a **minimum**, not an equality: `asset_exif.rating >= options.rating`
-(`asset.repository.ts:309`, and `database.ts:897` via `ratingIsMinimum` on the smart path). But
-`rating-filter.svelte:27` computes:
+- whenever the Rating section renders, all five stars render uniformly;
+- whenever the Media section renders, all three buttons render;
+- `rating-filter.svelte` and `media-type-filter.svelte` are not modified by this work at all.
 
-```ts
-const isOrphaned = availableRatings !== undefined && !availableRatings.includes(star);
-```
-
-With `ratings: [2]` — a library whose only rated assets are 2-star — stars 1 _and_ 2 both return
-results, yet star 1 would be dimmed as unavailable. The prop is dead code today, so nobody has hit
-this. Slice 5 makes it live. The correct rule follows the `>=` semantics:
-
-```ts
-const isOrphaned = availableRatings !== undefined && star > Math.max(0, ...availableRatings);
-```
+The section rules remain sound without the controls participating. `ratings: []` means no
+`rating >= N` can match for any N, so the whole section is dead. `mediaTypes.length < 2` means the
+one present type is a synonym for _All_ and the other button is empty, so the control cannot
+discriminate. Both verdicts are about the section, which is exactly what #910 asks about.
 
 ### 4.4 Three overriding rules
 
@@ -374,12 +385,11 @@ baseline and never calls it.
 
 `filter-panel.svelte`:
 
-- Delete the `filter-panel.svelte:160-164` discard; assign `availableRatings = result.ratings` and
-  `availableMediaTypes = result.mediaTypes`. Both props already exist and are already consumed
-  (`rating-filter.svelte:27`, `media-type-filter.svelte:18-24`).
-- Fix `rating-filter.svelte:27` to the `>=` orphan rule per §4.3.1. The two changes must land in the
-  same slice: assigning `availableRatings` without the fix ships the dimming bug.
-- Capture `baseline` per §4.5.
+- Capture the whole response into `currentSuggestions`, and `baseline` per §4.5. `ratings` and
+  `mediaTypes` reach `getSectionAvailability` through that object.
+- **Leave `availableRatings` and `availableMediaTypes` unset**, and leave the
+  `filter-panel.svelte:160-164` comment in place with a pointer to §2.4 — it records a standing
+  decision this spec does not overturn. Do not "tidy" it away.
 - Derive `availability` per section and gate **both** the render loop (`filter-panel.svelte:753`) and
   the section-toggle icon row (`filter-panel.svelte:727`) on `!== 'unavailable'`.
 - Feed `count = 0` on `'empty'`. The `filterContext ? … : undefined` ladder at
@@ -452,8 +462,10 @@ Mobile has no `isInAlbum` ("has album") equivalent, so only `hasAssetsNotInAlbum
 from §6.3. `manage_sections_sheet.widget.dart` iterates `FilterSectionId.values` and must not offer a
 switch for an unavailable section.
 
-`rating_stars_section.widget.dart` and `media_type_section.widget.dart` get the same available-value
-dimming web already has.
+`rating_stars_section.widget.dart` and `media_type_section.widget.dart` are **not modified**. The
+former's doc comment already cites `feedback_no_dynamic_rating_media_hiding` ("Always renders 5
+stars"); §2.4 keeps that true on both clients. Mobile gates the `rating` and `media` sections as
+wholes, exactly like web, and leaves their contents alone.
 
 ## 8. Test plan
 
@@ -500,12 +512,15 @@ of §4.1, plus:
 - `hasAssetsInAlbum: true, hasAssetsNotInAlbum: false` → `unavailable`, and the mirror
 - timeline and text never `unavailable`, for any input
 
-Separately, `rating-filter.svelte`'s star-level rule (§4.3.1), which is not part of the module:
+Separately, a guard that §2.4's standing decision survives this work — the panel must reach
+`getSectionAvailability` without ever handing the facets to the controls:
 
-- `availableRatings: [2]` → stars 1 and 2 live, stars 3–5 dimmed. **This is the test that fails
-  against today's `!includes(star)` implementation** and is the reason the fix is in scope.
-- `availableRatings: [2, 5]` → stars 1–5 all live (5 is the max, everything below it matches `>=`)
-- `availableRatings: []` → all five dimmed; `availableRatings: undefined` → none dimmed (legacy path)
+- with `ratings: [2]` and the Rating section available, all five stars render and none carries the
+  `opacity-50` dimming class
+- with `mediaTypes: ['IMAGE', 'VIDEO']`, all three media buttons render undimmed
+
+Both fail if a later change re-introduces `availableRatings` / `availableMediaTypes` assignment, which
+is the point: `feedback_no_dynamic_rating_media_hiding` has been re-litigated twice already.
 
 ### 8.3 Web — panel integration
 
@@ -579,7 +594,7 @@ Each row names the test that must fail first, so the slice cannot be started imp
 | 2   | OpenAPI regen — TypeScript SDK + Dart client                                              | none — generated output, covered by slice 1 and 4                                 | build                            |
 | 3   | `filter-availability.ts` + its tests, no wiring                                           | the §4.3 table, driven as data (§8.2)                                             | web unit                         |
 | 4   | Widen `FilterSuggestionsResponse`; six configs/mappers; delete `emptyFilterSuggestions()` | per-surface: a failing facet fetch **rejects** rather than resolving empty (§8.3) | web unit + `check:typescript`    |
-| 5   | Panel wiring: consume facets, `>=` star rule, baseline capture, gating, ledger separation | `availableRatings: [2]` keeps star 1 live (§8.2)                                  | web unit + `check:svelte` + lint |
+| 5   | Panel wiring: capture facets, baseline capture, section gating, ledger separation         | an unavailable section renders neither its body nor its toggle icon (§8.3)        | web unit + `check:svelte` + lint |
 | 6   | e2e seed and assertion updates                                                            | a library with no videos does not render `filter-section-media`                   | e2e web                          |
 | 7   | Mobile: `isNotInAlbum` forwarding, section and toggle gating, manage-sections sheet       | provider forwards `isNotInAlbum` (§8.5)                                           | flutter test, analyze, format    |
 | 8   | Docs                                                                                      | none                                                                              | docs prettier                    |
