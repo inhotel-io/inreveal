@@ -18,7 +18,7 @@
 - Tailwind classes must use logical properties for inline positioning — `inset-s-*` / `inset-e-*`, never `left-*` / `right-*`. `sidebar-shell.spec.ts` asserts this convention.
 - The existing testids `section-toggle-{section}` and `section-toggle-dot-{section}` MUST survive onto the menu rows. They are what makes this a migration rather than a test rewrite.
 - Never add `Co-Authored-By` or "Generated with" trailers to commits.
-- **Closing the menu is asynchronous.** The popover carries `transition:slide`, so when `open` goes false Svelte plays a ~300ms outro and the element stays in the DOM until it ends. `web/src/test-data/setup.ts:48-59` mocks `matchMedia` to always return `matches: false`, so `mediaQueryManager.reducedMotion` is false in tests and the transition always runs at full duration. Every "the menu is gone" assertion must therefore be `await waitFor(() => expect(screen.queryByTestId('section-menu')).toBeNull())`, matching the `waitFor` pattern already used throughout `filter-sections.spec.ts`. `aria-expanded` flips synchronously and needs no wait. This is not a `$bindable` write-back problem — wrapping props in the repo's `reactiveProps()` helper produces the identical failures.
+- **A closed menu is asserted via `aria-expanded`, never via DOM removal.** The popover carries `transition:slide`, and `web/src/test-data/setup.ts:42-46` mocks `Element.prototype.animate` down to `{ cancel, finished }`. Svelte 5 drives transitions through the Web Animations API, so under that mock an outro never signals completion and **a transitioned element is never removed from the DOM in this test environment** — `waitFor` cannot rescue it either. The state itself is correct: a probe confirmed `aria-expanded` flips to `false` on close while the element stays mounted. So every "the menu is closed" assertion checks `expect(cog).toHaveAttribute('aria-expanded', 'false')`, which is both synchronous and the actual ARIA contract. Do not remove the transition to make removal assertable — that trades real UX for a harness limitation, and `filter-section.svelte` already ships the same pattern.
 
 **Deviation from the spec, deliberate:** the spec puts the aggregate `anyHiddenActiveFilter` derived in `filter-panel.svelte`. This plan instead passes one `hasActiveFilter` predicate into the menu and derives **both** cues (per-row marker and cog dot) inside the component, so the two cannot drift apart. Same behaviour, one predicate instead of two.
 
@@ -72,7 +72,7 @@ Create `web/src/lib/components/filter-panel/__tests__/filter-section-menu.spec.t
 
 ```ts
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import type { FilterSection } from '../filter-panel';
 import FilterSectionMenu from '../filter-section-menu.svelte';
@@ -189,7 +189,6 @@ describe('filter-section-menu', () => {
     await openMenu();
     await openMenu();
 
-    await waitFor(() => expect(screen.queryByTestId('section-menu')).toBeNull());
     expect(cog()).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -200,7 +199,7 @@ describe('filter-section-menu', () => {
     await openMenu();
     await fireEvent.mouseDown(document.body);
 
-    await waitFor(() => expect(screen.queryByTestId('section-menu')).toBeNull());
+    expect(cog()).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('closes on Escape and returns focus to the cog', async () => {
@@ -211,7 +210,7 @@ describe('filter-section-menu', () => {
     row.focus();
     await fireEvent.keyDown(row, { key: 'Escape' });
 
-    await waitFor(() => expect(screen.queryByTestId('section-menu')).toBeNull());
+    expect(cog()).toHaveAttribute('aria-expanded', 'false');
     expect(document.activeElement).toBe(cog());
   });
 
@@ -224,7 +223,7 @@ describe('filter-section-menu', () => {
     cog().focus();
     await fireEvent.keyDown(cog(), { key: 'Escape' });
 
-    await waitFor(() => expect(screen.queryByTestId('section-menu')).toBeNull());
+    expect(cog()).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('calls onShowAll once', async () => {
@@ -579,7 +578,7 @@ it('shows a dot on the cog when a hidden section still holds a filter', async ()
   await fireEvent.click(screen.getByTestId('section-toggle-people'));
   await fireEvent.keyDown(screen.getByTestId('section-menu-btn'), { key: 'Escape' });
 
-  await waitFor(() => expect(screen.queryByTestId('section-menu')).toBeNull());
+  expect(screen.getByTestId('section-menu-btn')).toHaveAttribute('aria-expanded', 'false');
   expect(screen.getByTestId('section-menu-dot')).toBeTruthy();
 });
 
@@ -812,7 +811,7 @@ it('closes an open section menu when collapsed in externalToggle mode', async ()
     collapsed: true,
   });
 
-  await waitFor(() => expect(screen.queryByTestId('section-menu')).toBeNull());
+  expect(screen.getByTestId('section-menu-btn')).toHaveAttribute('aria-expanded', 'false');
 });
 ```
 
