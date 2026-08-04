@@ -74,6 +74,15 @@ Its purpose is to be visible while the menu is **shut**, so it is asserted witho
 
 The menu stays open across toggles — hiding three sections is three clicks, not three round-trips through the cog. It closes on outside click or Escape via `use:clickOutside={{ onOutclick, onEscape }}`, the same action `sidebar-shell.svelte:119` uses, rather than the `svelte:window` click handler in `search-sort-dropdown.svelte:33-37`. Escape returns focus to the cog.
 
+**`clickOutside` goes on a wrapper enclosing both the cog and the popover**, not on the popover alone. Reading `web/src/lib/actions/click-outside.ts`, that placement is load-bearing in two ways:
+
+- Escape is bound to the **node**, not the document (`node.addEventListener('keydown', …)`), so it only fires while focus is inside. With the wrapper, Escape works whether focus sits on the cog or on a row; on the popover alone it would be dead the moment focus were on the trigger.
+- `onOutclick` early-returns when `node.contains(event.target)`, so a click on the cog while the menu is open does **not** reach it. Closing on a second cog click is therefore the button's own `onclick` toggling `open`, and there is no double-handling to guard against.
+
+The action also calls `event.stopPropagation()` before `onEscape`, so Escape closing the menu cannot also reach page-level handlers. `filter-panel.svelte` has no keydown or `clickOutside` of its own, so nothing else in the panel competes.
+
+Motion follows the folder's existing convention rather than inventing one: `mediaQueryManager.reducedMotion` with the `slideMotion()` helper from `./motion.ts`, as `filter-section.svelte:52` already does.
+
 ### Semantics
 
 The rows are `<button aria-pressed>` in a plain popover, and the trigger carries `aria-expanded` + `aria-controls`. `role="menu"` with `role="menuitemcheckbox"` would be the richer vocabulary, but it obliges arrow-key navigation and a roving tabindex; declaring the role without implementing it leaves a screen-reader user with a menu whose keys do not work. Plain buttons get native Tab order and no keyboard code to get wrong, and `aria-pressed` is what the icons already carry today.
@@ -85,6 +94,30 @@ Both `titles` and `toggleLabels` are passed because they deliberately diverge fo
 The panel body is `overflow-y-auto` (`filter-panel.svelte:703`), so anything absolutely positioned inside it is clipped at the container edge. The popover therefore renders inside the header, which is `sticky top-0 z-5` (`:708`), and needs a z above `5`.
 
 At ten sections plus the reset the menu is roughly 380px against a full-height panel, so it fits without portalling to `<body>`. Should the section list ever outgrow that, the fix is a `max-height` and internal scroll on the menu — not a portal.
+
+Anchoring uses logical properties (`inset-e-0` / `inset-s-0`), not `left`/`right`. The panel folder has no precedent either way, but the codebase convention does — `sidebar-shell.spec.ts` asserts `inset-s-0` and explicitly forbids `left-0`/`right-0`.
+
+### Edge cases
+
+**Collapsing the panel with the menu open.** The two collapse modes behave differently and only one is safe by construction (`filter-panel.svelte:669-706`):
+
+- Built-in (`collapsed && !externalToggle`): the whole `{:else}` branch unmounts, taking the menu with it. Nothing to do.
+- `externalToggle`: the panel **stays mounted** at `w-0`, clipped and `inert`. A menu left open keeps its `open` state through the collapse and is still open on reopen — and while collapsed it is an inert popover that may be painting outside a zero-width box.
+
+So `open` must be forced false whenever `collapsed` becomes true. This is the one edge case that does not fall out of the design for free, and it is invisible in the built-in mode most tests use, so it needs a test in `externalToggle` mode specifically.
+
+**Others**, each cheap and each a test:
+
+| Case                                                   | Expected                                                                      |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| One section configured                                 | Cog still renders; hiding it lands on the empty state                         |
+| Zero sections configured                               | No cog at all — same gate the row used                                        |
+| Every section hidden                                   | Empty state and the menu's `Show all` both restore; neither shadows the other |
+| Hidden section's filter cleared while the menu is shut | Cog dot clears                                                                |
+| Hidden section's filter cleared while it is open       | Row marker and cog dot both clear                                             |
+| `Show all` while everything is already visible         | No-op, menu stays open                                                        |
+| Newly-shipped section on an upgrade                    | Arrives checked, per the untouched `known`-set hydration                      |
+| `localStorage` unavailable                             | Toggling still works in-session — the existing `try`/`catch` is unchanged     |
 
 ### i18n
 
@@ -110,12 +143,57 @@ Three assertions change shape, all of them `section-toggle-row` sites:
 
 The last two improve: they stop asserting the absence of markup and start asserting the cog's actual render gate.
 
-**New coverage:**
-
-- The aggregate dot on the cog — hide a section holding an active filter, assert the dot **without** opening the menu.
-- `filter-section-menu.spec.ts` for the component alone: opens and closes; Escape restores focus to the cog; stays open across consecutive toggles; `Show all` fires once; checkbox state tracks the `visible` prop.
-
 **No e2e churn** — nothing under `e2e/` references these testids.
+
+### Order of work (test-first)
+
+Written as three steps because the middle one is unavoidably breaking, and pretending otherwise would hide the only risky moment in the change.
+
+**Step 1 — the component, in isolation. Nothing else touched, full suite green throughout.**
+
+Red first: `filter-section-menu.spec.ts` against a component that does not exist yet.
+
+| Test                                                          | Guards                                              |
+| ------------------------------------------------------------- | --------------------------------------------------- |
+| Cog renders with `aria-expanded="false"`; no list             | Closed is the initial state                         |
+| Clicking the cog opens the list with a row per section        | The trigger works and rows come from `sections`     |
+| Each row's `aria-pressed` tracks the `visible` prop           | Checkbox state is driven, not local                 |
+| Clicking a row calls `onToggle` once with that section        | No double-fire from the wrapper's outclick handler  |
+| Menu is **still open** after two consecutive row clicks       | The multi-toggle premise of the whole design        |
+| Clicking the cog again closes it                              | Second click toggles rather than re-opening         |
+| Outside `mousedown` closes it                                 | `clickOutside` wired to the wrapper                 |
+| Escape closes it and returns focus to the cog                 | Focus is not dropped to `<body>`                    |
+| Escape while focus is on the cog (not a row) also closes      | Why the action sits on the wrapper, not the popover |
+| `Show all` calls `onShowAll` once                             | Reset is wired                                      |
+| Row marker renders only where `hasHiddenActiveFilter` is true | The per-row cue                                     |
+
+No localStorage, no SDK, no page mocks — the component takes plain props.
+
+Then green: implement `filter-section-menu.svelte`.
+
+**Step 2 — the swap. One commit; the existing suite goes red inside it and comes back green.**
+
+Red first, against the unmodified panel, so each genuinely fails for the right reason:
+
+| Test                                                                                           | Guards                                |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Cog renders in the header when sections are configured                                         | The new control exists                |
+| No cog with `sections: []`                                                                     | The `config.sections.length > 0` gate |
+| No cog once the panel is collapsed (built-in mode)                                             | Header unmounts                       |
+| Aggregate dot shows when a hidden section holds an active filter, **without opening the menu** | The dot's entire purpose              |
+| Aggregate dot clears when that filter is cleared                                               | Derived, not latched                  |
+| Menu closes when the panel collapses in **`externalToggle`** mode                              | The one edge case that is not free    |
+| Single configured section: cog renders; hiding it shows the empty state                        | Boundary of the gate                  |
+| `Show all` from the menu restores every section                                                | Reset reaches `showAllSections`       |
+| Empty-state link still restores every section                                                  | The second route is not shadowed      |
+
+Then green, in one commit because the row these depend on ceases to exist:
+
+1. Add the cog to the header (`filter-panel.svelte:707-720`), delete the row (`:722-750`) and `sectionIcons` (`:330-341`).
+2. Add `filter_manage_sections`; reword `filter_show_sections_hint`.
+3. Add `openSectionMenu()` beside `renderPanel()`; add the one line to the 25 affected tests and reshape the 3 `section-toggle-row` assertions above.
+
+**Step 3 — verify.** Full web suite, `check:typescript`, `pnpm lint`, prettier. Then a manual pass, because none of the above proves the popover is not clipped: open the menu in a page using the built-in panel and one using `externalToggle`, at a viewport short enough that the panel scrolls, and confirm the menu is neither cut off by `overflow-y-auto` nor painted under the sticky header's `z-5`.
 
 ## Out of scope
 
