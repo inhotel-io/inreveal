@@ -1468,6 +1468,7 @@
   "filter_has_no_album": "Has no album",
   "filter_invalid_from_date": "Enter a valid From date",
   "filter_invalid_to_date": "Enter a valid To date",
+  "filter_manage_sections": "Show or hide sections",
   "filter_name_people_hint": "Name people to use this filter",
   "filter_no_cameras_found": "No cameras found",
   "filter_no_locations_found": "No locations found",
