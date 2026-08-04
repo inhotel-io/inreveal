@@ -129,6 +129,7 @@ DROP TABLE IF EXISTS "shared_space_album_user" CASCADE;
 DROP TABLE IF EXISTS "shared_space_album_user_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_album_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_album" CASCADE;
+DROP TABLE IF EXISTS "shared_space_album_folder" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member" CASCADE;
 DROP TABLE IF EXISTS "shared_space" CASCADE;
 
@@ -251,6 +252,9 @@ DELETE FROM "migration_overrides"
    'index_shared_space_person_identityId_spaceId_idx',
    'index_shared_space_person_space_name_idx',
    'index_shared_space_person_spaceId_identityId_key',
+   'index_shared_space_album_folder_parentId_idx',
+   'index_shared_space_album_folder_nested_name_key',
+   'index_shared_space_album_folder_root_name_key',
    'trigger_asset_library_delete_audit',
    'trigger_classification_category_updatedAt',
    'trigger_face_identity_face_updatedAt',
@@ -283,7 +287,8 @@ DELETE FROM "migration_overrides"
    'trigger_shared_space_member_updatedAt',
    'trigger_shared_space_person_updatedAt',
    'trigger_shared_space_updatedAt',
-   'trigger_user_group_updatedAt'
+   'trigger_user_group_updatedAt',
+   'trigger_shared_space_album_folder_updatedAt'
  );
 
 -- -----------------------------------------------------------------------------
@@ -436,6 +441,7 @@ DELETE FROM "kysely_migrations"
    '1784000000000-FixFaceRepairScanInFlightIndexOverride',
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
    '1785000000000-AddFaceRepairLock',
+   '1785000000000-AddSharedSpaceAlbumFolderTable',
    '1786000000000-FaceRepairLockPersonNullable',
    '1787000000000-AddFacePersonVerdict',
    '1788000000000-ReconcileFacePersonVerdictConstraints',
@@ -528,7 +534,7 @@ BEGIN
        'shared_space_audit', 'shared_space_asset', 'shared_space_member',
        'shared_space_album', 'shared_space_album_audit',
        'shared_space_album_user', 'shared_space_album_user_audit',
-       'shared_space_album_asset_audit',
+       'shared_space_album_asset_audit', 'shared_space_album_folder',
        'album_space_asset_audit',
        'face_identity_face', 'face_identity',
        'shared_space', 'user_group_member', 'user_group',
