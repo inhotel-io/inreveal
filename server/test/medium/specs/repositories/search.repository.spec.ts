@@ -554,6 +554,66 @@ describe(SearchRepository.name, () => {
       // Only the filed Canon survives the filter, so Nikon must be gone from the makes facet.
       expect(result.cameraMakes).toEqual(['Canon']);
     });
+
+    it('reports no favourites and mixed album membership on the smart path (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: filed } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, filed.id);
+      const { asset: unfiled } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, unfiled.id);
+      const { album } = await ctx.newAlbum({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: filed.id });
+
+      const result = await sut.getSmartSearchFacets({ userIds: [user.id], embedding: matchingEmbedding });
+
+      expect(result.total).toBe(2);
+      expect(result.hasFavorites).toBe(false);
+      expect(result.hasAssetsInAlbum).toBe(true);
+      expect(result.hasAssetsNotInAlbum).toBe(true);
+    });
+
+    it('reports hasAssetsNotInAlbum false on the smart path when everything is filed (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, asset.id);
+      const { album } = await ctx.newAlbum({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+      const result = await sut.getSmartSearchFacets({ userIds: [user.id], embedding: matchingEmbedding });
+
+      expect(result.total).toBe(1);
+      expect(result.hasAssetsInAlbum).toBe(true);
+      expect(result.hasAssetsNotInAlbum).toBe(false);
+    });
+
+    it('reports hasAssetsInAlbum false on the smart path when nothing is filed (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, asset.id);
+
+      const result = await sut.getSmartSearchFacets({ userIds: [user.id], embedding: matchingEmbedding });
+
+      expect(result.total).toBe(1);
+      expect(result.hasAssetsInAlbum).toBe(false);
+      expect(result.hasAssetsNotInAlbum).toBe(true);
+    });
+
+    it('reports hasFavorites true on the smart path when a favourite is present (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: favourite } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      await addEmbedding(defaultDatabase, favourite.id);
+      const { asset: plain } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, plain.id);
+
+      const result = await sut.getSmartSearchFacets({ userIds: [user.id], embedding: matchingEmbedding });
+
+      expect(result.total).toBe(2);
+      expect(result.hasFavorites).toBe(true);
+    });
   });
 
   describe('getFilterSuggestions', () => {
@@ -638,6 +698,18 @@ describe(SearchRepository.name, () => {
       });
     });
 
+    it('reports every #910 facet false under forceEmptyResult', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+
+      const result = await sut.getFilterSuggestions([user.id], { forceEmptyResult: true });
+
+      expect(result.hasFavorites).toBe(false);
+      expect(result.hasAssetsInAlbum).toBe(false);
+      expect(result.hasAssetsNotInAlbum).toBe(false);
+    });
+
     describe('hasFavorites (#910)', () => {
       it('is false when the scope has no favourite', async () => {
         const { ctx, sut } = setup();
@@ -683,6 +755,28 @@ describe(SearchRepository.name, () => {
         const result = await sut.getFilterSuggestions([user.id], { make: 'Nikon' });
 
         expect(result.hasFavorites).toBe(false);
+      });
+
+      it('sees a shared-space favourite only with timelineSpaceIds (#910)', async () => {
+        const { ctx, sut } = setup();
+        const { user: owner } = await ctx.newUser();
+        const { user: member } = await ctx.newUser();
+        const { asset } = await ctx.newAsset({ ownerId: owner.id, isFavorite: true });
+
+        const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+        await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+        await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+        await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+
+        // The member owns nothing. Without the space in scope the favourite is invisible to them...
+        const ownScope = await sut.getFilterSuggestions([member.id], {});
+        expect(ownScope.hasFavorites).toBe(false);
+
+        // ...and with it, it is. The two scopes disagree, which is exactly what §4.6 documents:
+        // the photos page drops withSharedSpaces when isFavorite is set, so `current` is narrower
+        // than `baseline`. Subset, so it can only grey — never wrongly hide.
+        const spaceScope = await sut.getFilterSuggestions([member.id], { timelineSpaceIds: [space.id] });
+        expect(spaceScope.hasFavorites).toBe(true);
       });
     });
 
