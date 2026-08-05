@@ -216,12 +216,30 @@ describe(PersonService.name, () => {
     return identityMergePropagation;
   };
 
+  // `mocks.systemMetadata.get` is one mock shared by every key, so a bare `mockResolvedValue` would answer the
+  // one-shot suggestion-sweep marker AND the system config with the same object. These two helpers key on the
+  // metadata key so a test can pin one without disturbing the other.
+  const useSuggestionSweepAlreadyRun = (config?: unknown) =>
+    mocks.systemMetadata.get.mockImplementation(
+      (key: SystemMetadataKey) =>
+        Promise.resolve(
+          key === SystemMetadataKey.FaceSuggestionDefaultOnState ? { sweptAt: '2026-08-01T00:00:00.000Z' } : config,
+        ) as any,
+    );
+
+  const useSuggestionSweepPending = (config?: unknown) =>
+    mocks.systemMetadata.get.mockImplementation(
+      (key: SystemMetadataKey) =>
+        Promise.resolve(key === SystemMetadataKey.FaceSuggestionDefaultOnState ? undefined : config) as any,
+    );
+
   it('should be defined', () => {
     expect(sut).toBeDefined();
   });
 
   describe('onBootstrap', () => {
     it('should queue identity backfill when existing people or faces need identity links', async () => {
+      useSuggestionSweepAlreadyRun();
       (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(true);
       mocks.job.searchJobs.mockResolvedValue([]);
 
@@ -249,6 +267,7 @@ describe(PersonService.name, () => {
     });
 
     it('should skip identity backfill when no identity work remains', async () => {
+      useSuggestionSweepAlreadyRun();
       (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(false);
 
       await sut.onBootstrap();
@@ -259,6 +278,7 @@ describe(PersonService.name, () => {
     });
 
     it('should not queue a new identity backfill root while another backfill page is pending', async () => {
+      useSuggestionSweepAlreadyRun();
       (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(true);
       mocks.job.searchJobs.mockResolvedValue([
         {
@@ -275,6 +295,7 @@ describe(PersonService.name, () => {
     });
 
     it('should not queue a new identity backfill root while the root backfill is active', async () => {
+      useSuggestionSweepAlreadyRun();
       (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(true);
       mocks.job.searchJobs.mockResolvedValue([
         {
@@ -297,6 +318,61 @@ describe(PersonService.name, () => {
       });
       expect(mocks.job.searchJobs.mock.calls[0][1]?.status).toHaveLength(4);
       expect(mocks.job.queue).not.toHaveBeenCalled();
+    });
+
+    // Face suggestions ship enabled by default. An instance that upgrades into that default never emits a
+    // ConfigUpdate, and FaceSuggestionMaintenance has no cron, so without this one-shot sweep the toggle
+    // would read "on" over a permanently empty queue.
+    describe('one-shot face suggestion sweep', () => {
+      it('should queue face suggestion maintenance once when the marker is absent and the feature is on', async () => {
+        useSuggestionSweepPending();
+        (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(false);
+
+        await sut.onBootstrap();
+
+        expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
+        expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.FaceSuggestionDefaultOnState, {
+          sweptAt: expect.any(String),
+        });
+      });
+
+      it('should not queue face suggestion maintenance when the marker is already burnt', async () => {
+        useSuggestionSweepAlreadyRun();
+        (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(false);
+
+        await sut.onBootstrap();
+
+        expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
+        expect(mocks.systemMetadata.set).not.toHaveBeenCalledWith(
+          SystemMetadataKey.FaceSuggestionDefaultOnState,
+          expect.anything(),
+        );
+      });
+
+      it('should burn the marker without sweeping when an admin has the feature switched off', async () => {
+        useSuggestionSweepPending(onConfigUpdateTestConfig(false));
+        (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(false);
+
+        await sut.onBootstrap();
+
+        expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
+        // Burnt regardless: a later opt-in is picked up by onConfigUpdate's false -> true transition, so
+        // leaving the marker unset would only re-ask this question on every boot.
+        expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.FaceSuggestionDefaultOnState, {
+          sweptAt: expect.any(String),
+        });
+      });
+
+      it('should still queue the identity backfill it shares the hook with', async () => {
+        useSuggestionSweepPending();
+        (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(true);
+        mocks.job.searchJobs.mockResolvedValue([]);
+
+        await sut.onBootstrap();
+
+        expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
+        expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
+      });
     });
   });
 
@@ -3893,6 +3969,19 @@ describe(PersonService.name, () => {
     });
 
     it('queues one metadata backfill when identity work completes without targeted face-match work', async () => {
+      // Suggestions pinned off so the count below stays about the metadata backfill: the shipped default is
+      // on, and the two tests below own the enabled/disabled suggestion-chaining behaviour.
+      mocks.systemMetadata.get.mockResolvedValue({
+        machineLearning: {
+          enabled: true,
+          facialRecognition: {
+            enabled: true,
+            maxDistance: 0.5,
+            minFaces: 3,
+            suggestions: { enabled: false, maxDistance: 0.7 },
+          },
+        },
+      });
       mocks.faceIdentity.backfillPersonalIdentities.mockResolvedValue({ processed: 0 });
       mocks.faceIdentity.backfillSpacePersonIdentities.mockResolvedValue({ processed: 0, conflictCount: 0 });
       (mocks.faceIdentity as any).getBackfillWork.mockResolvedValue({

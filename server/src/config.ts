@@ -351,7 +351,7 @@ export const defaults = Object.freeze<SystemConfig>({
       maxDistance: 0.5,
       minFaces: 3,
       suggestions: {
-        enabled: false,
+        enabled: true,
         maxDistance: 0.7,
       },
     },

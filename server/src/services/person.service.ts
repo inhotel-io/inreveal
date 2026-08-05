@@ -106,6 +106,8 @@ export class PersonService extends BaseService {
 
   @OnEvent({ name: 'AppBootstrap', workers: [ImmichWorker.Microservices] })
   async onBootstrap(): Promise<void> {
+    await this.queueInitialFaceSuggestionSweep();
+
     if (!(await this.faceIdentityRepository.hasBackfillWork())) {
       return;
     }
@@ -118,6 +120,38 @@ export class PersonService extends BaseService {
     }
 
     await this.jobRepository.queue({ name: JobName.FaceIdentityBackfill, data: {} });
+  }
+
+  /**
+   * Face suggestions ship enabled (`config.ts` defaults). An instance that upgrades *into* that default
+   * never emits a `ConfigUpdate`, so `onConfigUpdate`'s false -> true transition — the thing that normally
+   * starts the work — cannot fire for it. `FaceSuggestionMaintenance` has no cron either, so without this
+   * the settings page would report the feature on while the queue stayed empty until someone renamed a
+   * person or ran the job by hand: the same "the feature seems to be missing" report the opt-in toggle was
+   * introduced to fix, in a new shape.
+   *
+   * Runs at most once per instance, guarded by a system-metadata marker (same pattern as
+   * SharedSpaceService.onBootstrap). The marker is burnt even when the feature is off, because an admin
+   * who opts in later is already served by the `ConfigUpdate` transition — leaving it unset would only
+   * re-ask the question on every boot. A fresh install also burns it here against an empty library, which
+   * costs nothing: the sweep finds no named people, and `handleFaceIdentityBackfill`'s completion path
+   * keeps the queue current from then on.
+   */
+  private async queueInitialFaceSuggestionSweep(): Promise<void> {
+    const state = await this.systemMetadataRepository.get(SystemMetadataKey.FaceSuggestionDefaultOnState);
+    if (state?.sweptAt) {
+      return;
+    }
+
+    const { machineLearning } = await this.getConfig({ withCache: false });
+    if (isFaceSuggestionEnabled(machineLearning)) {
+      this.logger.log('Face suggestions are enabled and have never been swept; queueing face suggestion maintenance');
+      await this.jobRepository.queue({ name: JobName.FaceSuggestionMaintenance, data: {} });
+    }
+
+    await this.systemMetadataRepository.set(SystemMetadataKey.FaceSuggestionDefaultOnState, {
+      sweptAt: new Date().toISOString(),
+    });
   }
 
   @OnEvent({ name: 'ConfigValidate' })

@@ -265,6 +265,11 @@ describe(SharedSpaceService.name, () => {
 
   beforeEach(() => {
     ({ sut, mocks } = newTestService(SharedSpaceService));
+    // Face suggestions ship enabled, so the rename / metadata-backfill paths now get past
+    // `areSpacePersonSuggestionsEnabled` and ask whether the space has face recognition on. Default to off
+    // so tests that aren't about suggestion queueing stay the no-op they were written as; the tests that do
+    // care stub `getById` themselves.
+    mocks.sharedSpace.getById.mockResolvedValue(factory.sharedSpace({ faceRecognitionEnabled: false }));
     mocks.sharedSpace.hasPetsBySpaceId.mockResolvedValue(false);
     mocks.sharedSpace.getAlbumNamesByIds.mockResolvedValue([]);
     mocks.sharedSpace.recountPersons.mockResolvedValue(void 0);

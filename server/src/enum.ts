@@ -407,6 +407,7 @@ export enum SystemMetadataKey {
   IntegrityChecksumCheckpoint = 'integrity-checksum-checkpoint',
   ClassificationConfigState = 'classification-config-state',
   SharedSpaceFaceJobCleanupState = 'shared-space-face-job-cleanup-state',
+  FaceSuggestionDefaultOnState = 'face-suggestion-default-on-state',
 }
 
 export enum UserMetadataKey {

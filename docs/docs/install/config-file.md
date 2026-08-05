@@ -147,7 +147,7 @@ The default configuration looks like this:
       "minScore": 0.7,
       "modelName": "buffalo_l",
       "suggestions": {
-        "enabled": false,
+        "enabled": true,
         "maxDistance": 0.7
       }
     },

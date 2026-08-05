@@ -26,7 +26,14 @@ describe('FacialRecognitionConfigSchema suggestions', () => {
     expect(() => FacialRecognitionConfigSchema.parse(base)).toThrow();
   });
 
-  it('defaults to disabled with a 0.7 band', () => {
-    expect(defaults.machineLearning.facialRecognition.suggestions).toEqual({ enabled: false, maxDistance: 0.7 });
+  it('defaults to enabled with a 0.7 band', () => {
+    expect(defaults.machineLearning.facialRecognition.suggestions).toEqual({ enabled: true, maxDistance: 0.7 });
+  });
+
+  it('ships a default band that clears the default recognition distance', () => {
+    // The shipped pair must satisfy onConfigValidate, or a fresh install would boot into a config that
+    // its own settings page refuses to save.
+    const { maxDistance, suggestions } = defaults.machineLearning.facialRecognition;
+    expect(suggestions.maxDistance).toBeGreaterThan(maxDistance);
   });
 });
