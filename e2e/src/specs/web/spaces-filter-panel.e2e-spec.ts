@@ -1,7 +1,9 @@
 import type { LoginResponseDto } from '@immich/sdk';
+import { updateAsset } from '@immich/sdk';
 import type { Locator } from '@playwright/test';
 import { expect, test } from '@playwright/test';
-import { utils } from 'src/utils';
+import { readFileSync } from 'node:fs';
+import { asBearerAuth, testAssetDir, utils } from 'src/utils';
 
 // isVisible() rejects if the locator resolution races with a navigation; the
 // empty-state probes below treat that the same as "not visible".
@@ -70,7 +72,56 @@ test.describe('Spaces FilterPanel', () => {
       fileModifiedAt: '2023-08-20T10:00:00.000Z',
     });
 
-    await utils.addSpaceAssets(admin.accessToken, space.id, [asset1.id, asset2.id, asset3.id, asset4.id]);
+    // #910: each of these keeps one filter section available within the SPACE's own scope — the
+    // space, not the library, is what facets are scoped to, so they must be added to the space
+    // alongside the four plain assets above. See slice 6's recipe table.
+    const video = await utils.createAsset(admin.accessToken, {
+      fileCreatedAt: '2023-06-01T10:00:00.000Z',
+      fileModifiedAt: '2023-06-01T10:00:00.000Z',
+      assetData: { filename: 'example-video.mp4' },
+    });
+    const gpsAsset = await utils.createAsset(admin.accessToken, {
+      assetData: {
+        bytes: readFileSync(`${testAssetDir}/metadata/gps-position/thompson-springs.jpg`),
+        filename: 'gps.jpg',
+      },
+    });
+    const cameraAsset = await utils.createAsset(admin.accessToken, {
+      assetData: {
+        bytes: readFileSync(`${testAssetDir}/metadata/rating/mongolels.jpg`),
+        filename: 'canon.jpg',
+      },
+    });
+    await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+
+    await utils.addSpaceAssets(admin.accessToken, space.id, [
+      asset1.id,
+      asset2.id,
+      asset3.id,
+      asset4.id,
+      video.id,
+      gpsAsset.id,
+      cameraAsset.id,
+    ]);
+
+    const [tag] = await utils.upsertTags(admin.accessToken, ['e2e-space-filter-tag']);
+    await utils.tagAssets(admin.accessToken, tag.id, [asset1.id]);
+    // Rating 3, not 5: some existing tests hard-assert "0 results" at the 5-star filter, so the
+    // seeded rating must clear the 3-star threshold without also clearing 5.
+    //
+    // Rate BOTH asset1 (image) and video: rating ONLY an image means a >=3 rating filter narrows
+    // the space down to a single media type, which empties the Media facet mid-interaction and
+    // detaches media-type-image/-video while a combined rating+media test is still clicking — rating
+    // both keeps at least one image AND one video in every rating-filtered view, so Media stays
+    // available throughout.
+    await updateAsset(
+      { id: asset1.id, updateAssetDto: { rating: 3, isFavorite: true } },
+      { headers: asBearerAuth(admin.accessToken) },
+    );
+    await updateAsset({ id: video.id, updateAssetDto: { rating: 3 } }, { headers: asBearerAuth(admin.accessToken) });
+
+    // Albums needs BOTH sides — some filed, some not.
+    await utils.createAlbum(admin.accessToken, { albumName: `#910 space album ${space.id}`, assetIds: [video.id] });
 
     return { space, assets: [asset1, asset2, asset3, asset4] };
   }
@@ -79,7 +130,7 @@ test.describe('Spaces FilterPanel', () => {
   // Page load and basic rendering (3 tests)
   // ────────────────────────────────────────────────────────────────────────────
   test.describe('Page load and basic rendering', () => {
-    test('should render filter panel with all sections on space page', async ({ context, page }) => {
+    test('should render filter panel with every section the space can populate', async ({ context, page }) => {
       const { space } = await createPopulatedSpace('Render All Sections');
       await gotoSpace(context, page, space.id);
 
@@ -88,12 +139,16 @@ test.describe('Spaces FilterPanel', () => {
 
       // Verify all configured sections are present
       await expect(page.locator('[data-testid="filter-section-timeline"]')).toBeVisible();
-      await expect(page.locator('[data-testid="filter-section-people"]')).toBeVisible();
       await expect(page.locator('[data-testid="filter-section-location"]')).toBeVisible();
       await expect(page.locator('[data-testid="filter-section-camera"]')).toBeVisible();
       await expect(page.locator('[data-testid="filter-section-tags"]')).toBeVisible();
       await expect(page.locator('[data-testid="filter-section-rating"]')).toBeVisible();
       await expect(page.locator('[data-testid="filter-section-media"]')).toBeVisible();
+
+      // #910: People needs a detected face and the web e2e project runs no ML, so this space
+      // genuinely cannot filter by person. Asserting the absence is the coverage, not a concession —
+      // see slice 6 "The People carve-out".
+      await expect(page.locator('[data-testid="filter-section-people"]')).toHaveCount(0);
     });
 
     test('should show temporal picker with year/month data from space photos', async ({ context, page }) => {
@@ -236,31 +291,26 @@ test.describe('Spaces FilterPanel', () => {
       expect(countText).toMatch(/\d+\s*result/);
     });
 
-    test('should grey out years with zero photos after filtering', async ({ context, page }) => {
+    // #910: filtering to zero results puts Timeline in the same "empty" state every other section
+    // gets when the CURRENT filters (not the whole scope) empty it — greyed, `(0)` suffix, content
+    // collapsed (filter-section.svelte's isEmpty/isOpen; see filter-availability.ts's `count`
+    // wiring for suggestionsProvider pages). The temporal picker content — including year-grid —
+    // unmounts entirely rather than rendering with zero height, which is what this test originally
+    // assumed (predating #910, when Timeline never received a `count` prop at all). The section
+    // wrapper itself is never removed from the DOM — getSectionAvailability never returns
+    // 'unavailable' for Timeline — so that wrapper is the actual "greys but never hides" invariant
+    // to assert on.
+    test('collapses the temporal picker content with zero photos after filtering', async ({ context, page }) => {
       const { space } = await createPopulatedSpace('Year Greyed Out');
       await gotoSpace(context, page, space.id);
 
-      // Apply a very restrictive filter that may cause some years to have zero photos
-      // Click rating 5 — likely no photos have 5-star rating
+      // Click rating 5 — no seeded asset reaches 5 stars, so this always empties the current view.
+      const bucketResponse = page.waitForResponse((r) => r.url().includes('/timeline/buckets'));
       await page.locator('[data-testid="rating-star-5"]').click();
+      await bucketResponse;
 
-      // Wait for TimelineManager to re-fetch timeBuckets with the rating filter applied
-      await page.waitForTimeout(2000);
-
-      // The temporal picker div is always in the DOM but may have zero height when
-      // timeBuckets is empty (no year chips to render). Check it exists in the DOM
-      // rather than asserting visibility, which fails when the div has no content.
-      await expect(page.locator('[data-testid="temporal-picker"]')).toBeAttached();
-
-      // When the filter produces zero results, timeBuckets may be empty so year-grid
-      // may have no children (invisible). If year chips exist, verify they have opacity-30.
-      const yearChips = page.locator('[data-testid="year-grid"] .year-chip');
-      if ((await yearChips.count()) > 0) {
-        // All year buttons should have opacity-30 class when count is 0
-        for (let i = 0; i < (await yearChips.count()); i++) {
-          await expect(yearChips.nth(i)).toHaveClass(/opacity-30/);
-        }
-      }
+      await expect(page.locator('[data-testid="filter-section-timeline"]')).toBeVisible();
+      await expect(page.locator('[data-testid="temporal-picker"]')).toHaveCount(0);
     });
 
     test('should grey out months with zero photos after filtering', async ({ context, page }) => {
@@ -283,52 +333,29 @@ test.describe('Spaces FilterPanel', () => {
   // People filter (9 tests)
   // ────────────────────────────────────────────────────────────────────────────
   test.describe('People filter', () => {
-    test('should show only people present in the space (not global list)', async ({ context, page }) => {
+    // #910: People needs a detected face and the web e2e project runs no ML, so a space with no
+    // face-recognition data genuinely cannot filter by person — the section hides rather than
+    // showing an empty scoped list. Asserting the absence is the coverage, not a concession — see
+    // slice 6 "The People carve-out".
+    test('hides the people section when the space has no face-recognition data', async ({ context, page }) => {
       const { space } = await createPopulatedSpace('People Scoped');
       await gotoSpace(context, page, space.id);
 
-      // People section should be visible
-      const peopleSection = page.locator('[data-testid="filter-section-people"]');
-      await expect(peopleSection).toBeVisible();
-
-      // Since our test space has no face recognition data, it should show the empty state
-      // or the people loaded from the space's people endpoint
-      const peopleFilter = page.locator('[data-testid="people-filter"]');
-      await expect(peopleFilter).toBeVisible();
+      await expect(page.locator('[data-testid="filter-section-people"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid="people-filter"]')).toHaveCount(0);
     });
 
-    test('should update timeline when selecting a person', async ({ context, page }) => {
-      // Create space with face recognition enabled and people
+    // #910: same carve-out as above — this space has no face-recognition data (createPerson-less,
+    // ML-less e2e project), so the section is absent rather than offering a selectable (or even
+    // empty) people list. See slice 6 "The People carve-out".
+    test('hides the people section for a space with no detected people', async ({ context, page }) => {
       const space = await utils.createSpace(admin.accessToken, { name: 'Person Select' });
       const asset = await utils.createAsset(admin.accessToken);
       await utils.addSpaceAssets(admin.accessToken, space.id, [asset.id]);
 
       await gotoSpace(context, page, space.id);
 
-      // Check people filter renders
-      const peopleFilter = page.locator('[data-testid="people-filter"]');
-      await expect(peopleFilter).toBeVisible();
-
-      // If people exist, clicking one should work; if empty, the empty state message shows
-      const emptyMsg = page.locator('[data-testid="people-empty"]');
-      const personItems = page.locator('[data-testid^="people-item-"]');
-      const hasItems = (await personItems.count()) > 0;
-
-      if (hasItems) {
-        // Wait for the timeline/buckets API to be called with the person filter
-        const bucketResponse = page.waitForResponse((r) => r.url().includes('/timeline/buckets'));
-        await personItems.first().click();
-        await bucketResponse;
-
-        // Should trigger filter change and show result count
-        await expect(page.locator('[data-testid="active-filters-bar"]')).toBeVisible();
-        const resultCount = page.locator('[data-testid="result-count"]');
-        await expect(resultCount).toBeVisible();
-        const countText = await resultCount.textContent();
-        expect(countText).toMatch(/\d+\s*result/);
-      } else {
-        await expect(emptyMsg).toBeVisible();
-      }
+      await expect(page.locator('[data-testid="filter-section-people"]')).toHaveCount(0);
     });
 
     test('should support multi-select for people (both remain selected)', async ({ context, page }) => {
@@ -353,16 +380,20 @@ test.describe('Spaces FilterPanel', () => {
       // If fewer than 2 people, test passes trivially (no multi-select to verify)
     });
 
-    test('should show photos containing either selected person (OR logic)', async ({ context, page }) => {
+    // #910: same carve-out — OR-logic selection needs at least one real person to select, which this
+    // ML-less e2e project cannot seed. The server-side OR-logic behavior itself is covered by
+    // search.e2e-spec.ts; this only confirms the section hides. See slice 6 "The People carve-out".
+    test('hides the people section rather than offering an OR-logic selection with no people', async ({
+      context,
+      page,
+    }) => {
       const space = await utils.createSpace(admin.accessToken, { name: 'People OR' });
       const asset = await utils.createAsset(admin.accessToken);
       await utils.addSpaceAssets(admin.accessToken, space.id, [asset.id]);
 
       await gotoSpace(context, page, space.id);
 
-      // Verify people filter exists
-      await expect(page.locator('[data-testid="people-filter"]')).toBeVisible();
-      // OR logic is a server-side behavior; UI test verifies the interaction works
+      await expect(page.locator('[data-testid="filter-section-people"]')).toHaveCount(0);
     });
 
     test('should keep only remaining person filter after deselecting one', async ({ context, page }) => {
@@ -886,8 +917,9 @@ test.describe('Spaces FilterPanel', () => {
       const countText = await resultCount.textContent();
       expect(countText).toMatch(/\d+\s*result/);
 
-      // Since our test assets have no ratings, the filtered count should be 0
-      // and the empty state should appear
+      // #910: createPopulatedSpace rates one asset at 3 stars (see the helper above), so a >=3
+      // filter matches it and the empty state should NOT appear — this only guards the case where
+      // it unexpectedly does.
       const emptyState = page.locator('[data-testid="empty-state-message"]');
       if (await isVisibleOrFalse(emptyState, 2000)) {
         await expect(emptyState).toContainText('No photos match your filters');
@@ -937,8 +969,9 @@ test.describe('Spaces FilterPanel', () => {
 
       await expect(page.locator('[data-testid="active-filters-bar"]')).toBeVisible();
 
-      // Our test assets are unrated, so even rating >= 1 should yield 0 results
-      // Verify result count shows in the active filters bar
+      // #910: createPopulatedSpace rates one asset at 3 stars (see the helper above), so a >=1
+      // filter matches it; the point here is just that the result count renders in the active
+      // filters bar, which the assertion below checks without pinning an exact value.
       const resultCount = page.locator('[data-testid="result-count"]');
       await expect(resultCount).toBeVisible();
       const countText = await resultCount.textContent();
@@ -1532,17 +1565,24 @@ test.describe('Spaces FilterPanel', () => {
       await expect(page.locator('[data-testid="filter-toggle-btn"]')).toHaveCount(0);
     });
 
-    test('should show empty messages in location and camera sections when space has no EXIF data', async ({
-      context,
-      page,
-    }) => {
-      // Create space with test images (random PNGs without real EXIF)
-      const { space } = await createPopulatedSpace('No EXIF Data');
+    // #910: createPopulatedSpace now seeds real GPS/camera EXIF (see the helper above) so every
+    // OTHER test in this file gets a populated location/camera facet. This test needs the opposite —
+    // a space that structurally has none — so it builds its own bare fixture rather than reusing the
+    // shared helper. Under slice 5 that scope hides the sections outright instead of showing an
+    // "-empty" placeholder inside them (there are no active filters, so "current" and "baseline"
+    // facets are identical — an always-empty scope is 'unavailable', never merely 'empty'). Asserting
+    // the absence is the coverage, not a concession — see slice 6 "The People carve-out" for the same
+    // principle applied to People.
+    test('hides location and camera sections when space has no EXIF data', async ({ context, page }) => {
+      const space = await utils.createSpace(admin.accessToken, { name: 'No EXIF Data' });
+      const asset1 = await utils.createAsset(admin.accessToken);
+      const asset2 = await utils.createAsset(admin.accessToken);
+      await utils.addSpaceAssets(admin.accessToken, space.id, [asset1.id, asset2.id]);
+
       await gotoSpace(context, page, space.id);
 
-      // Location and camera should show empty messages since our random images lack EXIF
-      await expect(page.locator('[data-testid="location-empty"]')).toBeVisible();
-      await expect(page.locator('[data-testid="camera-empty"]')).toBeVisible();
+      await expect(page.locator('[data-testid="filter-section-location"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid="filter-section-camera"]')).toHaveCount(0);
     });
 
     test('should handle rapid filter toggling without race conditions', async ({ context, page }) => {
