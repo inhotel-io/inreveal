@@ -110,6 +110,33 @@ bool toggleAvailable({required bool activeFilter, required bool? currentFacet, r
   return baselineFacet ?? true;
 }
 
+/// Whether [filter] is empty with respect to the fields the facets request actually forwards.
+///
+/// This is deliberately narrower than [SearchFilter.isEmpty]: that getter also counts fields the
+/// facets call in filter_suggestions.provider.dart never sends — `context` (the sheet's search-bar
+/// text) foremost, plus `filename`/`description`/`ocr`/`language`/`assetId`/`location.state`/
+/// `display.isArchive`/`display.isUntagged`. Using [SearchFilter.isEmpty] for the baseline-key
+/// decision below meant setting only one of those unforwarded fields (typically the search bar)
+/// made the baseline key diverge from the main key even though the outgoing HTTP request for both
+/// was byte-identical — firing a second request that told the server nothing new.
+///
+/// Keep the field list here in lockstep with the parameters passed to `getFilterSuggestions` in
+/// filter_suggestions.provider.dart — that's the contract this predicate exists to mirror.
+bool _isEmptyForFacets(SearchFilter filter) {
+  return filter.location.city == null &&
+      filter.location.country == null &&
+      filter.camera.make == null &&
+      filter.camera.model == null &&
+      filter.mediaType == AssetType.other &&
+      filter.people.isEmpty &&
+      filter.rating.rating.isNone &&
+      (filter.tagIds ?? const []).isEmpty &&
+      filter.date.takenAfter == null &&
+      filter.date.takenBefore == null &&
+      filter.display.isFavorite == false &&
+      filter.display.isNotInAlbum == false;
+}
+
 /// The scope-wide baseline (no filters applied) facets — "could this ever populate?". Keyed on
 /// [photosFilterDebouncedProvider] like every other facets lookup (finding 1), and shared by
 /// [sectionAvailabilityProvider] and the toggles' gated switches (finding 2) so both consult the
@@ -117,9 +144,11 @@ bool toggleAvailable({required bool activeFilter, required bool? currentFacet, r
 final baselineFacetsProvider = Provider.autoDispose<AsyncValue<FilterSuggestionsResponseDto>>((ref) {
   final filter = ref.watch(photosFilterDebouncedProvider);
 
-  // Same family, different key — and the SAME key when nothing is filtered, so the common case
-  // costs no extra request. SearchFilter has value equality, which is what makes that true.
-  final baselineKey = filter.isEmpty ? filter : SearchFilter.empty();
+  // Same family, different key — and the SAME key when nothing FACETS-RELEVANT is filtered, so the
+  // common case costs no extra request. SearchFilter has value equality, which is what makes that
+  // true; [_isEmptyForFacets] (rather than [SearchFilter.isEmpty]) is what makes it true even when
+  // an unforwarded field like the search-bar `context` is set.
+  final baselineKey = _isEmptyForFacets(filter) ? filter : SearchFilter.empty();
   return ref.watch(photosFilterSuggestionsProvider(baselineKey));
 });
 

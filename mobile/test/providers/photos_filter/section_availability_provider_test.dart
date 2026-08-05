@@ -259,6 +259,67 @@ void main() {
       });
     });
 
+    // filter_suggestions.provider.dart never forwards the search-bar `context` field to the server,
+    // so a session that opens with only the search text set must not diverge the baseline key from
+    // the main key: that would fire a second facets request whose actual HTTP params are
+    // byte-identical to the first. Setting the text BEFORE anything reads the derived providers is
+    // deliberate: it's the case that matters, because it's the only one where neither key has a
+    // chance to reuse an already-resolved "empty" cache entry from an earlier at-rest render — a
+    // burst starting from an at-rest mount (like the test above) would prime that cache and mask
+    // the bug regardless of which baseline-key predicate is used.
+    test(
+      'requests one facets set, not two, when the sheet opens with only search text set (#910 fix-wave finding 3)',
+      () {
+        fakeAsync((async) {
+          when(
+            () => mockSearchApi.getFilterSuggestions(
+              city: any(named: 'city'),
+              country: any(named: 'country'),
+              isFavorite: any(named: 'isFavorite'),
+              isNotInAlbum: any(named: 'isNotInAlbum'),
+              make: any(named: 'make'),
+              mediaType: any(named: 'mediaType'),
+              model: any(named: 'model'),
+              personIds: any(named: 'personIds'),
+              rating: any(named: 'rating'),
+              spaceId: any(named: 'spaceId'),
+              tagIds: any(named: 'tagIds'),
+              takenAfter: any(named: 'takenAfter'),
+              takenBefore: any(named: 'takenBefore'),
+              withSharedSpaces: any(named: 'withSharedSpaces'),
+            ),
+          ).thenAnswer((_) async => emptySuggestions());
+
+          final container = ProviderContainer(overrides: [apiServiceProvider.overrideWithValue(mockApiService)]);
+          addTearDown(container.dispose);
+
+          container.read(photosFilterProvider.notifier).setText('sunset');
+
+          container.listen(sectionAvailabilityProvider, (_, __) {});
+          async.flushMicrotasks();
+
+          verify(
+            () => mockSearchApi.getFilterSuggestions(
+              city: any(named: 'city'),
+              country: any(named: 'country'),
+              isFavorite: any(named: 'isFavorite'),
+              isNotInAlbum: any(named: 'isNotInAlbum'),
+              make: any(named: 'make'),
+              mediaType: any(named: 'mediaType'),
+              model: any(named: 'model'),
+              personIds: any(named: 'personIds'),
+              rating: any(named: 'rating'),
+              spaceId: any(named: 'spaceId'),
+              tagIds: any(named: 'tagIds'),
+              takenAfter: any(named: 'takenAfter'),
+              takenBefore: any(named: 'takenBefore'),
+              withSharedSpaces: any(named: 'withSharedSpaces'),
+            ),
+          ).called(1);
+        });
+      },
+    );
+
     // Task 1b makes a null response throw; the sheet must then show everything rather than
     // interpreting the failure as a genuinely empty library.
     test('offers every section while the facets are in error', () async {
