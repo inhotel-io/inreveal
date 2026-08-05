@@ -10,32 +10,28 @@
 
 part of openapi.api;
 
-class SyncSharedSpaceAlbumLinkV1 {
-  /// Returns a new [SyncSharedSpaceAlbumLinkV1] instance.
-  SyncSharedSpaceAlbumLinkV1({
-    required this.addedById,
-    required this.albumId,
+class SyncSharedSpaceAlbumFolderV1 {
+  /// Returns a new [SyncSharedSpaceAlbumFolderV1] instance.
+  SyncSharedSpaceAlbumFolderV1({
     required this.createdAt,
-    required this.folderId,
-    required this.showInTimeline,
+    required this.id,
+    required this.name,
+    required this.parentId,
     required this.spaceId,
     required this.updatedAt,
   });
 
-  /// User who linked the album to the space
-  String? addedById;
-
-  /// Album ID
-  String albumId;
-
   /// Created at
   DateTime createdAt;
 
-  /// Album folder ID within the space, or null if at the space root
-  String? folderId;
+  /// Folder ID
+  String id;
 
-  /// Whether this album appears in the space timeline
-  bool showInTimeline;
+  /// Folder name
+  String name;
+
+  /// Parent folder ID
+  String? parentId;
 
   /// Shared space ID
   String spaceId;
@@ -44,46 +40,39 @@ class SyncSharedSpaceAlbumLinkV1 {
   DateTime updatedAt;
 
   @override
-  bool operator ==(Object other) => identical(this, other) || other is SyncSharedSpaceAlbumLinkV1 &&
-    other.addedById == addedById &&
-    other.albumId == albumId &&
+  bool operator ==(Object other) => identical(this, other) || other is SyncSharedSpaceAlbumFolderV1 &&
     other.createdAt == createdAt &&
-    other.folderId == folderId &&
-    other.showInTimeline == showInTimeline &&
+    other.id == id &&
+    other.name == name &&
+    other.parentId == parentId &&
     other.spaceId == spaceId &&
     other.updatedAt == updatedAt;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (addedById == null ? 0 : addedById!.hashCode) +
-    (albumId.hashCode) +
     (createdAt.hashCode) +
-    (folderId == null ? 0 : folderId!.hashCode) +
-    (showInTimeline.hashCode) +
+    (id.hashCode) +
+    (name.hashCode) +
+    (parentId == null ? 0 : parentId!.hashCode) +
     (spaceId.hashCode) +
     (updatedAt.hashCode);
 
   @override
-  String toString() => 'SyncSharedSpaceAlbumLinkV1[addedById=$addedById, albumId=$albumId, createdAt=$createdAt, folderId=$folderId, showInTimeline=$showInTimeline, spaceId=$spaceId, updatedAt=$updatedAt]';
+  String toString() => 'SyncSharedSpaceAlbumFolderV1[createdAt=$createdAt, id=$id, name=$name, parentId=$parentId, spaceId=$spaceId, updatedAt=$updatedAt]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
-    if (this.addedById != null) {
-      json[r'addedById'] = this.addedById;
-    } else {
-      json[r'addedById'] = null;
-    }
-      json[r'albumId'] = this.albumId;
       json[r'createdAt'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/')
         ? this.createdAt.millisecondsSinceEpoch
         : this.createdAt.toUtc().toIso8601String();
-    if (this.folderId != null) {
-      json[r'folderId'] = this.folderId;
+      json[r'id'] = this.id;
+      json[r'name'] = this.name;
+    if (this.parentId != null) {
+      json[r'parentId'] = this.parentId;
     } else {
-      json[r'folderId'] = null;
+      json[r'parentId'] = null;
     }
-      json[r'showInTimeline'] = this.showInTimeline;
       json[r'spaceId'] = this.spaceId;
       json[r'updatedAt'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/')
         ? this.updatedAt.millisecondsSinceEpoch
@@ -91,20 +80,19 @@ class SyncSharedSpaceAlbumLinkV1 {
     return json;
   }
 
-  /// Returns a new [SyncSharedSpaceAlbumLinkV1] instance and imports its values from
+  /// Returns a new [SyncSharedSpaceAlbumFolderV1] instance and imports its values from
   /// [value] if it's a [Map], null otherwise.
   // ignore: prefer_constructors_over_static_methods
-  static SyncSharedSpaceAlbumLinkV1? fromJson(dynamic value) {
-    upgradeDto(value, "SyncSharedSpaceAlbumLinkV1");
+  static SyncSharedSpaceAlbumFolderV1? fromJson(dynamic value) {
+    upgradeDto(value, "SyncSharedSpaceAlbumFolderV1");
     if (value is Map) {
       final json = value.cast<String, dynamic>();
 
-      return SyncSharedSpaceAlbumLinkV1(
-        addedById: mapValueOfType<String>(json, r'addedById'),
-        albumId: mapValueOfType<String>(json, r'albumId')!,
+      return SyncSharedSpaceAlbumFolderV1(
         createdAt: mapDateTime(json, r'createdAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/')!,
-        folderId: mapValueOfType<String>(json, r'folderId'),
-        showInTimeline: mapValueOfType<bool>(json, r'showInTimeline')!,
+        id: mapValueOfType<String>(json, r'id')!,
+        name: mapValueOfType<String>(json, r'name')!,
+        parentId: mapValueOfType<String>(json, r'parentId'),
         spaceId: mapValueOfType<String>(json, r'spaceId')!,
         updatedAt: mapDateTime(json, r'updatedAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/')!,
       );
@@ -112,11 +100,11 @@ class SyncSharedSpaceAlbumLinkV1 {
     return null;
   }
 
-  static List<SyncSharedSpaceAlbumLinkV1> listFromJson(dynamic json, {bool growable = false,}) {
-    final result = <SyncSharedSpaceAlbumLinkV1>[];
+  static List<SyncSharedSpaceAlbumFolderV1> listFromJson(dynamic json, {bool growable = false,}) {
+    final result = <SyncSharedSpaceAlbumFolderV1>[];
     if (json is List && json.isNotEmpty) {
       for (final row in json) {
-        final value = SyncSharedSpaceAlbumLinkV1.fromJson(row);
+        final value = SyncSharedSpaceAlbumFolderV1.fromJson(row);
         if (value != null) {
           result.add(value);
         }
@@ -125,12 +113,12 @@ class SyncSharedSpaceAlbumLinkV1 {
     return result.toList(growable: growable);
   }
 
-  static Map<String, SyncSharedSpaceAlbumLinkV1> mapFromJson(dynamic json) {
-    final map = <String, SyncSharedSpaceAlbumLinkV1>{};
+  static Map<String, SyncSharedSpaceAlbumFolderV1> mapFromJson(dynamic json) {
+    final map = <String, SyncSharedSpaceAlbumFolderV1>{};
     if (json is Map && json.isNotEmpty) {
       json = json.cast<String, dynamic>(); // ignore: parameter_assignments
       for (final entry in json.entries) {
-        final value = SyncSharedSpaceAlbumLinkV1.fromJson(entry.value);
+        final value = SyncSharedSpaceAlbumFolderV1.fromJson(entry.value);
         if (value != null) {
           map[entry.key] = value;
         }
@@ -139,14 +127,14 @@ class SyncSharedSpaceAlbumLinkV1 {
     return map;
   }
 
-  // maps a json object with a list of SyncSharedSpaceAlbumLinkV1-objects as value to a dart map
-  static Map<String, List<SyncSharedSpaceAlbumLinkV1>> mapListFromJson(dynamic json, {bool growable = false,}) {
-    final map = <String, List<SyncSharedSpaceAlbumLinkV1>>{};
+  // maps a json object with a list of SyncSharedSpaceAlbumFolderV1-objects as value to a dart map
+  static Map<String, List<SyncSharedSpaceAlbumFolderV1>> mapListFromJson(dynamic json, {bool growable = false,}) {
+    final map = <String, List<SyncSharedSpaceAlbumFolderV1>>{};
     if (json is Map && json.isNotEmpty) {
       // ignore: parameter_assignments
       json = json.cast<String, dynamic>();
       for (final entry in json.entries) {
-        map[entry.key] = SyncSharedSpaceAlbumLinkV1.listFromJson(entry.value, growable: growable,);
+        map[entry.key] = SyncSharedSpaceAlbumFolderV1.listFromJson(entry.value, growable: growable,);
       }
     }
     return map;
@@ -154,11 +142,10 @@ class SyncSharedSpaceAlbumLinkV1 {
 
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
-    'addedById',
-    'albumId',
     'createdAt',
-    'folderId',
-    'showInTimeline',
+    'id',
+    'name',
+    'parentId',
     'spaceId',
     'updatedAt',
   };
