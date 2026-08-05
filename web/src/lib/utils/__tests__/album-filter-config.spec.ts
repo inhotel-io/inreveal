@@ -186,6 +186,17 @@ describe('buildAlbumDetailFilterConfig', () => {
     expect(result.hasAssetsInAlbum).toBe(true);
     expect(result.hasAssetsNotInAlbum).toBe(false);
   });
+
+  it('offers a browse-mode baseline computed with no filters, scoped to the album (#910)', async () => {
+    const config = buildAlbumDetailFilterConfig('album-1');
+    vi.mocked(getFilterSuggestions).mockClear();
+
+    const baseline = await config.baselineProvider!();
+
+    expect(baseline).toBeDefined();
+    expect(getFilterSuggestions).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-1' }));
+    expect(getFilterSuggestions).not.toHaveBeenCalledWith(expect.objectContaining({ rating: expect.anything() }));
+  });
 });
 
 describe('buildAlbumAssetPickerFilterConfig', () => {
@@ -271,5 +282,18 @@ describe('buildAlbumAssetPickerFilterConfig', () => {
     });
 
     expect(getFilterSuggestions).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-1' }));
+  });
+
+  it('offers a browse-mode baseline computed with no filters, unscoped (#910)', async () => {
+    const config = buildAlbumAssetPickerFilterConfig();
+    vi.mocked(getFilterSuggestions).mockClear();
+
+    const baseline = await config.baselineProvider!();
+
+    expect(baseline).toBeDefined();
+    const call = vi.mocked(getFilterSuggestions).mock.calls.at(-1)?.[0];
+    expect(call).not.toHaveProperty('albumId');
+    expect(call).not.toHaveProperty('withSharedSpaces');
+    expect(call).not.toHaveProperty('rating');
   });
 });

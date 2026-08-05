@@ -317,6 +317,10 @@
       }
       return mapSmartSearchFacetsToFilterSuggestions(facets);
     },
+    // #910: no baseline in query mode. A second concurrent facet request would abort the in-flight
+    // one (single `smartFacetInFlight` slot) and then clobber `smartFacets`, which feeds the
+    // timeline and the result count. `undefined` means "don't hide anything here" — see spec §4.5.
+    baselineProvider: async () => (showSearchResults ? undefined : loadPhotoFilterSuggestions(createFilterState())),
     providers: {
       ...normalProviders,
       cities: async (country, context) => {

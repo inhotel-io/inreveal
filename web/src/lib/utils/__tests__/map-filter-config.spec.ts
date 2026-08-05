@@ -299,6 +299,28 @@ describe('buildMapFilterConfig', () => {
     expect(getSearchSuggestions).toHaveBeenCalledWith(expect.objectContaining({ spaceId: 'space-123', make: 'Nikon' }));
   });
 
+  describe('baselineProvider', () => {
+    it('offers a browse-mode baseline computed with no filters (#910)', async () => {
+      const config = buildMapFilterConfig();
+      vi.mocked(getFilterSuggestions).mockClear();
+
+      const baseline = await config.baselineProvider!();
+
+      expect(baseline).toBeDefined();
+      expect(getFilterSuggestions).toHaveBeenCalledWith(expect.objectContaining({ withSharedSpaces: true }));
+      expect(getFilterSuggestions).not.toHaveBeenCalledWith(expect.objectContaining({ rating: expect.anything() }));
+    });
+
+    it('scopes the baseline by spaceId when provided', async () => {
+      const config = buildMapFilterConfig('space-123');
+      vi.mocked(getFilterSuggestions).mockClear();
+
+      await config.baselineProvider!();
+
+      expect(getFilterSuggestions).toHaveBeenCalledWith(expect.objectContaining({ spaceId: 'space-123' }));
+    });
+  });
+
   it('should pass withSharedSpaces to cities provider when no spaceId', async () => {
     vi.mocked(getSearchSuggestions).mockResolvedValue(['Paris'] as never);
 

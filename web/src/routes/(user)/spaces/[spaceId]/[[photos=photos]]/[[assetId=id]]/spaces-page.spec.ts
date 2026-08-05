@@ -481,6 +481,44 @@ describe('Spaces page search URL state', () => {
     );
   });
 
+  it('offers a browse-mode baseline computed with no filters, scoped to the space (#910)', async () => {
+    renderPage();
+    await waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
+
+    // The whole point: the baseline ignores whatever filters are active.
+    await fireEvent.click(screen.getByTestId('select-favorites-filter'));
+    await waitFor(() =>
+      expect(sdkMock.getFilterSuggestions).toHaveBeenCalledWith(expect.objectContaining({ isFavorite: true })),
+    );
+    sdkMock.getFilterSuggestions.mockClear();
+
+    await fireEvent.click(screen.getByTestId('load-baseline'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).not.toHaveAttribute('data-baseline', 'undefined');
+    });
+    expect(sdkMock.getFilterSuggestions).toHaveBeenCalledWith(
+      expect.objectContaining({ spaceId: 'space-1', rating: undefined, isFavorite: undefined }),
+    );
+  });
+
+  it('offers no baseline in query mode, and leaves the space facets alone (#910)', async () => {
+    mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?q=beach');
+
+    renderPage();
+    await vi.waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1));
+    sdkMock.searchSmartFacets.mockClear();
+
+    await fireEvent.click(screen.getByTestId('load-baseline'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-baseline', 'undefined');
+    });
+    // Regression guard for spec §4.5: a baseline request here would abort the in-flight facet
+    // fetch and then overwrite smartFacets, corrupting the timeline and the result count.
+    expect(sdkMock.searchSmartFacets).not.toHaveBeenCalled();
+  });
+
   it('fetches smart facets with spaceId for committed space search', async () => {
     mockPage.url = new URL('https://gallery.test/spaces/space-1/photos?q=beach');
 

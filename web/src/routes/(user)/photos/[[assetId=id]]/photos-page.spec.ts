@@ -651,6 +651,44 @@ describe('Photos page search URL state', () => {
     await vi.waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
   });
 
+  it('offers a browse-mode baseline computed with no filters (#910)', async () => {
+    mockPage.url = new URL('https://gallery.test/photos');
+
+    renderPage();
+    await waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
+
+    // The whole point: the baseline ignores whatever filters are active.
+    await fireEvent.click(screen.getByTestId('select-favorites-filter'));
+    await waitFor(() =>
+      expect(sdkMock.getFilterSuggestions).toHaveBeenCalledWith(expect.objectContaining({ isFavorite: true })),
+    );
+    sdkMock.getFilterSuggestions.mockClear();
+
+    await fireEvent.click(screen.getByTestId('load-baseline'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).not.toHaveAttribute('data-baseline', 'undefined');
+    });
+    expect(sdkMock.getFilterSuggestions).toHaveBeenCalledWith(
+      expect.objectContaining({ rating: undefined, personIds: undefined, isFavorite: undefined }),
+    );
+  });
+
+  it('offers no baseline in query mode, and leaves the page facets alone (#910)', async () => {
+    renderPage();
+    await vi.waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1));
+    sdkMock.searchSmartFacets.mockClear();
+
+    await fireEvent.click(screen.getByTestId('load-baseline'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-baseline', 'undefined');
+    });
+    // Regression guard for spec §4.5: a baseline request here would abort the in-flight facet
+    // fetch and then overwrite smartFacets, corrupting the timeline and the result count.
+    expect(sdkMock.searchSmartFacets).not.toHaveBeenCalled();
+  });
+
   it('does not include sort order in the smart facet payload', async () => {
     mockPage.url = new URL('https://gallery.test/photos?q=nature&sort=asc');
 
