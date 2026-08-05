@@ -217,6 +217,7 @@ function makePageData(
   album: AlbumResponseDto,
   members: SharedSpaceMemberResponseDto[] = [makeMember()],
   space: SharedSpaceResponseDto = BASE_SPACE,
+  folderId: string | null = null,
 ) {
   return {
     error: undefined,
@@ -225,6 +226,7 @@ function makePageData(
     space,
     members,
     album,
+    folderId,
     meta: { title: album.albumName },
   };
 }
@@ -233,10 +235,12 @@ function renderPage({
   album = makeAlbum(),
   members = [makeMember()],
   space = BASE_SPACE,
+  folderId = null,
 }: {
   album?: AlbumResponseDto;
   members?: SharedSpaceMemberResponseDto[];
   space?: SharedSpaceResponseDto;
+  folderId?: string | null;
 } = {}) {
   authManager.setUser(userAdminFactory.build({ id: 'current-user-id' }));
   authManager.setPreferences(preferencesFactory.build());
@@ -253,7 +257,7 @@ function renderPage({
     }>,
     {
       component: SpaceAlbumDetailPage,
-      componentProps: { data: makePageData(album, members, space) },
+      componentProps: { data: makePageData(album, members, space, folderId) },
     },
   );
 }
@@ -328,6 +332,24 @@ describe('Space album detail page', () => {
     renderPage();
     const leading = screen.getByTestId('layout-leading');
     expect(leading.querySelector('button')).not.toBeNull();
+  });
+
+  // Back must return the user to the folder the album lives in, not dump them at the space
+  // root — otherwise every trip into an album costs them their place in the tree.
+  it('back returns to the album folder when the album lives in one', async () => {
+    renderPage({ folderId: 'folder-trips' });
+
+    await fireEvent.click(screen.getByTestId('layout-leading').querySelector('button')!);
+
+    expect(goto).toHaveBeenCalledWith('/spaces/space-1/albums?folder=folder-trips');
+  });
+
+  it('back returns to the space root when the album is not in a folder', async () => {
+    renderPage({ folderId: null });
+
+    await fireEvent.click(screen.getByTestId('layout-leading').querySelector('button')!);
+
+    expect(goto).toHaveBeenCalledWith('/spaces/space-1/albums');
   });
 
   it('editor sees the "Add photos" button', () => {
