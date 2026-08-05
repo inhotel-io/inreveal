@@ -736,12 +736,12 @@ export class SearchRepository {
       .$if(exclude !== 'favorites' && options.isFavorite !== undefined, (qb) =>
         qb.where('asset.isFavorite', '=', options.isFavorite!),
       )
-      .$if(exclude !== 'albums' && !!options.isNotInAlbum, (qb) =>
+      .$if(exclude !== 'albums' && !!options.isNotInAlbum && !options.albumIds?.length, (qb) =>
         qb.where((eb) =>
           eb.not(eb.exists(eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
         ),
       )
-      .$if(exclude !== 'albums' && !!options.isInAlbum, (qb) =>
+      .$if(exclude !== 'albums' && !!options.isInAlbum && !options.albumIds?.length, (qb) =>
         qb.where((eb) => eb.exists(eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
       )
       .$if(needsExifJoin, (qb) =>

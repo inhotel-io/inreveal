@@ -847,7 +847,10 @@ Add the same three lines to `SmartSearchFacetsResponseSchema` (`:260`), after `h
 deterministically. **This step is a loop, not a line:** run Step 4 first, read the new fragments out of
 the generated file, come back here and add them, then run Step 4 again. Do not guess the strings.
 
-The three probes add four queries, not three — `getFilteredAlbumMembership` issues two.
+The three probes add six queries total, not three — three per `@GenerateSql` call site. Each of
+`getFilterSuggestions` and `getSmartSearchFacets` gains one favourites query plus two
+album-membership probes (`getFilteredAlbumMembership` / `getSmartFacetAlbumMembership` each issue
+two, one per `filed`/`unfiled` branch).
 
 - [ ] **Step 3: Update unit-test fixtures**
 

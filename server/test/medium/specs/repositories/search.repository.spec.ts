@@ -489,6 +489,32 @@ describe(SearchRepository.name, () => {
       });
 
       expect(result.hasFavorites).toBe(true);
+      // The isFavorite: false filter still applies to `total` itself — only hasFavorites ignores it.
+      // If a future change over-corrected and dropped the predicate everywhere, hasFavorites would
+      // still read true here but total would silently go from 1 to 2.
+      expect(result.total).toBe(1);
+    });
+
+    it('honours the other active dimensions on the smart-search path (tag) (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: favourite } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      await addEmbedding(defaultDatabase, favourite.id);
+      const { asset: plain } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, plain.id);
+      const [tagA, tagB] = await upsertTags(ctx.get(TagRepository), { userId: user.id, tags: ['TagA', 'TagB'] });
+      await ctx.newTagAsset({ tagIds: [tagA.id], assetIds: [favourite.id] });
+      await ctx.newTagAsset({ tagIds: [tagB.id], assetIds: [plain.id] });
+
+      // The only favourite carries tag A, so filtering to tag B must report no favourites — the
+      // smart-search mirror of the browse-path tag case above.
+      const result = await sut.getSmartSearchFacets({
+        userIds: [user.id],
+        embedding: matchingEmbedding,
+        tagIds: [tagB.id],
+      });
+
+      expect(result.hasFavorites).toBe(false);
     });
 
     it('computes album membership ignoring its own isNotInAlbum filter (#910)', async () => {
@@ -763,6 +789,23 @@ describe(SearchRepository.name, () => {
         expect(result.hasFavorites).toBe(false);
       });
 
+      it('honours the other active dimensions (tag)', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { asset: favourite } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+        const { asset: plain } = await ctx.newAsset({ ownerId: user.id });
+        const [tagA, tagB] = await upsertTags(ctx.get(TagRepository), { userId: user.id, tags: ['TagA', 'TagB'] });
+        await ctx.newTagAsset({ tagIds: [tagA.id], assetIds: [favourite.id] });
+        await ctx.newTagAsset({ tagIds: [tagB.id], assetIds: [plain.id] });
+
+        // The only favourite carries tag A, so filtering to tag B must report no favourites. Tags go
+        // through a `tag_asset` EXISTS subquery rather than the `asset_exif` join the make case above
+        // exercises, so this covers a different code path.
+        const result = await sut.getFilterSuggestions([user.id], { tagIds: [tagB.id] });
+
+        expect(result.hasFavorites).toBe(false);
+      });
+
       it('sees a shared-space favourite only with timelineSpaceIds (#910)', async () => {
         const { ctx, sut } = setup();
         const { user: owner } = await ctx.newUser();
@@ -770,7 +813,7 @@ describe(SearchRepository.name, () => {
         const { asset } = await ctx.newAsset({ ownerId: owner.id, isFavorite: true });
         // A distinctive make so the second assertion can identify THIS asset specifically —
         // a `toBe(true)` non-emptiness check alone would also pass for an over-broad scope
-        // that leaked in unrelated assets (see the mutation check in the task report).
+        // that leaked in unrelated assets.
         await ctx.newExif({ assetId: asset.id, make: 'SpaceMake' });
 
         const { space } = await ctx.newSharedSpace({ createdById: owner.id });
