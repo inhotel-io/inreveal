@@ -548,6 +548,57 @@ describe(SearchRepository.name, () => {
         ratings: [],
         mediaTypes: [],
         hasUnnamedPeople: false,
+        hasFavorites: false,
+        hasAssetsInAlbum: false,
+        hasAssetsNotInAlbum: false,
+      });
+    });
+
+    describe('hasFavorites (#910)', () => {
+      it('is false when the scope has no favourite', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        await ctx.newAsset({ ownerId: user.id });
+
+        const result = await sut.getFilterSuggestions([user.id], {});
+
+        expect(result.hasFavorites).toBe(false);
+      });
+
+      it('is true when the scope has a favourite', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+
+        const result = await sut.getFilterSuggestions([user.id], {});
+
+        expect(result.hasFavorites).toBe(true);
+      });
+
+      it('ignores its own isFavorite filter', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+        await ctx.newAsset({ ownerId: user.id });
+
+        // Filtering to non-favourites must not make the facet claim there are none.
+        const result = await sut.getFilterSuggestions([user.id], { isFavorite: false });
+
+        expect(result.hasFavorites).toBe(true);
+      });
+
+      it('honours the other active dimensions', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { asset: favourite } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+        await ctx.newExif({ assetId: favourite.id, make: 'Canon' });
+        const { asset: plain } = await ctx.newAsset({ ownerId: user.id });
+        await ctx.newExif({ assetId: plain.id, make: 'Nikon' });
+
+        // The only favourite is a Canon, so a Nikon filter must report no favourites.
+        const result = await sut.getFilterSuggestions([user.id], { make: 'Nikon' });
+
+        expect(result.hasFavorites).toBe(false);
       });
     });
   });

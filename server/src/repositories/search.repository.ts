@@ -350,6 +350,9 @@ export interface FilterSuggestionsResult {
   ratings: number[];
   mediaTypes: string[];
   hasUnnamedPeople: boolean;
+  hasFavorites: boolean;
+  hasAssetsInAlbum: boolean;
+  hasAssetsNotInAlbum: boolean;
 }
 
 /** Skip threshold when disabled (0), undefined, or at max cosine distance (>= 2) since it would filter nothing */
@@ -1399,7 +1402,7 @@ export class SearchRepository {
     ],
   })
   async getFilterSuggestions(userIds: string[], options: FilterSuggestionsOptions): Promise<FilterSuggestionsResult> {
-    const [countries, cameraMakes, tags, peopleResult, ratings, mediaTypes] = await Promise.all([
+    const [countries, cameraMakes, tags, peopleResult, ratings, mediaTypes, hasFavorites] = await Promise.all([
       // `state` joins `country` / `city` in the location group's self-exclusion: it implies its
       // country, so leaving it applied would collapse the country selector to a single row —
       // exactly the reason `city` is excluded here. Every other list keeps `state` applied.
@@ -1411,6 +1414,7 @@ export class SearchRepository {
       this.getFilteredPeople(userIds, without(options, 'personIds', 'identityIds')),
       this.getFilteredRatings(userIds, without(options, 'rating')),
       this.getFilteredMediaTypes(userIds, without(options, 'mediaType')),
+      this.getFilteredHasFavorites(userIds, without(options, 'isFavorite')),
     ]);
 
     return {
@@ -1421,6 +1425,9 @@ export class SearchRepository {
       ratings,
       mediaTypes,
       hasUnnamedPeople: peopleResult.hasUnnamedPeople,
+      hasFavorites,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     };
   }
 
@@ -1907,5 +1914,20 @@ export class SearchRepository {
       .orderBy('type')
       .execute();
     return res.map((row) => row.type);
+  }
+
+  /**
+   * #910: presence probes for the Favourites / Albums sections. `limit 1` rather than an aggregate so
+   * Postgres stops at the first matching row — the answer is "does one exist", not "how many".
+   */
+  private async getFilteredHasFavorites(userIds: string[], options: FilterSuggestionsOptions): Promise<boolean> {
+    const row = await this.db
+      .selectFrom('asset')
+      .select('asset.id')
+      .where('asset.id', 'in', this.buildFilteredAssetIds(userIds, options))
+      .where('asset.isFavorite', '=', true)
+      .limit(1)
+      .executeTakeFirst();
+    return !!row;
   }
 }
