@@ -13,7 +13,7 @@ import { SystemMetadataRepository } from 'src/repositories/system-metadata.repos
 import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
 import { ThemeSearchAsset, ThemeSearchPort } from 'src/services/memory-rules/theme-search.port';
-import { MemoryService } from 'src/services/memory.service';
+import { MemoryService, RULE_DAILY_LIMIT } from 'src/services/memory.service';
 import { newMediumService } from 'test/medium.factory';
 import { factory } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
@@ -1141,7 +1141,7 @@ describe(MemoryService.name, () => {
       expect(searchByEmbedding).not.toHaveBeenCalled();
     });
 
-    it('does not insert a third rule memory when the daily slot budget is already full', async () => {
+    it('does not insert another rule memory when the daily slot budget is already full', async () => {
       const { sut, ctx } = setup();
       const memoryRepo = ctx.get(MemoryRepository);
       const now = DateTime.fromObject({ year: 2026, month: 7, day: 8 }, { zone: 'utc' }) as DateTime<true>;
@@ -1158,35 +1158,29 @@ describe(MemoryService.name, () => {
         });
       }
 
-      // Fill both daily slots with pre-existing rule memories already visible today.
+      // Fill every daily slot with pre-existing rule memories already visible today.
       const showAt = now.startOf('day').toJSDate();
       const hideAt = now.endOf('day').toJSDate();
-      await ctx.newMemory({
-        ownerId: user.id,
-        type: MemoryType.Rule,
-        data: { ruleId: 'dummy_a', dedupeKey: 'dummy_a:x', title: 'Dummy A', subtitle: '', score: 1, context: {} },
-        memoryAt: now.toJSDate(),
-        showAt,
-        hideAt,
-      });
-      await ctx.newMemory({
-        ownerId: user.id,
-        type: MemoryType.Rule,
-        data: { ruleId: 'dummy_b', dedupeKey: 'dummy_b:x', title: 'Dummy B', subtitle: '', score: 1, context: {} },
-        memoryAt: now.toJSDate(),
-        showAt,
-        hideAt,
-      });
+      const dummyRuleIds = Array.from({ length: RULE_DAILY_LIMIT }, (_, index) => `dummy_${index}`);
+      for (const ruleId of dummyRuleIds) {
+        await ctx.newMemory({
+          ownerId: user.id,
+          type: MemoryType.Rule,
+          data: { ruleId, dedupeKey: `${ruleId}:x`, title: ruleId, subtitle: '', score: 1, context: {} },
+          memoryAt: now.toJSDate(),
+          showAt,
+          hideAt,
+        });
+      }
 
       vi.setSystemTime(now.toJSDate());
       await sut.onMemoriesCreate();
 
       const memories = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
-      expect(memories).toHaveLength(2);
-      expect(memories.map((memory) => (memory.data as { ruleId?: string }).ruleId).toSorted()).toEqual([
-        'dummy_a',
-        'dummy_b',
-      ]);
+      expect(memories).toHaveLength(RULE_DAILY_LIMIT);
+      expect(memories.map((memory) => (memory.data as { ruleId?: string }).ruleId).toSorted()).toEqual(
+        [...dummyRuleIds].toSorted(),
+      );
     });
   });
 
@@ -1447,7 +1441,7 @@ describe(MemoryService.name, () => {
 
       // Anna's person_throwback already fired a year before `target`. Dates sit well outside
       // `target`'s search window, so this pre-existing memory doesn't itself occupy one of
-      // today's two rule slots -- the test isolates the dedupeKey skip (D8), not the slot cap.
+      // today's rule slots -- the test isolates the dedupeKey skip (D8), not the slot cap.
       const dedupeKeyAnna = `person_throwback:${anna.id}`;
       const priorShowAt = DateTime.fromObject({ year: 2025, month: 8, day: 13 }, { zone: 'utc' });
       await ctx.newMemory({

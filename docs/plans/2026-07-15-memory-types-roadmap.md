@@ -14,7 +14,7 @@ implements `evaluate({ ownerId, target }) → MemoryRuleCandidate[]`. Candidates
 - sorts all candidates by `score` descending,
 - de-duplicates by `dedupeKey` and by `hasRuleMemory(ownerId, ruleId, dedupeKey)` (a
   given memory is only ever inserted once),
-- inserts up to `RULE_DAILY_LIMIT` (currently **2**) rule memories per day.
+- inserts up to `RULE_DAILY_LIMIT` (currently **6**) rule memories per day.
 
 Registering a new type is two lines: an entry in `MEMORY_TYPE_METADATA`
 (`memory-type.metadata.ts`) and a factory in `RULE_FACTORIES`
@@ -26,9 +26,10 @@ toggles, `availableMemoryTypes`, and the visibility filter — derives from the 
 - **Titles/subtitles are English strings baked into each rule server-side** (same as the
   existing `birthday`/`recent_trip` rules). Localizing memory _content_ is out of scope;
   only settings _labels_ are localized.
-- Adding rules **increases competition for the 2 daily slots** — weak candidates simply
+- Adding rules **increases competition for the daily slots** — weak candidates simply
   lose on score. This is by design. `RULE_DAILY_LIMIT` is the tuning knob if the surface
-  ever feels starved.
+  ever feels starved; it was raised from 2 to 6 once the multi-day recaps landed, since
+  four lingering windows could otherwise crowd out the date-anchored 1-day rules.
 - The **admin settings list is hardcoded** (`memoryTypeKeys` in
   `MemoriesSettings.svelte`); user settings auto-derive from `availableMemoryTypes`.
   Every new type needs 4 i18n keys (admin label+desc, user label+desc) in `en.json`.

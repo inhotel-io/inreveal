@@ -41,6 +41,8 @@ The rule compares the last 30 days of location clusters with the preceding 90 da
 
 Trip memories are titled **Recent trip to City, Country** or **Recent trip to Country**. The subtitle shows the number of photos and days in the trip window.
 
+Because a trip surfaces at most once per place every 30 days, the card stays in the memory lane for several days rather than the single day it was generated on: 3 days for a short trip, up to 7 for a longer one.
+
 ### Trip photo curation
 
 Trip memories try to show representative photos instead of every near-duplicate burst:
@@ -54,7 +56,7 @@ Trip memories try to show representative photos instead of every near-duplicate 
 
 The **Generate memories** nightly task creates both classic **On this day** memories and rule memories.
 
-Rule memories run only through the current day and are capped at 2 rule-generated cards per user per day. If one rule fails for a user, Gallery logs the failure and continues evaluating the remaining users and rules where possible.
+Rule memories run only through the current day and are capped at 6 rule-generated cards visible per user per day. If one rule fails for a user, Gallery logs the failure and continues evaluating the remaining users and rules where possible.
 
 You can enable, disable, or reschedule this task from **Administration → Settings → Nightly Tasks**. The same setting is exposed as `nightlyTasks.generateMemories` in the [config file](/install/config-file).
 
@@ -96,6 +98,29 @@ Two of these types are tunable in **Administration → Settings → Memories**, 
 
 - **Theme match threshold** (`memories.themeMaxDistance`, default `0.75`) — how close a photo must be to the month's theme. This is a text-to-image CLIP distance, so it is much larger than a face-matching threshold; values under `0.5` usually yield no themed memories at all.
 - **Person throwback dormancy** (`memories.personThrowbackDormancyMonths`, default `6`) — how long someone must be absent from your photos before `person_throwback` can resurface them.
+
+### When each type appears
+
+Most generated types are anchored to a day of the month, so a new server does not produce all of them right away — a type only generates on its own day. Dates are evaluated in UTC.
+
+Once created, a memory stays in the memory lane on the home page for its visibility window. After the window closes the memory is still kept and remains browsable under **Memories** in the Library sidebar, it simply stops appearing on the home page.
+
+| Type key              | Generated on                                       | Stays in the memory lane for |
+| --------------------- | -------------------------------------------------- | ---------------------------- |
+| `on_this_day`         | every day                                          | 1 day                        |
+| `birthday`            | every day (a person's birthday must fall that day) | 1 day                        |
+| `recent_trip`         | every day                                          | 3–7 days, matching the trip  |
+| `on_this_day_place`   | every day                                          | 1 day                        |
+| `trip_anniversary`    | every day (the anniversary of a past trip's start) | 3–7 days, matching the trip  |
+| `month_recap`         | the 1st                                            | 7 days                       |
+| `video_moments`       | the 8th                                            | 5 days                       |
+| `person_throwback`    | the 13th                                           | 7 days                       |
+| `favorites_throwback` | the 15th                                           | 7 days                       |
+| `people_together`     | the 20th                                           | 7 days                       |
+| `themed`              | the 22nd                                           | 5 days                       |
+| `season_recap`        | the 1st of March, June, September, and December    | 10 days                      |
+
+A type generates a memory only when your library has enough matching photos for it, so a qualifying day does not guarantee a card. The cap of 6 rule memories per day also applies, and it counts memories still inside their window from earlier days: when more qualify than there is room for, the highest-scoring cards win and the rest are skipped. **On this day** memories are not part of that cap.
 
 ### Per-user toggles
 

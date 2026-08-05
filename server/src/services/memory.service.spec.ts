@@ -2,13 +2,26 @@ import { BadRequestException } from '@nestjs/common';
 import { DateTime } from 'luxon';
 import { defaults } from 'src/config';
 import { MemoryType, SystemMetadataKey, UserMetadataKey } from 'src/enum';
-import { MemoryService } from 'src/services/memory.service';
+import { MemoryService, RULE_DAILY_LIMIT } from 'src/services/memory.service';
 import { OnThisDayData, RuleMemoryData } from 'src/types';
 import { AssetFactory } from 'test/factories/asset.factory';
 import { MemoryFactory } from 'test/factories/memory.factory';
 import { getForMemory } from 'test/mappers';
 import { factory, newUuid, newUuids } from 'test/small.factory';
 import { newTestService, ServiceMocks } from 'test/utils';
+
+/** `count` rule memories already visible on `memoryAt`, shaped as `memory.search` returns them. */
+const visibleRuleMemories = (ownerId: string, memoryAt: string, count: number) =>
+  Array.from({ length: count }, (_, index) =>
+    getForMemory(
+      MemoryFactory.create({
+        ownerId,
+        type: MemoryType.Rule,
+        memoryAt: new Date(memoryAt),
+        data: { ruleId: 'existing', dedupeKey: `existing-${index}`, title: 'Existing' } satisfies RuleMemoryData,
+      }),
+    ),
+  );
 
 describe(MemoryService.name, () => {
   let sut: MemoryService;
@@ -260,7 +273,7 @@ describe(MemoryService.name, () => {
       vi.useRealTimers();
     });
 
-    it('should keep only the top two surviving rule candidates after dedupe and fail soft', async () => {
+    it('should skip an already-generated candidate, keep the rest in score order, and fail soft', async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date('2026-04-23T12:00:00Z'));
 
@@ -332,20 +345,8 @@ describe(MemoryService.name, () => {
         lastRuleDate: '2026-04-22T00:00:00.000Z',
       });
       mocks.asset.getByDayOfYear.mockResolvedValue([]);
-      mocks.memory.search.mockResolvedValue([
-        getForMemory(
-          MemoryFactory.create({
-            ownerId: user.id,
-            type: MemoryType.Rule,
-            memoryAt: new Date('2026-04-23T00:00:00Z'),
-            data: {
-              ruleId: 'birthday',
-              dedupeKey: 'existing',
-              title: 'Existing',
-            } satisfies RuleMemoryData,
-          }),
-        ),
-      ]);
+      // every slot but one is already taken by memories still visible today
+      mocks.memory.search.mockResolvedValue(visibleRuleMemories(user.id, '2026-04-23T00:00:00Z', RULE_DAILY_LIMIT - 1));
       mocks.memory.hasRuleMemory.mockResolvedValue(false);
       mocks.memory.create.mockResolvedValue(MemoryFactory.create() as any);
 
@@ -396,20 +397,8 @@ describe(MemoryService.name, () => {
         lastRuleDate: '2026-04-23T00:00:00.000Z',
       });
       mocks.asset.getByDayOfYear.mockResolvedValue([]);
-      mocks.memory.search.mockResolvedValue([
-        getForMemory(
-          MemoryFactory.create({
-            ownerId: user.id,
-            type: MemoryType.Rule,
-            memoryAt: new Date('2026-04-24T00:00:00Z'),
-            data: {
-              ruleId: 'existing',
-              dedupeKey: 'existing',
-              title: 'Existing',
-            } satisfies RuleMemoryData,
-          }),
-        ),
-      ]);
+      // every slot but one is already taken by memories still visible today
+      mocks.memory.search.mockResolvedValue(visibleRuleMemories(user.id, '2026-04-24T00:00:00Z', RULE_DAILY_LIMIT - 1));
       mocks.memory.hasRuleMemory.mockResolvedValue(false);
       mocks.memory.create.mockResolvedValue(MemoryFactory.create() as any);
 
@@ -698,7 +687,7 @@ describe(MemoryService.name, () => {
 
       await sut.onMemoriesCreate();
 
-      // Both slots used, but the second month_recap year is dropped so the daily rule gets a slot.
+      // The second month_recap year is dropped even though slots remain: one card per multi-day rule.
       expect(mocks.memory.create).toHaveBeenCalledTimes(2);
       expect(mocks.memory.create.mock.calls.map((call) => (call[0].data as { dedupeKey: string }).dedupeKey)).toEqual([
         'month_recap:2023-07',

@@ -22,7 +22,15 @@ import { addAssets, removeAssets } from 'src/utils/asset.util';
 import { getPreferences } from 'src/utils/preferences';
 
 const DAYS = 3;
-const RULE_DAILY_LIMIT = 2;
+/**
+ * Cap on rule memories *visible* on a given day, so a multi-day recap holds its slot for its
+ * whole window. Sized from the worst-case overlap of the current rules: the calendar-fixed
+ * windows only ever overlap two deep (e.g. `person_throwback` 13–19 and `favorites_throwback`
+ * 15–21), plus `recent_trip` and `trip_anniversary`, which can start on any day — four lingering
+ * cards. The remaining two slots keep the date-anchored 1-day rules (`birthday` above all, since
+ * a missed one waits a year) from ever being crowded out.
+ */
+export const RULE_DAILY_LIMIT = 6;
 
 @Injectable()
 export class MemoryService extends BaseService {

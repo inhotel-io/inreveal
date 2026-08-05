@@ -84,6 +84,10 @@ export class RecentTripMemoryRule implements MemoryRule {
         score: 50 + candidate.dayCount * 5 + Math.min(candidate.assetCount, 20),
         assetIds,
         memoryAt: target,
+        // A trip fires at most once per place per 30 days, so a single-day window meant anyone
+        // not opening the app that day missed it entirely. Scaled by trip length, matching
+        // `trip_anniversary`.
+        visibleForDays: Math.min(Math.max(candidate.dayCount, 3), 7),
         context: {
           placeKey,
           placeLabel,

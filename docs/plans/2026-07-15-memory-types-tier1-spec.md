@@ -214,8 +214,9 @@ constants below are the values referenced by the tests; treat them as the spec's
   - `memoryAt`: `target.set({ year })`
   - `dedupeKey`: `on_this_day_place:${year}-${MM}-${dd}:${placeKey}`
   - `score`: `100 + count * 3 + recencyBonus(year, target)`
-  - `assetIds`: **only the dominant-city assets** for that year → `sampleAssetsByTime(cap = 8)`
-    (not the whole day)
+  - `assetIds`: **only the dominant-city assets** for that year → `sampleAssetsByTime(cap = 16)`
+    (not the whole day). The cap was raised from 8 after live testing: `subtitle` reports the
+    full dominant-city count, so a tight cap reads as a broken promise on a busy day.
   - `visibleForDays`: **1** (omit — date-anchored, regenerates daily)
 - **Determinism:** on a dominant-city tie, pick the greater count then the lexicographically
   smaller city (so tests and reruns are stable).
