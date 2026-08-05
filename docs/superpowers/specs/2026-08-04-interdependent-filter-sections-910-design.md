@@ -167,7 +167,7 @@ test suite — a refactor #910 does not justify.
 | camera    | `cameraMakes`                             | `cameraMakes` empty                             |
 | tags      | `tags`                                    | `tags` empty                                    |
 | rating    | `ratings`                                 | `ratings` empty                                 |
-| media     | `mediaTypes`                              | `mediaTypes.length < 2`                         |
+| media     | `mediaTypes`                              | not **both** `IMAGE` and `VIDEO` present        |
 | favorites | `hasFavorites`                            | `hasFavorites` false                            |
 | albums    | `hasAssetsInAlbum`, `hasAssetsNotInAlbum` | either is false                                 |
 | timeline  | `timeBuckets`                             | never — greys when `timeBuckets` empty          |
@@ -175,8 +175,13 @@ test suite — a refactor #910 does not justify.
 
 Notes on the three non-obvious rows:
 
-- **media** uses `< 2`, not "empty". The section offers All / Photos / Videos; with only images
-  present, _Photos_ is identical to _All_ and _Videos_ is empty, so the control cannot discriminate.
+- **media** tests for the two types the control actually offers, not for list length. The section
+  offers All / Photos / Videos; with only images present, _Photos_ is identical to _All_ and _Videos_
+  is empty, so the control cannot discriminate. A length test looks equivalent and is not:
+  `getFilteredMediaTypes` (`search.repository.ts:1737`) returns raw `distinct asset.type`, and
+  `AssetType` is `IMAGE | VIDEO | AUDIO | OTHER` (`enum.ts:38`). A library of photos plus one `OTHER`
+  asset yields `['IMAGE', 'OTHER']` — length 2, but the Videos button is still dead. The rule is
+  `mediaTypes.includes('IMAGE') && mediaTypes.includes('VIDEO')`.
 - **albums** needs both booleans for the same reason. With no albums, _Has album_ → 0 and _Has no
   album_ → everything; with a fully-filed library, the reverse.
 - **favorites** takes one boolean, deliberately asymmetric with albums. "Nothing favourited" is the
@@ -196,7 +201,8 @@ no `hidden` and simply greys).
 
 ### 4.3.1 Section-level only — the facets never reach the controls
 
-`ratings` and `mediaTypes` feed `getSectionAvailability` and nothing else. Per §2.4,
+`ratings` and `mediaTypes` feed `getSectionAvailability` and nothing else — including the
+`IMAGE`/`VIDEO` presence test above, which never reaches the three media buttons. Per §2.4,
 `availableRatings` and `availableMediaTypes` stay unset, so:
 
 - whenever the Rating section renders, all five stars render uniformly;
@@ -204,9 +210,9 @@ no `hidden` and simply greys).
 - `rating-filter.svelte` and `media-type-filter.svelte` are not modified by this work at all.
 
 The section rules remain sound without the controls participating. `ratings: []` means no
-`rating >= N` can match for any N, so the whole section is dead. `mediaTypes.length < 2` means the
-one present type is a synonym for _All_ and the other button is empty, so the control cannot
-discriminate. Both verdicts are about the section, which is exactly what #910 asks about.
+`rating >= N` can match for any N, so the whole section is dead. A `mediaTypes` missing either `IMAGE`
+or `VIDEO` means the present type is a synonym for _All_ and the other button is empty, so the control
+cannot discriminate. Both verdicts are about the section, which is exactly what #910 asks about.
 
 ### 4.4 Three overriding rules
 
@@ -223,11 +229,50 @@ discriminate. Both verdicts are about the section, which is exactly what #910 as
 
 Client-side, cached per panel instance:
 
-- The panel's mount effect (`filter-panel.svelte:100-184`) already fires one request. When
+- The panel's mount effect (`filter-panel.svelte:96-181`) already fires one request. When
   `getActiveFilterCount(filters) === 0`, that response **is** the baseline — captured for free.
 - When the panel mounts with filters already applied (a deep link such as `/photos?rating=5`, or
-  restored space filters), one extra `suggestionsProvider(createFilterState())` call fires alongside.
+  restored space filters), the panel calls a **separate** `config.baselineProvider` once, after the
+  first ordinary response has settled.
 - The baseline is held for the component's lifetime.
+
+#### Why `baselineProvider` and not `suggestionsProvider(createFilterState())`
+
+The obvious implementation — reuse the existing provider with an empty filter state — is wrong on
+the three query-mode surfaces, in two independent ways. Both were found by reading
+`loadPhotoSmartFacets` (`photos/…/+page.svelte:224-274`; `spaces/…:239-247` and
+`recently-added/…:210-247` are the same shape):
+
+1. **The requests abort each other.** Each page keeps a _single_ `smartFacetInFlight` slot and calls
+   `smartFacetInFlight?.controller.abort()` whenever the incoming key differs. A filtered mount would
+   issue the current-filters request and the baseline request concurrently under different keys, so
+   one kills the other. Whichever loses falls into the `.catch`, which returns the stale `smartFacets`
+   — `undefined` on a first load — and after §4.6 that becomes a rejection. The panel then has either
+   no `current` or no `baseline`. It fails safe (nothing is wrongly hidden) but #910 is silently dead
+   on every filtered deep link into query mode.
+2. **The baseline response would clobber the page's own state.** On resolve the page assigns
+   `smartFacets = result; smartFacetKey = key`, and `smartFacets` drives `smartFacetBuckets` (the
+   Timeline section) and `smartFacetTotal` (the result count). An unfiltered baseline response landing
+   in that slot makes the timeline and the count show _unfiltered_ data while filters are applied.
+
+Sequencing the two requests fixes (1) but not (2). The panel cannot fix (2) at all, because the
+coupling lives in the page. So the baseline becomes the surface's own decision:
+
+```ts
+baselineProvider?: () => Promise<FilterSuggestionsResponse | undefined>;
+```
+
+- Returning a response sets the baseline.
+- Returning `undefined` means "this surface has no cheap baseline here" — the panel keeps
+  `baseline === undefined` and therefore never hides anything, which is the same fail-safe as a
+  rejection (§6.1).
+- Omitting the field entirely has the same effect, so a surface can adopt the suggestions path
+  without opting into hiding.
+
+The query-mode branches return `undefined` for exactly this reason: a smart-search result set is a
+deliberately narrow scope where an empty facet means "this query has none", which is what greying
+already communicates. Browse-mode branches call their ordinary loader with `createFilterState()`,
+which touches no cache and no page state.
 
 Rejected: a server-side `scopeFacets` block returned with every response. It adds ~8 `EXISTS`
 subqueries to every suggestions request, including the debounced refetch that fires on each filter
@@ -256,6 +301,11 @@ Even a stale baseline fails safe, which is why no `scopeKey` prop is needed. A c
 only **narrow** the scope, so `facet(query) ⊆ facet(browse)`. Hiding requires _both_ the current and
 the baseline facet to be empty; a baseline from a wider scope can therefore only fail to hide, never
 hide wrongly. The same argument covers the `withSharedSpaces` coupling in §4.6.
+
+Note that the `{#key}` invariant is still load-bearing even though query mode returns no baseline:
+without the remount, a baseline captured in browse mode would survive into query mode. That is the
+benign direction by the subset argument above, but the guard in §8.3 stays because the invariant also
+protects `currentSuggestions`, `visibleSections` hydration and the expanded-section state.
 
 ### 4.6 Degenerate inputs that must not read as "structurally empty"
 
@@ -350,9 +400,21 @@ dimension; the album predicate is an `EXISTS` over `album_asset`, cheap per row.
 
 ### 5.4 Ripple
 
-`make sql` to regenerate `server/src/queries/search.repository.sql` — **requires a running database;
-it deletes every query file otherwise** — then `pnpm build`, `pnpm sync:open-api`, and `make open-api`
-for the TypeScript SDK and the Dart client (Java required).
+Regenerate `server/src/queries/search.repository.sql`, then the spec and both clients. **The commands
+CLAUDE.md documents for this no longer exist** — `make sql`, `make open-api` and `pnpm sync:open-api`
+are removed stubs or absent (verified against `Makefile` and `server/package.json`; see
+`feedback_local_verify_command_traps` §2). The real sequence, from the repo root:
+
+```bash
+cd server && pnpm build          # mise sql and sync-open-api both run out of dist/
+mise sql                         # node ./dist/bin/sync-sql.js — needs a running database
+node server/dist/bin/sync-open-api.js
+mise open-api                    # TypeScript SDK + Dart client (Java required)
+```
+
+`mise sql` still **requires a running database and deletes every file in `server/src/queries/`
+without one**. Use the bare `mise sql` form, never `mise run //:sql`: from a worktree the `//:` prefix
+resolves to the **main** checkout (`reference_mise_run_from_worktree_wrong_dir`).
 
 ## 6. Web
 
@@ -420,7 +482,7 @@ The empty-state hint ("all sections hidden — show all") must count only sectio
 
 ### 6.4 Surfaces
 
-Six config/mapper sites forward the three new fields:
+Six config/mapper sites forward the three new fields **and gain a `baselineProvider`** (§4.5):
 
 - `web/src/lib/utils/map-filter-config.ts`
 - `web/src/lib/utils/album-filter-config.ts` (both builders)
@@ -430,7 +492,10 @@ Six config/mapper sites forward the three new fields:
 - `routes/(user)/spaces/[spaceId]/…/+page.svelte` and `routes/(user)/albums/[albumId=id]/…/+page.svelte`
 
 Widening `FilterSuggestionsResponse` (`filter-panel.ts:80-90`) with three required booleans makes
-`tsc` name every site that has not been updated — the compiler is the checklist.
+`tsc` name every site that has not been updated — the compiler is the checklist. It will **not** name
+the missing `baselineProvider`, which is optional by design (§4.5): a surface that forgets it simply
+never hides. That is safe but silent, so slice 4 enumerates the six sites by hand and slice 5's
+per-surface tests assert the baseline call actually happens.
 
 The same slice removes `emptyFilterSuggestions()` from the three query-mode surfaces in favour of a
 rejection, per §4.6. Note that `tsc` will **not** catch this one: the sentinel is a plain object
@@ -457,6 +522,40 @@ facets therefore ignore the not-in-album toggle today. Slice 7 forwards it; with
 albums facet would be computed against the wrong asset set.
 
 Mobile has no `isInAlbum` ("has album") equivalent, so only `hasAssetsNotInAlbum` is consulted there.
+
+**Mobile has the same empty sentinel web is deleting, and it is the same bug.**
+`filter_suggestions.provider.dart` ends with:
+
+```dart
+return response ?? FilterSuggestionsResponseDto(hasUnnamedPeople: false);
+```
+
+That is §4.6's failure sentinel in Dart. Widening the DTO makes this line stop compiling, and the
+tempting fix — adding `hasFavorites: false, hasAssetsInAlbum: false, hasAssetsNotInAlbum: false` — is
+precisely the bug: a null response would then be indistinguishable from an empty library and would
+hide six sections at once. It becomes a `throw` (slice 7 task 1), so the provider surfaces
+`AsyncValue.error` and the gating falls back to "offer everything".
+
+**Mobile gets a baseline too.** An earlier draft gave mobile the simpler rule "hidden when the facet
+is empty", on the grounds that the active-filter guard covered the transient case. It does not: that
+guard only covers a section's _own_ filter, and the case §4.4 rule 1 exists for is **cross-section**
+narrowing. Select a person with no rated photos and `ratings` empties while `rating` holds no filter,
+so the Rating section would vanish from the sheet — the pop-in/pop-out behaviour §2.1 rejected, and a
+web/mobile divergence §2.3 exists to prevent.
+
+Mobile pays almost nothing for parity, because the baseline is the same family provider under a
+different key:
+
+```dart
+final baselineKey = filter.isEmpty ? filter : SearchFilter.empty();
+final baseline = ref.watch(photosFilterSuggestionsProvider(baselineKey));
+```
+
+`SearchFilter` implements value equality (`search_filter.model.dart:362-402`), so when no filter is
+applied `baselineKey == filter` and Riverpod serves the _same_ cached future — zero extra requests in
+the common case, one `autoDispose`-cached request while filters are on. Mobile therefore takes the
+full three-verdict model, minus the grey rendering: it has no `(0)` treatment, so `empty` and
+`available` both render the section normally and only `unavailable` hides it.
 
 **`hidden_sections.provider.dart`** is mobile's user ledger and takes the identical separation rule
 from §6.3. `manage_sections_sheet.widget.dart` iterates `FilterSectionId.values` and must not offer a
@@ -532,9 +631,12 @@ In `web/src/lib/components/filter-panel/__tests__/`:
   response reports it available — the §6.3 regression guard
 - an unavailable section still appears in the stored `known` array, so PR #926's
   "introduced since the ledger" logic cannot mistake it for a new section on the next load
-- the panel mounts with filters active → a second `suggestionsProvider` call with an empty filter
-  state; mounts clean → exactly one call
-- baseline request rejects → no section is hidden
+- the panel mounts with filters active → exactly one `baselineProvider` call, and **no** second
+  `suggestionsProvider` call; mounts clean → neither fires
+- `baselineProvider` rejects, resolves `undefined`, or is absent → no section is hidden, in all three
+  cases, and with a filter active on a _different_ section so the §4.4 rule-1 guard cannot mask it
+- Timeline renders `(0)`, collapsed and disabled while `timeBuckets` is empty, and re-expands when
+  buckets arrive — the state every query-mode surface passes through before its first facet response
 - **a later `suggestionsProvider` rejection leaves the previous facets and baseline in place** — the
   §4.6 sentinel guard, at panel level
 - `showAllSections` and the empty-state hint count only available sections
@@ -545,7 +647,8 @@ In `web/src/lib/components/filter-panel/__tests__/`:
 At surface level, one test per query-mode page (photos, spaces, recently-added) that a failing
 `searchSmartFacets` makes `suggestionsProvider` **reject** rather than resolve with empty arrays
 (§4.6). These fail against today's `emptyFilterSuggestions()` and are what makes slice 4 TDD rather
-than a refactor.
+than a refactor. Plus, per surface, one test that `baselineProvider` returns `undefined` in query mode
+and a real response in browse mode — the §4.5 guard against re-introducing the cache collision.
 
 A guard for the `{#key}` invariant in §4.5: one test per surface that changing the committed query (or
 album/space id) mounts a fresh panel — asserted by the panel re-issuing its baseline request. Without
@@ -557,18 +660,44 @@ response matches the runtime shape.
 
 ### 8.4 e2e
 
-Both suites click controls that will now be gated:
+**Five suites are affected, not two.** Every suite that asserts a filter section is visible, or clicks
+a control inside one, is now seed-dependent. Enumerated by
+`grep -rln "filter-section-\|media-type-\|rating-star-\|section-toggle-" e2e/src`:
 
-- `photos-filter-panel.e2e-spec.ts` already rates an asset (`:28`) so Rating stays available, but
-  seeds **only images** — the Media section becomes unavailable and the `media-type-image` click at
-  `:78` fails.
-- `spaces-filter-panel.e2e-spec.ts` asserts `filter-section-rating` and `filter-section-media` are
-  visible (`:95-96`) and clicks `rating-star-N` / `media-type-*` ~25 times.
+| Suite                                        | Seeds today               | Breaks                                                                                     |
+| -------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------ |
+| `web/photos-filter-panel.e2e-spec.ts`        | 3 plain images, 1 rating  | `:63` asserts 7 sections → **5 fail**; `:78` media click                                   |
+| `web/spaces-filter-panel.e2e-spec.ts`        | 4 plain images            | `:82` asserts 7 sections → **6 fail**; ~25 control clicks                                  |
+| `web/recently-added-filters.e2e-spec.ts`     | images + videos + ratings | `:130` asserts **all ten** → **6 fail**                                                    |
+| `web/map-filter-panel.e2e-spec.ts`           | **nothing at all**        | `:41` favorites, `:46` location                                                            |
+| `rebase-smoke/permission-matrix.e2e-spec.ts` | GPS asset + tag           | `:220` waits for camera unconditionally, but `:237` already guards on `make` being present |
 
-Fix the seed data, not the feature. `recently-added-filters.e2e-spec.ts:102-110` shows the existing
-pattern: `utils.createAsset(token, { assetData: { filename: 'example-0.mp4' } })` — random image bytes
-with an `.mp4` name, typed from the extension. Add a video and, where absent, a rating, a favourite
-and an album membership to each suite's `beforeAll`.
+Fix the seed data, not the feature — with one documented exception below. The seeding recipes, all
+verified against `e2e/test-assets` and `e2e/src/utils.ts`:
+
+| Section   | Seed                                                                                                                                                                        |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| media     | `utils.createAsset(token, { assetData: { filename: 'x.mp4' } })` — random bytes, typed from the extension (`recently-added-filters.e2e-spec.ts:102-110`)                    |
+| rating    | `updateAsset({ id, updateAssetDto: { rating: 5 } }, …)`                                                                                                                     |
+| favorites | `updateAsset({ id, updateAssetDto: { isFavorite: true } }, …)`                                                                                                              |
+| albums    | an album containing **some but not all** seeded assets                                                                                                                      |
+| location  | upload `${testAssetDir}/metadata/gps-position/thompson-springs.jpg`, then `waitForQueueFinish(token, 'metadataExtraction')`                                                 |
+| camera    | upload a fixture that carries an EXIF `Make` — `metadata/rating/mongolels.jpg` or `metadata/tags/picasa.jpg` (both Canon); **`thompson-springs.jpg` has GPS but no `Make`** |
+| tags      | `utils.upsertTags(token, ['x'])` then `utils.tagAssets(token, tagId, [assetId])`                                                                                            |
+| people    | **not seedable** — see below                                                                                                                                                |
+
+**The People carve-out.** A People facet requires a _face_, and face detection needs the ML stack that
+the web e2e project does not run. `utils.createPerson` makes a person row with no face, which
+`getFilteredPeople` (`search.repository.ts:1502`) will not return — `utils.ts:989-991` already
+documents this for the command palette ("a bare API-created person won't surface in search results").
+There is no seed that keeps People available in these suites.
+
+So for `people` only, the assertion changes rather than the seed: the three suites that list `people`
+among "all sections" drop it from the list and instead assert `filter-section-people` is **absent**,
+with a comment naming this paragraph. That is not weakening an assertion to accommodate the feature —
+a library with no detected faces genuinely cannot filter by person, so asserting its absence is
+positive #910 coverage. Any suite that later runs with ML can seed a face chain
+(`feedback_e2e_space_person_face_chain`) and flip the assertion back.
 
 New e2e coverage: a library with no videos does not render `filter-section-media`; favouriting an
 asset makes `filter-section-favorites` appear on reload.
@@ -583,25 +712,36 @@ and `dart format` as separate gates:
   always render
 - availability is never written to `hiddenSectionsProvider`
 - `photosFilterSuggestionsProvider` forwards `isNotInAlbum`
+- a facet emptied by a **cross-section** filter keeps its section rendered, because the baseline still
+  has it — the §7 parity guard, and the test that fails if the baseline watch is dropped
+- `SearchFilter.empty()` is not re-requested when the current filter is already empty (one provider
+  key, not two)
+- a null API response makes the provider **error** rather than resolve with an all-false DTO, and the
+  sheet then renders every section
 
 ## 9. Slices
 
 Each row names the test that must fail first, so the slice cannot be started implementation-first.
 
-| #   | Slice                                                                                     | First failing test                                                                | Gate                             |
-| --- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------- |
-| 1   | Server facets, DTOs, `SmartFacetExclude`, candidate-query move, `make sql`                | medium: `hasFavorites` on a library with one favourite (§8.1)                     | server unit + medium             |
-| 2   | OpenAPI regen — TypeScript SDK + Dart client                                              | none — generated output, covered by slice 1 and 4                                 | build                            |
-| 3   | `filter-availability.ts` + its tests, no wiring                                           | the §4.3 table, driven as data (§8.2)                                             | web unit                         |
-| 4   | Widen `FilterSuggestionsResponse`; six configs/mappers; delete `emptyFilterSuggestions()` | per-surface: a failing facet fetch **rejects** rather than resolving empty (§8.3) | web unit + `check:typescript`    |
-| 5   | Panel wiring: capture facets, baseline capture, section gating, ledger separation         | an unavailable section renders neither its body nor its toggle icon (§8.3)        | web unit + `check:svelte` + lint |
-| 6   | e2e seed and assertion updates                                                            | a library with no videos does not render `filter-section-media`                   | e2e web                          |
-| 7   | Mobile: `isNotInAlbum` forwarding, section and toggle gating, manage-sections sheet       | provider forwards `isNotInAlbum` (§8.5)                                           | flutter test, analyze, format    |
-| 8   | Docs                                                                                      | none                                                                              | docs prettier                    |
+| #   | Slice                                                                                                         | First failing test                                                                | Gate                             |
+| --- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------- |
+| 1   | Server facets, DTOs, `SmartFacetExclude`, candidate-query move, `mise sql`                                    | medium: `hasFavorites` on a library with one favourite (§8.1)                     | server unit + medium             |
+| 2   | OpenAPI regen — TypeScript SDK + Dart client                                                                  | none — generated output, covered by slice 1 and 4                                 | build                            |
+| 3   | `filter-availability.ts` + its tests, no wiring                                                               | the §4.3 table, driven as data (§8.2)                                             | web unit                         |
+| 4   | Widen `FilterSuggestionsResponse`; six configs/mappers; `baselineProvider`; delete `emptyFilterSuggestions()` | per-surface: a failing facet fetch **rejects** rather than resolving empty (§8.3) | web unit + `check:typescript`    |
+| 5   | Panel wiring: capture facets, baseline capture, section gating, ledger separation                             | an unavailable section renders neither its body nor its toggle icon (§8.3)        | web unit + `check:svelte` + lint |
+| 6   | e2e seed and assertion updates                                                                                | a library with no videos does not render `filter-section-media`                   | e2e web                          |
+| 7   | Mobile: `isNotInAlbum` forwarding, section and toggle gating, manage-sections sheet                           | provider forwards `isNotInAlbum` (§8.5)                                           | flutter test, analyze, format    |
+| 8   | Docs                                                                                                          | none                                                                              | docs prettier                    |
 
 Slice 4 precedes slice 5 because widening the response type breaks every config until they are
 updated; `tsc` then enumerates the work. It also carries the §4.6 sentinel removal, which slice 5's
 gating depends on for safety — slice 5 must not land without it.
+
+**The slice order is strict, including 2 before 3.** Slice 3 knowingly leaves `check:typescript` red
+until slice 4 repairs it, and slice 2's gate asserts that a clean `check:typescript` proves the
+generated SDK is well-formed. Running 3 first invalidates that gate. Slice 3's "depends on: nothing at
+runtime" refers to its imports, not to its position.
 
 ## 10. Sequencing and risks
 
@@ -615,8 +755,21 @@ GPS, no tags, no albums and no favourites will show Timeline, People (unnamed hi
 only. This is the intended behaviour per §2.2 — the hidden sections genuinely cannot filter anything —
 but it is a visible change for new users and should be called out in the PR description.
 
-**Risk: one extra request on filtered mount.** Deep links carrying filters pay one additional
-suggestions request. Measured against the alternative in §4.5, this is the cheaper side.
+**Risk: one extra request on filtered mount.** Browse-mode deep links carrying filters pay one
+additional suggestions request. Query mode pays none (§4.5 returns no baseline there). Measured
+against the server-side alternative in §4.5, this is the cheaper side.
+
+**Risk: Timeline greys during smart-search loading.** `timeBuckets` is `[]` until the first facet
+response lands, so on query-mode surfaces the Timeline section renders `(0)`, collapsed and disabled
+for the duration of every committed query. `filter-section.svelte:21` derives `isOpen` rather than
+storing it, so it re-expands on its own — but it is a visible flicker on the hot path that did not
+exist before, because the suggestions path previously passed no count for `timeline` at all. Called
+out in the PR description; §8.3 locks the re-expansion.
+
+**Risk: the e2e People carve-out is permanent until ML runs in e2e.** §8.4 replaces three
+"all sections are visible" assertions with "People is absent". If the web e2e project ever gains face
+detection, those assertions become wrong in the other direction and will fail loudly, which is the
+intended outcome.
 
 **Non-goal: the Text section.** Description, filename and OCR are free text with no enumerable
 domain. Gating them would need `hasDescription` / `hasOcrText` probes over columns not indexed for

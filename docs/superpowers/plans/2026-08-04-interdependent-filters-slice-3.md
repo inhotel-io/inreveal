@@ -12,18 +12,21 @@ the rules are testable as data and the panel wiring in slice 5 stays mechanical.
 
 **Tech Stack:** TypeScript, Vitest.
 
-- **Spec:** `docs/superpowers/specs/2026-08-04-interdependent-filter-sections-910-design.md` §4.1, §4.3, §4.4, §6.1
+- **Spec:** `docs/superpowers/specs/2026-08-04-interdependent-filter-sections-910-design.md` §4.1, §4.3, §4.4, §4.5, §6.1
 - **Branch:** `fix/910-interdependent-filter-sections`
-- **Depends on:** nothing at runtime. It types against `FilterSuggestionsResponse`, which slice 4 widens —
-  see Task 1 Step 3 for how to avoid blocking on that.
+- **Depends on:** nothing at runtime — but **run it after slice 2**. This slice deliberately leaves
+  `check:typescript` red until slice 4, and slice 2's gate reads a clean `check:typescript` as proof the
+  generated SDK is well-formed. Running 3 first destroys that signal.
 - **Scope:** one new web source file, one new web test file. Nothing else.
 
 ## Global Constraints
 
 - Web uses Svelte 5 runes in new code, but this module is plain TypeScript — no runes, no `$state`.
 - Prettier: 120-char lines, single quotes, trailing commas, semicolons. `eslint --max-warnings 0`.
-- Web unit tests: `cd web && pnpm test -- --run <path>`. Per `feedback_local_verify_command_traps`, the
-  `--run` flag must come **before** the path or vitest silently ignores the filter.
+- Web unit tests: `cd web && pnpm test --run <path>`. Per `feedback_local_verify_command_traps` §1 the
+  trap is the **`--` separator**, not the flag order: `pnpm test -- --run <path>` passes the literal
+  `--` through, vitest drops the path filter, and all ~300 web spec files run (~60s) while looking like
+  a scoped run. Check the reported file count before trusting a red or a green.
 - Per `feedback_web_vitest_no_clearmocks`, mock history leaks across a file. This module has no mocks, so
   it does not apply here — but do not add any.
 
@@ -124,8 +127,26 @@ describe('getSectionAvailability', () => {
       expect(getSectionAvailability('media', input({ current: single, baseline: single }))).toBe('unavailable');
     });
 
-    it('treats two media types as usable', () => {
+    it('treats photos plus videos as usable', () => {
       expect(getSectionAvailability('media', input())).toBe('available');
+    });
+
+    // `getFilteredMediaTypes` returns raw `distinct asset.type`, and AssetType is
+    // IMAGE | VIDEO | AUDIO | OTHER. A length>=2 rule would call this section usable while the
+    // Videos button is still dead — the exact thing #910 exists to stop.
+    it.each([['OTHER'], ['AUDIO']])('does not count %s towards a usable media section', (other) => {
+      const noVideo = { ...full(), mediaTypes: ['IMAGE', other] };
+      expect(getSectionAvailability('media', input({ current: noVideo, baseline: noVideo }))).toBe('unavailable');
+    });
+
+    it('keeps media usable when an extra type accompanies both photos and videos', () => {
+      const extra = { ...full(), mediaTypes: ['IMAGE', 'OTHER', 'VIDEO'] };
+      expect(getSectionAvailability('media', input({ current: extra, baseline: extra }))).toBe('available');
+    });
+
+    it('treats videos-only as unusable, mirroring photos-only', () => {
+      const single = { ...full(), mediaTypes: ['VIDEO'] };
+      expect(getSectionAvailability('media', input({ current: single, baseline: single }))).toBe('unavailable');
     });
 
     it('keeps people available when unnamed faces exist', () => {
@@ -187,6 +208,13 @@ describe('getSectionAvailability', () => {
       const state = input({ current: barren(), baseline: barren(), timeBucketCount: 0 });
       expect(getSectionAvailability('text', state)).toBe('available');
     });
+
+    // The `default:` branch of isSectionEmpty. A section added to FilterSection in future must
+    // default to visible, not silently vanish because nobody wrote it a rule.
+    it('reports an unrecognised section available rather than hiding it', () => {
+      const state = input({ current: barren(), baseline: barren() });
+      expect(getSectionAvailability('newcomer' as FilterSection, state)).toBe('available');
+    });
   });
 });
 ```
@@ -194,7 +222,7 @@ describe('getSectionAvailability', () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/filter-availability.spec.ts
+cd web && pnpm test --run src/lib/components/filter-panel/__tests__/filter-availability.spec.ts
 ```
 
 Expected: FAIL — `Failed to resolve import "../filter-availability"`.
@@ -226,6 +254,32 @@ export interface FilterSuggestionsResponse {
 This breaks `check:typescript` for every surface config until slice 4 lands, which is expected and is why
 slice 4 immediately follows. Do not add optional markers (`?`) to dodge it — optional fields would let a
 surface silently forget to forward one, and `undefined` would then read as "structurally empty".
+
+Add the baseline hook to `FilterPanelConfig` in the same edit (spec §4.5). Slice 4 wires the six
+surfaces to it and slice 5 consumes it; declaring it here keeps all the type churn in one commit:
+
+```ts
+export interface FilterPanelConfig {
+  sections: FilterSection[];
+  suggestionsProvider?: (filters: FilterState) => Promise<FilterSuggestionsResponse>;
+  /**
+   * Facets for this surface's scope with no filters applied (#910). The panel only calls this when it
+   * mounts with filters already active — otherwise the ordinary response is already the baseline.
+   *
+   * Resolving `undefined` means "no cheap baseline here", and the panel then never hides a section.
+   * The three query-mode surfaces return `undefined` deliberately: their `smartFacetInFlight` slot is
+   * single-entry and their `smartFacets` state feeds the timeline and the result count, so a second
+   * concurrent facet request would abort the first and then overwrite the page's own data. See spec
+   * §4.5 — this hook exists because `suggestionsProvider(createFilterState())` cannot be used.
+   */
+  baselineProvider?: () => Promise<FilterSuggestionsResponse | undefined>;
+  providers?: {/* unchanged */};
+}
+```
+
+Optional on purpose, and it is the one field `tsc` will **not** chase for you: a surface that omits it
+just never hides anything. That is the safe direction, but it is silent, so slice 4 enumerates the six
+sites by hand and slice 5 asserts per surface that the call happens.
 
 - [ ] **Step 4: Write the module**
 
@@ -278,8 +332,13 @@ function isSectionEmpty(section: FilterSection, facets: FilterSuggestionsRespons
       return facets.ratings.length === 0;
     }
     case 'media': {
-      // One media type means "Photos" (or "Videos") is a synonym for "All" and the other is empty.
-      return facets.mediaTypes.length < 2;
+      // The control offers All / Photos / Videos, so it needs both of those types to discriminate:
+      // with only images, "Photos" is a synonym for "All" and "Videos" is empty.
+      //
+      // NOT `mediaTypes.length < 2`. getFilteredMediaTypes returns raw `distinct asset.type` and
+      // AssetType is IMAGE | VIDEO | AUDIO | OTHER (enum.ts:38), so a photo library holding one
+      // OTHER asset would pass a length test with a dead Videos button.
+      return !(facets.mediaTypes.includes('IMAGE') && facets.mediaTypes.includes('VIDEO'));
     }
     case 'favorites': {
       return !facets.hasFavorites;
@@ -329,10 +388,11 @@ export function getSectionAvailability(section: FilterSection, input: Availabili
 - [ ] **Step 5: Run the tests to verify they pass**
 
 ```bash
-cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/filter-availability.spec.ts
+cd web && pnpm test --run src/lib/components/filter-panel/__tests__/filter-availability.spec.ts
 ```
 
-Expected: PASS. The `it.each(GATED)` blocks give 8 cases each, so the count should be well above 30.
+Expected: PASS. The `it.each(GATED)` blocks give 8 cases each, so the count should be well above 40.
+Check the reported **file** count is 1 — if it is ~300 you hit the `--` trap from Global Constraints.
 
 - [ ] **Step 6: Lint and format**
 
@@ -356,7 +416,7 @@ git commit -m "feat(web): add the filter-section availability rules (#910)"
 
 ## Done when
 
-- `pnpm test -- --run src/lib/components/filter-panel/__tests__/filter-availability.spec.ts` is green.
+- `pnpm test --run src/lib/components/filter-panel/__tests__/filter-availability.spec.ts` is green.
 - `pnpm lint` and `pnpm format` are green.
 - `check:typescript` is knowingly red on the surface configs, and only there. Confirm with
   `pnpm check:typescript 2>&1 | grep -c "filter-availability"` returning `0` — no error may point at the

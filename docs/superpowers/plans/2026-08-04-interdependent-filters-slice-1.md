@@ -23,8 +23,19 @@ moved out of the candidate temp table first, so it can be excluded per facet the
 
 - Server imports use the `src/` path alias. Relative imports are a lint error.
 - Prettier: 120-char lines, single quotes, trailing commas, semicolons. `eslint --max-warnings 0`.
-- `make sql` **requires a running database**. Without one it deletes every file in
-  `server/src/queries/`. Start the dev stack (`make dev`) or a Postgres container first.
+- **Do not insert a `--` before `--run`.** Per `feedback_local_verify_command_traps` §1, this pnpm
+  passes the literal `--` through and vitest then **drops the path filter and runs the whole suite** —
+  verified, not theoretical. The `-t` name filter is unreliable the same way. Every command in this
+  plan is `pnpm test:medium --run <path>`; keep it that way, and sanity-check the reported file count
+  against what you asked for before believing a red or a green.
+- **`make sql`, `make lint-server` and `make format-server` do not work.** `make sql` is a removed
+  stub that prints "use mise sql" and exits 1; the `lint-server` / `format-server` targets do not
+  exist in the `Makefile` at all (CLAUDE.md is stale — `feedback_local_verify_command_traps` §2).
+  Use `mise sql` and `cd server && pnpm lint` / `pnpm format`.
+- `mise sql` **requires a running database**. Without one it deletes every file in
+  `server/src/queries/`. Start the dev stack (`mise dev`) or a Postgres container first. Use the bare
+  `mise sql`, never `mise run //:sql` — from a worktree the `//:` prefix targets the **main** checkout
+  (`reference_mise_run_from_worktree_wrong_dir`).
 - Medium tests need the dev prerequisites from `reference_fresh_worktree_medium_test_prereqs`:
   `mise run plugins` (sdk + plugin-sdk + plugin-core) before `pnpm test:medium`.
 - Do not touch `server/src/schema/` — no migration is involved.
@@ -118,7 +129,7 @@ describe('hasFavorites (#910)', () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts -t 'hasFavorites'
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts -t 'hasFavorites'
 ```
 
 Expected: FAIL — `expected undefined to be false`. `hasFavorites` is not on the result yet.
@@ -203,7 +214,7 @@ them until slice 4.
 - [ ] **Step 6: Run the tests to verify they pass**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts -t 'hasFavorites'
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts -t 'hasFavorites'
 ```
 
 Expected: PASS, 4 tests.
@@ -325,7 +336,7 @@ describe('album membership (#910)', () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts -t 'album membership'
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts -t 'album membership'
 ```
 
 Expected: FAIL — every `hasAssetsInAlbum` assertion gets `false` from Task 1's placeholder, so the
@@ -390,7 +401,7 @@ return {
 - [ ] **Step 5: Run the tests to verify they pass**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts -t 'album membership'
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts -t 'album membership'
 ```
 
 Expected: PASS, 6 tests.
@@ -441,7 +452,7 @@ it('computes hasFavorites ignoring its own isFavorite filter (#910)', async () =
 - [ ] **Step 2: Run it to verify it fails**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts -t 'hasFavorites ignoring'
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts -t 'hasFavorites ignoring'
 ```
 
 Expected: FAIL — `hasFavorites` is not on `SmartSearchFacetsResult` yet.
@@ -506,7 +517,7 @@ query runs inside one transaction against the same temp table.
 - [ ] **Step 6: Run the test to verify it passes**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts -t 'getSmartSearchFacets'
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts -t 'getSmartSearchFacets'
 ```
 
 Expected: PASS — the new test plus every pre-existing `getSmartSearchFacets` test.
@@ -584,7 +595,7 @@ it('still applies isNotInAlbum to the non-album facets (#910)', async () => {
 - [ ] **Step 2: Run them to verify they fail**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts -t 'isNotInAlbum'
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts -t 'isNotInAlbum'
 ```
 
 Expected: FAIL — the first on `hasAssetsInAlbum` being the `false` placeholder from Task 3. The second
@@ -676,7 +687,7 @@ return object.
 - [ ] **Step 6: Run the full repository suite**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts
 ```
 
 Expected: PASS. Pay attention to the pre-existing `getSmartSearchFacets` tests — moving a predicate out of
@@ -692,16 +703,17 @@ git commit -m "feat(server): add album-membership smart-search facets (#910)"
 
 ---
 
-## Task 5: Degenerate-input coverage
+## Task 5: Degenerate-input and scope coverage
 
 **Files:**
 
 - Test only: `server/test/medium/specs/repositories/search.repository.spec.ts`
 
-Spec §4.6. No source change is expected — if either test fails, stop and report rather than "fixing" it,
-because it means the client-side reasoning in the spec is wrong.
+Spec §4.6 and the last two rows of §8.1. No source change is expected in this task — if any test here
+fails, stop and report rather than "fixing" it, because it means the client-side reasoning in the spec
+is wrong.
 
-- [ ] **Step 1: Write the tests**
+- [ ] **Step 1: Write the `forceEmptyResult` test**
 
 ```ts
 it('reports every #910 facet false under forceEmptyResult', async () => {
@@ -717,20 +729,84 @@ it('reports every #910 facet false under forceEmptyResult', async () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm they pass without source changes**
+- [ ] **Step 2: Write the `withSharedSpaces` scope test**
+
+Spec §8.1's last row, and the one that pins §4.6's third degenerate input. The whole client-side
+argument that a scope mismatch "can only grey, never wrongly hide" rests on the baseline seeing a
+**wider** set than the favourites-filtered current — this is what proves the server side of that.
+
+Copy the space fixture shape from the existing test at `:382` (`newSharedSpace` /
+`newSharedSpaceMember` / `newSharedSpaceAsset`); `SharedSpaceRepository` is already in `setup()`'s
+`real` list.
+
+```ts
+it('sees a shared-space favourite only with timelineSpaceIds (#910)', async () => {
+  const { ctx, sut } = setup();
+  const { user: owner } = await ctx.newUser();
+  const { user: member } = await ctx.newUser();
+  const { asset } = await ctx.newAsset({ ownerId: owner.id, isFavorite: true });
+
+  const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+  await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+  await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: asset.id, addedById: owner.id });
+
+  // The member owns nothing. Without the space in scope the favourite is invisible to them...
+  const ownScope = await sut.getFilterSuggestions([member.id], {});
+  expect(ownScope.hasFavorites).toBe(false);
+
+  // ...and with it, it is. The two scopes disagree, which is exactly what §4.6 documents:
+  // the photos page drops withSharedSpaces when isFavorite is set, so `current` is narrower
+  // than `baseline`. Subset, so it can only grey — never wrongly hide.
+  const spaceScope = await sut.getFilterSuggestions([member.id], { timelineSpaceIds: [space.id] });
+  expect(spaceScope.hasFavorites).toBe(true);
+});
+```
+
+- [ ] **Step 3: Write the smart-path verdict tests**
+
+§8.1's "smart-search path, each of the above" row. Tasks 3 and 4 only covered the two _exclusion_
+cases; the ordinary verdicts on the smart path are still unpinned, and they run through a completely
+different query builder (`buildSmartFacetFilteredAssetIds` over the temp table, not
+`buildFilteredAssetIds`). Mirror Task 1's and Task 2's cases with `addEmbedding` + `matchingEmbedding`:
+
+```ts
+it('reports no favourites and mixed album membership on the smart path (#910)', async () => {
+  const { ctx, sut } = setup();
+  const { user } = await ctx.newUser();
+  const { asset: filed } = await ctx.newAsset({ ownerId: user.id });
+  await addEmbedding(defaultDatabase, filed.id);
+  const { asset: unfiled } = await ctx.newAsset({ ownerId: user.id });
+  await addEmbedding(defaultDatabase, unfiled.id);
+  const { album } = await ctx.newAlbum({ ownerId: user.id });
+  await ctx.newAlbumAsset({ albumId: album.id, assetId: filed.id });
+
+  const result = await sut.getSmartSearchFacets({ userIds: [user.id], embedding: matchingEmbedding });
+
+  expect(result.hasFavorites).toBe(false);
+  expect(result.hasAssetsInAlbum).toBe(true);
+  expect(result.hasAssetsNotInAlbum).toBe(true);
+});
+```
+
+Add the two single-sided album cases (everything filed → `hasAssetsNotInAlbum` false; nothing filed →
+`hasAssetsInAlbum` false) the same way, plus one favourite present → `hasFavorites` true.
+
+- [ ] **Step 4: Run and confirm they pass without source changes**
 
 ```bash
-cd server && pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts -t 'forceEmptyResult'
+cd server && pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts
 ```
 
 Expected: PASS. `buildFilteredAssetIds` already honours `forceEmptyResult` at `:1402`, so the probes
-inherit it.
+inherit it; the space scoping is `applySuggestionScope`'s existing behaviour; and Tasks 3–4 already
+built the smart-path probes.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add server/test/medium/specs/repositories/search.repository.spec.ts
-git commit -m "test(server): lock forceEmptyResult behaviour for the #910 facets"
+git commit -m "test(server): lock degenerate-input and scope behaviour for the #910 facets"
 ```
 
 ---
@@ -767,40 +843,56 @@ Add the same three lines to `SmartSearchFacetsResponseSchema` (`:260`), after `h
 
 - [ ] **Step 2: Update the SQL-generation hints**
 
-`sortQueries` at `:1245` lists the leading fragment of each generated query so `make sql` orders them
-deterministically. Run `make sql` first (Step 4), read the new fragments out of the generated file, then
-add them here and re-run. Do not guess the strings.
+`sortQueries` at `:1245` lists the leading fragment of each generated query so `mise sql` orders them
+deterministically. **This step is a loop, not a line:** run Step 4 first, read the new fragments out of
+the generated file, come back here and add them, then run Step 4 again. Do not guess the strings.
+
+The three probes add four queries, not three — `getFilteredAlbumMembership` issues two.
 
 - [ ] **Step 3: Update unit-test fixtures**
 
-`search.service.spec.ts:1218`, `:1866`, `:1880`, `:1966` and `search.controller.spec.ts:175`, `:474`,
-`:489`, `:543` build literal facet objects. Add
-`hasFavorites: false, hasAssetsInAlbum: false, hasAssetsNotInAlbum: false` to each, except where the
-surrounding test is about a populated library — match the neighbouring `ratings` / `mediaTypes` values.
+**Do not work from a hand-written list — let `tsc` enumerate them.** An earlier draft of this plan
+named four sites in `search.service.spec.ts`; there are eleven `hasUnnamedPeople` literals in that file
+alone (`:30, 1220, 1868, 1882, 1886, 1915, 1968, 2068, 2101, 2126, 2151`) plus four in
+`search.controller.spec.ts` (`:177, 476, 491, 545`). Only the ones typed as `FilterSuggestionsResult` /
+`SmartSearchFacetsResult` need the fields, and the compiler knows which:
 
 ```bash
-cd server && pnpm test -- --run src/services/search.service.spec.ts src/controllers/search.controller.spec.ts
+cd server && pnpm check 2>&1 | grep -E "hasFavorites|hasAssetsInAlbum|hasAssetsNotInAlbum"
+```
+
+Add `hasFavorites: false, hasAssetsInAlbum: false, hasAssetsNotInAlbum: false` to each site it names,
+except where the surrounding test is about a populated library — there, match the neighbouring
+`ratings` / `mediaTypes` values.
+
+```bash
+cd server && pnpm test --run src/services/search.service.spec.ts src/controllers/search.controller.spec.ts
 ```
 
 Expected: PASS.
 
 - [ ] **Step 4: Regenerate the SQL**
 
-Start a database first — `make dev` in another terminal, or any Postgres the server config points at.
-**`make sql` against no database deletes every file in `server/src/queries/`.**
+Start a database first — `mise dev` in another terminal, or any Postgres the server config points at.
+**`mise sql` against no database deletes every file in `server/src/queries/`.** It also runs out of
+`dist/`, so the server must be built first.
 
 ```bash
-make sql
+cd server && pnpm build
+mise sql
 git diff --stat server/src/queries/
 ```
 
-Expected: `search.repository.sql` changed, nothing deleted. If the diff shows deletions, `git checkout --
-server/src/queries/` and start a database.
+Expected: `search.repository.sql` changed, nothing deleted. If the diff shows deletions,
+`git checkout -- server/src/queries/` and start a database.
 
 - [ ] **Step 5: Full server gate**
 
+`make lint-server` and `make format-server` do not exist — they are not stubs, there is simply no such
+target (`feedback_local_verify_command_traps` §2).
+
 ```bash
-cd server && pnpm test -- --run && pnpm check && make lint-server && make format-server
+cd server && pnpm test --run && pnpm check && pnpm lint && pnpm format
 ```
 
 - [ ] **Step 6: Commit**
@@ -814,8 +906,11 @@ git commit -m "feat(server): expose favourites and album-membership facets in th
 
 ## Done when
 
-- `pnpm test:medium -- --run test/medium/specs/repositories/search.repository.spec.ts` is green, including
-  every pre-existing test.
-- `pnpm test`, `pnpm check`, `make lint-server`, `make format-server` are green.
-- `server/src/queries/search.repository.sql` contains the three new probe queries and nothing was deleted.
+- `pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts` is green, including
+  every pre-existing test — and the reported file count is 1, not the whole suite (Global Constraints).
+- `pnpm test --run`, `pnpm check`, `pnpm lint`, `pnpm format` are green from `server/`.
+- `server/src/queries/search.repository.sql` contains the four new probe queries (album membership is
+  two) and nothing was deleted.
+- Every row of spec §8.1 has a test. The two easiest to skip are `withSharedSpaces` and the
+  smart-path verdicts — both are Task 5.
 - No web, mobile, or `open-api/` file is touched — those are slices 2 and 4.

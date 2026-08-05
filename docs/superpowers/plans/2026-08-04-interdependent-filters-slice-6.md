@@ -27,125 +27,177 @@ must seed enough variety for that section to be available; the feature itself is
 - Per `feedback_e2e_waitforqueuefinish_false_done`, `waitForQueueFinish` returns "done" while the queue is
   merely momentarily empty. Rating and EXIF assertions must poll rather than trust it.
 
+- **Five suites are affected, not two.** An earlier draft of this plan named only the photos and spaces
+  suites and mis-stated their failures as one assertion each. The real list, from
+  `grep -rln "filter-section-\|media-type-\|rating-star-\|section-toggle-" e2e/src`, is in Task 0.
+
 ## File Structure
 
-| File                                                | Responsibility                         |
-| --------------------------------------------------- | -------------------------------------- |
-| `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts` | seed a video; new hide coverage        |
-| `e2e/src/specs/web/spaces-filter-panel.e2e-spec.ts` | seed a video, a favourite and an album |
+| File                                                       | Responsibility                                    |
+| ---------------------------------------------------------- | ------------------------------------------------- |
+| `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts`        | seed variety; People carve-out; new hide coverage |
+| `e2e/src/specs/web/spaces-filter-panel.e2e-spec.ts`        | seed variety; People carve-out                    |
+| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts`     | seed variety; People carve-out                    |
+| `e2e/src/specs/web/map-filter-panel.e2e-spec.ts`           | seeds **nothing** today — needs a fixture         |
+| `e2e/src/specs/rebase-smoke/permission-matrix.e2e-spec.ts` | one unconditional wait becomes conditional        |
+
+### The seeding recipes
+
+Verified against `e2e/test-assets` and `e2e/src/utils.ts`. Every section except People can be seeded.
+
+| Section   | Seed                                                                                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| media     | `utils.createAsset(token, { assetData: { filename: 'x.mp4' } })` — random bytes, typed from the extension (`recently-added-filters.e2e-spec.ts:102-110`)                             |
+| rating    | `updateAsset({ id, updateAssetDto: { rating: 5 } }, { headers: asBearerAuth(token) })`                                                                                               |
+| favorites | `updateAsset({ id, updateAssetDto: { isFavorite: true } }, …)`                                                                                                                       |
+| albums    | an album containing **some but not all** seeded assets — both booleans must be true                                                                                                  |
+| location  | upload `${testAssetDir}/metadata/gps-position/thompson-springs.jpg`, then `await utils.waitForQueueFinish(token, 'metadataExtraction')`                                              |
+| camera    | upload `${testAssetDir}/metadata/rating/mongolels.jpg` (EXIF `Make: Canon`). **`thompson-springs.jpg` has GPS but no `Make`** — confirmed with exiftool, so it does not cover Camera |
+| tags      | `const [tag] = await utils.upsertTags(token, ['e2e-tag']); await utils.tagAssets(token, tag.id, [assetId]);`                                                                         |
+| people    | **impossible here — see below**                                                                                                                                                      |
+
+`waitForQueueFinish` reports "done" while the queue is merely momentarily empty
+(`feedback_e2e_waitforqueuefinish_false_done`), so assert EXIF-derived sections with `expect.poll` or a
+Playwright web-first assertion rather than treating the drain as a barrier.
+
+### The People carve-out
+
+A People facet needs a **face**, and face detection needs the ML stack the web e2e project does not
+run. `utils.createPerson` makes a person row with no face, which `getFilteredPeople`
+(`search.repository.ts:1502`) will not return — `e2e/src/utils.ts:989-991` already documents this for
+the command palette ("a bare API-created person won't surface in search results"). There is no seed that
+keeps the People section available in these suites.
+
+So for `people` **only**, the assertion changes rather than the seed: drop it from the "all sections"
+lists and assert `filter-section-people` is **absent**, with a comment pointing here. This is not
+weakening an assertion to accommodate the feature — a library with no detected faces genuinely cannot
+filter by person, so asserting its absence is positive #910 coverage. If the suite ever runs with ML,
+seed a face chain (`feedback_e2e_space_person_face_chain`) and flip the assertion back; it will fail
+loudly rather than silently, which is the point.
 
 ---
 
-## Task 1: Seed the photos suite so its sections stay available
+## Task 0: Establish the real failure list before changing anything
 
-**Files:**
+**Files:** none — this is a measurement step.
 
-- Modify: `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts:14-29` (`beforeAll`)
-
-The suite creates three assets, all images (`utils.createAsset` defaults to `makeRandomImage()` named
-`example.png`), and rates one. Rating therefore stays available; **Media does not** — `mediaTypes` is
-`['IMAGE']`, which is `< 2`. The `media-type-image` click at `:78` will fail.
-
-- [ ] **Step 1: Run the suite to see the failure**
+- [ ] **Step 1: Run every affected suite and record what fails**
 
 ```bash
 make e2e-web-dev
 ```
 
-Expected: FAIL in "should filter by media type" at `:78` — `media-type-image` never becomes visible,
-because the section is not rendered.
+Expected: FAIL, broadly. The predicted list, so you can tell a surprise from an expectation:
 
-This is the RED step. Do not skip it: seeing the exact failure confirms slice 5 gates what it should,
-and confirms the seed is the cause rather than something else.
+| Suite                                | Predicted failures                                                                                       |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `photos-filter-panel.e2e-spec.ts`    | `:63` asserts 7 sections; only `timeline` + `rating` survive → **5 fail**. Then `:78` `media-type-image` |
+| `spaces-filter-panel.e2e-spec.ts`    | `:82` asserts 7 sections; only `timeline` survives → **6 fail**. Then ~25 rating/media clicks            |
+| `recently-added-filters.e2e-spec.ts` | `:130` asserts **all ten**; people/location/camera/tags/favorites/albums → **6 fail**                    |
+| `map-filter-panel.e2e-spec.ts`       | `beforeAll` seeds **zero assets**, so `:41` favorites and `:46` location fail                            |
 
-- [ ] **Step 2: Seed a video**
+`permission-matrix.e2e-spec.ts` is in the `rebase-smoke` project, not `web` — run it separately with
+`make e2e-rebase-smoke` if you want the confirmation; Task 4 fixes it either way.
 
-The fork's pattern is a random-image body with a video extension — the server types the asset from the
-filename. Copy it from `recently-added-filters.e2e-spec.ts:102-110`:
+**Write the actual list down before continuing.** If a suite fails in a way this table does not predict,
+stop: it means slice 5 gates something it should not, and that is a bug in slice 5, not a seed gap.
+
+---
+
+## Task 1: Photos suite
+
+**Files:** `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts` — `beforeAll` at `:9-29`, assertions at `:63`.
+
+- [ ] **Step 1: Seed the missing variety**
+
+The suite creates three images and rates one. Add a video, a GPS asset, a Canon asset, a tag, a
+favourite and a partial album membership per the recipe table. Keep `asset1`'s rating.
 
 ```ts
-// #910: the Media section only renders when both types are present. Without a video the section
-// is (correctly) hidden and every media-type assertion below has nothing to click.
-await utils.createAsset(admin.accessToken, {
+// #910: each of these keeps one filter section available. Without them the section is correctly
+// hidden and the assertions below have nothing to act on. See slice 6's recipe table.
+const video = await utils.createAsset(admin.accessToken, {
   fileCreatedAt: '2023-06-01T10:00:00.000Z',
   fileModifiedAt: '2023-06-01T10:00:00.000Z',
   assetData: { filename: 'example-video.mp4' },
 });
+await utils.createAsset(admin.accessToken, {
+  assetData: { bytes: readFileSync(`${testAssetDir}/metadata/gps-position/thompson-springs.jpg`), filename: 'gps.jpg' },
+});
+await utils.createAsset(admin.accessToken, {
+  assetData: { bytes: readFileSync(`${testAssetDir}/metadata/rating/mongolels.jpg`), filename: 'canon.jpg' },
+});
+await utils.waitForQueueFinish(admin.accessToken, 'metadataExtraction');
+
+const [tag] = await utils.upsertTags(admin.accessToken, ['e2e-filter-tag']);
+await utils.tagAssets(admin.accessToken, tag.id, [asset1.id]);
+await updateAsset(
+  { id: asset1.id, updateAssetDto: { isFavorite: true } },
+  { headers: asBearerAuth(admin.accessToken) },
+);
+
+// Albums needs BOTH sides — some filed, some not.
+const album = await utils.createAlbum(admin.accessToken, { albumName: '#910 album', assetIds: [video.id] });
 ```
 
-- [ ] **Step 3: Run the suite to verify it passes**
+`readFileSync` and `testAssetDir` need importing (`node:fs` and `src/utils`); `utils.createAlbum`'s exact
+signature is in `e2e/src/utils.ts` — read it rather than copying the line above verbatim.
+
+- [ ] **Step 2: Apply the People carve-out at `:63`**
+
+```ts
+test('should show every filter section its library can populate', async ({ context, page }) => {
+  await gotoPhotos(context, page);
+  await expect(page.locator('[data-testid="discovery-panel"]')).toBeVisible();
+
+  for (const section of ['timeline', 'location', 'camera', 'tags', 'rating', 'media']) {
+    await expect(page.locator(`[data-testid="filter-section-${section}"]`)).toBeVisible();
+  }
+
+  // #910: People needs a detected face and the web e2e project runs no ML, so this library
+  // genuinely cannot filter by person. Asserting the absence is the coverage, not a concession —
+  // see slice 6 "The People carve-out".
+  await expect(page.locator('[data-testid="filter-section-people"]')).toHaveCount(0);
+});
+```
+
+Rename the test: "all 7 filter sections" is no longer what it checks.
+
+- [ ] **Step 3: Re-run and confirm every predicted failure is gone**
 
 ```bash
 make e2e-web-dev
 ```
-
-Expected: PASS.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add e2e/src/specs/web/photos-filter-panel.e2e-spec.ts
-git commit -m "test(e2e): seed a video so the media filter section renders (#910)"
+git commit -m "test(e2e): seed the variety each filter section needs (#910)"
 ```
 
 ---
 
-## Task 2: Seed the spaces suite
+## Task 2: Spaces suite
 
-**Files:**
+**Files:** `e2e/src/specs/web/spaces-filter-panel.e2e-spec.ts` — `createPopulatedSpace` at `:52-76`,
+assertions at `:82-97`.
 
-- Modify: `e2e/src/specs/web/spaces-filter-panel.e2e-spec.ts` — `createPopulatedSpace`
+`createPopulatedSpace` seeds four plain images and nothing else, and the suite clicks `rating-star-N` /
+`media-type-*` around 25 times, so this is the largest fix.
 
-This suite asserts `filter-section-rating` and `filter-section-media` are visible (`:95-96`) and clicks
-`rating-star-N` / `media-type-*` around 25 times. `createPopulatedSpace` builds the fixture.
+- [ ] **Step 1: Extend `createPopulatedSpace`**
 
-- [ ] **Step 1: Run the suite to see the failures**
+Apply the same recipe set as Task 1, inside the helper so every caller benefits, and add the new assets
+to `utils.addSpaceAssets` alongside the existing four. **The space, not the library, is the scope** — an
+asset that is not in the space does not populate the space's facets.
 
-```bash
-make e2e-web-dev
-```
+- [ ] **Step 2: Apply the People carve-out at `:91`**
 
-Expected: FAIL at `:95-96` and at every media-type and rating click, depending on what
-`createPopulatedSpace` currently seeds. Note the full list before changing anything.
+Same shape as Task 1 Step 2: drop `filter-section-people` from the visible list, assert `toHaveCount(0)`
+with the same comment.
 
-- [ ] **Step 2: Extend `createPopulatedSpace`**
-
-Read the whole helper first. Add whatever the Step 1 failures show is missing, from this set:
-
-```ts
-// #910: each of these keeps one filter section available. Without them the section is correctly
-// hidden and the assertions below have nothing to act on.
-// — a video, so Media has two types
-await utils.createAsset(admin.accessToken, {
-  fileCreatedAt: '2023-06-01T10:00:00.000Z',
-  fileModifiedAt: '2023-06-01T10:00:00.000Z',
-  assetData: { filename: 'space-video.mp4' },
-});
-// — a rating, so Rating is available
-await updateAsset({ id: asset1.id, updateAssetDto: { rating: 5 } }, { headers: asBearerAuth(admin.accessToken) });
-// — a favourite, so Favorites is available
-await updateAsset(
-  { id: asset2.id, updateAssetDto: { isFavorite: true } },
-  { headers: asBearerAuth(admin.accessToken) },
-);
-```
-
-`updateAsset` and `asBearerAuth` are already imported in `photos-filter-panel.e2e-spec.ts`; add the same
-imports here if absent.
-
-For the Albums section, the space needs both a filed and an un-filed asset. If the suite has an
-albums-section assertion, add an album containing exactly one of the seeded assets; if it does not, leave
-the section to be hidden and do not add an assertion for it.
-
-- [ ] **Step 3: Run the suite to verify it passes**
-
-```bash
-make e2e-web-dev
-```
-
-Expected: PASS.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Re-run, then commit**
 
 ```bash
 git add e2e/src/specs/web/spaces-filter-panel.e2e-spec.ts
@@ -154,13 +206,71 @@ git commit -m "test(e2e): seed varied space assets so every filter section rende
 
 ---
 
-## Task 3: Direct coverage for the hide behaviour
+## Task 3: Recently Added and Map suites
 
-**Files:**
+**Files:** `recently-added-filters.e2e-spec.ts:130`, `map-filter-panel.e2e-spec.ts:9-12`.
 
-- Modify: `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts`
+- [ ] **Step 1: Recently Added**
 
-Tasks 1 and 2 prove the feature does not break existing flows. This proves it works.
+Its `beforeAll` already seeds images, videos and ratings, so media and rating are fine. Add location,
+camera, tags, favourites and a partial album, then apply the People carve-out to the ten-section list at
+`:130`. Rename it — "renders all ten metadata filter sections" becomes nine plus an absence assertion.
+
+- [ ] **Step 2: Map**
+
+`map-filter-panel.e2e-spec.ts` seeds **nothing at all**, which is why its favorites (`:41`) and location
+(`:46`) tests fail: on an empty library every gated section is unavailable. Its `beforeAll` needs at
+minimum the GPS asset (for `filter-section-location`) and a favourite (for `favorites-filter`).
+
+This suite is also the cheapest place to prove the feature end to end, because it starts empty. Consider
+keeping one test that asserts the empty-library panel renders only `timeline` and `text` — but only if
+it can run before the seeding `beforeAll`, i.e. in its own `test.describe`.
+
+- [ ] **Step 3: Re-run, then commit**
+
+```bash
+git add e2e/src/specs/web/recently-added-filters.e2e-spec.ts e2e/src/specs/web/map-filter-panel.e2e-spec.ts
+git commit -m "test(e2e): seed the recently-added and map filter suites (#910)"
+```
+
+---
+
+## Task 4: The rebase-smoke camera wait
+
+**Files:** `e2e/src/specs/rebase-smoke/permission-matrix.e2e-spec.ts:220`.
+
+Test 9 waits unconditionally for `filter-section-camera`, while its own assertion at `:237` is guarded by
+`if (fullAsset.exifInfo?.make)` — the suite already assumes `make` may be absent. When it is, the section
+is now correctly hidden and the wait times out. The wait must take the same guard as the assertion.
+
+- [ ] **Step 1: Make the wait conditional**
+
+```ts
+// #910: an asset with no EXIF make gives an empty camera facet, so the section is not rendered.
+// The assertion below is already guarded on `make`; the wait has to be too.
+if (fullAsset.exifInfo?.make) {
+  await page.locator('[data-testid="filter-section-camera"]').waitFor({ timeout: 10_000 });
+}
+```
+
+Leave the location and tags waits alone: `test.skip` above already guarantees a country, and the suite
+seeds the tag itself.
+
+- [ ] **Step 2: Run the rebase-smoke project, then commit**
+
+```bash
+make e2e-rebase-smoke
+git add e2e/src/specs/rebase-smoke/permission-matrix.e2e-spec.ts
+git commit -m "test(e2e): guard the camera-section wait on EXIF make (#910)"
+```
+
+---
+
+## Task 5: Direct coverage for the hide behaviour
+
+**Files:** `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts`
+
+Tasks 1–4 prove the feature does not break existing flows. This proves it works.
 
 - [ ] **Step 1: Write the tests**
 
@@ -170,17 +280,19 @@ These need a library **without** the seeded variety, so they get their own `test
 ```ts
 test.describe('Photos FilterPanel — unavailable sections (#910)', () => {
   let admin: LoginResponseDto;
+  let assetId: string;
 
   test.beforeAll(async () => {
     utils.initSdk();
     await utils.resetDatabase();
     admin = await utils.adminSetup();
 
-    // Images only, nothing rated, nothing favourited, no albums.
-    await utils.createAsset(admin.accessToken, {
+    // Images only, nothing rated, nothing favourited, no albums, no tags, no EXIF.
+    const asset = await utils.createAsset(admin.accessToken, {
       fileCreatedAt: '2023-08-15T10:00:00.000Z',
       fileModifiedAt: '2023-08-15T10:00:00.000Z',
     });
+    assetId = asset.id;
   });
 
   test('hides the sections that cannot filter anything', async ({ context, page }) => {
@@ -192,17 +304,17 @@ test.describe('Photos FilterPanel — unavailable sections (#910)', () => {
 
     // The positive assertion first: the panel rendered, so the negatives below mean something.
     await expect(page.locator('[data-testid="filter-section-timeline"]')).toBeVisible();
+    await expect(page.locator('[data-testid="filter-section-text"]')).toBeVisible();
 
-    await expect(page.locator('[data-testid="filter-section-media"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="filter-section-rating"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="filter-section-favorites"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="section-toggle-rating"]')).toHaveCount(0);
+    for (const section of ['media', 'rating', 'favorites', 'albums', 'people', 'location', 'camera', 'tags']) {
+      await expect(page.locator(`[data-testid="filter-section-${section}"]`)).toHaveCount(0);
+      await expect(page.locator(`[data-testid="section-toggle-${section}"]`)).toHaveCount(0);
+    }
   });
 
   test('shows the favorites section once something is favourited', async ({ context, page }) => {
-    const [asset] = await utils.getAssets(admin.accessToken);
     await updateAsset(
-      { id: asset.id, updateAssetDto: { isFavorite: true } },
+      { id: assetId, updateAssetDto: { isFavorite: true } },
       { headers: asBearerAuth(admin.accessToken) },
     );
 
@@ -213,11 +325,27 @@ test.describe('Photos FilterPanel — unavailable sections (#910)', () => {
 
     await expect(page.locator('[data-testid="filter-section-favorites"]')).toBeVisible();
   });
+
+  test('shows the media section once a video exists', async ({ context, page }) => {
+    await utils.createAsset(admin.accessToken, { assetData: { filename: 'late-video.mp4' } });
+
+    await utils.setAuthCookies(context, admin.accessToken);
+    await page.goto('/photos');
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    await expect(page.locator('[data-testid="filter-section-media"]')).toBeVisible();
+  });
 });
 ```
 
-`utils.getAssets` may not exist under that name — check `e2e/src/utils.ts` and either use the real helper
-or capture the asset id from `createAsset` in `beforeAll` into a suite-level variable.
+The `assetId` capture replaces the earlier draft's `utils.getAssets`, which does not exist under that
+name — capture from `createAsset` instead of looking it up.
+
+Note the ordering dependency: the second test favourites the asset and the third adds a video, so the
+first must run before both. Playwright runs tests within a file in declaration order by default; if this
+project enables `fullyParallel`, split them into separate describes with their own resets rather than
+relying on it.
 
 - [ ] **Step 2: Run them**
 
@@ -239,6 +367,7 @@ git commit -m "test(e2e): cover hiding and revealing unusable filter sections (#
 
 ## Done when
 
-- `make e2e-web-dev` is green for `photos-filter-panel` and `spaces-filter-panel`.
-- No assertion was deleted or weakened to accommodate the feature — only seed data was added, plus the new
-  describe block in Task 3.
+- `make e2e-web-dev` is green for all four web filter suites, and `make e2e-rebase-smoke` for Test 9.
+- Every failure recorded in Task 0 is accounted for — fixed by seeding, or by the documented People
+  carve-out. Nothing was made to pass by deleting an assertion.
+- The only assertions that changed meaning are the four People ones, each carrying the carve-out comment.

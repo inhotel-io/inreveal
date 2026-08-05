@@ -42,21 +42,27 @@ Three rows of the "What updates" table are wrong **today**, before this change:
 
 - [ ] **Step 1: Rewrite the "What updates" table**
 
+The "narrows" column must say **No** for Rating and Media Type. Per spec §2.4 and §4.3.1 their facets
+decide section visibility and are never handed to the controls: every star and every media button always
+renders. Saying "Yes" there would contradict §2.4 _and_ Step 3 of this same task, which states that stars
+and buttons never dim or disappear individually. Favorites and Albums are toggles with no list to narrow,
+so the column is n/a for them.
+
 ```markdown
 ## What updates
 
-| Filter     | Narrows with other filters? | Section hidden when it cannot filter?                  |
-| ---------- | --------------------------- | ------------------------------------------------------ |
-| People     | Yes                         | Yes, unless unnamed faces exist                        |
-| Location   | Yes (countries)             | Yes, when no photo has a location                      |
-| Camera     | Yes (makes)                 | Yes, when no photo has camera metadata                 |
-| Tags       | Yes                         | Yes, when nothing is tagged                            |
-| Rating     | Yes                         | Yes, when nothing is rated                             |
-| Media Type | Yes                         | Yes, unless you have both photos and videos            |
-| Favorites  | Yes                         | Yes, when nothing is favourited                        |
-| Albums     | Yes                         | Yes, unless some photos are in albums and some are not |
-| Timeline   | Drives filtering            | Never — it greys out instead                           |
-| Text       | No — free text              | Never                                                  |
+| Filter     | Options narrow with other filters? | Whole section hidden when it cannot filter?            |
+| ---------- | ---------------------------------- | ------------------------------------------------------ |
+| People     | Yes                                | Yes, unless unnamed faces exist                        |
+| Location   | Yes (countries)                    | Yes, when no photo has a location                      |
+| Camera     | Yes (makes)                        | Yes, when no photo has camera metadata                 |
+| Tags       | Yes                                | Yes, when nothing is tagged                            |
+| Rating     | No — all five stars always show    | Yes, when nothing is rated                             |
+| Media Type | No — all three buttons always show | Yes, unless you have both photos and videos            |
+| Favorites  | n/a — a toggle, not a list         | Yes, when nothing is favourited                        |
+| Albums     | n/a — a toggle, not a list         | Yes, unless some photos are in albums and some are not |
+| Timeline   | Drives filtering                   | Never — it greys out instead                           |
+| Text       | No — free text                     | Never                                                  |
 ```
 
 - [ ] **Step 2: Add the section-visibility explanation**
@@ -95,11 +101,24 @@ their position, so a gap in the row would be misleading. When they cannot help, 
 hidden or greyed instead.
 ```
 
-- [ ] **Step 4: Update the "Architecture" paragraph**
+- [ ] **Step 4: Correct the query count in all three places it appears**
 
-It says the endpoint "runs 6 parallel queries". After slice 1 it is eight. Correct the count and mention
-that the presence probes exist. Verify the number against
-`server/src/repositories/search.repository.ts`'s `getFilterSuggestions` rather than trusting this line.
+"6" is stated three times, and Step 4 of an earlier draft caught only the first:
+
+```bash
+grep -n "6 parallel\|6 queries\|All 6" docs/docs/features/dynamic-filter-suggestions.md
+```
+
+1. the **Architecture** paragraph — "The server runs 6 parallel queries"
+2. the **Server flow** code block — "3. Run 6 queries in parallel:" plus the six-item list under it,
+   which needs the favourites and album-membership probes added
+3. the **Shared query helper** paragraph — "All 6 extraction queries share a common
+   `buildFilteredAssetIds` helper"
+
+The `Promise.all` gains two entries (favourites, album membership) for **eight**, but album membership
+issues two SQL probes, so nine queries run. Say "eight parallel facet queries" in the prose and let the
+Server flow list show the album row as two probes. Verify both numbers against
+`getFilterSuggestions` in `server/src/repositories/search.repository.ts` rather than trusting this line.
 
 - [ ] **Step 5: Format and preview**
 
@@ -151,4 +170,8 @@ git add README.md && git commit -m "docs: note filter-section visibility in the 
 - `npx prettier --check docs/` passes.
 - The "What updates" table matches what slices 5 and 7 actually shipped — re-read them rather than this
   plan if the two disagree.
-- No claim in the doc says rating stars or media buttons are individually hidden or dimmed.
+- No claim in the doc says rating stars or media buttons are individually hidden or dimmed, **or that
+  their options narrow**. That last one is the easy mistake: their facets exist and are consulted, but
+  only for section visibility (spec §4.3.1).
+- `grep -n "6 parallel\|6 queries\|All 6" docs/docs/features/dynamic-filter-suggestions.md` returns
+  nothing.

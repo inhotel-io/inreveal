@@ -16,7 +16,9 @@ in the template. The legacy providers-only path is left byte-for-byte unchanged.
 - **Spec:** `docs/superpowers/specs/2026-08-04-interdependent-filter-sections-910-design.md` §2.4, §4.2, §4.3.1, §4.5, §6.2, §6.3
 - **Branch:** `fix/910-interdependent-filter-sections`
 - **Depends on:** Slices 3 and 4. **Must not land without slice 4's sentinel removal** — gating on emptiness
-  while a failed fetch still resolves as "empty" would hide the whole panel on a network blip.
+  while a failed fetch still resolves as "empty" would hide the whole panel on a network blip. It also
+  consumes slice 4's `baselineProvider`; without it the panel simply never hides, which is safe but makes
+  every Task 2 hide/grey test fail for a reason that has nothing to do with this slice.
 - **Scope:** `filter-panel.svelte` and the panel's test directory. **Nothing else.**
 
 ## Global Constraints
@@ -66,8 +68,17 @@ three slice-1 booleans so existing tests keep their sections visible once Task 2
   hasAssetsNotInAlbum: true,
 ```
 
-Do the same for the fixtures in `contextual-refetch.spec.ts` and `filter-panel.spec.ts`. Skipping this
-makes Task 2 look like it broke a dozen unrelated tests.
+`unified-suggestions.spec.ts` and `contextual-refetch.spec.ts` are the only two panel specs that use
+`suggestionsProvider` (`grep -ln suggestionsProvider web/src/lib/components/filter-panel/__tests__/`),
+so they are the only two whose sections can go unavailable. Do not stop there, though: **~20 files
+across `web/src` carry `hasUnnamedPeople` literals** and slice 4 should already have repaired them —
+
+```bash
+cd web && grep -rln "hasUnnamedPeople" src | sort
+```
+
+Anything that list names and `pnpm check:typescript` does not is a fixture that type-checks but lies
+at runtime. Skipping this makes Task 2 look like it broke a dozen unrelated tests.
 
 - [ ] **Step 2: Write the failing test**
 
@@ -104,7 +115,7 @@ it('consumes the facets without dimming the controls (#910, feedback_no_dynamic_
 - [ ] **Step 3: Run it — it should pass**
 
 ```bash
-cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/unified-suggestions.spec.ts
+cd web && pnpm test --run src/lib/components/filter-panel/__tests__/unified-suggestions.spec.ts
 ```
 
 Expected: PASS. This is the rare guard-first case: the behaviour is already correct and the test exists to
@@ -154,7 +165,7 @@ asserting it.
 - [ ] **Step 5: Run the whole panel suite**
 
 ```bash
-cd web && pnpm test -- --run src/lib/components/filter-panel/
+cd web && pnpm test --run src/lib/components/filter-panel/
 ```
 
 Expected: PASS. `currentSuggestions` and `baseline` are captured but nothing reads them yet, so this task
@@ -265,41 +276,110 @@ describe('section availability (#910)', () => {
     await waitFor(() => expect(screen.getByTestId('filter-section-rating')).toBeInTheDocument());
   });
 
-  it('fetches a baseline separately when it mounts with filters applied', async () => {
+  it('calls baselineProvider once when it mounts with filters applied', async () => {
     const suggestionsProvider = vi.fn().mockResolvedValue(availableEverything);
-    const config = { sections: ['rating'] as FilterSection[], suggestionsProvider };
+    const baselineProvider = vi.fn().mockResolvedValue(availableEverything);
+    const config = { sections: ['rating'] as FilterSection[], suggestionsProvider, baselineProvider };
 
     render(FilterPanel, { props: { config, timeBuckets: [], filters: { ...createFilterState(), rating: 5 } } });
 
-    await waitFor(() => expect(suggestionsProvider).toHaveBeenCalledTimes(2));
-    expect(suggestionsProvider).toHaveBeenCalledWith(expect.objectContaining({ rating: undefined }));
+    await waitFor(() => expect(baselineProvider).toHaveBeenCalledTimes(1));
+    // The baseline is a SEPARATE hook, never a second suggestionsProvider call: spec §4.5 explains
+    // why reusing the provider corrupts the query-mode pages.
+    expect(suggestionsProvider).toHaveBeenCalledTimes(1);
   });
 
-  it('fetches no extra baseline when it mounts clean', async () => {
+  it('calls no baseline provider when it mounts clean', async () => {
     const suggestionsProvider = vi.fn().mockResolvedValue(availableEverything);
-    const config = { sections: ['rating'] as FilterSection[], suggestionsProvider };
+    const baselineProvider = vi.fn().mockResolvedValue(availableEverything);
+    const config = { sections: ['rating'] as FilterSection[], suggestionsProvider, baselineProvider };
 
     render(FilterPanel, { props: { config, timeBuckets: [] } });
 
     await waitFor(() => expect(suggestionsProvider).toHaveBeenCalledTimes(1));
-    // Give any stray second request time to land before asserting it did not.
+    // Give any stray request time to land before asserting it did not. The clean-mount response IS
+    // the baseline, so a second call would be pure waste.
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(suggestionsProvider).toHaveBeenCalledTimes(1);
+    expect(baselineProvider).not.toHaveBeenCalled();
   });
 
-  it('hides nothing when the baseline request rejects', async () => {
+  // The filter is on `people`, NOT on `rating`. That distinction is the whole test: with the filter
+  // on the section under assertion, hasActiveFilter short-circuits to 'available' before the code
+  // ever reads `baseline`, and the test passes whether or not the failure path works at all.
+  it.each([
+    ['rejects', () => Promise.reject(new Error('baseline failed'))],
+    ['resolves undefined', () => Promise.resolve(undefined)],
+  ])('hides nothing when the baseline provider %s', async (_label, baseline) => {
+    const config = {
+      sections: ['rating', 'media'] as FilterSection[],
+      suggestionsProvider: vi.fn().mockResolvedValue({ ...availableEverything, ratings: [] }),
+      baselineProvider: vi.fn().mockImplementation(baseline),
+    };
+
+    render(FilterPanel, {
+      props: { config, timeBuckets: [], filters: { ...createFilterState(), personIds: ['p'] } },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('filter-section-media')).toBeInTheDocument());
+    expect(screen.getByTestId('filter-section-rating')).toBeInTheDocument();
+  });
+
+  it('hides nothing when no baselineProvider is configured at all', async () => {
+    const config = {
+      sections: ['rating', 'media'] as FilterSection[],
+      suggestionsProvider: vi.fn().mockResolvedValue({ ...availableEverything, ratings: [] }),
+    };
+
+    render(FilterPanel, {
+      props: { config, timeBuckets: [], filters: { ...createFilterState(), personIds: ['p'] } },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('filter-section-media')).toBeInTheDocument());
+    expect(screen.getByTestId('filter-section-rating')).toBeInTheDocument();
+  });
+
+  it('keeps the previous facets when a later refetch rejects', async () => {
     const suggestionsProvider = vi
       .fn()
-      .mockImplementation((next) =>
-        next.rating === undefined
-          ? Promise.reject(new Error('baseline failed'))
-          : Promise.resolve({ ...availableEverything, ratings: [] }),
-      );
-    const config = { sections: ['rating'] as FilterSection[], suggestionsProvider };
+      .mockResolvedValueOnce(availableEverything)
+      .mockRejectedValue(new Error('network blip'));
+    const config = { sections: ['rating', 'media'] as FilterSection[], suggestionsProvider };
+    const filters = { ...createFilterState() };
 
-    render(FilterPanel, { props: { config, timeBuckets: [], filters: { ...createFilterState(), rating: 5 } } });
-
+    const { rerender } = render(FilterPanel, { props: { config, timeBuckets: [], filters } });
     await waitFor(() => expect(screen.getByTestId('filter-section-rating')).toBeInTheDocument());
+
+    await rerender({ config, timeBuckets: [], filters: { ...filters, personIds: ['p'] } });
+    await waitFor(() => expect(suggestionsProvider).toHaveBeenCalledTimes(2));
+
+    // §4.6 at panel level: a rejection must leave `current` and `baseline` untouched, not blank the
+    // panel. Slice 4 made the surfaces reject instead of resolving empty precisely so this holds.
+    expect(screen.getByTestId('filter-section-rating')).toBeInTheDocument();
+    expect(screen.getByTestId('filter-section-media')).toBeInTheDocument();
+  });
+
+  it('greys the timeline while it has no buckets, and restores it when they arrive', async () => {
+    const config = {
+      sections: ['timeline', 'media'] as FilterSection[],
+      suggestionsProvider: vi.fn().mockResolvedValue(availableEverything),
+    };
+
+    // Every query-mode surface passes through timeBuckets: [] before its first facet response.
+    const { rerender } = render(FilterPanel, { props: { config, timeBuckets: [] } });
+
+    await waitFor(() => {
+      const button = within(screen.getByTestId('filter-section-timeline')).getByRole('button');
+      expect(button).toBeDisabled();
+      expect(button.textContent).toContain('(0)');
+    });
+
+    await rerender({ config, timeBuckets: [{ timeBucket: '2024-01-01', count: 3 }] });
+
+    // `isOpen` is derived, not stored, so it must recover on its own.
+    await waitFor(() => {
+      const button = within(screen.getByTestId('filter-section-timeline')).getByRole('button');
+      expect(button).toBeEnabled();
+    });
   });
 
   it('keeps a section with an active filter visible even when its facet is empty', async () => {
@@ -311,6 +391,20 @@ describe('section availability (#910)', () => {
     render(FilterPanel, { props: { config, timeBuckets: [], filters: { ...createFilterState(), rating: 5 } } });
 
     await waitFor(() => expect(screen.getByTestId('filter-section-rating')).toBeInTheDocument());
+  });
+
+  it('offers the show-all hint when every AVAILABLE section is user-hidden', async () => {
+    // The user hid `media`; `rating` is unavailable. Nothing renders, so the hint must appear —
+    // but `visibleSections` still contains `rating`, so a `.size === 0` check would miss it.
+    localStorage.setItem('test-key', JSON.stringify({ selected: ['rating'], known: ['rating', 'media'] }));
+    const config = {
+      sections: ['rating', 'media'] as FilterSection[],
+      suggestionsProvider: vi.fn().mockResolvedValue({ ...availableEverything, ratings: [] }),
+    };
+
+    render(FilterPanel, { props: { config, timeBuckets: [], storageKey: 'test-key' } });
+
+    await waitFor(() => expect(screen.getByText('filter_show_all_sections')).toBeInTheDocument());
   });
 
   it('leaves the legacy providers path ungated', async () => {
@@ -327,14 +421,18 @@ describe('section availability (#910)', () => {
 });
 ```
 
+`$t()` returns raw keys under test (`feedback_web_vitest_no_clearmocks`), which is why the hint test
+matches the literal `filter_show_all_sections` rather than English copy.
+
 - [ ] **Step 2: Run them to verify they fail**
 
 ```bash
-cd web && pnpm test -- --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts
+cd web && pnpm test --run src/lib/components/filter-panel/__tests__/filter-panel.spec.ts
 ```
 
-Expected: FAIL on hide, grey, re-show, and baseline-request. The ledger, reject, active-filter and legacy
-tests pass already — they are the guards against over-correcting.
+Expected: FAIL on hide, grey, re-show, baseline-provider (both), timeline-greying and the show-all
+hint. The ledger, no-baselineProvider, refetch-rejection, active-filter and legacy tests pass already —
+they are the guards against over-correcting.
 
 - [ ] **Step 3: Import the rule module**
 
@@ -356,15 +454,21 @@ if (getActiveFilterCount(currentFilters) === 0) {
 }
 ```
 
-Then add a one-shot effect next to the other `$effect`s:
+Then add a one-shot effect next to the other `$effect`s. **It must call `config.baselineProvider`, not
+`config.suggestionsProvider(createFilterState())`** — spec §4.5 has the full reasoning, and slice 4
+built the hook for exactly this. In short: the three query-mode pages keep one `smartFacetInFlight`
+slot and abort on key mismatch, so a second concurrent facet request would kill the first; and their
+`.then` writes `smartFacets`, which feeds the Timeline buckets and the result count, so an unfiltered
+baseline response would make the page render unfiltered data while filters are applied. Neither failure
+is visible from inside the panel.
 
 ```ts
 // Only fires when the panel mounts with filters already applied (a deep link, or restored state) —
 // otherwise the effect above captures the baseline for free. Scope changes remount the panel, so this
 // needs no invalidation: see spec §4.5 for the `{#key}` blocks that guarantee it.
 $effect(() => {
-  const provider = config.suggestionsProvider;
-  if (!provider || baselineRequested) {
+  const provider = config.baselineProvider;
+  if (!config.suggestionsProvider || !provider || baselineRequested) {
     return;
   }
   baselineRequested = true;
@@ -373,7 +477,9 @@ $effect(() => {
     return;
   }
 
-  void provider(createFilterState())
+  void provider()
+    // A surface with no cheap baseline resolves `undefined` (every query-mode branch does). Assigning
+    // it is a no-op that keeps the "never hidden on missing information" rule intact.
     .then((result) => {
       baseline = result;
     })
@@ -444,14 +550,25 @@ The `count` prop (`:761-771`):
 
 - [ ] **Step 7: Point the empty-state hint at renderable sections**
 
-Post-#926 the hint asks whether every section _this surface renders_ is hidden. Change that check to use
-`renderableSections`, so a user whose only available section is hidden still gets the hint. Read the
-post-#926 code for the exact expression before editing.
+This is the "offers the show-all hint" test from Step 1 — it is behaviour, not tidying, which is why it
+gets a failing test rather than a drive-by edit.
+
+Today the hint is gated on `{#if visibleSections.size === 0}` (`filter-panel.svelte:876`). That counts
+the user's _persisted_ choice, which still contains unavailable sections, so a panel rendering nothing
+can have `size > 0` and show no hint. Gate it on the intersection instead:
+
+```svelte
+{#if renderableSections.every((section) => !visibleSections.has(section))}
+```
+
+`showAllSections()` keeps setting `visibleSections = new SvelteSet(config.sections)` — availability must
+never be written into the ledger (§6.3), and an unavailable section that becomes available later has to
+come back already-selected. Read the post-#926 versions of both before editing; #926 rewrites this area.
 
 - [ ] **Step 8: Run the whole panel suite**
 
 ```bash
-cd web && pnpm test -- --run src/lib/components/filter-panel/
+cd web && pnpm test --run src/lib/components/filter-panel/
 ```
 
 Expected: PASS, including `filter-panel.spec.ts:403` (`#858 §3.3`) with no edits — that test uses the
@@ -481,12 +598,16 @@ git commit -m "feat(web): hide filter sections that cannot filter anything (#910
 Baseline caching is correct only because each surface remounts the panel when its non-filter scope changes.
 Nothing in the panel enforces that, and deleting a `{#key}` would be a silent correctness regression.
 
+Query mode returns no baseline (§4.5), so the remount matters here for `currentSuggestions`,
+the hydrated `visibleSections` and the expanded-section state rather than for the baseline itself — and
+for the browse↔query transition, where a browse-mode baseline must not survive into query mode.
+
 - [ ] **Step 1: Write the test**
 
 One per query-mode page. In `photos-page.spec.ts`:
 
 ```ts
-it('remounts the filter panel when the committed query changes, so the baseline is re-fetched (#910)', async () => {
+it('remounts the filter panel when the committed query changes, so its cached facets are dropped (#910)', async () => {
   const before = sdkMock.searchSmartFacets.mock.calls.length;
 
   await commitQuery('beach');
@@ -501,7 +622,7 @@ verbatim; do not invent a `commitQuery` helper if one does not exist.
 - [ ] **Step 2: Run and confirm green without source changes**
 
 ```bash
-cd web && pnpm test -- --run "src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts"
+cd web && pnpm test --run "src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts"
 ```
 
 Expected: PASS. If it fails, the `{#key}` block at `+page.svelte:600` has changed and the baseline design
@@ -518,9 +639,12 @@ git commit -m "test(web): lock the filter-panel remount that scopes the #910 bas
 
 ## Done when
 
-- `pnpm test`, `pnpm check:typescript`, `pnpm check:svelte`, `pnpm lint`, `pnpm format` are all green in
-  `web/`.
+- `pnpm test --run`, `pnpm check:typescript`, `pnpm check:svelte`, `pnpm lint`, `pnpm format` are all
+  green in `web/`.
 - `filter-panel.spec.ts:403` passes unmodified.
+- `grep -n "createFilterState()" web/src/lib/components/filter-panel/filter-panel.svelte` shows no call
+  handed to `suggestionsProvider` — the baseline goes through `config.baselineProvider` (spec §4.5).
+- The empty-state hint has a test, and it fails if the gate is reverted to `visibleSections.size === 0`.
 - `git diff --name-only` for this slice lists **no** `rating-filter.svelte` or `media-type-filter.svelte`.
 - `grep -n "availableRatings =" web/src/lib/components/filter-panel/filter-panel.svelte` returns nothing.
 - `filterContext` still exists and still carries its #858 exclusion list.

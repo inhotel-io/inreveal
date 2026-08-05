@@ -23,7 +23,7 @@ emptiness.
 ## Global Constraints
 
 - Prettier: 120-char lines, single quotes, trailing commas, semicolons. `eslint --max-warnings 0`.
-- `cd web && pnpm test -- --run <path>` — `--run` before the path, or the filter is silently dropped.
+- `cd web && pnpm test --run <path>` — `--run` before the path, or the filter is silently dropped.
 - Per `reference_web_checks_and_pr_base`, the web gate is three commands: `pnpm check:typescript`,
   `pnpm check:svelte`, `pnpm lint`.
 - Per `reference_web_check_svelte_blind_locally`, `check:svelte` can scan zero files locally. Treat a
@@ -59,11 +59,18 @@ emptiness.
 - Modify: `web/src/lib/utils/space-search.ts:116-136` (`mapSmartSearchFacetsToFilterSuggestions`)
 - Test: `web/src/lib/utils/__tests__/album-filter-config.spec.ts`,
   `web/src/lib/utils/__tests__/map-filter-config.spec.ts`,
-  `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts`
+  `web/src/lib/utils/__tests__/recently-added-filter-config.spec.ts`,
+  `web/src/lib/utils/__tests__/space-search.spec.ts`
 
 - [ ] **Step 1: Write the failing tests**
 
-One assertion per mapper. Add to the existing `describe` block in each spec — these files already mock
+One assertion per mapper — **all four**, including `space-search.ts`. That one is the easiest to skip
+and the most important to cover: it is the mapper behind all three smart-search surfaces (photos,
+spaces and recently-added in query mode), so a missed field there breaks three pages at once.
+`space-search.spec.ts:347` already has a `describe('mapSmartSearchFacetsToFilterSuggestions')` block
+with literal facet objects — extend those.
+
+For the other three, add to the existing `describe` block in each spec — these files already mock
 `@immich/sdk` and already have a populated `getFilterSuggestions` fixture, so extend that fixture rather
 than adding a second mock.
 
@@ -80,17 +87,19 @@ it('forwards the #910 availability facets', async () => {
 });
 ```
 
-Add the equivalent to `map-filter-config.spec.ts` (using `buildMapFilterConfig()`) and to
-`recently-added-filter-config.spec.ts` (using `buildRecentlyAddedFilterConfig()`), extending each file's
-existing fixture the same way. Use distinct true/false combinations per file so a copy-paste mapper bug
-that hard-codes one value cannot pass all three.
+Add the equivalent to `map-filter-config.spec.ts` (using `buildMapFilterConfig()`), to
+`recently-added-filter-config.spec.ts` (using `buildRecentlyAddedFilterConfig()`), and to
+`space-search.spec.ts` (calling `mapSmartSearchFacetsToFilterSuggestions` directly), extending each
+file's existing fixture the same way. Use distinct true/false combinations per file so a copy-paste
+mapper bug that hard-codes one value cannot pass all four.
 
 - [ ] **Step 2: Run them to verify they fail**
 
 ```bash
-cd web && pnpm test -- --run src/lib/utils/__tests__/album-filter-config.spec.ts \
+cd web && pnpm test --run src/lib/utils/__tests__/album-filter-config.spec.ts \
                           src/lib/utils/__tests__/map-filter-config.spec.ts \
-                          src/lib/utils/__tests__/recently-added-filter-config.spec.ts
+                          src/lib/utils/__tests__/recently-added-filter-config.spec.ts \
+                          src/lib/utils/__tests__/space-search.spec.ts
 ```
 
 Expected: FAIL — `expected undefined to be true`.
@@ -125,9 +134,10 @@ In all four mappers, add three lines after `hasUnnamedPeople`. `map-filter-confi
 - [ ] **Step 4: Run the tests to verify they pass**
 
 ```bash
-cd web && pnpm test -- --run src/lib/utils/__tests__/album-filter-config.spec.ts \
+cd web && pnpm test --run src/lib/utils/__tests__/album-filter-config.spec.ts \
                           src/lib/utils/__tests__/map-filter-config.spec.ts \
-                          src/lib/utils/__tests__/recently-added-filter-config.spec.ts
+                          src/lib/utils/__tests__/recently-added-filter-config.spec.ts \
+                          src/lib/utils/__tests__/space-search.spec.ts
 ```
 
 Expected: PASS.
@@ -141,14 +151,106 @@ git commit -m "feat(web): forward the availability facets through every filter m
 
 ---
 
+## Task 1b: Wire `baselineProvider` on all six surfaces
+
+**Files:** the four mappers from Task 1, plus the photos and spaces page configs.
+
+Slice 3 declared `FilterPanelConfig.baselineProvider` (spec §4.5). This task supplies it. Read §4.5
+before starting — the obvious implementation is wrong, and the reason is not visible from the panel.
+
+**Why the panel cannot just call `suggestionsProvider(createFilterState())`.** All three query-mode
+pages keep a _single_ `smartFacetInFlight` slot and abort it whenever an incoming request has a
+different key (`photos/…/+page.svelte:239-247` and the same shape in spaces `:239-247` and
+recently-added `:210-247`). Two concurrent facet requests under different keys therefore kill each
+other. Worse, on resolve those pages assign `smartFacets = result`, and `smartFacets` drives the
+Timeline buckets and the result count — so an unfiltered baseline response landing in that slot would
+make the page display unfiltered data while filters are applied.
+
+- [ ] **Step 1: Write the failing tests**
+
+Two per query-mode page, one per simple surface.
+
+```ts
+it('offers a browse-mode baseline computed with no filters (#910)', async () => {
+  const config = getRenderedFilterConfig();
+  sdkMock.getFilterSuggestions.mockClear();
+
+  const baseline = await config.baselineProvider!();
+
+  expect(baseline).toBeDefined();
+  // The whole point: the baseline ignores whatever filters are active.
+  expect(sdkMock.getFilterSuggestions).toHaveBeenCalledWith(
+    expect.objectContaining({ rating: undefined, personIds: undefined }),
+  );
+});
+
+it('offers no baseline in query mode, and leaves the page facets alone (#910)', async () => {
+  await commitQuery('beach');
+  const config = getRenderedFilterConfig();
+  sdkMock.searchSmartFacets.mockClear();
+
+  await expect(config.baselineProvider!()).resolves.toBeUndefined();
+
+  // Regression guard for spec §4.5: a baseline request here would abort the in-flight facet
+  // fetch and then overwrite smartFacets, corrupting the timeline and the result count.
+  expect(sdkMock.searchSmartFacets).not.toHaveBeenCalled();
+});
+```
+
+`getRenderedFilterConfig` / `commitQuery` are shorthand — reuse whatever the neighbouring smart-search
+tests in each file already do rather than inventing helpers.
+
+For `map-filter-config.spec.ts`, `album-filter-config.spec.ts` and
+`recently-added-filter-config.spec.ts`, assert only the first shape: those surfaces have no query mode.
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Expected: FAIL — `config.baselineProvider is not a function`.
+
+- [ ] **Step 3: Wire the four mappers**
+
+Each already has a `mapSuggestions` and an SDK call. The baseline is the same call with the filter
+arguments dropped, keeping only the scope arguments (`albumId`, `spaceId`, `withSharedSpaces`, …):
+
+```ts
+    baselineProvider: async () => mapSuggestions(await getFilterSuggestions({ /* scope args only */ })),
+```
+
+- [ ] **Step 4: Wire the two page configs**
+
+Browse mode returns a real baseline; query mode returns `undefined`. On the photos page:
+
+```ts
+    // #910: no baseline in query mode. A second concurrent facet request would abort the in-flight
+    // one (single `smartFacetInFlight` slot) and then clobber `smartFacets`, which feeds the
+    // timeline and the result count. `undefined` means "don't hide anything here" — see spec §4.5.
+    baselineProvider: async () => (showSearchResults ? undefined : loadPhotoFilterSuggestions(createFilterState())),
+```
+
+The spaces page takes the identical shape with `loadSpaceFilterSuggestions`. The Recently Added page
+routes through `recently-added-filter-config.ts`, so it is covered by Step 3 — verify which branch it
+actually uses before assuming.
+
+- [ ] **Step 5: Run the tests to verify they pass, then commit**
+
+```bash
+git add web/src/lib/utils/ "web/src/routes/(user)/"
+git commit -m "feat(web): give each filter surface a no-filters baseline provider (#910)"
+```
+
+---
+
 ## Task 2: Delete the empty-response sentinel
 
 **Files:**
 
-- Modify: `routes/(user)/photos/[[assetId=id]]/+page.svelte:167-177` (`emptyFilterSuggestions`), `:271-273`
-- Modify: `routes/(user)/spaces/[spaceId]/…/+page.svelte:172-182`, `:305-307`
-- Modify: `routes/(user)/recently-added/…/+page.svelte` (its `emptyFilterSuggestions` and the
-  `if (!facets)` branch around `:266-269`)
+- Modify: `routes/(user)/photos/[[assetId=id]]/+page.svelte` — `emptyFilterSuggestions` at `:167`, its
+  call site at `:302`
+- Modify: `routes/(user)/spaces/[spaceId]/…/+page.svelte` — `:172` and `:306`
+- Modify: `routes/(user)/recently-added/…/+page.svelte` — `:184` and `:268`
+
+(Line numbers drift; `grep -rn "emptyFilterSuggestions" web/src` gives all six in one shot.)
+
 - Test: the three page spec files alongside those routes
 
 All three pages resolve their provider with every array empty when the smart-facets request fails. Today
@@ -180,7 +282,7 @@ neighbouring smart-search test in the same file and use the same mechanism rathe
 - [ ] **Step 2: Run them to verify they fail**
 
 ```bash
-cd web && pnpm test -- --run "src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts"
+cd web && pnpm test --run "src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts"
 ```
 
 Expected: FAIL — the promise resolves with the empty sentinel instead of rejecting.
@@ -211,7 +313,7 @@ not.
 - [ ] **Step 5: Run the tests to verify they pass**
 
 ```bash
-cd web && pnpm test -- --run "src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts" \
+cd web && pnpm test --run "src/routes/(user)/photos/[[assetId=id]]/photos-page.spec.ts" \
                           "src/routes/(user)/spaces/[spaceId]/[[photos=photos]]/[[assetId=id]]/spaces-page.spec.ts" \
                           "src/routes/(user)/recently-added/[[photos=photos]]/[[assetId=id]]/recently-added-page.spec.ts"
 ```
@@ -298,6 +400,11 @@ git commit -m "feat(web): forward the availability facets from every filter surf
 ## Done when
 
 - `pnpm check:typescript` is green — no surface still omits a field.
-- `pnpm test` is green, including `filter-section-parity.spec.ts` with unmodified assertions.
+- `pnpm test --run` is green, including `filter-section-parity.spec.ts` with unmodified assertions.
 - `grep -rn "emptyFilterSuggestions" web/src` returns nothing.
+- `grep -rn "baselineProvider" web/src/lib/utils "web/src/routes/(user)"` returns **six** wiring sites.
+  `tsc` cannot check this one for you — the field is optional, so a surface that forgets it silently
+  never hides anything (spec §4.5).
+- No `baselineProvider` calls `suggestionsProvider(createFilterState())`, and none of the three
+  query-mode branches issues a facet request.
 - The filter panel component is still untouched.

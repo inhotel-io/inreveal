@@ -23,8 +23,19 @@ output.
 - The live TypeScript SDK is `packages/sdk/src/fetch-client.ts`, not `open-api/typescript-sdk/`. Generated
   output lands in both; the one the web app imports is `packages/sdk`.
 - Never hand-edit generated files. If output looks wrong, fix the DTO in `server/src/dtos/` and regenerate.
-- `make build-sdk` does **not** exist despite CLAUDE.md mentioning it. Build the SDK with
-  `pnpm --filter @immich/sdk build`.
+- **Three of the commands CLAUDE.md documents for this workflow do not work** — verified against the
+  `Makefile` and `server/package.json` (`feedback_local_verify_command_traps` §2 and §4):
+
+  | Don't                | Why                                                | Do                                      |
+  | -------------------- | -------------------------------------------------- | --------------------------------------- |
+  | `make build-sdk`     | no such target                                     | `pnpm --filter @immich/sdk build`       |
+  | `make open-api`      | removed stub — prints "use mise open-api", exits 1 | `mise open-api`                         |
+  | `pnpm sync:open-api` | no such script in `server/package.json`            | `node server/dist/bin/sync-open-api.js` |
+
+- Run `mise open-api`, not `mise run //:open-api`: from a worktree the `//:` prefix targets the **main**
+  checkout (`reference_mise_run_from_worktree_wrong_dir`).
+- **Run this slice before slice 3.** Slice 3 knowingly leaves `check:typescript` red until slice 4, and
+  Step 6 below uses a clean `check:typescript` as its evidence that the generator emitted valid output.
 
 ## File Structure
 
@@ -70,22 +81,29 @@ top of uncommitted work makes the generated diff impossible to review.
 - [ ] **Step 2: Build the server and sync the spec**
 
 ```bash
-cd server && pnpm build && pnpm sync:open-api
+cd server && pnpm build
+node dist/bin/sync-open-api.js
 ```
 
 - [ ] **Step 3: Verify the spec picked up the new fields**
 
 ```bash
-grep -c 'hasAssetsNotInAlbum' open-api/immich-openapi-specs.json
+grep -c '"hasAssetsNotInAlbum": {' open-api/immich-openapi-specs.json
 ```
 
-Expected: `2` — once in `FilterSuggestionsResponseDto`, once in `SmartSearchFacetsResponseDto`. A `0` means
-slice 1's DTO edit is missing or the server build was stale; go back rather than continuing.
+Expected: `2` — the property declaration in `FilterSuggestionsResponseDto` and in
+`SmartSearchFacetsResponseDto`. A `0` means slice 1's DTO edit is missing or the server build was
+stale; go back rather than continuing.
+
+The `": {"` suffix is load-bearing. A bare `grep -c 'hasAssetsNotInAlbum'` returns **4**, because each
+schema also lists the name in its `required` array — confirmed by running it against the existing
+`hasUnnamedPeople`, which reports 4 on today's spec. An earlier draft of this plan expected 2 from the
+bare grep and would have read a correct regeneration as a failure.
 
 - [ ] **Step 4: Regenerate both clients**
 
 ```bash
-make open-api
+mise open-api
 ```
 
 - [ ] **Step 5: Verify the generated clients**
@@ -107,6 +125,10 @@ cd web && pnpm check:typescript
 
 Expected: PASS. Nothing in web reads the new fields yet, so widening the response type cannot break it.
 A failure here means the generator emitted something malformed.
+
+This gate only means that **if slice 3 has not run yet**. If `check:typescript` is already red with
+`hasFavorites`-shaped errors in `web/src/lib/utils/`, you ran slice 3 first: those errors are slice 3's
+deliberate red, not a generator problem. Confirm no error points at `packages/sdk` and move on.
 
 - [ ] **Step 7: Confirm the Dart client still analyses**
 
@@ -131,7 +153,8 @@ git commit -m "chore(api): regenerate clients for the #910 filter facets"
 
 ## Done when
 
-- `grep -c hasAssetsNotInAlbum open-api/immich-openapi-specs.json` returns 2.
+- `grep -c '"hasAssetsNotInAlbum": {' open-api/immich-openapi-specs.json` returns 2 (the bare grep
+  returns 4 — see Task 1 Step 3).
 - `packages/sdk/src/fetch-client.ts` and `mobile/openapi/` both carry all three fields.
 - `pnpm check:typescript` (web) and `dart analyze --fatal-infos lib` (mobile) are green.
 - The commit touches only generated directories.
