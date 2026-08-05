@@ -1459,6 +1459,9 @@ export class SearchRepository {
       'WITH\n  filtered_assets',
       'select distinct\n  "rating"',
       'select distinct\n  "type"',
+      'and "asset"."isFavorite" = $',
+      '  and exists (\n    select\n    from\n      "album_asset"',
+      '  and not exists (\n    select\n    from\n      "album_asset"',
     ],
   })
   async getFilterSuggestions(userIds: string[], options: FilterSuggestionsOptions): Promise<FilterSuggestionsResult> {
