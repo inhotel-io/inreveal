@@ -121,6 +121,18 @@ describe('getSectionAvailability', () => {
     it.each(GATED)('never hides %s while the baseline is unknown', (section) => {
       expect(getSectionAvailability(section, input({ current: barren(), baseline: undefined }))).toBe('empty');
     });
+
+    // Slice 3 review gap: every existing baseline-undefined case above pairs it with a BARREN
+    // current, so the current-emptiness check and the baseline-undefined check are never both live at
+    // once — swapping their order would leave every test above green. A populated current with an
+    // unknown baseline is the case that actually exercises the order: it must resolve on the
+    // current-emptiness check alone and never even look at `baseline`.
+    it.each(GATED)(
+      'reports %s available when the current facet is populated but the baseline is unknown',
+      (section) => {
+        expect(getSectionAvailability(section, input({ baseline: undefined }))).toBe('available');
+      },
+    );
   });
 
   describe('exempt sections', () => {
