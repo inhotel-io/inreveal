@@ -3,6 +3,7 @@ import { AssetType } from 'src/enum';
 import { MemoryPeriodAsset } from 'src/repositories/asset.repository';
 import { recencyBonus } from 'src/services/memory-rules/curation.util';
 import {
+  ASSET_CAP,
   MAX_COUNT_BONUS,
   OnThisDayPlaceMemoryRule,
   SCORE_BASE,
@@ -106,6 +107,14 @@ describe(OnThisDayPlaceMemoryRule.name, () => {
     const [candidate] = await rule.evaluate({ ownerId: 'user-1', target });
     expect(candidate.assetIds.every((id) => id.startsWith('Lisbon-'))).toBe(true);
     expect(candidate.assetIds).toHaveLength(5);
+  });
+
+  it('caps the attached assets but keeps the full count in the subtitle', async () => {
+    const { rule } = ruleWith(cityAssets(2023, 'Lisbon', 40));
+    const [candidate] = await rule.evaluate({ ownerId: 'user-1', target });
+    expect(candidate.assetIds).toHaveLength(ASSET_CAP);
+    expect(candidate.subtitle).toBe('40 photos from 2023');
+    expect(candidate.context).toMatchObject({ count: 40 });
   });
 
   it('emits no candidate when all photos are ungeotagged', async () => {

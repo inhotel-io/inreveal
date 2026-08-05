@@ -6,7 +6,10 @@ import { placeKeyOf } from 'src/services/memory-rules/trip.util';
 export const MIN_ASSETS = 4;
 export const MIN_DOMINANCE = 0.6;
 export const MAX_YEARS = 3;
-export const ASSET_CAP = 8;
+// The subtitle reports the full dominant-city count, so a stingy cap reads as a broken promise
+// ("78 photos from 2025" on a card holding 8). 16 sits between the recap caps (24/30) and the
+// smaller single-subject rules, which suits a day's worth of photos in one city.
+export const ASSET_CAP = 16;
 export const SCORE_BASE = 100;
 export const MAX_COUNT_BONUS = 30;
 
