@@ -274,6 +274,10 @@ describe('the panel reflects a contextual STATE filter', () => {
       { state: 'Prague' },
     );
 
+    // The section toggles live inside the cog's popover since #912, so open it before reaching for
+    // one — the same `openSectionMenu` step filter-panel.spec.ts grew for its own toggle tests.
+    await fireEvent.click(await screen.findByTestId('section-menu-btn'));
+
     await fireEvent.click(await screen.findByTestId('section-toggle-location'));
     expect(screen.getByTestId('section-toggle-dot-location')).toBeInTheDocument();
   });
