@@ -33,6 +33,7 @@
   "add_to_album_bottom_sheet_added": "Добавлено в альбом {album}",
   "add_to_album_bottom_sheet_already_exists": "Уже в альбоме {album}",
   "add_to_album_bottom_sheet_some_local_assets": "Некоторые объекты не добавлены в альбом, поскольку еще не загружены на сервер",
+  "add_to_album_item_count": "Добавить {count, plural, one {# элемент} few {# элемента} many {# элементов} other {# элемента}} в альбом",
   "add_to_album_or_space": "Добавить в альбом или Space",
   "add_to_album_toggle": "Переключить выбор для «{album}»",
   "add_to_albums": "Добавить в альбомы",
