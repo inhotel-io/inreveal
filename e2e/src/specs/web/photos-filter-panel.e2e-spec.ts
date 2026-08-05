@@ -59,6 +59,12 @@ test.describe('Photos FilterPanel', () => {
 
     // Albums needs BOTH sides — some filed, some not.
     await utils.createAlbum(admin.accessToken, { albumName: '#910 album', assetIds: [video.id] });
+
+    // People: createFace inserts asset_face + face_identity + face_identity_face directly, so it
+    // needs no ML — getFilteredPeople's global-scope query only requires a named, non-hidden person
+    // with a face on an asset in scope. See e2e/src/utils.ts:490.
+    const person = await utils.createPerson(admin.accessToken, { name: '#910 Person' });
+    await utils.createFace({ assetId: asset1.id, personId: person.id });
   });
 
   async function gotoPhotos(context: import('@playwright/test').BrowserContext, page: import('@playwright/test').Page) {
@@ -94,17 +100,25 @@ test.describe('Photos FilterPanel', () => {
   test('should show every filter section its library can populate', async ({ context, page }) => {
     await gotoPhotos(context, page);
 
-    // Panel starts expanded — all sections should be visible
+    // Panel starts expanded — every section the library populates should be visible. `timeline` and
+    // `text` are always available (filter-availability.ts); the rest each need the seed data added
+    // in beforeAll above.
     await expect(page.locator('[data-testid="discovery-panel"]')).toBeVisible();
 
-    for (const section of ['timeline', 'location', 'camera', 'tags', 'rating', 'media']) {
+    for (const section of [
+      'timeline',
+      'people',
+      'location',
+      'camera',
+      'tags',
+      'rating',
+      'media',
+      'favorites',
+      'albums',
+      'text',
+    ]) {
       await expect(page.locator(`[data-testid="filter-section-${section}"]`)).toBeVisible();
     }
-
-    // #910: People needs a detected face and the web e2e project runs no ML, so this library
-    // genuinely cannot filter by person. Asserting the absence is the coverage, not a concession —
-    // see slice 6 "The People carve-out".
-    await expect(page.locator('[data-testid="filter-section-people"]')).toHaveCount(0);
   });
 
   test('should filter by media type and show result count', async ({ context, page }) => {

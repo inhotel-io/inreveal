@@ -153,6 +153,11 @@ test.describe('Recently Added filters', () => {
       albumName: '#910 recently-added album',
       assetIds: [images[4].id],
     });
+
+    // People: createFace inserts asset_face + face_identity + face_identity_face directly, so it
+    // needs no ML — see e2e/src/utils.ts:490. No new asset, so TOTAL stays exact.
+    const person = await utils.createPerson(admin.accessToken, { name: '#910 Person' });
+    await utils.createFace({ assetId: images[0].id, personId: person.id });
   });
 
   async function gotoRecentlyAdded(
@@ -168,12 +173,13 @@ test.describe('Recently Added filters', () => {
     await page.waitForSelector('[data-testid="discovery-panel"], [data-testid="filter-toggle-btn"]');
   }
 
-  test('renders nine metadata filter sections and hides People (#910)', async ({ context, page }) => {
+  test('renders every metadata filter section its library can populate (#910)', async ({ context, page }) => {
     await gotoRecentlyAdded(context, page);
 
     await expect(page.getByTestId('discovery-panel')).toBeVisible();
     for (const section of [
       'timeline',
+      'people',
       'location',
       'camera',
       'tags',
@@ -185,11 +191,6 @@ test.describe('Recently Added filters', () => {
     ]) {
       await expect(page.getByTestId(`filter-section-${section}`)).toBeVisible();
     }
-
-    // #910: People needs a detected face and the web e2e project runs no ML, so this library
-    // genuinely cannot filter by person. Asserting the absence is the coverage, not a concession —
-    // see slice 6 "The People carve-out".
-    await expect(page.getByTestId('filter-section-people')).toHaveCount(0);
   });
 
   // Spec scenario: Filtering by media type updates grid, URL, and count

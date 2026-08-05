@@ -514,11 +514,16 @@ export const utils = {
       throw new Error('Database client not connected');
     }
 
+    // sourceType must be 'manual', NOT left at its schema default ('machine-learning'). On any
+    // stack with facial recognition enabled, person.service.ts's handleDetectFaces treats every
+    // existing MachineLearning-sourced face on an asset as a prior ML detection: it re-runs
+    // detection, finds 0 real faces in these test fixtures, and deletes every face whose id wasn't
+    // re-confirmed — silently wiping a manually-seeded face that defaulted to that sourceType.
     const result = await client.query(
       `
       WITH inserted_face AS (
-        INSERT INTO asset_face ("assetId", "personId")
-        VALUES ($1, $2)
+        INSERT INTO asset_face ("assetId", "personId", "sourceType")
+        VALUES ($1, $2, 'manual')
         RETURNING id
       ),
       person_row AS (
@@ -625,9 +630,11 @@ export const utils = {
       );
       const globalPersonId = personResult.rows[0].id as string;
 
-      // 2. Create a face row linking the asset to the global person.
+      // 2. Create a face row linking the asset to the global person. sourceType: 'manual' — see the
+      // comment on utils.createFace above; left at the default it gets silently deleted by
+      // handleDetectFaces on any stack with facial recognition enabled.
       const faceResult = await client.query(
-        `INSERT INTO "asset_face" ("assetId", "personId") VALUES ($1, $2) RETURNING id`,
+        `INSERT INTO "asset_face" ("assetId", "personId", "sourceType") VALUES ($1, $2, 'manual') RETURNING id`,
         [assetId, globalPersonId],
       );
       const faceId = faceResult.rows[0].id as string;
