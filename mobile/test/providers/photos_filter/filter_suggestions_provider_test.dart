@@ -159,7 +159,10 @@ void main() {
       expect(result, dto);
     });
 
-    test('returns a fallback empty DTO when api returns null', () async {
+    // #910 / spec §4.6: a null API response must surface as AsyncValue.error, not a fabricated
+    // all-empty DTO. sectionAvailabilityProvider (Task 3) cannot tell a fabricated empty response
+    // from a genuinely empty library, and would hide six filter sections on a transient failure.
+    test('errors rather than reporting an empty library when the API returns null (#910)', () async {
       when(
         () => mockSearchApi.getFilterSuggestions(
           city: any(named: 'city'),
@@ -179,9 +182,10 @@ void main() {
         ),
       ).thenAnswer((_) async => null);
 
-      final result = await container.read(photosFilterSuggestionsProvider(SearchFilter.empty()).future);
-
-      expect(result.hasUnnamedPeople, false);
+      expect(
+        () => container.read(photosFilterSuggestionsProvider(SearchFilter.empty()).future),
+        throwsA(isA<Exception>()),
+      );
     });
 
     test('forwards filter fields to getFilterSuggestions', () async {
