@@ -717,6 +717,21 @@ describe('Photos page search URL state', () => {
     expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-search-query', 'nature');
   });
 
+  it('rejects rather than reporting an empty library when the facet fetch fails (#910)', async () => {
+    sdkMock.searchSmartFacets.mockRejectedValue(new Error('boom'));
+
+    renderPage();
+
+    await vi.waitFor(() => expect(sdkMock.searchSmartFacets).toHaveBeenCalled());
+    // The stub's suggestionsProvider effect sets data-suggestions to 'error' on rejection, and to a
+    // JSON dump of the resolved value otherwise — an empty-sentinel resolution would show up here as
+    // JSON, not 'error'. #910: on a first-ever failure (no previous smartFacets to fall back to),
+    // the provider must reject rather than resolve with a fabricated empty response.
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-suggestions', 'error');
+    });
+  });
+
   it('preserves previous facet total and buckets when a later facet fetch fails', async () => {
     renderPage();
     await vi.waitFor(() => expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-total', '12'));

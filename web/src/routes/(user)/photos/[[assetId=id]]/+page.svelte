@@ -168,18 +168,6 @@
   const smartFacetBuckets = $derived(showSearchResults ? (smartFacets?.timeBuckets ?? []) : timelineBuckets);
   const smartFacetTotal = $derived(showSearchResults ? smartFacets?.total : undefined);
 
-  const emptyFilterSuggestions = () => ({
-    countries: [],
-    cities: [],
-    cameraMakes: [],
-    cameraModels: [],
-    tags: [],
-    people: [],
-    ratings: [],
-    mediaTypes: [],
-    hasUnnamedPeople: false,
-  });
-
   const loadPhotoFilterSuggestions = async (nextFilters: FilterState) => {
     const context = buildFilterContext(nextFilters);
     const response = await getFilterSuggestions({
@@ -306,7 +294,10 @@
 
       const facets = await loadPhotoSmartFacets(nextFilters);
       if (!facets) {
-        return emptyFilterSuggestions();
+        // #910: never resolve with a fabricated empty response — the panel cannot tell it apart from a
+        // genuinely empty library and would hide every section. Rejecting lets the panel keep the last
+        // good facets.
+        throw new Error('smart-search facets unavailable');
       }
 
       for (const p of facets.people) {
