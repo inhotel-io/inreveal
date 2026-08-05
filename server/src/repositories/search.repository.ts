@@ -1402,20 +1402,22 @@ export class SearchRepository {
     ],
   })
   async getFilterSuggestions(userIds: string[], options: FilterSuggestionsOptions): Promise<FilterSuggestionsResult> {
-    const [countries, cameraMakes, tags, peopleResult, ratings, mediaTypes, hasFavorites] = await Promise.all([
-      // `state` joins `country` / `city` in the location group's self-exclusion: it implies its
-      // country, so leaving it applied would collapse the country selector to a single row —
-      // exactly the reason `city` is excluded here. Every other list keeps `state` applied.
-      this.getFilteredCountries(userIds, without(options, 'country', 'state', 'city')),
-      // `lensModel` deliberately stays applied, matching the standalone getCameraMakes endpoint:
-      // clicking a make does not clear the lens chip, so the make list may honestly narrow by it.
-      this.getFilteredCameraMakes(userIds, without(options, 'make', 'model')),
-      this.getFilteredTags(userIds, without(options, 'tagIds')),
-      this.getFilteredPeople(userIds, without(options, 'personIds', 'identityIds')),
-      this.getFilteredRatings(userIds, without(options, 'rating')),
-      this.getFilteredMediaTypes(userIds, without(options, 'mediaType')),
-      this.getFilteredHasFavorites(userIds, without(options, 'isFavorite')),
-    ]);
+    const [countries, cameraMakes, tags, peopleResult, ratings, mediaTypes, hasFavorites, albumMembership] =
+      await Promise.all([
+        // `state` joins `country` / `city` in the location group's self-exclusion: it implies its
+        // country, so leaving it applied would collapse the country selector to a single row —
+        // exactly the reason `city` is excluded here. Every other list keeps `state` applied.
+        this.getFilteredCountries(userIds, without(options, 'country', 'state', 'city')),
+        // `lensModel` deliberately stays applied, matching the standalone getCameraMakes endpoint:
+        // clicking a make does not clear the lens chip, so the make list may honestly narrow by it.
+        this.getFilteredCameraMakes(userIds, without(options, 'make', 'model')),
+        this.getFilteredTags(userIds, without(options, 'tagIds')),
+        this.getFilteredPeople(userIds, without(options, 'personIds', 'identityIds')),
+        this.getFilteredRatings(userIds, without(options, 'rating')),
+        this.getFilteredMediaTypes(userIds, without(options, 'mediaType')),
+        this.getFilteredHasFavorites(userIds, without(options, 'isFavorite')),
+        this.getFilteredAlbumMembership(userIds, without(options, 'isInAlbum', 'isNotInAlbum')),
+      ]);
 
     return {
       countries,
@@ -1426,8 +1428,7 @@ export class SearchRepository {
       mediaTypes,
       hasUnnamedPeople: peopleResult.hasUnnamedPeople,
       hasFavorites,
-      hasAssetsInAlbum: false,
-      hasAssetsNotInAlbum: false,
+      ...albumMembership,
     };
   }
 
@@ -1929,5 +1930,25 @@ export class SearchRepository {
       .limit(1)
       .executeTakeFirst();
     return !!row;
+  }
+
+  private async getFilteredAlbumMembership(
+    userIds: string[],
+    options: FilterSuggestionsOptions,
+  ): Promise<{ hasAssetsInAlbum: boolean; hasAssetsNotInAlbum: boolean }> {
+    const probe = (filed: boolean) =>
+      this.db
+        .selectFrom('asset')
+        .select('asset.id')
+        .where('asset.id', 'in', this.buildFilteredAssetIds(userIds, options))
+        .where((eb) => {
+          const inAlbum = eb.exists(eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'));
+          return filed ? inAlbum : eb.not(inAlbum);
+        })
+        .limit(1)
+        .executeTakeFirst();
+
+    const [filed, unfiled] = await Promise.all([probe(true), probe(false)]);
+    return { hasAssetsInAlbum: !!filed, hasAssetsNotInAlbum: !!unfiled };
   }
 }

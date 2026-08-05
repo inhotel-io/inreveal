@@ -601,6 +601,91 @@ describe(SearchRepository.name, () => {
         expect(result.hasFavorites).toBe(false);
       });
     });
+
+    describe('album membership (#910)', () => {
+      it('reports not-in-album only when the scope has no albums', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        await ctx.newAsset({ ownerId: user.id });
+
+        const result = await sut.getFilterSuggestions([user.id], {});
+
+        expect(result.hasAssetsInAlbum).toBe(false);
+        expect(result.hasAssetsNotInAlbum).toBe(true);
+      });
+
+      it('reports in-album only when every asset is filed', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        const { album } = await ctx.newAlbum({ ownerId: user.id });
+        await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+        const result = await sut.getFilterSuggestions([user.id], {});
+
+        expect(result.hasAssetsInAlbum).toBe(true);
+        expect(result.hasAssetsNotInAlbum).toBe(false);
+      });
+
+      it('reports both when the scope is mixed', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { asset: filed } = await ctx.newAsset({ ownerId: user.id });
+        await ctx.newAsset({ ownerId: user.id });
+        const { album } = await ctx.newAlbum({ ownerId: user.id });
+        await ctx.newAlbumAsset({ albumId: album.id, assetId: filed.id });
+
+        const result = await sut.getFilterSuggestions([user.id], {});
+
+        expect(result.hasAssetsInAlbum).toBe(true);
+        expect(result.hasAssetsNotInAlbum).toBe(true);
+      });
+
+      it('ignores its own isNotInAlbum filter', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { asset: filed } = await ctx.newAsset({ ownerId: user.id });
+        await ctx.newAsset({ ownerId: user.id });
+        const { album } = await ctx.newAlbum({ ownerId: user.id });
+        await ctx.newAlbumAsset({ albumId: album.id, assetId: filed.id });
+
+        // Filtering to un-filed assets must not erase the evidence that filed ones exist.
+        const result = await sut.getFilterSuggestions([user.id], { isNotInAlbum: true });
+
+        expect(result.hasAssetsInAlbum).toBe(true);
+        expect(result.hasAssetsNotInAlbum).toBe(true);
+      });
+
+      it('reports every asset filed when scoped to one album', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { asset } = await ctx.newAsset({ ownerId: user.id });
+        await ctx.newAsset({ ownerId: user.id });
+        const { album } = await ctx.newAlbum({ ownerId: user.id });
+        await ctx.newAlbumAsset({ albumId: album.id, assetId: asset.id });
+
+        const result = await sut.getFilterSuggestions([user.id], { albumId: album.id });
+
+        expect(result.hasAssetsInAlbum).toBe(true);
+        expect(result.hasAssetsNotInAlbum).toBe(false);
+      });
+
+      it('honours the other active dimensions', async () => {
+        const { ctx, sut } = setup();
+        const { user } = await ctx.newUser();
+        const { asset: filed } = await ctx.newAsset({ ownerId: user.id });
+        await ctx.newExif({ assetId: filed.id, make: 'Canon' });
+        const { asset: unfiled } = await ctx.newAsset({ ownerId: user.id });
+        await ctx.newExif({ assetId: unfiled.id, make: 'Nikon' });
+        const { album } = await ctx.newAlbum({ ownerId: user.id });
+        await ctx.newAlbumAsset({ albumId: album.id, assetId: filed.id });
+
+        const result = await sut.getFilterSuggestions([user.id], { make: 'Nikon' });
+
+        expect(result.hasAssetsInAlbum).toBe(false);
+        expect(result.hasAssetsNotInAlbum).toBe(true);
+      });
+    });
   });
 
   describe('getCameraMakes (LOW #7)', () => {
