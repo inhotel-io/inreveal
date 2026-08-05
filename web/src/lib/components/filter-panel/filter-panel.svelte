@@ -9,6 +9,7 @@
     FilterPanelConfig,
     FilterSection as FilterSectionType,
     FilterState,
+    FilterSuggestionsResponse,
     PersonOption,
     TagOption,
   } from './filter-panel';
@@ -80,6 +81,18 @@
   let tags = $state<TagOption[]>([]);
   let availableRatings = $state<number[] | undefined>();
   let availableMediaTypes = $state<string[] | undefined>();
+
+  // #910: the facets for the filters in force right now, and for the same scope with none applied.
+  // The baseline answers "could this section EVER do anything here", which is what separates hiding a
+  // section from merely greying it. Captured here; wired into getSectionAvailability in the next
+  // commit, so each is genuinely unread until then — disable no-unused-vars per line rather than
+  // delay the declarations to that commit.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let currentSuggestions = $state<FilterSuggestionsResponse | undefined>();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let baseline = $state<FilterSuggestionsResponse | undefined>();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  let baselineRequested = false;
 
   // The count gate answers "has a *cross-section* filter narrowed the panel?". It drives the
   // empty-section disable in filter-section.svelte, not a request, so the location/camera/media
@@ -168,11 +181,12 @@
           cameraMakes = result.cameraMakes;
           tags = result.tags;
           // Note: availableRatings and availableMediaTypes are intentionally NOT set from
-          // suggestionsProvider. Hiding rating stars and media type buttons based on the
-          // current result set is too aggressive — it breaks existing E2E tests and confuses
-          // users who expect these fixed options to always be visible. The core value of
-          // interdependent filtering is in people/countries/cameras/tags narrowing.
+          // suggestionsProvider. Hiding or dimming rating stars and media type buttons based on the
+          // current result set breaks their positional meaning (PR #261) and the E2E suites that click
+          // them. #910 gates the *sections* instead — the facets reach getSectionAvailability through
+          // `currentSuggestions` below, never the controls. See spec §2.4.
           hasUnnamedPeople = result.hasUnnamedPeople;
+          currentSuggestions = result;
         })
         .catch((error: unknown) => {
           if (!controller.signal.aborted) {
