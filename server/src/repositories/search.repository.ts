@@ -219,7 +219,17 @@ export type SmartSearchOptions = SearchDateOptions &
 export type SmartSearchFacetsOptions = Omit<SmartSearchOptions, 'orderDirection'>;
 
 type SmartFacetExclude =
-  'time' | 'people' | 'location' | 'city' | 'camera' | 'cameraModel' | 'tags' | 'rating' | 'media';
+  | 'time'
+  | 'people'
+  | 'location'
+  | 'city'
+  | 'camera'
+  | 'cameraModel'
+  | 'tags'
+  | 'rating'
+  | 'media'
+  | 'favorites'
+  | 'albums';
 
 export interface SmartSearchFacetsResult {
   total: number;
@@ -233,6 +243,9 @@ export interface SmartSearchFacetsResult {
   ratings: number[];
   mediaTypes: AssetType[];
   hasUnnamedPeople: boolean;
+  hasFavorites: boolean;
+  hasAssetsInAlbum: boolean;
+  hasAssetsNotInAlbum: boolean;
 }
 
 export type OcrSearchOptions = SearchDateOptions & SearchOcrOptions;
@@ -625,6 +638,7 @@ export class SearchRepository {
       const peopleResult = await this.getSmartFacetPeople(trx, options);
       const ratings = await this.getSmartFacetRatings(trx, options);
       const mediaTypes = await this.getSmartFacetMediaTypes(trx, options);
+      const hasFavorites = await this.getSmartFacetHasFavorites(trx, options);
 
       return {
         total,
@@ -638,6 +652,9 @@ export class SearchRepository {
         ratings,
         mediaTypes,
         hasUnnamedPeople: peopleResult.hasUnnamedPeople,
+        hasFavorites,
+        hasAssetsInAlbum: false,
+        hasAssetsNotInAlbum: false,
       };
     });
   }
@@ -714,7 +731,9 @@ export class SearchRepository {
         qb.where('asset.fileCreatedAt', '<=', options.takenBefore!),
       )
       .$if(exclude !== 'media' && !!options.type, (qb) => qb.where('asset.type', '=', options.type!))
-      .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
+      .$if(exclude !== 'favorites' && options.isFavorite !== undefined, (qb) =>
+        qb.where('asset.isFavorite', '=', options.isFavorite!),
+      )
       .$if(needsExifJoin, (qb) =>
         qb
           .innerJoin('asset_exif', 'asset_exif.assetId', 'asset.id')
@@ -961,6 +980,17 @@ export class SearchRepository {
       .orderBy('type')
       .execute();
     return rows.map((row) => row.type);
+  }
+
+  private async getSmartFacetHasFavorites(trx: Kysely<DB>, options: SmartSearchFacetsOptions): Promise<boolean> {
+    const row = await trx
+      .selectFrom('asset')
+      .select('asset.id')
+      .where('asset.id', 'in', this.buildSmartFacetFilteredAssetIds(trx, options, 'favorites'))
+      .where('asset.isFavorite', '=', true)
+      .limit(1)
+      .executeTakeFirst();
+    return !!row;
   }
 
   @GenerateSql(

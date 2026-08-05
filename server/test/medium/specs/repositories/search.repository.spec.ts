@@ -334,6 +334,9 @@ describe(SearchRepository.name, () => {
         ratings: [],
         mediaTypes: [],
         hasUnnamedPeople: false,
+        hasFavorites: false,
+        hasAssetsInAlbum: false,
+        hasAssetsNotInAlbum: false,
       });
     });
 
@@ -469,6 +472,23 @@ describe(SearchRepository.name, () => {
         },
       ]);
       expect(result.hasUnnamedPeople).toBe(false);
+    });
+
+    it('computes hasFavorites ignoring its own isFavorite filter (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: favourite } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      await addEmbedding(defaultDatabase, favourite.id);
+      const { asset: plain } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, plain.id);
+
+      const result = await sut.getSmartSearchFacets({
+        userIds: [user.id],
+        embedding: matchingEmbedding,
+        isFavorite: false,
+      });
+
+      expect(result.hasFavorites).toBe(true);
     });
   });
 

@@ -1269,6 +1269,9 @@ describe(SearchService.name, () => {
       ratings: [4, 5],
       mediaTypes: [AssetType.Image],
       hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     };
 
     beforeEach(() => {
