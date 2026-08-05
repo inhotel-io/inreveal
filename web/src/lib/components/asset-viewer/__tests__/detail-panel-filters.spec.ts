@@ -239,6 +239,51 @@ describe('DetailPanel camera filter', () => {
   });
 });
 
+// #732, restated for the mechanism that replaced the /search links. The old bug: the camera
+// anchor jumped to /search, whose metadata search is scoped to own + partner assets, so a Space
+// member clicking the camera of a photo ANOTHER member shared into the Space got zero results —
+// not even the photo they had just clicked on. #927 fixed that by sending withSharedSpaces:true
+// on the anchor; this branch deletes the anchor instead, so that fix has to be re-proven here.
+//
+// It holds for a different reason now: the click filters the surface you are standing on, and the
+// Space timeline already contains every member's contributions. The photo you clicked cannot fall
+// out of scope, because the scope IS the Space. The 🔍 escape to /photos keeps the co-member's
+// photo too — buildPhotosTimelineOptions sends withSharedSpaces there (pinned in
+// utils/__tests__/photos-filter-options.spec.ts), which is the same guarantee #927 asserted.
+describe('DetailPanel shared-space coverage (#732)', () => {
+  it('a co-member’s photo in a Space filters the Space, not the owner-scoped /search', async () => {
+    mockPage.reset('https://gallery.test/spaces/space-1/photos/asset-1');
+    const asset = buildAsset({ ownerId: 'someone-else', exifInfo: { make: 'Apple', model: 'iPhone 17 Pro' } });
+
+    const { container } = renderWithTooltips(DetailPanel, { asset, currentAlbum: null });
+
+    await fireEvent.click(await screen.findByLabelText(/filter_by_camera/));
+
+    const [target] = gotoMock.mock.calls.at(-1) as [string];
+    expect(target.startsWith('/spaces/space-1')).toBe(true);
+    expect(target).toContain('make=Apple');
+    // The owner-scoped page the bug sent people to. Nothing may route there any more.
+    expect(target).not.toContain('/search');
+    expect(container.querySelector('a[href*="/search"]')).toBeNull();
+  });
+
+  it('the same holds for the lens row', async () => {
+    mockPage.reset('https://gallery.test/spaces/space-1/photos/asset-1');
+    const asset = buildAsset({ ownerId: 'someone-else', exifInfo: { lensModel: 'iPhone 17 Pro front camera' } });
+
+    const { container } = renderWithTooltips(DetailPanel, { asset, currentAlbum: null });
+
+    await fireEvent.click(await screen.findByLabelText(/filter_by_lens/));
+
+    const [target] = gotoMock.mock.calls.at(-1) as [string];
+    expect(target.startsWith('/spaces/space-1')).toBe(true);
+    // `lensModel` is the FilterState key; the URL codec spells it `lens` (filter-url.ts).
+    expect(target).toContain('lens=iPhone');
+    expect(target).not.toContain('/search');
+    expect(container.querySelector('a[href*="/search"]')).toBeNull();
+  });
+});
+
 // Task 4 — the filename row lives inline in DetailPanel.svelte too. The patch is the basename
 // WITHOUT its extension: that is what surfaces a RAW/JPEG pair (IMG_1234.CR3 + IMG_1234.jpg) and
 // edited variants of the same shot.
