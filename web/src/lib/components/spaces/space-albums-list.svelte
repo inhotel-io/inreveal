@@ -21,6 +21,7 @@
     getFolderPreviewAssetIds,
     getRecursiveAlbumCount,
   } from '$lib/utils/space-album-folders';
+  import type { DragPayload } from '$lib/utils/space-album-folder-dnd';
   import LoadingSpinner from '$lib/components/shared-components/LoadingSpinner.svelte';
   import SpaceAlbumCard from '$lib/components/spaces/space-album-card.svelte';
   import SpaceAlbumFolderCard from '$lib/components/spaces/space-album-folder-card.svelte';
@@ -44,10 +45,12 @@
     searchQuery?: string;
     onUnlink?: (album: SharedSpaceLinkedAlbumDto) => void;
     onToggleTimeline?: (album: SharedSpaceLinkedAlbumDto) => void;
+    onMoveAlbum?: (album: SharedSpaceLinkedAlbumDto) => void;
     onOpenFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onRenameFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onMoveFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDeleteFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
+    onDropItem?: (payload: DragPayload, targetFolderId: string | null) => void;
   }
 
   let {
@@ -63,10 +66,12 @@
     searchQuery = '',
     onUnlink,
     onToggleTimeline,
+    onMoveAlbum,
     onOpenFolder,
     onRenameFolder,
     onMoveFolder,
     onDeleteFolder,
+    onDropItem,
   }: Props = $props();
 
   const isSearching = $derived((searchQuery ?? '').trim().length > 0);
@@ -162,7 +167,7 @@
     <div class="grid grid-auto-fill-56 gap-y-4">
       {#each searchHits as hit (hit.album.id)}
         <div>
-          <SpaceAlbumCard {spaceId} album={hit.album} {canManage} {onUnlink} {onToggleTimeline} />
+          <SpaceAlbumCard {spaceId} album={hit.album} {canManage} {onUnlink} {onToggleTimeline} onMove={onMoveAlbum} />
           {#if hit.path.length > 0}
             <p class="px-5 text-xs opacity-70" data-testid="space-album-search-path-{hit.album.id}">
               {hit.path.join(' › ')}
@@ -216,10 +221,13 @@
             albumCount={getRecursiveAlbumCount(folders, albums, folder.id)}
             previewAssetIds={getFolderPreviewAssetIds(folders, albums, folder.id)}
             {canManage}
+            {folders}
+            {albums}
             onOpen={onOpenFolder}
             onRename={onRenameFolder}
             onMove={onMoveFolder}
             onDelete={onDeleteFolder}
+            {onDropItem}
           />
         {/each}
       </div>
@@ -250,7 +258,7 @@
           {#if !collapsed}
             <div class="mt-4 grid grid-auto-fill-56 gap-y-4" transition:slide={{ duration: 300 }}>
               {#each group.albums as album (album.id)}
-                <SpaceAlbumCard {spaceId} {album} {canManage} {onUnlink} {onToggleTimeline} />
+                <SpaceAlbumCard {spaceId} {album} {canManage} {onUnlink} {onToggleTimeline} onMove={onMoveAlbum} />
               {/each}
             </div>
           {/if}
@@ -258,7 +266,7 @@
       {:else}
         <div class="grid grid-auto-fill-56 gap-y-4">
           {#each sorted as album (album.id)}
-            <SpaceAlbumCard {spaceId} {album} {canManage} {onUnlink} {onToggleTimeline} />
+            <SpaceAlbumCard {spaceId} {album} {canManage} {onUnlink} {onToggleTimeline} onMove={onMoveAlbum} />
           {/each}
         </div>
       {/if}
