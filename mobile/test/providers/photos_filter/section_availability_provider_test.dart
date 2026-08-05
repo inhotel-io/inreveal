@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
@@ -5,6 +6,7 @@ import 'package:immich_mobile/models/search/search_filter.model.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/api.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/section_availability.provider.dart';
 import 'package:immich_mobile/utils/option.dart';
 import 'package:mocktail/mocktail.dart';
@@ -167,6 +169,94 @@ void main() {
           withSharedSpaces: any(named: 'withSharedSpaces'),
         ),
       ).called(1);
+    });
+
+    // #910 fix-wave finding 1: the facets lookup must key on photosFilterDebouncedProvider (250 ms),
+    // not the raw filter — otherwise every discrete tap fires its own request on a family key nobody
+    // else shares. This is the strong form: a burst of rapid, discrete changes settles to exactly one
+    // NEW request, not one per change.
+    test('coalesces a burst of rapid filter changes into a single new facets request', () {
+      fakeAsync((async) {
+        when(
+          () => mockSearchApi.getFilterSuggestions(
+            city: any(named: 'city'),
+            country: any(named: 'country'),
+            isFavorite: any(named: 'isFavorite'),
+            isNotInAlbum: any(named: 'isNotInAlbum'),
+            make: any(named: 'make'),
+            mediaType: any(named: 'mediaType'),
+            model: any(named: 'model'),
+            personIds: any(named: 'personIds'),
+            rating: any(named: 'rating'),
+            spaceId: any(named: 'spaceId'),
+            tagIds: any(named: 'tagIds'),
+            takenAfter: any(named: 'takenAfter'),
+            takenBefore: any(named: 'takenBefore'),
+            withSharedSpaces: any(named: 'withSharedSpaces'),
+          ),
+        ).thenAnswer((_) async => emptySuggestions());
+
+        final container = ProviderContainer(overrides: [apiServiceProvider.overrideWithValue(mockApiService)]);
+        addTearDown(container.dispose);
+
+        // Mount and let the at-rest (empty-filter) request settle before starting the burst.
+        container.listen(sectionAvailabilityProvider, (_, __) {});
+        async.flushMicrotasks();
+        clearInteractions(mockSearchApi);
+
+        // Three discrete taps in quick succession — each well inside the 250 ms debounce window
+        // measured from the previous one.
+        final notifier = container.read(photosFilterProvider.notifier);
+        notifier.togglePerson(const PersonDto(id: 'p1', name: 'A', isHidden: false, thumbnailPath: ''));
+        async.elapse(const Duration(milliseconds: 50));
+        notifier.togglePerson(const PersonDto(id: 'p2', name: 'B', isHidden: false, thumbnailPath: ''));
+        async.elapse(const Duration(milliseconds: 50));
+        notifier.togglePerson(const PersonDto(id: 'p3', name: 'C', isHidden: false, thumbnailPath: ''));
+
+        // Still within the window measured from the last change: no new request yet.
+        async.elapse(const Duration(milliseconds: 100));
+        verifyNever(
+          () => mockSearchApi.getFilterSuggestions(
+            city: any(named: 'city'),
+            country: any(named: 'country'),
+            isFavorite: any(named: 'isFavorite'),
+            isNotInAlbum: any(named: 'isNotInAlbum'),
+            make: any(named: 'make'),
+            mediaType: any(named: 'mediaType'),
+            model: any(named: 'model'),
+            personIds: any(named: 'personIds'),
+            rating: any(named: 'rating'),
+            spaceId: any(named: 'spaceId'),
+            tagIds: any(named: 'tagIds'),
+            takenAfter: any(named: 'takenAfter'),
+            takenBefore: any(named: 'takenBefore'),
+            withSharedSpaces: any(named: 'withSharedSpaces'),
+          ),
+        );
+
+        // Past the debounce window: the burst settles to exactly ONE new request.
+        async.elapse(const Duration(milliseconds: 200));
+        async.flushMicrotasks();
+
+        verify(
+          () => mockSearchApi.getFilterSuggestions(
+            city: any(named: 'city'),
+            country: any(named: 'country'),
+            isFavorite: any(named: 'isFavorite'),
+            isNotInAlbum: any(named: 'isNotInAlbum'),
+            make: any(named: 'make'),
+            mediaType: any(named: 'mediaType'),
+            model: any(named: 'model'),
+            personIds: any(named: 'personIds'),
+            rating: any(named: 'rating'),
+            spaceId: any(named: 'spaceId'),
+            tagIds: any(named: 'tagIds'),
+            takenAfter: any(named: 'takenAfter'),
+            takenBefore: any(named: 'takenBefore'),
+            withSharedSpaces: any(named: 'withSharedSpaces'),
+          ),
+        ).called(1);
+      });
     });
 
     // Task 1b makes a null response throw; the sheet must then show everything rather than

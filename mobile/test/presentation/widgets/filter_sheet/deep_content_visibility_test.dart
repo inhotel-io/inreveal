@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
@@ -15,6 +16,7 @@ import 'package:immich_mobile/presentation/widgets/filter_sheet/deep_content.wid
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_sheet.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
+import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/section_availability.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/time_buckets.provider.dart';
 import 'package:openapi/api.dart';
@@ -145,6 +147,44 @@ void main() {
     // These two have no facet and must always render — the section itself never disappears.
     expect(find.byKey(const Key('toggle-archived')), findsOneWidget);
     expect(find.byKey(const Key('toggle-untagged')), findsOneWidget);
+  });
+
+  // #910 fix-wave finding 2: the gated toggles need the SAME baseline treatment as the sections —
+  // a facet emptied only by a CROSS-SECTION filter (here: selecting a person with no favourited
+  // photos) must not pop the switch out mid-session, because the whole-scope baseline still has it.
+  // Mirrors the provider-level `keeps a section whose facet a CROSS-SECTION filter emptied` test.
+  testWidgets('keeps the favourites switch when a CROSS-SECTION filter emptied its facet, because the '
+      'baseline still has it (#910)', (tester) async {
+    const aPerson = PersonDto(id: 'p1', name: 'Alice', isHidden: false, thumbnailPath: '');
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
+    await pumpDeep(
+      tester,
+      controller,
+      overrides: [
+        photosFilterSuggestionsProvider.overrideWith((ref, filter) {
+          // Current facets (person filter applied): no favourites in that person's photos.
+          // Baseline facets (SearchFilter.empty()): the library does have favourites.
+          return Future.value(
+            FilterSuggestionsResponseDto(
+              hasUnnamedPeople: false,
+              hasFavorites: filter.isEmpty,
+              hasAssetsInAlbum: false,
+              hasAssetsNotInAlbum: true,
+            ),
+          );
+        }),
+      ],
+    );
+
+    final container = ProviderScope.containerOf(tester.element(find.byType(DeepContent)));
+    container.read(photosFilterProvider.notifier).togglePerson(aPerson);
+    // Past the 250 ms debounce so the person filter's facets settle in.
+    await tester.pump(const Duration(milliseconds: 260));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('toggle-favourites')), findsOneWidget);
   });
 
   testWidgets('never dims or drops a rating star (#910, feedback_no_dynamic_rating_media_hiding)', (tester) async {
