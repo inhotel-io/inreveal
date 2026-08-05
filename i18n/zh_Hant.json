@@ -33,6 +33,7 @@
   "add_to_album_bottom_sheet_added": "已新增至 {album}",
   "add_to_album_bottom_sheet_already_exists": "已在 {album} 中",
   "add_to_album_bottom_sheet_some_local_assets": "無法將部分本機項目新增至相簿",
+  "add_to_album_item_count": "將 {count, plural, one {# 個項目} other {# 個項目}} 加入到相簿",
   "add_to_album_or_space": "加入到相簿或 Space",
   "add_to_album_toggle": "切換「{album}」的選取狀態",
   "add_to_albums": "加入相簿",
