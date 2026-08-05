@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/deep/collapsible_section.widget.dart';
 import 'package:immich_mobile/presentation/widgets/filter_sheet/filter_section_id.dart';
+import 'package:immich_mobile/providers/photos_filter/filter_suggestions.provider.dart';
 import 'package:immich_mobile/providers/photos_filter/photos_filter.provider.dart';
 
 /// Adaptive toggles: Favourites, Archived, Not-in-album, Untagged.
@@ -16,6 +17,11 @@ class TogglesSection extends ConsumerWidget {
     final display = ref.watch(photosFilterProvider.select((f) => f.display));
     final notifier = ref.read(photosFilterProvider.notifier);
 
+    final facets = ref.watch(photosFilterSuggestionsProvider(ref.watch(photosFilterProvider)));
+    // Offer everything while the request is in flight or failed. #910
+    final hasFavorites = facets.valueOrNull?.hasFavorites ?? true;
+    final hasUnfiled = facets.valueOrNull?.hasAssetsNotInAlbum ?? true;
+
     return CollapsibleSection(
       sectionId: FilterSectionId.toggles,
       titleKey: 'filter_sheet_deep_toggles_section',
@@ -24,16 +30,18 @@ class TogglesSection extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SwitchListTile.adaptive(
-              key: const Key('toggle-favourites'),
-              contentPadding: EdgeInsets.zero,
-              title: Text('filter_sheet_favourites'.tr()),
-              value: display.isFavorite,
-              onChanged: (v) {
-                HapticFeedback.selectionClick();
-                notifier.setFavouritesOnly(v);
-              },
-            ),
+            // Never remove the control that clears a filter the user has on. #910
+            if (hasFavorites || display.isFavorite)
+              SwitchListTile.adaptive(
+                key: const Key('toggle-favourites'),
+                contentPadding: EdgeInsets.zero,
+                title: Text('filter_sheet_favourites'.tr()),
+                value: display.isFavorite,
+                onChanged: (v) {
+                  HapticFeedback.selectionClick();
+                  notifier.setFavouritesOnly(v);
+                },
+              ),
             SwitchListTile.adaptive(
               key: const Key('toggle-archived'),
               contentPadding: EdgeInsets.zero,
@@ -44,16 +52,17 @@ class TogglesSection extends ConsumerWidget {
                 notifier.setArchivedIncluded(v);
               },
             ),
-            SwitchListTile.adaptive(
-              key: const Key('toggle-not-in-album'),
-              contentPadding: EdgeInsets.zero,
-              title: Text('filter_sheet_not_in_album'.tr()),
-              value: display.isNotInAlbum,
-              onChanged: (v) {
-                HapticFeedback.selectionClick();
-                notifier.setNotInAlbum(v);
-              },
-            ),
+            if (hasUnfiled || display.isNotInAlbum)
+              SwitchListTile.adaptive(
+                key: const Key('toggle-not-in-album'),
+                contentPadding: EdgeInsets.zero,
+                title: Text('filter_sheet_not_in_album'.tr()),
+                value: display.isNotInAlbum,
+                onChanged: (v) {
+                  HapticFeedback.selectionClick();
+                  notifier.setNotInAlbum(v);
+                },
+              ),
             SwitchListTile.adaptive(
               key: const Key('toggle-untagged'),
               contentPadding: EdgeInsets.zero,
