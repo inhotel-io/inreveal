@@ -912,8 +912,8 @@ git commit -m "feat(server): expose favourites and album-membership facets in th
 - `pnpm test:medium --run test/medium/specs/repositories/search.repository.spec.ts` is green, including
   every pre-existing test — and the reported file count is 1, not the whole suite (Global Constraints).
 - `pnpm test --run`, `pnpm check`, `pnpm lint`, `pnpm format` are green from `server/`.
-- `server/src/queries/search.repository.sql` contains the four new probe queries (album membership is
-  two) and nothing was deleted.
+- `server/src/queries/search.repository.sql` contains the six new probe queries — three per
+  `@GenerateSql` call site, since album membership issues two — and nothing was deleted.
 - Every row of spec §8.1 has a test. The two easiest to skip are `withSharedSpaces` and the
   smart-path verdicts — both are Task 5.
 - No web, mobile, or `open-api/` file is touched — those are slices 2 and 4.
