@@ -490,6 +490,48 @@ describe(SearchRepository.name, () => {
 
       expect(result.hasFavorites).toBe(true);
     });
+
+    it('computes album membership ignoring its own isNotInAlbum filter (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: filed } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, filed.id);
+      const { asset: unfiled } = await ctx.newAsset({ ownerId: user.id });
+      await addEmbedding(defaultDatabase, unfiled.id);
+      const { album } = await ctx.newAlbum({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: filed.id });
+
+      const result = await sut.getSmartSearchFacets({
+        userIds: [user.id],
+        embedding: matchingEmbedding,
+        isNotInAlbum: true,
+      });
+
+      expect(result.hasAssetsInAlbum).toBe(true);
+      expect(result.hasAssetsNotInAlbum).toBe(true);
+    });
+
+    it('still applies isNotInAlbum to the non-album facets (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: filed } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: filed.id, make: 'Canon' });
+      await addEmbedding(defaultDatabase, filed.id);
+      const { asset: unfiled } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: unfiled.id, make: 'Nikon' });
+      await addEmbedding(defaultDatabase, unfiled.id);
+      const { album } = await ctx.newAlbum({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: filed.id });
+
+      const result = await sut.getSmartSearchFacets({
+        userIds: [user.id],
+        embedding: matchingEmbedding,
+        isNotInAlbum: true,
+      });
+
+      // Only the un-filed Nikon survives the filter, so Canon must be gone from the makes facet.
+      expect(result.cameraMakes).toEqual(['Nikon']);
+    });
   });
 
   describe('getFilterSuggestions', () => {

@@ -639,6 +639,7 @@ export class SearchRepository {
       const ratings = await this.getSmartFacetRatings(trx, options);
       const mediaTypes = await this.getSmartFacetMediaTypes(trx, options);
       const hasFavorites = await this.getSmartFacetHasFavorites(trx, options);
+      const albumMembership = await this.getSmartFacetAlbumMembership(trx, options);
 
       return {
         total,
@@ -653,8 +654,7 @@ export class SearchRepository {
         mediaTypes,
         hasUnnamedPeople: peopleResult.hasUnnamedPeople,
         hasFavorites,
-        hasAssetsInAlbum: false,
-        hasAssetsNotInAlbum: false,
+        ...albumMembership,
       };
     });
   }
@@ -672,6 +672,8 @@ export class SearchRepository {
         'rating',
         'type',
         'isFavorite',
+        'isInAlbum',
+        'isNotInAlbum',
         'takenAfter',
         'takenBefore',
         'personIds',
@@ -733,6 +735,14 @@ export class SearchRepository {
       .$if(exclude !== 'media' && !!options.type, (qb) => qb.where('asset.type', '=', options.type!))
       .$if(exclude !== 'favorites' && options.isFavorite !== undefined, (qb) =>
         qb.where('asset.isFavorite', '=', options.isFavorite!),
+      )
+      .$if(exclude !== 'albums' && !!options.isNotInAlbum, (qb) =>
+        qb.where((eb) =>
+          eb.not(eb.exists(eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
+        ),
+      )
+      .$if(exclude !== 'albums' && !!options.isInAlbum, (qb) =>
+        qb.where((eb) => eb.exists(eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'))),
       )
       .$if(needsExifJoin, (qb) =>
         qb
@@ -991,6 +1001,26 @@ export class SearchRepository {
       .limit(1)
       .executeTakeFirst();
     return !!row;
+  }
+
+  private async getSmartFacetAlbumMembership(
+    trx: Kysely<DB>,
+    options: SmartSearchFacetsOptions,
+  ): Promise<{ hasAssetsInAlbum: boolean; hasAssetsNotInAlbum: boolean }> {
+    const probe = (filed: boolean) =>
+      trx
+        .selectFrom('asset')
+        .select('asset.id')
+        .where('asset.id', 'in', this.buildSmartFacetFilteredAssetIds(trx, options, 'albums'))
+        .where((eb) => {
+          const inAlbum = eb.exists(eb.selectFrom('album_asset').whereRef('album_asset.assetId', '=', 'asset.id'));
+          return filed ? inAlbum : eb.not(inAlbum);
+        })
+        .limit(1)
+        .executeTakeFirst();
+
+    const [filed, unfiled] = await Promise.all([probe(true), probe(false)]);
+    return { hasAssetsInAlbum: !!filed, hasAssetsNotInAlbum: !!unfiled };
   }
 
   @GenerateSql(
