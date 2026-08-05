@@ -33,6 +33,7 @@
   "add_to_album_bottom_sheet_added": "Aggiunto in {album}",
   "add_to_album_bottom_sheet_already_exists": "Già presente in {album}",
   "add_to_album_bottom_sheet_some_local_assets": "Alcune risorse locali non possono essere aggiunte all'album",
+  "add_to_album_item_count": "Aggiungi {count, plural, one {# elemento} other {# elementi}} all'album",
   "add_to_album_or_space": "Aggiungi a un album o a uno Space",
   "add_to_album_toggle": "Attiva/disattiva la selezione di {album}",
   "add_to_albums": "Aggiungi ad album",
