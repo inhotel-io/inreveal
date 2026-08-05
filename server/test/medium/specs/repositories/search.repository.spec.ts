@@ -701,7 +701,13 @@ describe(SearchRepository.name, () => {
     it('reports every #910 facet false under forceEmptyResult', async () => {
       const { ctx, sut } = setup();
       const { user } = await ctx.newUser();
-      await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      // The favourite is filed (makes hasAssetsInAlbum load-bearing) and a separate plain asset
+      // is left unfiled (makes hasAssetsNotInAlbum load-bearing too) — without forceEmptyResult
+      // all three facets would flip to true/true/true, not vacuously stay false.
+      const { asset: favourite } = await ctx.newAsset({ ownerId: user.id, isFavorite: true });
+      const { album } = await ctx.newAlbum({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: favourite.id });
+      await ctx.newAsset({ ownerId: user.id });
 
       const result = await sut.getFilterSuggestions([user.id], { forceEmptyResult: true });
 
@@ -762,6 +768,10 @@ describe(SearchRepository.name, () => {
         const { user: owner } = await ctx.newUser();
         const { user: member } = await ctx.newUser();
         const { asset } = await ctx.newAsset({ ownerId: owner.id, isFavorite: true });
+        // A distinctive make so the second assertion can identify THIS asset specifically —
+        // a `toBe(true)` non-emptiness check alone would also pass for an over-broad scope
+        // that leaked in unrelated assets (see the mutation check in the task report).
+        await ctx.newExif({ assetId: asset.id, make: 'SpaceMake' });
 
         const { space } = await ctx.newSharedSpace({ createdById: owner.id });
         await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
@@ -777,6 +787,10 @@ describe(SearchRepository.name, () => {
         // than `baseline`. Subset, so it can only grey — never wrongly hide.
         const spaceScope = await sut.getFilterSuggestions([member.id], { timelineSpaceIds: [space.id] });
         expect(spaceScope.hasFavorites).toBe(true);
+        // Pins the space asset specifically, not merely "scope became non-empty": an over-broad
+        // scope (e.g. the timelineSpaceIds arm silently falling through to unfiltered) would leak
+        // other tests' makes into this array and fail the toEqual.
+        expect(spaceScope.cameraMakes).toEqual(['SpaceMake']);
       });
     });
 
