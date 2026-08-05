@@ -33,6 +33,7 @@
   "add_to_album_bottom_sheet_added": "已添加至 {album}",
   "add_to_album_bottom_sheet_already_exists": "已在 {album} 中",
   "add_to_album_bottom_sheet_some_local_assets": "部分本地资产无法添加至相册",
+  "add_to_album_item_count": "将 {count, plural, one {# 个项目} other {# 个项目}} 添加到相册",
   "add_to_album_or_space": "添加到相簿或 Space",
   "add_to_album_toggle": "切换“{album}”的选择状态",
   "add_to_albums": "添加到相册",
