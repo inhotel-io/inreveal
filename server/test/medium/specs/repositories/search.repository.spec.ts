@@ -532,6 +532,28 @@ describe(SearchRepository.name, () => {
       // Only the un-filed Nikon survives the filter, so Canon must be gone from the makes facet.
       expect(result.cameraMakes).toEqual(['Nikon']);
     });
+
+    it('still applies isInAlbum to the non-album facets (#910)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset: filed } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: filed.id, make: 'Canon' });
+      await addEmbedding(defaultDatabase, filed.id);
+      const { asset: unfiled } = await ctx.newAsset({ ownerId: user.id });
+      await ctx.newExif({ assetId: unfiled.id, make: 'Nikon' });
+      await addEmbedding(defaultDatabase, unfiled.id);
+      const { album } = await ctx.newAlbum({ ownerId: user.id });
+      await ctx.newAlbumAsset({ albumId: album.id, assetId: filed.id });
+
+      const result = await sut.getSmartSearchFacets({
+        userIds: [user.id],
+        embedding: matchingEmbedding,
+        isInAlbum: true,
+      });
+
+      // Only the filed Canon survives the filter, so Nikon must be gone from the makes facet.
+      expect(result.cameraMakes).toEqual(['Canon']);
+    });
   });
 
   describe('getFilterSuggestions', () => {
