@@ -61,6 +61,8 @@ function toSuggestionRequest(filters: FilterState) {
         : filters.mediaType === 'image'
           ? AssetTypeEnum.Image
           : AssetTypeEnum.Video,
+    isNotInAlbum: filters.isNotInAlbum === true ? true : undefined,
+    isInAlbum: filters.isInAlbum === true ? true : undefined,
     takenAfter: context?.takenAfter,
     takenBefore: context?.takenBefore,
   };

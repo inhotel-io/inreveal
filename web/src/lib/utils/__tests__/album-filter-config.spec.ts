@@ -284,6 +284,27 @@ describe('buildAlbumAssetPickerFilterConfig', () => {
     expect(getFilterSuggestions).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'album-1' }));
   });
 
+  it('forwards isInAlbum and isNotInAlbum to filter suggestions (#910)', async () => {
+    const config = buildAlbumAssetPickerFilterConfig();
+
+    await config.suggestionsProvider!({ ...createFilterState(), isInAlbum: true });
+    const isInAlbumRequest = vi.mocked(getFilterSuggestions).mock.calls.at(-1)?.[0];
+    expect(isInAlbumRequest?.isInAlbum).toBe(true);
+    expect(isInAlbumRequest?.isNotInAlbum).toBeUndefined();
+
+    await config.suggestionsProvider!({ ...createFilterState(), isNotInAlbum: true });
+    const isNotInAlbumRequest = vi.mocked(getFilterSuggestions).mock.calls.at(-1)?.[0];
+    expect(isNotInAlbumRequest?.isNotInAlbum).toBe(true);
+    expect(isNotInAlbumRequest?.isInAlbum).toBeUndefined();
+
+    // An explicit `false` means "only assets that ARE/aren't in an album", not "don't filter" —
+    // it must not be forwarded as `false`, only `true` or omitted.
+    await config.suggestionsProvider!({ ...createFilterState(), isInAlbum: false, isNotInAlbum: false });
+    const bothFalseRequest = vi.mocked(getFilterSuggestions).mock.calls.at(-1)?.[0];
+    expect(bothFalseRequest?.isInAlbum).toBeUndefined();
+    expect(bothFalseRequest?.isNotInAlbum).toBeUndefined();
+  });
+
   it('offers a browse-mode baseline computed with no filters, unscoped (#910)', async () => {
     const config = buildAlbumAssetPickerFilterConfig();
     vi.mocked(getFilterSuggestions).mockClear();
