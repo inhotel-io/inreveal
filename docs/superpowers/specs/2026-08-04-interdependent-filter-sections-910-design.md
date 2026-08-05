@@ -170,8 +170,13 @@ test suite — a refactor #910 does not justify.
 | media     | `mediaTypes`                              | not **both** `IMAGE` and `VIDEO` present        |
 | favorites | `hasFavorites`                            | `hasFavorites` false                            |
 | albums    | `hasAssetsInAlbum`, `hasAssetsNotInAlbum` | either is false                                 |
-| timeline  | `timeBuckets`                             | never — greys when `timeBuckets` empty          |
+| timeline  | `timeBuckets`                             | never — greys when `timeBuckets` empty†         |
 | text      | none                                      | never                                           |
+
+† Not unconditionally: §4.4 rule 1 outranks this row. A Timeline holding an active date filter stays
+`available` even with no buckets, because greying the one control that could clear that filter would
+strand the user. The implementation takes rule 1 first, which is correct — read this row as "timeline
+never becomes `unavailable`, and greys when empty _unless_ rule 1 applies".
 
 Notes on the three non-obvious rows:
 
@@ -684,20 +689,24 @@ verified against `e2e/test-assets` and `e2e/src/utils.ts`:
 | location  | upload `${testAssetDir}/metadata/gps-position/thompson-springs.jpg`, then `waitForQueueFinish(token, 'metadataExtraction')`                                                 |
 | camera    | upload a fixture that carries an EXIF `Make` — `metadata/rating/mongolels.jpg` or `metadata/tags/picasa.jpg` (both Canon); **`thompson-springs.jpg` has GPS but no `Make`** |
 | tags      | `utils.upsertTags(token, ['x'])` then `utils.tagAssets(token, tagId, [assetId])`                                                                                            |
-| people    | **not seedable** — see below                                                                                                                                                |
+| people    | `utils.createPerson` + `utils.createFace({ assetId, personId })` (global), or `utils.createSpacePerson(...)` (space-scoped)                                                 |
 
-**The People carve-out.** A People facet requires a _face_, and face detection needs the ML stack that
-the web e2e project does not run. `utils.createPerson` makes a person row with no face, which
-`getFilteredPeople` (`search.repository.ts:1502`) will not return — `utils.ts:989-991` already
-documents this for the command palette ("a bare API-created person won't surface in search results").
-There is no seed that keeps People available in these suites.
+**People is seedable too — an earlier draft of this spec said otherwise and was wrong.** That draft
+reasoned from `utils.createPerson`, which creates a person row with no face and therefore never
+reaches `getFilteredPeople`, and concluded that a People facet needs the ML stack the web e2e project
+does not run. It then sanctioned changing People assertions to assert **absence**.
 
-So for `people` only, the assertion changes rather than the seed: the three suites that list `people`
-among "all sections" drop it from the list and instead assert `filter-section-people` is **absent**,
-with a comment naming this paragraph. That is not weakening an assertion to accommodate the feature —
-a library with no detected faces genuinely cannot filter by person, so asserting its absence is
-positive #910 coverage. Any suite that later runs with ML can seed a face chain
-(`feedback_e2e_space_person_face_chain`) and flip the assertion back.
+That was a mistake. `utils.createFace({ assetId, personId })` (`e2e/src/utils.ts:490`) inserts the
+face row directly in SQL with no ML involved, and more than twenty specs already use it;
+`utils.createSpacePerson` (`:573`) does the same for space-scoped people. So People takes the ordinary
+rule — fix the seed, never the assertion — exactly like every other section, and the suites assert
+`filter-section-people` is **visible**.
+
+One trap that made this look impossible, now fixed in the helpers themselves: `asset_face.sourceType`
+defaults to `machine-learning`, and on any stack with facial recognition enabled `handleDetectFaces`
+treats such a face as a prior detection, re-runs detection, finds no real face in a synthetic fixture,
+and deletes it — so a manually seeded face vanished seconds after creation. Both helpers now insert
+`sourceType: 'manual'`, which is also what the app's own manual-face endpoint writes.
 
 New e2e coverage: a library with no videos does not render `filter-section-media`; favouriting an
 asset makes `filter-section-favorites` appear on reload.
@@ -766,10 +775,9 @@ storing it, so it re-expands on its own — but it is a visible flicker on the h
 exist before, because the suggestions path previously passed no count for `timeline` at all. Called
 out in the PR description; §8.3 locks the re-expansion.
 
-**Risk: the e2e People carve-out is permanent until ML runs in e2e.** §8.4 replaces three
-"all sections are visible" assertions with "People is absent". If the web e2e project ever gains face
-detection, those assertions become wrong in the other direction and will fail loudly, which is the
-intended outcome.
+**Retired risk: the e2e People carve-out.** An earlier draft listed a standing risk here on the premise
+that People could not be seeded without ML. It can (§8.4), the carve-out was removed, and the suites
+assert People is visible like every other section. Nothing is outstanding.
 
 **Non-goal: the Text section.** Description, filename and OCR are free text with no enumerable
 domain. Gating them would need `hasDescription` / `hasOcrText` probes over columns not indexed for
