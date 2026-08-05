@@ -24,14 +24,14 @@ If someone's People page shows photos that clearly belong to a different person,
 **Administration → Face cleanup** opens a chooser with two modes. They write exactly the same records, so a
 decision made in either is permanent and is respected by the other — and by every future scan.
 
-|               | **Guided review**                             | **Manual review**                         |
+|               | **Guided cleanup**                            | **Manual review**                         |
 | ------------- | --------------------------------------------- | ----------------------------------------- |
 | Starts from   | a scan                                        | a person you pick                         |
 | Shows you     | the faces the scan flagged, worst first       | **every** face on that person             |
 | Best when     | you want the likeliest mistakes found for you | you already know whose cluster is wrong   |
 | Needs a scan? | yes                                           | **no** — it works on a brand-new instance |
 
-Guided review is the rest of this page. Manual review is described under
+Guided cleanup is the rest of this page. Manual review is described under
 [Manual review](#manual-review).
 
 Neither mode is "the" way to do it. If you know that a particular person's photos are wrong, going straight to
@@ -45,23 +45,45 @@ decisions and lose them.
 
 ## How to use it
 
-1. Go to **Administration → Face cleanup**.
+1. Go to **Administration → Face cleanup** and choose **Guided cleanup**.
 2. Click **Re-scan**. The scan runs while the facial recognition queue is idle; it completes in seconds to minutes
    depending on the number of faces on the instance.
-3. Review the table. The scan splits flagged clusters into two groups:
-   - **Review these first** (amber rows) — named people, large clusters, or clusters whose impostor faces route
-     into another flagged cluster. Open each row to see the faces that would leave vs. the suspected owner. Uncheck
-     any faces that actually belong to this person, then click **Move faces** to approve the move for that person.
-   - **Confident — auto-selected** — unnamed, small clusters with a single clean owner. These are pre-selected and
-     safe to bulk-approve from the list without opening.
+3. Work the two lanes the scan sorts flagged clusters into:
+   - **Ready to auto-fix** — unnamed, small clusters with a single clean owner. Nothing here needs opening:
+     **Approve all** re-homes the whole batch in one action, or approve them one at a time. Use **Exclude from
+     this batch** to hold a cluster back, or **Review them** to open the lane and go face by face instead.
+   - **Needs your review** — named people, large clusters, or clusters whose impostor faces route into another
+     flagged cluster (badged `also flagged`). Nothing here is touched until you open it. Open each row, decide
+     each face (see [the six actions](#the-six-actions)), then press **Apply**.
 
-4. Once you are happy with the selection, click **Re-attribute selected (N) →** to apply all approved moves in one
-   batch.
+The two lanes are independent: approving the auto-fix batch does not touch anything in the review lane, and vice
+versa.
 
 ### Operating order
 
-Clean **owner-first**: start with the people that have the smallest flagged percentage. Rows marked `bad-target`
+Clean **owner-first**: start with the people that have the smallest flagged percentage. Rows badged `also flagged`
 mean their suspected owner is itself flagged — resolving the owners first turns those rows green in the next scan.
+
+### The six actions
+
+On a person's review page, every flagged face has to end in one of six states before that person leaves the
+cleanup queue. Nothing is written until you press **Apply**.
+
+| Action              | What it does                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| **Move to owner**   | the default — sends the face to the person the scan thinks it actually is          |
+| **Move to person…** | sends it to someone you pick instead, including a new person                       |
+| **Keep here**       | the face really is this person; declines the suggestion so future scans drop it    |
+| **Confirm & lock**  | like Keep here, but permanent and owner-agnostic — no future scan can flag it      |
+| **Unknown person**  | a real face that isn't this person and you can't name; parks it in its own cluster |
+| **Not a face**      | retires the crop entirely. **This is the only irreversible action**                |
+
+**Keep here** vs. **Confirm & lock** is the distinction worth learning. Keep here answers one scan's question —
+if a later scan suspects a _different_ person, the face can be flagged again. Confirm & lock silences it for
+good, survives the person being merged or deleted, and is the right choice for faces that genuinely don't
+resemble their owner: childhood photos, big age gaps, costumes, heavy shadow.
+
+Declines and locks can be undone later from the [Resolutions](#reviewing-and-undoing-decisions) page.
 
 ## Seeing the whole cluster
 
@@ -103,14 +125,14 @@ Manual review lets you audit **any** person without running a scan first.
 The interaction is the same as guided review: select tiles, then apply. The actions differ slightly, because
 there is no scan making a suggestion to accept or reject:
 
-| Action             | What it does                                                          |
-| ------------------ | --------------------------------------------------------------------- |
-| _(default)_        | **Nothing.** Faces you do not touch are left exactly as they are      |
-| **Move to person** | reassigns the face to another person in the same owner's library      |
-| **Lock**           | records that you verified this face — future scans will never flag it |
-| **Unknown person** | a real person you cannot name; parks the face in its own new cluster  |
-| **Not a face**     | retires the crop entirely. **This is the only irreversible action**   |
-| **Unmark**         | undoes a mark you have not applied yet                                |
+| Action              | What it does                                                          |
+| ------------------- | --------------------------------------------------------------------- |
+| _(default)_         | **Nothing.** Faces you do not touch are left exactly as they are      |
+| **Move to person…** | reassigns the face to another person in the same owner's library      |
+| **Confirm & lock**  | records that you verified this face — future scans will never flag it |
+| **Unknown person**  | a real person you cannot name; parks the face in its own new cluster  |
+| **Not a face**      | retires the crop entirely. **This is the only irreversible action**   |
+| **Unmark**          | undoes a mark you have not applied yet                                |
 
 **Faces you leave alone are not recorded.** This is deliberate: marking every face you glanced at as
 human-verified would stop future scans from ever flagging them, hiding real mistakes later. If you _want_ that
@@ -153,13 +175,25 @@ server defaults again.
 
 If the scan flags something that is actually correct, you can teach it to stop asking:
 
-- **Dismiss** (list page row action) — dismisses the whole suggestion for that person. It will not reappear in
-  future scans unless new evidence shows up (different suspected owners).
-- **Decline** (per-face, on a person's review page) — marks an individual face as belonging to the person it is on.
-  Declined faces are excluded from future scans and from any apply.
+- **Dismiss** (row action in the **Needs your review** lane) — drops the whole cluster from the queue. It will not
+  reappear in future scans unless new evidence shows up (a different suspected owner).
+- **Keep here** / **Confirm & lock** (per-face, on a person's review page) — records that an individual face
+  belongs to the person it is already on. See [The six actions](#the-six-actions) for how the two differ.
 
-Declined faces and dismissed people are listed under **View declined** (`Administration → Face cleanup → View
-declined`), where each entry has an **Undo** action that re-surfaces it in the next scan.
+## Reviewing and undoing decisions
+
+**View resolutions** on the scan page opens `Administration → Face cleanup → Resolutions`, a log of every "this
+face is not that person" decision recorded on the instance — from the admin console _and_ from the face
+suggestions users review on their own People pages. Filter by **All sources**, **Admin cleanup**, or **User
+reviews**.
+
+Each entry has an **Undo** action that clears the decision, so the face becomes eligible to be flagged or
+suggested again.
+
+:::note
+Moves are not listed here — Resolutions records negative decisions ("not this person") and locks. To reverse a
+move, open the affected people on the People page and reassign the faces.
+:::
 
 ## Safety
 
