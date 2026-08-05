@@ -15,6 +15,9 @@ vi.mock('@immich/sdk', async (importOriginal) => {
       ratings: [5],
       mediaTypes: ['IMAGE'],
       hasUnnamedPeople: false,
+      hasFavorites: true,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     }),
     getSearchSuggestions: vi.fn().mockResolvedValue(['Berlin']),
     searchSmartFacets: vi.fn().mockResolvedValue({
@@ -172,6 +175,14 @@ describe('buildRecentlyAddedFilterConfig', () => {
         takenBefore: '2025-01-01T00:00:00.000Z',
       }),
     );
+  });
+
+  it('forwards the #910 availability facets', async () => {
+    const result = await buildRecentlyAddedFilterConfig().suggestionsProvider!(createFilterState());
+
+    expect(result.hasFavorites).toBe(true);
+    expect(result.hasAssetsInAlbum).toBe(false);
+    expect(result.hasAssetsNotInAlbum).toBe(false);
   });
 
   it('passes the dependent-provider arguments and context through', async () => {

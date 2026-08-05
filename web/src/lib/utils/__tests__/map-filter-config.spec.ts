@@ -14,6 +14,9 @@ vi.mock('@immich/sdk', async (importOriginal) => {
       ratings: [],
       mediaTypes: [],
       hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: true,
+      hasAssetsNotInAlbum: true,
     }),
     getSearchSuggestions: vi.fn().mockResolvedValue([]),
   };
@@ -264,6 +267,15 @@ describe('buildMapFilterConfig', () => {
 
       expect(result.tags).toHaveLength(1);
       expect(result.tags[0]).toEqual({ id: 'tag-1', name: 'Nature' });
+    });
+
+    it('forwards the #910 availability facets', async () => {
+      const config = buildMapFilterConfig();
+      const result = await config.suggestionsProvider!(emptyFilters);
+
+      expect(result.hasFavorites).toBe(false);
+      expect(result.hasAssetsInAlbum).toBe(true);
+      expect(result.hasAssetsNotInAlbum).toBe(true);
     });
   });
 

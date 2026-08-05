@@ -15,6 +15,9 @@ vi.mock('@immich/sdk', async (importOriginal) => {
       ratings: [5],
       mediaTypes: ['IMAGE'],
       hasUnnamedPeople: false,
+      hasFavorites: true,
+      hasAssetsInAlbum: true,
+      hasAssetsNotInAlbum: false,
     }),
     getSearchSuggestions: vi.fn().mockResolvedValue(['Berlin']),
   };
@@ -174,6 +177,14 @@ describe('buildAlbumDetailFilterConfig', () => {
     expect(getFilterSuggestions).toHaveBeenCalledWith(
       expect.objectContaining({ albumId: 'album-1', isFavorite: true }),
     );
+  });
+
+  it('forwards the #910 availability facets', async () => {
+    const result = await buildAlbumDetailFilterConfig('album-1').suggestionsProvider!(createFilterState());
+
+    expect(result.hasFavorites).toBe(true);
+    expect(result.hasAssetsInAlbum).toBe(true);
+    expect(result.hasAssetsNotInAlbum).toBe(false);
   });
 });
 

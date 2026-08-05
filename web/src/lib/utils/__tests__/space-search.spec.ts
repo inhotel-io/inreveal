@@ -535,6 +535,29 @@ describe('mapSmartSearchFacetsToFilterSuggestions', () => {
       }),
     );
   });
+
+  it('forwards the #910 availability facets', () => {
+    const result = mapSmartSearchFacetsToFilterSuggestions({
+      total: 0,
+      timeBuckets: [],
+      countries: [],
+      cities: [],
+      cameraMakes: [],
+      cameraModels: [],
+      tags: [],
+      people: [],
+      ratings: [],
+      mediaTypes: [],
+      hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: true,
+    });
+
+    expect(result.hasFavorites).toBe(false);
+    expect(result.hasAssetsInAlbum).toBe(false);
+    expect(result.hasAssetsNotInAlbum).toBe(true);
+  });
 });
 
 describe('SEARCH_FILTER_DEBOUNCE_MS', () => {

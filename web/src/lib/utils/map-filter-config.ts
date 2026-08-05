@@ -55,6 +55,9 @@ export function buildMapFilterConfig(spaceId?: string): FilterPanelConfig {
       ratings: response.ratings,
       mediaTypes: response.mediaTypes,
       hasUnnamedPeople: response.hasUnnamedPeople,
+      hasFavorites: response.hasFavorites,
+      hasAssetsInAlbum: response.hasAssetsInAlbum,
+      hasAssetsNotInAlbum: response.hasAssetsNotInAlbum,
     };
   };
 

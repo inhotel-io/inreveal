@@ -24,6 +24,9 @@ function mapSuggestions(response: Awaited<ReturnType<typeof getFilterSuggestions
     ratings: response.ratings,
     mediaTypes: response.mediaTypes,
     hasUnnamedPeople: response.hasUnnamedPeople,
+    hasFavorites: response.hasFavorites,
+    hasAssetsInAlbum: response.hasAssetsInAlbum,
+    hasAssetsNotInAlbum: response.hasAssetsNotInAlbum,
   };
 }
 
