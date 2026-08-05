@@ -122,7 +122,8 @@ export const Route = {
   // spaces
   spaces: () => '/spaces',
   viewSpace: ({ id }: { id: string }) => `/spaces/${id}`,
-  viewSpaceAlbums: ({ id }: { id: string }) => `/spaces/${id}/albums`,
+  viewSpaceAlbums: ({ id, folderId }: { id: string; folderId?: string | null }) =>
+    `/spaces/${id}/albums` + asQueryString({ folder: folderId ?? undefined }),
   viewSpaceAlbum: ({ spaceId, albumId }: { spaceId: string; albumId: string }) =>
     `/spaces/${spaceId}/albums/${albumId}`,
 
