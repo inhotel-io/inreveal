@@ -33,6 +33,7 @@
   "add_to_album_bottom_sheet_added": "Toegevoegd aan {album}",
   "add_to_album_bottom_sheet_already_exists": "Staat al in {album}",
   "add_to_album_bottom_sheet_some_local_assets": "Sommige lokale items konden niet aan album toegevoegd worden",
+  "add_to_album_item_count": "{count, plural, one {# item} other {# items}} aan album toevoegen",
   "add_to_album_or_space": "Aan album of Space toevoegen",
   "add_to_album_toggle": "Selectie wisselen voor {album}",
   "add_to_albums": "Toevoegen aan albums",
