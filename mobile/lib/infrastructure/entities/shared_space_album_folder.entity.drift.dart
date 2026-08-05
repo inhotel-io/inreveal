@@ -1,55 +1,54 @@
 // dart format width=80
 // ignore_for_file: type=lint
 import 'package:drift/drift.dart' as i0;
-import 'package:immich_mobile/infrastructure/entities/shared_space_album_link.entity.drift.dart'
+import 'package:immich_mobile/infrastructure/entities/shared_space_album_folder.entity.drift.dart'
     as i1;
-import 'package:immich_mobile/infrastructure/entities/shared_space_album_link.entity.dart'
+import 'package:immich_mobile/infrastructure/entities/shared_space_album_folder.entity.dart'
     as i2;
 import 'package:drift/src/runtime/query_builder/query_builder.dart' as i3;
 import 'package:immich_mobile/infrastructure/entities/shared_space.entity.drift.dart'
     as i4;
 import 'package:drift/internal/modular.dart' as i5;
 
-typedef $$SharedSpaceAlbumLinkEntityTableCreateCompanionBuilder =
-    i1.SharedSpaceAlbumLinkEntityCompanion Function({
+typedef $$SharedSpaceAlbumFolderEntityTableCreateCompanionBuilder =
+    i1.SharedSpaceAlbumFolderEntityCompanion Function({
+      required String id,
       required String spaceId,
-      required String albumId,
-      i0.Value<bool> showInTimeline,
-      i0.Value<String?> folderId,
-      i0.Value<String?> addedById,
+      i0.Value<String?> parentId,
+      required String name,
       i0.Value<DateTime> createdAt,
       i0.Value<DateTime> updatedAt,
     });
-typedef $$SharedSpaceAlbumLinkEntityTableUpdateCompanionBuilder =
-    i1.SharedSpaceAlbumLinkEntityCompanion Function({
+typedef $$SharedSpaceAlbumFolderEntityTableUpdateCompanionBuilder =
+    i1.SharedSpaceAlbumFolderEntityCompanion Function({
+      i0.Value<String> id,
       i0.Value<String> spaceId,
-      i0.Value<String> albumId,
-      i0.Value<bool> showInTimeline,
-      i0.Value<String?> folderId,
-      i0.Value<String?> addedById,
+      i0.Value<String?> parentId,
+      i0.Value<String> name,
       i0.Value<DateTime> createdAt,
       i0.Value<DateTime> updatedAt,
     });
 
-final class $$SharedSpaceAlbumLinkEntityTableReferences
+final class $$SharedSpaceAlbumFolderEntityTableReferences
     extends
         i0.BaseReferences<
           i0.GeneratedDatabase,
-          i1.$SharedSpaceAlbumLinkEntityTable,
-          i1.SharedSpaceAlbumLinkEntityData
+          i1.$SharedSpaceAlbumFolderEntityTable,
+          i1.SharedSpaceAlbumFolderEntityData
         > {
-  $$SharedSpaceAlbumLinkEntityTableReferences(
+  $$SharedSpaceAlbumFolderEntityTableReferences(
     super.$_db,
     super.$_table,
     super.$_typedResult,
   );
 
-  static i4.$SharedSpaceEntityTable _spaceIdTable(i0.GeneratedDatabase db) =>
-      i5.ReadDatabaseContainer(db)
-          .resultSet<i4.$SharedSpaceEntityTable>('shared_space_entity')
-          .createAlias(
-            'shared_space_album_link_entity__space_id__shared_space_entity__id',
-          );
+  static i4.$SharedSpaceEntityTable _spaceIdTable(
+    i0.GeneratedDatabase db,
+  ) => i5.ReadDatabaseContainer(db)
+      .resultSet<i4.$SharedSpaceEntityTable>('shared_space_entity')
+      .createAlias(
+        'shared_space_album_folder_entity__space_id__shared_space_entity__id',
+      );
 
   i4.$$SharedSpaceEntityTableProcessedTableManager get spaceId {
     final $_column = $_itemColumn<String>('space_id')!;
@@ -70,33 +69,31 @@ final class $$SharedSpaceAlbumLinkEntityTableReferences
   }
 }
 
-class $$SharedSpaceAlbumLinkEntityTableFilterComposer
+class $$SharedSpaceAlbumFolderEntityTableFilterComposer
     extends
-        i0.Composer<i0.GeneratedDatabase, i1.$SharedSpaceAlbumLinkEntityTable> {
-  $$SharedSpaceAlbumLinkEntityTableFilterComposer({
+        i0.Composer<
+          i0.GeneratedDatabase,
+          i1.$SharedSpaceAlbumFolderEntityTable
+        > {
+  $$SharedSpaceAlbumFolderEntityTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  i0.ColumnFilters<String> get albumId => $composableBuilder(
-    column: $table.albumId,
+  i0.ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
     builder: (column) => i0.ColumnFilters(column),
   );
 
-  i0.ColumnFilters<bool> get showInTimeline => $composableBuilder(
-    column: $table.showInTimeline,
+  i0.ColumnFilters<String> get parentId => $composableBuilder(
+    column: $table.parentId,
     builder: (column) => i0.ColumnFilters(column),
   );
 
-  i0.ColumnFilters<String> get folderId => $composableBuilder(
-    column: $table.folderId,
-    builder: (column) => i0.ColumnFilters(column),
-  );
-
-  i0.ColumnFilters<String> get addedById => $composableBuilder(
-    column: $table.addedById,
+  i0.ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
     builder: (column) => i0.ColumnFilters(column),
   );
 
@@ -138,33 +135,31 @@ class $$SharedSpaceAlbumLinkEntityTableFilterComposer
   }
 }
 
-class $$SharedSpaceAlbumLinkEntityTableOrderingComposer
+class $$SharedSpaceAlbumFolderEntityTableOrderingComposer
     extends
-        i0.Composer<i0.GeneratedDatabase, i1.$SharedSpaceAlbumLinkEntityTable> {
-  $$SharedSpaceAlbumLinkEntityTableOrderingComposer({
+        i0.Composer<
+          i0.GeneratedDatabase,
+          i1.$SharedSpaceAlbumFolderEntityTable
+        > {
+  $$SharedSpaceAlbumFolderEntityTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  i0.ColumnOrderings<String> get albumId => $composableBuilder(
-    column: $table.albumId,
+  i0.ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
     builder: (column) => i0.ColumnOrderings(column),
   );
 
-  i0.ColumnOrderings<bool> get showInTimeline => $composableBuilder(
-    column: $table.showInTimeline,
+  i0.ColumnOrderings<String> get parentId => $composableBuilder(
+    column: $table.parentId,
     builder: (column) => i0.ColumnOrderings(column),
   );
 
-  i0.ColumnOrderings<String> get folderId => $composableBuilder(
-    column: $table.folderId,
-    builder: (column) => i0.ColumnOrderings(column),
-  );
-
-  i0.ColumnOrderings<String> get addedById => $composableBuilder(
-    column: $table.addedById,
+  i0.ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
     builder: (column) => i0.ColumnOrderings(column),
   );
 
@@ -207,29 +202,27 @@ class $$SharedSpaceAlbumLinkEntityTableOrderingComposer
   }
 }
 
-class $$SharedSpaceAlbumLinkEntityTableAnnotationComposer
+class $$SharedSpaceAlbumFolderEntityTableAnnotationComposer
     extends
-        i0.Composer<i0.GeneratedDatabase, i1.$SharedSpaceAlbumLinkEntityTable> {
-  $$SharedSpaceAlbumLinkEntityTableAnnotationComposer({
+        i0.Composer<
+          i0.GeneratedDatabase,
+          i1.$SharedSpaceAlbumFolderEntityTable
+        > {
+  $$SharedSpaceAlbumFolderEntityTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
-  i0.GeneratedColumn<String> get albumId =>
-      $composableBuilder(column: $table.albumId, builder: (column) => column);
+  i0.GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
 
-  i0.GeneratedColumn<bool> get showInTimeline => $composableBuilder(
-    column: $table.showInTimeline,
-    builder: (column) => column,
-  );
+  i0.GeneratedColumn<String> get parentId =>
+      $composableBuilder(column: $table.parentId, builder: (column) => column);
 
-  i0.GeneratedColumn<String> get folderId =>
-      $composableBuilder(column: $table.folderId, builder: (column) => column);
-
-  i0.GeneratedColumn<String> get addedById =>
-      $composableBuilder(column: $table.addedById, builder: (column) => column);
+  i0.GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
 
   i0.GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -266,79 +259,75 @@ class $$SharedSpaceAlbumLinkEntityTableAnnotationComposer
   }
 }
 
-class $$SharedSpaceAlbumLinkEntityTableTableManager
+class $$SharedSpaceAlbumFolderEntityTableTableManager
     extends
         i0.RootTableManager<
           i0.GeneratedDatabase,
-          i1.$SharedSpaceAlbumLinkEntityTable,
-          i1.SharedSpaceAlbumLinkEntityData,
-          i1.$$SharedSpaceAlbumLinkEntityTableFilterComposer,
-          i1.$$SharedSpaceAlbumLinkEntityTableOrderingComposer,
-          i1.$$SharedSpaceAlbumLinkEntityTableAnnotationComposer,
-          $$SharedSpaceAlbumLinkEntityTableCreateCompanionBuilder,
-          $$SharedSpaceAlbumLinkEntityTableUpdateCompanionBuilder,
+          i1.$SharedSpaceAlbumFolderEntityTable,
+          i1.SharedSpaceAlbumFolderEntityData,
+          i1.$$SharedSpaceAlbumFolderEntityTableFilterComposer,
+          i1.$$SharedSpaceAlbumFolderEntityTableOrderingComposer,
+          i1.$$SharedSpaceAlbumFolderEntityTableAnnotationComposer,
+          $$SharedSpaceAlbumFolderEntityTableCreateCompanionBuilder,
+          $$SharedSpaceAlbumFolderEntityTableUpdateCompanionBuilder,
           (
-            i1.SharedSpaceAlbumLinkEntityData,
-            i1.$$SharedSpaceAlbumLinkEntityTableReferences,
+            i1.SharedSpaceAlbumFolderEntityData,
+            i1.$$SharedSpaceAlbumFolderEntityTableReferences,
           ),
-          i1.SharedSpaceAlbumLinkEntityData,
+          i1.SharedSpaceAlbumFolderEntityData,
           i0.PrefetchHooks Function({bool spaceId})
         > {
-  $$SharedSpaceAlbumLinkEntityTableTableManager(
+  $$SharedSpaceAlbumFolderEntityTableTableManager(
     i0.GeneratedDatabase db,
-    i1.$SharedSpaceAlbumLinkEntityTable table,
+    i1.$SharedSpaceAlbumFolderEntityTable table,
   ) : super(
         i0.TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              i1.$$SharedSpaceAlbumLinkEntityTableFilterComposer(
+              i1.$$SharedSpaceAlbumFolderEntityTableFilterComposer(
                 $db: db,
                 $table: table,
               ),
           createOrderingComposer: () =>
-              i1.$$SharedSpaceAlbumLinkEntityTableOrderingComposer(
+              i1.$$SharedSpaceAlbumFolderEntityTableOrderingComposer(
                 $db: db,
                 $table: table,
               ),
           createComputedFieldComposer: () =>
-              i1.$$SharedSpaceAlbumLinkEntityTableAnnotationComposer(
+              i1.$$SharedSpaceAlbumFolderEntityTableAnnotationComposer(
                 $db: db,
                 $table: table,
               ),
           updateCompanionCallback:
               ({
+                i0.Value<String> id = const i0.Value.absent(),
                 i0.Value<String> spaceId = const i0.Value.absent(),
-                i0.Value<String> albumId = const i0.Value.absent(),
-                i0.Value<bool> showInTimeline = const i0.Value.absent(),
-                i0.Value<String?> folderId = const i0.Value.absent(),
-                i0.Value<String?> addedById = const i0.Value.absent(),
+                i0.Value<String?> parentId = const i0.Value.absent(),
+                i0.Value<String> name = const i0.Value.absent(),
                 i0.Value<DateTime> createdAt = const i0.Value.absent(),
                 i0.Value<DateTime> updatedAt = const i0.Value.absent(),
-              }) => i1.SharedSpaceAlbumLinkEntityCompanion(
+              }) => i1.SharedSpaceAlbumFolderEntityCompanion(
+                id: id,
                 spaceId: spaceId,
-                albumId: albumId,
-                showInTimeline: showInTimeline,
-                folderId: folderId,
-                addedById: addedById,
+                parentId: parentId,
+                name: name,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
           createCompanionCallback:
               ({
+                required String id,
                 required String spaceId,
-                required String albumId,
-                i0.Value<bool> showInTimeline = const i0.Value.absent(),
-                i0.Value<String?> folderId = const i0.Value.absent(),
-                i0.Value<String?> addedById = const i0.Value.absent(),
+                i0.Value<String?> parentId = const i0.Value.absent(),
+                required String name,
                 i0.Value<DateTime> createdAt = const i0.Value.absent(),
                 i0.Value<DateTime> updatedAt = const i0.Value.absent(),
-              }) => i1.SharedSpaceAlbumLinkEntityCompanion.insert(
+              }) => i1.SharedSpaceAlbumFolderEntityCompanion.insert(
+                id: id,
                 spaceId: spaceId,
-                albumId: albumId,
-                showInTimeline: showInTimeline,
-                folderId: folderId,
-                addedById: addedById,
+                parentId: parentId,
+                name: name,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
               ),
@@ -346,7 +335,11 @@ class $$SharedSpaceAlbumLinkEntityTableTableManager
               .map(
                 (e) => (
                   e.readTable(table),
-                  i1.$$SharedSpaceAlbumLinkEntityTableReferences(db, table, e),
+                  i1.$$SharedSpaceAlbumFolderEntityTableReferences(
+                    db,
+                    table,
+                    e,
+                  ),
                 ),
               )
               .toList(),
@@ -376,10 +369,10 @@ class $$SharedSpaceAlbumLinkEntityTableTableManager
                                 currentTable: table,
                                 currentColumn: table.spaceId,
                                 referencedTable: i1
-                                    .$$SharedSpaceAlbumLinkEntityTableReferences
+                                    .$$SharedSpaceAlbumFolderEntityTableReferences
                                     ._spaceIdTable(db),
                                 referencedColumn: i1
-                                    .$$SharedSpaceAlbumLinkEntityTableReferences
+                                    .$$SharedSpaceAlbumFolderEntityTableReferences
                                     ._spaceIdTable(db)
                                     .id,
                               )
@@ -397,38 +390,47 @@ class $$SharedSpaceAlbumLinkEntityTableTableManager
       );
 }
 
-typedef $$SharedSpaceAlbumLinkEntityTableProcessedTableManager =
+typedef $$SharedSpaceAlbumFolderEntityTableProcessedTableManager =
     i0.ProcessedTableManager<
       i0.GeneratedDatabase,
-      i1.$SharedSpaceAlbumLinkEntityTable,
-      i1.SharedSpaceAlbumLinkEntityData,
-      i1.$$SharedSpaceAlbumLinkEntityTableFilterComposer,
-      i1.$$SharedSpaceAlbumLinkEntityTableOrderingComposer,
-      i1.$$SharedSpaceAlbumLinkEntityTableAnnotationComposer,
-      $$SharedSpaceAlbumLinkEntityTableCreateCompanionBuilder,
-      $$SharedSpaceAlbumLinkEntityTableUpdateCompanionBuilder,
+      i1.$SharedSpaceAlbumFolderEntityTable,
+      i1.SharedSpaceAlbumFolderEntityData,
+      i1.$$SharedSpaceAlbumFolderEntityTableFilterComposer,
+      i1.$$SharedSpaceAlbumFolderEntityTableOrderingComposer,
+      i1.$$SharedSpaceAlbumFolderEntityTableAnnotationComposer,
+      $$SharedSpaceAlbumFolderEntityTableCreateCompanionBuilder,
+      $$SharedSpaceAlbumFolderEntityTableUpdateCompanionBuilder,
       (
-        i1.SharedSpaceAlbumLinkEntityData,
-        i1.$$SharedSpaceAlbumLinkEntityTableReferences,
+        i1.SharedSpaceAlbumFolderEntityData,
+        i1.$$SharedSpaceAlbumFolderEntityTableReferences,
       ),
-      i1.SharedSpaceAlbumLinkEntityData,
+      i1.SharedSpaceAlbumFolderEntityData,
       i0.PrefetchHooks Function({bool spaceId})
     >;
-i0.Index get idxSharedSpaceAlbumLinkSpace => i0.Index(
-  'idx_shared_space_album_link_space',
-  'CREATE INDEX IF NOT EXISTS idx_shared_space_album_link_space ON shared_space_album_link_entity (space_id)',
+i0.Index get idxSharedSpaceAlbumFolderSpace => i0.Index(
+  'idx_shared_space_album_folder_space',
+  'CREATE INDEX IF NOT EXISTS idx_shared_space_album_folder_space ON shared_space_album_folder_entity (space_id)',
 );
 
-class $SharedSpaceAlbumLinkEntityTable extends i2.SharedSpaceAlbumLinkEntity
+class $SharedSpaceAlbumFolderEntityTable extends i2.SharedSpaceAlbumFolderEntity
     with
         i0.TableInfo<
-          $SharedSpaceAlbumLinkEntityTable,
-          i1.SharedSpaceAlbumLinkEntityData
+          $SharedSpaceAlbumFolderEntityTable,
+          i1.SharedSpaceAlbumFolderEntityData
         > {
   @override
   final i0.GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $SharedSpaceAlbumLinkEntityTable(this.attachedDatabase, [this._alias]);
+  $SharedSpaceAlbumFolderEntityTable(this.attachedDatabase, [this._alias]);
+  static const i0.VerificationMeta _idMeta = const i0.VerificationMeta('id');
+  @override
+  late final i0.GeneratedColumn<String> id = i0.GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const i0.VerificationMeta _spaceIdMeta = const i0.VerificationMeta(
     'spaceId',
   );
@@ -443,52 +445,27 @@ class $SharedSpaceAlbumLinkEntityTable extends i2.SharedSpaceAlbumLinkEntity
       'REFERENCES shared_space_entity (id) ON DELETE CASCADE',
     ),
   );
-  static const i0.VerificationMeta _albumIdMeta = const i0.VerificationMeta(
-    'albumId',
+  static const i0.VerificationMeta _parentIdMeta = const i0.VerificationMeta(
+    'parentId',
   );
   @override
-  late final i0.GeneratedColumn<String> albumId = i0.GeneratedColumn<String>(
-    'album_id',
+  late final i0.GeneratedColumn<String> parentId = i0.GeneratedColumn<String>(
+    'parent_id',
+    aliasedName,
+    true,
+    type: i0.DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const i0.VerificationMeta _nameMeta = const i0.VerificationMeta(
+    'name',
+  );
+  @override
+  late final i0.GeneratedColumn<String> name = i0.GeneratedColumn<String>(
+    'name',
     aliasedName,
     false,
     type: i0.DriftSqlType.string,
     requiredDuringInsert: true,
-  );
-  static const i0.VerificationMeta _showInTimelineMeta =
-      const i0.VerificationMeta('showInTimeline');
-  @override
-  late final i0.GeneratedColumn<bool> showInTimeline = i0.GeneratedColumn<bool>(
-    'show_in_timeline',
-    aliasedName,
-    false,
-    type: i0.DriftSqlType.bool,
-    requiredDuringInsert: false,
-    defaultConstraints: i0.GeneratedColumn.constraintIsAlways(
-      'CHECK ("show_in_timeline" IN (0, 1))',
-    ),
-    defaultValue: const i3.Constant(true),
-  );
-  static const i0.VerificationMeta _folderIdMeta = const i0.VerificationMeta(
-    'folderId',
-  );
-  @override
-  late final i0.GeneratedColumn<String> folderId = i0.GeneratedColumn<String>(
-    'folder_id',
-    aliasedName,
-    true,
-    type: i0.DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const i0.VerificationMeta _addedByIdMeta = const i0.VerificationMeta(
-    'addedById',
-  );
-  @override
-  late final i0.GeneratedColumn<String> addedById = i0.GeneratedColumn<String>(
-    'added_by_id',
-    aliasedName,
-    true,
-    type: i0.DriftSqlType.string,
-    requiredDuringInsert: false,
   );
   static const i0.VerificationMeta _createdAtMeta = const i0.VerificationMeta(
     'createdAt',
@@ -518,11 +495,10 @@ class $SharedSpaceAlbumLinkEntityTable extends i2.SharedSpaceAlbumLinkEntity
       );
   @override
   List<i0.GeneratedColumn> get $columns => [
+    id,
     spaceId,
-    albumId,
-    showInTimeline,
-    folderId,
-    addedById,
+    parentId,
+    name,
     createdAt,
     updatedAt,
   ];
@@ -530,14 +506,19 @@ class $SharedSpaceAlbumLinkEntityTable extends i2.SharedSpaceAlbumLinkEntity
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
-  static const String $name = 'shared_space_album_link_entity';
+  static const String $name = 'shared_space_album_folder_entity';
   @override
   i0.VerificationContext validateIntegrity(
-    i0.Insertable<i1.SharedSpaceAlbumLinkEntityData> instance, {
+    i0.Insertable<i1.SharedSpaceAlbumFolderEntityData> instance, {
     bool isInserting = false,
   }) {
     final context = i0.VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
     if (data.containsKey('space_id')) {
       context.handle(
         _spaceIdMeta,
@@ -546,34 +527,19 @@ class $SharedSpaceAlbumLinkEntityTable extends i2.SharedSpaceAlbumLinkEntity
     } else if (isInserting) {
       context.missing(_spaceIdMeta);
     }
-    if (data.containsKey('album_id')) {
+    if (data.containsKey('parent_id')) {
       context.handle(
-        _albumIdMeta,
-        albumId.isAcceptableOrUnknown(data['album_id']!, _albumIdMeta),
+        _parentIdMeta,
+        parentId.isAcceptableOrUnknown(data['parent_id']!, _parentIdMeta),
+      );
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
       );
     } else if (isInserting) {
-      context.missing(_albumIdMeta);
-    }
-    if (data.containsKey('show_in_timeline')) {
-      context.handle(
-        _showInTimelineMeta,
-        showInTimeline.isAcceptableOrUnknown(
-          data['show_in_timeline']!,
-          _showInTimelineMeta,
-        ),
-      );
-    }
-    if (data.containsKey('folder_id')) {
-      context.handle(
-        _folderIdMeta,
-        folderId.isAcceptableOrUnknown(data['folder_id']!, _folderIdMeta),
-      );
-    }
-    if (data.containsKey('added_by_id')) {
-      context.handle(
-        _addedByIdMeta,
-        addedById.isAcceptableOrUnknown(data['added_by_id']!, _addedByIdMeta),
-      );
+      context.missing(_nameMeta);
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -591,34 +557,30 @@ class $SharedSpaceAlbumLinkEntityTable extends i2.SharedSpaceAlbumLinkEntity
   }
 
   @override
-  Set<i0.GeneratedColumn> get $primaryKey => {spaceId, albumId};
+  Set<i0.GeneratedColumn> get $primaryKey => {id};
   @override
-  i1.SharedSpaceAlbumLinkEntityData map(
+  i1.SharedSpaceAlbumFolderEntityData map(
     Map<String, dynamic> data, {
     String? tablePrefix,
   }) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return i1.SharedSpaceAlbumLinkEntityData(
+    return i1.SharedSpaceAlbumFolderEntityData(
+      id: attachedDatabase.typeMapping.read(
+        i0.DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
       spaceId: attachedDatabase.typeMapping.read(
         i0.DriftSqlType.string,
         data['${effectivePrefix}space_id'],
       )!,
-      albumId: attachedDatabase.typeMapping.read(
+      parentId: attachedDatabase.typeMapping.read(
         i0.DriftSqlType.string,
-        data['${effectivePrefix}album_id'],
-      )!,
-      showInTimeline: attachedDatabase.typeMapping.read(
-        i0.DriftSqlType.bool,
-        data['${effectivePrefix}show_in_timeline'],
-      )!,
-      folderId: attachedDatabase.typeMapping.read(
-        i0.DriftSqlType.string,
-        data['${effectivePrefix}folder_id'],
+        data['${effectivePrefix}parent_id'],
       ),
-      addedById: attachedDatabase.typeMapping.read(
+      name: attachedDatabase.typeMapping.read(
         i0.DriftSqlType.string,
-        data['${effectivePrefix}added_by_id'],
-      ),
+        data['${effectivePrefix}name'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         i0.DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -631,8 +593,8 @@ class $SharedSpaceAlbumLinkEntityTable extends i2.SharedSpaceAlbumLinkEntity
   }
 
   @override
-  $SharedSpaceAlbumLinkEntityTable createAlias(String alias) {
-    return $SharedSpaceAlbumLinkEntityTable(attachedDatabase, alias);
+  $SharedSpaceAlbumFolderEntityTable createAlias(String alias) {
+    return $SharedSpaceAlbumFolderEntityTable(attachedDatabase, alias);
   }
 
   @override
@@ -641,52 +603,46 @@ class $SharedSpaceAlbumLinkEntityTable extends i2.SharedSpaceAlbumLinkEntity
   bool get isStrict => true;
 }
 
-class SharedSpaceAlbumLinkEntityData extends i0.DataClass
-    implements i0.Insertable<i1.SharedSpaceAlbumLinkEntityData> {
+class SharedSpaceAlbumFolderEntityData extends i0.DataClass
+    implements i0.Insertable<i1.SharedSpaceAlbumFolderEntityData> {
+  final String id;
   final String spaceId;
-  final String albumId;
-  final bool showInTimeline;
-  final String? folderId;
-  final String? addedById;
+  final String? parentId;
+  final String name;
   final DateTime createdAt;
   final DateTime updatedAt;
-  const SharedSpaceAlbumLinkEntityData({
+  const SharedSpaceAlbumFolderEntityData({
+    required this.id,
     required this.spaceId,
-    required this.albumId,
-    required this.showInTimeline,
-    this.folderId,
-    this.addedById,
+    this.parentId,
+    required this.name,
     required this.createdAt,
     required this.updatedAt,
   });
   @override
   Map<String, i0.Expression> toColumns(bool nullToAbsent) {
     final map = <String, i0.Expression>{};
+    map['id'] = i0.Variable<String>(id);
     map['space_id'] = i0.Variable<String>(spaceId);
-    map['album_id'] = i0.Variable<String>(albumId);
-    map['show_in_timeline'] = i0.Variable<bool>(showInTimeline);
-    if (!nullToAbsent || folderId != null) {
-      map['folder_id'] = i0.Variable<String>(folderId);
+    if (!nullToAbsent || parentId != null) {
+      map['parent_id'] = i0.Variable<String>(parentId);
     }
-    if (!nullToAbsent || addedById != null) {
-      map['added_by_id'] = i0.Variable<String>(addedById);
-    }
+    map['name'] = i0.Variable<String>(name);
     map['created_at'] = i0.Variable<DateTime>(createdAt);
     map['updated_at'] = i0.Variable<DateTime>(updatedAt);
     return map;
   }
 
-  factory SharedSpaceAlbumLinkEntityData.fromJson(
+  factory SharedSpaceAlbumFolderEntityData.fromJson(
     Map<String, dynamic> json, {
     i0.ValueSerializer? serializer,
   }) {
     serializer ??= i0.driftRuntimeOptions.defaultSerializer;
-    return SharedSpaceAlbumLinkEntityData(
+    return SharedSpaceAlbumFolderEntityData(
+      id: serializer.fromJson<String>(json['id']),
       spaceId: serializer.fromJson<String>(json['spaceId']),
-      albumId: serializer.fromJson<String>(json['albumId']),
-      showInTimeline: serializer.fromJson<bool>(json['showInTimeline']),
-      folderId: serializer.fromJson<String?>(json['folderId']),
-      addedById: serializer.fromJson<String?>(json['addedById']),
+      parentId: serializer.fromJson<String?>(json['parentId']),
+      name: serializer.fromJson<String>(json['name']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -695,44 +651,38 @@ class SharedSpaceAlbumLinkEntityData extends i0.DataClass
   Map<String, dynamic> toJson({i0.ValueSerializer? serializer}) {
     serializer ??= i0.driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
       'spaceId': serializer.toJson<String>(spaceId),
-      'albumId': serializer.toJson<String>(albumId),
-      'showInTimeline': serializer.toJson<bool>(showInTimeline),
-      'folderId': serializer.toJson<String?>(folderId),
-      'addedById': serializer.toJson<String?>(addedById),
+      'parentId': serializer.toJson<String?>(parentId),
+      'name': serializer.toJson<String>(name),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
 
-  i1.SharedSpaceAlbumLinkEntityData copyWith({
+  i1.SharedSpaceAlbumFolderEntityData copyWith({
+    String? id,
     String? spaceId,
-    String? albumId,
-    bool? showInTimeline,
-    i0.Value<String?> folderId = const i0.Value.absent(),
-    i0.Value<String?> addedById = const i0.Value.absent(),
+    i0.Value<String?> parentId = const i0.Value.absent(),
+    String? name,
     DateTime? createdAt,
     DateTime? updatedAt,
-  }) => i1.SharedSpaceAlbumLinkEntityData(
+  }) => i1.SharedSpaceAlbumFolderEntityData(
+    id: id ?? this.id,
     spaceId: spaceId ?? this.spaceId,
-    albumId: albumId ?? this.albumId,
-    showInTimeline: showInTimeline ?? this.showInTimeline,
-    folderId: folderId.present ? folderId.value : this.folderId,
-    addedById: addedById.present ? addedById.value : this.addedById,
+    parentId: parentId.present ? parentId.value : this.parentId,
+    name: name ?? this.name,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
-  SharedSpaceAlbumLinkEntityData copyWithCompanion(
-    i1.SharedSpaceAlbumLinkEntityCompanion data,
+  SharedSpaceAlbumFolderEntityData copyWithCompanion(
+    i1.SharedSpaceAlbumFolderEntityCompanion data,
   ) {
-    return SharedSpaceAlbumLinkEntityData(
+    return SharedSpaceAlbumFolderEntityData(
+      id: data.id.present ? data.id.value : this.id,
       spaceId: data.spaceId.present ? data.spaceId.value : this.spaceId,
-      albumId: data.albumId.present ? data.albumId.value : this.albumId,
-      showInTimeline: data.showInTimeline.present
-          ? data.showInTimeline.value
-          : this.showInTimeline,
-      folderId: data.folderId.present ? data.folderId.value : this.folderId,
-      addedById: data.addedById.present ? data.addedById.value : this.addedById,
+      parentId: data.parentId.present ? data.parentId.value : this.parentId,
+      name: data.name.present ? data.name.value : this.name,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -740,12 +690,11 @@ class SharedSpaceAlbumLinkEntityData extends i0.DataClass
 
   @override
   String toString() {
-    return (StringBuffer('SharedSpaceAlbumLinkEntityData(')
+    return (StringBuffer('SharedSpaceAlbumFolderEntityData(')
+          ..write('id: $id, ')
           ..write('spaceId: $spaceId, ')
-          ..write('albumId: $albumId, ')
-          ..write('showInTimeline: $showInTimeline, ')
-          ..write('folderId: $folderId, ')
-          ..write('addedById: $addedById, ')
+          ..write('parentId: $parentId, ')
+          ..write('name: $name, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -753,91 +702,77 @@ class SharedSpaceAlbumLinkEntityData extends i0.DataClass
   }
 
   @override
-  int get hashCode => Object.hash(
-    spaceId,
-    albumId,
-    showInTimeline,
-    folderId,
-    addedById,
-    createdAt,
-    updatedAt,
-  );
+  int get hashCode =>
+      Object.hash(id, spaceId, parentId, name, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is i1.SharedSpaceAlbumLinkEntityData &&
+      (other is i1.SharedSpaceAlbumFolderEntityData &&
+          other.id == this.id &&
           other.spaceId == this.spaceId &&
-          other.albumId == this.albumId &&
-          other.showInTimeline == this.showInTimeline &&
-          other.folderId == this.folderId &&
-          other.addedById == this.addedById &&
+          other.parentId == this.parentId &&
+          other.name == this.name &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
 
-class SharedSpaceAlbumLinkEntityCompanion
-    extends i0.UpdateCompanion<i1.SharedSpaceAlbumLinkEntityData> {
+class SharedSpaceAlbumFolderEntityCompanion
+    extends i0.UpdateCompanion<i1.SharedSpaceAlbumFolderEntityData> {
+  final i0.Value<String> id;
   final i0.Value<String> spaceId;
-  final i0.Value<String> albumId;
-  final i0.Value<bool> showInTimeline;
-  final i0.Value<String?> folderId;
-  final i0.Value<String?> addedById;
+  final i0.Value<String?> parentId;
+  final i0.Value<String> name;
   final i0.Value<DateTime> createdAt;
   final i0.Value<DateTime> updatedAt;
-  const SharedSpaceAlbumLinkEntityCompanion({
+  const SharedSpaceAlbumFolderEntityCompanion({
+    this.id = const i0.Value.absent(),
     this.spaceId = const i0.Value.absent(),
-    this.albumId = const i0.Value.absent(),
-    this.showInTimeline = const i0.Value.absent(),
-    this.folderId = const i0.Value.absent(),
-    this.addedById = const i0.Value.absent(),
+    this.parentId = const i0.Value.absent(),
+    this.name = const i0.Value.absent(),
     this.createdAt = const i0.Value.absent(),
     this.updatedAt = const i0.Value.absent(),
   });
-  SharedSpaceAlbumLinkEntityCompanion.insert({
+  SharedSpaceAlbumFolderEntityCompanion.insert({
+    required String id,
     required String spaceId,
-    required String albumId,
-    this.showInTimeline = const i0.Value.absent(),
-    this.folderId = const i0.Value.absent(),
-    this.addedById = const i0.Value.absent(),
+    this.parentId = const i0.Value.absent(),
+    required String name,
     this.createdAt = const i0.Value.absent(),
     this.updatedAt = const i0.Value.absent(),
-  }) : spaceId = i0.Value(spaceId),
-       albumId = i0.Value(albumId);
-  static i0.Insertable<i1.SharedSpaceAlbumLinkEntityData> custom({
+  }) : id = i0.Value(id),
+       spaceId = i0.Value(spaceId),
+       name = i0.Value(name);
+  static i0.Insertable<i1.SharedSpaceAlbumFolderEntityData> custom({
+    i0.Expression<String>? id,
     i0.Expression<String>? spaceId,
-    i0.Expression<String>? albumId,
-    i0.Expression<bool>? showInTimeline,
-    i0.Expression<String>? folderId,
-    i0.Expression<String>? addedById,
+    i0.Expression<String>? parentId,
+    i0.Expression<String>? name,
     i0.Expression<DateTime>? createdAt,
     i0.Expression<DateTime>? updatedAt,
   }) {
     return i0.RawValuesInsertable({
+      if (id != null) 'id': id,
       if (spaceId != null) 'space_id': spaceId,
-      if (albumId != null) 'album_id': albumId,
-      if (showInTimeline != null) 'show_in_timeline': showInTimeline,
-      if (folderId != null) 'folder_id': folderId,
-      if (addedById != null) 'added_by_id': addedById,
+      if (parentId != null) 'parent_id': parentId,
+      if (name != null) 'name': name,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
 
-  i1.SharedSpaceAlbumLinkEntityCompanion copyWith({
+  i1.SharedSpaceAlbumFolderEntityCompanion copyWith({
+    i0.Value<String>? id,
     i0.Value<String>? spaceId,
-    i0.Value<String>? albumId,
-    i0.Value<bool>? showInTimeline,
-    i0.Value<String?>? folderId,
-    i0.Value<String?>? addedById,
+    i0.Value<String?>? parentId,
+    i0.Value<String>? name,
     i0.Value<DateTime>? createdAt,
     i0.Value<DateTime>? updatedAt,
   }) {
-    return i1.SharedSpaceAlbumLinkEntityCompanion(
+    return i1.SharedSpaceAlbumFolderEntityCompanion(
+      id: id ?? this.id,
       spaceId: spaceId ?? this.spaceId,
-      albumId: albumId ?? this.albumId,
-      showInTimeline: showInTimeline ?? this.showInTimeline,
-      folderId: folderId ?? this.folderId,
-      addedById: addedById ?? this.addedById,
+      parentId: parentId ?? this.parentId,
+      name: name ?? this.name,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -846,20 +781,17 @@ class SharedSpaceAlbumLinkEntityCompanion
   @override
   Map<String, i0.Expression> toColumns(bool nullToAbsent) {
     final map = <String, i0.Expression>{};
+    if (id.present) {
+      map['id'] = i0.Variable<String>(id.value);
+    }
     if (spaceId.present) {
       map['space_id'] = i0.Variable<String>(spaceId.value);
     }
-    if (albumId.present) {
-      map['album_id'] = i0.Variable<String>(albumId.value);
+    if (parentId.present) {
+      map['parent_id'] = i0.Variable<String>(parentId.value);
     }
-    if (showInTimeline.present) {
-      map['show_in_timeline'] = i0.Variable<bool>(showInTimeline.value);
-    }
-    if (folderId.present) {
-      map['folder_id'] = i0.Variable<String>(folderId.value);
-    }
-    if (addedById.present) {
-      map['added_by_id'] = i0.Variable<String>(addedById.value);
+    if (name.present) {
+      map['name'] = i0.Variable<String>(name.value);
     }
     if (createdAt.present) {
       map['created_at'] = i0.Variable<DateTime>(createdAt.value);
@@ -872,20 +804,14 @@ class SharedSpaceAlbumLinkEntityCompanion
 
   @override
   String toString() {
-    return (StringBuffer('SharedSpaceAlbumLinkEntityCompanion(')
+    return (StringBuffer('SharedSpaceAlbumFolderEntityCompanion(')
+          ..write('id: $id, ')
           ..write('spaceId: $spaceId, ')
-          ..write('albumId: $albumId, ')
-          ..write('showInTimeline: $showInTimeline, ')
-          ..write('folderId: $folderId, ')
-          ..write('addedById: $addedById, ')
+          ..write('parentId: $parentId, ')
+          ..write('name: $name, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 }
-
-i0.Index get idxSharedSpaceAlbumLinkAlbumSpace => i0.Index(
-  'idx_shared_space_album_link_album_space',
-  'CREATE INDEX IF NOT EXISTS idx_shared_space_album_link_album_space ON shared_space_album_link_entity (album_id, space_id)',
-);
