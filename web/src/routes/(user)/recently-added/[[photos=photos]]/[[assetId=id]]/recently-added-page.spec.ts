@@ -3,6 +3,7 @@ import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
+import { SvelteURL } from 'svelte/reactivity';
 import { goto } from '$app/navigation';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
@@ -435,5 +436,25 @@ describe('Recently Added page query mode', () => {
 
     await waitFor(() => expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-sort-order', 'asc'));
     expect(sdkMock.searchSmartFacets).toHaveBeenCalledTimes(1);
+  });
+
+  it('remounts the filter panel on the browse-to-query transition, dropping the stale baseline (#910)', async () => {
+    mockPage.url = new SvelteURL('https://gallery.test/recently-added');
+
+    renderPage();
+    await waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
+    await fireEvent.click(screen.getByTestId('load-baseline'));
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).not.toHaveAttribute('data-baseline', 'not-loaded');
+    });
+
+    // Commit a query without unmounting the page: the panel's {#key} must remount it so the
+    // browse-mode baseline (cached on the stub for the component's lifetime) doesn't survive into
+    // query mode, where §4.5 says the baseline provider must return undefined.
+    mockPage.url.search = '?q=beach';
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-baseline', 'not-loaded');
+    });
   });
 });

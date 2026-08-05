@@ -3,6 +3,7 @@ import { AssetTypeEnum, AssetVisibility, SharedSpaceRole } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick, type Component } from 'svelte';
+import { SvelteURL } from 'svelte/reactivity';
 import { sdkMock } from '$lib/__mocks__/sdk.mock';
 import TestWrapper from '$lib/components/TestWrapper.svelte';
 import type { FilterState } from '$lib/components/filter-panel/filter-panel';
@@ -523,6 +524,26 @@ describe('Spaces page search URL state', () => {
     // Regression guard for spec §4.5: a baseline request here would abort the in-flight facet
     // fetch and then overwrite smartFacets, corrupting the timeline and the result count.
     expect(sdkMock.searchSmartFacets).not.toHaveBeenCalled();
+  });
+
+  it('remounts the filter panel on the browse-to-query transition, dropping the stale baseline (#910)', async () => {
+    mockPage.url = new SvelteURL('https://gallery.test/spaces/space-1/photos');
+
+    renderPage();
+    await waitFor(() => expect(sdkMock.getFilterSuggestions).toHaveBeenCalled());
+    await fireEvent.click(screen.getByTestId('load-baseline'));
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).not.toHaveAttribute('data-baseline', 'not-loaded');
+    });
+
+    // Commit a query without unmounting the page: the panel's {#key} must remount it so the
+    // browse-mode baseline (cached on the stub for the component's lifetime) doesn't survive into
+    // query mode, where §4.5 says the baseline provider must return undefined.
+    mockPage.url.search = '?q=beach';
+
+    await waitFor(() => {
+      expect(screen.getByTestId('filter-panel-stub')).toHaveAttribute('data-baseline', 'not-loaded');
+    });
   });
 
   it('fetches smart facets with spaceId for committed space search', async () => {
