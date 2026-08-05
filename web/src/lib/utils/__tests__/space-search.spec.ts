@@ -453,6 +453,9 @@ describe('mapSmartSearchFacetsToFilterSuggestions', () => {
         ratings: [4],
         mediaTypes: [AssetTypeEnum.Image],
         hasUnnamedPeople: true,
+        hasFavorites: true,
+        hasAssetsInAlbum: true,
+        hasAssetsNotInAlbum: true,
       },
       { spaceId: 'space-1' },
     );
@@ -473,6 +476,9 @@ describe('mapSmartSearchFacetsToFilterSuggestions', () => {
       ratings: [4],
       mediaTypes: [AssetTypeEnum.Image],
       hasUnnamedPeople: true,
+      hasFavorites: true,
+      hasAssetsInAlbum: true,
+      hasAssetsNotInAlbum: true,
     });
   });
 
@@ -495,6 +501,9 @@ describe('mapSmartSearchFacetsToFilterSuggestions', () => {
       ratings: [],
       mediaTypes: [],
       hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     });
 
     expect(result.people).toEqual([
@@ -526,6 +535,9 @@ describe('mapSmartSearchFacetsToFilterSuggestions', () => {
       ratings: [],
       mediaTypes: [],
       hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     });
 
     expect(result.people[0]).toEqual(

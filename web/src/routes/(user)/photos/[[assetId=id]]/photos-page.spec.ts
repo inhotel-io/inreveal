@@ -264,6 +264,9 @@ describe('Photos page search URL state', () => {
       ratings: [],
       mediaTypes: [],
       hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     });
     sdkMock.searchSmartFacets.mockResolvedValue({
       total: 12,
@@ -277,6 +280,9 @@ describe('Photos page search URL state', () => {
       ratings: [4],
       mediaTypes: [AssetTypeEnum.Image],
       hasUnnamedPeople: false,
+      hasFavorites: true,
+      hasAssetsInAlbum: true,
+      hasAssetsNotInAlbum: true,
     });
     sdkMock.getSearchSuggestions.mockResolvedValue([]);
   });

@@ -262,6 +262,9 @@ describe('Spaces page search URL state', () => {
       ratings: [],
       mediaTypes: [],
       hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     });
     sdkMock.searchSmartFacets.mockResolvedValue({
       total: 7,
@@ -275,6 +278,9 @@ describe('Spaces page search URL state', () => {
       ratings: [5],
       mediaTypes: [AssetTypeEnum.Image],
       hasUnnamedPeople: false,
+      hasFavorites: true,
+      hasAssetsInAlbum: true,
+      hasAssetsNotInAlbum: true,
     });
     sdkMock.getSearchSuggestions.mockResolvedValue([]);
   });

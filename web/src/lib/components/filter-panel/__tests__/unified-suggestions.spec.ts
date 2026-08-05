@@ -16,6 +16,9 @@ const defaultResponse: FilterSuggestionsResponse = {
   ratings: [3, 4, 5],
   mediaTypes: ['IMAGE', 'VIDEO'],
   hasUnnamedPeople: false,
+  hasFavorites: true,
+  hasAssetsInAlbum: true,
+  hasAssetsNotInAlbum: true,
 };
 
 const timeBuckets = [

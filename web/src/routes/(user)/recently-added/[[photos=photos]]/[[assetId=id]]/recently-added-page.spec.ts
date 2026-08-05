@@ -207,6 +207,9 @@ describe('Recently Added page filters', () => {
       ratings: [],
       mediaTypes: [],
       hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     });
     sdkMock.getSearchSuggestions.mockResolvedValue([]);
     sdkMock.getTimeBuckets.mockResolvedValue([]);
@@ -332,6 +335,9 @@ describe('Recently Added page query mode', () => {
       ratings: [],
       mediaTypes: [],
       hasUnnamedPeople: false,
+      hasFavorites: false,
+      hasAssetsInAlbum: false,
+      hasAssetsNotInAlbum: false,
     });
     sdkMock.getSearchSuggestions.mockResolvedValue([]);
     sdkMock.getTimeBuckets.mockResolvedValue([]);
@@ -347,6 +353,9 @@ describe('Recently Added page query mode', () => {
       ratings: [4],
       mediaTypes: [AssetTypeEnum.Image],
       hasUnnamedPeople: false,
+      hasFavorites: true,
+      hasAssetsInAlbum: true,
+      hasAssetsNotInAlbum: true,
     });
   });
 
