@@ -10,6 +10,13 @@ import 'package:openapi/api.dart';
 
 import '../../service.mocks.dart';
 
+FilterSuggestionsResponseDto emptySuggestions() => FilterSuggestionsResponseDto(
+  hasUnnamedPeople: false,
+  hasFavorites: false,
+  hasAssetsInAlbum: false,
+  hasAssetsNotInAlbum: false,
+);
+
 void main() {
   late MockApiService mockApiService;
   late MockSearchApi mockSearchApi;
@@ -38,6 +45,7 @@ void main() {
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: any(named: 'mediaType'),
           model: any(named: 'model'),
@@ -49,7 +57,7 @@ void main() {
           takenBefore: any(named: 'takenBefore'),
           withSharedSpaces: any(named: 'withSharedSpaces'),
         ),
-      ).thenAnswer((_) async => FilterSuggestionsResponseDto(hasUnnamedPeople: false));
+      ).thenAnswer((_) async => emptySuggestions());
 
       await container.read(photosFilterSuggestionsProvider(SearchFilter.empty()).future);
 
@@ -58,6 +66,7 @@ void main() {
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: any(named: 'mediaType'),
           model: any(named: 'model'),
@@ -72,13 +81,66 @@ void main() {
       ).called(1);
     });
 
-    test('returns the FilterSuggestionsResponseDto returned by the API', () async {
-      final dto = FilterSuggestionsResponseDto(hasUnnamedPeople: false, countries: ['France']);
+    // #910: the albums facet is computed with this filter excluded, but every OTHER facet must
+    // still honour it — forwarding it here is what lets a not-in-album toggle narrow the other
+    // five facets instead of being silently dropped.
+    test('forwards isNotInAlbum so the facets reflect it (#910)', () async {
       when(
         () => mockSearchApi.getFilterSuggestions(
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
+          make: any(named: 'make'),
+          mediaType: any(named: 'mediaType'),
+          model: any(named: 'model'),
+          personIds: any(named: 'personIds'),
+          rating: any(named: 'rating'),
+          spaceId: any(named: 'spaceId'),
+          tagIds: any(named: 'tagIds'),
+          takenAfter: any(named: 'takenAfter'),
+          takenBefore: any(named: 'takenBefore'),
+          withSharedSpaces: any(named: 'withSharedSpaces'),
+        ),
+      ).thenAnswer((_) async => emptySuggestions());
+
+      final filter = SearchFilter.empty().copyWith(display: SearchFilter.empty().display.copyWith(isNotInAlbum: true));
+      await container.read(photosFilterSuggestionsProvider(filter).future);
+
+      verify(
+        () => mockSearchApi.getFilterSuggestions(
+          city: any(named: 'city'),
+          country: any(named: 'country'),
+          isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: true,
+          make: any(named: 'make'),
+          mediaType: any(named: 'mediaType'),
+          model: any(named: 'model'),
+          personIds: any(named: 'personIds'),
+          rating: any(named: 'rating'),
+          spaceId: any(named: 'spaceId'),
+          tagIds: any(named: 'tagIds'),
+          takenAfter: any(named: 'takenAfter'),
+          takenBefore: any(named: 'takenBefore'),
+          withSharedSpaces: any(named: 'withSharedSpaces'),
+        ),
+      ).called(1);
+    });
+
+    test('returns the FilterSuggestionsResponseDto returned by the API', () async {
+      final dto = FilterSuggestionsResponseDto(
+        hasUnnamedPeople: false,
+        hasFavorites: false,
+        hasAssetsInAlbum: false,
+        hasAssetsNotInAlbum: false,
+        countries: ['France'],
+      );
+      when(
+        () => mockSearchApi.getFilterSuggestions(
+          city: any(named: 'city'),
+          country: any(named: 'country'),
+          isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: any(named: 'mediaType'),
           model: any(named: 'model'),
@@ -103,6 +165,7 @@ void main() {
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: any(named: 'mediaType'),
           model: any(named: 'model'),
@@ -127,6 +190,7 @@ void main() {
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: any(named: 'mediaType'),
           model: any(named: 'model'),
@@ -138,7 +202,7 @@ void main() {
           takenBefore: any(named: 'takenBefore'),
           withSharedSpaces: any(named: 'withSharedSpaces'),
         ),
-      ).thenAnswer((_) async => FilterSuggestionsResponseDto(hasUnnamedPeople: false));
+      ).thenAnswer((_) async => emptySuggestions());
 
       final after = DateTime.utc(2024, 1, 1);
       final before = DateTime.utc(2024, 12, 31);
@@ -158,6 +222,7 @@ void main() {
           city: 'Paris',
           country: 'France',
           isFavorite: null,
+          isNotInAlbum: null,
           make: 'Canon',
           mediaType: AssetTypeEnum.IMAGE,
           model: 'EOS R5',
@@ -177,6 +242,7 @@ void main() {
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: any(named: 'mediaType'),
           model: any(named: 'model'),
@@ -188,7 +254,7 @@ void main() {
           takenBefore: any(named: 'takenBefore'),
           withSharedSpaces: any(named: 'withSharedSpaces'),
         ),
-      ).thenAnswer((_) async => FilterSuggestionsResponseDto(hasUnnamedPeople: false));
+      ).thenAnswer((_) async => emptySuggestions());
 
       await container.read(photosFilterSuggestionsProvider(SearchFilter.empty()).future);
 
@@ -197,6 +263,7 @@ void main() {
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: captureAny(named: 'mediaType'),
           model: any(named: 'model'),
@@ -218,6 +285,7 @@ void main() {
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: any(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: any(named: 'mediaType'),
           model: any(named: 'model'),
@@ -229,7 +297,7 @@ void main() {
           takenBefore: any(named: 'takenBefore'),
           withSharedSpaces: any(named: 'withSharedSpaces'),
         ),
-      ).thenAnswer((_) async => FilterSuggestionsResponseDto(hasUnnamedPeople: false));
+      ).thenAnswer((_) async => emptySuggestions());
 
       await container.read(photosFilterSuggestionsProvider(SearchFilter.empty()).future);
 
@@ -238,6 +306,7 @@ void main() {
           city: any(named: 'city'),
           country: any(named: 'country'),
           isFavorite: captureAny(named: 'isFavorite'),
+          isNotInAlbum: any(named: 'isNotInAlbum'),
           make: any(named: 'make'),
           mediaType: any(named: 'mediaType'),
           model: any(named: 'model'),
