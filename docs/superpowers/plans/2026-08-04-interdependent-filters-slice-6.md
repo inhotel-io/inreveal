@@ -33,47 +33,59 @@ must seed enough variety for that section to be available; the feature itself is
 
 ## File Structure
 
-| File                                                       | Responsibility                                    |
-| ---------------------------------------------------------- | ------------------------------------------------- |
-| `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts`        | seed variety; People carve-out; new hide coverage |
-| `e2e/src/specs/web/spaces-filter-panel.e2e-spec.ts`        | seed variety; People carve-out                    |
-| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts`     | seed variety; People carve-out                    |
-| `e2e/src/specs/web/map-filter-panel.e2e-spec.ts`           | seeds **nothing** today — needs a fixture         |
-| `e2e/src/specs/rebase-smoke/permission-matrix.e2e-spec.ts` | one unconditional wait becomes conditional        |
+| File                                                       | Responsibility                                          |
+| ---------------------------------------------------------- | ------------------------------------------------------- |
+| `e2e/src/specs/web/photos-filter-panel.e2e-spec.ts`        | seed variety incl. a face for People; new hide coverage |
+| `e2e/src/specs/web/spaces-filter-panel.e2e-spec.ts`        | seed variety incl. a space-scoped person for People     |
+| `e2e/src/specs/web/recently-added-filters.e2e-spec.ts`     | seed variety incl. a face for People                    |
+| `e2e/src/specs/web/map-filter-panel.e2e-spec.ts`           | seeds **nothing** today — needs a fixture               |
+| `e2e/src/specs/rebase-smoke/permission-matrix.e2e-spec.ts` | one unconditional wait becomes conditional              |
 
 ### The seeding recipes
 
-Verified against `e2e/test-assets` and `e2e/src/utils.ts`. Every section except People can be seeded.
+Verified against `e2e/test-assets` and `e2e/src/utils.ts`. Every section, People included, can be seeded.
 
-| Section   | Seed                                                                                                                                                                                 |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| media     | `utils.createAsset(token, { assetData: { filename: 'x.mp4' } })` — random bytes, typed from the extension (`recently-added-filters.e2e-spec.ts:102-110`)                             |
-| rating    | `updateAsset({ id, updateAssetDto: { rating: 5 } }, { headers: asBearerAuth(token) })`                                                                                               |
-| favorites | `updateAsset({ id, updateAssetDto: { isFavorite: true } }, …)`                                                                                                                       |
-| albums    | an album containing **some but not all** seeded assets — both booleans must be true                                                                                                  |
-| location  | upload `${testAssetDir}/metadata/gps-position/thompson-springs.jpg`, then `await utils.waitForQueueFinish(token, 'metadataExtraction')`                                              |
-| camera    | upload `${testAssetDir}/metadata/rating/mongolels.jpg` (EXIF `Make: Canon`). **`thompson-springs.jpg` has GPS but no `Make`** — confirmed with exiftool, so it does not cover Camera |
-| tags      | `const [tag] = await utils.upsertTags(token, ['e2e-tag']); await utils.tagAssets(token, tag.id, [assetId]);`                                                                         |
-| people    | **impossible here — see below**                                                                                                                                                      |
+| Section   | Seed                                                                                                                                                                                                                                              |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| media     | `utils.createAsset(token, { assetData: { filename: 'x.mp4' } })` — random bytes, typed from the extension (`recently-added-filters.e2e-spec.ts:102-110`)                                                                                          |
+| rating    | `updateAsset({ id, updateAssetDto: { rating: 5 } }, { headers: asBearerAuth(token) })`                                                                                                                                                            |
+| favorites | `updateAsset({ id, updateAssetDto: { isFavorite: true } }, …)`                                                                                                                                                                                    |
+| albums    | an album containing **some but not all** seeded assets — both booleans must be true                                                                                                                                                               |
+| location  | upload `${testAssetDir}/metadata/gps-position/thompson-springs.jpg`, then `await utils.waitForQueueFinish(token, 'metadataExtraction')`                                                                                                           |
+| camera    | upload `${testAssetDir}/metadata/rating/mongolels.jpg` (EXIF `Make: Canon`). **`thompson-springs.jpg` has GPS but no `Make`** — confirmed with exiftool, so it does not cover Camera                                                              |
+| tags      | `const [tag] = await utils.upsertTags(token, ['e2e-tag']); await utils.tagAssets(token, tag.id, [assetId]);`                                                                                                                                      |
+| people    | global scope: `const person = await utils.createPerson(token, { name }); await utils.createFace({ assetId, personId: person.id });`. Space scope: `utils.createSpacePerson(spaceId, name, ownerId, assetId)` — see "People is seedable too" below |
 
 `waitForQueueFinish` reports "done" while the queue is merely momentarily empty
 (`feedback_e2e_waitforqueuefinish_false_done`), so assert EXIF-derived sections with `expect.poll` or a
 Playwright web-first assertion rather than treating the drain as a barrier.
 
-### The People carve-out
+### People is seedable too
 
-A People facet needs a **face**, and face detection needs the ML stack the web e2e project does not
-run. `utils.createPerson` makes a person row with no face, which `getFilteredPeople`
-(`search.repository.ts:1502`) will not return — `e2e/src/utils.ts:989-991` already documents this for
-the command palette ("a bare API-created person won't surface in search results"). There is no seed that
-keeps the People section available in these suites.
+A People facet needs a **face**, but face detection does not: `utils.createFace({ assetId, personId })`
+(`e2e/src/utils.ts:490`) inserts `asset_face`, `face_identity` and `face_identity_face` directly by SQL —
+no ML involved. `utils.createPerson(token, { name })` + `createFace` satisfies every predicate
+`getFilteredPeople`'s global-scope query checks (`search.repository.ts:1646`: non-empty name, not
+hidden, a face on an asset in the filtered scope) and its identity-scoped variant
+(`search.repository.ts:1664`, which needs `person.identityId` plus a `face_identity_face` row —
+`createFace` writes both). It is already used this way by five web-project specs, including
+`global-search.e2e-spec.ts` and `cross-owner-people-merge.e2e-spec.ts`.
 
-So for `people` **only**, the assertion changes rather than the seed: drop it from the "all sections"
-lists and assert `filter-section-people` is **absent**, with a comment pointing here. This is not
-weakening an assertion to accommodate the feature — a library with no detected faces genuinely cannot
-filter by person, so asserting its absence is positive #910 coverage. If the suite ever runs with ML,
-seed a face chain (`feedback_e2e_space_person_face_chain`) and flip the assertion back; it will fail
-loudly rather than silently, which is the point.
+For a space's own People facet, use `utils.createSpacePerson(spaceId, name, ownerId, assetId)`
+(`e2e/src/utils.ts:573`) instead — it builds the whole `shared_space_person` chain in one transaction
+and satisfies `buildFilteredSpacePeopleQuery` (`search.repository.ts:1625`) exactly. It is already used
+by `spaces-albums.e2e-spec.ts:567`.
+
+So `people` follows the same rule as every other section: seed it, then assert it renders. There is no
+carve-out — every suite that lists "all sections" should include `people`, seeded like the rest.
+
+One environment-specific gotcha either seed needs: `asset_face.sourceType` defaults to
+`'machine-learning'` in the schema. On a stack that runs facial recognition (anything other than the
+e2e project's own ML-less docker-compose — e.g. a `make dev` stack), `person.service.ts`'s
+`handleDetectFaces` re-scans every newly uploaded asset, finds 0 real faces in these fixtures, and
+deletes every existing face it still sees tagged `machine-learning` as a stale detection — silently
+wiping a manually-seeded face. Both `createFace` and `createSpacePerson` insert their face row with
+`sourceType: 'manual'` for exactly this reason; do not drop it.
 
 ---
 
@@ -138,30 +150,41 @@ await updateAsset(
 
 // Albums needs BOTH sides — some filed, some not.
 const album = await utils.createAlbum(admin.accessToken, { albumName: '#910 album', assetIds: [video.id] });
+
+// People: createFace inserts asset_face + face_identity + face_identity_face directly, no ML needed.
+const person = await utils.createPerson(admin.accessToken, { name: '#910 Person' });
+await utils.createFace({ assetId: asset1.id, personId: person.id });
 ```
 
 `readFileSync` and `testAssetDir` need importing (`node:fs` and `src/utils`); `utils.createAlbum`'s exact
 signature is in `e2e/src/utils.ts` — read it rather than copying the line above verbatim.
 
-- [ ] **Step 2: Apply the People carve-out at `:63`**
+- [ ] **Step 2: Assert every section at `:63`, People included**
 
 ```ts
 test('should show every filter section its library can populate', async ({ context, page }) => {
   await gotoPhotos(context, page);
   await expect(page.locator('[data-testid="discovery-panel"]')).toBeVisible();
 
-  for (const section of ['timeline', 'location', 'camera', 'tags', 'rating', 'media']) {
+  for (const section of [
+    'timeline',
+    'people',
+    'location',
+    'camera',
+    'tags',
+    'rating',
+    'media',
+    'favorites',
+    'albums',
+    'text',
+  ]) {
     await expect(page.locator(`[data-testid="filter-section-${section}"]`)).toBeVisible();
   }
-
-  // #910: People needs a detected face and the web e2e project runs no ML, so this library
-  // genuinely cannot filter by person. Asserting the absence is the coverage, not a concession —
-  // see slice 6 "The People carve-out".
-  await expect(page.locator('[data-testid="filter-section-people"]')).toHaveCount(0);
 });
 ```
 
-Rename the test: "all 7 filter sections" is no longer what it checks.
+The list is `ALL_FILTER_SECTIONS` in full (`filter-panel.ts:46`) — every section the seed above
+populates, including `people` now that it is seeded like everything else.
 
 - [ ] **Step 3: Re-run and confirm every predicted failure is gone**
 
@@ -190,12 +213,19 @@ assertions at `:82-97`.
 
 Apply the same recipe set as Task 1, inside the helper so every caller benefits, and add the new assets
 to `utils.addSpaceAssets` alongside the existing four. **The space, not the library, is the scope** — an
-asset that is not in the space does not populate the space's facets.
+asset that is not in the space does not populate the space's facets. For People, use
+`utils.createSpacePerson(space.id, name, ownerId, assetId)` (not `createFace`) — People is space-scoped
+here, and `createSpacePerson` builds the `shared_space_person` chain the space's own facet query reads.
 
-- [ ] **Step 2: Apply the People carve-out at `:91`**
+- [ ] **Step 2: Assert every section at `:91`, People included**
 
-Same shape as Task 1 Step 2: drop `filter-section-people` from the visible list, assert `toHaveCount(0)`
-with the same comment.
+Same shape as Task 1 Step 2: add `people` to the visible-sections list, in `ALL_FILTER_SECTIONS` order.
+
+Three existing People tests in this file build their own bespoke space rather than reusing
+`createPopulatedSpace` ("should show only people present in the space (not global list)", "should
+update timeline when selecting a person", "should show photos containing either selected person (OR
+logic)"). Give each its own `utils.createSpacePerson` call too — they are the only web-suite coverage
+of space-scoped people versus the global list, and a seed exists for every one of them.
 
 - [ ] **Step 3: Re-run, then commit**
 
@@ -213,8 +243,8 @@ git commit -m "test(e2e): seed varied space assets so every filter section rende
 - [ ] **Step 1: Recently Added**
 
 Its `beforeAll` already seeds images, videos and ratings, so media and rating are fine. Add location,
-camera, tags, favourites and a partial album, then apply the People carve-out to the ten-section list at
-`:130`. Rename it — "renders all ten metadata filter sections" becomes nine plus an absence assertion.
+camera, tags, favourites, a partial album, and a face (`createPerson` + `createFace`, on an
+already-seeded asset so `TOTAL` stays exact) for People, then assert all ten sections at `:130`.
 
 - [ ] **Step 2: Map**
 
@@ -368,6 +398,6 @@ git commit -m "test(e2e): cover hiding and revealing unusable filter sections (#
 ## Done when
 
 - `make e2e-web-dev` is green for all four web filter suites, and `make e2e-rebase-smoke` for Test 9.
-- Every failure recorded in Task 0 is accounted for — fixed by seeding, or by the documented People
-  carve-out. Nothing was made to pass by deleting an assertion.
-- The only assertions that changed meaning are the four People ones, each carrying the carve-out comment.
+- Every failure recorded in Task 0 is accounted for, fixed by seeding. Nothing was made to pass by
+  deleting or weakening an assertion — People included, via `utils.createFace` /
+  `utils.createSpacePerson` (see "People is seedable too").
