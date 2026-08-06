@@ -121,7 +121,12 @@ describe('SpaceActivityFeed', () => {
     // conversion clamps at zero rather than going negative.
     it('renders "album_bulk_unlink" with zero others when only one album succeeded', () => {
       const activities = [
-        makeActivity({ id: 'act-bulk-solo', type: 'album_bulk_unlink', data: { albumName: 'Solo', count: 1 }, userName: 'Bob' }),
+        makeActivity({
+          id: 'act-bulk-solo',
+          type: 'album_bulk_unlink',
+          data: { albumName: 'Solo', count: 1 },
+          userName: 'Bob',
+        }),
       ];
       renderFeed({ activities, spaceColor: 'primary', onLoadMore: vi.fn(), hasMore: false });
       expect(screen.getByTestId('activity-item-act-bulk-solo')).toHaveTextContent('Bob unlinked "Solo" and 0 others');
