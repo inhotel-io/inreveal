@@ -2748,7 +2748,7 @@
   "spaces": "Spaces",
   "spaces_activity": "动态",
   "spaces_activity_added_photos": "{name} 添加了 {count} 张照片",
-  "spaces_activity_bulk_unlinked_albums": "{name} 取消关联了{albumName}和另外{count, plural, one {# 个相簿} other {# 个相簿}}",
+  "spaces_activity_bulk_unlinked_albums": "{name} 取消关联了“{albumName}”和另外 {count, plural, one {# 个相簿} other {# 个相簿}}",
   "spaces_activity_changed_role": "{name} 将角色更改为 {role}",
   "spaces_activity_default": "{name} 执行了一项操作",
   "spaces_activity_deleted_person": "{name} 删除了人物“{personName}”",

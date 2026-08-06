@@ -2748,7 +2748,7 @@
   "spaces": "Spaces",
   "spaces_activity": "Actividad",
   "spaces_activity_added_photos": "{name} añadió {count} fotos",
-  "spaces_activity_bulk_unlinked_albums": "{name} desvinculó {albumName} y {count, plural, one {# más} other {# más}}",
+  "spaces_activity_bulk_unlinked_albums": "{name} desvinculó \"{albumName}\" y {count, plural, one {# álbum más} other {# álbumes más}}",
   "spaces_activity_changed_role": "{name} cambió el rol a {role}",
   "spaces_activity_default": "{name} realizó una acción",
   "spaces_activity_deleted_person": "{name} eliminó a la persona \"{personName}\"",

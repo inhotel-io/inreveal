@@ -2750,7 +2750,7 @@
   "spaces": "Spaces",
   "spaces_activity": "Активность",
   "spaces_activity_added_photos": "{name} добавил(а) фото: {count}",
-  "spaces_activity_bulk_unlinked_albums": "{name} отвязал(а) {albumName} и ещё {count, plural, one {# альбом} few {# альбома} many {# альбомов} other {# альбома}}",
+  "spaces_activity_bulk_unlinked_albums": "{name} отвязал(а) «{albumName}» и ещё {count, plural, one {# альбом} few {# альбома} many {# альбомов} other {# альбома}}",
   "spaces_activity_changed_role": "{name} изменил(а) роль на «{role}»",
   "spaces_activity_default": "{name} выполнил(а) действие",
   "spaces_activity_deleted_person": "{name} удалил(а) человека «{personName}»",
