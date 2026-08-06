@@ -1,4 +1,17 @@
+import { AgentRunnerTokenGuard } from 'src/controllers/agent-runner-token.guard';
 import { ActivityService } from 'src/services/activity.service';
+import { AgentAssetSearchFilterResolverService } from 'src/services/agent-asset-search-filter-resolver.service';
+import { AgentMcpToolContractService } from 'src/services/agent-mcp-tool-contract.service';
+import { AgentMcpToolRegistryService } from 'src/services/agent-mcp-tool-registry.service';
+import { AgentMcpService } from 'src/services/agent-mcp.service';
+import { AgentMessageService } from 'src/services/agent-message.service';
+import { AgentOperationPlanService } from 'src/services/agent-operation-plan.service';
+import { AgentProviderCredentialService } from 'src/services/agent-provider-credential.service';
+import { AgentRunnerToolTokenService } from 'src/services/agent-runner-tool-token.service';
+import { AgentRunnerService } from 'src/services/agent-runner.service';
+import { AgentSessionActivityEventService } from 'src/services/agent-session-activity-event.service';
+import { AgentSessionService } from 'src/services/agent-session.service';
+import { AgentToolService } from 'src/services/agent-tool.service';
 import { AlbumService } from 'src/services/album.service';
 import { ApiKeyService } from 'src/services/api-key.service';
 import { ApiService } from 'src/services/api.service';
@@ -13,8 +26,10 @@ import { DatabaseBackupService } from 'src/services/database-backup.service';
 import { DatabaseService } from 'src/services/database.service';
 import { DownloadService } from 'src/services/download.service';
 import { DuplicateService } from 'src/services/duplicate.service';
+import { EncryptedSecretService } from 'src/services/encrypted-secret.service';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import { HlsService } from 'src/services/hls.service';
+import { ImageQualityService } from 'src/services/image-quality.service';
 import { IntegrityService } from 'src/services/integrity.service';
 import { JobService } from 'src/services/job.service';
 import { LibraryManifestService } from 'src/services/library-manifest.service';
@@ -61,6 +76,19 @@ import { WorkflowService } from 'src/services/workflow.service';
 export const services = [
   ApiKeyService,
   ActivityService,
+  AgentRunnerTokenGuard,
+  AgentMessageService,
+  AgentMcpService,
+  AgentMcpToolContractService,
+  AgentMcpToolRegistryService,
+  AgentOperationPlanService,
+  AgentProviderCredentialService,
+  AgentRunnerService,
+  AgentRunnerToolTokenService,
+  AgentSessionActivityEventService,
+  AgentSessionService,
+  AgentAssetSearchFilterResolverService,
+  AgentToolService,
   AlbumService,
   ApiService,
   AppMetricsService,
@@ -74,6 +102,7 @@ export const services = [
   DatabaseService,
   DownloadService,
   DuplicateService,
+  EncryptedSecretService,
   FaceRepairService,
   IntegrityService,
   HlsService,
@@ -87,6 +116,7 @@ export const services = [
   MetadataService,
   NotificationService,
   NotificationAdminService,
+  ImageQualityService,
   OcrService,
   PartnerService,
   PetDetectionService,

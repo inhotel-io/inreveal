@@ -95,6 +95,12 @@ export interface SearchExifOptions {
   ratingIsMinimum?: boolean;
 }
 
+export interface SearchQualityOptions {
+  maxSharpness?: number;
+  maxBrightness?: number;
+  maxQuality?: number;
+}
+
 export interface SearchEmbeddingOptions {
   embedding: string;
   userIds: string[];
@@ -119,6 +125,7 @@ export interface SearchTagOptions {
 
 export interface SearchAlbumOptions {
   albumIds?: string[];
+  albumMatchAny?: boolean;
 }
 
 export interface SearchSpaceOptions {
@@ -139,6 +146,7 @@ export interface SearchPaginationOptions {
 type BaseAssetSearchOptions = SearchDateOptions &
   SearchIdOptions &
   SearchExifOptions &
+  SearchQualityOptions &
   SearchOrderOptions &
   SearchPathOptions &
   SearchStatusOptions &
@@ -172,6 +180,7 @@ export interface AssetSearchPaginationV3Options {
 export type SmartSearchOptions = SearchDateOptions &
   SearchEmbeddingOptions &
   SearchExifOptions &
+  SearchQualityOptions &
   SearchOneToOneRelationOptions &
   Omit<SearchStatusOptions, 'visibility'> &
   SearchUserIdOptions &
