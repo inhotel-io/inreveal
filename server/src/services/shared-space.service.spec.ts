@@ -138,8 +138,17 @@ const setupBulkAlbumEditor = (mocks: ServiceMocks) => {
 const setupBulkUnlinkAlbums = (mocks: ServiceMocks) => {
   const { auth, spaceId } = setupBulkAlbumEditor(mocks);
   const [a1, a2, a3] = [newUuid(), newUuid(), newUuid()];
+  // Distinct names per album (fix round 1, Minor): a shared literal name can't distinguish
+  // `names.get(succeeded[0])` picking the right album from a hardcoded fallback.
+  const albumNames = new Map([
+    [a1, 'Trip A'],
+    [a2, 'Trip B'],
+    [a3, 'Trip C'],
+  ]);
   mocks.sharedSpace.hasAlbumLink.mockResolvedValue(true);
-  mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+  mocks.album.getById.mockImplementation((id: string) =>
+    Promise.resolve({ albumName: albumNames.get(id) ?? 'Unknown' } as any),
+  );
   mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
   mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
   mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
@@ -9538,6 +9547,16 @@ describe(SharedSpaceService.name, () => {
         expect(result[2].success).toBe(true);
         // observable state, not just the envelope:
         expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledTimes(2);
+        // I3 (fix round 1): the batch/reconcile side effects must reflect only the SUCCEEDED ids
+        // (a1, a3), not the full requested batch — dropping the `.filter((r) => r.success)` at the
+        // call site survives every assertion above (they only inspect the per-item envelope).
+        expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ count: 2 }) }),
+        );
+        expect(mocks.job.queue).toHaveBeenCalledWith({
+          name: JobName.SharedSpaceAlbumGrantReconcile,
+          data: { albumIds: [a1, a3] },
+        });
       });
 
       it('does not throw when every id fails', async () => {
@@ -9546,6 +9565,10 @@ describe(SharedSpaceService.name, () => {
 
         const result = await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2] });
 
+        // Minor (fix round 1): result.every(...) and .not.toHaveBeenCalled() both hold vacuously
+        // for an empty array — pin the actual result shape so a code path that silently drops
+        // every item (instead of reporting per-item failures) can't pass this test by accident.
+        expect(result).toHaveLength(2);
         expect(result.every((r) => !r.success)).toBe(true);
         expect(mocks.sharedSpace.removeAlbum).not.toHaveBeenCalled();
       });
@@ -9560,8 +9583,11 @@ describe(SharedSpaceService.name, () => {
         expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledTimes(2);
       });
 
-      // Spec §6.4 — one row for the batch, not one per album.
-      it('writes exactly one activity row for the batch', async () => {
+      // Spec §6.4 — one row for the batch, not one per album. albumName is pinned against
+      // DISTINCT per-album fixture names (fix round 1, Minor): with every album sharing one
+      // literal name, this assertion couldn't tell `names.get(succeeded[0])` apart from a
+      // hardcoded string.
+      it('writes exactly one activity row for the batch, naming the first succeeded album', async () => {
         const { auth, spaceId, a1, a2, a3 } = setupBulkUnlinkAlbums(mocks);
 
         await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2, a3] });
@@ -9570,7 +9596,7 @@ describe(SharedSpaceService.name, () => {
         expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
           expect.objectContaining({
             type: SharedSpaceActivityType.AlbumBulkUnlink,
-            data: expect.objectContaining({ count: 3 }),
+            data: expect.objectContaining({ count: 3, albumName: 'Trip A' }),
           }),
         );
       });
@@ -9616,6 +9642,58 @@ describe(SharedSpaceService.name, () => {
         // it is out of scope for Task 3 — see task-3-report.md.
         expect(mocks.job.queue).toHaveBeenCalledTimes(3);
       });
+
+      // I2 (fix round 1): #runBulk must process ids strictly sequentially, not with Promise.all —
+      // Task 4's folder moves depend on each item seeing the tree the previous item produced.
+      // Every other assertion in this describe block is result-order based, and Promise.all
+      // preserves result order, so none of them catch a switch to parallel execution. Track
+      // actual in-flight concurrency instead of inferring it from ordering.
+      it('processes ids strictly sequentially, never more than one in flight at a time', async () => {
+        const { auth, spaceId, a1, a2, a3 } = setupBulkUnlinkAlbums(mocks);
+        let inFlight = 0;
+        let maxInFlight = 0;
+        mocks.sharedSpace.removeAlbum.mockImplementation(async () => {
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          inFlight--;
+        });
+
+        await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2, a3] });
+
+        expect(maxInFlight).toBe(1);
+      });
+
+      // I5 (fix round 1): #bulkErrorFor's ForbiddenException branch was unpinned — nothing in this
+      // file drove a per-item Forbidden failure. Force the rbac-6 owner arm to reject a2 by
+      // dropping space membership and granting album ownership of a1 only.
+      it('maps a forbidden per-item failure to no_permission and still processes the rest', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkUnlinkAlbums(mocks);
+        mocks.sharedSpace.getMember.mockResolvedValue(void 0); // not a space member -> owner arm only
+        mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([a1])); // owns a1 only
+
+        const result = await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(result[0].success).toBe(true);
+        expect(result[1]).toEqual({
+          id: a2,
+          success: false,
+          error: BulkIdErrorReason.NO_PERMISSION,
+          errorMessage: 'Insufficient role',
+        });
+      });
+
+      // I5 (fix round 1): the catch-all branch must RESOLVE with UNKNOWN, not rethrow — one bad
+      // item must never crash the whole bulk request.
+      it('maps an unexpected per-item error to unknown and resolves instead of throwing', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkUnlinkAlbums(mocks);
+        mocks.sharedSpace.removeAlbum.mockRejectedValueOnce(new Error('boom'));
+
+        const result = await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(result[0]).toEqual({ id: a1, success: false, error: BulkIdErrorReason.UNKNOWN, errorMessage: 'boom' });
+        expect(result[1].success).toBe(true);
+      });
     });
 
     describe('bulkSetAlbumTimeline', () => {
@@ -9630,6 +9708,34 @@ describe(SharedSpaceService.name, () => {
         expect(mocks.sharedSpace.setAlbumShowInTimeline).toHaveBeenCalledWith(spaceId, a1, true);
         expect(mocks.sharedSpace.setAlbumShowInTimeline).toHaveBeenCalledWith(spaceId, a2, true);
       });
+
+      // Minor (fix round 1): only `true` was ever exercised — hardcoding `true` in the
+      // implementation survived every test above. Pin the other boolean too.
+      it('applies false to every id', async () => {
+        const { auth, spaceId } = setupBulkAlbumEditor(mocks);
+        const [a1, a2] = [newUuid(), newUuid()];
+        mocks.sharedSpace.setAlbumShowInTimeline.mockResolvedValue(void 0 as any);
+
+        const result = await sut.bulkSetAlbumTimeline(auth, spaceId, { ids: [a1, a2], showInTimeline: false });
+
+        expect(result.every((r) => r.success)).toBe(true);
+        expect(mocks.sharedSpace.setAlbumShowInTimeline).toHaveBeenCalledWith(spaceId, a1, false);
+        expect(mocks.sharedSpace.setAlbumShowInTimeline).toHaveBeenCalledWith(spaceId, a2, false);
+      });
+
+      // C1 (fix round 1): hoisting a single requireRole(Editor) above the loop, then calling
+      // setAlbumShowInTimeline directly (bypassing #setAlbumTimelineChecked entirely), passes
+      // every assertion above. getMember — invoked via #setAlbumTimelineChecked's requireRole —
+      // must be re-evaluated once PER id, not once for the whole batch.
+      it('re-authorizes for every id, not once for the whole batch', async () => {
+        const { auth, spaceId } = setupBulkAlbumEditor(mocks);
+        const [a1, a2, a3] = [newUuid(), newUuid(), newUuid()];
+        mocks.sharedSpace.setAlbumShowInTimeline.mockResolvedValue(void 0 as any);
+
+        await sut.bulkSetAlbumTimeline(auth, spaceId, { ids: [a1, a2, a3], showInTimeline: true });
+
+        expect(mocks.sharedSpace.getMember).toHaveBeenCalledTimes(3);
+      });
     });
 
     describe('bulkSetAlbumFolder', () => {
@@ -9640,6 +9746,10 @@ describe(SharedSpaceService.name, () => {
 
         expect(result.every((r) => r.success)).toBe(true);
         expect(mocks.sharedSpace.setAlbumLinkFolder).toHaveBeenCalledTimes(2);
+        // I4 (fix round 1): the call count alone doesn't prove WHICH folder each album landed in —
+        // mirrors the sibling bulkSetAlbumTimeline assertion above.
+        expect(mocks.sharedSpace.setAlbumLinkFolder).toHaveBeenCalledWith(spaceId, a1, f1);
+        expect(mocks.sharedSpace.setAlbumLinkFolder).toHaveBeenCalledWith(spaceId, a2, f1);
       });
 
       it('maps a name-conflict rejection to a validation entry, not a 500', async () => {
@@ -9655,6 +9765,18 @@ describe(SharedSpaceService.name, () => {
           errorMessage: 'nope',
         });
         expect(result[1].success).toBe(true);
+      });
+
+      // C1 (fix round 1): hoisting a single requireRole(Editor) above the loop and calling
+      // setAlbumLinkFolder directly bypasses #setAlbumFolderChecked entirely — including its
+      // space-scoped getAlbumFolderById guard, the only thing preventing a cross-space folder
+      // placement. That guard must run once PER id, not once for the whole batch.
+      it('validates the destination folder for every id, not once for the whole batch', async () => {
+        const { auth, spaceId, a1, a2, f1 } = setupBulkSetAlbumFolder(mocks);
+
+        await sut.bulkSetAlbumFolder(auth, spaceId, { ids: [a1, a2], folderId: f1 });
+
+        expect(mocks.sharedSpace.getAlbumFolderById).toHaveBeenCalledTimes(2);
       });
     });
   });
