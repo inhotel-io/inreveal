@@ -9337,6 +9337,52 @@ describe(SharedSpaceService.name, () => {
 
       expect(mocks.sharedSpace.update).not.toHaveBeenCalledWith(space.id, { lastActivityAt: expect.any(Date) });
     });
+
+    // Task 2 pinning tests: the checked core (#unlinkAlbumChecked) must not log activity or queue
+    // the grant reconcile itself — those stay the wrapper's job so a future bulk caller can batch
+    // them into ONE row / ONE job instead of one per item. These pin the wrapper's current
+    // single-item behaviour across the extraction.
+    it('logs exactly one activity row for a single unlink', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.sharedSpace.hasAlbumLink.mockResolvedValue(true);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.unlinkAlbum(auth, spaceId, albumId);
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledTimes(1);
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ type: SharedSpaceActivityType.AlbumUnlink }),
+      );
+    });
+
+    it('queues a grant reconcile for the unlinked album', async () => {
+      const auth = factory.auth({ user: { isAdmin: false } });
+      const spaceId = newUuid();
+      const albumId = newUuid();
+      const member = makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor });
+
+      mocks.sharedSpace.getMember.mockResolvedValue(member);
+      mocks.sharedSpace.hasAlbumLink.mockResolvedValue(true);
+      mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+      mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+      mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+      mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+
+      await sut.unlinkAlbum(auth, spaceId, albumId);
+
+      // Job data field is `albumIds` (see queueAlbumGrantReconcile), not the brief pseudocode's `ids`.
+      expect(mocks.job.queue).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ albumIds: [albumId] }) }),
+      );
+    });
   });
 
   describe('unlinkAlbum — hasAlbumLink guard (M11)', () => {

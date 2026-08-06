@@ -810,6 +810,27 @@ export class SharedSpaceService extends BaseService {
   }
 
   async unlinkAlbum(auth: AuthDto, spaceId: string, albumId: string): Promise<void> {
+    const { albumName } = await this.#unlinkAlbumChecked(auth, spaceId, albumId);
+    await this.sharedSpaceRepository.logActivity({
+      spaceId,
+      userId: auth.user.id,
+      type: SharedSpaceActivityType.AlbumUnlink,
+      data: { albumId, albumName },
+    });
+    // correctness-4: reconcile grants for the just-unlinked album (its grant revocation
+    // in shared_space_album_delete_audit could have lost a delete to a concurrent revocation).
+    await this.queueAlbumGrantReconcile([albumId]);
+  }
+
+  // Checked core shared by the single-item unlinkAlbum above and the future bulk-unlink path
+  // (Task 3): authorization + validation + the removal itself, with NO activity logging and NO
+  // grant-reconcile queueing — those are batched by the caller (one row / one job per request,
+  // not per item) so a bulk unlink of N albums doesn't spam N activity rows and N reconcile jobs.
+  async #unlinkAlbumChecked(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+  ): Promise<{ albumName: string; orphanedAssetIds: string[] }> {
     // rbac-6: current-space Editors curate space links; ADDITIONALLY the album owner can always
     // revoke a link to their own album, even without space membership (otherwise an owner cannot
     // discover or undo an editor's link). The Editor path short-circuits, so it is not weakened.
@@ -823,9 +844,10 @@ export class SharedSpaceService extends BaseService {
     }
 
     // Fork RBAC (Slice 4 / M11): the owner arm authorizes on album ownership only and never verified
-    // the album is actually linked to this space. Without this guard, logActivity below injects an
-    // AlbumUnlink row into an arbitrary space's feed (activity spam via a leaked spaceId), and a
-    // nonexistent spaceId 500s on the FK. Guard both paths: no link -> 404, before any side effect.
+    // the album is actually linked to this space. Without this guard, the caller's logActivity
+    // could inject an AlbumUnlink row into an arbitrary space's feed (activity spam via a leaked
+    // spaceId), and a nonexistent spaceId 500s on the FK. Guard both paths: no link -> 404, before
+    // any side effect.
     const linked = await this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId);
     if (!linked) {
       throw new NotFoundException('Album is not linked to this space');
@@ -834,20 +856,12 @@ export class SharedSpaceService extends BaseService {
     const album = await this.albumRepository.getById(albumId, { withAssets: false });
     const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
     await this.sharedSpaceRepository.removeAlbum(spaceId, albumId);
-    await this.sharedSpaceRepository.logActivity({
-      spaceId,
-      userId: auth.user.id,
-      type: SharedSpaceActivityType.AlbumUnlink,
-      data: { albumId, albumName: album?.albumName ?? '' },
-    });
     if (orphanedAssetIds.length > 0) {
       await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphanedAssetIds);
       await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
       await this.queueSpacePersonMetadataBackfill();
     }
-    // correctness-4: reconcile grants for the just-unlinked album (its grant revocation
-    // in shared_space_album_delete_audit could have lost a delete to a concurrent revocation).
-    await this.queueAlbumGrantReconcile([albumId]);
+    return { albumName: album?.albumName ?? '', orphanedAssetIds };
   }
 
   async updateAlbumLink(
@@ -856,8 +870,18 @@ export class SharedSpaceService extends BaseService {
     albumId: string,
     dto: SharedSpaceAlbumLinkUpdateDto,
   ): Promise<void> {
+    await this.#setAlbumTimelineChecked(auth, spaceId, albumId, dto.showInTimeline);
+  }
+
+  // Checked core shared by updateAlbumLink above and the future bulk path (Task 3).
+  async #setAlbumTimelineChecked(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+    showInTimeline: boolean,
+  ): Promise<void> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
-    await this.sharedSpaceRepository.setAlbumShowInTimeline(spaceId, albumId, dto.showInTimeline);
+    await this.sharedSpaceRepository.setAlbumShowInTimeline(spaceId, albumId, showInTimeline);
   }
 
   async setAlbumFolder(
@@ -866,12 +890,20 @@ export class SharedSpaceService extends BaseService {
     albumId: string,
     dto: SharedSpaceAlbumFolderMoveAlbumDto,
   ): Promise<void> {
+    await this.#setAlbumFolderChecked(auth, spaceId, albumId, dto.folderId ?? null);
+  }
+
+  // Checked core shared by setAlbumFolder above and the future bulk path (Task 3).
+  async #setAlbumFolderChecked(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+    folderId: string | null,
+  ): Promise<void> {
     // Space Editor only — album ownership is deliberately not required. Folders are
     // space-scoped metadata, so any editor may reorganise any linked album. Matches
     // updateAlbumLink, which gates on space Editor alone.
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
-
-    const folderId = dto.folderId ?? null;
 
     if (folderId !== null) {
       // Space-scoped lookup: this is the only thing preventing a cross-space placement,
