@@ -824,6 +824,43 @@ describe('SpaceAlbumsList', () => {
         expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
         expect(screen.getByTestId('space-album-row-b').closest('tr')).toHaveAttribute('data-selected', 'true');
       });
+
+      // Fix round 2: SpaceAlbumsTable is rendered at a THIRD site — the {#if isGrouped} branch —
+      // which none of the tests above reach, since none of them set groupBy away from its default
+      // None. Grouped List is an ordinary combination a user reaches from the existing view
+      // controls, and the props threaded into that call site had zero coverage.
+      describe('grouped', () => {
+        beforeEach(() => {
+          // Same ordering as the "collapsed groups" describe above, and for the same reason:
+          // collapsedGroups is keyed by groupBy and reset() does not clone it, so a Year-grouping
+          // collapse from an earlier test could otherwise leak in. Set groupBy first, then expand.
+          spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+          expandAllSpaceAlbumGroups();
+        });
+
+        it('check circle toggles an album row into the selection inside a grouped List table', async () => {
+          renderList({
+            ...props,
+            albums: [
+              linkedAlbum('a', { endDate: '2024-01-01T00:00:00.000Z' }),
+              linkedAlbum('b', { endDate: '2023-01-01T00:00:00.000Z' }),
+            ],
+            folders: [],
+          });
+
+          // Positive control: proves this render actually reached the grouped branch (which
+          // renders a group-header row) rather than silently falling through to the ungrouped
+          // table — a group header only exists in {#if isGrouped} branch's markup.
+          expect(screen.getByTestId('space-album-group-header-2024')).toBeInTheDocument();
+
+          await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+          expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+          expect(screen.getByTestId('space-album-row-a').closest('tr')).toHaveAttribute('data-selected', 'true');
+          // Positive control: an unselected row does not carry the attribute.
+          expect(screen.getByTestId('space-album-row-b').closest('tr')).not.toHaveAttribute('data-selected', 'true');
+        });
+      });
     });
   });
 });
