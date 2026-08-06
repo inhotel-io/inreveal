@@ -16,6 +16,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { NextFunction, Response } from 'express';
 import { Endpoint, HistoryBuilder } from 'src/decorators';
+import { BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import {
@@ -24,6 +25,13 @@ import {
   PersonFacePageResponseDto,
   PersonStatisticsResponseDto,
 } from 'src/dtos/person.dto';
+import {
+  SharedSpaceBulkAlbumFolderMoveDto,
+  SharedSpaceBulkAlbumIdsDto,
+  SharedSpaceBulkAlbumTimelineDto,
+  SharedSpaceBulkFolderIdsDto,
+  SharedSpaceBulkFolderParentDto,
+} from 'src/dtos/shared-space-bulk.dto';
 import {
   SharedSpacePeopleStatisticsResponseDto,
   SharedSpacePersonAliasDto,
@@ -599,6 +607,62 @@ export class SharedSpaceController {
     return this.service.getLinkedAlbums(auth, id);
   }
 
+  // These three bulk routes are declared BEFORE the `:albumId` param routes below on purpose:
+  // Nest/Express match routes in declaration order, and `PUT :id/albums/:albumId` (linkAlbum)
+  // would otherwise swallow `PUT :id/albums/bulk-folder` / `bulk-timeline`, treating "bulk-folder"
+  // as an albumId.
+  @Post(':id/albums/bulk-unlink')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumDelete })
+  @HttpCode(HttpStatus.OK)
+  @Endpoint({
+    summary: 'Unlink several albums from a shared space',
+    description:
+      'Per-item results; the request succeeds with 200 even when every item fails. Unlike the other ' +
+      'bulk album/folder endpoints, this authorizes per item rather than with a single space-Editor ' +
+      "check: an album's owner may always revoke a link to their own album, even without space " +
+      'membership (mirrors DELETE :id/albums/:albumId).',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  bulkUnlinkAlbums(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: SharedSpaceBulkAlbumIdsDto,
+  ): Promise<BulkIdResponseDto[]> {
+    return this.service.bulkUnlinkAlbums(auth, id, dto);
+  }
+
+  @Put(':id/albums/bulk-folder')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumUpdate })
+  @Endpoint({
+    summary: 'Move several linked albums into a folder',
+    description:
+      'Per-item results; the request succeeds with 200 even when every item fails. Pass folderId: null ' +
+      'to move the albums to the space root. Requires space Editor.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  bulkSetAlbumFolder(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: SharedSpaceBulkAlbumFolderMoveDto,
+  ): Promise<BulkIdResponseDto[]> {
+    return this.service.bulkSetAlbumFolder(auth, id, dto);
+  }
+
+  @Put(':id/albums/bulk-timeline')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumUpdate })
+  @Endpoint({
+    summary: 'Set the timeline flag for several linked albums',
+    description: 'Per-item results; the request succeeds with 200 even when every item fails. Requires space Editor.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  bulkSetAlbumTimeline(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: SharedSpaceBulkAlbumTimelineDto,
+  ): Promise<BulkIdResponseDto[]> {
+    return this.service.bulkSetAlbumTimeline(auth, id, dto);
+  }
+
   @Put(':id/albums/:albumId')
   @Authenticated({ permission: Permission.SharedSpaceAlbumCreate })
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -671,6 +735,41 @@ export class SharedSpaceController {
     @Body() dto: SharedSpaceAlbumFolderCreateDto,
   ): Promise<SharedSpaceAlbumFolderDto> {
     return this.service.createAlbumFolder(auth, id, dto);
+  }
+
+  @Put(':id/album-folders/bulk-parent')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumFolderUpdate })
+  @Endpoint({
+    summary: 'Move several album folders to a new parent',
+    description:
+      'Per-item results; the request succeeds with 200 even when every item fails. Pass parentId: null ' +
+      'to move the folders to the space root. Requires space Editor.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  bulkMoveAlbumFolders(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: SharedSpaceBulkFolderParentDto,
+  ): Promise<BulkIdResponseDto[]> {
+    return this.service.bulkMoveAlbumFolders(auth, id, dto);
+  }
+
+  @Post(':id/album-folders/bulk-delete')
+  @Authenticated({ permission: Permission.SharedSpaceAlbumFolderDelete })
+  @HttpCode(HttpStatus.OK)
+  @Endpoint({
+    summary: 'Delete several album folders',
+    description:
+      'Per-item results; the request succeeds with 200 even when every item fails. Direct children of ' +
+      'each deleted folder are promoted one level up. Requires space Editor.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  bulkDeleteAlbumFolders(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: SharedSpaceBulkFolderIdsDto,
+  ): Promise<BulkIdResponseDto[]> {
+    return this.service.bulkDeleteAlbumFolders(auth, id, dto);
   }
 
   @Patch(':id/album-folders/:folderId')
