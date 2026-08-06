@@ -735,6 +735,16 @@ class ApiClient {
           return SharedSpaceAssetLinkedAlbumDto.fromJson(value);
         case 'SharedSpaceAssetRemoveDto':
           return SharedSpaceAssetRemoveDto.fromJson(value);
+        case 'SharedSpaceBulkAlbumFolderMoveDto':
+          return SharedSpaceBulkAlbumFolderMoveDto.fromJson(value);
+        case 'SharedSpaceBulkAlbumIdsDto':
+          return SharedSpaceBulkAlbumIdsDto.fromJson(value);
+        case 'SharedSpaceBulkAlbumTimelineDto':
+          return SharedSpaceBulkAlbumTimelineDto.fromJson(value);
+        case 'SharedSpaceBulkFolderIdsDto':
+          return SharedSpaceBulkFolderIdsDto.fromJson(value);
+        case 'SharedSpaceBulkFolderParentDto':
+          return SharedSpaceBulkFolderParentDto.fromJson(value);
         case 'SharedSpaceCreateDto':
           return SharedSpaceCreateDto.fromJson(value);
         case 'SharedSpaceLibraryLinkDto':
