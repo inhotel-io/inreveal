@@ -24,7 +24,11 @@ import {
   SystemMetadataKey,
   UserAvatarColor,
 } from 'src/enum';
-import { SHARED_SPACE_DEDUP_MAX_PASSES, SharedSpaceService } from 'src/services/shared-space.service';
+import {
+  SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE,
+  SHARED_SPACE_DEDUP_MAX_PASSES,
+  SharedSpaceService,
+} from 'src/services/shared-space.service';
 import { StorageService } from 'src/services/storage.service';
 import { ImmichFileResponse, ImmichStreamResponse } from 'src/utils/file';
 import { CROSS_OWNER_MERGE_ERROR_CODE } from 'src/utils/merge-policy';
@@ -12169,6 +12173,35 @@ describe(SharedSpaceService.name, () => {
         expect(mocks.sharedSpace.getAlbumFolderById).not.toHaveBeenCalled();
         expect(mocks.sharedSpace.countAlbumFoldersBySpace).not.toHaveBeenCalled();
       });
+
+      // Task 3 review, Part A (path 1/3): the name pre-check (F-03) is optimistic — a concurrent
+      // create can still race past it and hit the partial unique index, which Postgres reports as
+      // error 23505. That must map to the same 400 the pre-check throws, not escape as a raw 500.
+      it('maps a raced unique-violation (23505) on the insert to a 400 with the pre-check message', async () => {
+        const { auth, space } = setupAlbumFolderEditor(mocks);
+        mocks.sharedSpace.createAlbumFolder.mockRejectedValue(
+          Object.assign(
+            new Error('duplicate key value violates unique constraint "shared_space_album_folder_root_name_key"'),
+            { code: '23505' },
+          ),
+        );
+
+        const promise = sut.createAlbumFolder(auth, space.id, { name: 'Trips' } as any);
+
+        await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+        await expect(promise).rejects.toThrow(SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE);
+      });
+
+      // Task 3 review, Part A: only code 23505 is mapped — any other repository error (a
+      // different constraint, a connection failure, …) must propagate unchanged, same error
+      // object, not rewrapped.
+      it('propagates a non-23505 repository error unchanged', async () => {
+        const { auth, space } = setupAlbumFolderEditor(mocks);
+        const error = Object.assign(new Error('violates foreign key constraint'), { code: '23503' });
+        mocks.sharedSpace.createAlbumFolder.mockRejectedValue(error);
+
+        await expect(sut.createAlbumFolder(auth, space.id, { name: 'Trips' } as any)).rejects.toBe(error);
+      });
     });
 
     describe('updateAlbumFolder (rename)', () => {
@@ -12191,9 +12224,15 @@ describe(SharedSpaceService.name, () => {
         mocks.sharedSpace.getAlbumFolderById.mockResolvedValue(folder);
         mocks.sharedSpace.hasSiblingAlbumFolderName.mockResolvedValue(true);
 
-        await expect(sut.updateAlbumFolder(auth, space.id, folder.id, { name: 'trips' } as any)).rejects.toBeInstanceOf(
-          BadRequestException,
-        );
+        const promise = sut.updateAlbumFolder(auth, space.id, folder.id, { name: 'trips' } as any);
+
+        // Asserts the shared const, not just the exception type: the pre-check
+        // (assertNoAlbumFolderNameConflict) and the raced-23505 mapper
+        // (withAlbumFolderNameConflictMapped) both throw SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE,
+        // and mobile substring-matches that exact text to choose its specific toast — a reword of one
+        // throw site alone must fail this test, not just leave it green on the exception class.
+        await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+        await expect(promise).rejects.toThrow(SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE);
         expect(mocks.sharedSpace.updateAlbumFolder).not.toHaveBeenCalled();
       });
 
@@ -12245,6 +12284,23 @@ describe(SharedSpaceService.name, () => {
         await expect(sut.updateAlbumFolder(auth, space.id, folder.id, {} as any)).rejects.toBeInstanceOf(
           BadRequestException,
         );
+      });
+
+      // Task 3 review, Part A (path 2/3): the rename pre-check (N-02) is optimistic — a
+      // concurrent rename to the same target name can still race past it, and the UPDATE itself
+      // raises Postgres 23505. Map it to the same 400 the pre-check throws.
+      it('maps a raced unique-violation (23505) on the rename UPDATE to a 400', async () => {
+        const { auth, space } = setupAlbumFolderEditor(mocks);
+        const folder = albumFolderRow({ spaceId: space.id });
+        mocks.sharedSpace.getAlbumFolderById.mockResolvedValue(folder);
+        mocks.sharedSpace.updateAlbumFolder.mockRejectedValue(
+          Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' }),
+        );
+
+        const promise = sut.updateAlbumFolder(auth, space.id, folder.id, { name: 'Travel' } as any);
+
+        await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+        await expect(promise).rejects.toThrow(SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE);
       });
     });
 
@@ -12429,6 +12485,21 @@ describe(SharedSpaceService.name, () => {
         expect(mocks.sharedSpace.moveAlbumFolderChecked).toHaveBeenCalledWith(space.id, folder.id, target.id, 'Travel');
         expect(mocks.sharedSpace.updateAlbumFolder).not.toHaveBeenCalled();
       });
+
+      // Task 3 review, Part A (path 3/3): same race, but through the move path's final UPDATE
+      // inside moveAlbumFolderChecked's own transaction — the rejection propagates out of
+      // db.transaction().execute and must still map to the same 400, not escape as a raw 500.
+      it('maps a raced unique-violation (23505) on the move to a 400', async () => {
+        const { auth, space, folder, target } = setupAlbumFolderMove(mocks);
+        mocks.sharedSpace.moveAlbumFolderChecked.mockRejectedValue(
+          Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' }),
+        );
+
+        const promise = sut.updateAlbumFolder(auth, space.id, folder.id, { parentId: target.id } as any);
+
+        await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+        await expect(promise).rejects.toThrow(SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE);
+      });
     });
 
     describe('deleteAlbumFolder', () => {
@@ -12502,34 +12573,13 @@ describe(SharedSpaceService.name, () => {
         expect(mocks.sharedSpace.getAlbumFolderById).not.toHaveBeenCalled();
       });
 
-      // A-03 / C-02: the write is an unconditional UPDATE, so repeating it or racing it is
-      // last-write-wins with no conflict detection. That is deliberate for placement metadata.
-      it('A-03: moving into the same folder again is idempotent', async () => {
-        const { auth, space } = setupAlbumFolderEditor(mocks);
-        const folder = albumFolderRow({ spaceId: space.id });
-        const albumId = newUuid();
-        mocks.sharedSpace.getAlbumFolderById.mockResolvedValue(folder);
-        mocks.sharedSpace.setAlbumLinkFolder.mockResolvedValue(true);
-
-        await sut.setAlbumFolder(auth, space.id, albumId, { folderId: folder.id } as any);
-        await sut.setAlbumFolder(auth, space.id, albumId, { folderId: folder.id } as any);
-
-        expect(mocks.sharedSpace.setAlbumLinkFolder).toHaveBeenCalledTimes(2);
-      });
-
-      // A-04: placement lives on the (spaceId, albumId) join row, so the update is scoped to
-      // this space and an album linked elsewhere keeps its other placement untouched.
-      it('A-04: scopes the write to this space only', async () => {
-        const { auth, space } = setupAlbumFolderEditor(mocks);
-        const folder = albumFolderRow({ spaceId: space.id });
-        const albumId = newUuid();
-        mocks.sharedSpace.getAlbumFolderById.mockResolvedValue(folder);
-        mocks.sharedSpace.setAlbumLinkFolder.mockResolvedValue(true);
-
-        await sut.setAlbumFolder(auth, space.id, albumId, { folderId: folder.id } as any);
-
-        expect(mocks.sharedSpace.setAlbumLinkFolder).toHaveBeenCalledWith(space.id, albumId, folder.id);
-      });
+      // A-03 / A-04 / C-02: the write is an unconditional UPDATE, so repeating it or racing it is
+      // last-write-wins with no conflict detection — deliberate for placement metadata. These were
+      // previously pinned by mocked unit tests that could not fail (Task 3 review): A-03 asserted
+      // only that setAlbumLinkFolder was CALLED twice, true of any non-throwing implementation, and
+      // A-04 was byte-identical to A-01's arrange/act/assert above. The real idempotency and
+      // per-space-scoping properties now live as medium tests against a real database in
+      // shared-space-album-folder.repository.spec.ts (A-03, A-04).
 
       // A-05: the cross-space invariant that PG14 cannot express as a composite FK. This test
       // and the medium test P-07 are the only things enforcing it.

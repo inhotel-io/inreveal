@@ -108,6 +108,16 @@ export const SHARED_SPACE_ALBUM_FOLDER_MAX_DEPTH = 10;
 /** Bounds the whole-space folder fetch the web client uses to render the tree. */
 export const SHARED_SPACE_ALBUM_FOLDER_MAX_PER_SPACE = 500;
 
+/**
+ * Shared by the optimistic pre-check ({@link SharedSpaceService.assertNoAlbumFolderNameConflict})
+ * and the raced-23505 mapper ({@link SharedSpaceService.withAlbumFolderNameConflictMapped}) so the
+ * two 400 paths can never drift apart in wording. The mobile client
+ * (`mobile/lib/pages/library/spaces/space_albums.page.dart`, `_folderErrorKey`) substring-matches
+ * `'already exists here'` on this exact text to pick the specific `space_album_folder_name_taken`
+ * toast instead of a generic error — do not reword this without updating that match too.
+ */
+export const SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE = 'A folder with that name already exists here';
+
 type SpacePersonMatchResult = {
   id: string;
   identityId?: string | null;
@@ -952,12 +962,14 @@ export class SharedSpaceService extends BaseService {
 
     await this.assertNoAlbumFolderNameConflict(spaceId, parentId, name, null);
 
-    const created = await this.sharedSpaceRepository.createAlbumFolder({
-      spaceId,
-      parentId,
-      name,
-      createdById: auth.user.id,
-    });
+    const created = await this.withAlbumFolderNameConflictMapped(() =>
+      this.sharedSpaceRepository.createAlbumFolder({
+        spaceId,
+        parentId,
+        name,
+        createdById: auth.user.id,
+      }),
+    );
     return this.mapAlbumFolder(created);
   }
 
@@ -1017,11 +1029,13 @@ export class SharedSpaceService extends BaseService {
     await this.assertNoAlbumFolderNameConflict(spaceId, destinationParentId, name, folderId);
 
     if (isMove) {
-      const outcome = await this.sharedSpaceRepository.moveAlbumFolderChecked(
-        spaceId,
-        folderId,
-        destinationParentId,
-        dto.name === undefined ? undefined : name,
+      const outcome = await this.withAlbumFolderNameConflictMapped(() =>
+        this.sharedSpaceRepository.moveAlbumFolderChecked(
+          spaceId,
+          folderId,
+          destinationParentId,
+          dto.name === undefined ? undefined : name,
+        ),
       );
       if (outcome === 'cycle') {
         throw new BadRequestException('A folder cannot be moved into one of its own descendants');
@@ -1032,7 +1046,9 @@ export class SharedSpaceService extends BaseService {
       return;
     }
 
-    await this.sharedSpaceRepository.updateAlbumFolder(spaceId, folderId, { name });
+    await this.withAlbumFolderNameConflictMapped(() =>
+      this.sharedSpaceRepository.updateAlbumFolder(spaceId, folderId, { name }),
+    );
   }
 
   async deleteAlbumFolder(auth: AuthDto, spaceId: string, folderId: string): Promise<void> {
@@ -1076,7 +1092,28 @@ export class SharedSpaceService extends BaseService {
   ): Promise<void> {
     const conflict = await this.sharedSpaceRepository.hasSiblingAlbumFolderName(spaceId, parentId, name, excludeId);
     if (conflict) {
-      throw new BadRequestException('A folder with that name already exists here');
+      throw new BadRequestException(SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE);
+    }
+  }
+
+  /**
+   * The name-conflict pre-check above (assertNoAlbumFolderNameConflict) is optimistic — see
+   * moveAlbumFolderChecked's comment on why a full re-check under lock isn't worth the cost for
+   * plain create/rename/move. A concurrent request can still race past the pre-check and hit one
+   * of the partial unique indexes (shared_space_album_folder_nested_name_key / _root_name_key),
+   * which Postgres reports as error code 23505. Map ONLY that code to the same 400 the pre-check
+   * throws; any other error (a different constraint, a connection failure, …) propagates
+   * unchanged — the same error object, not rewrapped — so it is never mistaken for a name
+   * collision.
+   */
+  private async withAlbumFolderNameConflictMapped<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      if ((error as { code?: string })?.code === '23505') {
+        throw new BadRequestException(SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE);
+      }
+      throw error;
     }
   }
 
