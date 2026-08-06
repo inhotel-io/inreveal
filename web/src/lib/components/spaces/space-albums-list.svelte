@@ -172,9 +172,9 @@
     groupIds = groups.map((g) => g.id);
   });
 
-  // Owned here (not by the route's +page.svelte) because two of its three clearing triggers —
-  // currentFolderId and searchQuery — are THIS component's own props, and the manager needs to
-  // react to them directly. See the three $effects below.
+  // Owned here (not by the route's +page.svelte) because three of its clearing triggers —
+  // currentFolderId, searchQuery, and spaceId — are THIS component's own props, and the manager
+  // needs to react to them directly. See the $effects below (search "Trigger").
   const selection = new SpaceAlbumMultiSelectManager();
 
   // §4.3: range resolution needs ONE flat list in visual order, folders first then albums, so the
@@ -232,7 +232,9 @@
   };
 
   // Shift-hover range preview (§4.3 / §5.1). Reads keyboardManager rather than the mouse event's
-  // own shiftKey so the preview also updates if Shift is pressed/released while already hovering.
+  // own shiftKey so a hover that starts before Shift is pressed still previews correctly. This
+  // only fires on `mouseenter`, so it does NOT by itself clear the preview if Shift is released
+  // (or the mouse moves off every card) without a new mouseenter elsewhere — see the effect below.
   const handleAlbumHover = (album: SharedSpaceLinkedAlbumDto) => {
     if (keyboardManager.shift && selection.selectionActive) {
       selection.previewRange('album', album.id, orderedIds);
@@ -243,6 +245,18 @@
       selection.previewRange('folder', folder.id, orderedIds);
     }
   };
+
+  // M-2: without this, releasing Shift mid-hover leaves the candidate outline (and
+  // `isCandidate`) stuck on whatever was last previewed — the hover handlers above only run on
+  // `mouseenter`, so nothing re-evaluates once the mouse stops moving. This effect is the
+  // general-purpose fix: the moment `keyboardManager.shift` goes false, the preview is cleared
+  // regardless of mouse position. Safe unconditionally — `candidates` is never meaningfully
+  // populated while Shift isn't held (both hover handlers gate `previewRange` on it).
+  $effect(() => {
+    if (!keyboardManager.shift) {
+      selection.candidates = [];
+    }
+  });
 
   // E-5: an item that disappears from the incoming data (unlinked/deleted elsewhere, or a level
   // change under foldersUnavailable) must silently drop out of the selection. This runs on every
@@ -283,11 +297,27 @@
     lastSearchQuery = current;
   });
 
-  // Trigger 3 (§5.1): still needed for leaving the albums route entirely, INCLUDING a same-route
-  // transition between two different spaces' album pages (`/spaces/A/albums` → `/spaces/B/albums`
-  // is the same route id, so `?folder=`/searchQuery may not change at all, and +layout.svelte
-  // suppresses AppNavigate for same-route transitions in the folder-drill-in case only — a full
-  // navigation between routes still emits it).
+  // Trigger 3 (§5.1 / I-2 fix): switching spaces. `/spaces/A/albums` → `/spaces/B/albums` is the
+  // SAME route id (`/(user)/spaces/[spaceId]/albums`), so +layout.svelte's same-route-transition
+  // check returns before `AppNavigate` is emitted — that event does NOT cover this case, despite
+  // an earlier version of this comment claiming it did. `currentFolderId`/`searchQuery` don't
+  // necessarily change either. Nor is `reconcile` (trigger against `presentIds`, above) a reliable
+  // backstop: if an album is linked to BOTH spaces, it stays present in the new space's data too,
+  // so reconcile has nothing to drop — the bar would keep reading "1 selected" against the WRONG
+  // space, and a bulk action would act on the wrong space's link row. `spaceId` itself is this
+  // component's own prop, so it gets the same last-seen-value guard as the other two triggers.
+  let lastSpaceId: string | undefined;
+  $effect(() => {
+    const current = spaceId;
+    if (lastSpaceId !== undefined && lastSpaceId !== current) {
+      selection.clear();
+    }
+    lastSpaceId = current;
+  });
+
+  // Trigger 4 (§5.1): still needed for leaving the albums route entirely to a DIFFERENT route
+  // (e.g. into an album's own detail page, or off the space entirely) — that's a real navigation,
+  // not a same-route param change, so `AppNavigate` does fire for it.
   const handleAppNavigate = () => selection.clear();
 
   const handleKeydown = (event: KeyboardEvent) => {
@@ -295,6 +325,18 @@
       selection.clear();
     }
   };
+
+  // M-3: selection can only ever be ENTERED while canManage is true (the check circle is gated on
+  // it), but canManage can go FALSE mid-selection if the viewer's role is downgraded and a
+  // `invalidateAll()` elsewhere refreshes `members` (E-15). Without this, the bar disappears
+  // (also gated on canManage, see the template) yet the selection itself survives, and
+  // handleAlbumClick/handleFolderClick keep routing clicks to toggle — silently making every card
+  // unopenable, since `selection.selectionActive` is still true, until the user navigates away.
+  $effect(() => {
+    if (!canManage) {
+      selection.clear();
+    }
+  });
 
   const allSelectedAlbumsInTimeline = $derived(
     selection.kind === 'album' && selection.ids.every((id) => albums.find((a) => a.id === id)?.showInTimeline),

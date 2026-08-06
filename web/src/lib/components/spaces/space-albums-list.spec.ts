@@ -7,7 +7,7 @@ import { authManager } from '$lib/managers/auth-manager.svelte';
 import { eventManager } from '$lib/managers/event-manager.svelte';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
-import { toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
+import { expandAllSpaceAlbumGroups, toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
 import { renderWithTooltips } from '$tests/helpers';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 
@@ -656,6 +656,174 @@ describe('SpaceAlbumsList', () => {
       });
 
       await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+    });
+
+    // I-2: switching spaces is a same-route transition (`/spaces/A/albums` → `/spaces/B/albums`
+    // share the route id `/(user)/spaces/[spaceId]/albums`), so AppNavigate does NOT fire — and an
+    // album present in BOTH spaces would survive reconcile too (it's genuinely still present in
+    // the new space's data), so reconcile is not a reliable backstop either. spaceId itself has to
+    // be an explicit clearing trigger.
+    it('clears the selection when spaceId changes', async () => {
+      const { rerender } = renderList({ ...props, spaceId: 'space-a' });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+      // Same album id present in the "new" space's data too — reconcile alone would keep it.
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, spaceId: 'space-b' },
+      });
+
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // M-3 / E-15: canManage can flip to false mid-selection (a role downgrade plus some unrelated
+    // invalidateAll() refreshing `members`). The bar is already gated on canManage and disappears,
+    // but without also clearing the selection itself, every subsequent card click would silently
+    // toggle an invisible selection instead of opening the album.
+    it('clears the selection when canManage goes false, so cards remain openable', async () => {
+      const onOpen = vi.fn();
+      const { rerender } = renderList({ ...props, canManage: true, onOpenAlbum: onOpen });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, canManage: false, onOpenAlbum: onOpen },
+      });
+
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+
+      await fireEvent.click(screen.getByTestId('space-album-card-b'));
+      expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }));
+    });
+
+    // M-2: the hover handlers only run on `mouseenter`, so releasing Shift mid-hover (without a
+    // new mouseenter elsewhere) must not leave the candidate outline stuck on whatever was last
+    // previewed.
+    it('clears the Shift-hover preview when Shift is released', async () => {
+      renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')],
+        folders: [],
+      });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+      await fireEvent.keyDown(win, { key: 'Shift', shiftKey: true });
+      await fireEvent.mouseEnter(screen.getByTestId('space-album-card-c'));
+      expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-candidate', 'true'); // positive control
+
+      await fireEvent.keyUp(win, { key: 'Shift', shiftKey: false });
+
+      expect(screen.getByTestId('space-album-card-b')).not.toHaveAttribute('data-candidate', 'true');
+    });
+
+    // I-1: §4.3 says a range cannot pass THROUGH collapsed items; E-14 says collapsing must not
+    // deselect what's already selected inside a group. Neither rule is exercised by any other
+    // test in this file, and both directions are cheap to break independently (see the guard at
+    // `orderedAlbumIds`'s isGrouped branch, and the `presentIds` reconcile source).
+    describe('collapsed groups', () => {
+      beforeEach(() => {
+        // `spaceAlbumViewSettings.reset()` (outer beforeEach) resets the store back to the SAME
+        // default object `persisted()` was constructed with (svelte-persisted-store does not
+        // clone it) — and `toggleSpaceAlbumGroupCollapsing` mutates `collapsedGroups` in place, so
+        // a collapse from an EARLIER test can leak through `reset()` into this one.
+        // `collapsedGroups` is keyed by groupBy, so set groupBy to Year FIRST — expanding while
+        // still on the group-by the previous test left behind would clear the wrong bucket.
+        spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+        expandAllSpaceAlbumGroups();
+      });
+
+      // Sorted by year, group order defaults to Desc: 2024, 2023, 2022.
+      const groupedAlbums = [
+        linkedAlbum('a', { endDate: '2024-01-01T00:00:00.000Z' }),
+        linkedAlbum('b', { endDate: '2023-01-01T00:00:00.000Z' }),
+        linkedAlbum('c', { endDate: '2022-01-01T00:00:00.000Z' }),
+      ];
+
+      it('a Shift-range does not pull in an album hidden inside a collapsed group', async () => {
+        renderList({ ...props, albums: groupedAlbums, folders: [] });
+
+        toggleSpaceAlbumGroupCollapsing('2023');
+        await waitFor(() =>
+          expect(screen.getByTestId('space-album-group-2023')).toHaveAttribute('aria-expanded', 'false'),
+        );
+
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-card-c'), { shiftKey: true });
+
+        // 'a' (2024) and 'c' (2022) were both visible and selected; 'b' lives inside the collapsed
+        // 2023 group. Without the collapsed-group filter, the range would also pull in 'b',
+        // producing a count of 3 instead of 2.
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+      });
+
+      it('collapsing a group does not deselect an album already selected inside it (E-14)', async () => {
+        renderList({ ...props, albums: groupedAlbums, folders: [] });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'); // positive control
+
+        toggleSpaceAlbumGroupCollapsing('2023');
+        await waitFor(() =>
+          expect(screen.getByTestId('space-album-group-2023')).toHaveAttribute('aria-expanded', 'false'),
+        );
+
+        // If reconcile were driven by the (now collapsed-filtered) orderedIds instead of the full
+        // albums/folders props, 'b' would drop out of the selection the instant it collapsed.
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+      });
+    });
+
+    // I-3: the five selection-related props threaded into SpaceAlbumsTable (onOpenAlbum,
+    // onToggleSelectAlbum, onToggleSelectFolder, isAlbumSelected, isFolderSelected) have no
+    // coverage anywhere else — space-albums-table.spec.ts only exercises the table in isolation
+    // with hand-injected predicates, and every OTHER test in this file renders Cover mode.
+    describe('List view wiring', () => {
+      beforeEach(() => {
+        spaceAlbumViewSettings.update((s) => ({ ...s, view: AlbumViewMode.List }));
+      });
+
+      it('check circle toggles an album row into the selection and marks it selected', async () => {
+        renderList({ ...props, folders: [] });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+        expect(screen.getByTestId('space-album-row-a').closest('tr')).toHaveAttribute('data-selected', 'true');
+        // Positive control: an unselected row does not carry the attribute.
+        expect(screen.getByTestId('space-album-row-b').closest('tr')).not.toHaveAttribute('data-selected', 'true');
+      });
+
+      it('clicking a row toggles instead of opening once a selection is active', async () => {
+        const onOpen = vi.fn();
+        renderList({ ...props, folders: [], onOpenAlbum: onOpen });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        onOpen.mockClear();
+        await fireEvent.click(screen.getByTestId('space-album-row-b'));
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+        expect(onOpen).not.toHaveBeenCalled();
+      });
+
+      it('check circle toggles a folder row into the selection and marks it selected', async () => {
+        renderList(props); // props already includes folderDto('f')
+
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+        expect(screen.getByTestId('space-album-folder-row-f')).toHaveAttribute('data-selected', 'true');
+      });
+
+      it('search + List view: check circle toggles selection on a search hit', async () => {
+        renderList({ ...props, searchQuery: 'bra', folders: [] });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+        expect(screen.getByTestId('space-album-row-b').closest('tr')).toHaveAttribute('data-selected', 'true');
+      });
     });
   });
 });

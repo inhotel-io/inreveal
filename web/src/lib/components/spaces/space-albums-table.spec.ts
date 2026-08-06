@@ -186,5 +186,28 @@ describe('SpaceAlbumsTable', () => {
       expect(screen.getByTestId(`space-album-row-${a1.id}`).closest('tr')).toHaveAttribute('data-selected', 'true');
       expect(screen.getByTestId(`space-album-folder-row-${folder.id}`)).not.toHaveAttribute('data-selected', 'true');
     });
+
+    // M-1: without stopPropagation on the menu cell, opening the kebab and clicking an option
+    // would ALSO bubble to the <tr>'s onclick and fire onOpenAlbum — orphaning whatever the menu
+    // option triggered (here, an unlink confirm dialog would open behind a navigation).
+    it('clicking the row kebab menu does not also fire onOpenAlbum', async () => {
+      const onOpenAlbum = vi.fn();
+      const onUnlink = vi.fn();
+      renderWithTooltips(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [a1],
+        canManage: true,
+        onOpenAlbum,
+        onUnlink,
+        onToggleTimeline: vi.fn(),
+      });
+
+      const menuButton = screen.getByTestId(`space-album-row-menu-${a1.id}`).querySelector('button')!;
+      await fireEvent.click(menuButton);
+      await fireEvent.click(await screen.findByText('Unlink album'));
+
+      expect(onUnlink).toHaveBeenCalledWith(a1);
+      expect(onOpenAlbum).not.toHaveBeenCalled();
+    });
   });
 });
