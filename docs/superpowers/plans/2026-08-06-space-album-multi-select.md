@@ -1274,6 +1274,12 @@ export class SpaceAlbumMultiSelectManager {
     for (const id of this.#range(toId, ordered)) {
       this.#ids.add(id);
     }
+    // Spec E-7: a Shift-click with no anchor "behaves as a plain click: selects that one item AND
+    // SETS IT AS THE ANCHOR". Without this, a Shift-click as the FIRST interaction leaves the
+    // anchor null forever — previewRange then returns no candidates (no hover highlight at all),
+    // and the next Shift-click selects only the two endpoints, silently skipping everything
+    // between. Same dead state after a kind switch, which resets the anchor above.
+    this.#anchor ??= toId;
     this.candidates = [];
   }
 
