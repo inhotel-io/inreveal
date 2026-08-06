@@ -62,12 +62,22 @@
   let foldersLoadFailed = $state(false);
   let groupIds = $state<string[]>([]);
   let searchQuery = $state('');
-  // I-1 (fix round 1): bumped after a multi-id drag-move completes, so SpaceAlbumsList's own
-  // Trigger 5 effect can clear a selection that just moved out of view — see that effect's own
-  // comment for why nothing else (route change, prop change, reconcile) catches this. A counter,
-  // not a boolean, so two drags in a row still register as two distinct signals even if some
-  // other re-render happened to leave the value looking unchanged.
-  let selectionMoveSignal = $state(0);
+  // I-1 (fix round 2): bumped after ANY drag-move settles, so SpaceAlbumsList's own Trigger 5
+  // effect can reconcile a selection whose moved members just left view — see that effect's own
+  // comment for why nothing else (route change, prop change, reconcile) catches this. `movedIds`
+  // (not a bare success/fail boolean) is what lets Trigger 5 drop exactly what moved and keep
+  // exactly what didn't — a failed item stayed exactly where it was and is still visible, so it
+  // must stay selected, matching S-24/S-25's contract for every other bulk action in this feature.
+  // `seq` (not just comparing movedIds by value) is what makes two consecutive moves of the SAME
+  // id register as two distinct signals rather than looking unchanged to Trigger 5's guard.
+  let selectionMove = $state<{ seq: number; movedIds: string[] }>({ seq: 0, movedIds: [] });
+  // Safe to call unconditionally on ANY settled move — single-item or bulk, drag or (since
+  // moveAlbumToFolder is shared with the kebab's "Move to folder…") that too: an id that was
+  // never part of the current selection reconciles to a no-op on the list's side, so there is no
+  // "was this actually a multi-select drag" gate this function needs to get right.
+  function markSelectionMoved(movedIds: string[]) {
+    selectionMove = { seq: selectionMove.seq + 1, movedIds };
+  }
 
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
   const isEditor = $derived(
@@ -332,6 +342,10 @@
         albumId,
         sharedSpaceAlbumFolderMoveAlbumDto: { folderId: targetFolderId },
       });
+      // Marked BEFORE reload()/invalidateAll() (fix round 2, cheap item): if either of those two
+      // rejects even though the move itself already succeeded, the bump must not be skipped —
+      // the album really did move.
+      markSelectionMoved([albumId]);
       await reload();
       // reload() only refreshes THIS page's state. The [spaceId] layout separately caches
       // linkedAlbums, and each of those rows carries the folderId that the album detail page's
@@ -462,30 +476,28 @@
 
   // Drag counterparts of handleBulkMoveAlbums/handleBulkMoveFolders above, for a multi-id drop
   // (S-22): no confirm (a drag is not destructive) and no folder-picker modal (the target is the
-  // drop's own destination), otherwise the same bulk-action-plus-toast shape. `selectionMoveSignal`
-  // bump is the I-1 fix (fix round 1): a multi-id drag necessarily moved every currently-selected
-  // item (buildDragPayload only ever widens to more than one id when the dragged card is part of
-  // the active same-kind selection), and once it completes — successfully or partially — those
-  // items are typically no longer visible at this level. Bumping unconditionally (not gated on
-  // failedCount) matches "the drag discharged the user's intent" rather than "the drag succeeded
-  // 100%": a partial failure still means most/all of the moved items are gone from view, and the
-  // ones that failed are still linked/parented exactly where they were, so nothing is lost by also
-  // clearing them out of the selection — the user can reselect and retry if needed.
+  // drop's own destination), otherwise the same bulk-action-plus-toast shape. `markSelectionMoved`
+  // (I-1, fix round 2) is passed only the ids that actually SUCCEEDED — a failed id is still
+  // linked/parented exactly where it was, still visible, and must stay selected, matching
+  // S-24/S-25's contract for every other bulk action in this feature.
   async function bulkMoveAlbumsToFolder(ids: string[], targetFolderId: string | null) {
-    const { failedCount } = await bulkSetAlbumFolderAction(space.id, ids, targetFolderId);
+    const { failedIds, failedCount } = await bulkSetAlbumFolderAction(space.id, ids, targetFolderId);
     notifyBulkFailures(failedCount);
+    // Marked BEFORE reload()/invalidateAll() (fix round 2, cheap item): a rejection there must
+    // not skip the bump. Only the ids that actually SUCCEEDED count as "moved" — a failed id
+    // stayed exactly where it was and must stay selected, not get reconciled away too.
+    markSelectionMoved(ids.filter((id) => !failedIds.includes(id)));
     await reload();
     await invalidateAll();
-    selectionMoveSignal++;
   }
 
   async function bulkMoveFoldersToParent(ids: string[], targetParentId: string | null) {
-    const { failedCount } = await bulkMoveAlbumFoldersAction(space.id, ids, targetParentId);
+    const { failedIds, failedCount } = await bulkMoveAlbumFoldersAction(space.id, ids, targetParentId);
     notifyBulkFailures(failedCount);
+    markSelectionMoved(ids.filter((id) => !failedIds.includes(id)));
     // Matches the single-folder-move branch below: folder-to-folder reparenting does not touch
     // any album's folderId, so the layout's cached linkedAlbums stay valid — no invalidateAll.
     await reload();
-    selectionMoveSignal++;
   }
 
   // The client-side canDrop guard means a drop with NOTHING legal in it never fires a request at
@@ -527,6 +539,11 @@
         folderId,
         sharedSpaceAlbumFolderUpdateDto: { parentId: targetFolderId },
       });
+      // I-1 (fix round 2): this is the exact branch probe B reaches — a multi-id folder drag that
+      // canDropOne filters down to one legal id (e.g. {Trips, Family} dropped onto Trips: Trips
+      // filters itself out) lands HERE, not in the bulk branch above. Without this bump, that
+      // filtered-down single-item move was the one path fix round 1 left uncovered.
+      markSelectionMoved([folderId]);
       await reload();
     } catch (error) {
       folders = previous; // rollback
@@ -618,7 +635,7 @@
         onMoveFolder={handleMoveFolder}
         onDeleteFolder={handleDeleteFolder}
         onDropItem={handleDropItem}
-        {selectionMoveSignal}
+        {selectionMove}
         onBulkUnlink={handleBulkUnlink}
         onBulkMoveAlbums={handleBulkMoveAlbums}
         onBulkToggleAlbumsTimeline={handleBulkToggleAlbumsTimeline}

@@ -678,24 +678,84 @@ describe('SpaceAlbumsList', () => {
       expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
     });
 
-    // Trigger 5 / I-1 (fix round 1): a multi-id drag-move can move every selected item out of the
-    // current level without currentFolderId/searchQuery/spaceId changing, without AppNavigate
+    // Trigger 5 / I-1 (fix round 2): a drag-move can move any subset of the selected items out of
+    // the current level without currentFolderId/searchQuery/spaceId changing, without AppNavigate
     // firing, and without E-5's reconcile catching it (the moved items are still PRESENT in the
-    // space's data, just under a different folderId/parentId). +page.svelte bumps
-    // selectionMoveSignal once such a move completes; this proves the list clears its own
-    // selection in response.
-    it('clears the selection when selectionMoveSignal changes', async () => {
-      const { rerender } = renderList({ ...props, selectionMoveSignal: 0 });
-      await fireEvent.click(screen.getByTestId('space-album-select-a'));
-      await fireEvent.click(screen.getByTestId('space-album-select-b'));
-      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+    // space's data, just under a different folderId/parentId). +page.svelte bumps `selectionMove`
+    // — carrying WHICH ids actually moved, not a bare counter — once a move settles; these prove
+    // the list reconciles PRECISELY: only the moved ids drop out, everything else selected stays.
+    describe('selectionMove (Trigger 5)', () => {
+      it('drops only the moved id, keeping the rest of the selection', async () => {
+        const threeAlbums = { albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')], folders: [] };
+        const { rerender } = renderList({ ...props, ...threeAlbums, selectionMove: { seq: 0, movedIds: [] } });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        await fireEvent.click(screen.getByTestId('space-album-select-c'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3'); // positive control
 
-      await rerender({
-        component: SpaceAlbumsList,
-        componentProps: { ...props, selectionMoveSignal: 1 },
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, ...threeAlbums, selectionMove: { seq: 1, movedIds: ['b'] } },
+        });
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+        expect(screen.getByTestId('space-album-card-a')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-b')).not.toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-c')).toHaveAttribute('data-selected', 'true');
       });
 
-      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+      it('clears the whole selection when every selected id moved', async () => {
+        const { rerender } = renderList({ ...props, selectionMove: { seq: 0, movedIds: [] } });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, selectionMove: { seq: 1, movedIds: ['a', 'b'] } },
+        });
+
+        expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+      });
+
+      // Negative (fix round 2): a moved id that was never selected must not disturb an unrelated
+      // live selection — this is the list-level half of "dragging an unselected card while a
+      // selection is live must leave that selection untouched," now composed through reconcile
+      // rather than a gate this function would have to get right.
+      it('leaves an unrelated selection untouched when the moved id was never selected', async () => {
+        const threeAlbums = { albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')], folders: [] };
+        const { rerender } = renderList({ ...props, ...threeAlbums, selectionMove: { seq: 0, movedIds: [] } });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, ...threeAlbums, selectionMove: { seq: 1, movedIds: ['c'] } },
+        });
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+        expect(screen.getByTestId('space-album-card-a')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-selected', 'true');
+      });
+
+      // Negative (fix round 2): an unrelated re-render (same seq, some OTHER prop changed) must
+      // not re-trigger the effect's reconcile — mirrors the last-seen-value guard already proven
+      // for Triggers 1-4 (a prop spread re-render must not spuriously fire them).
+      it('does not touch the selection on an unrelated re-render with the same seq', async () => {
+        const { rerender } = renderList({ ...props, selectionMove: { seq: 0, movedIds: ['a'] } });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        // Same seq (0), same movedIds — only an unrelated prop (foldersUnavailable) changed.
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, foldersUnavailable: true, selectionMove: { seq: 0, movedIds: ['a'] } },
+        });
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+      });
     });
 
     // M-3 / E-15: canManage can flip to false mid-selection (a role downgrade plus some unrelated

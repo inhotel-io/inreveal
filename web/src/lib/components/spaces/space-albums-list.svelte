@@ -57,11 +57,13 @@
     onMoveFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDeleteFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDropItem?: (payload: DragPayload, targetFolderId: string | null) => void;
-    // I-1: bumped by the page after a multi-id drag-move (via EITHER drop target — the folder
-    // grid, forwarded through onDropItem above, or the breadcrumb, which the page renders
-    // directly and has no other route back into this component's own manager) completes. See
-    // Trigger 5 below for why nothing else can catch this.
-    selectionMoveSignal?: number;
+    // I-1 (fix round 2): bumped by the page after ANY drag-move — single-item or bulk, via
+    // EITHER drop target (the folder grid, forwarded through onDropItem above, or the breadcrumb,
+    // which the page renders directly and has no other route back into this component's own
+    // manager) — settles. `movedIds` carries exactly which ids actually moved (the round-1
+    // version bumped a bare counter and unconditionally cleared everything; see Trigger 5 below
+    // for why that was wrong). See Trigger 5 below for why nothing else can catch this.
+    selectionMove?: { seq: number; movedIds: string[] };
     // Bulk-action callbacks for the selection bar. Each resolves to the ids that should REMAIN
     // selected (typically the page's own bulkXAction's `failedIds` — see space-album-bulk-actions.ts
     // — or, on a cancelled confirm dialog, the untouched input `ids`) so this component can fold
@@ -93,7 +95,7 @@
     onMoveFolder,
     onDeleteFolder,
     onDropItem,
-    selectionMoveSignal = 0,
+    selectionMove = { seq: 0, movedIds: [] },
     onBulkUnlink,
     onBulkMoveAlbums,
     onBulkToggleAlbumsTimeline,
@@ -328,25 +330,35 @@
   // not a same-route param change, so `AppNavigate` does fire for it.
   const handleAppNavigate = () => selection.clear();
 
-  // Trigger 5 (I-1, fix round 1): a multi-id drag-move can move every selected item out of the
-  // current folder level without any of Triggers 1-4 firing — currentFolderId/searchQuery/spaceId
-  // are all unchanged (the VIEWER didn't navigate, the DATA did), and it's AppNavigate-silent for
-  // the same reason those are. The E-5 reconcile effect above can't catch it either: a moved
-  // album/folder is still PRESENT in the space's data, just under a different
-  // folderId/parentId — reconcile only drops ids that vanish entirely. Left alone, the bar keeps
-  // reading "N selected" and offering confirmed-destructive bulk actions (unlink, delete) against
-  // a selection with no visible card on screen. `+page.svelte` bumps `selectionMoveSignal` once a
-  // multi-id drag-move completes (success or partial failure — the drag discharged the user's
-  // intent either way) for BOTH drop targets: the folder grid (its onDropItem is forwarded
-  // through this component) and the breadcrumb (which the page renders directly, with no other
-  // route back into this component's own manager).
-  let lastSelectionMoveSignal: number | undefined;
+  // Trigger 5 (I-1, fix round 2): a drag-move can move any subset of the selected items out of
+  // the current folder level without any of Triggers 1-4 firing — currentFolderId/searchQuery/
+  // spaceId are all unchanged (the VIEWER didn't navigate, the DATA did), and it's
+  // AppNavigate-silent for the same reason those are. The E-5 reconcile effect above can't catch
+  // it either: a moved album/folder is still PRESENT in the space's data, just under a different
+  // folderId/parentId — reconcile only drops ids that vanish entirely.
+  //
+  // Round 1 bumped a bare counter and unconditionally `selection.clear()`d on every settle. The
+  // round-2 review found that wrong two ways: (a) a PARTIAL failure leaves the failed ids exactly
+  // where they were, still visible — clearing them too breaks the same failures-stay-selected
+  // contract S-24/S-25 honour everywhere else in this feature; (b) filtering the drag payload
+  // down to the canDrop-legal subset (Minor #3) means a genuinely multi-id drag can land on the
+  // single-item optimistic path once the illegal member is filtered out (e.g. dragging {Trips,
+  // Family} onto Trips: Trips filters itself out, leaving a 1-id dispatch) — round 1's counter was
+  // only bumped by the BULK helpers, so that path silently left the moved item selected.
+  //
+  // `selectionMove.movedIds` fixes both: it carries exactly the ids that ACTUALLY moved (the
+  // dispatched ids minus whichever failed), so `+page.svelte` bumps it on EVERY move path —
+  // single-item or bulk — unconditionally. An id that isn't currently selected reconciles to a
+  // no-op, so there is no "only bump for a real multi-select drag" gate to get wrong — which is
+  // also what fixes, for free, dragging an UNSELECTED single card while an unrelated selection is
+  // live: the moved id was never in `selection.ids`, so filtering it out changes nothing.
+  let lastSelectionMoveSeq: number | undefined;
   $effect(() => {
-    const current = selectionMoveSignal;
-    if (lastSelectionMoveSignal !== undefined && lastSelectionMoveSignal !== current) {
-      selection.clear();
+    const current = selectionMove;
+    if (lastSelectionMoveSeq !== undefined && lastSelectionMoveSeq !== current.seq) {
+      selection.reconcile(selection.ids.filter((id) => !current.movedIds.includes(id)));
     }
-    lastSelectionMoveSignal = current;
+    lastSelectionMoveSeq = current.seq;
   });
 
   const handleKeydown = (event: KeyboardEvent) => {

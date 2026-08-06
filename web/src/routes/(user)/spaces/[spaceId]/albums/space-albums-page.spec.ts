@@ -1116,6 +1116,52 @@ describe('Space albums page', () => {
       await waitFor(() => expect(toastManager.warning).toHaveBeenCalledWith('1 item could not be updated'));
     });
 
+    // Q1 (fix round 2): a partial failure on a drag-move must keep EXACTLY the failed item
+    // selected — it never moved and is still visible right where it was, mirroring S-24's
+    // contract for the select-bar's own bulk actions. Round 1's unconditional `selection.clear()`
+    // would have wiped this too, treating a failure the same as a success.
+    it('Q1: a partial failure on a multi-id album drag keeps exactly the failed item selected', async () => {
+      sdkMock.bulkSetAlbumFolder.mockResolvedValue([
+        { id: 'a1', success: true },
+        { id: 'a2', success: false, error: 'validation' },
+      ] as never);
+      renderPage(
+        [makeAlbum({ id: 'a1', albumName: 'Rome' }), makeAlbum({ id: 'a2', albumName: 'Venice' })],
+        SharedSpaceRole.Editor,
+        { folders: [makeFolder('trips', 'Trips')] },
+      );
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(screen.getByTestId('space-album-select-a2'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+      await dropOnFolder({ kind: 'album', ids: ['a1', 'a2'] }, 'trips');
+
+      await waitFor(() => expect(toastManager.warning).toHaveBeenCalledWith('1 item could not be updated'));
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+      expect(screen.getByTestId('space-album-card-a2')).toHaveAttribute('data-selected', 'true');
+      expect(screen.getByTestId('space-album-card-a1')).not.toHaveAttribute('data-selected', 'true');
+    });
+
+    // Q2 (fix round 2): a LONE selected item, dragged alone, must also be deselected once it
+    // moves out of view — round 1 only bumped on the bulk (2+ ids) path, so a 1-item selection
+    // dragged by itself (buildDragPayload still returns a one-element array for it) fell through
+    // to the single-item optimistic path and was never bumped at all.
+    it('Q2: a lone selected album dragged alone is deselected once it moves out of view', async () => {
+      sdkMock.setSharedSpaceAlbumFolder.mockResolvedValue(undefined as never);
+      renderPage([makeAlbum({ id: 'a1', albumName: 'Rome' })], SharedSpaceRole.Editor, {
+        folders: [makeFolder('trips', 'Trips')],
+      });
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'); // positive control
+
+      await dropOnFolder({ kind: 'album', ids: ['a1'] }, 'trips');
+
+      await waitFor(() => expect(sdkMock.setSharedSpaceAlbumFolder).toHaveBeenCalled());
+      await waitFor(() => expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument());
+    });
+
     it('S-22: a multi-id folder drag payload moves the whole batch through the bulk endpoint', async () => {
       sdkMock.bulkMoveAlbumFolders.mockResolvedValue([
         { id: 'trips', success: true },
@@ -1164,7 +1210,7 @@ describe('Space albums page', () => {
 
     // I-1 (fix round 1), breadcrumb path: +page.svelte renders SpaceAlbumFolderBreadcrumb
     // directly (not through SpaceAlbumsList), so this is the STRUCTURAL half of the fix —
-    // SpaceAlbumsList has no way to observe this drop on its own; only the selectionMoveSignal
+    // SpaceAlbumsList has no way to observe this drop on its own; only the selectionMove
     // prop bump reaches it.
     it('I-1: a multi-id folder drag onto a breadcrumb crumb clears the selection once the move completes', async () => {
       sdkMock.bulkMoveAlbumFolders.mockResolvedValue([
@@ -1188,6 +1234,77 @@ describe('Space albums page', () => {
       await dropOnCrumb({ kind: 'folder', ids: ['trips', 'family'] }, null);
 
       await waitFor(() => expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument());
+    });
+
+    // Probe B (fix round 2's motivating regression): a genuinely multi-id drag can land on the
+    // SINGLE-item optimistic path once Minor #3's filtering removes an illegal member —
+    // canDropOne filters "Trips" out here (dropped onto itself), leaving a length-1 dispatch of
+    // just "Family". Round 1's bulk-only bump missed this path entirely, leaving Family selected
+    // after it moved out of view. Round 2 bumps on the single-item path too — and because Trips
+    // itself never actually moved (still sitting at the root, still visible), it correctly STAYS
+    // selected: the bar must read "1 selected" (Trips only), not "2" (the round-1-era bug) and
+    // not "0" (over-correcting into treating an untouched card as moved).
+    it('probe B: dragging {Trips, Family} onto Trips filters Trips out, moves only Family, and leaves exactly Trips selected', async () => {
+      sdkMock.updateSharedSpaceAlbumFolder.mockResolvedValue(undefined as never);
+      renderPage([], SharedSpaceRole.Editor, {
+        folders: [makeFolder('trips', 'Trips'), makeFolder('family', 'Family')],
+      });
+      await screen.findAllByTestId('space-album-folder-card');
+
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-trips'));
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-family'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+      const accepted = await dropOnFolder({ kind: 'folder', ids: ['trips', 'family'] }, 'trips');
+
+      expect(accepted).toBe(true);
+      await waitFor(() =>
+        expect(sdkMock.updateSharedSpaceAlbumFolder).toHaveBeenCalledWith({
+          id: 'space-1',
+          folderId: 'family',
+          sharedSpaceAlbumFolderUpdateDto: { parentId: 'trips' },
+        }),
+      );
+      expect(sdkMock.bulkMoveAlbumFolders).not.toHaveBeenCalled();
+
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+      const cards = screen.getAllByTestId('space-album-folder-card');
+      const tripsCard = cards.find((card) => card.dataset.folderId === 'trips');
+      const familyCard = cards.find((card) => card.dataset.folderId === 'family');
+      expect(tripsCard).toHaveAttribute('data-selected', 'true');
+      expect(familyCard).not.toHaveAttribute('data-selected', 'true');
+    });
+
+    // Negative (fix round 2): dragging an UNSELECTED card must not disturb an unrelated, live
+    // selection — Rome and Venice stay selected even though Paris (never selected) is the one
+    // that actually moved. This is the exact interaction the naive "also bump the single-item
+    // path unconditionally, ungated" fix would have broken.
+    it('dragging an unselected card leaves a live, unrelated selection untouched', async () => {
+      sdkMock.setSharedSpaceAlbumFolder.mockResolvedValue(undefined as never);
+      renderPage(
+        [
+          makeAlbum({ id: 'rome', albumName: 'Rome' }),
+          makeAlbum({ id: 'venice', albumName: 'Venice' }),
+          makeAlbum({ id: 'paris', albumName: 'Paris' }),
+        ],
+        SharedSpaceRole.Editor,
+        { folders: [makeFolder('trips', 'Trips')] },
+      );
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-rome'));
+      await fireEvent.click(screen.getByTestId('space-album-select-venice'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+      // Paris is NOT selected — a single-item, unselected drag.
+      const accepted = await dropOnFolder({ kind: 'album', ids: ['paris'] }, 'trips');
+
+      expect(accepted).toBe(true);
+      await waitFor(() =>
+        expect(sdkMock.setSharedSpaceAlbumFolder).toHaveBeenCalledWith(expect.objectContaining({ albumId: 'paris' })),
+      );
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'));
+      expect(screen.getByTestId('space-album-card-rome')).toHaveAttribute('data-selected', 'true');
+      expect(screen.getByTestId('space-album-card-venice')).toHaveAttribute('data-selected', 'true');
     });
 
     // Minor #3 (fix round 1): `.some()` accepting the drop only proves SOMETHING in the batch is
@@ -1334,7 +1451,12 @@ describe('Space albums page', () => {
       // SpaceAlbumsList's own reconcile has even run, proving nothing. `invalidateAll` is the
       // LAST call inside handleBulkUnlink before it returns control to SpaceAlbumsList's
       // runBulkAction (which performs the reconcile immediately after), so waiting for it first
-      // forces the assertion below to observe the actually-settled state.
+      // forces the assertion below to observe the actually-settled state. INVARIANT this depends
+      // on (fix round 2, cheap item): `invalidateAll` must remain the LAST `await` inside
+      // handleBulkUnlink before its `return failedIds` — nothing enforces that mechanically, so if
+      // a future edit adds another await after it, this synchronization point stops being valid
+      // and this assertion could start passing "too early" again (see the Minor #4 writeup in the
+      // fix-round-1 section of the report for the exact failure mode this guards against).
       await waitFor(() => expect(invalidateAll).toHaveBeenCalled());
       expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
       emitSpy.mockRestore();
@@ -1384,13 +1506,18 @@ describe('Space albums page', () => {
         within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Add to timeline' }),
       );
 
-      expect(modalManagerMock.showDialog).not.toHaveBeenCalled();
       await waitFor(() =>
         expect(sdkMock.bulkSetAlbumTimeline).toHaveBeenCalledWith({
           id: 'space-1',
           sharedSpaceBulkAlbumTimelineDto: { ids: ['a1'], showInTimeline: true },
         }),
       );
+      // Fix round 2, cheap item: asserted AFTER the waitFor above (not before) — before that
+      // point the async chain has not necessarily run at all yet, so a `showDialog` call added
+      // later in the chain would still pass this check; it currently only "passed" because every
+      // mock in this test resolves synchronously. Asserting post-settlement is what actually
+      // proves no confirm dialog was shown for this non-destructive action.
+      expect(modalManagerMock.showDialog).not.toHaveBeenCalled();
     });
 
     it('bulk move folders: opens the folder picker and calls bulkMoveAlbumFolders with the chosen destination', async () => {
@@ -1429,10 +1556,13 @@ describe('Space albums page', () => {
         within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Move to folder…' }),
       );
 
+      // Fix round 2, cheap item: exact `toEqual` (not `arrayContaining`), which would also pass
+      // for an over-broad exclusion set — e.g. accidentally excluding every folder in the space,
+      // not just the ones actually selected.
       await waitFor(() =>
         expect(modalManagerMock.show).toHaveBeenCalledWith(
           expect.anything(),
-          expect.objectContaining({ excludeFolderIds: expect.arrayContaining(['trips', 'family']) }),
+          expect.objectContaining({ excludeFolderIds: ['trips', 'family'] }),
         ),
       );
     });
