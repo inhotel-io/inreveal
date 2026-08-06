@@ -1062,6 +1062,78 @@ describe('Space albums page', () => {
       expect(sdkMock.setSharedSpaceAlbumFolder).not.toHaveBeenCalled();
     });
 
+    // Fix round 3: moveFolder (the kebab-only counterpart to moveAlbumToFolder) was the one
+    // remaining "moved out of view but still present in the data" gap — never bumped
+    // selectionMove, unlike every drag path and the album kebab. The folder kebab is always in
+    // the DOM (only opacity-gated by group-hover), so hovering a card while a selection is live
+    // reaches it: a live multi-folder selection with one moved via the kebab left the bar
+    // counting an invisible folder and offering "Delete folder" against it.
+    it('kebab-moving a SELECTED folder reconciles a live multi-folder selection', async () => {
+      modalManagerMock.show.mockResolvedValue({ folderId: 'family' });
+      sdkMock.updateSharedSpaceAlbumFolder.mockResolvedValue(undefined as never);
+      renderPage([], SharedSpaceRole.Editor, {
+        folders: [makeFolder('trips', 'Trips'), makeFolder('family', 'Family')],
+      });
+
+      const cards = await screen.findAllByTestId('space-album-folder-card');
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-trips'));
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-family'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+      // ButtonContextMenu renders its dropdown content unconditionally (`{#if isOpen ||
+      // !hideContent}`, and no caller here sets hideContent) — every folder card's own "Move to
+      // folder…" option is in the DOM at once, so a bare `screen.findByText` is ambiguous with 2+
+      // folders rendered. Scope to THIS card's own menu container instead.
+      const tripsCard = cards.find((card) => card.dataset.folderId === 'trips')!;
+      const tripsMenu = tripsCard.querySelector('[data-testid="space-album-folder-card-menu"]') as HTMLElement;
+      await fireEvent.click(tripsMenu.querySelector('button')!);
+      await fireEvent.click(within(tripsMenu).getByText('Move to folder…'));
+
+      await waitFor(() =>
+        expect(sdkMock.updateSharedSpaceAlbumFolder).toHaveBeenCalledWith({
+          id: 'space-1',
+          folderId: 'trips',
+          sharedSpaceAlbumFolderUpdateDto: { parentId: 'family' },
+        }),
+      );
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+      const familyCard = cards.find((card) => card.dataset.folderId === 'family')!;
+      expect(familyCard).toHaveAttribute('data-selected', 'true');
+      expect(tripsCard).not.toHaveAttribute('data-selected', 'true');
+    });
+
+    // Negative (fix round 3): kebab-moving an UNSELECTED folder must not disturb a live,
+    // unrelated selection — same guarantee the drag paths already have, now extended to the
+    // kebab's own move action.
+    it('kebab-moving an UNSELECTED folder leaves a live, unrelated selection untouched', async () => {
+      modalManagerMock.show.mockResolvedValue({ folderId: 'trips' });
+      sdkMock.updateSharedSpaceAlbumFolder.mockResolvedValue(undefined as never);
+      renderPage([], SharedSpaceRole.Editor, {
+        folders: [makeFolder('trips', 'Trips'), makeFolder('family', 'Family'), makeFolder('other', 'Other')],
+      });
+
+      const cards = await screen.findAllByTestId('space-album-folder-card');
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-trips'));
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-family'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+      const otherCard = cards.find((card) => card.dataset.folderId === 'other')!;
+      const otherMenu = otherCard.querySelector('[data-testid="space-album-folder-card-menu"]') as HTMLElement;
+      await fireEvent.click(otherMenu.querySelector('button')!);
+      await fireEvent.click(within(otherMenu).getByText('Move to folder…'));
+
+      await waitFor(() =>
+        expect(sdkMock.updateSharedSpaceAlbumFolder).toHaveBeenCalledWith({
+          id: 'space-1',
+          folderId: 'other',
+          sharedSpaceAlbumFolderUpdateDto: { parentId: 'trips' },
+        }),
+      );
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'));
+      expect(cards.find((card) => card.dataset.folderId === 'trips')).toHaveAttribute('data-selected', 'true');
+      expect(cards.find((card) => card.dataset.folderId === 'family')).toHaveAttribute('data-selected', 'true');
+    });
+
     it('viewer cannot drag: the album card is not draggable', () => {
       renderPage([makeAlbum({ id: 'a1', albumName: 'Rome' })], SharedSpaceRole.Viewer);
 
@@ -1160,6 +1232,52 @@ describe('Space albums page', () => {
 
       await waitFor(() => expect(sdkMock.setSharedSpaceAlbumFolder).toHaveBeenCalled());
       await waitFor(() => expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument());
+    });
+
+    // Fix round 3: promoted from a re-reviewer scratch probe to a named test — a drag where EVERY
+    // item fails must keep the WHOLE selection (movedIds ends up empty, so nothing reconciles
+    // away), the S-25 equivalent for the drag path specifically.
+    it('a total failure on a multi-id album drag keeps the whole selection', async () => {
+      sdkMock.bulkSetAlbumFolder.mockResolvedValue([
+        { id: 'a1', success: false, error: 'validation' },
+        { id: 'a2', success: false, error: 'validation' },
+      ] as never);
+      renderPage(
+        [makeAlbum({ id: 'a1', albumName: 'Rome' }), makeAlbum({ id: 'a2', albumName: 'Venice' })],
+        SharedSpaceRole.Editor,
+        { folders: [makeFolder('trips', 'Trips')] },
+      );
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(screen.getByTestId('space-album-select-a2'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+      await dropOnFolder({ kind: 'album', ids: ['a1', 'a2'] }, 'trips');
+
+      await waitFor(() => expect(toastManager.warning).toHaveBeenCalledWith('2 items could not be updated'));
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'));
+      expect(screen.getByTestId('space-album-card-a1')).toHaveAttribute('data-selected', 'true');
+      expect(screen.getByTestId('space-album-card-a2')).toHaveAttribute('data-selected', 'true');
+    });
+
+    // Fix round 3: promoted from a re-reviewer scratch probe to a named test — a SINGLE-item
+    // drag that fails (a thrown request, caught by moveAlbumToFolder's own try/catch) must keep
+    // its lone selection: the bump sits inside the try, after the request, so a throw skips it
+    // entirely and nothing is reconciled away.
+    it('a single-item album drag that fails keeps its lone selection', async () => {
+      sdkMock.setSharedSpaceAlbumFolder.mockRejectedValue(new Error('boom'));
+      renderPage([makeAlbum({ id: 'a1', albumName: 'Rome' })], SharedSpaceRole.Editor, {
+        folders: [makeFolder('trips', 'Trips')],
+      });
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'); // positive control
+
+      await dropOnFolder({ kind: 'album', ids: ['a1'] }, 'trips');
+
+      await waitFor(() => expect(sdkMock.setSharedSpaceAlbumFolder).toHaveBeenCalled());
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+      expect(screen.getByTestId('space-album-card-a1')).toHaveAttribute('data-selected', 'true');
     });
 
     it('S-22: a multi-id folder drag payload moves the whole batch through the bulk endpoint', async () => {

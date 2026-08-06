@@ -293,6 +293,14 @@
         folderId,
         sharedSpaceAlbumFolderUpdateDto: { parentId },
       });
+      // Fix round 3: the last remaining "moved out of view but still present in the data" gap —
+      // moveFolder is the kebab-only counterpart to moveAlbumToFolder, and unlike that function
+      // (bumped in round 2), this one was never wired up. The kebab is always in the DOM (only
+      // opacity-gated by group-hover), so hovering a card while a selection is live reaches it: a
+      // multi-folder selection with one moved via the kebab left the bar counting an invisible
+      // folder and offering "Delete folder" against it. Marked BEFORE reload() for the same
+      // bump-before-awaits reason as every other move path.
+      markSelectionMoved([folderId]);
       await reload();
     } catch (error) {
       handleError(error, $t('space_album_folder_error_move'));
