@@ -139,6 +139,26 @@ void main() {
       expect(state.ids, {'f1', 'f2'});
       expect(state.kind, SpaceAlbumSelectionKind.folder);
     });
+
+    // I-1: reconciling against an empty page (every album/folder deleted or
+    // filtered away) must not leave a stale selection behind — Task 15
+    // would otherwise send those ids in a bulk-action payload against items
+    // that no longer exist.
+    test('reconcile with an empty list empties the selection', () {
+      notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+      notifier.toggle(SpaceAlbumSelectionKind.album, 'b');
+      final before = container.read(spaceAlbumSelectionProvider);
+      expect(before.isEmpty, isFalse); // positive control
+      expect(before.kind, SpaceAlbumSelectionKind.album); // positive control
+
+      notifier.reconcile(<String>[]);
+
+      final state = container.read(spaceAlbumSelectionProvider);
+      expect(state.isEmpty, isTrue);
+      expect(state.count, 0);
+      expect(state.kind, SpaceAlbumSelectionKind.none);
+      expect(state.ids, isEmpty);
+    });
   });
 
   group('clear', () {
@@ -156,6 +176,49 @@ void main() {
       expect(state.count, 0);
       expect(state.kind, SpaceAlbumSelectionKind.none);
       expect(state.ids, isEmpty);
+    });
+  });
+
+  group('notifications', () {
+    // I-2: `container.read(...)` alone can't tell an in-place Set mutation
+    // (no listener fires, so a widget rebuild never happens) apart from a
+    // real `state = ...` reassignment (fires a notification) — both leave
+    // the same content behind for a subsequent `read`. Riverpod's Notifier
+    // only notifies on assignment, so growing/shrinking a selection within
+    // one kind must go through `state = ...`, not a mutation of the
+    // existing Set, or Task 14's selection bar and card highlighting would
+    // freeze on real widget rebuilds while this suite stayed green.
+    test('adding another id within the same kind notifies listeners', () {
+      notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+
+      var notifications = 0;
+      container.listen<SpaceAlbumSelection>(
+        spaceAlbumSelectionProvider,
+        (_, __) => notifications++,
+        fireImmediately: false,
+      );
+
+      notifier.toggle(SpaceAlbumSelectionKind.album, 'b');
+
+      expect(notifications, 1);
+      expect(container.read(spaceAlbumSelectionProvider).ids, {'a', 'b'}); // proves the call actually did something
+    });
+
+    test('removing one of several ids within the same kind notifies listeners', () {
+      notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+      notifier.toggle(SpaceAlbumSelectionKind.album, 'b');
+
+      var notifications = 0;
+      container.listen<SpaceAlbumSelection>(
+        spaceAlbumSelectionProvider,
+        (_, __) => notifications++,
+        fireImmediately: false,
+      );
+
+      notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+
+      expect(notifications, 1);
+      expect(container.read(spaceAlbumSelectionProvider).ids, {'b'}); // proves the call actually did something
     });
   });
 

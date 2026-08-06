@@ -60,6 +60,8 @@ class SpaceAlbumSelectionNotifier extends Notifier<SpaceAlbumSelection> {
     final sameKind = state.kind == kind;
     final ids = Set<String>.of(sameKind ? state.ids : <String>{});
 
+    // Set.add returns false when id was already present — i.e. this was a
+    // deselect, so undo the no-op add and remove it instead.
     if (!ids.add(id)) {
       ids.remove(id);
     }
