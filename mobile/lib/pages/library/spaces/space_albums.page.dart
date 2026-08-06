@@ -127,6 +127,49 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       return () => queryController.removeListener(listener);
     }, [queryController]);
 
+    // Task 14 fix round 1 (I-1/I-2) — clears a live selection when the identity of "what is being
+    // browsed" changes: a different space, a different folder, or a changed search query. Needed
+    // because leaving a selection active does not always pop THIS page: the `PopScope` and the
+    // vanished-folder `ref.listen` clear (further down / in the giant U-11 comment below) both
+    // only run on an actual `didPop`, and `router.replaceAll` — the 401 -> `LoginRoute` redirect
+    // (`auth_guard.dart:31,57,68`), Android VIEW-intent handling
+    // (`view_intent_handler_android.dart:99`), and the splash-screen login redirect
+    // (`splash_screen.page.dart:355,362`) — tears the OLD route down WITHOUT one. Because
+    // `SpaceAlbumsRoute` is self-recursive, `AutoRoutePage.canUpdate` matches on the route NAME
+    // alone (see the class doc above), so a `replaceAll` that swaps in a same-SHAPE page list
+    // (same route names at the same stack depths, just different args — e.g. a different
+    // `spaceId`) can have Flutter's Navigator UPDATE this widget's existing Element in place with
+    // the new args rather than disposing and recreating it: this widget's own hook state
+    // (including the guard below) persists across what looks, from the user's perspective, like
+    // landing on an entirely different page. `spaceAlbumSelectionProvider` is a single GLOBAL,
+    // app-lifetime-scoped provider (Task 13), so without this, a selection made in space A
+    // survives untouched into space B.
+    //
+    // Mirrors web's `space-albums-list.svelte` Triggers 1-3 (currentFolderId/searchQuery/spaceId,
+    // :283-325): the guard compares against the LAST VALUE this effect actually saw, initialized
+    // on the very first run WITHOUT clearing, so an unrelated rebuild can never spuriously wipe a
+    // selection — only a genuine change to one of the three tracked values does. `query.value`
+    // (not a trimmed/searching-only derivative) mirrors web's raw `searchQuery`. Dart records have
+    // built-in value equality, so the whole triple can be compared in one shot.
+    //
+    // The actual `clear()` is deferred via `Future.microtask`, NOT called directly in the body
+    // below: unlike React, flutter_hooks runs a `useEffect` callback SYNCHRONOUSLY inside
+    // `initHook`/`didUpdateHook` — i.e. mid-BUILD, not after the frame — and Riverpod's
+    // `UncontrolledProviderScope` hard-asserts against mutating provider state while the widget
+    // tree is building ("Tried to modify a provider while the widget tree was building"),
+    // exactly the failure this produced before the fix. `Future.microtask` is Riverpod's own
+    // documented workaround for this error and runs before the next frame, so there is no
+    // user-visible delay.
+    final lastBrowseIdentity = useRef<(String, String?, String)?>(null);
+    useEffect(() {
+      final identity = (spaceId, folderId, query.value);
+      if (lastBrowseIdentity.value != null && lastBrowseIdentity.value != identity) {
+        Future.microtask(selectionNotifier.clear);
+      }
+      lastBrowseIdentity.value = identity;
+      return null;
+    }, [spaceId, folderId, query.value]);
+
     // U-11: the folder we're browsing can vanish out from under us at any moment — an incoming
     // sync, not just navigation — so pop reactively rather than only checking at mount. Only
     // react once the stream has ALREADY delivered a real emission (`previous` carried data):

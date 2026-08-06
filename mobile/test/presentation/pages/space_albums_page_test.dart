@@ -1628,6 +1628,12 @@ void main() {
   /// `SpaceAlbumDetailPage`. A real router is required (not the router-less [pumpPage]) because
   /// proving "tap with no selection opens the album" (S-3) means proving `context.pushRoute`
   /// actually fires — which throws with no `AutoRouter` ancestor at all.
+  ///
+  /// Uses the same taller-than-default viewport as [pumpPage] above (folder + album cards
+  /// together need more room than the default 800x600 test surface — see that helper's own
+  /// comment) so I-4's folder-plus-album fixture actually builds both cards, rather than one of
+  /// them silently going unbuilt outside the sliver's cache extent and any assertion about it
+  /// passing vacuously.
   Future<RootStackRouter> pumpSpaceAlbumsPage(
     WidgetTester tester, {
     required List<SpaceAlbum> albums,
@@ -1636,6 +1642,11 @@ void main() {
     bool canManage = true,
     required List<String> openedAlbumIds,
   }) async {
+    tester.view.devicePixelRatio = 3.0;
+    tester.view.physicalSize = const Size(2400, 3600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final router = RootStackRouter.build(
       routes: [
         AutoRoute(initial: true, page: PageInfo('SpaceAlbumsHarness', builder: (_) => const SizedBox.shrink())),
@@ -1687,6 +1698,60 @@ void main() {
     return router;
   }
 
+  // I-1 (fix round 1) — the reviewer's probes proved a selection made in one space survives
+  // into another: `router.replaceAll` (401 -> LoginRoute, Android VIEW-intent handling, the
+  // splash-screen login redirect) tears the OLD route down without a `didPop`, and because
+  // `SpaceAlbumsRoute` is self-recursive, `AutoRoutePage.canUpdate` matching on route NAME alone
+  // means a same-shaped `replaceAll` can update THIS widget's existing Element in place with a
+  // new `spaceId` rather than disposing/recreating it — so this widget's own hook state
+  // (including the new clearing effect) persists across what looks like landing on an entirely
+  // different page. Reproduced directly here via plain Flutter element-reuse semantics (no
+  // router needed): pumping the SAME `SpaceAlbumsPage` type, unkeyed, at the same tree position
+  // TWICE with a different `spaceId` updates the existing Element rather than recreating it —
+  // exactly the premise the production `replaceAll` case relies on.
+  testWidgets('I-1: switching to a different space clears an active selection', (tester) async {
+    const spaceB = 'space-2';
+    final overrides = [
+      spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value([_album(id: 'a1', name: 'Album A')])),
+      spaceAlbumFoldersProvider(spaceId).overrideWith((_) => Stream.value(const <SpaceAlbumFolder>[])),
+      spaceAlbumsProvider(spaceB).overrideWith((_) => Stream.value([_album(id: 'b1', name: 'Album B')])),
+      spaceAlbumFoldersProvider(spaceB).overrideWith((_) => Stream.value(const <SpaceAlbumFolder>[])),
+    ];
+
+    await tester.pumpConsumerWidget(const SpaceAlbumsPage(spaceId: spaceId, canEdit: true), overrides: overrides);
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget); // positive control
+
+    await tester.pumpConsumerWidget(const SpaceAlbumsPage(spaceId: spaceB, canEdit: true), overrides: overrides);
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+    expect(find.byKey(const Key('space-album-card-b1')), findsOneWidget); // proves space B actually rendered
+  });
+
+  // I-2 (fix round 1) — the reviewer's probe: long-press "Hawaii", type "Sunsets" -> the bar kept
+  // reading "1 selected" with the selected card gone from the tree, because the AppBar is
+  // replaced while selecting but the body's `_SearchAndSortBar` is not, so the search field
+  // stays live and reachable the whole time.
+  testWidgets('I-2: changing the search query clears an active selection', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget); // positive control
+
+    await tester.enterText(find.byKey(const Key('space-albums-search-field')), 'b');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+  });
+
   testWidgets('S-14: long-press enters selection mode with that album selected', (tester) async {
     final openedAlbumIds = <String>[];
     await pumpSpaceAlbumsPage(
@@ -1731,6 +1796,14 @@ void main() {
     expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
   });
 
+  // I-3 (fix round 1) — the original assertion only proved the BAR was absent, but
+  // `showSelectionBar = canEdit && !selection.isEmpty` hides the bar independently of the
+  // gesture gate: removing `canEdit` from `onAlbumLongPress` entirely still passes this test,
+  // since a viewer page would still compute `showSelectionBar: false` even with a live selection
+  // sitting in the (global) provider. Also asserting the card's own selected badge is absent
+  // binds this test to the GESTURE gate itself — `isSelected` doesn't consult `canEdit` at all,
+  // so if `onAlbumLongPress` ever wrote into the provider despite `canManage: false`, the badge
+  // would render here regardless of the bar's own visibility.
   testWidgets('S-10 on mobile: long-press does nothing when canManage is false', (tester) async {
     final openedAlbumIds = <String>[];
     await pumpSpaceAlbumsPage(
@@ -1744,6 +1817,47 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+    expect(find.byKey(const Key('space-album-card-selected-a')), findsNothing);
+  });
+
+  // I-4 (fix round 1) — folder selection had zero coverage: no test long-pressed a folder card.
+  // This single test closes four survivors the reviewer's mutation pass found: folder
+  // long-press registering kind `album` instead of `folder` (fails the folder-badge assertion
+  // AND flips the bar to album actions), a badge rendering on every card regardless of kind
+  // (fails the album-badge-absent assertion), the bar rendering album actions for a folder-kind
+  // selection (fails the Unlink/toggle-timeline-absent assertions), AND dropping the
+  // never-mixed-kind guard from `isSelected` (`selection.kind == kind && ids.contains(id)`
+  // collapsing to a bare `ids.contains(id)`).
+  //
+  // The folder and album fixtures DELIBERATELY share the id 'x': with distinct ids, the
+  // kind-guard-drop mutation is invisible — a folder-only selection's `ids` would never contain
+  // a different album's id regardless of whether the kind is checked, so nothing would diverge.
+  // A shared id is what forces the two kinds' badges to actually disagree once the guard is gone.
+  testWidgets('I-4: long-press a folder card selects the folder with folder-only bar actions', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      folders: [folder('x', 'Trips')],
+      albums: [album('x', 'Album X')],
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-folder-card-x')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
+    // The folder itself shows selected...
+    expect(find.byKey(const Key('space-album-folder-card-selected-x')), findsOneWidget);
+    // ...but the (present, rendered) album card sharing the same raw id does NOT.
+    expect(find.byKey(const Key('space-album-card-x')), findsOneWidget); // positive control
+    expect(find.byKey(const Key('space-album-card-selected-x')), findsNothing);
+    // Folder-kind actions only: Move + Delete, never Unlink/toggle-timeline.
+    expect(find.byKey(const Key('space-album-selection-move')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-selection-delete')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-selection-unlink')), findsNothing);
+    expect(find.byKey(const Key('space-album-selection-toggle-timeline')), findsNothing);
+    expect(openedAlbumIds, isEmpty);
   });
 
   testWidgets('S-16: back exits selection before popping', (tester) async {
