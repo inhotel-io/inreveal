@@ -1,8 +1,22 @@
 import { Kysely } from 'kysely';
 import { SharedSpaceRole, SyncEntityType, SyncRequestType } from 'src/enum';
+import { AccessRepository } from 'src/repositories/access.repository';
+import { AlbumUserRepository } from 'src/repositories/album-user.repository';
+import { AlbumRepository } from 'src/repositories/album.repository';
+import { AssetRepository } from 'src/repositories/asset.repository';
+import { DatabaseRepository } from 'src/repositories/database.repository';
+import { EventRepository } from 'src/repositories/event.repository';
+import { JobRepository } from 'src/repositories/job.repository';
+import { LoggingRepository } from 'src/repositories/logging.repository';
+import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
+import { StackRepository } from 'src/repositories/stack.repository';
+import { StorageRepository } from 'src/repositories/storage.repository';
 import { SyncRepository } from 'src/repositories/sync.repository';
+import { UserRepository } from 'src/repositories/user.repository';
 import { DB } from 'src/schema';
-import { SyncTestContext } from 'test/medium.factory';
+import { SharedSpaceService } from 'src/services/shared-space.service';
+import { newMediumService, SyncTestContext } from 'test/medium.factory';
+import { factory } from 'test/small.factory';
 import { getKyselyDB } from 'test/utils';
 
 let defaultDatabase: Kysely<DB>;
@@ -456,5 +470,86 @@ describe('SharedSpaceAlbumFoldersV1 sync stream (handler level)', () => {
     // The inaccessible space's folder and tombstone do NOT arrive.
     expect(upsertIds).not.toContain(excludedFolder.id);
     expect(tombstoneFolderIds).not.toContain(excludedTombstoned.id);
+  });
+});
+
+// ── Bulk-move round trip (Task 6) ───────────────────────────────────────────
+// #runBulk moves folders one at a time (see shared-space.service.ts), so a single
+// bulkMoveAlbumFolders call that touches two folders produces two separate row updates —
+// each with its own updateId. This is the sync arm's own evidence that the checkpoint machinery
+// still coalesces a whole batch into ONE ack, rather than the member's next stream needing to
+// round-trip once per moved folder.
+const sharedSpaceServiceSetup = () => {
+  const { ctx, sut } = newMediumService(SharedSpaceService, {
+    database: defaultDatabase,
+    real: [
+      AccessRepository,
+      AlbumRepository,
+      AlbumUserRepository,
+      AssetRepository,
+      DatabaseRepository,
+      SharedSpaceRepository,
+      StackRepository,
+      UserRepository,
+    ],
+    mock: [EventRepository, LoggingRepository, JobRepository, StorageRepository],
+  });
+  return { ctx, sut };
+};
+
+describe('SharedSpaceAlbumFoldersV1 sync stream — bulk move', () => {
+  it('delivers a bulk folder move as a single checkpoint advance', async () => {
+    const { ctx, db, auth } = await streamSetup();
+    const { user: owner } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: auth.user.id, role: SharedSpaceRole.Editor });
+
+    // Target predates the member's first sync round, so the move below is the ONLY thing that
+    // changes on the next round — the target's own creation is not conflated into the count.
+    const target = await newFolder(db, space.id, 'Target');
+    const folderA = await newFolder(db, space.id, 'A');
+    const folderB = await newFolder(db, space.id, 'B');
+
+    const initial = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumFoldersV1]);
+    expect(
+      initial
+        .filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumFolderV1)
+        .map((r: { data: { id: string } }) => r.data.id)
+        .sort(),
+    ).toEqual([target.id, folderA.id, folderB.id].sort());
+    await ctx.syncAckAll(auth, initial);
+
+    // Owner bulk-moves both folders into the target in a single call.
+    const sharedSpaceService = sharedSpaceServiceSetup();
+    const ownerAuth = factory.auth({ user: { id: owner.id, email: owner.email } });
+    const results = await sharedSpaceService.sut.bulkMoveAlbumFolders(ownerAuth, space.id, {
+      ids: [folderA.id, folderB.id],
+      parentId: target.id,
+    });
+    expect(results).toEqual([
+      { id: folderA.id, success: true },
+      { id: folderB.id, success: true },
+    ]);
+
+    const response = await ctx.syncStream(auth, [SyncRequestType.SharedSpaceAlbumFoldersV1]);
+    const upserts = response.filter((r: { type: string }) => r.type === SyncEntityType.SharedSpaceAlbumFolderV1);
+    expect(upserts).toHaveLength(2);
+    expect(upserts.map((r: { data: { id: string } }) => r.data.id).sort()).toEqual([folderA.id, folderB.id].sort());
+    for (const event of upserts as Array<{ data: { parentId: string } }>) {
+      expect(event.data.parentId).toBe(target.id);
+    }
+
+    // One checkpoint advance for the whole batch: the wire protocol (src/utils/sync.ts serialize)
+    // stamps every plain upsert event with its OWN per-type `ack`, so ordinary delivery of two
+    // rows carries two ack VALUES on the wire, not a separate SyncAckV1 marker — that type is
+    // reserved for backfill completion, which does not run here (target/A/B all predate the
+    // member's first sync round). test/medium.factory.ts's syncAckAll collapses those per-row acks
+    // to the LAST one for the type, so acking this one response is enough to mark BOTH moved
+    // folders delivered in a single watermark advance — the next round delivers nothing further.
+    // If the handler read or wrote the wrong checkpoint key, this would either re-deliver both
+    // folders (key never advanced) or silently skip real data (key pointed at the wrong cursor).
+    await ctx.syncAckAll(auth, response);
+    await ctx.assertSyncIsComplete(auth, [SyncRequestType.SharedSpaceAlbumFoldersV1]);
   });
 });
