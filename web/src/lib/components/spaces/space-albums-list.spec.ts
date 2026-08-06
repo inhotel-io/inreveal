@@ -678,6 +678,26 @@ describe('SpaceAlbumsList', () => {
       expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
     });
 
+    // Trigger 5 / I-1 (fix round 1): a multi-id drag-move can move every selected item out of the
+    // current level without currentFolderId/searchQuery/spaceId changing, without AppNavigate
+    // firing, and without E-5's reconcile catching it (the moved items are still PRESENT in the
+    // space's data, just under a different folderId/parentId). +page.svelte bumps
+    // selectionMoveSignal once such a move completes; this proves the list clears its own
+    // selection in response.
+    it('clears the selection when selectionMoveSignal changes', async () => {
+      const { rerender } = renderList({ ...props, selectionMoveSignal: 0 });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-select-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, selectionMoveSignal: 1 },
+      });
+
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
     // M-3 / E-15: canManage can flip to false mid-selection (a role downgrade plus some unrelated
     // invalidateAll() refreshing `members`). The bar is already gated on canManage and disappears,
     // but without also clearing the selection itself, every subsequent card click would silently

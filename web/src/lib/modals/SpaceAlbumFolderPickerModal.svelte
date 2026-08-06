@@ -7,22 +7,28 @@
 
   interface Props {
     folders: SharedSpaceAlbumFolderDto[];
-    /** When moving a FOLDER, its own subtree is not a legal destination. Null when moving an album. */
-    excludeFolderId: string | null;
+    /** When moving one or more FOLDERS, none of their own subtrees is a legal destination.
+     * Empty when moving an album (or albums) — there is no folder-subtree concept to exclude
+     * there. A bulk folder move passes every folder in the batch (fix round 1, Minor #2): with
+     * only the FIRST one excluded, moving a single selected folder onto itself was reachable
+     * through "Move to folder…" (the kebab's single-item picker already excluded the one folder
+     * being moved; the bulk picker excluded nothing) and produced a 100% server-side failure with
+     * no client-side explanation. */
+    excludeFolderIds: string[];
     currentFolderId: string | null;
     onClose: (result?: { folderId: string | null }) => void;
   }
 
-  let { folders, excludeFolderId, currentFolderId, onClose }: Props = $props();
+  let { folders, excludeFolderIds, currentFolderId, onClose }: Props = $props();
 
   let selected = $state<string | null>(currentFolderId);
 
   const tree = $derived(buildFolderTree(folders));
 
-  // Disabling the moved folder and its descendants means the illegal choice is never
+  // Disabling every moved folder and its descendants means an illegal choice is never
   // selectable — the user cannot produce a request the server would have to reject.
   const isDisabled = (id: string) =>
-    !!excludeFolderId && (id === excludeFolderId || isDescendant(folders, id, excludeFolderId));
+    excludeFolderIds.some((excludeId) => id === excludeId || isDescendant(folders, id, excludeId));
 
   const flatten = (nodes: FolderNode[], depth = 0): { folder: SharedSpaceAlbumFolderDto; depth: number }[] =>
     nodes.flatMap((node) => [{ folder: node.folder, depth }, ...flatten(node.children, depth + 1)]);

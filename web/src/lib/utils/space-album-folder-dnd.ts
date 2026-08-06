@@ -68,7 +68,13 @@ export const setActiveDragPayload = (payload: DragPayload | null): void => {
 
 export const getActiveDragPayload = (): DragPayload | null => activeDragPayload;
 
-const canDropOne = (
+/**
+ * Exported for callers that need to know WHICH ids in a multi-id payload are actually legal
+ * (Minor #3 / fix round 1) — `canDrop` itself only answers "is at least one id legal", which is
+ * the right question for deciding whether to preventDefault() a drop, but the wrong one for
+ * deciding what to actually send once the drop happens.
+ */
+export const canDropOne = (
   folders: SharedSpaceAlbumFolderDto[],
   albums: SharedSpaceLinkedAlbumDto[],
   kind: 'album' | 'folder',

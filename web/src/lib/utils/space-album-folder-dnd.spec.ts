@@ -2,6 +2,7 @@ import type { SharedSpaceAlbumFolderDto, SharedSpaceLinkedAlbumDto } from '@immi
 import {
   buildDragPayload,
   canDrop,
+  canDropOne,
   getActiveDragPayload,
   readDragPayload,
   setActiveDragPayload,
@@ -132,6 +133,31 @@ describe('space-album-folder-dnd', () => {
   it('refuses an unknown item or an unknown target', () => {
     expect(canDrop(folders, albums, { kind: 'album', ids: ['ghost'] }, 'trips')).toBe(false);
     expect(canDrop(folders, albums, { kind: 'folder', ids: ['trips'] }, 'ghost')).toBe(false);
+  });
+
+  // Minor #3 (fix round 1): canDropOne is now exported so +page.svelte can filter a multi-id
+  // payload down to exactly the legal ids before dispatch — canDrop's own `.some()` is built
+  // from this same predicate, so these cases mirror canDrop's single-item cases directly.
+  describe('canDropOne', () => {
+    it('is true for an album that would actually move', () => {
+      expect(canDropOne(folders, albums, 'album', 'a1', 'family')).toBe(true);
+    });
+
+    it('is false for an album already at the target', () => {
+      expect(canDropOne(folders, albums, 'album', 'a1', 'trips')).toBe(false);
+    });
+
+    it('is false for a folder dropped onto itself', () => {
+      expect(canDropOne(folders, albums, 'folder', 'trips', 'trips')).toBe(false);
+    });
+
+    it('is true for a folder that would actually move', () => {
+      expect(canDropOne(folders, albums, 'folder', 'trips', 'family')).toBe(true);
+    });
+
+    it('is false for an unknown id', () => {
+      expect(canDropOne(folders, albums, 'album', 'ghost', 'trips')).toBe(false);
+    });
   });
 
   describe('multi-id payloads (S-22)', () => {

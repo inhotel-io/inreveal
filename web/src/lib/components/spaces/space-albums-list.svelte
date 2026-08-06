@@ -57,6 +57,11 @@
     onMoveFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDeleteFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDropItem?: (payload: DragPayload, targetFolderId: string | null) => void;
+    // I-1: bumped by the page after a multi-id drag-move (via EITHER drop target — the folder
+    // grid, forwarded through onDropItem above, or the breadcrumb, which the page renders
+    // directly and has no other route back into this component's own manager) completes. See
+    // Trigger 5 below for why nothing else can catch this.
+    selectionMoveSignal?: number;
     // Bulk-action callbacks for the selection bar. Each resolves to the ids that should REMAIN
     // selected (typically the page's own bulkXAction's `failedIds` — see space-album-bulk-actions.ts
     // — or, on a cancelled confirm dialog, the untouched input `ids`) so this component can fold
@@ -88,6 +93,7 @@
     onMoveFolder,
     onDeleteFolder,
     onDropItem,
+    selectionMoveSignal = 0,
     onBulkUnlink,
     onBulkMoveAlbums,
     onBulkToggleAlbumsTimeline,
@@ -321,6 +327,27 @@
   // (e.g. into an album's own detail page, or off the space entirely) — that's a real navigation,
   // not a same-route param change, so `AppNavigate` does fire for it.
   const handleAppNavigate = () => selection.clear();
+
+  // Trigger 5 (I-1, fix round 1): a multi-id drag-move can move every selected item out of the
+  // current folder level without any of Triggers 1-4 firing — currentFolderId/searchQuery/spaceId
+  // are all unchanged (the VIEWER didn't navigate, the DATA did), and it's AppNavigate-silent for
+  // the same reason those are. The E-5 reconcile effect above can't catch it either: a moved
+  // album/folder is still PRESENT in the space's data, just under a different
+  // folderId/parentId — reconcile only drops ids that vanish entirely. Left alone, the bar keeps
+  // reading "N selected" and offering confirmed-destructive bulk actions (unlink, delete) against
+  // a selection with no visible card on screen. `+page.svelte` bumps `selectionMoveSignal` once a
+  // multi-id drag-move completes (success or partial failure — the drag discharged the user's
+  // intent either way) for BOTH drop targets: the folder grid (its onDropItem is forwarded
+  // through this component) and the breadcrumb (which the page renders directly, with no other
+  // route back into this component's own manager).
+  let lastSelectionMoveSignal: number | undefined;
+  $effect(() => {
+    const current = selectionMoveSignal;
+    if (lastSelectionMoveSignal !== undefined && lastSelectionMoveSignal !== current) {
+      selection.clear();
+    }
+    lastSelectionMoveSignal = current;
+  });
 
   const handleKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape' && selection.selectionActive) {
