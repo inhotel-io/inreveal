@@ -1013,7 +1013,16 @@ Keys to add:
 | `space_album_bulk_add_to_timeline`       | `Add to timeline`                                                                         |
 | `space_album_bulk_remove_from_timeline`  | `Remove from timeline`                                                                    |
 | `space_album_bulk_partial_failure`       | `{count, plural, one {# item could not be updated} other {# items could not be updated}}` |
-| `spaces_activity_bulk_unlinked_albums`   | `{name} unlinked {albumName} and {count, plural, one {# other} other {# others}}`         |
+| `spaces_activity_bulk_unlinked_albums`   | `{name} unlinked "{albumName}" and {count, plural, one {# other} other {# others}}`       |
+
+> **Amended 2026-08-06 during implementation.** The original wording left `{albumName}` unquoted.
+> The feed renders the whole line as one flat, truncatable text node
+> (`space-activity-feed.svelte:198`, `:244`), so the quotes are the **only** delimiter between
+> template text and user-controlled data — and the sibling `spaces_activity_merged_people` quotes
+> its name in all ten locales. Unquoted, an album called `Summer 2024 and 3 others` renders
+> `Alex unlinked Summer 2024 and 3 others and 2 others`; in zh, which has no whitespace delimiter
+> at all, even ordinary names run together. Each locale must use its own marks: `"` for
+> en/de/es/fr/it/nl/pl, `«»` for ru, `“”` for zh_Hans, `「」` for zh_Hant.
 
 - [ ] **Step 1: Add the EN keys**
 
