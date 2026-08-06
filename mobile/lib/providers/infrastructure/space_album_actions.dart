@@ -3,6 +3,7 @@ import 'package:immich_mobile/domain/utils/background_sync.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
 import 'package:immich_mobile/repositories/drift_album_api_repository.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
+import 'package:openapi/api.dart' show BulkIdResponseDto;
 
 /// Centralises the space-album mutation operations:
 ///   - [link]             — PUT  /shared-spaces/{id}/albums/{albumId} (one or more)
@@ -108,6 +109,96 @@ class SpaceAlbumActions {
   Future<void> moveAlbumToFolder(String spaceId, String albumId, String? folderId) async {
     await _repo.setAlbumFolder(spaceId, albumId, folderId);
     await _syncManager.syncRemote();
+  }
+
+  // ---------------------------------------------------------------------
+  // Task 15 (multi-select bulk actions).
+  //
+  // Every `bulkX` method below returns the SUBSET of the requested ids that
+  // failed — empty on total success. Unlike the single-item methods above,
+  // a bulk request can partially fail (the server responds 200 with
+  // per-item results even when every item fails), so there is no single
+  // exception to propagate. Mirrors the web `runBulkAction`
+  // (space-album-bulk-actions.ts): a thrown request (never reached the
+  // server — offline, 500, timeout) is folded into "every id failed" HERE,
+  // rather than propagating, so the caller (the page) can compose the
+  // result directly with `SpaceAlbumSelectionNotifier.reconcile` regardless
+  // of which of the three ways the batch failed — total success reconciles
+  // to nothing selected, a partial failure keeps only the failures, and a
+  // total failure or a throw keeps everything (identical from the caller's
+  // perspective: reconcile(failedIds) where failedIds == the ids sent).
+  //
+  // The sync nudge fires whenever the request actually reached the server
+  // (even a 200 with every item failed) but is skipped on a throw, matching
+  // the single-item methods' own fail-fast convention above.
+  // ---------------------------------------------------------------------
+
+  /// Folds a bulk response into the subset of [ids] that failed — the complement of
+  /// "succeeded". An id missing from [results] entirely (e.g. an empty response array) counts as
+  /// failed too. Never branches on the SPECIFIC `error` reason (the deliberate albums/folders
+  /// error asymmetry — `not_found` vs `validation`): only `success` is read, so every failure
+  /// reason is treated identically here.
+  Set<String> _bulkFailures(Set<String> ids, List<BulkIdResponseDto> results) {
+    final succeeded = results.where((result) => result.success).map((result) => result.id).toSet();
+    return ids.where((id) => !succeeded.contains(id)).toSet();
+  }
+
+  /// Bulk-unlink [albumIds] from [spaceId]. Returns the subset that failed.
+  Future<Set<String>> bulkUnlink(String spaceId, Set<String> albumIds) async {
+    try {
+      final results = await _repo.bulkUnlinkAlbums(spaceId, albumIds);
+      await _syncManager.syncRemote();
+      return _bulkFailures(albumIds, results);
+    } catch (_) {
+      return albumIds;
+    }
+  }
+
+  /// Bulk-move [albumIds] into [folderId], or to the space root when null. Returns the subset
+  /// that failed.
+  Future<Set<String>> bulkSetAlbumFolder(String spaceId, Set<String> albumIds, {String? folderId}) async {
+    try {
+      final results = await _repo.bulkSetAlbumFolder(spaceId, albumIds, folderId: folderId);
+      await _syncManager.syncRemote();
+      return _bulkFailures(albumIds, results);
+    } catch (_) {
+      return albumIds;
+    }
+  }
+
+  /// Bulk-toggle the `showInTimeline` flag for [albumIds]. Returns the subset that failed.
+  Future<Set<String>> bulkSetAlbumTimeline(String spaceId, Set<String> albumIds, {required bool showInTimeline}) async {
+    try {
+      final results = await _repo.bulkSetAlbumTimeline(spaceId, albumIds, showInTimeline: showInTimeline);
+      await _syncManager.syncRemote();
+      return _bulkFailures(albumIds, results);
+    } catch (_) {
+      return albumIds;
+    }
+  }
+
+  /// Bulk-move [folderIds] under [parentId], or to the space root when null. Returns the subset
+  /// that failed.
+  Future<Set<String>> bulkMoveFolders(String spaceId, Set<String> folderIds, {String? parentId}) async {
+    try {
+      final results = await _repo.bulkMoveAlbumFolders(spaceId, folderIds, parentId: parentId);
+      await _syncManager.syncRemote();
+      return _bulkFailures(folderIds, results);
+    } catch (_) {
+      return folderIds;
+    }
+  }
+
+  /// Bulk-delete [folderIds]. Direct children of each are promoted one level up; albums are
+  /// never unlinked. Returns the subset that failed.
+  Future<Set<String>> bulkDeleteFolders(String spaceId, Set<String> folderIds) async {
+    try {
+      final results = await _repo.bulkDeleteAlbumFolders(spaceId, folderIds);
+      await _syncManager.syncRemote();
+      return _bulkFailures(folderIds, results);
+    } catch (_) {
+      return folderIds;
+    }
   }
 }
 

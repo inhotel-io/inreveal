@@ -338,6 +338,27 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       }
     });
 
+    // Task 15 (bulk actions) — item 1 of the task-15 brief: `SpaceAlbumSelectionNotifier.reconcile`
+    // (Task 13) had no call site on mobile before this task. Without it, an album/folder another
+    // member unlinks/deletes stays in a live selection here, and a subsequent bulk action would
+    // ship its now-stale id straight into the request payload. Mirrors web's own E-5 effect
+    // (`space-albums-list.svelte`): `presentIds` is the union of every CURRENTLY KNOWN album and
+    // folder id in the space (not just this level — `folders`/`albumsAsync` are already the
+    // whole-space lists used elsewhere on this page), reconciled on every stream emission, not on
+    // a timer. `reconcile` is a no-op when nothing actually needs dropping
+    // (`SpaceAlbumSelection`'s `==` short-circuits the state update), so firing this
+    // unconditionally on every emission — including ones a selection never sees — is harmless.
+    //
+    // Deferred via `Future.microtask`, same reason as the browse-identity clear above: `useEffect`
+    // runs mid-BUILD, and Riverpod's `UncontrolledProviderScope` asserts against mutating provider
+    // state while the widget tree is still building.
+    final currentAlbums = albumsAsync.valueOrNull;
+    useEffect(() {
+      final presentIds = {...?currentAlbums?.map((a) => a.id), ...folders.map((f) => f.id)};
+      Future.microtask(() => selectionNotifier.reconcile(presentIds));
+      return null;
+    }, [currentAlbums, folders]);
+
     // Folder CRUD (app-bar "New folder" + folder-card ⋮). Defined here, above the `albumsAsync`
     // branch, rather than inside `data: (albums) {...}` below: none of these need the album list,
     // and "New folder" is an app-bar action rendered regardless of load/error/data state.
@@ -485,6 +506,98 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       }
     }
 
+    // Task 15 (bulk actions), S-18/S-19 — album kind only: whether EVERY selected album is
+    // already in the timeline, decides the toggle action's label/icon/direction. Mirrors web's
+    // `allSelectedAlbumsInTimeline` (`space-albums-list.svelte`): `.every` is false the moment
+    // ANY selected album is off-timeline, so a MIXED selection resolves toward "Add to timeline"
+    // — only a selection that is ALREADY entirely in the timeline reads as "remove".
+    final isAllInTimeline =
+        selection.kind == SpaceAlbumSelectionKind.album &&
+        selection.ids.isNotEmpty &&
+        selection.ids.every((id) => currentAlbums?.firstWhereOrNull((a) => a.id == id)?.showInTimeline == true);
+
+    // Task 15 (bulk actions) — wires the Task 14 selection bar's previously-disabled
+    // (`onPressed: null`) action icons to the generated bulk endpoints. All four handlers below
+    // share the same failure contract: `SpaceAlbumActions`'s `bulkX` methods return the SUBSET of
+    // ids that failed (empty on total success, everything on a total failure OR a thrown
+    // request — see that class's own doc), and `reconcile(failedIds)` composes directly against
+    // that: total success reconciles to nothing selected (S-26), a partial failure keeps only the
+    // failures (S-24), and a total failure/throw keeps everything (S-25) — without this page ever
+    // inspecting *why* the batch failed.
+    void notifyBulkFailures(int failedCount) {
+      if (failedCount == 0 || !context.mounted) return;
+      ImmichToast.show(
+        context: context,
+        msg: 'space_album_bulk_partial_failure'.t(context: context, args: {'count': failedCount.toString()}),
+        toastType: ToastType.error,
+      );
+    }
+
+    Future<void> bulkUnlink() async {
+      final ids = selection.ids;
+      final confirmed = await _confirmBulkAction(
+        context,
+        title: 'space_album_bulk_unlink_title'.t(context: context, args: {'count': ids.length.toString()}),
+        content: 'space_album_bulk_unlink_confirm'.t(context: context),
+        confirmLabel: 'space_album_unlink_from_space'.t(context: context),
+        cancelKey: const Key('space-album-bulk-unlink-cancel'),
+        confirmKey: const Key('space-album-bulk-unlink-confirm'),
+      );
+      if (!confirmed || !context.mounted) return;
+      final failedIds = await ref.read(spaceAlbumActionsProvider).bulkUnlink(spaceId, ids);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
+    Future<void> bulkMove() async {
+      final ids = selection.ids;
+      final kind = selection.kind;
+      final result = await showSpaceAlbumFolderPicker(
+        context,
+        folders: folders,
+        // A single folder still excludes itself (and its subtree) as an illegal destination,
+        // same as the single-item picker above. The picker widget only supports ONE excluded id,
+        // so a multi-folder batch can't pre-exclude every member's own subtree the way a fuller
+        // implementation might — an illegal member of a bigger batch simply comes back as a
+        // per-item failure from the server instead of being filtered out of the picker here.
+        excludeFolderId: kind == SpaceAlbumSelectionKind.folder && ids.length == 1 ? ids.first : null,
+        currentFolderId: currentFolderId,
+      );
+      if (!result.picked || !context.mounted) return;
+      final actions = ref.read(spaceAlbumActionsProvider);
+      final failedIds = kind == SpaceAlbumSelectionKind.folder
+          ? await actions.bulkMoveFolders(spaceId, ids, parentId: result.folderId)
+          : await actions.bulkSetAlbumFolder(spaceId, ids, folderId: result.folderId);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
+    Future<void> bulkToggleTimeline(bool showInTimeline) async {
+      final ids = selection.ids;
+      final failedIds = await ref
+          .read(spaceAlbumActionsProvider)
+          .bulkSetAlbumTimeline(spaceId, ids, showInTimeline: showInTimeline);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
+    Future<void> bulkDeleteFolders() async {
+      final ids = selection.ids;
+      final confirmed = await _confirmBulkAction(
+        context,
+        title: 'space_album_bulk_folder_delete_title'.t(context: context, args: {'count': ids.length.toString()}),
+        content: 'space_album_bulk_folder_delete_confirm'.t(context: context),
+        confirmLabel: 'delete'.t(context: context),
+        cancelKey: const Key('space-album-bulk-delete-cancel'),
+        confirmKey: const Key('space-album-bulk-delete-confirm'),
+        destructive: true,
+      );
+      if (!confirmed || !context.mounted) return;
+      final failedIds = await ref.read(spaceAlbumActionsProvider).bulkDeleteFolders(spaceId, ids);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
     // Task 14 (multi-select), S-10 — a selection can only ever be non-empty on a canEdit page (see
     // the canEdit-gated long-press wiring above), but gating the BAR on `canEdit` too, not just
     // `selection.isEmpty`, keeps a viewer page from ever rendering it even in the theoretical case
@@ -513,6 +626,11 @@ class SpaceAlbumsPage extends HookConsumerWidget {
                 kind: selection.kind,
                 count: selection.count,
                 onClear: selectionNotifier.clear,
+                isAllInTimeline: isAllInTimeline,
+                onUnlink: bulkUnlink,
+                onMove: bulkMove,
+                onToggleTimeline: bulkToggleTimeline,
+                onDelete: bulkDeleteFolders,
               )
             : AppBar(
                 title: Text(_title(context, folders)),
@@ -904,6 +1022,42 @@ Future<bool> _confirmDeleteFolder(BuildContext context, SpaceAlbumFolder folder)
           onPressed: () => Navigator.of(ctx).pop(true),
           style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
           child: Text('delete'.t(context: ctx)),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
+}
+
+/// Task 15 (bulk actions) — the shared "act on N items" confirm-dialog shape (bulk unlink / bulk
+/// folder delete), one dialog for the WHOLE batch naming the count. Mirrors [_confirmDeleteFolder]
+/// above exactly (Cancel + a labelled confirm `TextButton`, error-tinted only when [destructive]),
+/// just parameterised since the two callers use different keys/copy/tint.
+Future<bool> _confirmBulkAction(
+  BuildContext context, {
+  required String title,
+  required String content,
+  required String confirmLabel,
+  required Key cancelKey,
+  required Key confirmKey,
+  bool destructive = false,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: Text(content),
+      actions: [
+        TextButton(
+          key: cancelKey,
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: Text('cancel'.t(context: ctx)),
+        ),
+        TextButton(
+          key: confirmKey,
+          onPressed: () => Navigator.of(ctx).pop(true),
+          style: destructive ? TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error) : null,
+          child: Text(confirmLabel),
         ),
       ],
     ),
@@ -1358,21 +1512,42 @@ class _AlbumCard extends ConsumerWidget {
 enum _CardAction { toggle, unlink, move }
 
 // ---------------------------------------------------------------------------
-// Selection bar — Task 14 (multi-select). Replaces the normal AppBar while a
-// selection is active (S-13/S-14/S-15). Mirrors the shape of web's
-// `space-album-select-bar.svelte` (count + kind-appropriate actions) and this
-// codebase's own `SelectionSliverAppBar` convention (leading close icon,
-// count in the title). The action buttons are present (so the bar's shape
-// is right for a given kind) but rendered disabled (`onPressed: null`):
-// wiring them to the actual bulk mutations is Task 15's job, not this one's.
+// Selection bar — Task 14 (multi-select) built the shape, Task 15 wired the
+// actions. Replaces the normal AppBar while a selection is active
+// (S-13/S-14/S-15). Mirrors the shape of web's `space-album-select-bar.svelte`
+// (count + kind-appropriate actions) and this codebase's own
+// `SelectionSliverAppBar` convention (leading close icon, count in the title).
 // ---------------------------------------------------------------------------
 
 class _SelectionAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const _SelectionAppBar({super.key, required this.kind, required this.count, required this.onClear});
+  const _SelectionAppBar({
+    super.key,
+    required this.kind,
+    required this.count,
+    required this.onClear,
+    required this.isAllInTimeline,
+    required this.onUnlink,
+    required this.onMove,
+    required this.onToggleTimeline,
+    required this.onDelete,
+  });
 
   final SpaceAlbumSelectionKind kind;
   final int count;
   final VoidCallback onClear;
+
+  /// Task 15, S-18/S-19 — album kind only: whether EVERY selected album is already in the
+  /// timeline, decides whether the toggle action reads/acts as "Add" or "Remove". Mirrors web's
+  /// `allInTimeline` prop on `SpaceAlbumSelectBar`.
+  final bool isAllInTimeline;
+
+  final VoidCallback onUnlink;
+  final VoidCallback onMove;
+
+  /// Called with the `showInTimeline` value to send — always `!isAllInTimeline`, i.e. the
+  /// resolved direction (a mixed selection resolves toward include).
+  final void Function(bool showInTimeline) onToggleTimeline;
+  final VoidCallback onDelete;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
@@ -1393,33 +1568,35 @@ class _SelectionAppBar extends StatelessWidget implements PreferredSizeWidget {
             key: const Key('space-album-selection-unlink'),
             icon: const Icon(Icons.link_off),
             tooltip: 'space_album_unlink_from_space'.t(context: context),
-            onPressed: null,
+            onPressed: onUnlink,
           ),
           IconButton(
             key: const Key('space-album-selection-move'),
             icon: const Icon(Icons.drive_file_move_outline),
             tooltip: 'space_album_folder_move'.t(context: context),
-            onPressed: null,
+            onPressed: onMove,
           ),
           IconButton(
             key: const Key('space-album-selection-toggle-timeline'),
-            icon: const Icon(Icons.visibility_outlined),
-            tooltip: 'spaces_hide_from_timeline'.t(context: context),
-            onPressed: null,
+            icon: Icon(isAllInTimeline ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+            tooltip: (isAllInTimeline ? 'space_album_bulk_remove_from_timeline' : 'space_album_bulk_add_to_timeline').t(
+              context: context,
+            ),
+            onPressed: () => onToggleTimeline(!isAllInTimeline),
           ),
         ] else if (kind == SpaceAlbumSelectionKind.folder) ...[
           IconButton(
             key: const Key('space-album-selection-move'),
             icon: const Icon(Icons.drive_file_move_outline),
             tooltip: 'space_album_folder_move'.t(context: context),
-            onPressed: null,
+            onPressed: onMove,
           ),
           IconButton(
             key: const Key('space-album-selection-delete'),
             icon: const Icon(Icons.delete_outline),
             tooltip: 'space_album_folder_delete'.t(context: context),
             color: Theme.of(context).colorScheme.error,
-            onPressed: null,
+            onPressed: onDelete,
           ),
         ],
       ],
