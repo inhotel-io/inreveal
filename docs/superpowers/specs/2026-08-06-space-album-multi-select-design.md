@@ -245,7 +245,15 @@ reason.
 - Name collision on move → `success: false`, `error: validation`
 
 The endpoint itself returns 200 even when every item failed. It returns a 4xx only for
-request-level problems: not a space member (403), malformed body (400), unknown space (404).
+request-level problems: not a space member (403), malformed body (400), unknown space (**403**, not
+404 — see below).
+
+> **Corrected 2026-08-06 during implementation.** An earlier draft of this section said an unknown
+> space returns 404. It cannot: `requireRole` → `requireMembership` throws `ForbiddenException`, and
+> an unknown `spaceId` is indistinguishable from one the caller simply is not a member of. All five
+> endpoints therefore return 403. This is pre-existing behaviour across the whole
+> `SharedSpaceController`, and it is the better answer anyway — a 404 would leak which space ids
+> exist to a non-member.
 
 **`showInTimeline` on the bulk-timeline body is required, not optional.** The existing
 `PATCH :id/albums/:albumId` carries a comment recording exactly this: making it optional pushes the
@@ -544,7 +552,7 @@ RBAC matrix as real HTTP assertions, exact status codes (not "not 200"):
 - **viewer → 403**
 - **non-member → 403**
 - album-owner-but-not-editor → per-item success for their own albums, `no_permission` for others
-- malformed body → 400; unknown space → 404; empty `ids` → 400
+- malformed body → 400; unknown space → 403 (see §6.2 — not 404); empty `ids` → 400
 
 Assert response **bodies**, not just statuses, and assert the resulting state via a follow-up GET.
 
