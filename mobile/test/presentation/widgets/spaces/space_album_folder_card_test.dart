@@ -96,14 +96,14 @@ Finder menuFinder() => find.byKey(const Key('space-album-folder-card-menu'));
 Future<void> pumpPickerSheet(
   WidgetTester tester, {
   required List<SpaceAlbumFolder> folders,
-  String? excludeFolderId,
+  List<String> excludeFolderIds = const [],
   String? currentFolderId,
   void Function(String? folderId)? onSelect,
 }) async {
   await tester.pumpConsumerWidget(
     SpaceAlbumFolderPickerSheet(
       folders: folders,
-      excludeFolderId: excludeFolderId,
+      excludeFolderIds: excludeFolderIds,
       currentFolderId: currentFolderId,
       onSelect: onSelect ?? (_) {},
     ),
@@ -254,7 +254,7 @@ void main() {
     // U-07 — offering a folder's own subtree as a destination would guarantee
     // a server 400. Disabling it means the illegal choice is never tappable.
     testWidgets('U-07: disables the moved folder and its descendants', (tester) async {
-      await pumpPickerSheet(tester, folders: tripsTree(), excludeFolderId: 'trips');
+      await pumpPickerSheet(tester, folders: tripsTree(), excludeFolderIds: const ['trips']);
 
       expect(tileEnabled(tester, 'trips'), isFalse, reason: 'the moved folder itself');
       expect(tileEnabled(tester, 'y2026'), isFalse, reason: 'a direct child');
@@ -263,10 +263,25 @@ void main() {
       expect(tileEnabled(tester, 'root'), isTrue, reason: 'moving to the space root is always legal');
     });
 
+    // Task 15 fix round 1 (I-4/R5) — a MULTI-folder batch must exclude every one of its own
+    // members (and each one's own subtree), not just a single id: this is what closes "select
+    // Trips + Family and the picker still offers Trips (or Family) as the destination for the
+    // WHOLE batch", which used to guarantee that member's own move fails server-side with no
+    // indication in the picker of why.
+    testWidgets('disables every excluded folder and each of their descendants', (tester) async {
+      await pumpPickerSheet(tester, folders: tripsTree(), excludeFolderIds: const ['trips', 'family']);
+
+      expect(tileEnabled(tester, 'trips'), isFalse, reason: 'first excluded folder');
+      expect(tileEnabled(tester, 'y2026'), isFalse, reason: "first excluded folder's child");
+      expect(tileEnabled(tester, 'italy'), isFalse, reason: "first excluded folder's grandchild");
+      expect(tileEnabled(tester, 'family'), isFalse, reason: 'second excluded folder');
+      expect(tileEnabled(tester, 'root'), isTrue, reason: 'moving to the space root is always legal');
+    });
+
     // U-08 — moving an ALBUM has no subtree to exclude, so everything stays
     // selectable.
     testWidgets('U-08: leaves every folder selectable when nothing is excluded', (tester) async {
-      await pumpPickerSheet(tester, folders: tripsTree(), excludeFolderId: null);
+      await pumpPickerSheet(tester, folders: tripsTree());
 
       for (final id in ['trips', 'y2026', 'italy', 'family']) {
         expect(tileEnabled(tester, id), isTrue);
@@ -274,7 +289,7 @@ void main() {
     });
 
     testWidgets('renders a root option plus one row per folder', (tester) async {
-      await pumpPickerSheet(tester, folders: tripsTree(), excludeFolderId: null);
+      await pumpPickerSheet(tester, folders: tripsTree());
 
       expect(find.byKey(const Key('folder-option-root')), findsOneWidget);
       for (final id in ['trips', 'y2026', 'italy', 'family']) {
@@ -284,7 +299,7 @@ void main() {
 
     testWidgets('tapping an enabled row calls onSelect with that folder id', (tester) async {
       String? selected = 'unset';
-      await pumpPickerSheet(tester, folders: tripsTree(), excludeFolderId: null, onSelect: (id) => selected = id);
+      await pumpPickerSheet(tester, folders: tripsTree(), onSelect: (id) => selected = id);
 
       await tester.tap(find.byKey(const Key('folder-option-family')));
       await tester.pump();
@@ -294,7 +309,12 @@ void main() {
 
     testWidgets('tapping the root option calls onSelect with null', (tester) async {
       String? selected = 'unset';
-      await pumpPickerSheet(tester, folders: tripsTree(), excludeFolderId: 'trips', onSelect: (id) => selected = id);
+      await pumpPickerSheet(
+        tester,
+        folders: tripsTree(),
+        excludeFolderIds: const ['trips'],
+        onSelect: (id) => selected = id,
+      );
 
       await tester.tap(find.byKey(const Key('folder-option-root')));
       await tester.pump();
@@ -304,7 +324,12 @@ void main() {
 
     testWidgets('tapping a disabled row does nothing', (tester) async {
       var called = false;
-      await pumpPickerSheet(tester, folders: tripsTree(), excludeFolderId: 'trips', onSelect: (_) => called = true);
+      await pumpPickerSheet(
+        tester,
+        folders: tripsTree(),
+        excludeFolderIds: const ['trips'],
+        onSelect: (_) => called = true,
+      );
 
       await tester.tap(find.byKey(const Key('folder-option-y2026')), warnIfMissed: false);
       await tester.pump();
@@ -320,7 +345,7 @@ void main() {
         Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
-              result = await showSpaceAlbumFolderPicker(context, folders: tripsTree(), excludeFolderId: null);
+              result = await showSpaceAlbumFolderPicker(context, folders: tripsTree());
             },
             child: const Text('open'),
           ),
@@ -341,7 +366,11 @@ void main() {
         Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
-              result = await showSpaceAlbumFolderPicker(context, folders: tripsTree(), excludeFolderId: 'trips');
+              result = await showSpaceAlbumFolderPicker(
+                context,
+                folders: tripsTree(),
+                excludeFolderIds: const ['trips'],
+              );
             },
             child: const Text('open'),
           ),
@@ -362,7 +391,7 @@ void main() {
         Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
-              result = await showSpaceAlbumFolderPicker(context, folders: tripsTree(), excludeFolderId: null);
+              result = await showSpaceAlbumFolderPicker(context, folders: tripsTree());
             },
             child: const Text('open'),
           ),

@@ -15,12 +15,16 @@ import 'package:immich_mobile/utils/space_album_folders.dart';
 /// stages a selection behind a separate Submit button, mobile bottom sheets
 /// in this app (e.g. `SpaceLinkPickerSheet`) select-and-close immediately.
 ///
-/// When [excludeFolderId] is set (moving a FOLDER), that folder and every
-/// folder beneath it are disabled: offering them would guarantee a server
-/// 400, since a folder can never become its own descendant. Uses the Task 6
-/// [isDescendant] guard rather than reimplementing the walk (U-07). When
-/// [excludeFolderId] is null (moving an ALBUM), nothing is excluded -- an
-/// album has no subtree, so every folder stays selectable (U-08).
+/// Every id in [excludeFolderIds] (moving one or more FOLDERs) — and every folder beneath ANY
+/// of them — is disabled: offering one would guarantee a server 400, since a folder can never
+/// become its own (or a batch-sibling's) descendant. Uses the Task 6 [isDescendant] guard rather
+/// than reimplementing the walk (U-07). Task 15 fix round 1 (I-4) — a single-folder move used to
+/// pass just that one id, which correctly blocked "move Trips into Trips" but left a MULTI-folder
+/// batch's OTHER members unexcluded: selecting `Trips` + `Archive` and picking `Trips` as the
+/// destination guaranteed a per-item 400 for `Trips` with no indication in the picker itself that
+/// it was illegal — exactly the bug web's own `SpaceAlbumFolderPickerModal` (`excludeFolderIds`,
+/// `.some(...)`) already closed on this branch. [excludeFolderIds] empty (moving one or more
+/// ALBUMs) excludes nothing -- an album has no subtree, so every folder stays selectable (U-08).
 ///
 /// [currentFolderId] highlights the item's current location; it does not
 /// otherwise change selectability, so re-picking the current folder is a
@@ -29,22 +33,19 @@ class SpaceAlbumFolderPickerSheet extends StatelessWidget {
   const SpaceAlbumFolderPickerSheet({
     super.key,
     required this.folders,
-    required this.excludeFolderId,
+    this.excludeFolderIds = const [],
     required this.currentFolderId,
     required this.onSelect,
   });
 
   final List<SpaceAlbumFolder> folders;
-  final String? excludeFolderId;
+  final List<String> excludeFolderIds;
   final String? currentFolderId;
 
   /// Called with the chosen folder id, or `null` for the space root.
   final void Function(String? folderId) onSelect;
 
-  bool _isDisabled(String id) {
-    final exclude = excludeFolderId;
-    return exclude != null && (id == exclude || isDescendant(folders, id, exclude));
-  }
+  bool _isDisabled(String id) => excludeFolderIds.any((exclude) => id == exclude || isDescendant(folders, id, exclude));
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +110,7 @@ class SpaceAlbumFolderPickerSheet extends StatelessWidget {
 Future<({bool picked, String? folderId})> showSpaceAlbumFolderPicker(
   BuildContext context, {
   required List<SpaceAlbumFolder> folders,
-  String? excludeFolderId,
+  List<String> excludeFolderIds = const [],
   String? currentFolderId,
 }) async {
   final result = await showModalBottomSheet<({String? folderId})>(
@@ -117,7 +118,7 @@ Future<({bool picked, String? folderId})> showSpaceAlbumFolderPicker(
     isScrollControlled: true,
     builder: (sheetContext) => SpaceAlbumFolderPickerSheet(
       folders: folders,
-      excludeFolderId: excludeFolderId,
+      excludeFolderIds: excludeFolderIds,
       currentFolderId: currentFolderId,
       onSelect: (folderId) => Navigator.of(sheetContext).pop((folderId: folderId)),
     ),

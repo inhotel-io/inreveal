@@ -466,9 +466,10 @@ class SpaceAlbumsPage extends HookConsumerWidget {
         folders: folders,
         // The folder itself and its whole subtree must not be offered as a destination — a folder
         // can never become its own descendant. Same guard as the picker sheet's own Task 6
-        // `isDescendant` check; passing `excludeFolderId` here is what actually engages it for
-        // this call site (the album-move path above passes `null` since an album has no subtree).
-        excludeFolderId: folder.id,
+        // `isDescendant` check; passing `excludeFolderIds` here is what actually engages it for
+        // this call site (the album-move path above passes `const []` since an album has no
+        // subtree).
+        excludeFolderIds: [folder.id],
         currentFolderId: folder.parentId,
       );
       // Same picked-vs-folderId==null distinction as moveAlbumToFolder below: both a dismissal and
@@ -555,12 +556,12 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       final result = await showSpaceAlbumFolderPicker(
         context,
         folders: folders,
-        // A single folder still excludes itself (and its subtree) as an illegal destination,
-        // same as the single-item picker above. The picker widget only supports ONE excluded id,
-        // so a multi-folder batch can't pre-exclude every member's own subtree the way a fuller
-        // implementation might — an illegal member of a bigger batch simply comes back as a
-        // per-item failure from the server instead of being filtered out of the picker here.
-        excludeFolderId: kind == SpaceAlbumSelectionKind.folder && ids.length == 1 ? ids.first : null,
+        // Task 15 fix round 1 (I-4) — every selected folder (and each one's own subtree) is
+        // excluded, not just "the folder" for a single-folder batch: offering ANY batch member as
+        // a destination for the WHOLE batch guarantees that member's own move fails server-side
+        // (a folder can never become its own descendant), and the picker previously had no way to
+        // say so — see `SpaceAlbumFolderPickerSheet`'s own doc for the exact failure this closes.
+        excludeFolderIds: kind == SpaceAlbumSelectionKind.folder ? ids.toList() : const [],
         currentFolderId: currentFolderId,
       );
       if (!result.picked || !context.mounted) return;
@@ -668,7 +669,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
               final result = await showSpaceAlbumFolderPicker(
                 context,
                 folders: folders,
-                excludeFolderId: null,
+                excludeFolderIds: const [],
                 currentFolderId: album.folderId,
               );
               // Both a dismissal and picking the root resolve `folderId: null` — only `picked`

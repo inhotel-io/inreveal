@@ -229,14 +229,14 @@ class SharedSpaceApiRepository extends ApiRepository {
       checkNull(_api.bulkUnlinkAlbums(spaceId, SharedSpaceBulkAlbumIdsDto(ids: albumIds.toList())));
 
   /// Bulk-move several albums into a folder, or to the space root when [folderId] is null
-  /// (POST /shared-spaces/{id}/albums/bulk-set-folder).
+  /// (PUT /shared-spaces/{id}/albums/bulk-folder).
   Future<List<BulkIdResponseDto>> bulkSetAlbumFolder(String spaceId, Set<String> albumIds, {String? folderId}) =>
       checkNull(
         _api.bulkSetAlbumFolder(spaceId, SharedSpaceBulkAlbumFolderMoveDto(ids: albumIds.toList(), folderId: folderId)),
       );
 
-  /// Bulk-toggle the `showInTimeline` flag for several space-album links (POST
-  /// /shared-spaces/{id}/albums/bulk-set-timeline).
+  /// Bulk-toggle the `showInTimeline` flag for several space-album links (PUT
+  /// /shared-spaces/{id}/albums/bulk-timeline).
   Future<List<BulkIdResponseDto>> bulkSetAlbumTimeline(
     String spaceId,
     Set<String> albumIds, {
@@ -249,7 +249,7 @@ class SharedSpaceApiRepository extends ApiRepository {
   );
 
   /// Bulk-move several album folders under a new parent, or to the space root when [parentId] is
-  /// null (POST /shared-spaces/{id}/album-folders/bulk-move).
+  /// null (PUT /shared-spaces/{id}/album-folders/bulk-parent).
   Future<List<BulkIdResponseDto>> bulkMoveAlbumFolders(String spaceId, Set<String> folderIds, {String? parentId}) =>
       checkNull(
         _api.bulkMoveAlbumFolders(spaceId, SharedSpaceBulkFolderParentDto(ids: folderIds.toList(), parentId: parentId)),
