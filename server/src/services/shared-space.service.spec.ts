@@ -144,13 +144,15 @@ const setupBulkFolderEditor = (mocks: ServiceMocks, role: SharedSpaceRole = Shar
   return { auth, space, f1, f2, target };
 };
 
-/** Editor membership only — each bulk album method's checked core re-authorizes per item. */
-const setupBulkAlbumEditor = (mocks: ServiceMocks) => {
+/**
+ * Editor membership by default — each bulk album method's checked core re-authorizes per item.
+ * `role` lets callers build a viewer fixture for the hoisted-check tests on bulkSetAlbumFolder /
+ * bulkSetAlbumTimeline (Task 5 review — see the hoisted requireRole comment on those methods).
+ */
+const setupBulkAlbumEditor = (mocks: ServiceMocks, role: SharedSpaceRole = SharedSpaceRole.Editor) => {
   const auth = factory.auth({ user: { isAdmin: false } });
   const spaceId = newUuid();
-  mocks.sharedSpace.getMember.mockResolvedValue(
-    makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor }),
-  );
+  mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ spaceId, userId: auth.user.id, role }));
   return { auth, spaceId };
 };
 
@@ -9746,7 +9748,11 @@ describe(SharedSpaceService.name, () => {
       // C1 (fix round 1): hoisting a single requireRole(Editor) above the loop, then calling
       // setAlbumShowInTimeline directly (bypassing #setAlbumTimelineChecked entirely), passes
       // every assertion above. getMember — invoked via #setAlbumTimelineChecked's requireRole —
-      // must be re-evaluated once PER id, not once for the whole batch.
+      // must be re-evaluated once PER id, not once for the whole batch. Count is ids.length + 1:
+      // Task 5 review added its OWN hoisted requireRole (S-28/S-29, see the comment on
+      // bulkSetAlbumTimeline) so a viewer/non-member gets one 403 instead of every item
+      // reporting no_permission — that hoisted call is additional to, not a replacement for,
+      // the per-item one this test pins.
       it('re-authorizes for every id, not once for the whole batch', async () => {
         const { auth, spaceId } = setupBulkAlbumEditor(mocks);
         const [a1, a2, a3] = [newUuid(), newUuid(), newUuid()];
@@ -9754,7 +9760,19 @@ describe(SharedSpaceService.name, () => {
 
         await sut.bulkSetAlbumTimeline(auth, spaceId, { ids: [a1, a2, a3], showInTimeline: true });
 
-        expect(mocks.sharedSpace.getMember).toHaveBeenCalledTimes(3);
+        expect(mocks.sharedSpace.getMember).toHaveBeenCalledTimes(4);
+      });
+
+      // Task 5 review (RBAC gap found reviewing Task 4): spec S-28/S-29 require viewer -> 403 for
+      // the WHOLE call, matching bulkMoveAlbumFolders/bulkDeleteAlbumFolders below — this method
+      // previously had NO hoisted check, so a viewer got 200 with per-item no_permission instead.
+      it('rejects a viewer for the whole call, before touching the repository', async () => {
+        const { auth, spaceId } = setupBulkAlbumEditor(mocks, SharedSpaceRole.Viewer);
+
+        await expect(
+          sut.bulkSetAlbumTimeline(auth, spaceId, { ids: [newUuid()], showInTimeline: true }),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mocks.sharedSpace.setAlbumShowInTimeline).not.toHaveBeenCalled();
       });
     });
 
@@ -9795,8 +9813,19 @@ describe(SharedSpaceService.name, () => {
         const { auth, spaceId, a1, a2, f1 } = setupBulkSetAlbumFolder(mocks);
 
         await sut.bulkSetAlbumFolder(auth, spaceId, { ids: [a1, a2], folderId: f1 });
-
         expect(mocks.sharedSpace.getAlbumFolderById).toHaveBeenCalledTimes(2);
+      });
+
+      // Task 5 review (RBAC gap found reviewing Task 4): spec S-28/S-29 require viewer -> 403 for
+      // the WHOLE call, matching bulkMoveAlbumFolders/bulkDeleteAlbumFolders below — this method
+      // previously had NO hoisted check, so a viewer got 200 with per-item no_permission instead.
+      it('rejects a viewer for the whole call, before touching the repository', async () => {
+        const { auth, spaceId } = setupBulkAlbumEditor(mocks, SharedSpaceRole.Viewer);
+
+        await expect(
+          sut.bulkSetAlbumFolder(auth, spaceId, { ids: [newUuid()], folderId: newUuid() }),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mocks.sharedSpace.setAlbumLinkFolder).not.toHaveBeenCalled();
       });
     });
   });

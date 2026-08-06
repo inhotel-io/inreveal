@@ -994,6 +994,13 @@ export class SharedSpaceService extends BaseService {
     spaceId: string,
     dto: SharedSpaceBulkAlbumFolderMoveDto,
   ): Promise<BulkIdResponseDto[]> {
+    // Hoisted on top of the per-item check inside #setAlbumFolderChecked (spec S-28/S-29, fix
+    // round found during Task 4 review): unlike bulkUnlinkAlbums (S-29a — the album-owner arm
+    // needs a per-item decision), this endpoint has no owner-without-membership carve-out, so a
+    // viewer/non-member gets one clean 403 for the whole request instead of every item reporting
+    // no_permission. #setAlbumFolderChecked's own requireRole still runs per item — this does not
+    // replace it.
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     return this.#runBulk(dto.ids, (albumId) => this.#setAlbumFolderChecked(auth, spaceId, albumId, dto.folderId));
   }
 
@@ -1002,6 +1009,8 @@ export class SharedSpaceService extends BaseService {
     spaceId: string,
     dto: SharedSpaceBulkAlbumTimelineDto,
   ): Promise<BulkIdResponseDto[]> {
+    // See the comment on bulkSetAlbumFolder above — same hoist, same reasoning.
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     return this.#runBulk(dto.ids, (albumId) =>
       this.#setAlbumTimelineChecked(auth, spaceId, albumId, dto.showInTimeline),
     );
