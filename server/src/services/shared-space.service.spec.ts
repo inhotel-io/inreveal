@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { writeFile } from 'node:fs/promises';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { FACE_THUMBNAIL_SIZE } from 'src/constants';
+import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import {
@@ -121,6 +122,38 @@ const setupAlbumFolderMove = (
   mocks.sharedSpace.getAlbumFolderSubtree.mockResolvedValue([{ id: folder.id, depth: 0 }]);
   mocks.sharedSpace.moveAlbumFolderChecked.mockResolvedValue('ok');
   return { auth, space, folder, target };
+};
+
+/** Editor membership only — each bulk album method's checked core re-authorizes per item. */
+const setupBulkAlbumEditor = (mocks: ServiceMocks) => {
+  const auth = factory.auth({ user: { isAdmin: false } });
+  const spaceId = newUuid();
+  mocks.sharedSpace.getMember.mockResolvedValue(
+    makeMemberResult({ spaceId, userId: auth.user.id, role: SharedSpaceRole.Editor }),
+  );
+  return { auth, spaceId };
+};
+
+/** Helper to build an editor + three linked albums fixture for the bulkUnlinkAlbums tests below. */
+const setupBulkUnlinkAlbums = (mocks: ServiceMocks) => {
+  const { auth, spaceId } = setupBulkAlbumEditor(mocks);
+  const [a1, a2, a3] = [newUuid(), newUuid(), newUuid()];
+  mocks.sharedSpace.hasAlbumLink.mockResolvedValue(true);
+  mocks.album.getById.mockResolvedValue({ albumName: 'Trip' } as any);
+  mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue([]);
+  mocks.sharedSpace.removeAlbum.mockResolvedValue(void 0 as any);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  return { auth, spaceId, a1, a2, a3 };
+};
+
+/** Helper to build an editor + destination folder fixture for the bulkSetAlbumFolder tests below. */
+const setupBulkSetAlbumFolder = (mocks: ServiceMocks) => {
+  const { auth, spaceId } = setupBulkAlbumEditor(mocks);
+  const [a1, a2] = [newUuid(), newUuid()];
+  const f1 = newUuid();
+  mocks.sharedSpace.getAlbumFolderById.mockResolvedValue(albumFolderRow({ id: f1, spaceId }));
+  mocks.sharedSpace.setAlbumLinkFolder.mockResolvedValue(true);
+  return { auth, spaceId, a1, a2, f1 };
 };
 
 const makeRichRow = (over: Record<string, unknown> = {}) => {
@@ -9470,6 +9503,159 @@ describe(SharedSpaceService.name, () => {
       await expect(sut.updateAlbumLink(auth, space.id, newUuid(), { showInTimeline: false })).rejects.toThrow(
         ForbiddenException,
       );
+    });
+  });
+
+  describe('bulk album operations', () => {
+    describe('bulkUnlinkAlbums', () => {
+      it('returns one success entry per id, in request order', async () => {
+        const { auth, spaceId, a1, a2, a3 } = setupBulkUnlinkAlbums(mocks);
+
+        const result = await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2, a3] });
+
+        expect(result).toEqual([
+          { id: a1, success: true },
+          { id: a2, success: true },
+          { id: a3, success: true },
+        ]);
+      });
+
+      // Spec §6.3 — per-item authorization, not one space-level check. hasAlbumLink is the
+      // M11 guard inside #unlinkAlbumChecked, re-evaluated for every id.
+      it('reports not_found for one unlinked id and still processes the rest', async () => {
+        const { auth, spaceId, a1, a2, a3 } = setupBulkUnlinkAlbums(mocks);
+        mocks.sharedSpace.hasAlbumLink.mockImplementation((_spaceId: string, id: string) => Promise.resolve(id !== a2));
+
+        const result = await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2, a3] });
+
+        expect(result[1]).toEqual({
+          id: a2,
+          success: false,
+          error: BulkIdErrorReason.NOT_FOUND,
+          errorMessage: 'Album is not linked to this space',
+        });
+        expect(result[0].success).toBe(true);
+        expect(result[2].success).toBe(true);
+        // observable state, not just the envelope:
+        expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledTimes(2);
+      });
+
+      it('does not throw when every id fails', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkUnlinkAlbums(mocks);
+        mocks.sharedSpace.hasAlbumLink.mockResolvedValue(false);
+
+        const result = await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(result.every((r) => !r.success)).toBe(true);
+        expect(mocks.sharedSpace.removeAlbum).not.toHaveBeenCalled();
+      });
+
+      // E-3
+      it('deduplicates repeated ids', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkUnlinkAlbums(mocks);
+
+        const result = await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a1, a2] });
+
+        expect(result).toHaveLength(2);
+        expect(mocks.sharedSpace.removeAlbum).toHaveBeenCalledTimes(2);
+      });
+
+      // Spec §6.4 — one row for the batch, not one per album.
+      it('writes exactly one activity row for the batch', async () => {
+        const { auth, spaceId, a1, a2, a3 } = setupBulkUnlinkAlbums(mocks);
+
+        await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2, a3] });
+
+        expect(mocks.sharedSpace.logActivity).toHaveBeenCalledTimes(1);
+        expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: SharedSpaceActivityType.AlbumBulkUnlink,
+            data: expect.objectContaining({ count: 3 }),
+          }),
+        );
+      });
+
+      it('logs no activity row when every item failed', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkUnlinkAlbums(mocks);
+        mocks.sharedSpace.hasAlbumLink.mockResolvedValue(false);
+
+        await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
+      });
+
+      it('queues one grant reconcile covering every succeeded album', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkUnlinkAlbums(mocks);
+
+        await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(mocks.job.queue).toHaveBeenCalledTimes(1);
+        expect(mocks.job.queue).toHaveBeenCalledWith({
+          name: JobName.SharedSpaceAlbumGrantReconcile,
+          data: { albumIds: [a1, a2] },
+        });
+      });
+
+      // Task 2 review, trap 1: #unlinkAlbumChecked returns orphanedAssetIds but has ALREADY run
+      // removePersonFacesByAssetIds + deleteOrphanedPersons itself. If the bulk wrapper re-ran that
+      // cleanup over the batch union, an N-album unlink would double-sweep person-face deletes. This
+      // pins that the cleanup fires exactly once per orphaning item — from the checked core alone.
+      it('does not re-run orphan cleanup itself — the checked core already did it', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkUnlinkAlbums(mocks);
+        mocks.sharedSpace.getAlbumAssetIdsWithoutOtherSpacePath.mockResolvedValue(['orphan-asset']);
+        mocks.sharedSpace.removePersonFacesByAssetIds.mockResolvedValue([] as any);
+        mocks.sharedSpace.deleteOrphanedPersons.mockResolvedValue(void 0 as any);
+
+        await sut.bulkUnlinkAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(mocks.sharedSpace.removePersonFacesByAssetIds).toHaveBeenCalledTimes(2);
+        expect(mocks.sharedSpace.deleteOrphanedPersons).toHaveBeenCalledTimes(2);
+        // Documents (not asserts as desired behaviour) the known N-jobs gap from Task 2 review,
+        // trap 2: queueSpacePersonMetadataBackfill is still called inside the checked core, so
+        // this fires once per orphaning album PLUS the batch's one grant-reconcile call. Restructuring
+        // it is out of scope for Task 3 — see task-3-report.md.
+        expect(mocks.job.queue).toHaveBeenCalledTimes(3);
+      });
+    });
+
+    describe('bulkSetAlbumTimeline', () => {
+      it('applies the explicit boolean to every id', async () => {
+        const { auth, spaceId } = setupBulkAlbumEditor(mocks);
+        const [a1, a2] = [newUuid(), newUuid()];
+        mocks.sharedSpace.setAlbumShowInTimeline.mockResolvedValue(void 0 as any);
+
+        const result = await sut.bulkSetAlbumTimeline(auth, spaceId, { ids: [a1, a2], showInTimeline: true });
+
+        expect(result.every((r) => r.success)).toBe(true);
+        expect(mocks.sharedSpace.setAlbumShowInTimeline).toHaveBeenCalledWith(spaceId, a1, true);
+        expect(mocks.sharedSpace.setAlbumShowInTimeline).toHaveBeenCalledWith(spaceId, a2, true);
+      });
+    });
+
+    describe('bulkSetAlbumFolder', () => {
+      it('moves every album to the destination folder', async () => {
+        const { auth, spaceId, a1, a2, f1 } = setupBulkSetAlbumFolder(mocks);
+
+        const result = await sut.bulkSetAlbumFolder(auth, spaceId, { ids: [a1, a2], folderId: f1 });
+
+        expect(result.every((r) => r.success)).toBe(true);
+        expect(mocks.sharedSpace.setAlbumLinkFolder).toHaveBeenCalledTimes(2);
+      });
+
+      it('maps a name-conflict rejection to a validation entry, not a 500', async () => {
+        const { auth, spaceId, a1, a2, f1 } = setupBulkSetAlbumFolder(mocks);
+        mocks.sharedSpace.setAlbumLinkFolder.mockRejectedValueOnce(new BadRequestException('nope'));
+
+        const result = await sut.bulkSetAlbumFolder(auth, spaceId, { ids: [a1, a2], folderId: f1 });
+
+        expect(result[0]).toEqual({
+          id: a1,
+          success: false,
+          error: BulkIdErrorReason.VALIDATION,
+          errorMessage: 'nope',
+        });
+        expect(result[1].success).toBe(true);
+      });
     });
   });
 

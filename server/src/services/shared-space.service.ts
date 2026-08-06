@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { AssetFace, SharedSpacePerson } from 'src/database';
 import { OnEvent, OnJob } from 'src/decorators';
 import { MapAlbumDto, mapAlbum } from 'src/dtos/album.dto';
+import { BulkIdErrorReason, BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import type { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import type { MapMarkerResponseDto } from 'src/dtos/map.dto';
@@ -12,6 +13,11 @@ import {
   PersonFacePageResponseDto,
   PersonStatisticsResponseDto,
 } from 'src/dtos/person.dto';
+import {
+  SharedSpaceBulkAlbumFolderMoveDto,
+  SharedSpaceBulkAlbumIdsDto,
+  SharedSpaceBulkAlbumTimelineDto,
+} from 'src/dtos/shared-space-bulk.dto';
 import {
   SharedSpacePeopleStatisticsResponseDto,
   SharedSpacePersonAliasDto,
@@ -918,6 +924,85 @@ export class SharedSpaceService extends BaseService {
     if (!updated) {
       throw new BadRequestException('Album is not linked to this space');
     }
+  }
+
+  /**
+   * Runs `fn` per id and converts each outcome into a BulkIdResponseDto. Deliberately sequential:
+   * folder moves mutate the tree that later items are validated against (E-9/E-10), so parallelism
+   * would make results order-dependent in a way callers cannot reason about.
+   *
+   * Never throws for a per-item failure — the endpoint returns 200 with per-item reasons.
+   */
+  async #runBulk(ids: string[], fn: (id: string) => Promise<void>): Promise<BulkIdResponseDto[]> {
+    const results: BulkIdResponseDto[] = [];
+    for (const id of new Set(ids)) {
+      try {
+        await fn(id);
+        results.push({ id, success: true });
+      } catch (error) {
+        results.push({ id, success: false, ...this.#bulkErrorFor(error) });
+      }
+    }
+    return results;
+  }
+
+  #bulkErrorFor(error: unknown): { error: BulkIdErrorReason; errorMessage?: string } {
+    const message = error instanceof Error ? error.message : undefined;
+    if (error instanceof ForbiddenException) {
+      return { error: BulkIdErrorReason.NO_PERMISSION, errorMessage: message };
+    }
+    if (error instanceof NotFoundException) {
+      return { error: BulkIdErrorReason.NOT_FOUND, errorMessage: message };
+    }
+    if (error instanceof BadRequestException) {
+      return { error: BulkIdErrorReason.VALIDATION, errorMessage: message };
+    }
+    this.logger.error(`Bulk operation item failed: ${message}`);
+    return { error: BulkIdErrorReason.UNKNOWN, errorMessage: message };
+  }
+
+  async bulkUnlinkAlbums(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkAlbumIdsDto,
+  ): Promise<BulkIdResponseDto[]> {
+    const names = new Map<string, string>();
+    const results = await this.#runBulk(dto.ids, async (albumId) => {
+      const { albumName } = await this.#unlinkAlbumChecked(auth, spaceId, albumId);
+      names.set(albumId, albumName);
+    });
+
+    const succeeded = results.filter((r) => r.success).map((r) => r.id);
+    if (succeeded.length > 0) {
+      // ONE row for the batch (spec §6.4). albumName carries the first album so the feed can render
+      // "X and N others", mirroring how person_merge renders {personName, count}.
+      await this.sharedSpaceRepository.logActivity({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumBulkUnlink,
+        data: { count: succeeded.length, albumName: names.get(succeeded[0]) ?? '' },
+      });
+      await this.queueAlbumGrantReconcile(succeeded);
+    }
+    return results;
+  }
+
+  async bulkSetAlbumFolder(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkAlbumFolderMoveDto,
+  ): Promise<BulkIdResponseDto[]> {
+    return this.#runBulk(dto.ids, (albumId) => this.#setAlbumFolderChecked(auth, spaceId, albumId, dto.folderId));
+  }
+
+  async bulkSetAlbumTimeline(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkAlbumTimelineDto,
+  ): Promise<BulkIdResponseDto[]> {
+    return this.#runBulk(dto.ids, (albumId) =>
+      this.#setAlbumTimelineChecked(auth, spaceId, albumId, dto.showInTimeline),
+    );
   }
 
   async getLinkedAlbums(auth: AuthDto, spaceId: string): Promise<SharedSpaceLinkedAlbumDto[]> {
