@@ -1615,4 +1615,198 @@ void main() {
       await settleToast(tester);
     },
   );
+
+  // ---------------------------------------------------------------------
+  // Task 14 — multi-select gestures, selection bar, and the selection
+  // PopScope (S-14, S-15, S-3 on mobile, S-10 on mobile, S-16, S-16a/E-21).
+  // ---------------------------------------------------------------------
+
+  /// Pushes [SpaceAlbumsPage] onto a real AutoRoute stack (harness home a plain placeholder,
+  /// matching [pumpRoutedPage] above) with a THIRD route registered under
+  /// [SpaceAlbumDetailRoute]'s own name — a stub page that records the tapped album id into
+  /// [openedAlbumIds] instead of building the real (heavyweight, DB-backed)
+  /// `SpaceAlbumDetailPage`. A real router is required (not the router-less [pumpPage]) because
+  /// proving "tap with no selection opens the album" (S-3) means proving `context.pushRoute`
+  /// actually fires — which throws with no `AutoRouter` ancestor at all.
+  Future<RootStackRouter> pumpSpaceAlbumsPage(
+    WidgetTester tester, {
+    required List<SpaceAlbum> albums,
+    List<SpaceAlbumFolder> folders = const [],
+    String? folderId,
+    bool canManage = true,
+    required List<String> openedAlbumIds,
+  }) async {
+    final router = RootStackRouter.build(
+      routes: [
+        AutoRoute(initial: true, page: PageInfo('SpaceAlbumsHarness', builder: (_) => const SizedBox.shrink())),
+        AutoRoute(page: SpaceAlbumsRoute.page),
+        AutoRoute(
+          page: PageInfo(
+            SpaceAlbumDetailRoute.name,
+            builder: (data) {
+              final args = data.argsAs<SpaceAlbumDetailRouteArgs>();
+              openedAlbumIds.add(args.albumId);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: locales.values.toList(),
+        path: translationsPath,
+        startLocale: locales.values.first,
+        fallbackLocale: locales.values.first,
+        saveLocale: false,
+        useFallbackTranslations: true,
+        assetLoader: const CodegenLoader(),
+        child: ProviderScope(
+          overrides: [
+            spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
+            spaceAlbumFoldersProvider(spaceId).overrideWith((_) => Stream.value(folders)),
+          ],
+          child: Builder(
+            builder: (context) => MaterialApp.router(
+              debugShowCheckedModeBanner: false,
+              routerConfig: router.config(),
+              localizationsDelegates: context.localizationDelegates,
+              supportedLocales: context.supportedLocales,
+              locale: context.locale,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    // NOT awaited — see the identical comment on `pumpRoutedPage` above: `push`'s Future only
+    // resolves once this route is popped.
+    unawaited(router.push(SpaceAlbumsRoute(spaceId: spaceId, canEdit: canManage, folderId: folderId)));
+    await tester.pumpAndSettle();
+    return router;
+  }
+
+  testWidgets('S-14: long-press enters selection mode with that album selected', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(openedAlbumIds, isEmpty); // long-press must not also open the album
+  });
+
+  testWidgets('S-15: tap toggles a second album once selection mode is active', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-card-b')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 selected'), findsOneWidget);
+    expect(openedAlbumIds, isEmpty); // tap must not navigate while selecting
+  });
+
+  testWidgets('S-3 on mobile: tap with no selection opens the album', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(tester, albums: [album('a', 'Album A')], openedAlbumIds: openedAlbumIds);
+
+    await tester.tap(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+
+    expect(openedAlbumIds, ['a']);
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+  });
+
+  testWidgets('S-10 on mobile: long-press does nothing when canManage is false', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [album('a', 'Album A')],
+      canManage: false,
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+  });
+
+  testWidgets('S-16: back exits selection before popping', (tester) async {
+    final openedAlbumIds = <String>[];
+    final router = await pumpSpaceAlbumsPage(tester, albums: [album('a', 'Album A')], openedAlbumIds: openedAlbumIds);
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+
+    // First back: exits selection, page stays displayed.
+    await router.maybePop();
+    await tester.pumpAndSettle();
+    expect(find.byType(SpaceAlbumsPage), findsOneWidget);
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+
+    // Second back: no selection left to intercept — the page pops normally.
+    await router.maybePop();
+    await tester.pumpAndSettle();
+    expect(find.byType(SpaceAlbumsPage), findsNothing);
+  });
+
+  // S-16a / E-21 — the interaction guard: the selection PopScope must not veto the pre-existing
+  // folder-vanished self-pop (U-11 stacked, above). Reuses that harness
+  // (`pumpStackedFolderPagesWithFolderStream`) exactly, plus a selection entered on the page
+  // that will end up buried WHILE it is still topmost — a buried page's widgets are not
+  // independently interactable in this harness (see the comment on the sibling U-11 stacked
+  // tests above) — then buries it under a second push before driving the vanish.
+  testWidgets('S-16a/E-21: the selection PopScope does not veto the folder-vanished self-pop', (tester) async {
+    final controller = StreamController<List<SpaceAlbumFolder>>();
+    addTearDown(controller.close);
+    final router = await pumpStackedFolderPagesWithFolderStream(
+      tester,
+      controller.stream,
+      folderIds: ['folder-a'],
+      albums: [album('a1', 'Rome', folderId: 'folder-a')],
+    );
+
+    controller.add([folder('folder-a', 'Folder A')]);
+    await tester.pumpAndSettle();
+    expect(router.stackData.length, 2); // harness + A
+
+    // Select an album on A while it is still topmost and interactable.
+    await tester.longPress(find.byKey(const Key('space-album-card-a1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+
+    // Bury A under B — the selection stays live (A is covered, not disposed).
+    unawaited(router.push(SpaceAlbumsRoute(spaceId: spaceId, canEdit: true, folderId: 'folder-b')));
+    await tester.pumpAndSettle();
+    expect(router.stackData.length, 3); // harness + A + B
+
+    // folder-a (A's own folder) vanishes while A is buried, selection still active on A.
+    controller.add([folder('folder-b', 'Folder B')]);
+    await tester.pumpAndSettle();
+    expect(router.stackData.length, 3); // nothing popped yet — A is buried, now pending
+
+    // The user backs out of B. A becomes topmost and must self-pop despite the earlier
+    // selection — proving the selection was cleared before `maybePop` ran, not vetoed by it.
+    await router.maybePop();
+    await tester.pumpAndSettle();
+
+    expect(router.stackData.length, 1); // harness root only — A left the stack
+    expect(find.byType(SpaceAlbumsPage), findsNothing);
+  });
 }
