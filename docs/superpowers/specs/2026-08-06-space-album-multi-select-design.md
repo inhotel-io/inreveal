@@ -441,13 +441,30 @@ and the HTTP status is 200.
 
 **S-28 Viewer is refused**
 Given a space viewer
-When they call any bulk endpoint
+When they call any bulk endpoint **except `albums/bulk-unlink`**
 Then the response is 403 and nothing changed.
 
 **S-29 Non-member is refused**
 Given a user who is not a member of the space
-When they call any bulk endpoint
+When they call any bulk endpoint **except `albums/bulk-unlink`**
 Then the response is 403.
+
+**S-29a `albums/bulk-unlink` refuses per item, not per request**
+Given a space viewer who owns none of the albums in the batch
+When they call `POST :id/albums/bulk-unlink`
+Then the response is **200** and every entry is `success: false, error: no_permission`, and nothing changed.
+And given a non-member who owns one of the albums in the batch
+Then that album's entry is `success: true` and the others are `no_permission`.
+
+> **Why this endpoint differs** (amended 2026-08-06, during implementation). The other four bulk
+> endpoints are space-Editor-only, so a single hoisted `requireRole(Editor)` is equivalent to
+> checking per item and gives the cleaner 403. `unlinkAlbum` is not: it carries a deliberate owner
+> arm (the `rbac-6` block in `shared-space.service.ts`) letting an album's owner revoke a link to
+> their own album **even without space membership** — otherwise an owner could neither discover nor
+> undo an editor's link. Hoisting `requireRole(Editor)` there would silently narrow that rule, so
+> this endpoint authorizes per item and reports per item. The UI never exercises the difference:
+> selection is gated on `canManage` (§4.4), so a viewer never reaches any of these endpoints from
+> the app.
 
 **S-30 Bulk move rejects a cycle**
 Given folders F and G where G is a child of F
