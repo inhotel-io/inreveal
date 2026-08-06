@@ -533,19 +533,52 @@ git commit -m "feat(server): add bulk unlink, folder and timeline space album op
 **Interfaces:**
 
 - Consumes: Task 1's DTOs, Task 3's `#runBulk`.
-- Produces: `bulkMoveAlbumFolders(auth, spaceId, dto: SharedSpaceBulkFolderParentDto): Promise<BulkIdResponseDto[]>` and `bulkDeleteAlbumFolders(auth, spaceId, dto: SharedSpaceBulkFolderIdsDto): Promise<BulkIdResponseDto[]>`.
+- Produces:
+  - `bulkMoveAlbumFolders(auth, spaceId, dto: SharedSpaceBulkFolderParentDto): Promise<BulkIdResponseDto[]>`
+  - `bulkDeleteAlbumFolders(auth, spaceId, dto: SharedSpaceBulkFolderIdsDto): Promise<BulkIdResponseDto[]>`
+  - private `#moveAlbumFolderOrThrow(spaceId: string, folderId: string, destinationParentId: string \| null, name?: string): Promise<void>` — extracted from `updateAlbumFolder`'s move branch and called by both it and the bulk mover.
 
-**The load-bearing property:** bulk folder move must delegate to `moveAlbumFolderChecked` per item. That method carries the advisory lock and cycle detection; a bulk mover issuing its own `UPDATE` bypasses both.
+**Read this before writing code — the naming is a trap.** `moveAlbumFolderChecked` is a **repository** method, not a service method:
+
+```ts
+// server/src/repositories/shared-space.repository.ts:1423
+moveAlbumFolderChecked(
+  spaceId: string,
+  folderId: string,
+  newParentId: string | null,
+  name?: string,
+): Promise<'ok' | 'cycle' | 'notfound'>;
+```
+
+It takes no `auth`, and it **resolves with an outcome string — it does not throw**. The service's move branch (`shared-space.service.ts:1015-1044`) wraps it with three things the repository does not do:
+
+1. the depth check against `SHARED_SPACE_ALBUM_FOLDER_MAX_DEPTH`;
+2. `assertNoAlbumFolderNameConflict(spaceId, destinationParentId, name, folderId)`;
+3. `withAlbumFolderNameConflictMapped(...)` plus mapping `'cycle'` and `'notfound'` to `BadRequestException`.
+
+**Calling the repository directly from the bulk method would skip all three** — which is precisely the bypass this task exists to prevent. Extract the service's move branch into `#moveAlbumFolderOrThrow` and have both callers use it. Do not duplicate its body.
 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
 describe('bulkMoveAlbumFolders', () => {
+  beforeEach(() => {
+    // The repo method RESOLVES with an outcome; it never rejects. Default every call to 'ok'.
+    mocks.sharedSpace.moveAlbumFolderChecked.mockResolvedValue('ok');
+  });
+
   // Spec §6.3 — the guard against reopening the bypass that narrowing updateAlbumFolder closed.
-  it('delegates every move to moveAlbumFolderChecked and never to a raw update', async () => {
+  it('delegates every move to the repository moveAlbumFolderChecked and never to a raw update', async () => {
     await sut.bulkMoveAlbumFolders(authStub.admin, spaceId, { ids: [f1, f2], parentId: f3 });
     expect(mocks.sharedSpace.moveAlbumFolderChecked).toHaveBeenCalledTimes(2);
     expect(mocks.sharedSpace.updateAlbumFolder).not.toHaveBeenCalled();
+  });
+
+  // The repo takes (spaceId, folderId, newParentId, name?) — no auth. Pin the argument order so a
+  // refactor cannot silently swap folderId and parentId.
+  it('passes spaceId, folderId and the destination parent in that order', async () => {
+    await sut.bulkMoveAlbumFolders(authStub.admin, spaceId, { ids: [f1], parentId: f3 });
+    expect(mocks.sharedSpace.moveAlbumFolderChecked).toHaveBeenCalledWith(spaceId, f1, f3, undefined);
   });
 
   it('processes ids in request order so an earlier move constrains a later one', async () => {
@@ -553,11 +586,28 @@ describe('bulkMoveAlbumFolders', () => {
     expect(mocks.sharedSpace.moveAlbumFolderChecked.mock.calls.map((c) => c[1])).toEqual([f1, f2]);
   });
 
-  it('maps a cycle rejection to a validation entry and continues', async () => {
-    mocks.sharedSpace.moveAlbumFolderChecked.mockRejectedValueOnce(new BadRequestException('cycle'));
+  // The 'cycle' OUTCOME, not a rejection. A test that mocked a rejection here would pass against an
+  // implementation that ignores the outcome value entirely.
+  it('maps a cycle outcome to a validation entry and continues with the next id', async () => {
+    mocks.sharedSpace.moveAlbumFolderChecked.mockResolvedValueOnce('cycle');
     const result = await sut.bulkMoveAlbumFolders(authStub.admin, spaceId, { ids: [f1, f2], parentId: f3 });
     expect(result[0]).toMatchObject({ id: f1, success: false, error: BulkIdErrorReason.VALIDATION });
     expect(result[1].success).toBe(true);
+  });
+
+  it('maps a notfound outcome to a validation entry', async () => {
+    mocks.sharedSpace.moveAlbumFolderChecked.mockResolvedValueOnce('notfound');
+    const result = await sut.bulkMoveAlbumFolders(authStub.admin, spaceId, { ids: [f1], parentId: f3 });
+    expect(result[0]).toMatchObject({ id: f1, success: false, error: BulkIdErrorReason.VALIDATION });
+  });
+
+  // E-12: the depth guard lives in the SERVICE, above the repo call. If the bulk path called the
+  // repository directly this test fails — which is the point.
+  it('rejects a move that would exceed the depth limit before touching the repository', async () => {
+    mocks.sharedSpace.getAlbumFolderDepth.mockResolvedValue(SHARED_SPACE_ALBUM_FOLDER_MAX_DEPTH);
+    const result = await sut.bulkMoveAlbumFolders(authStub.admin, spaceId, { ids: [f1], parentId: f3 });
+    expect(result[0]).toMatchObject({ success: false, error: BulkIdErrorReason.VALIDATION });
+    expect(mocks.sharedSpace.moveAlbumFolderChecked).not.toHaveBeenCalled();
   });
 });
 
@@ -585,18 +635,43 @@ Expected: FAIL — `sut.bulkMoveAlbumFolders is not a function`.
 - [ ] **Step 3: Implement**
 
 ```ts
+/**
+ * The move branch lifted verbatim out of updateAlbumFolder (:1015-1044) so the single-item and
+ * bulk paths cannot drift. Everything here sits ABOVE the repository call and is exactly what a
+ * direct repository call would skip: the depth guard, the name-conflict pre-check, and turning the
+ * repository's outcome string into an exception.
+ */
+async #moveAlbumFolderOrThrow(
+  spaceId: string,
+  folderId: string,
+  destinationParentId: string | null,
+  name?: string,
+): Promise<void> {
+  // ...depth check against SHARED_SPACE_ALBUM_FOLDER_MAX_DEPTH, moved here unchanged...
+  await this.assertNoAlbumFolderNameConflict(spaceId, destinationParentId, name, folderId);
+
+  const outcome = await this.withAlbumFolderNameConflictMapped(() =>
+    this.sharedSpaceRepository.moveAlbumFolderChecked(spaceId, folderId, destinationParentId, name),
+  );
+  if (outcome === 'cycle') {
+    throw new BadRequestException('A folder cannot be moved into one of its own descendants');
+  }
+  if (outcome === 'notfound') {
+    throw new BadRequestException('Folder not found');
+  }
+}
+
 async bulkMoveAlbumFolders(
   auth: AuthDto,
   spaceId: string,
   dto: SharedSpaceBulkFolderParentDto,
 ): Promise<BulkIdResponseDto[]> {
   await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
-  // Sequential and per-item on purpose: moveAlbumFolderChecked takes the advisory lock and runs
-  // cycle + depth detection against the tree AS IT IS NOW, and earlier items in this batch change
-  // that tree (E-9, E-10). A raw bulk UPDATE here would bypass both.
-  return this.#runBulk(dto.ids, (folderId) =>
-    this.moveAlbumFolderChecked(auth, spaceId, folderId, dto.parentId),
-  );
+  // Sequential and per-item on purpose: the repository call takes the advisory lock and runs cycle
+  // detection against the tree AS IT IS NOW, and earlier items in this batch change that tree
+  // (E-9, E-10). A raw bulk UPDATE — or a direct repository call — bypasses the depth and
+  // name-conflict guards above it.
+  return this.#runBulk(dto.ids, (folderId) => this.#moveAlbumFolderOrThrow(spaceId, folderId, dto.parentId));
 }
 
 async bulkDeleteAlbumFolders(
@@ -605,11 +680,13 @@ async bulkDeleteAlbumFolders(
   dto: SharedSpaceBulkFolderIdsDto,
 ): Promise<BulkIdResponseDto[]> {
   await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+  // deleteAlbumFolder re-checks the role per item; that is redundant here but harmless, and
+  // reusing it verbatim keeps the promoting-delete semantics in exactly one place.
   return this.#runBulk(dto.ids, (folderId) => this.deleteAlbumFolder(auth, spaceId, folderId));
 }
 ```
 
-If `moveAlbumFolderChecked` is currently private or only reachable through `updateAlbumFolder`, expose the checked path as a private service method used by both callers rather than duplicating its body — read `updateAlbumFolder`'s move branch first and reuse it verbatim.
+Then rewrite `updateAlbumFolder`'s `if (isMove)` branch to call `#moveAlbumFolderOrThrow` too, and re-run the existing folder tests to prove the extraction changed nothing.
 
 - [ ] **Step 4: Run to verify they pass**
 
@@ -649,7 +726,7 @@ describe('bulk endpoints', () => {
   it('R-20 unlinks a batch and reports per-item outcomes', async () => {
     const { status, body } = await request(app)
       .post(`/shared-spaces/${space.id}/albums/bulk-unlink`)
-      .set('Authorization', `Bearer ${editor.accessToken}`)
+      .set(asBearerAuth(editor.accessToken))
       .send({ ids: [albumA.id, foreignAlbum.id] });
     expect(status).toBe(200);
     expect(body).toEqual([
@@ -657,9 +734,7 @@ describe('bulk endpoints', () => {
       expect.objectContaining({ id: foreignAlbum.id, success: false, error: 'not_found' }),
     ]);
 
-    const list = await request(app)
-      .get(`/shared-spaces/${space.id}/albums`)
-      .set('Authorization', `Bearer ${editor.accessToken}`);
+    const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
     expect(list.body.map((l: { albumId: string }) => l.albumId)).not.toContain(albumA.id);
   });
 
@@ -667,7 +742,7 @@ describe('bulk endpoints', () => {
   it('R-21 refuses a viewer with 403', async () => {
     const { status } = await request(app)
       .post(`/shared-spaces/${space.id}/albums/bulk-unlink`)
-      .set('Authorization', `Bearer ${viewer.accessToken}`)
+      .set(asBearerAuth(viewer.accessToken))
       .send({ ids: [albumB.id] });
     expect(status).toBe(403);
   });
@@ -676,7 +751,7 @@ describe('bulk endpoints', () => {
   it('R-22 refuses a non-member with 403', async () => {
     const { status } = await request(app)
       .post(`/shared-spaces/${space.id}/albums/bulk-unlink`)
-      .set('Authorization', `Bearer ${stranger.accessToken}`)
+      .set(asBearerAuth(stranger.accessToken))
       .send({ ids: [albumB.id] });
     expect(status).toBe(403);
   });
@@ -685,7 +760,7 @@ describe('bulk endpoints', () => {
   it('R-23 rejects an empty ids array with 400', async () => {
     const { status } = await request(app)
       .post(`/shared-spaces/${space.id}/albums/bulk-unlink`)
-      .set('Authorization', `Bearer ${editor.accessToken}`)
+      .set(asBearerAuth(editor.accessToken))
       .send({ ids: [] });
     expect(status).toBe(400);
   });
@@ -693,14 +768,12 @@ describe('bulk endpoints', () => {
   it('R-24 moves a batch of albums into a folder and the list reflects it', async () => {
     const { status, body } = await request(app)
       .put(`/shared-spaces/${space.id}/albums/bulk-folder`)
-      .set('Authorization', `Bearer ${editor.accessToken}`)
+      .set(asBearerAuth(editor.accessToken))
       .send({ ids: [albumB.id, albumC.id], folderId: folder.id });
     expect(status).toBe(200);
     expect(body.every((r: { success: boolean }) => r.success)).toBe(true);
 
-    const list = await request(app)
-      .get(`/shared-spaces/${space.id}/albums`)
-      .set('Authorization', `Bearer ${editor.accessToken}`);
+    const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
     const placed = list.body.filter((l: { folderId: string | null }) => l.folderId === folder.id);
     expect(placed).toHaveLength(2);
   });
@@ -708,12 +781,10 @@ describe('bulk endpoints', () => {
   it('R-25 applies the timeline flag to a batch', async () => {
     const { status } = await request(app)
       .put(`/shared-spaces/${space.id}/albums/bulk-timeline`)
-      .set('Authorization', `Bearer ${editor.accessToken}`)
+      .set(asBearerAuth(editor.accessToken))
       .send({ ids: [albumB.id], showInTimeline: false });
     expect(status).toBe(200);
-    const list = await request(app)
-      .get(`/shared-spaces/${space.id}/albums`)
-      .set('Authorization', `Bearer ${editor.accessToken}`);
+    const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
     expect(list.body.find((l: { albumId: string }) => l.albumId === albumB.id).showInTimeline).toBe(false);
   });
 
@@ -721,7 +792,7 @@ describe('bulk endpoints', () => {
   it('R-26 rejects a cycle in a bulk folder move with a validation entry', async () => {
     const { status, body } = await request(app)
       .put(`/shared-spaces/${space.id}/album-folders/bulk-parent`)
-      .set('Authorization', `Bearer ${editor.accessToken}`)
+      .set(asBearerAuth(editor.accessToken))
       .send({ ids: [parentFolder.id], parentId: childFolder.id });
     expect(status).toBe(200);
     expect(body[0]).toMatchObject({ success: false, error: 'validation' });
@@ -731,19 +802,17 @@ describe('bulk endpoints', () => {
   it('R-27 bulk deletes folders and promotes their children', async () => {
     const { status } = await request(app)
       .post(`/shared-spaces/${space.id}/album-folders/bulk-delete`)
-      .set('Authorization', `Bearer ${editor.accessToken}`)
+      .set(asBearerAuth(editor.accessToken))
       .send({ ids: [folder.id] });
     expect(status).toBe(200);
-    const list = await request(app)
-      .get(`/shared-spaces/${space.id}/albums`)
-      .set('Authorization', `Bearer ${editor.accessToken}`);
+    const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
     expect(list.body.find((l: { albumId: string }) => l.albumId === albumB.id).folderId).toBeNull();
   });
 
   it('R-28 refuses a viewer on bulk folder delete with 403', async () => {
     const { status } = await request(app)
       .post(`/shared-spaces/${space.id}/album-folders/bulk-delete`)
-      .set('Authorization', `Bearer ${viewer.accessToken}`)
+      .set(asBearerAuth(viewer.accessToken))
       .send({ ids: [folder.id] });
     expect(status).toBe(403);
   });
@@ -770,7 +839,7 @@ Expected: FAIL with 404s — the routes do not exist.
 })
 bulkUnlinkAlbums(
   @Auth() auth: AuthDto,
-  @Param() { id }: SharedSpaceIdParamDto,
+  @Param() { id }: UUIDParamDto,
   @Body() dto: SharedSpaceBulkAlbumIdsDto,
 ): Promise<BulkIdResponseDto[]> {
   return this.service.bulkUnlinkAlbums(auth, id, dto);
@@ -1347,43 +1416,90 @@ git commit -m "feat(web): add space album bulk action helpers"
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
-// S-1, S-2, S-3
+const props = {
+  spaceId: 'space-1',
+  albums: [linkedAlbum('a'), linkedAlbum('b')],
+  folders: [folderDto('f')],
+  canManage: true,
+  currentFolderId: null,
+  searchQuery: '',
+};
+
+// S-1
 it('clicking the check circle enters selection without navigating', async () => {
-  /* ... */
+  const onOpen = vi.fn();
+  render(SpaceAlbumsList, { ...props, onOpenAlbum: onOpen });
+  await fireEvent.click(screen.getByTestId('space-album-select-a'));
+  expect(screen.getByTestId('space-album-select-bar')).toBeInTheDocument();
+  expect(onOpen).not.toHaveBeenCalled();
 });
+
+// S-2
 it('clicking a card while a selection is active toggles instead of navigating', async () => {
-  /* ... */
+  const onOpen = vi.fn();
+  render(SpaceAlbumsList, { ...props, onOpenAlbum: onOpen });
+  await fireEvent.click(screen.getByTestId('space-album-select-a'));
+  await fireEvent.click(screen.getByTestId('space-album-card-b'));
+  expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+  expect(onOpen).not.toHaveBeenCalled();
 });
+
+// S-3
 it('clicking a card with no selection opens the album', async () => {
-  /* ... */
+  const onOpen = vi.fn();
+  render(SpaceAlbumsList, { ...props, onOpenAlbum: onOpen });
+  await fireEvent.click(screen.getByTestId('space-album-card-b'));
+  expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }));
+  expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
 });
 
 // S-9 — the trigger AppNavigate does NOT cover.
 it('clears the selection when currentFolderId changes', async () => {
   const { rerender } = render(SpaceAlbumsList, { ...props, currentFolderId: null });
-  // select two albums
-  expect(manager.count).toBe(2);
+  await fireEvent.click(screen.getByTestId('space-album-select-a'));
+  await fireEvent.click(screen.getByTestId('space-album-select-b'));
+  expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+
   await rerender({ ...props, currentFolderId: 'folder-1' });
-  expect(manager.count).toBe(0);
+  expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
 });
 
 // S-9b — searchQuery is local $state, so no navigation fires at all.
 it('clears the selection when searchQuery changes', async () => {
   const { rerender } = render(SpaceAlbumsList, { ...props, searchQuery: 'be' });
-  // select one album
-  expect(manager.count).toBe(1);
+  await fireEvent.click(screen.getByTestId('space-album-select-a'));
+  expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
   await rerender({ ...props, searchQuery: 'bea' });
-  expect(manager.count).toBe(0);
+  expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
 });
 
 // S-10
 it('renders no check circle when canManage is false', async () => {
-  /* ... */
+  render(SpaceAlbumsList, { ...props, canManage: false });
+  // Positive control: the cards themselves ARE rendered, so this is not vacuous.
+  expect(screen.getByTestId('space-album-card-a')).toBeInTheDocument();
+  expect(screen.queryByTestId('space-album-select-a')).not.toBeInTheDocument();
 });
 
 // S-13
 it('offers move and delete but not unlink for a folder selection', async () => {
-  /* ... */
+  render(SpaceAlbumsList, props);
+  await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+  const bar = screen.getByTestId('space-album-select-bar');
+  expect(within(bar).getByRole('button', { name: 'space_album_folder_move' })).toBeInTheDocument();
+  expect(within(bar).getByRole('button', { name: 'space_album_folder_delete' })).toBeInTheDocument();
+  expect(within(bar).queryByRole('button', { name: 'space_album_unlink_from_space' })).not.toBeInTheDocument();
+});
+
+// S-11 at the component level: selecting a folder replaces an album selection.
+it('replaces an album selection when a folder is selected', async () => {
+  render(SpaceAlbumsList, props);
+  await fireEvent.click(screen.getByTestId('space-album-select-a'));
+  expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'); // positive control
+  await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+  expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+  expect(screen.getByTestId('space-album-card-a')).not.toHaveAttribute('data-selected', 'true');
 });
 ```
 
@@ -1474,16 +1590,73 @@ it('dragging an unselected card carries only that card', () => {
   expect(payload.ids).toEqual(['d']);
 });
 
-// S-18 / S-19
-it('labels the timeline button by the derived state', () => {
-  /* isAllInTimeline true -> Remove */
+// S-19: every selected album is already in the timeline -> the button offers to remove.
+it('labels the timeline button "Remove from timeline" when all are included', async () => {
+  render(SpaceAlbumSelectBar, {
+    props: { kind: 'album', selected: [albumIn('a'), albumIn('b')], onAction: vi.fn() },
+  });
+  expect(screen.getByRole('button', { name: 'space_album_bulk_remove_from_timeline' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'space_album_bulk_add_to_timeline' })).not.toBeInTheDocument();
 });
 
-// S-24
+// S-18: a mixed selection resolves toward include.
+it('labels the timeline button "Add to timeline" when any is excluded', async () => {
+  render(SpaceAlbumSelectBar, {
+    props: { kind: 'album', selected: [albumIn('a'), albumOut('b')], onAction: vi.fn() },
+  });
+  expect(screen.getByRole('button', { name: 'space_album_bulk_add_to_timeline' })).toBeInTheDocument();
+});
+
+it('sends showInTimeline true for a mixed selection', async () => {
+  const onAction = vi.fn();
+  render(SpaceAlbumSelectBar, { props: { kind: 'album', selected: [albumIn('a'), albumOut('b')], onAction } });
+  await fireEvent.click(screen.getByRole('button', { name: 'space_album_bulk_add_to_timeline' }));
+  expect(onAction).toHaveBeenCalledWith({ type: 'timeline', showInTimeline: true });
+});
+
+// S-24: exactly the failures stay selected, and the successes do not.
 it('keeps exactly the failed items selected after a partial failure', async () => {
-  /* ... */
+  const manager = new SpaceAlbumMultiSelectManager();
+  const order = ['a', 'b', 'c'];
+  for (const id of order) {
+    manager.toggle('album', id, order);
+  }
+  expect(manager.count).toBe(3); // positive control
+
+  vi.mocked(bulkUnlinkAlbums).mockResolvedValue([
+    { id: 'a', success: true },
+    { id: 'b', success: false, error: 'no_permission' },
+    { id: 'c', success: true },
+  ] as never);
+
+  await runBulkUnlink(manager, 'space-1', order);
+
+  expect(manager.ids).toEqual(['b']);
+  expect(manager.kind).toBe('album');
+});
+
+// S-26
+it('clears the selection when every item succeeded', async () => {
+  const manager = new SpaceAlbumMultiSelectManager();
+  manager.toggle('album', 'a', ['a']);
+  vi.mocked(bulkUnlinkAlbums).mockResolvedValue([{ id: 'a', success: true }] as never);
+  await runBulkUnlink(manager, 'space-1', ['a']);
+  expect(manager.selectionActive).toBe(false);
+});
+
+// E-19: a thrown request must not deselect anything.
+it('keeps the whole selection when the request throws', async () => {
+  const manager = new SpaceAlbumMultiSelectManager();
+  for (const id of ['a', 'b']) {
+    manager.toggle('album', id, ['a', 'b']);
+  }
+  vi.mocked(bulkUnlinkAlbums).mockRejectedValue(new Error('offline'));
+  await runBulkUnlink(manager, 'space-1', ['a', 'b']);
+  expect(manager.ids.sort()).toEqual(['a', 'b']);
 });
 ```
+
+`albumIn(id)` / `albumOut(id)` are local helpers returning a `SharedSpaceLinkedAlbumDto`-shaped object with `showInTimeline` true/false. `runBulkUnlink(manager, spaceId, ids)` is the action wrapper from Task 10; it must catch a thrown request and treat every id as failed, which is what the last test pins.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -1522,7 +1695,13 @@ Mirrors Task 9's semantics minus ranges (no Shift on mobile).
 - [ ] **Step 1: Write the failing tests**
 
 ```dart
-test('toggling an album selects it', () { /* ... */ });
+test('toggling an album selects it', () {
+  notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+  final state = container.read(provider);
+  expect(state.kind, SpaceAlbumSelectionKind.album);
+  expect(state.ids, {'a'});
+  expect(state.isEmpty, isFalse);
+});
 test('selecting a folder replaces an album selection', () {
   notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
   notifier.toggle(SpaceAlbumSelectionKind.album, 'b');
@@ -1531,8 +1710,27 @@ test('selecting a folder replaces an album selection', () {
   expect(container.read(provider).kind, SpaceAlbumSelectionKind.folder);
   expect(container.read(provider).ids, {'f'});
 });
-test('toggling the last item empties the selection', () { /* ... */ });
-test('reconcile drops ids that no longer exist', () { /* ... */ });
+test('toggling the last item empties the selection', () {
+  notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+  expect(container.read(provider).isEmpty, isFalse); // positive control
+  notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+  final state = container.read(provider);
+  expect(state.isEmpty, isTrue);
+  expect(state.kind, SpaceAlbumSelectionKind.none);
+});
+// E-5
+test('reconcile drops ids that no longer exist', () {
+  notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+  notifier.toggle(SpaceAlbumSelectionKind.album, 'b');
+  notifier.reconcile({'b'});
+  expect(container.read(provider).ids, {'b'});
+});
+// E-17: selection is page state, so it survives a rebuild.
+test('selection survives a provider rebuild', () {
+  notifier.toggle(SpaceAlbumSelectionKind.album, 'a');
+  container.refresh(someUnrelatedProvider);
+  expect(container.read(provider).ids, {'a'});
+});
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -1570,8 +1768,43 @@ git commit -m "feat(mobile): add the space album selection provider"
 
 ```dart
 // S-14, S-15
-testWidgets('long-press enters selection and tap toggles', (tester) async { /* ... */ });
-testWidgets('tap with no selection opens the album', (tester) async { /* ... */ });
+// S-14
+testWidgets('long-press enters selection mode with that album selected', (tester) async {
+  await pumpSpaceAlbumsPage(tester, albums: [album('a'), album('b')], canManage: true);
+  await tester.longPress(find.byKey(const Key('space-album-card-a')));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+  expect(find.text('1'), findsOneWidget);
+  expect(openedAlbumIds, isEmpty); // long-press must not also open the album
+});
+
+// S-15
+testWidgets('tap toggles a second album once selection mode is active', (tester) async {
+  await pumpSpaceAlbumsPage(tester, albums: [album('a'), album('b')], canManage: true);
+  await tester.longPress(find.byKey(const Key('space-album-card-a')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('space-album-card-b')));
+  await tester.pumpAndSettle();
+  expect(find.text('2'), findsOneWidget);
+  expect(openedAlbumIds, isEmpty); // tap must not navigate while selecting
+});
+
+// S-3 on mobile
+testWidgets('tap with no selection opens the album', (tester) async {
+  await pumpSpaceAlbumsPage(tester, albums: [album('a')], canManage: true);
+  await tester.tap(find.byKey(const Key('space-album-card-a')));
+  await tester.pumpAndSettle();
+  expect(openedAlbumIds, ['a']);
+  expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+});
+
+// S-10 on mobile
+testWidgets('long-press does nothing when canManage is false', (tester) async {
+  await pumpSpaceAlbumsPage(tester, albums: [album('a')], canManage: false);
+  await tester.longPress(find.byKey(const Key('space-album-card-a')));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+});
 
 // S-16
 testWidgets('back exits selection before popping', (tester) async {
@@ -1618,13 +1851,71 @@ cd .. && git add mobile && git commit -m "feat(mobile): add multi-select gesture
 
 ```dart
 // S-17
-testWidgets('confirming bulk unlink calls the bulk endpoint once', (tester) async { /* ... */ });
+testWidgets('confirming bulk unlink calls the bulk endpoint once for the whole batch', (tester) async {
+  await pumpSpaceAlbumsPage(tester, albums: [album('a'), album('b')], canManage: true);
+  await selectAlbums(tester, ['a', 'b']);
+  await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+  await tester.pumpAndSettle();
+  // One confirm dialog for the batch, naming the count.
+  expect(find.textContaining('2'), findsWidgets);
+  await tester.tap(find.byKey(const Key('space-album-bulk-unlink-confirm')));
+  await tester.pumpAndSettle();
+  verify(() => api.bulkUnlinkAlbums(spaceId, {'a', 'b'})).called(1);
+});
+
 // S-18 / S-19
-testWidgets('the timeline action resolves toward include for a mixed selection', (tester) async { /* ... */ });
+testWidgets('the timeline action resolves toward include for a mixed selection', (tester) async {
+  await pumpSpaceAlbumsPage(
+    tester,
+    albums: [album('a', showInTimeline: true), album('b', showInTimeline: false)],
+    canManage: true,
+  );
+  await selectAlbums(tester, ['a', 'b']);
+  expect(find.text('space_album_bulk_add_to_timeline'), findsOneWidget);
+  await tester.tap(find.byKey(const Key('space-album-selection-timeline')));
+  await tester.pumpAndSettle();
+  verify(() => api.bulkSetAlbumTimeline(spaceId, {'a', 'b'}, showInTimeline: true)).called(1);
+});
+
+testWidgets('the timeline action offers removal when every album is already included', (tester) async {
+  await pumpSpaceAlbumsPage(
+    tester,
+    albums: [album('a', showInTimeline: true), album('b', showInTimeline: true)],
+    canManage: true,
+  );
+  await selectAlbums(tester, ['a', 'b']);
+  expect(find.text('space_album_bulk_remove_from_timeline'), findsOneWidget);
+});
+
 // S-24
-testWidgets('a partial failure keeps exactly the failed albums selected', (tester) async { /* ... */ });
+testWidgets('a partial failure keeps exactly the failed albums selected', (tester) async {
+  when(() => api.bulkUnlinkAlbums(any(), any())).thenAnswer(
+    (_) async => [
+      BulkIdResponseDto(id: 'a', success: true),
+      BulkIdResponseDto(id: 'b', success: false, error: BulkIdErrorReason.no_permission),
+    ],
+  );
+  await pumpSpaceAlbumsPage(tester, albums: [album('a'), album('b')], canManage: true);
+  await selectAlbums(tester, ['a', 'b']);
+  expect(find.text('2'), findsOneWidget); // positive control
+  await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('space-album-bulk-unlink-confirm')));
+  await tester.pumpAndSettle();
+  expect(container.read(spaceAlbumSelectionProvider).ids, {'b'});
+  expect(find.textContaining('space_album_bulk_partial_failure'), findsOneWidget);
+});
+
 // S-20
-testWidgets('bulk move places every selected album in the folder', (tester) async { /* ... */ });
+testWidgets('bulk move places every selected album in the folder', (tester) async {
+  await pumpSpaceAlbumsPage(tester, albums: [album('a'), album('b')], folders: [folder('f')], canManage: true);
+  await selectAlbums(tester, ['a', 'b']);
+  await tester.tap(find.byKey(const Key('space-album-selection-move')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const Key('space-album-folder-picker-f')));
+  await tester.pumpAndSettle();
+  verify(() => api.bulkSetAlbumFolder(spaceId, {'a', 'b'}, folderId: 'f')).called(1);
+});
 ```
 
 - [ ] **Step 2: Run to verify they fail.** Expected: FAIL.
