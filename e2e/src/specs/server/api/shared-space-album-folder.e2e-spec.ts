@@ -523,12 +523,14 @@ describe('/shared-spaces/:id/album-folders', () => {
         .send({ ids: [strangerAlbum.id, albumC.id] });
 
       expect(status).toBe(200);
-      expect(body).toEqual(
-        expect.arrayContaining([
-          { id: strangerAlbum.id, success: true },
-          expect.objectContaining({ id: albumC.id, success: false, error: 'no_permission' }),
-        ]),
-      );
+      // Fix round 1, M-3: pin exact array shape (length + order), not just membership — #runBulk
+      // iterates `new Set(ids)` in request order, so strangerAlbum (first) precedes albumC
+      // (second). `arrayContaining` would pass even if dedup/reordering duplicated or reshuffled
+      // entries.
+      expect(body).toEqual([
+        { id: strangerAlbum.id, success: true },
+        expect.objectContaining({ id: albumC.id, success: false, error: 'no_permission' }),
+      ]);
 
       const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
       expect(list.body.map((l: { id: string }) => l.id)).not.toContain(strangerAlbum.id);
@@ -550,7 +552,12 @@ describe('/shared-spaces/:id/album-folders', () => {
         .set(asBearerAuth(editor.accessToken))
         .send({ ids: [albumB.id, albumC.id], folderId: folder.id });
       expect(status).toBe(200);
-      expect(body.every((r: { success: boolean }) => r.success)).toBe(true);
+      // Fix round 1, I-1: `body.every(...)` is vacuously true on an empty array, so this used to
+      // pass even if the endpoint returned `[]`. Pin the exact response shape.
+      expect(body).toEqual([
+        { id: albumB.id, success: true },
+        { id: albumC.id, success: true },
+      ]);
 
       const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
       const placed = list.body.filter((l: { folderId: string | null }) => l.folderId === folder.id);
@@ -558,11 +565,13 @@ describe('/shared-spaces/:id/album-folders', () => {
     });
 
     it('R-25 applies the timeline flag to a batch', async () => {
-      const { status } = await request(app)
+      const { status, body } = await request(app)
         .put(`/shared-spaces/${space.id}/albums/bulk-timeline`)
         .set(asBearerAuth(editor.accessToken))
         .send({ ids: [albumB.id], showInTimeline: false });
       expect(status).toBe(200);
+      // Fix round 1, I-1: this test previously asserted no body at all — pin it.
+      expect(body).toEqual([{ id: albumB.id, success: true }]);
       const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
       expect(list.body.find((l: { id: string }) => l.id === albumB.id).showInTimeline).toBe(false);
     });
@@ -648,10 +657,12 @@ describe('/shared-spaces/:id/album-folders', () => {
       expect(status).toBe(403);
     });
 
-    // Task 5 Addition 1 (RBAC gap found reviewing Task 4): bulk-folder, bulk-timeline and
-    // bulk-parent are now hoisted-Editor-gated exactly like bulk-delete above (S-28/S-29) — unlike
-    // bulk-unlink (S-29a). A viewer or a non-member gets exactly 403 for the whole request, before
-    // any item is even looked at (random ids that don't exist still 403, never 200/404).
+    // Task 5 Addition 1 (RBAC gap found reviewing Task 4): bulk-folder, bulk-timeline, bulk-parent
+    // and bulk-delete are all hoisted-Editor-gated (S-28/S-29) — unlike bulk-unlink (S-29a). A
+    // viewer or a non-member gets exactly 403 for the whole request, before any item is even
+    // looked at (random ids that don't exist still 403, never 200/404). Fix round 1, M-2: R-31
+    // above only covers a viewer on bulk-delete — bulk-delete is folded into this matrix too so a
+    // non-member is proven refused there as well (every OTHER endpoint already was).
     it.each([
       ['R-32', 'viewer', () => viewer.accessToken],
       ['R-33', 'non-member', () => stranger.accessToken],
@@ -675,6 +686,12 @@ describe('/shared-spaces/:id/album-folders', () => {
         .set(asBearerAuth(token))
         .send({ ids: [randomUUID()], parentId: null });
       expect(folderParent.status).toBe(403);
+
+      const folderDelete = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders/bulk-delete`)
+        .set(asBearerAuth(token))
+        .send({ ids: [randomUUID()] });
+      expect(folderDelete.status).toBe(403);
     });
   });
 });
