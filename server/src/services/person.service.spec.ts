@@ -331,9 +331,6 @@ describe(PersonService.name, () => {
         await sut.onBootstrap();
 
         expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
-        expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.FaceSuggestionDefaultOnState, {
-          sweptAt: expect.any(String),
-        });
       });
 
       it('should not queue face suggestion maintenance when the marker is already burnt', async () => {
@@ -349,18 +346,39 @@ describe(PersonService.name, () => {
         );
       });
 
-      it('should burn the marker without sweeping when an admin has the feature switched off', async () => {
+      // The marker records "a sweep has actually run", so only a sweep may write it. Burning it here instead
+      // rested on the assumption that a later opt-in always re-triggers via onConfigUpdate's false -> true
+      // transition — which cannot happen under IMMICH_CONFIG_FILE, where updateSystemConfig throws outright
+      // (system-config.service.ts) and a YAML edit + restart emits only ConfigInit. Such an admin would get a
+      // toggle reading "on" over a queue that is never filled.
+      it('should leave the marker unburnt when the feature resolves off, so a later boot re-checks', async () => {
         useSuggestionSweepPending(onConfigUpdateTestConfig(false));
         (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(false);
 
         await sut.onBootstrap();
 
         expect(mocks.job.queue).not.toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
-        // Burnt regardless: a later opt-in is picked up by onConfigUpdate's false -> true transition, so
-        // leaving the marker unset would only re-ask this question on every boot.
-        expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.FaceSuggestionDefaultOnState, {
-          sweptAt: expect.any(String),
-        });
+        expect(mocks.systemMetadata.set).not.toHaveBeenCalledWith(
+          SystemMetadataKey.FaceSuggestionDefaultOnState,
+          expect.anything(),
+        );
+      });
+
+      // Queueing is not sweeping. FaceSuggestionMaintenance runs with attempts:1 and removeOnFail:true
+      // (job.repository.ts), so a marker written here would survive a job that failed and vanished — the
+      // sweep would be recorded as done having never run, with no retry. Only the handler's success path
+      // may write it (see job.service.spec.ts).
+      it('should not burn the marker at queue time, leaving that to the sweep itself', async () => {
+        useSuggestionSweepPending();
+        (mocks.faceIdentity as any).hasBackfillWork.mockResolvedValue(false);
+
+        await sut.onBootstrap();
+
+        expect(mocks.job.queue).toHaveBeenCalledWith({ name: JobName.FaceSuggestionMaintenance, data: {} });
+        expect(mocks.systemMetadata.set).not.toHaveBeenCalledWith(
+          SystemMetadataKey.FaceSuggestionDefaultOnState,
+          expect.anything(),
+        );
       });
 
       it('should still queue the identity backfill it shares the hook with', async () => {

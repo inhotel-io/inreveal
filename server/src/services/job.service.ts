@@ -2,7 +2,16 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { OnEvent, OnJob } from 'src/decorators';
 import { mapAsset } from 'src/dtos/asset-response.dto';
 import { JobCreateDto } from 'src/dtos/job.dto';
-import { AssetType, AssetVisibility, IntegrityReport, JobName, JobStatus, ManualJobName, QueueName } from 'src/enum';
+import {
+  AssetType,
+  AssetVisibility,
+  IntegrityReport,
+  JobName,
+  JobStatus,
+  ManualJobName,
+  QueueName,
+  SystemMetadataKey,
+} from 'src/enum';
 import { ArgsOf } from 'src/repositories/event.repository';
 import { BaseService } from 'src/services/base.service';
 import { JobItem } from 'src/types';
@@ -106,6 +115,16 @@ export class JobService extends BaseService {
       { name: JobName.PersonSuggestionScanQueueAll, data: {} },
       { name: JobName.SpacePersonSuggestionScanQueueAll, data: {} },
     ]);
+
+    // The one-shot boot sweep's marker (PersonService.queueInitialFaceSuggestionSweep) is written HERE, not
+    // where the job is queued, so it records "a sweep ran" rather than "a sweep was queued". This job is
+    // attempts:1 / removeOnFail:true, so a marker burnt at queue time would survive a run that failed and
+    // vanished. Only the success path may claim the slot — the `Skipped` return above deliberately does not,
+    // so an admin running this by hand while the feature is off doesn't consume the boot sweep. Setting it
+    // on a manual run once the feature IS on is correct and intentional: a full sweep genuinely happened.
+    await this.systemMetadataRepository.set(SystemMetadataKey.FaceSuggestionDefaultOnState, {
+      sweptAt: new Date().toISOString(),
+    });
     return JobStatus.Success;
   }
 

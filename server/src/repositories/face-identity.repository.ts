@@ -1361,9 +1361,18 @@ export class FaceIdentityRepository {
 
       const faceIds = await this.getScopedProfileFaceIds(profileRef, trx);
       if (faceIds.length > 0) {
+        // Re-key the faces onto the fresh identity and touch NOTHING else. `source` is deliberately absent:
+        // separating a profile is a statement about grouping ("this profile is not the same human as the ones
+        // it was grouped with"), not a per-face attestation, and `source='manual'` means precisely the latter
+        // — both engines read it, owner-agnostically, as "a human confirmed this face" and exclude it from the
+        // cleanup console and from suggestions forever (see isSettledForOwner in utils/face-repair.ts and the
+        // manual-link anti-join in face-person-verdict.repository.ts). Stamping it here buried every ML
+        // mistake in exactly the contaminated cluster a user separates BECAUSE it is contaminated, with no UI
+        // to undo it — the same over-claim the R1 people-merge decision reversed. The identityId rewrite is
+        // what makes the separation stick; the source label plays no part in it.
         await trx
           .updateTable('face_identity_face')
-          .set({ identityId: identity.id, source: 'manual' })
+          .set({ identityId: identity.id })
           .where('assetFaceId', 'in', faceIds)
           .execute();
 

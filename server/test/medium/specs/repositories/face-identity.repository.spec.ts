@@ -4108,6 +4108,76 @@ describe(FaceIdentityRepository.name, () => {
       );
     });
 
+    // Separating a profile is a statement about GROUPING — "this profile is not the same human as the ones it
+    // was grouped with". It says nothing about whether each individual face inside it is correctly placed. So
+    // the detach must not relabel those faces as human placements: `source='manual'` is read by BOTH engines
+    // as "a human attested to this face", owner-agnostically (face-repair.ts isSettledForOwner /
+    // face-person-verdict.repository.ts applyPendingEligibility) — permanently excluding them from the cleanup
+    // console and from suggestions. Stamping it here would hide every ML mistake in exactly the contaminated
+    // cluster a user separates BECAUSE it is contaminated, with no UI to undo it. Same shape as the R1 people
+    // -merge decision: a person-level action is not a per-face attestation.
+    it('preserves each backing face source when detaching, so machine placements stay scannable', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      await ctx.newSharedSpaceMember({ spaceId: space.id, userId: user.id, role: SharedSpaceRole.Owner });
+      const { person: personalPerson } = await ctx.newPerson({ ownerId: user.id, name: 'Alice' });
+      const originalIdentity = await sut.ensurePersonIdentity(personalPerson.id);
+
+      // Two faces behind ONE space profile, reaching it by different routes: one placed by the machine, one
+      // genuinely placed by a human. The detach must leave both labels exactly as it found them.
+      const { asset: evidenceAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: evidenceFace } = await ctx.newAssetFace({ assetId: evidenceAsset.id });
+      const { asset: placedAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: placedFace } = await ctx.newAssetFace({ assetId: placedAsset.id });
+
+      const spacePerson = await ctx.database
+        .insertInto('shared_space_person')
+        .values({
+          spaceId: space.id,
+          identityId: originalIdentity.id,
+          name: 'Alice in Space',
+          representativeFaceId: evidenceFace.id,
+          type: 'person',
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      await linkSpaceFace(ctx, spacePerson.id, evidenceFace.id);
+      await linkSpaceFace(ctx, spacePerson.id, placedFace.id);
+      await sut.linkFace({
+        assetFaceId: evidenceFace.id,
+        identityId: originalIdentity.id,
+        source: 'shared-space-evidence',
+      });
+      await sut.linkFace({ assetFaceId: placedFace.id, identityId: originalIdentity.id, source: 'manual' });
+
+      const newIdentityId = await sut.detachScopedProfile({
+        type: 'space-person',
+        id: spacePerson.id,
+        spaceId: space.id,
+      });
+
+      const links = await ctx.database
+        .selectFrom('face_identity_face')
+        .select(['assetFaceId', 'identityId', 'source'])
+        .where('assetFaceId', 'in', [evidenceFace.id, placedFace.id])
+        .execute();
+
+      const evidenceLink = links.find((link) => link.assetFaceId === evidenceFace.id);
+      const placedLink = links.find((link) => link.assetFaceId === placedFace.id);
+
+      // The machine placement keeps its true origin — still visible to both scan engines.
+      expect(evidenceLink?.source).toBe('shared-space-evidence');
+      // Positive control: a face a human really did place keeps 'manual'. Without this, dropping the write
+      // entirely (rather than dropping only the relabel) would pass the assertion above just as well.
+      expect(placedLink?.source).toBe('manual');
+      // The separation itself still holds: both faces moved to the fresh identity, which is what makes the
+      // detach stick — not the source stamp.
+      expect(newIdentityId).not.toBe(originalIdentity.id);
+      expect(evidenceLink?.identityId).toBe(newIdentityId);
+      expect(placedLink?.identityId).toBe(newIdentityId);
+    });
+
     it('rejects detach when selected space-person faces also back non-repairable personal profiles', async () => {
       const { ctx, sut } = setup();
       const { user: actor } = await ctx.newUser();

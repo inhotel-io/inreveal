@@ -131,11 +131,22 @@ export class PersonService extends BaseService {
    * introduced to fix, in a new shape.
    *
    * Runs at most once per instance, guarded by a system-metadata marker (same pattern as
-   * SharedSpaceService.onBootstrap). The marker is burnt even when the feature is off, because an admin
-   * who opts in later is already served by the `ConfigUpdate` transition — leaving it unset would only
-   * re-ask the question on every boot. A fresh install also burns it here against an empty library, which
-   * costs nothing: the sweep finds no named people, and `handleFaceIdentityBackfill`'s completion path
-   * keeps the queue current from then on.
+   * SharedSpaceService.onBootstrap). This method only ever QUEUES; the marker is written by the sweep
+   * itself, in `JobService.handleFaceSuggestionMaintenance`'s success path. Two failure modes make that
+   * split load-bearing, and burning the marker here reintroduces both:
+   *
+   *   - feature off at this boot. The old code burnt the marker anyway, reasoning that a later opt-in is
+   *     served by `onConfigUpdate`'s false -> true transition. That is untrue under IMMICH_CONFIG_FILE:
+   *     `updateSystemConfig` throws outright for file-mode instances, and a YAML edit + restart emits only
+   *     `ConfigInit`. Such an admin would get a toggle reading "on" over a queue nothing ever fills. The
+   *     cost of leaving it unset is one config read per boot.
+   *   - the sweep fails. `FaceSuggestionMaintenance` runs with `attempts: 1` and `removeOnFail: true`
+   *     (job.repository.ts), so a marker written at queue time would outlive a job that failed and
+   *     vanished — recorded as swept, never actually run, never retried.
+   *
+   * A fresh install still burns it on the first boot, against an empty library, which costs nothing: the
+   * sweep finds no named people, and `handleFaceIdentityBackfill`'s completion path keeps the queue current
+   * from then on.
    */
   private async queueInitialFaceSuggestionSweep(): Promise<void> {
     const state = await this.systemMetadataRepository.get(SystemMetadataKey.FaceSuggestionDefaultOnState);
@@ -144,14 +155,12 @@ export class PersonService extends BaseService {
     }
 
     const { machineLearning } = await this.getConfig({ withCache: false });
-    if (isFaceSuggestionEnabled(machineLearning)) {
-      this.logger.log('Face suggestions are enabled and have never been swept; queueing face suggestion maintenance');
-      await this.jobRepository.queue({ name: JobName.FaceSuggestionMaintenance, data: {} });
+    if (!isFaceSuggestionEnabled(machineLearning)) {
+      return;
     }
 
-    await this.systemMetadataRepository.set(SystemMetadataKey.FaceSuggestionDefaultOnState, {
-      sweptAt: new Date().toISOString(),
-    });
+    this.logger.log('Face suggestions are enabled and have never been swept; queueing face suggestion maintenance');
+    await this.jobRepository.queue({ name: JobName.FaceSuggestionMaintenance, data: {} });
   }
 
   @OnEvent({ name: 'ConfigValidate' })

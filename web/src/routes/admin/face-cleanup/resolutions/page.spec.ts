@@ -134,7 +134,7 @@ const SPACE_PERSON_ROW = {
 
 // A fully-orphaned verdict: the suspected owner AND its identity were both GC'd/degraded away after the
 // verdict was recorded (personId + spacePersonId both SET NULL, no identity survives either) — the row must
-// still render as a valid row (falling back to "unnamed"), never throw (D15 1.4b).
+// still render as a valid row (as a deleted target), never throw (D15 1.4b).
 const ORPHANED_ROW = {
   id: 'verdict-4',
   assetFaceId: 'face-4',
@@ -196,7 +196,7 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(screen.queryByTestId('locks-section')).not.toBeInTheDocument();
   });
 
-  it('renders a space-person verdict with its space named, and a fully-orphaned verdict falls back to "unnamed"', async () => {
+  it('renders a space-person verdict with its space named, and a fully-orphaned verdict as a deleted target', async () => {
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
       total: 2,
       resolutions: [SPACE_PERSON_ROW, ORPHANED_ROW],
@@ -215,31 +215,35 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(within(spacePersonRow).getByText('not Casper')).toBeInTheDocument();
     expect(within(spacePersonRow).getByText('in Family Trip')).toBeInTheDocument();
 
-    // (b) fully-orphaned row: no crash, and falls back to the actual "unnamed" label — a positive control
-    // that the fallback branch itself renders correctly, not just that SOME text is present.
-    expect(within(orphanedRow).getByText('not Unnamed cluster')).toBeInTheDocument();
+    // (b) fully-orphaned row: no crash, and reads as a deleted target — a positive control that the
+    // no-target branch itself renders correctly, not just that SOME text is present.
+    expect(within(orphanedRow).getByText('not Deleted target')).toBeInTheDocument();
     // No actor for the orphaned row (actorId/actorName both null) — the positive control for "by <actor>"
     // rendering at all is the cleanup row's "by Admin" assertion in the previous test.
     expect(within(orphanedRow).queryByText(/^by /)).not.toBeInTheDocument();
   });
 
-  // S12.7/F30: a target whose id survived (the row itself was never deleted, so its FK is intact) but whose
-  // name resolved null must read distinctly from a row that never had a target at all (both null) — otherwise
-  // an admin cannot tell "this person was removed after the verdict" from "this cluster was simply never
-  // named". Positive control (both-null → "Unnamed cluster") is DELETED_TARGET_ROW's sibling assertion in the
-  // same test, using the SAME `targetName()` code path with different input.
-  it('renders a deleted-target row distinctly from a genuinely unnamed (fully-orphaned) row', async () => {
-    const deletedTargetRow = {
+  // S12.7/F30: "the target row still exists but was never named" and "the target row is gone" must read
+  // differently, and each must get the label that matches its own state.
+  //
+  // Which fixture shapes are legal is fixed by the schema, not by taste: `person.name` /
+  // `shared_space_person.name` are NOT NULL DEFAULT '', and both target FKs are ON DELETE SET NULL. So
+  // listNegativeVerdicts can only ever emit (a) an intact id beside an EMPTY-STRING name — a live cluster
+  // nobody has named — or (b) a NULL id, meaning the target row was deleted out from under the verdict. A
+  // non-null `personId` beside `personName: null` is unreachable, so a fixture using that shape pins
+  // nothing.
+  it('labels a live unnamed target "unnamed" and a target-deleted verdict "deleted"', async () => {
+    const liveUnnamedRow = {
       ...CLEANUP_ROW,
       id: 'verdict-5',
       assetFaceId: 'face-5',
       personId: 'person-5',
-      personName: null,
+      personName: '',
     };
 
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
       total: 2,
-      resolutions: [deletedTargetRow, ORPHANED_ROW],
+      resolutions: [liveUnnamedRow, ORPHANED_ROW],
     } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
 
     render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
@@ -247,15 +251,18 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
 
     const rows = screen.getAllByTestId('resolution-row');
-    const deletedRow = rows.find((r) => r.dataset.source === 'cleanup')!;
+    const liveRow = rows.find((r) => r.dataset.source === 'cleanup')!;
     const orphanedRow = rows.find((r) => r.dataset.source === 'suggestion')!;
 
-    expect(within(deletedRow).getByText('not Deleted target')).toBeInTheDocument();
-    expect(within(deletedRow).queryByText('not Unnamed cluster')).not.toBeInTheDocument();
+    // The person still exists — it just has no name. Calling that "deleted" tells the admin the opposite
+    // of the truth.
+    expect(within(liveRow).getByText('not Unnamed cluster')).toBeInTheDocument();
+    expect(within(liveRow).queryByText('not Deleted target')).not.toBeInTheDocument();
 
-    // Positive control, same body: the fully-orphaned row (no id survived at all) still reads as "unnamed",
-    // not "deleted" — the two states use different i18n keys, not just different data.
-    expect(within(orphanedRow).getByText('not Unnamed cluster')).toBeInTheDocument();
+    // Positive control, same code path, opposite input: nothing survived here, so this is the row that
+    // earns the "deleted" label. The two states use different i18n keys, not just different data.
+    expect(within(orphanedRow).getByText('not Deleted target')).toBeInTheDocument();
+    expect(within(orphanedRow).queryByText('not Unnamed cluster')).not.toBeInTheDocument();
   });
 
   it('filters by source', async () => {

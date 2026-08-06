@@ -65,22 +65,22 @@
     thumbnailFaceId ? getAdminFaceThumbnailUrl(thumbnailFaceId) : `/api${getPeopleThumbnailPath(personId)}`;
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString();
 
-  // Both `personId`/`spacePersonId` FKs are `ON DELETE SET NULL`, and both `person.name`/`shared_space_person.
-  // name` can independently be null on a row whose FK is still intact — so "the id survived but the name
-  // didn't" and "nothing survived at all" are genuinely different states, not the same "no name" case. The old
-  // single `?? unnamed` fallback rendered both identically, telling an admin nothing about which one they were
-  // looking at.
+  // "The target still exists but was never named" and "the target row is gone" are different states and get
+  // different labels. Branch on the ID, never on the name: `person.name` / `shared_space_person.name` are NOT
+  // NULL DEFAULT '' (see person.table.ts / shared-space-person.table.ts), so an unnamed-but-live target
+  // arrives as an EMPTY STRING, not null — while `personId`/`spacePersonId` are ON DELETE SET NULL, so a
+  // surviving id is itself proof the row is still there. Testing the name first inverted both cases: a live
+  // unnamed cluster read as "deleted", and a genuinely deleted target read as "unnamed". Kysely types these
+  // left-joined columns `string | null`, which is what makes the null-first shape look plausible; the data
+  // cannot produce it.
   const targetName = (item: ResolutionItem) => {
-    if (item.personName) {
-      return item.personName;
+    if (item.personId) {
+      return item.personName || $t('admin.face_cleanup_unnamed');
     }
-    if (item.spacePersonName) {
-      return item.spacePersonName;
+    if (item.spacePersonId) {
+      return item.spacePersonName || $t('admin.face_cleanup_unnamed');
     }
-    if (item.personId || item.spacePersonId) {
-      return $t('admin.face_cleanup_resolutions_target_deleted');
-    }
-    return $t('admin.face_cleanup_unnamed');
+    return $t('admin.face_cleanup_resolutions_target_deleted');
   };
 
   // Slice 11 (F23): the server paginates listNegativeVerdicts (page/size, capped at 200 — see
