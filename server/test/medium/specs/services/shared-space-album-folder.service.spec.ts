@@ -86,8 +86,16 @@ describe('SharedSpaceService — bulk album folders against a real tree', () => 
       expect(rows.find((r) => r.id === b.id)!.parentId).toBeNull();
     });
 
-    // E-9 / E-10, strengthened: this is the test that actually needs a SEQUENTIAL implementation
-    // to pass, because it needs item 2's validation to observe a write item 1 just made.
+    // E-9 / E-10, strengthened: item 2's validation needs to observe a write item 1 just made.
+    // That does NOT make this test a deterministic guard against a `Promise.all` regression here —
+    // against a real Postgres connection pool, item 2's read can still start before item 1's write
+    // commits often enough (~20-27% of runs) that this test alone would flake rather than reliably
+    // catch a switch to parallel execution. The deterministic sequencing guarantee lives in three
+    // unit pins instead — `expect(maxInFlight).toBe(1)` in shared-space.service.spec.ts:9686
+    // (bulkUnlinkAlbums), :13006 (bulkMoveAlbumFolders) and :13165 (bulkDeleteAlbumFolders) — which
+    // force in-flight concurrency to 1 directly rather than inferring it from a race. What this
+    // test contributes that those unit pins cannot: real-DB coverage of a committed sibling write
+    // observed against the real partial unique index, which is structurally unmockable.
     //
     // A and B currently live under two DIFFERENT parents and happen to share a name — legal per
     // F-04 (same name, different parents). Both move to the SAME target T in one call. Moving A
