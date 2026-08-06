@@ -12,7 +12,7 @@
   } from '$lib/utils/space-album-folder-dnd';
   import type { SharedSpaceAlbumFolderDto, SharedSpaceLinkedAlbumDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
-  import { mdiDotsVertical, mdiFolder } from '@mdi/js';
+  import { mdiCheckCircle, mdiDotsVertical, mdiFolder } from '@mdi/js';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -23,7 +23,16 @@
     /** Needed to run the client-side canDrop check while this card is a drop target. */
     folders?: SharedSpaceAlbumFolderDto[];
     albums?: SharedSpaceLinkedAlbumDto[];
-    onOpen?: (folder: SharedSpaceAlbumFolderDto) => void;
+    /** Whether this folder is part of the active multi-selection (design §4). */
+    selected?: boolean;
+    /** Live Shift-hover range preview (design §4.3). */
+    selectionCandidate?: boolean;
+    /** Fired on a plain click on the "open" region. The caller decides open-vs-toggle. */
+    onOpen?: (folder: SharedSpaceAlbumFolderDto, shiftKey: boolean) => void;
+    /** Fired ONLY from the check circle — always enters/extends the selection. */
+    onToggleSelect?: (shiftKey: boolean) => void;
+    /** Shift-hover range preview (design §4.3) — the caller decides whether Shift is actually held. */
+    onHover?: () => void;
     onRename?: (folder: SharedSpaceAlbumFolderDto) => void;
     onMove?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDelete?: (folder: SharedSpaceAlbumFolderDto) => void;
@@ -37,7 +46,11 @@
     canManage,
     folders = [],
     albums = [],
+    selected = false,
+    selectionCandidate = false,
     onOpen,
+    onToggleSelect,
+    onHover,
     onRename,
     onMove,
     onDelete,
@@ -75,6 +88,7 @@
     setActiveDragPayload(payload);
   }}
   ondragend={() => setActiveDragPayload(null)}
+  onmouseenter={() => onHover?.()}
   ondragover={(event) => {
     // A drop only fires if dragover calls preventDefault. Doing it *only* for valid targets is
     // also what makes the cursor show "no drop" over an illegal one.
@@ -96,8 +110,39 @@
   }}
   class:ring-2={isDropTarget}
   class:ring-primary={isDropTarget}
-  class="group relative rounded-2xl border border-transparent p-5 hover:border-gray-200 hover:bg-gray-100 dark:hover:border-gray-800 dark:hover:bg-gray-900"
+  data-selected={selected ? 'true' : undefined}
+  data-candidate={selectionCandidate ? 'true' : undefined}
+  class={[
+    'group relative rounded-2xl border p-5 hover:border-gray-200 hover:bg-gray-100 dark:hover:border-gray-800 dark:hover:bg-gray-900',
+    selected ? 'border-primary/70 bg-primary/5' : selectionCandidate ? 'border-primary/40' : 'border-transparent',
+  ]}
 >
+  <!-- Check circle — always in the DOM (never hover-gated for RENDERING, only for opacity) so it
+       is directly clickable without first hovering, mirroring space-album-card.svelte. -->
+  {#if canManage}
+    <div
+      class={[
+        'absolute inset-s-6 top-6 z-10 transition-opacity',
+        selected || selectionCandidate ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
+      ]}
+    >
+      <button
+        type="button"
+        data-testid="space-album-folder-select-{folder.id}"
+        class="rounded-full bg-black/25 p-1 hover:bg-black/40"
+        aria-pressed={selected}
+        aria-label={$t('select')}
+        onclick={(event) => {
+          event.stopPropagation();
+          event.preventDefault();
+          onToggleSelect?.(event.shiftKey);
+        }}
+      >
+        <Icon icon={mdiCheckCircle} size="24" class={selected ? 'text-primary' : 'text-white/80 hover:text-white'} />
+      </button>
+    </div>
+  {/if}
+
   {#if canManage}
     <div
       class="absolute inset-e-6 top-6 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100"
@@ -123,7 +168,7 @@
   <button
     type="button"
     class="w-full text-start"
-    onclick={() => onOpen?.(folder)}
+    onclick={(event) => onOpen?.(folder, event.shiftKey)}
     data-testid="space-album-folder-card-open"
   >
     <div class="relative aspect-square w-full overflow-hidden rounded-xl">

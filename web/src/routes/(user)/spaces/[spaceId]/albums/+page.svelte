@@ -139,6 +139,12 @@
   // the browser back button.
   const navigateToFolder = (folderId: string | null) => goto(Route.viewSpaceAlbums({ id: space.id, folderId }));
 
+  // Fired by SpaceAlbumsList when the user opens an album with no selection active (design §5.1).
+  // Selection state — and the clearing triggers that watch currentFolderId/searchQuery — live
+  // inside SpaceAlbumsList itself (its own props), not here; see that component for why.
+  const openAlbum = (album: SharedSpaceLinkedAlbumDto) =>
+    goto(Route.viewSpaceAlbum({ spaceId: space.id, albumId: album.id }));
+
   async function handleUnlink(album: SharedSpaceLinkedAlbumDto) {
     const confirmed = await modalManager.showDialog({
       prompt: $t('spaces_linked_albums_unlink_confirmation', { values: { name: album.albumName } }),
@@ -445,6 +451,7 @@
         onUnlink={handleUnlink}
         onToggleTimeline={handleToggleTimeline}
         onMoveAlbum={handleMoveAlbum}
+        onOpenAlbum={(album) => void openAlbum(album)}
         onOpenFolder={(f) => void navigateToFolder(f.id)}
         onRenameFolder={handleRenameFolder}
         onMoveFolder={handleMoveFolder}

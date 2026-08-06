@@ -184,4 +184,52 @@ describe('SpaceAlbumFolderCard', () => {
       expect(onDropItem).toHaveBeenCalledWith({ kind: 'album', id: 'a1' }, folder.id);
     });
   });
+
+  describe('multi-select', () => {
+    it('renders a check circle when canManage is true', () => {
+      renderWithTooltips(SpaceAlbumFolderCard, defaults);
+      expect(screen.getByTestId(`space-album-folder-select-${folder.id}`)).toBeInTheDocument();
+    });
+
+    it('renders no check circle when canManage is false', () => {
+      renderWithTooltips(SpaceAlbumFolderCard, { ...defaults, canManage: false });
+      expect(screen.queryByTestId(`space-album-folder-select-${folder.id}`)).not.toBeInTheDocument();
+    });
+
+    it('clicking the check circle calls onToggleSelect with the shift key state and never onOpen', async () => {
+      const onToggleSelect = vi.fn();
+      const onOpen = vi.fn();
+      renderWithTooltips(SpaceAlbumFolderCard, { ...defaults, onToggleSelect, onOpen });
+
+      await fireEvent.click(screen.getByTestId(`space-album-folder-select-${folder.id}`), { shiftKey: true });
+
+      expect(onToggleSelect).toHaveBeenCalledWith(true);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it('clicking the open region calls onOpen with the folder and the shift key state', async () => {
+      const onOpen = vi.fn();
+      const onToggleSelect = vi.fn();
+      renderWithTooltips(SpaceAlbumFolderCard, { ...defaults, onOpen, onToggleSelect });
+
+      await fireEvent.click(screen.getByTestId('space-album-folder-card-open'), { shiftKey: true });
+
+      expect(onOpen).toHaveBeenCalledWith(folder, true);
+      expect(onToggleSelect).not.toHaveBeenCalled();
+    });
+
+    it('data-selected/data-candidate reflect the selected and selectionCandidate props', async () => {
+      const { rerender } = renderWithTooltips(SpaceAlbumFolderCard, { ...defaults, selected: true });
+      expect(screen.getByTestId('space-album-folder-card')).toHaveAttribute('data-selected', 'true');
+
+      // renderWithTooltips mounts a generic TestWrapper, so rerender operates on ITS props
+      // ({component, componentProps}), not directly on SpaceAlbumFolderCard's.
+      await rerender({
+        component: SpaceAlbumFolderCard,
+        componentProps: { ...defaults, selected: false, selectionCandidate: true },
+      });
+      expect(screen.getByTestId('space-album-folder-card')).toHaveAttribute('data-candidate', 'true');
+      expect(screen.getByTestId('space-album-folder-card')).not.toHaveAttribute('data-selected', 'true');
+    });
+  });
 });

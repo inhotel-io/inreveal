@@ -1,12 +1,14 @@
 import type { SharedSpaceAlbumFolderDto, SharedSpaceLinkedAlbumDto, SharedSpaceMemberResponseDto } from '@immich/sdk';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { get } from 'svelte/store';
 import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
+import { eventManager } from '$lib/managers/event-manager.svelte';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import { toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
+import { renderWithTooltips } from '$tests/helpers';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: vi.fn() }));
@@ -402,6 +404,258 @@ describe('SpaceAlbumsList', () => {
       expect(screen.getByText('Rome')).toBeInTheDocument();
       expect(screen.getByText('Venice')).toBeInTheDocument();
       expect(screen.queryByTestId('space-albums-loading')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('multi-select', () => {
+    // Alphabetic names keyed to id so Title/Asc sort yields a, b, c, d, e, f in order —
+    // deterministic without depending on the store's default sort.
+    const NAMES: Record<string, string> = { a: 'Alpha', b: 'Bravo', c: 'Charlie', d: 'Delta', e: 'Echo', f: 'Foxtrot' };
+    function linkedAlbum(id: string, overrides: Partial<SharedSpaceLinkedAlbumDto> = {}): SharedSpaceLinkedAlbumDto {
+      return makeAlbum({ id, albumName: NAMES[id] ?? id, ...overrides });
+    }
+    function folderDto(id: string): SharedSpaceAlbumFolderDto {
+      return {
+        id,
+        spaceId: 's-1',
+        parentId: null,
+        name: NAMES[id] ?? id,
+        createdById: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+    }
+
+    const props = {
+      spaceId: 's-1',
+      albums: [linkedAlbum('a'), linkedAlbum('b')],
+      folders: [folderDto('f')],
+      canManage: true,
+      currentFolderId: null as string | null,
+      searchQuery: '',
+    };
+
+    // canManage: true renders the per-item kebab menu (ButtonContextMenu → Tooltip), which needs a
+    // TooltipProvider ancestor — plain `render` throws "Context Tooltip.Provider not found" the
+    // moment a folder or album with canManage renders. renderWithTooltips wraps in one.
+    const renderList = (componentProps: typeof props & Record<string, unknown>) =>
+      renderWithTooltips(SpaceAlbumsList, componentProps);
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      spaceAlbumViewSettings.reset();
+      spaceAlbumViewSettings.update((s) => ({ ...s, sortBy: AlbumSortBy.Title, sortOrder: SortOrder.Asc }));
+    });
+
+    // `fireEvent` types its targets as Window (not `typeof globalThis`), even though they're the
+    // same object in happy-dom — cast once and reuse rather than repeating `as unknown as Window`.
+    const win = globalThis as unknown as Window;
+
+    // keyboardManager is a module-level singleton (addEventListener('keydown'/'keyup') — reset it
+    // after every test so a shift left "held" by one test can't leak into the next.
+    afterEach(async () => {
+      await fireEvent.blur(win);
+    });
+
+    // S-1
+    it('clicking the check circle enters selection without navigating', async () => {
+      const onOpen = vi.fn();
+      renderList({ ...props, onOpenAlbum: onOpen });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toBeInTheDocument();
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    // S-2
+    it('clicking a card while a selection is active toggles instead of navigating', async () => {
+      const onOpen = vi.fn();
+      renderList({ ...props, onOpenAlbum: onOpen });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-card-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    // S-3
+    it('clicking a card with no selection opens the album', async () => {
+      const onOpen = vi.fn();
+      renderList({ ...props, onOpenAlbum: onOpen });
+      await fireEvent.click(screen.getByTestId('space-album-card-b'));
+      expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }));
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // S-9 — the trigger AppNavigate does NOT cover.
+    it('clears the selection when currentFolderId changes', async () => {
+      const { rerender } = renderList({ ...props, currentFolderId: null });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-select-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, currentFolderId: 'folder-1' },
+      });
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // S-9b — searchQuery is local $state, so no navigation fires at all.
+    it('clears the selection when searchQuery changes', async () => {
+      // 'bra' matches only 'Bravo' (album b) — 'Alpha' does not contain that substring.
+      const { rerender } = renderList({ ...props, searchQuery: 'bra' });
+      await fireEvent.click(screen.getByTestId('space-album-select-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, searchQuery: 'brav' },
+      });
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // S-9c — the trigger currentFolderId/searchQuery do NOT cover: navigating between two DIFFERENT
+    // spaces hits the same route id (`/spaces/[spaceId]/albums`), so SpaceAlbumsList is not
+    // remounted, and neither currentFolderId nor searchQuery necessarily change either. Only
+    // AppNavigate catches this.
+    it('clears the selection on AppNavigate', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+      eventManager.emit('AppNavigate');
+
+      await waitFor(() => expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument());
+    });
+
+    it('clears the selection when Escape is pressed', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toBeInTheDocument();
+
+      await fireEvent.keyDown(win, { key: 'Escape' });
+
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // S-10
+    it('renders no check circle when canManage is false', () => {
+      renderList({ ...props, canManage: false });
+      // Positive control: the cards themselves ARE rendered, so this is not vacuous.
+      expect(screen.getByTestId('space-album-card-a')).toBeInTheDocument();
+      expect(screen.queryByTestId('space-album-select-a')).not.toBeInTheDocument();
+    });
+
+    // S-13. NOTE: unlike most web unit tests in this codebase, this file's beforeAll registers the
+    // REAL en-US locale (see the "folders" describe block's own comment above), so $t() resolves
+    // actual copy here rather than the raw i18n key — assert on the rendered English text.
+    it('offers move and delete but not unlink for a folder selection', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+      const bar = screen.getByTestId('space-album-select-bar');
+      expect(within(bar).getByRole('button', { name: 'Move to folder…' })).toBeInTheDocument();
+      expect(within(bar).getByRole('button', { name: 'Delete folder' })).toBeInTheDocument();
+      expect(within(bar).queryByRole('button', { name: 'Unlink from space' })).not.toBeInTheDocument();
+    });
+
+    // S-11 at the component level: selecting a folder replaces an album selection.
+    it('replaces an album selection when a folder is selected', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'); // positive control
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+      expect(screen.getByTestId('space-album-card-a')).not.toHaveAttribute('data-selected', 'true');
+    });
+
+    // The bar offers only the kind's actions — album side of S-13.
+    it('offers unlink and timeline actions but not delete for an album selection', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      const bar = screen.getByTestId('space-album-select-bar');
+      expect(within(bar).getByRole('button', { name: 'Unlink from space' })).toBeInTheDocument();
+      expect(within(bar).getByRole('button', { name: 'Move to folder…' })).toBeInTheDocument();
+      expect(within(bar).queryByRole('button', { name: 'Delete folder' })).not.toBeInTheDocument();
+    });
+
+    // S-4-equivalent at the UI level: a Shift-click while a selection is active commits the
+    // contiguous range from the anchor.
+    it('shift-clicking a card selects the contiguous range from the anchor', async () => {
+      renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')],
+        folders: [],
+      });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-card-c'), { shiftKey: true });
+
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3');
+      expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-selected', 'true');
+    });
+
+    // §4.3 / forward-note 2: folders always sort before albums in `orderedIds`, so the two kinds
+    // stay CONTIGUOUS blocks. If they were interleaved, this album-only range could pull the
+    // folder's id into the (kind: 'album') selection, inflating the count past 3.
+    it('keeps folder and album ids contiguous so an album-only range never pulls in the folder', async () => {
+      renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')],
+        folders: [folderDto('f')],
+      });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-card-c'), { shiftKey: true });
+
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3');
+      expect(screen.getByTestId('space-album-folder-card')).not.toHaveAttribute('data-selected', 'true');
+    });
+
+    // Forward-note 5: `selectRange` keeps the anchor via `??=` so repeated Shift interactions stay
+    // anchored to the FIRST click, not the most recent one. A regression to an unconditional `=`
+    // passes all 19 manager unit tests (they never exercise a third interaction), so this has to be
+    // proven through rendered output: `previewRange` EXCLUDES already-selected ids, so hovering
+    // beyond the anchor reveals exactly which id the manager thinks the anchor is.
+    //
+    // Sequence: click a (anchor=a) → shift-click d (selects a,b,c,d; anchor stays a) → toggle c OFF
+    // (selected={a,b,d}, anchor untouched) → Shift+hover e.
+    //   Correct (anchor=a): range(a,e) minus {a,b,d} = {c,e} — c is highlighted.
+    //   Buggy (anchor drifted to d): range(d,e) minus {a,b,d} = {e} only — c is NOT highlighted.
+    it('keeps the original Shift anchor across repeated Shift interactions', async () => {
+      renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c'), linkedAlbum('d'), linkedAlbum('e')],
+        folders: [],
+      });
+
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-card-d'), { shiftKey: true });
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('4'); // a,b,c,d
+
+      await fireEvent.click(screen.getByTestId('space-album-select-c')); // toggle c off
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3'); // a,b,d
+
+      await fireEvent.keyDown(win, { key: 'Shift', shiftKey: true });
+      await fireEvent.mouseEnter(screen.getByTestId('space-album-card-e'));
+
+      expect(screen.getByTestId('space-album-card-c')).toHaveAttribute('data-candidate', 'true');
+    });
+
+    // reconcile (E-5): an item that disappears from the incoming props while selected must drop out
+    // of the selection silently, updating the count — without wiping an unrelated in-progress
+    // interaction test (covered separately by the anchor test above using the SAME candidate path).
+    it('drops a selected album from the selection when it disappears from props', async () => {
+      const { rerender } = renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b')],
+      });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-select-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, albums: [linkedAlbum('b')] }, // 'a' unlinked elsewhere
+      });
+
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
     });
   });
 });

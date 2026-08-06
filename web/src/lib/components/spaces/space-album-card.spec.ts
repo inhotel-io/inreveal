@@ -196,4 +196,57 @@ describe('SpaceAlbumCard', () => {
     expect(dataTransfer.setData).not.toHaveBeenCalled();
     expect(getActiveDragPayload()).toBeNull();
   });
+
+  describe('multi-select', () => {
+    it('renders a check circle when canManage is true', () => {
+      renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: true });
+      expect(screen.getByTestId(`space-album-select-${album.id}`)).toBeInTheDocument();
+    });
+
+    it('renders no check circle when canManage is false', () => {
+      renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: false });
+      expect(screen.queryByTestId(`space-album-select-${album.id}`)).not.toBeInTheDocument();
+    });
+
+    it('clicking the check circle calls onToggleSelect with the shift key state and never onOpen', async () => {
+      const onToggleSelect = vi.fn();
+      const onOpen = vi.fn();
+      renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: true, onToggleSelect, onOpen });
+
+      await fireEvent.click(screen.getByTestId(`space-album-select-${album.id}`), { shiftKey: true });
+
+      expect(onToggleSelect).toHaveBeenCalledWith(true);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it('clicking the card body calls onOpen with the album and the shift key state', async () => {
+      const onOpen = vi.fn();
+      const onToggleSelect = vi.fn();
+      renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: true, onOpen, onToggleSelect });
+
+      await fireEvent.click(screen.getByTestId(`space-album-card-${album.id}`), { shiftKey: true });
+
+      expect(onOpen).toHaveBeenCalledWith(album, true);
+      expect(onToggleSelect).not.toHaveBeenCalled();
+    });
+
+    // Regression guard for the stopPropagation fix on the kebab menu wrapper: without it, a click
+    // on a menu option would ALSO bubble into the card-body click handler and fire onOpen.
+    it('clicking a kebab menu option does not also fire onOpen', async () => {
+      const onOpen = vi.fn();
+      renderWithTooltips(SpaceAlbumCard, {
+        spaceId: 's-1',
+        album,
+        canManage: true,
+        onOpen,
+        onUnlink: vi.fn(),
+        onToggleTimeline: vi.fn(),
+        onMove: vi.fn(),
+      });
+
+      await fireEvent.click(screen.getByText('Move to folder…'));
+
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+  });
 });

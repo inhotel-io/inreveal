@@ -6,7 +6,9 @@
     SharedSpaceMemberResponseDto,
   } from '@immich/sdk';
   import { authManager } from '$lib/managers/auth-manager.svelte';
+  import { SpaceAlbumMultiSelectManager } from '$lib/managers/space-album-multi-select-manager.svelte';
   import { AlbumViewMode, SortOrder } from '$lib/stores/preferences.store';
+  import { keyboardManager } from '$lib/stores/keyboard-manager.svelte';
   import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
   import { sortAlbums } from '$lib/utils/album-utils';
   import {
@@ -23,8 +25,10 @@
   } from '$lib/utils/space-album-folders';
   import type { DragPayload } from '$lib/utils/space-album-folder-dnd';
   import LoadingSpinner from '$lib/components/shared-components/LoadingSpinner.svelte';
+  import OnEvents from '$lib/components/OnEvents.svelte';
   import SpaceAlbumCard from '$lib/components/spaces/space-album-card.svelte';
   import SpaceAlbumFolderCard from '$lib/components/spaces/space-album-folder-card.svelte';
+  import SpaceAlbumSelectBar from '$lib/components/spaces/space-album-select-bar.svelte';
   import SpaceAlbumsTable from '$lib/components/spaces/space-albums-table.svelte';
   import { Icon } from '@immich/ui';
   import { mdiChevronRight } from '@mdi/js';
@@ -46,11 +50,20 @@
     onUnlink?: (album: SharedSpaceLinkedAlbumDto) => void;
     onToggleTimeline?: (album: SharedSpaceLinkedAlbumDto) => void;
     onMoveAlbum?: (album: SharedSpaceLinkedAlbumDto) => void;
+    /** Fired when the user opens an album with no selection active (design §5.1). */
+    onOpenAlbum?: (album: SharedSpaceLinkedAlbumDto) => void;
     onOpenFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onRenameFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onMoveFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDeleteFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDropItem?: (payload: DragPayload, targetFolderId: string | null) => void;
+    // Bulk-action callbacks for the selection bar — left unwired here; a later task hangs the real
+    // bulk endpoints off these (see space-album-bulk-actions.ts).
+    onBulkUnlink?: (ids: string[]) => void;
+    onBulkMoveAlbums?: (ids: string[]) => void;
+    onBulkToggleAlbumsTimeline?: (ids: string[], showInTimeline: boolean) => void;
+    onBulkMoveFolders?: (ids: string[]) => void;
+    onBulkDeleteFolders?: (ids: string[]) => void;
   }
 
   let {
@@ -67,11 +80,17 @@
     onUnlink,
     onToggleTimeline,
     onMoveAlbum,
+    onOpenAlbum,
     onOpenFolder,
     onRenameFolder,
     onMoveFolder,
     onDeleteFolder,
     onDropItem,
+    onBulkUnlink,
+    onBulkMoveAlbums,
+    onBulkToggleAlbumsTimeline,
+    onBulkMoveFolders,
+    onBulkDeleteFolders,
   }: Props = $props();
 
   const isSearching = $derived((searchQuery ?? '').trim().length > 0);
@@ -152,7 +171,138 @@
   $effect(() => {
     groupIds = groups.map((g) => g.id);
   });
+
+  // Owned here (not by the route's +page.svelte) because two of its three clearing triggers —
+  // currentFolderId and searchQuery — are THIS component's own props, and the manager needs to
+  // react to them directly. See the three $effects below.
+  const selection = new SpaceAlbumMultiSelectManager();
+
+  // §4.3: range resolution needs ONE flat list in visual order, folders first then albums, so the
+  // two selection kinds stay CONTIGUOUS blocks. If they were interleaved, a same-kind Shift-range
+  // could pull an id of the OTHER kind in via raw index slicing (the manager's #range does not
+  // filter by kind) — see space-album-multi-select-manager.svelte.ts's docstring.
+  const orderedFolderIds = $derived(isSearching || foldersUnavailable ? [] : sortedFolders.map((f) => f.id));
+
+  const orderedAlbumIds = $derived.by(() => {
+    if (isSearching) {
+      return searchHitAlbums.map((a) => a.id);
+    }
+    if (isGrouped) {
+      return groups
+        .filter((g) => !isSpaceAlbumGroupCollapsed($spaceAlbumViewSettings, g.id))
+        .flatMap((g) => g.albums.map((a) => a.id));
+    }
+    return sorted.map((a) => a.id);
+  });
+
+  const orderedIds = $derived([...orderedFolderIds, ...orderedAlbumIds]);
+
+  const selectAlbum = (id: string, shiftKey: boolean) => {
+    if (shiftKey) {
+      selection.selectRange('album', id, orderedIds);
+    } else {
+      selection.toggle('album', id, orderedIds);
+    }
+  };
+
+  const selectFolder = (id: string, shiftKey: boolean) => {
+    if (shiftKey) {
+      selection.selectRange('folder', id, orderedIds);
+    } else {
+      selection.toggle('folder', id, orderedIds);
+    }
+  };
+
+  // Design table (§5.1): "Click a card, selection active → toggles"; "no selection active →
+  // opens". The card/row components have no opinion on which — they just report the click.
+  const handleAlbumClick = (album: SharedSpaceLinkedAlbumDto, shiftKey: boolean) => {
+    if (selection.selectionActive) {
+      selectAlbum(album.id, shiftKey);
+    } else {
+      onOpenAlbum?.(album);
+    }
+  };
+
+  const handleFolderClick = (folder: SharedSpaceAlbumFolderDto, shiftKey = false) => {
+    if (selection.selectionActive) {
+      selectFolder(folder.id, shiftKey);
+    } else {
+      onOpenFolder?.(folder);
+    }
+  };
+
+  // Shift-hover range preview (§4.3 / §5.1). Reads keyboardManager rather than the mouse event's
+  // own shiftKey so the preview also updates if Shift is pressed/released while already hovering.
+  const handleAlbumHover = (album: SharedSpaceLinkedAlbumDto) => {
+    if (keyboardManager.shift && selection.selectionActive) {
+      selection.previewRange('album', album.id, orderedIds);
+    }
+  };
+  const handleFolderHover = (folder: SharedSpaceAlbumFolderDto) => {
+    if (keyboardManager.shift && selection.selectionActive) {
+      selection.previewRange('folder', folder.id, orderedIds);
+    }
+  };
+
+  // E-5: an item that disappears from the incoming data (unlinked/deleted elsewhere, or a level
+  // change under foldersUnavailable) must silently drop out of the selection. This runs on every
+  // `albums`/`folders` identity change — i.e. every reload() the page performs, not on a timer or
+  // a background poll this surface doesn't have. reconcile() also unconditionally clears
+  // `candidates` (see the manager's own doc comment), so a reload mid Shift-hover blanks the
+  // preview until the next mouseenter; accepted, since every current reload is the DIRECT result
+  // of a user action (their own edit, unlink, or move), not a silent background refresh.
+  const presentIds = $derived([...albums.map((a) => a.id), ...folders.map((f) => f.id)]);
+  $effect(() => {
+    selection.reconcile(presentIds);
+  });
+
+  // Trigger 1 (§5.1): entering/leaving a folder is `?folder=` on the SAME route, so `AppNavigate`
+  // does not fire for it — this component's own `currentFolderId` prop is the only signal.
+  //
+  // Compares against the LAST VALUE the effect actually saw (rather than firing unconditionally
+  // on every re-run) so a re-render that changes some OTHER prop can never spuriously clear an
+  // active selection — this only fires selection.clear() when currentFolderId itself changed.
+  let lastFolderId: string | null | undefined;
+  $effect(() => {
+    const current = currentFolderId;
+    if (lastFolderId !== undefined && lastFolderId !== current) {
+      selection.clear();
+    }
+    lastFolderId = current;
+  });
+
+  // Trigger 2 (§5.1 / E-6): searchQuery is local $state on the page, not URL-backed, so no
+  // navigation of any kind fires when it changes — this is the ONLY way it clears. Same
+  // value-comparison guard as above, for the same reason.
+  let lastSearchQuery: string | undefined;
+  $effect(() => {
+    const current = searchQuery;
+    if (lastSearchQuery !== undefined && lastSearchQuery !== current) {
+      selection.clear();
+    }
+    lastSearchQuery = current;
+  });
+
+  // Trigger 3 (§5.1): still needed for leaving the albums route entirely, INCLUDING a same-route
+  // transition between two different spaces' album pages (`/spaces/A/albums` → `/spaces/B/albums`
+  // is the same route id, so `?folder=`/searchQuery may not change at all, and +layout.svelte
+  // suppresses AppNavigate for same-route transitions in the folder-drill-in case only — a full
+  // navigation between routes still emits it).
+  const handleAppNavigate = () => selection.clear();
+
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && selection.selectionActive) {
+      selection.clear();
+    }
+  };
+
+  const allSelectedAlbumsInTimeline = $derived(
+    selection.kind === 'album' && selection.ids.every((id) => albums.find((a) => a.id === id)?.showInTimeline),
+  );
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
+<OnEvents onAppNavigate={handleAppNavigate} />
 
 {#if isSearching}
   {#if searchHits.length === 0}
@@ -161,13 +311,34 @@
     <!-- Respect the user's List/Cover preference during a search too — it must not be silently
          discarded for the duration of the query. Deliberately UNGROUPED and with no folder rows
          (search escapes the folder tree entirely). -->
-    <SpaceAlbumsTable {spaceId} albums={searchHitAlbums} {canManage} {onUnlink} {onToggleTimeline} />
+    <SpaceAlbumsTable
+      {spaceId}
+      albums={searchHitAlbums}
+      {canManage}
+      {onUnlink}
+      {onToggleTimeline}
+      onOpenAlbum={handleAlbumClick}
+      onToggleSelectAlbum={(album, shiftKey) => selectAlbum(album.id, shiftKey)}
+      isAlbumSelected={(id) => selection.has('album', id)}
+    />
   {:else}
     <!-- Flattened, deliberately UNGROUPED: the path subtitle is the organising signal. -->
     <div class="grid grid-auto-fill-56 gap-y-4">
       {#each searchHits as hit (hit.album.id)}
         <div>
-          <SpaceAlbumCard {spaceId} album={hit.album} {canManage} {onUnlink} {onToggleTimeline} onMove={onMoveAlbum} />
+          <SpaceAlbumCard
+            {spaceId}
+            album={hit.album}
+            {canManage}
+            {onUnlink}
+            {onToggleTimeline}
+            onMove={onMoveAlbum}
+            selected={selection.has('album', hit.album.id)}
+            selectionCandidate={selection.isCandidate(hit.album.id)}
+            onOpen={handleAlbumClick}
+            onToggleSelect={(shiftKey) => selectAlbum(hit.album.id, shiftKey)}
+            onHover={() => handleAlbumHover(hit.album)}
+          />
           {#if hit.path.length > 0}
             <p class="px-5 text-xs opacity-70" data-testid="space-album-search-path-{hit.album.id}">
               {hit.path.join(' › ')}
@@ -197,7 +368,12 @@
         grouped
         {onUnlink}
         {onToggleTimeline}
-        {onOpenFolder}
+        onOpenFolder={handleFolderClick}
+        onOpenAlbum={handleAlbumClick}
+        onToggleSelectAlbum={(album, shiftKey) => selectAlbum(album.id, shiftKey)}
+        onToggleSelectFolder={(folder, shiftKey) => selectFolder(folder.id, shiftKey)}
+        isAlbumSelected={(id) => selection.has('album', id)}
+        isFolderSelected={(id) => selection.has('folder', id)}
       />
     {:else}
       <SpaceAlbumsTable
@@ -209,7 +385,12 @@
         {canManage}
         {onUnlink}
         {onToggleTimeline}
-        {onOpenFolder}
+        onOpenFolder={handleFolderClick}
+        onOpenAlbum={handleAlbumClick}
+        onToggleSelectAlbum={(album, shiftKey) => selectAlbum(album.id, shiftKey)}
+        onToggleSelectFolder={(folder, shiftKey) => selectFolder(folder.id, shiftKey)}
+        isAlbumSelected={(id) => selection.has('album', id)}
+        isFolderSelected={(id) => selection.has('folder', id)}
       />
     {/if}
   {:else}
@@ -223,7 +404,11 @@
             {canManage}
             {folders}
             {albums}
-            onOpen={onOpenFolder}
+            selected={selection.has('folder', folder.id)}
+            selectionCandidate={selection.isCandidate(folder.id)}
+            onOpen={handleFolderClick}
+            onToggleSelect={(shiftKey) => selectFolder(folder.id, shiftKey)}
+            onHover={() => handleFolderHover(folder)}
             onRename={onRenameFolder}
             onMove={onMoveFolder}
             onDelete={onDeleteFolder}
@@ -258,7 +443,19 @@
           {#if !collapsed}
             <div class="mt-4 grid grid-auto-fill-56 gap-y-4" transition:slide={{ duration: 300 }}>
               {#each group.albums as album (album.id)}
-                <SpaceAlbumCard {spaceId} {album} {canManage} {onUnlink} {onToggleTimeline} onMove={onMoveAlbum} />
+                <SpaceAlbumCard
+                  {spaceId}
+                  {album}
+                  {canManage}
+                  {onUnlink}
+                  {onToggleTimeline}
+                  onMove={onMoveAlbum}
+                  selected={selection.has('album', album.id)}
+                  selectionCandidate={selection.isCandidate(album.id)}
+                  onOpen={handleAlbumClick}
+                  onToggleSelect={(shiftKey) => selectAlbum(album.id, shiftKey)}
+                  onHover={() => handleAlbumHover(album)}
+                />
               {/each}
             </div>
           {/if}
@@ -266,7 +463,19 @@
       {:else}
         <div class="grid grid-auto-fill-56 gap-y-4">
           {#each sorted as album (album.id)}
-            <SpaceAlbumCard {spaceId} {album} {canManage} {onUnlink} {onToggleTimeline} onMove={onMoveAlbum} />
+            <SpaceAlbumCard
+              {spaceId}
+              {album}
+              {canManage}
+              {onUnlink}
+              {onToggleTimeline}
+              onMove={onMoveAlbum}
+              selected={selection.has('album', album.id)}
+              selectionCandidate={selection.isCandidate(album.id)}
+              onOpen={handleAlbumClick}
+              onToggleSelect={(shiftKey) => selectAlbum(album.id, shiftKey)}
+              onHover={() => handleAlbumHover(album)}
+            />
           {/each}
         </div>
       {/if}
@@ -280,4 +489,18 @@
   <div class="flex justify-center p-8" data-testid="space-albums-loading">
     <LoadingSpinner />
   </div>
+{/if}
+
+{#if canManage && selection.selectionActive}
+  <SpaceAlbumSelectBar
+    kind={selection.kind === 'folder' ? 'folder' : 'album'}
+    count={selection.count}
+    allInTimeline={allSelectedAlbumsInTimeline}
+    onClear={() => selection.clear()}
+    onUnlink={() => onBulkUnlink?.(selection.ids)}
+    onMove={() =>
+      selection.kind === 'folder' ? onBulkMoveFolders?.(selection.ids) : onBulkMoveAlbums?.(selection.ids)}
+    onDelete={() => onBulkDeleteFolders?.(selection.ids)}
+    onToggleTimeline={(showInTimeline) => onBulkToggleAlbumsTimeline?.(selection.ids, showInTimeline)}
+  />
 {/if}

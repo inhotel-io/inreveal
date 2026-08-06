@@ -316,6 +316,17 @@ describe('Space albums page', () => {
   });
 
   describe('interactions', () => {
+    // Task 11: the card no longer navigates via its raw <a href> click — it goes through the
+    // onOpenAlbum callback wired here, which must resolve to the real in-space album route.
+    it('clicking an album card with no selection active navigates to the album', async () => {
+      const album = makeAlbum({ id: 'album-1', albumName: 'Vacation' });
+      renderPage([album], SharedSpaceRole.Editor);
+
+      await fireEvent.click(await screen.findByTestId('space-album-card-album-1'));
+
+      await waitFor(() => expect(goto).toHaveBeenCalledWith('/spaces/space-1/albums/album-1'));
+    });
+
     it('clicking "Link album" opens the SpaceLinkAlbumModal with the linked album ids', async () => {
       modalManagerMock.show.mockResolvedValue(undefined);
       renderPage([makeAlbum({ id: 'album-1' })], SharedSpaceRole.Editor);
