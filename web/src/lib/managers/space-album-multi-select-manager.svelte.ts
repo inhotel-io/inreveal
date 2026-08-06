@@ -74,6 +74,11 @@ export class SpaceAlbumMultiSelectManager {
     for (const id of this.#range(toId, ordered)) {
       this.#ids.add(id);
     }
+    // Spec E-7: a Shift-click with no anchor "behaves as a plain click: selects that one item AND
+    // SETS IT AS THE ANCHOR". Without this, a Shift-click as the FIRST interaction leaves the anchor
+    // null forever — previewRange then returns no candidates, and the next Shift-click selects only
+    // the two endpoints, silently skipping everything between.
+    this.#anchor ??= toId;
     this.candidates = [];
   }
 
@@ -100,6 +105,9 @@ export class SpaceAlbumMultiSelectManager {
       this.#kind = 'none';
       this.#anchor = null;
     }
+    // m-1: a stale preview must not survive reconciliation — isCandidate(id) must stop being
+    // true for an id that just disappeared from the page's data.
+    this.candidates = [];
   }
 
   clear() {
