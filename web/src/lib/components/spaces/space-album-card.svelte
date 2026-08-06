@@ -3,7 +3,7 @@
   import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import { Route } from '$lib/route';
-  import { setActiveDragPayload, writeDragPayload } from '$lib/utils/space-album-folder-dnd';
+  import { buildDragPayload, setActiveDragPayload, writeDragPayload } from '$lib/utils/space-album-folder-dnd';
   import { type AlbumResponseDto, type SharedSpaceLinkedAlbumDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
   import { mdiCheckCircle, mdiDotsVertical } from '@mdi/js';
@@ -20,6 +20,11 @@
     selected?: boolean;
     /** Live Shift-hover range preview (design §4.3). */
     selectionCandidate?: boolean;
+    /** The full current selection, so a drag started from a selected card can carry the whole
+     * batch (design §5.3 / S-22). Defaults leave a drag carrying only itself, matching a caller
+     * that has no selection concept at all. */
+    selectedIds?: string[];
+    selectedKind?: 'album' | 'folder' | 'none';
     /** Fired on a plain card-body click. The caller decides open-vs-toggle — this component has no
      * opinion on whether a selection is active elsewhere on the page. */
     onOpen?: (album: SharedSpaceLinkedAlbumDto, shiftKey: boolean) => void;
@@ -37,6 +42,8 @@
     onMove,
     selected = false,
     selectionCandidate = false,
+    selectedIds = [],
+    selectedKind = 'none',
     onOpen,
     onToggleSelect,
     onHover,
@@ -89,7 +96,7 @@
       if (!canManage || !event.dataTransfer) {
         return;
       }
-      const payload = { kind: 'album' as const, id: album.id };
+      const payload = buildDragPayload({ kind: 'album', id: album.id }, selectedIds, selectedKind);
       writeDragPayload(event.dataTransfer, payload);
       setActiveDragPayload(payload);
     }}

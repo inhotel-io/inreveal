@@ -3,6 +3,7 @@
   import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import SpaceCollage from '$lib/components/spaces/space-collage.svelte';
   import {
+    buildDragPayload,
     canDrop,
     getActiveDragPayload,
     readDragPayload,
@@ -27,6 +28,10 @@
     selected?: boolean;
     /** Live Shift-hover range preview (design §4.3). */
     selectionCandidate?: boolean;
+    /** The full current selection, so a drag started from a selected card can carry the whole
+     * batch (design §5.3 / S-22). Defaults leave a drag carrying only itself. */
+    selectedIds?: string[];
+    selectedKind?: 'album' | 'folder' | 'none';
     /** Fired on a plain click on the "open" region. The caller decides open-vs-toggle. */
     onOpen?: (folder: SharedSpaceAlbumFolderDto, shiftKey: boolean) => void;
     /** Fired ONLY from the check circle — always enters/extends the selection. */
@@ -48,6 +53,8 @@
     albums = [],
     selected = false,
     selectionCandidate = false,
+    selectedIds = [],
+    selectedKind = 'none',
     onOpen,
     onToggleSelect,
     onHover,
@@ -83,7 +90,7 @@
     if (!event.dataTransfer) {
       return;
     }
-    const payload: DragPayload = { kind: 'folder', id: folder.id };
+    const payload: DragPayload = buildDragPayload({ kind: 'folder', id: folder.id }, selectedIds, selectedKind);
     writeDragPayload(event.dataTransfer, payload);
     setActiveDragPayload(payload);
   }}

@@ -7,6 +7,7 @@ import { authManager } from '$lib/managers/auth-manager.svelte';
 import { eventManager } from '$lib/managers/event-manager.svelte';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+import { readDragPayload } from '$lib/utils/space-album-folder-dnd';
 import { expandAllSpaceAlbumGroups, toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
 import { renderWithTooltips } from '$tests/helpers';
 import { userAdminFactory } from '@test-data/factories/user-factory';
@@ -860,6 +861,213 @@ describe('SpaceAlbumsList', () => {
           // Positive control: an unselected row does not carry the attribute.
           expect(screen.getByTestId('space-album-row-b').closest('tr')).not.toHaveAttribute('data-selected', 'true');
         });
+      });
+    });
+
+    describe('bulk actions', () => {
+      const makeDataTransfer = () => {
+        const store = new Map<string, string>();
+        return {
+          setData: (type: string, value: string) => store.set(type, value),
+          getData: (type: string) => store.get(type) ?? '',
+          types: [...store.keys()],
+        } as unknown as DataTransfer;
+      };
+
+      // S-19: every selected album is already in the timeline -> the button offers to remove.
+      it('labels the timeline button "Remove from timeline" when every selected album is already in the timeline', async () => {
+        renderList({
+          ...props,
+          albums: [linkedAlbum('a', { showInTimeline: true }), linkedAlbum('b', { showInTimeline: true })],
+          folders: [],
+        });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        const bar = screen.getByTestId('space-album-select-bar');
+        expect(within(bar).getByRole('button', { name: 'Remove from timeline' })).toBeInTheDocument();
+        expect(within(bar).queryByRole('button', { name: 'Add to timeline' })).not.toBeInTheDocument();
+      });
+
+      // S-18: a mixed selection resolves toward INCLUDE, not exclude.
+      it('labels the timeline button "Add to timeline" for a mixed selection', async () => {
+        renderList({
+          ...props,
+          albums: [linkedAlbum('a', { showInTimeline: true }), linkedAlbum('b', { showInTimeline: false })],
+          folders: [],
+        });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        expect(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Add to timeline' }),
+        ).toBeInTheDocument();
+      });
+
+      it('clicking the timeline button calls onBulkToggleAlbumsTimeline with the target value and the selected ids', async () => {
+        const onBulkToggleAlbumsTimeline = vi.fn().mockResolvedValue([]);
+        renderList({
+          ...props,
+          albums: [linkedAlbum('a', { showInTimeline: true }), linkedAlbum('b', { showInTimeline: false })],
+          folders: [],
+          onBulkToggleAlbumsTimeline,
+        });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Add to timeline' }),
+        );
+
+        expect(onBulkToggleAlbumsTimeline).toHaveBeenCalledTimes(1);
+        const [ids, showInTimeline] = onBulkToggleAlbumsTimeline.mock.calls[0];
+        expect((ids as string[]).slice().sort()).toEqual(['a', 'b']);
+        expect(showInTimeline).toBe(true);
+      });
+
+      it('clicking "Unlink from space" calls onBulkUnlink with the selected album ids', async () => {
+        const onBulkUnlink = vi.fn().mockResolvedValue([]);
+        renderList({ ...props, folders: [], onBulkUnlink });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+        );
+
+        expect(onBulkUnlink).toHaveBeenCalledTimes(1);
+        expect((onBulkUnlink.mock.calls[0][0] as string[]).slice().sort()).toEqual(['a', 'b']);
+      });
+
+      // S-24: exactly the failures stay selected, and the successes do not.
+      it('keeps exactly the failed items selected after a partial failure', async () => {
+        const onBulkUnlink = vi.fn().mockResolvedValue(['b']);
+        renderList({
+          ...props,
+          albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')],
+          folders: [],
+          onBulkUnlink,
+        });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        await fireEvent.click(screen.getByTestId('space-album-select-c'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3'); // positive control
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+        );
+
+        await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+        expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-a')).not.toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-c')).not.toHaveAttribute('data-selected', 'true');
+      });
+
+      // S-26: total success clears the selection and the bar disappears.
+      it('clears the selection when every item succeeds', async () => {
+        const onBulkUnlink = vi.fn().mockResolvedValue([]);
+        renderList({ ...props, albums: [linkedAlbum('a')], folders: [], onBulkUnlink });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+        );
+
+        await waitFor(() => expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument());
+      });
+
+      // E-19: even if the wired handler itself rejects — the page's own bulk-action wrappers never
+      // do (they catch a failed request and report every id as failed instead; see
+      // space-album-bulk-actions.ts), but this component's own defence-in-depth try/catch must
+      // hold regardless — nothing may be silently deselected.
+      it('keeps the whole selection when the bulk handler rejects', async () => {
+        const onBulkUnlink = vi.fn().mockRejectedValue(new Error('offline'));
+        renderList({ ...props, albums: [linkedAlbum('a'), linkedAlbum('b')], folders: [], onBulkUnlink });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+        );
+
+        await waitFor(() => expect(onBulkUnlink).toHaveBeenCalled());
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+        expect(screen.getByTestId('space-album-card-a')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-selected', 'true');
+      });
+
+      it('clicking "Move to folder…" calls onBulkMoveAlbums with the selected album ids', async () => {
+        const onBulkMoveAlbums = vi.fn().mockResolvedValue([]);
+        renderList({ ...props, folders: [], onBulkMoveAlbums });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Move to folder…' }),
+        );
+
+        expect(onBulkMoveAlbums).toHaveBeenCalledWith(['a']);
+      });
+
+      it('clicking "Move to folder…" calls onBulkMoveFolders for a folder selection', async () => {
+        const onBulkMoveFolders = vi.fn().mockResolvedValue([]);
+        renderList({ ...props, onBulkMoveFolders }); // props already includes folder 'f'
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Move to folder…' }),
+        );
+
+        expect(onBulkMoveFolders).toHaveBeenCalledWith(['f']);
+      });
+
+      it('clicking "Delete folder" calls onBulkDeleteFolders and reconciles on partial failure', async () => {
+        const onBulkDeleteFolders = vi.fn().mockResolvedValue(['f']);
+        renderList({ ...props, albums: [], folders: [folderDto('f'), folderDto('g')], onBulkDeleteFolders });
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-g'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Delete folder' }),
+        );
+
+        await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+        expect(onBulkDeleteFolders).toHaveBeenCalledTimes(1);
+        expect((onBulkDeleteFolders.mock.calls[0][0] as string[]).slice().sort()).toEqual(['f', 'g']);
+      });
+
+      // S-22/S-23: proves selection state actually reaches the dragged card's payload — the pure
+      // buildDragPayload function is unit-tested on its own in space-album-folder-dnd.spec.ts.
+      it('dragging a selected card carries the whole selection', async () => {
+        renderList({ ...props, albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')], folders: [] });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        const cardB = screen
+          .getByTestId('space-album-card-b')
+          .querySelector('[data-testid="space-album-card"]') as HTMLElement;
+        const dataTransfer = makeDataTransfer();
+        await fireEvent.dragStart(cardB, { dataTransfer });
+
+        const payload = readDragPayload(dataTransfer);
+        expect(payload?.kind).toBe('album');
+        expect(payload?.ids.slice().sort()).toEqual(['a', 'b']);
+      });
+
+      it('dragging an unselected card carries only that card and leaves the selection untouched', async () => {
+        renderList({ ...props, albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')], folders: [] });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        const cardC = screen
+          .getByTestId('space-album-card-c')
+          .querySelector('[data-testid="space-album-card"]') as HTMLElement;
+        const dataTransfer = makeDataTransfer();
+        await fireEvent.dragStart(cardC, { dataTransfer });
+
+        expect(readDragPayload(dataTransfer)).toEqual({ kind: 'album', ids: ['c'] });
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
       });
     });
   });

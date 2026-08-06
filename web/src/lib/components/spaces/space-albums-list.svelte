@@ -57,13 +57,15 @@
     onMoveFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDeleteFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDropItem?: (payload: DragPayload, targetFolderId: string | null) => void;
-    // Bulk-action callbacks for the selection bar — left unwired here; a later task hangs the real
-    // bulk endpoints off these (see space-album-bulk-actions.ts).
-    onBulkUnlink?: (ids: string[]) => void;
-    onBulkMoveAlbums?: (ids: string[]) => void;
-    onBulkToggleAlbumsTimeline?: (ids: string[], showInTimeline: boolean) => void;
-    onBulkMoveFolders?: (ids: string[]) => void;
-    onBulkDeleteFolders?: (ids: string[]) => void;
+    // Bulk-action callbacks for the selection bar. Each resolves to the ids that should REMAIN
+    // selected (typically the page's own bulkXAction's `failedIds` — see space-album-bulk-actions.ts
+    // — or, on a cancelled confirm dialog, the untouched input `ids`) so this component can fold
+    // the result straight into the manager's own `reconcile` without the page reaching into it.
+    onBulkUnlink?: (ids: string[]) => Promise<string[]>;
+    onBulkMoveAlbums?: (ids: string[]) => Promise<string[]>;
+    onBulkToggleAlbumsTimeline?: (ids: string[], showInTimeline: boolean) => Promise<string[]>;
+    onBulkMoveFolders?: (ids: string[]) => Promise<string[]>;
+    onBulkDeleteFolders?: (ids: string[]) => Promise<string[]>;
   }
 
   let {
@@ -341,6 +343,28 @@
   const allSelectedAlbumsInTimeline = $derived(
     selection.kind === 'album' && selection.ids.every((id) => albums.find((a) => a.id === id)?.showInTimeline),
   );
+
+  // Composes each bulk-action prop with the manager's own `reconcile` primitive (Task 10's review
+  // hint): reconcile drops any selected id NOT in the given list, so handing it exactly "the ids
+  // that should remain selected" — the contract each onBulk* prop above documents — makes total
+  // success clear the selection (S-26), a partial failure keep only the failures (S-24), and a
+  // total failure keep everything (S-25) without this component ever inspecting *why*.
+  //
+  // The try/catch is defence in depth, not load-bearing for the page's own handlers: those already
+  // funnel every bulk call through space-album-bulk-actions.ts's runBulkAction, which never
+  // rethrows. But E-19's guarantee — a failed request must not silently deselect anything — should
+  // hold at THIS boundary too, in case a caller's handler throws for some other reason.
+  async function runBulkAction(action: ((ids: string[]) => Promise<string[]>) | undefined, ids: string[]) {
+    if (!action) {
+      return;
+    }
+    try {
+      const keep = await action(ids);
+      selection.reconcile(keep);
+    } catch {
+      // Nothing to do — leaving the selection untouched IS the correct outcome here.
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -377,6 +401,8 @@
             onMove={onMoveAlbum}
             selected={selection.has('album', hit.album.id)}
             selectionCandidate={selection.isCandidate(hit.album.id)}
+            selectedIds={selection.ids}
+            selectedKind={selection.kind}
             onOpen={handleAlbumClick}
             onToggleSelect={(shiftKey) => selectAlbum(hit.album.id, shiftKey)}
             onHover={() => handleAlbumHover(hit.album)}
@@ -448,6 +474,8 @@
             {albums}
             selected={selection.has('folder', folder.id)}
             selectionCandidate={selection.isCandidate(folder.id)}
+            selectedIds={selection.ids}
+            selectedKind={selection.kind}
             onOpen={handleFolderClick}
             onToggleSelect={(shiftKey) => selectFolder(folder.id, shiftKey)}
             onHover={() => handleFolderHover(folder)}
@@ -494,6 +522,8 @@
                   onMove={onMoveAlbum}
                   selected={selection.has('album', album.id)}
                   selectionCandidate={selection.isCandidate(album.id)}
+                  selectedIds={selection.ids}
+                  selectedKind={selection.kind}
                   onOpen={handleAlbumClick}
                   onToggleSelect={(shiftKey) => selectAlbum(album.id, shiftKey)}
                   onHover={() => handleAlbumHover(album)}
@@ -514,6 +544,8 @@
               onMove={onMoveAlbum}
               selected={selection.has('album', album.id)}
               selectionCandidate={selection.isCandidate(album.id)}
+              selectedIds={selection.ids}
+              selectedKind={selection.kind}
               onOpen={handleAlbumClick}
               onToggleSelect={(shiftKey) => selectAlbum(album.id, shiftKey)}
               onHover={() => handleAlbumHover(album)}
@@ -539,10 +571,13 @@
     count={selection.count}
     allInTimeline={allSelectedAlbumsInTimeline}
     onClear={() => selection.clear()}
-    onUnlink={() => onBulkUnlink?.(selection.ids)}
-    onMove={() =>
-      selection.kind === 'folder' ? onBulkMoveFolders?.(selection.ids) : onBulkMoveAlbums?.(selection.ids)}
-    onDelete={() => onBulkDeleteFolders?.(selection.ids)}
-    onToggleTimeline={(showInTimeline) => onBulkToggleAlbumsTimeline?.(selection.ids, showInTimeline)}
+    onUnlink={() => void runBulkAction(onBulkUnlink, selection.ids)}
+    onMove={() => void runBulkAction(selection.kind === 'folder' ? onBulkMoveFolders : onBulkMoveAlbums, selection.ids)}
+    onDelete={() => void runBulkAction(onBulkDeleteFolders, selection.ids)}
+    onToggleTimeline={(showInTimeline) =>
+      void runBulkAction(
+        onBulkToggleAlbumsTimeline && ((ids) => onBulkToggleAlbumsTimeline(ids, showInTimeline)),
+        selection.ids,
+      )}
   />
 {/if}

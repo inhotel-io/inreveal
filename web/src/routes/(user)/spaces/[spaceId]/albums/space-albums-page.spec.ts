@@ -6,8 +6,9 @@ import {
   type SharedSpaceMemberResponseDto,
   type SharedSpaceResponseDto,
 } from '@immich/sdk';
+import { toastManager } from '@immich/ui';
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { goto, invalidateAll } from '$app/navigation';
@@ -767,7 +768,7 @@ describe('Space albums page', () => {
         folders: [makeFolder('trips', 'Trips')],
       });
 
-      const accepted = await dropOnFolder({ kind: 'album', id: 'a1' }, 'trips');
+      const accepted = await dropOnFolder({ kind: 'album', ids: ['a1'] }, 'trips');
 
       // dragover accepted the drop (preventDefault ran) — a real browser only lets `drop` fire
       // at all when this is true, so this is what actually gates the request, not merely
@@ -788,7 +789,7 @@ describe('Space albums page', () => {
         folders: [makeFolder('trips', 'Trips')],
       });
 
-      await dropOnFolder({ kind: 'album', id: 'a1' }, 'trips');
+      await dropOnFolder({ kind: 'album', ids: ['a1'] }, 'trips');
 
       await waitFor(() => expect(sdkMock.setSharedSpaceAlbumFolder).toHaveBeenCalled());
       await waitFor(() => expect(invalidateAll).toHaveBeenCalled());
@@ -800,7 +801,7 @@ describe('Space albums page', () => {
         folders: [makeFolder('trips', 'Trips'), makeFolder('family', 'Family')],
       });
 
-      const accepted = await dropOnFolder({ kind: 'folder', id: 'trips' }, 'family');
+      const accepted = await dropOnFolder({ kind: 'folder', ids: ['trips'] }, 'family');
 
       expect(accepted).toBe(true);
       await waitFor(() =>
@@ -828,14 +829,14 @@ describe('Space albums page', () => {
       // Invalid: "y2026" is a descendant of "trips" — dropping trips onto it must be a no-op.
       // dragover never accepts (never preventDefault()s), so — matching a real browser — `drop`
       // never even fires.
-      const invalidAccepted = await dropOnFolder({ kind: 'folder', id: 'trips' }, 'y2026');
+      const invalidAccepted = await dropOnFolder({ kind: 'folder', ids: ['trips'] }, 'y2026');
       expect(invalidAccepted).toBe(false);
       expect(sdkMock.setSharedSpaceAlbumFolder).not.toHaveBeenCalled();
       expect(sdkMock.updateSharedSpaceAlbumFolder).not.toHaveBeenCalled();
 
       // Prove the drop handler actually ran (rather than the event never reaching it at all): a
       // legal drop in the very same view — moving Rome from Italy into 2026 — does fire a request.
-      const validAccepted = await dropOnFolder({ kind: 'album', id: 'a1' }, 'y2026');
+      const validAccepted = await dropOnFolder({ kind: 'album', ids: ['a1'] }, 'y2026');
       expect(validAccepted).toBe(true);
       await waitFor(() =>
         expect(sdkMock.setSharedSpaceAlbumFolder).toHaveBeenCalledWith(
@@ -853,12 +854,12 @@ describe('Space albums page', () => {
       );
 
       // Invalid: a1 already sits in "trips".
-      const invalidAccepted = await dropOnFolder({ kind: 'album', id: 'a1' }, 'trips');
+      const invalidAccepted = await dropOnFolder({ kind: 'album', ids: ['a1'] }, 'trips');
       expect(invalidAccepted).toBe(false);
       expect(sdkMock.setSharedSpaceAlbumFolder).not.toHaveBeenCalled();
 
       // Prove the handler ran: a2, which does NOT already sit in "trips", legally drops there.
-      const validAccepted = await dropOnFolder({ kind: 'album', id: 'a2' }, 'trips');
+      const validAccepted = await dropOnFolder({ kind: 'album', ids: ['a2'] }, 'trips');
       expect(validAccepted).toBe(true);
       await waitFor(() =>
         expect(sdkMock.setSharedSpaceAlbumFolder).toHaveBeenCalledWith(
@@ -876,7 +877,7 @@ describe('Space albums page', () => {
         folders: [makeFolder('trips', 'Trips'), makeFolder('y2026', '2026', 'trips')],
       });
 
-      const accepted = await dropOnFolder({ kind: 'folder', id: 'y2026' }, 'trips');
+      const accepted = await dropOnFolder({ kind: 'folder', ids: ['y2026'] }, 'trips');
 
       expect(accepted).toBe(false);
       expect(sdkMock.setSharedSpaceAlbumFolder).not.toHaveBeenCalled();
@@ -900,7 +901,7 @@ describe('Space albums page', () => {
 
       const dataTransfer = makeFakeDataTransfer();
       // a1 already sits in "trips" — an illegal, no-op drop per canDrop.
-      writeDragPayload(dataTransfer, { kind: 'album', id: 'a1' });
+      writeDragPayload(dataTransfer, { kind: 'album', ids: ['a1'] });
 
       const card = await screen.findByTestId('space-album-folder-card');
       await fireEvent.drop(card, { dataTransfer }); // no preceding dragover
@@ -923,7 +924,7 @@ describe('Space albums page', () => {
       // isolating that failure is what makes the assertion below actually exercise the rollback.
       sdkMock.getSharedSpaceAlbums.mockRejectedValueOnce(new Error('network error'));
 
-      await dropOnFolder({ kind: 'album', id: 'a1' }, 'trips');
+      await dropOnFolder({ kind: 'album', ids: ['a1'] }, 'trips');
 
       // The request was actually attempted (proves the optimistic-apply branch ran)...
       await waitFor(() =>
@@ -955,7 +956,7 @@ describe('Space albums page', () => {
       // whether the rollback assignment itself ran.
       sdkMock.getSharedSpaceAlbumFolders.mockRejectedValueOnce(new Error('network error'));
 
-      await dropOnFolder({ kind: 'folder', id: 'trips' }, 'family');
+      await dropOnFolder({ kind: 'folder', ids: ['trips'] }, 'family');
 
       await waitFor(() =>
         expect(sdkMock.updateSharedSpaceAlbumFolder).toHaveBeenCalledWith({
@@ -988,7 +989,7 @@ describe('Space albums page', () => {
       sdkMock.getSharedSpaceAlbumFolders.mockResolvedValueOnce([]);
       sdkMock.getSharedSpaceAlbums.mockRejectedValueOnce(new Error('network error'));
 
-      await dropOnFolder({ kind: 'album', id: 'a1' }, 'trips');
+      await dropOnFolder({ kind: 'album', ids: ['a1'] }, 'trips');
 
       // The move-specific message — see the W-15 comment above for why a bare toHaveBeenCalled()
       // can't tell "the move's own handleError call ran" apart from "only reload's unrelated,
@@ -1009,7 +1010,7 @@ describe('Space albums page', () => {
       });
       await screen.findByTestId('space-album-folder-breadcrumb');
 
-      const accepted = await dropOnCrumb({ kind: 'album', id: 'a1' }, null);
+      const accepted = await dropOnCrumb({ kind: 'album', ids: ['a1'] }, null);
 
       expect(accepted).toBe(true);
       await waitFor(() =>
@@ -1071,6 +1072,269 @@ describe('Space albums page', () => {
       renderPage([], SharedSpaceRole.Viewer, { folders: [makeFolder('trips', 'Trips')] });
 
       expect(await screen.findByTestId('space-album-folder-card')).toHaveAttribute('draggable', 'false');
+    });
+
+    // S-22: a drag whose payload carries more than one id (a selection drag) must route through
+    // the BULK endpoint instead of the single-item one, and the reverse — the ordinary single-item
+    // tests above already pin that a one-element payload keeps using the single endpoint.
+    it('S-22: a multi-id album drag payload moves the whole batch through the bulk endpoint', async () => {
+      sdkMock.bulkSetAlbumFolder.mockResolvedValue([
+        { id: 'a1', success: true },
+        { id: 'a2', success: true },
+      ] as never);
+      renderPage(
+        [makeAlbum({ id: 'a1', albumName: 'Rome' }), makeAlbum({ id: 'a2', albumName: 'Venice' })],
+        SharedSpaceRole.Editor,
+        { folders: [makeFolder('trips', 'Trips')] },
+      );
+
+      const accepted = await dropOnFolder({ kind: 'album', ids: ['a1', 'a2'] }, 'trips');
+
+      expect(accepted).toBe(true);
+      await waitFor(() =>
+        expect(sdkMock.bulkSetAlbumFolder).toHaveBeenCalledWith({
+          id: 'space-1',
+          sharedSpaceBulkAlbumFolderMoveDto: { ids: ['a1', 'a2'], folderId: 'trips' },
+        }),
+      );
+      expect(sdkMock.setSharedSpaceAlbumFolder).not.toHaveBeenCalled();
+    });
+
+    it('S-22: a partial failure on a multi-id album drag shows the partial-failure toast', async () => {
+      sdkMock.bulkSetAlbumFolder.mockResolvedValue([
+        { id: 'a1', success: true },
+        { id: 'a2', success: false, error: 'validation' },
+      ] as never);
+      renderPage(
+        [makeAlbum({ id: 'a1', albumName: 'Rome' }), makeAlbum({ id: 'a2', albumName: 'Venice' })],
+        SharedSpaceRole.Editor,
+        { folders: [makeFolder('trips', 'Trips')] },
+      );
+
+      await dropOnFolder({ kind: 'album', ids: ['a1', 'a2'] }, 'trips');
+
+      await waitFor(() => expect(toastManager.warning).toHaveBeenCalledWith('1 item could not be updated'));
+    });
+
+    it('S-22: a multi-id folder drag payload moves the whole batch through the bulk endpoint', async () => {
+      sdkMock.bulkMoveAlbumFolders.mockResolvedValue([
+        { id: 'trips', success: true },
+        { id: 'family', success: true },
+      ] as never);
+      renderPage([], SharedSpaceRole.Editor, {
+        folders: [makeFolder('trips', 'Trips'), makeFolder('family', 'Family'), makeFolder('other', 'Other')],
+      });
+      await screen.findAllByTestId('space-album-folder-card');
+
+      const accepted = await dropOnFolder({ kind: 'folder', ids: ['trips', 'family'] }, 'other');
+
+      expect(accepted).toBe(true);
+      await waitFor(() =>
+        expect(sdkMock.bulkMoveAlbumFolders).toHaveBeenCalledWith({
+          id: 'space-1',
+          sharedSpaceBulkFolderParentDto: { ids: ['trips', 'family'], parentId: 'other' },
+        }),
+      );
+      expect(sdkMock.updateSharedSpaceAlbumFolder).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('bulk actions', () => {
+    // S-17
+    it('bulk unlink: shows a confirm dialog naming the count and calls bulkUnlinkAlbums with every selected id', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      sdkMock.bulkUnlinkAlbums.mockResolvedValue([
+        { id: 'a1', success: true },
+        { id: 'a2', success: true },
+      ] as never);
+      renderPage(
+        [makeAlbum({ id: 'a1', albumName: 'Rome' }), makeAlbum({ id: 'a2', albumName: 'Venice' })],
+        SharedSpaceRole.Editor,
+      );
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(screen.getByTestId('space-album-select-a2'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+      );
+
+      await waitFor(() =>
+        expect(modalManagerMock.showDialog).toHaveBeenCalledWith({
+          title: 'Unlink 2 albums?',
+          prompt: 'They will be removed from this space. The albums themselves are kept.',
+        }),
+      );
+      await waitFor(() =>
+        expect(sdkMock.bulkUnlinkAlbums).toHaveBeenCalledWith({
+          id: 'space-1',
+          sharedSpaceBulkAlbumIdsDto: { ids: expect.arrayContaining(['a1', 'a2']) },
+        }),
+      );
+    });
+
+    it('bulk unlink: dismissing the confirm dialog fires no request and leaves the selection untouched', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(false);
+      renderPage([makeAlbum({ id: 'a1', albumName: 'Rome' })], SharedSpaceRole.Editor);
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+      );
+
+      await waitFor(() => expect(modalManagerMock.showDialog).toHaveBeenCalled());
+      expect(sdkMock.bulkUnlinkAlbums).not.toHaveBeenCalled();
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+    });
+
+    // S-24
+    it('bulk unlink: a partial failure shows the partial-failure toast and keeps only the failure selected', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      sdkMock.bulkUnlinkAlbums.mockResolvedValue([
+        { id: 'a1', success: true },
+        { id: 'a2', success: false, error: 'no_permission' },
+      ] as never);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue([makeAlbum({ id: 'a2', albumName: 'Venice' })]);
+      renderPage(
+        [makeAlbum({ id: 'a1', albumName: 'Rome' }), makeAlbum({ id: 'a2', albumName: 'Venice' })],
+        SharedSpaceRole.Editor,
+      );
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(screen.getByTestId('space-album-select-a2'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+      );
+
+      await waitFor(() => expect(toastManager.warning).toHaveBeenCalledWith('1 item could not be updated'));
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+    });
+
+    it('bulk unlink: emits SpaceUnlinkAlbum only once something actually unlinked', async () => {
+      const emitSpy = vi.spyOn(eventManager, 'emit');
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      sdkMock.bulkUnlinkAlbums.mockResolvedValue([{ id: 'a1', success: false, error: 'no_permission' }] as never);
+      renderPage([makeAlbum({ id: 'a1', albumName: 'Rome' })], SharedSpaceRole.Editor);
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+      );
+
+      await waitFor(() => expect(sdkMock.bulkUnlinkAlbums).toHaveBeenCalled());
+      expect(emitSpy).not.toHaveBeenCalledWith('SpaceUnlinkAlbum', expect.anything());
+      emitSpy.mockRestore();
+    });
+
+    // S-20
+    it('bulk move albums: opens the folder picker and calls bulkSetAlbumFolder with the chosen destination', async () => {
+      modalManagerMock.show.mockResolvedValue({ folderId: 'trips' });
+      sdkMock.bulkSetAlbumFolder.mockResolvedValue([{ id: 'a1', success: true }] as never);
+      renderPage([makeAlbum({ id: 'a1', albumName: 'Rome' })], SharedSpaceRole.Editor, {
+        folders: [makeFolder('trips', 'Trips')],
+      });
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Move to folder…' }),
+      );
+
+      await waitFor(() =>
+        expect(sdkMock.bulkSetAlbumFolder).toHaveBeenCalledWith({
+          id: 'space-1',
+          sharedSpaceBulkAlbumFolderMoveDto: { ids: ['a1'], folderId: 'trips' },
+        }),
+      );
+    });
+
+    it('bulk move albums: dismissing the picker fires no request', async () => {
+      modalManagerMock.show.mockResolvedValue(undefined);
+      renderPage([makeAlbum({ id: 'a1', albumName: 'Rome' })], SharedSpaceRole.Editor);
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Move to folder…' }),
+      );
+
+      await waitFor(() => expect(modalManagerMock.show).toHaveBeenCalled());
+      expect(sdkMock.bulkSetAlbumFolder).not.toHaveBeenCalled();
+    });
+
+    // S-18/S-19: no confirm dialog for a non-destructive toggle.
+    it('bulk toggle timeline: calls bulkSetAlbumTimeline directly, with no confirm dialog', async () => {
+      sdkMock.bulkSetAlbumTimeline.mockResolvedValue([{ id: 'a1', success: true }] as never);
+      renderPage([makeAlbum({ id: 'a1', albumName: 'Rome', showInTimeline: false })], SharedSpaceRole.Editor);
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Add to timeline' }),
+      );
+
+      expect(modalManagerMock.showDialog).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(sdkMock.bulkSetAlbumTimeline).toHaveBeenCalledWith({
+          id: 'space-1',
+          sharedSpaceBulkAlbumTimelineDto: { ids: ['a1'], showInTimeline: true },
+        }),
+      );
+    });
+
+    it('bulk move folders: opens the folder picker and calls bulkMoveAlbumFolders with the chosen destination', async () => {
+      modalManagerMock.show.mockResolvedValue({ folderId: null });
+      sdkMock.bulkMoveAlbumFolders.mockResolvedValue([{ id: 'trips', success: true }] as never);
+      renderPage([], SharedSpaceRole.Editor, { folders: [makeFolder('trips', 'Trips')] });
+
+      await screen.findByTestId('space-album-folder-card');
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-trips'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Move to folder…' }),
+      );
+
+      await waitFor(() =>
+        expect(sdkMock.bulkMoveAlbumFolders).toHaveBeenCalledWith({
+          id: 'space-1',
+          sharedSpaceBulkFolderParentDto: { ids: ['trips'], parentId: null },
+        }),
+      );
+    });
+
+    // S-21
+    it('bulk delete folders: shows a confirm dialog naming the count and calls bulkDeleteAlbumFolders on confirm', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      sdkMock.bulkDeleteAlbumFolders.mockResolvedValue([{ id: 'trips', success: true }] as never);
+      renderPage([], SharedSpaceRole.Editor, { folders: [makeFolder('trips', 'Trips')] });
+
+      await screen.findByTestId('space-album-folder-card');
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-trips'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Delete folder' }),
+      );
+
+      await waitFor(() =>
+        expect(modalManagerMock.showDialog).toHaveBeenCalledWith({
+          title: 'Delete 1 folder?',
+          prompt: 'Albums inside will move up one level. Nothing is unlinked.',
+        }),
+      );
+      await waitFor(() =>
+        expect(sdkMock.bulkDeleteAlbumFolders).toHaveBeenCalledWith({
+          id: 'space-1',
+          sharedSpaceBulkFolderIdsDto: { ids: ['trips'] },
+        }),
+      );
+    });
+
+    it('bulk delete folders: dismissing the confirm dialog fires no request', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(false);
+      renderPage([], SharedSpaceRole.Editor, { folders: [makeFolder('trips', 'Trips')] });
+
+      await screen.findByTestId('space-album-folder-card');
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-trips'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Delete folder' }),
+      );
+
+      await waitFor(() => expect(modalManagerMock.showDialog).toHaveBeenCalled());
+      expect(sdkMock.bulkDeleteAlbumFolders).not.toHaveBeenCalled();
     });
   });
 

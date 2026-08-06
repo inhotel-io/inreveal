@@ -167,12 +167,59 @@ describe('SpaceAlbumCard', () => {
 
     await fireEvent.dragStart(card, { dataTransfer });
 
-    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'album', id: 'a-9' });
-    expect(getActiveDragPayload()).toEqual({ kind: 'album', id: 'a-9' });
+    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'album', ids: ['a-9'] });
+    expect(getActiveDragPayload()).toEqual({ kind: 'album', ids: ['a-9'] });
 
     await fireEvent.dragEnd(card);
 
     expect(getActiveDragPayload()).toBeNull();
+  });
+
+  // S-22/S-23: buildDragPayload is unit-tested on its own in space-album-folder-dnd.spec.ts; this
+  // proves the card actually WIRES its selectedIds/selectedKind props into that call, rather than
+  // the pure function merely existing unused.
+  it('dragging a card that is part of the current selection carries the whole selection', async () => {
+    const { container } = renderWithTooltips(SpaceAlbumCard, {
+      spaceId: 's-1',
+      album: { ...album, id: 'b' },
+      canManage: true,
+      selectedIds: ['a', 'b', 'c'],
+      selectedKind: 'album',
+    });
+    const card = container.querySelector('[data-testid="space-album-card"]')!;
+    const store = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? '',
+      types: [] as string[],
+    } as unknown as DataTransfer;
+
+    await fireEvent.dragStart(card, { dataTransfer });
+
+    const payload = readDragPayload(dataTransfer);
+    expect(payload?.kind).toBe('album');
+    expect(payload?.ids.slice().sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('dragging a card NOT part of the current selection carries only itself', async () => {
+    const { container } = renderWithTooltips(SpaceAlbumCard, {
+      spaceId: 's-1',
+      album: { ...album, id: 'd' },
+      canManage: true,
+      selectedIds: ['a', 'b'],
+      selectedKind: 'album',
+    });
+    const card = container.querySelector('[data-testid="space-album-card"]')!;
+    const store = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? '',
+      types: [] as string[],
+    } as unknown as DataTransfer;
+
+    await fireEvent.dragStart(card, { dataTransfer });
+
+    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'album', ids: ['d'] });
   });
 
   // draggable="false" on the outer div does not stop the inner <a>/cover image from being

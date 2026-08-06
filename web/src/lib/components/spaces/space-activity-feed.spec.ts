@@ -86,6 +86,13 @@ describe('SpaceActivityFeed', () => {
       { type: 'person_update', data: { personName: 'Alice' }, text: 'updated person "Alice"' },
       { type: 'person_delete', data: { personName: 'Alice' }, text: 'deleted person "Alice"' },
       { type: 'person_merge', data: { personName: 'Alice', count: 2 }, text: 'merged 2 people into "Alice"' },
+      // The server logs `count` as the TOTAL succeeded (spec §6.4 / shared-space.service.ts's
+      // bulkUnlinkAlbums), not "others" — 3 succeeded renders as "and 2 others" here.
+      {
+        type: 'album_bulk_unlink',
+        data: { albumName: 'Trip', count: 3 },
+        text: 'unlinked "Trip" and 2 others',
+      },
     ];
 
     for (const { type, data, text } of cases) {
@@ -107,6 +114,17 @@ describe('SpaceActivityFeed', () => {
       const activities = [makeActivity({ id: 'act-noname', type: 'album_link', data: {}, userName: 'Bob' })];
       renderFeed({ activities, spaceColor: 'primary', onLoadMore: vi.fn(), hasMore: false });
       expect(screen.getByTestId('activity-item-act-noname')).toHaveTextContent('Bob linked album ""');
+    });
+
+    // A bulk unlink of exactly one album (still routed through the bulk endpoint — the multi-select
+    // bar has no minimum) succeeds with `count: 1`, i.e. zero OTHERS — proves the total-minus-one
+    // conversion clamps at zero rather than going negative.
+    it('renders "album_bulk_unlink" with zero others when only one album succeeded', () => {
+      const activities = [
+        makeActivity({ id: 'act-bulk-solo', type: 'album_bulk_unlink', data: { albumName: 'Solo', count: 1 }, userName: 'Bob' }),
+      ];
+      renderFeed({ activities, spaceColor: 'primary', onLoadMore: vi.fn(), hasMore: false });
+      expect(screen.getByTestId('activity-item-act-bulk-solo')).toHaveTextContent('Bob unlinked "Solo" and 0 others');
     });
   });
 });
