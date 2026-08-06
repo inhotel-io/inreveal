@@ -26,6 +26,7 @@ import {
   UserAvatarColor,
 } from 'src/enum';
 import {
+  SHARED_SPACE_ALBUM_FOLDER_MAX_DEPTH,
   SHARED_SPACE_ALBUM_FOLDER_NAME_CONFLICT_MESSAGE,
   SHARED_SPACE_DEDUP_MAX_PASSES,
   SharedSpaceService,
@@ -122,6 +123,25 @@ const setupAlbumFolderMove = (
   mocks.sharedSpace.getAlbumFolderSubtree.mockResolvedValue([{ id: folder.id, depth: 0 }]);
   mocks.sharedSpace.moveAlbumFolderChecked.mockResolvedValue('ok');
   return { auth, space, folder, target };
+};
+
+/**
+ * Helper to build an editor/viewer membership plus a working destination folder for the
+ * bulkMoveAlbumFolders / bulkDeleteAlbumFolders tests below. f1/f2 resolve to plain folder rows
+ * via getAlbumFolderById (needed because #moveAlbumFolderOrThrow re-fetches the moved folder's
+ * own name whenever the bulk caller doesn't supply one), and `target` is a valid destination.
+ */
+const setupBulkFolderEditor = (mocks: ServiceMocks, role: SharedSpaceRole = SharedSpaceRole.Editor) => {
+  const { auth, space } = setupAlbumFolderEditor(mocks, role);
+  const [f1, f2] = [newUuid(), newUuid()];
+  const target = albumFolderRow({ spaceId: space.id, name: 'Archive' });
+  mocks.sharedSpace.getAlbumFolderById.mockImplementation((_s: string, id: string) =>
+    Promise.resolve(id === target.id ? target : albumFolderRow({ id, spaceId: space.id })),
+  );
+  mocks.sharedSpace.getAlbumFolderSubtree.mockResolvedValue([{ id: f1, depth: 0 }]);
+  mocks.sharedSpace.moveAlbumFolderChecked.mockResolvedValue('ok');
+  mocks.sharedSpace.deleteAlbumFolderPromotingChildren.mockResolvedValue({ outcome: 'ok' });
+  return { auth, space, f1, f2, target };
 };
 
 /** Editor membership only — each bulk album method's checked core re-authorizes per item. */
@@ -12897,6 +12917,231 @@ describe(SharedSpaceService.name, () => {
         const { auth, space } = setupAlbumFolderEditor(mocks, SharedSpaceRole.Viewer);
 
         await expect(sut.deleteAlbumFolder(auth, space.id, newUuid())).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mocks.sharedSpace.deleteAlbumFolderPromotingChildren).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('bulkMoveAlbumFolders', () => {
+      // Spec §6.3 — the guard against reopening the bypass that narrowing updateAlbumFolder's dto
+      // closed. The bulk mover must delegate to the exact same checked path as the single-item
+      // move (#moveAlbumFolderOrThrow -> moveAlbumFolderChecked), never a raw folder update.
+      it('delegates every move to moveAlbumFolderChecked and never to a raw folder update', async () => {
+        const { auth, space, f1, f2, target } = setupBulkFolderEditor(mocks);
+
+        const result = await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1, f2], parentId: target.id });
+
+        expect(result).toEqual([
+          { id: f1, success: true },
+          { id: f2, success: true },
+        ]);
+        expect(mocks.sharedSpace.moveAlbumFolderChecked).toHaveBeenCalledTimes(2);
+        expect(mocks.sharedSpace.updateAlbumFolder).not.toHaveBeenCalled();
+      });
+
+      // The repository takes (spaceId, folderId, newParentId, name?) — no auth. Pin the argument
+      // order so a refactor cannot silently swap folderId and the destination parent. The bulk dto
+      // has no name field, so the 4th arg is always undefined.
+      it('passes spaceId, folderId and the destination parent in that order, with no rename', async () => {
+        const { auth, space, f1, target } = setupBulkFolderEditor(mocks);
+
+        await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1], parentId: target.id });
+
+        expect(mocks.sharedSpace.moveAlbumFolderChecked).toHaveBeenCalledWith(space.id, f1, target.id, undefined);
+      });
+
+      it('moves folders to the space root', async () => {
+        const { auth, space, f1 } = setupBulkFolderEditor(mocks);
+
+        await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1], parentId: null });
+
+        expect(mocks.sharedSpace.moveAlbumFolderChecked).toHaveBeenCalledWith(space.id, f1, null, undefined);
+      });
+
+      // Task 3 review, I2-equivalent: a switch of #runBulk to Promise.all would not be caught by
+      // an order-of-results assertion (Promise.all preserves result order too). Track actual
+      // in-flight concurrency instead of inferring it from ordering.
+      it('processes ids strictly sequentially, never more than one folder move in flight', async () => {
+        const { auth, space, f1, f2, target } = setupBulkFolderEditor(mocks);
+        let inFlight = 0;
+        let maxInFlight = 0;
+        mocks.sharedSpace.moveAlbumFolderChecked.mockImplementation(async () => {
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          inFlight--;
+          return 'ok';
+        });
+
+        await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1, f2], parentId: target.id });
+
+        expect(maxInFlight).toBe(1);
+      });
+
+      it('processes ids in request order', async () => {
+        const { auth, space, f1, f2, target } = setupBulkFolderEditor(mocks);
+
+        await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1, f2], parentId: target.id });
+
+        expect(mocks.sharedSpace.moveAlbumFolderChecked.mock.calls.map((c) => c[1])).toEqual([f1, f2]);
+      });
+
+      // E-3
+      it('deduplicates repeated ids', async () => {
+        const { auth, space, f1, target } = setupBulkFolderEditor(mocks);
+
+        const result = await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1, f1], parentId: target.id });
+
+        expect(result).toHaveLength(1);
+        expect(mocks.sharedSpace.moveAlbumFolderChecked).toHaveBeenCalledTimes(1);
+      });
+
+      // The repository call RESOLVES with an outcome; it never rejects for a cycle/notfound. A
+      // test that mocked a rejection here would exercise a path that cannot occur in production.
+      it('maps a cycle outcome to a validation entry and continues with the next id', async () => {
+        const { auth, space, f1, f2, target } = setupBulkFolderEditor(mocks);
+        mocks.sharedSpace.moveAlbumFolderChecked.mockResolvedValueOnce('cycle');
+
+        const result = await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1, f2], parentId: target.id });
+
+        expect(result[0]).toMatchObject({ id: f1, success: false, error: BulkIdErrorReason.VALIDATION });
+        expect(result[1]).toMatchObject({ id: f2, success: true });
+      });
+
+      it('maps a notfound outcome to a validation entry', async () => {
+        const { auth, space, f1, target } = setupBulkFolderEditor(mocks);
+        mocks.sharedSpace.moveAlbumFolderChecked.mockResolvedValueOnce('notfound');
+
+        const result = await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1], parentId: target.id });
+
+        expect(result[0]).toMatchObject({ id: f1, success: false, error: BulkIdErrorReason.VALIDATION });
+      });
+
+      // E-12: the depth guard lives in the SERVICE, above the repository call. The repository has
+      // no depth cap of its own, so a bypass of #moveAlbumFolderOrThrow would report 'ok' here —
+      // this test only passes if the guard actually ran before the repository was reached.
+      it('rejects a move that would exceed the depth limit before touching the repository', async () => {
+        const { auth, space, f1, target } = setupBulkFolderEditor(mocks);
+        mocks.sharedSpace.getAlbumFolderAncestors.mockResolvedValue(
+          Array.from({ length: SHARED_SPACE_ALBUM_FOLDER_MAX_DEPTH }, () => ({
+            id: newUuid(),
+            parentId: null,
+            name: 'x',
+          })),
+        );
+
+        const result = await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1], parentId: target.id });
+
+        expect(result[0]).toMatchObject({ id: f1, success: false, error: BulkIdErrorReason.VALIDATION });
+        expect(mocks.sharedSpace.moveAlbumFolderChecked).not.toHaveBeenCalled();
+      });
+
+      // Same bypass class as the depth guard: the name-conflict pre-check also runs above the
+      // repository call.
+      it('rejects a move that collides with a name already at the destination, before touching the repository', async () => {
+        const { auth, space, f1, target } = setupBulkFolderEditor(mocks);
+        mocks.sharedSpace.hasSiblingAlbumFolderName.mockResolvedValue(true);
+
+        const result = await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1], parentId: target.id });
+
+        expect(result[0]).toMatchObject({ success: false, error: BulkIdErrorReason.VALIDATION });
+        expect(mocks.sharedSpace.moveAlbumFolderChecked).not.toHaveBeenCalled();
+      });
+
+      it('rejects a folder moved into itself and continues with the rest of the batch', async () => {
+        const { auth, space, f1, f2 } = setupBulkFolderEditor(mocks);
+
+        const result = await sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1, f2], parentId: f1 });
+
+        expect(result[0]).toMatchObject({ id: f1, success: false, error: BulkIdErrorReason.VALIDATION });
+        expect(result[1]).toMatchObject({ id: f2, success: true });
+      });
+
+      // Design spec §9.3: viewer -> 403 for the WHOLE call, not a per-item no_permission.
+      // moveAlbumFolderChecked has no auth parameter of its own, so this hoisted check is the
+      // ONLY authorization the move path has — unlike the album bulk endpoints, where a per-item
+      // Checked helper still gates each id individually.
+      it('rejects a viewer for the whole call, before touching the repository', async () => {
+        const { auth, space, f1, target } = setupBulkFolderEditor(mocks, SharedSpaceRole.Viewer);
+
+        await expect(
+          sut.bulkMoveAlbumFolders(auth, space.id, { ids: [f1], parentId: target.id }),
+        ).rejects.toBeInstanceOf(ForbiddenException);
+        expect(mocks.sharedSpace.moveAlbumFolderChecked).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('bulkDeleteAlbumFolders', () => {
+      it('deletes each folder through the promoting deleter', async () => {
+        const { auth, space, f1, f2 } = setupBulkFolderEditor(mocks);
+
+        const result = await sut.bulkDeleteAlbumFolders(auth, space.id, { ids: [f1, f2] });
+
+        expect(result).toEqual([
+          { id: f1, success: true },
+          { id: f2, success: true },
+        ]);
+        expect(mocks.sharedSpace.deleteAlbumFolderPromotingChildren).toHaveBeenCalledTimes(2);
+        expect(mocks.sharedSpace.deleteAlbumFolderPromotingChildren).toHaveBeenCalledWith(space.id, f1);
+        expect(mocks.sharedSpace.deleteAlbumFolderPromotingChildren).toHaveBeenCalledWith(space.id, f2);
+      });
+
+      it('reports a validation failure for a folder in another space and still deletes the rest', async () => {
+        const { auth, space, f1, f2 } = setupBulkFolderEditor(mocks);
+        mocks.sharedSpace.deleteAlbumFolderPromotingChildren.mockImplementation((_s: string, id: string) =>
+          Promise.resolve(id === f1 ? { outcome: 'notfound' } : { outcome: 'ok' }),
+        );
+
+        const result = await sut.bulkDeleteAlbumFolders(auth, space.id, { ids: [f1, f2] });
+
+        expect(result[0]).toMatchObject({ id: f1, success: false, error: BulkIdErrorReason.VALIDATION });
+        expect(result[1]).toMatchObject({ id: f2, success: true });
+      });
+
+      it('maps a promote name collision to a validation entry, not a crash', async () => {
+        const { auth, space, f1 } = setupBulkFolderEditor(mocks);
+        mocks.sharedSpace.deleteAlbumFolderPromotingChildren.mockResolvedValueOnce({
+          outcome: 'conflict',
+          name: '2026',
+        });
+
+        const result = await sut.bulkDeleteAlbumFolders(auth, space.id, { ids: [f1] });
+
+        expect(result[0]).toMatchObject({ id: f1, success: false, error: BulkIdErrorReason.VALIDATION });
+      });
+
+      // E-3
+      it('deduplicates repeated ids', async () => {
+        const { auth, space, f1 } = setupBulkFolderEditor(mocks);
+
+        const result = await sut.bulkDeleteAlbumFolders(auth, space.id, { ids: [f1, f1] });
+
+        expect(result).toHaveLength(1);
+        expect(mocks.sharedSpace.deleteAlbumFolderPromotingChildren).toHaveBeenCalledTimes(1);
+      });
+
+      it('processes ids strictly sequentially, never more than one delete in flight', async () => {
+        const { auth, space, f1, f2 } = setupBulkFolderEditor(mocks);
+        let inFlight = 0;
+        let maxInFlight = 0;
+        mocks.sharedSpace.deleteAlbumFolderPromotingChildren.mockImplementation(async () => {
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          inFlight--;
+          return { outcome: 'ok' };
+        });
+
+        await sut.bulkDeleteAlbumFolders(auth, space.id, { ids: [f1, f2] });
+
+        expect(maxInFlight).toBe(1);
+      });
+
+      it('rejects a viewer for the whole call, before touching the repository', async () => {
+        const { auth, space, f1 } = setupBulkFolderEditor(mocks, SharedSpaceRole.Viewer);
+
+        await expect(sut.bulkDeleteAlbumFolders(auth, space.id, { ids: [f1] })).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
         expect(mocks.sharedSpace.deleteAlbumFolderPromotingChildren).not.toHaveBeenCalled();
       });
     });

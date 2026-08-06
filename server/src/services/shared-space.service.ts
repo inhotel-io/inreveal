@@ -17,6 +17,8 @@ import {
   SharedSpaceBulkAlbumFolderMoveDto,
   SharedSpaceBulkAlbumIdsDto,
   SharedSpaceBulkAlbumTimelineDto,
+  SharedSpaceBulkFolderIdsDto,
+  SharedSpaceBulkFolderParentDto,
 } from 'src/dtos/shared-space-bulk.dto';
 import {
   SharedSpacePeopleStatisticsResponseDto,
@@ -1111,7 +1113,47 @@ export class SharedSpaceService extends BaseService {
     const destinationParentId = isMove ? (dto.parentId ?? null) : folder.parentId;
     const name = dto.name === undefined ? folder.name : this.normalizeAlbumFolderName(dto.name);
 
-    if (isMove && destinationParentId !== null) {
+    if (isMove) {
+      // dto.name undefined => forward undefined to keep #moveAlbumFolderOrThrow's repository call
+      // a move-only update (matches moveAlbumFolderChecked's own "name omitted = keep it" contract).
+      await this.#moveAlbumFolderOrThrow(
+        spaceId,
+        folderId,
+        destinationParentId,
+        dto.name === undefined ? undefined : name,
+      );
+      return;
+    }
+
+    // excludeId = folderId: renaming to the current name must not collide with the row being
+    // renamed.
+    await this.assertNoAlbumFolderNameConflict(spaceId, destinationParentId, name, folderId);
+    await this.withAlbumFolderNameConflictMapped(() =>
+      this.sharedSpaceRepository.updateAlbumFolder(spaceId, folderId, { name }),
+    );
+  }
+
+  /**
+   * The move branch lifted out of updateAlbumFolder so the single-item and bulk paths cannot
+   * drift (see bulkMoveAlbumFolders below). Runs everything a direct call to the repository's
+   * moveAlbumFolderChecked would skip: the self/cycle/depth guards, the name-conflict pre-check,
+   * and mapping the repository's 'cycle' / 'notfound' outcome strings to exceptions — the
+   * repository itself never throws for those, it resolves with the outcome.
+   *
+   * `name` is forwarded to the repository as-is: undefined means "move only, keep the current
+   * name" (mirrors moveAlbumFolderChecked's own "name omitted" contract). The name-conflict
+   * pre-check still needs *a* name to check even when not renaming — the folder keeps its old
+   * name, but the destination may already have a same-named child (M-07/M-09) — so when `name`
+   * is undefined this re-fetches the folder to resolve its current name for that check only; the
+   * value actually sent to the repository is untouched by that fetch.
+   */
+  async #moveAlbumFolderOrThrow(
+    spaceId: string,
+    folderId: string,
+    destinationParentId: string | null,
+    name?: string,
+  ): Promise<void> {
+    if (destinationParentId !== null) {
       if (destinationParentId === folderId) {
         throw new BadRequestException('A folder cannot be moved into itself');
       }
@@ -1136,36 +1178,56 @@ export class SharedSpaceService extends BaseService {
       }
     }
 
-    // excludeId = folderId: renaming to the current name, or moving into the current parent,
-    // must not collide with the row being modified. This is an optimistic pre-check against the
-    // intended END state — moveAlbumFolderChecked applies the rename and the reparent in the
-    // same statement, so the row is never persisted mid-transition under a name/parent
-    // combination this check didn't clear (B-1: a two-statement move-then-rename could write the
-    // folder into the destination still under its OLD name, colliding with a same-named sibling
-    // already there even though the new name would have been fine).
-    await this.assertNoAlbumFolderNameConflict(spaceId, destinationParentId, name, folderId);
-
-    if (isMove) {
-      const outcome = await this.withAlbumFolderNameConflictMapped(() =>
-        this.sharedSpaceRepository.moveAlbumFolderChecked(
-          spaceId,
-          folderId,
-          destinationParentId,
-          dto.name === undefined ? undefined : name,
-        ),
-      );
-      if (outcome === 'cycle') {
-        throw new BadRequestException('A folder cannot be moved into one of its own descendants');
-      }
-      if (outcome === 'notfound') {
-        throw new BadRequestException('Folder not found');
-      }
-      return;
+    // excludeId = folderId: moving into the current parent, or moving without a rename, must not
+    // collide with the row being moved. This is an optimistic pre-check against the intended END
+    // state — moveAlbumFolderChecked applies the rename and the reparent in the same statement,
+    // so the row is never persisted mid-transition under a name/parent combination this check
+    // didn't clear (B-1: a two-statement move-then-rename could write the folder into the
+    // destination still under its OLD name, colliding with a same-named sibling already there
+    // even though the new name would have been fine).
+    const currentFolder =
+      name === undefined ? await this.sharedSpaceRepository.getAlbumFolderById(spaceId, folderId) : undefined;
+    const nameToCheck = name ?? currentFolder?.name;
+    if (nameToCheck !== undefined) {
+      await this.assertNoAlbumFolderNameConflict(spaceId, destinationParentId, nameToCheck, folderId);
     }
 
-    await this.withAlbumFolderNameConflictMapped(() =>
-      this.sharedSpaceRepository.updateAlbumFolder(spaceId, folderId, { name }),
+    const outcome = await this.withAlbumFolderNameConflictMapped(() =>
+      this.sharedSpaceRepository.moveAlbumFolderChecked(spaceId, folderId, destinationParentId, name),
     );
+    if (outcome === 'cycle') {
+      throw new BadRequestException('A folder cannot be moved into one of its own descendants');
+    }
+    if (outcome === 'notfound') {
+      throw new BadRequestException('Folder not found');
+    }
+  }
+
+  async bulkMoveAlbumFolders(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkFolderParentDto,
+  ): Promise<BulkIdResponseDto[]> {
+    // moveAlbumFolderChecked takes no auth, and #moveAlbumFolderOrThrow doesn't check role either
+    // — this is the ONLY authorization gate the move path has, so it must run once up front rather
+    // than be threaded per item (design spec §9.3: a non-editor gets 403 for the whole call).
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    // Sequential and per-item on purpose (matches #runBulk generally, spec §6.3/§8 E-9/E-10): the
+    // repository call takes the advisory lock and runs cycle detection against the tree AS IT IS
+    // NOW, and earlier items in this batch change that tree. Calling the repository directly here
+    // — or in #runBulk's place — would bypass the depth and name-conflict guards above it.
+    return this.#runBulk(dto.ids, (folderId) => this.#moveAlbumFolderOrThrow(spaceId, folderId, dto.parentId));
+  }
+
+  async bulkDeleteAlbumFolders(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkFolderIdsDto,
+  ): Promise<BulkIdResponseDto[]> {
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    // deleteAlbumFolder re-checks the role per item; that is redundant here but harmless, and
+    // reusing it verbatim keeps the promoting-delete semantics in exactly one place.
+    return this.#runBulk(dto.ids, (folderId) => this.deleteAlbumFolder(auth, spaceId, folderId));
   }
 
   async deleteAlbumFolder(auth: AuthDto, spaceId: string, folderId: string): Promise<void> {
