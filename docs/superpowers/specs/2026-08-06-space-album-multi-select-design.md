@@ -83,15 +83,28 @@ selection would grey out two of three album actions and confuse what the bar is 
 
 ### 4.3 Ordering for Shift-ranges
 
-The range anchor and range resolution operate over **the flat list the page already computes for
-rendering, in visual order**.
+Range resolution operates over a **derived flat list in visual order**. This list does not exist
+today and must be added: `space-albums-list.svelte` computes three separate shapes —
+`searchHitAlbums` (:96), `sorted` (:132) and `groups` (:139) — with no unified ordering. Derive it
+from whichever is active:
 
-- In **grouped** mode that list spans group boundaries, so a range may cross group headers exactly
-  as photo ranges cross day headers.
-- Items inside **collapsed** groups are excluded from the flat list and therefore from ranges. A
-  user cannot Shift-select through items they cannot see.
-- In **search** mode the flat list is the flattened hit list.
-- In **List/table** mode it is the row order.
+| Mode           | Flat list                                                  |
+| -------------- | ---------------------------------------------------------- |
+| Search         | `searchHitAlbums`                                          |
+| Grouped        | `groups.filter(g => !collapsed(g)).flatMap(g => g.albums)` |
+| Ungrouped grid | `sorted`                                                   |
+| List/table     | the rendered row order (folders first, then `sorted`)      |
+
+Consequences:
+
+- In **grouped** mode the list spans group boundaries, so a range may cross group headers exactly as
+  photo ranges cross day headers.
+- Items in **collapsed** groups are absent from this list, so a range cannot pass _through_ them. A
+  user cannot Shift-select items they cannot see.
+
+**This is a range-resolution list, not a definition of selection membership.** Collapsing a group
+does not deselect anything already selected inside it (E-14); it only removes those items from the
+ordering used to compute a new range.
 
 Because folders and albums are separate selection kinds, a range never spans from a folder to an
 album; a Shift-click on the other kind starts a fresh selection at that item.
@@ -123,9 +136,27 @@ the web/mobile UI simply does not offer it, matching today.
 | `Escape`                             | Clears the selection                                  |
 | Navigating (including into a folder) | Clears the selection                                  |
 
-Selection clears on navigation through the existing `resetOnNavigate` / `AppNavigate` hook. This is
-load-bearing, not incidental: entering a folder is a navigation, so a selection can never span two
-folder levels — which matters because move-to-folder resolves against the current level.
+**Clearing must be explicit — `AppNavigate` is not sufficient, and assuming otherwise is a trap.**
+`web/src/routes/+layout.svelte:185-193` suppresses the event for same-route transitions:
+
+```js
+const sameRouteTransition = fromRouteId && toRouteId && fromRouteId === toRouteId;
+if (sameRouteTransition) return; // AppNavigate is NOT emitted
+eventManager.emit('AppNavigate');
+```
+
+Entering a folder is `goto(Route.viewSpaceAlbums({ id, folderId }))` (`+page.svelte:140`) — the same
+route id with a different `?folder=`. So `AppNavigate` never fires and a manager relying on
+`resetOnNavigate` alone would carry a selection across folder levels.
+
+The manager therefore clears on **three** explicit triggers:
+
+1. `currentFolderId` changes (covers entering/leaving a folder and the breadcrumb);
+2. `searchQuery` changes (local `$state`, see E-6 — no navigation occurs at all);
+3. `AppNavigate`, which still correctly covers leaving the albums route entirely.
+
+This matters because move-to-folder resolves against the current level, so a selection must never
+span two levels.
 
 ### 5.2 Mobile
 
@@ -140,6 +171,22 @@ folder levels — which matters because move-to-folder resolves against the curr
 
 There is no Shift equivalent; range selection is web-only. Long-press is currently unused on these
 cards, so there is no gesture conflict.
+
+**The back-button row requires adding a `PopScope`, and that is delicate.** The page has none today.
+The folder-vanished self-pop from the folders work calls `context.maybePop()`
+(`space_albums.page.dart:221`), which a `PopScope` can absorb — and a known deferred issue is that
+`trySelfPop` clears its guard flag _before_ `maybePop` resolves, so a refused pop leaves a visible,
+dead page with no retry. A naive selection `PopScope` would make that latent bug reachable.
+
+Two rules keep them separate:
+
+1. The `PopScope` is **inert unless a selection exists** — `canPop: selection.isEmpty` — so it
+   cannot intercept anything on a page with no selection.
+2. The folder-vanished listener **clears the selection first**, before the self-pop is attempted.
+   By the time `maybePop` runs, `canPop` is true again.
+
+Rule 2 is the load-bearing one and needs its own test (E-21). Do not modify the self-pop logic
+itself; the interaction is resolved entirely on the selection side.
 
 The `AppBar` is replaced by a selection bar showing the count and the action icons, mirroring the
 timeline's multiselect bar.
@@ -164,13 +211,23 @@ Added to `server/src/controllers/shared-space.controller.ts`, following the exis
 
 | Method | Path                            | Permission                     | Body                                |
 | ------ | ------------------------------- | ------------------------------ | ----------------------------------- |
-| POST   | `:id/albums/bulk-unlink`        | `SharedSpaceAlbumDelete`       | `BulkIdsDto`                        |
+| POST   | `:id/albums/bulk-unlink`        | `SharedSpaceAlbumDelete`       | `{ ids }`                           |
 | PUT    | `:id/albums/bulk-folder`        | `SharedSpaceAlbumUpdate`       | `{ ids, folderId: string \| null }` |
 | PUT    | `:id/albums/bulk-timeline`      | `SharedSpaceAlbumUpdate`       | `{ ids, showInTimeline: boolean }`  |
 | PUT    | `:id/album-folders/bulk-parent` | `SharedSpaceAlbumFolderUpdate` | `{ ids, parentId: string \| null }` |
-| POST   | `:id/album-folders/bulk-delete` | `SharedSpaceAlbumFolderDelete` | `BulkIdsDto`                        |
+| POST   | `:id/album-folders/bulk-delete` | `SharedSpaceAlbumFolderDelete` | `{ ids }`                           |
 
 All return `BulkIdResponseDto[]` with HTTP 200 (not 204 — there is a body).
+
+**Request DTOs are fork-local and must not reuse `BulkIdsDto`.** `BulkIdsSchema` is
+`z.array(z.uuidv4())` with **no `.min(1)`** (`asset-ids.response.dto.ts:38-42`), so reusing it would
+make an empty `ids` array a silent 200-with-`[]` rather than the 400 this spec requires (E-2). It is
+also shared with upstream endpoints, so tightening it in place is not an option.
+
+Define fork-local schemas in `server/src/dtos/shared-space.dto.ts` with
+`ids: z.array(z.uuidv4()).min(1).max(1000)`. The `max` bounds the request against a pathological
+payload; 1000 is above any realistic selection (E-16) and is a request-validation limit, not a
+product limit. Responses still reuse `BulkIdResponseDto` unchanged.
 
 ### 6.2 Response and partial failure
 
@@ -266,6 +323,17 @@ Given two albums are selected
 When the user opens a folder
 Then nothing is selected.
 
+**S-9a Browser Back out of a folder clears the selection**
+Given the user entered folder F and selected two albums
+When they press browser Back
+Then nothing is selected. (Same-route history moves emit no `AppNavigate`, so this fails against a
+manager relying on `resetOnNavigate` alone — see §5.1.)
+
+**S-9b Changing the search query clears the selection**
+Given two albums are selected from a search for "beach"
+When the user types another character
+Then nothing is selected.
+
 **S-10 Selection is unavailable without manage rights**
 Given the viewer has `canManage: false`
 When they hover a card
@@ -305,6 +373,12 @@ When the user presses system back
 Then selection mode exits and the page is still displayed.
 And when the user presses back again
 Then the page pops.
+
+**S-16a The selection `PopScope` does not veto the folder-vanished self-pop**
+Given the user is inside folder F with two albums selected
+When another editor deletes folder F and the provider emits a list without it
+Then the selection is cleared first, the page self-pops, and the user does not end up on a visible
+dead page. (Guards E-21 — the one place selection can resurrect a known self-pop issue.)
 
 ### 7.4 Bulk actions
 
@@ -386,28 +460,31 @@ Then exactly one activity row is written.
 
 ## 8. Edge cases
 
-| #    | Case                                                         | Required behaviour                                                                                        |
-| ---- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| E-1  | Empty selection                                              | The bar is not rendered; bulk endpoints are never called with an empty `ids` array (client-side guard).   |
-| E-2  | Server receives an empty `ids` array                         | 400 (`validation`), not a silent no-op — the zod schema requires `min(1)`.                                |
-| E-3  | Duplicate ids in one request                                 | Deduplicated server-side before processing; the response has one entry per distinct id.                   |
-| E-4  | An item disappears (unlinked elsewhere) before the action    | `error: not_found` for that id; the rest proceed.                                                         |
-| E-5  | An item disappears while selected, before any action         | The provider refresh drops it from the selection silently; the count updates.                             |
-| E-6  | Selection spanning a search, then the query changes          | Selection clears when the query changes, because the flat list identity changes.                          |
-| E-7  | Shift-click with no anchor (nothing selected yet)            | Behaves as a plain click: selects that one item and sets it as the anchor.                                |
-| E-8  | Shift-click _backwards_ (anchor after the target)            | Selects the range in visual order regardless of direction.                                                |
-| E-9  | Batch where an earlier move makes a later one illegal        | Items process in request order; the later item returns `error: validation`. Documented, not "undefined".  |
-| E-10 | Moving folders into a folder that is itself being moved      | Processed in order; the cycle check in `moveAlbumFolderChecked` rejects the offender with `validation`.   |
-| E-11 | Bulk move producing a name collision in the target folder    | `error: validation` for the colliding id, reusing the existing conflict message.                          |
-| E-12 | Bulk move exceeding the 10-level depth limit                 | `error: validation`, same message as the single-item path.                                                |
-| E-13 | Bulk create exceeding the space folder limit                 | Not applicable — no bulk create in scope.                                                                 |
-| E-14 | Selecting every item, then a group collapses                 | Collapsed items stay selected (collapsing hides, it does not deselect); ranges just cannot cross them.    |
-| E-15 | `canManage` flips to false mid-selection (role revoked)      | Selection clears on the next provider refresh and the bar disappears.                                     |
-| E-16 | Very large selection (e.g. 500 albums)                       | One request; no client-side chunking. If this proves slow, chunking is a follow-up, not a v1 requirement. |
-| E-17 | Mobile: selection active, app backgrounded and resumed       | Selection survives; it is page state, not navigation state.                                               |
-| E-18 | Mobile: the folder page self-pops (folder deleted elsewhere) | Selection is discarded with the page; the self-pop logic is untouched.                                    |
-| E-19 | Offline / request fails at transport level                   | Nothing is deselected and an error message is shown; the user can retry the whole batch.                  |
-| E-20 | Timeline toggle on a selection where the value is uniform    | Still sends the explicit boolean; the endpoint is idempotent.                                             |
+| #    | Case                                                                         | Required behaviour                                                                                                                                                                                                                                                  |
+| ---- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E-1  | Empty selection                                                              | The bar is not rendered; bulk endpoints are never called with an empty `ids` array (client-side guard).                                                                                                                                                             |
+| E-2  | Server receives an empty `ids` array                                         | 400, not a silent no-op. Requires the fork-local `.min(1)` schema of §6.1 — `BulkIdsDto` would return 200.                                                                                                                                                          |
+| E-3  | Duplicate ids in one request                                                 | Deduplicated server-side before processing; the response has one entry per distinct id.                                                                                                                                                                             |
+| E-4  | An item disappears (unlinked elsewhere) before the action                    | `error: not_found` for that id; the rest proceed.                                                                                                                                                                                                                   |
+| E-5  | An item disappears while selected, before any action                         | The provider refresh drops it from the selection silently; the count updates.                                                                                                                                                                                       |
+| E-6  | Selection spanning a search, then the query changes                          | Explicit clear on `searchQuery` change. It is local `$state` (`+page.svelte:57`), not URL-backed, so no navigation fires and nothing clears it otherwise.                                                                                                           |
+| E-7  | Shift-click with no anchor (nothing selected yet)                            | Behaves as a plain click: selects that one item and sets it as the anchor.                                                                                                                                                                                          |
+| E-8  | Shift-click _backwards_ (anchor after the target)                            | Selects the range in visual order regardless of direction.                                                                                                                                                                                                          |
+| E-9  | Batch where an earlier move makes a later one illegal                        | Items process in request order; the later item returns `error: validation`. Documented, not "undefined".                                                                                                                                                            |
+| E-10 | Moving folders into a folder that is itself being moved                      | Processed in order; the cycle check in `moveAlbumFolderChecked` rejects the offender with `validation`.                                                                                                                                                             |
+| E-11 | Bulk move producing a name collision in the target folder                    | `error: validation` for the colliding id, reusing the existing conflict message.                                                                                                                                                                                    |
+| E-12 | Bulk move exceeding the 10-level depth limit                                 | `error: validation`, same message as the single-item path.                                                                                                                                                                                                          |
+| E-13 | Bulk create exceeding the space folder limit                                 | Not applicable — no bulk create in scope.                                                                                                                                                                                                                           |
+| E-14 | Selecting every item, then a group collapses                                 | Collapsed items stay selected (collapsing hides, it does not deselect); ranges just cannot cross them.                                                                                                                                                              |
+| E-15 | `canManage` flips to false mid-selection (role revoked)                      | Selection clears on the next provider refresh and the bar disappears.                                                                                                                                                                                               |
+| E-16 | Very large selection (e.g. 500 albums)                                       | One request; no client-side chunking. If this proves slow, chunking is a follow-up, not a v1 requirement.                                                                                                                                                           |
+| E-17 | Mobile: selection active, app backgrounded and resumed                       | Selection survives; it is page state, not navigation state.                                                                                                                                                                                                         |
+| E-18 | Mobile: the folder page self-pops (folder deleted elsewhere)                 | Selection is discarded with the page; the self-pop logic is untouched.                                                                                                                                                                                              |
+| E-19 | Offline / request fails at transport level                                   | Nothing is deselected and an error message is shown; the user can retry the whole batch.                                                                                                                                                                            |
+| E-20 | Timeline toggle on a selection where the value is uniform                    | Still sends the explicit boolean; the endpoint is idempotent.                                                                                                                                                                                                       |
+| E-21 | Mobile: browsed folder vanishes **while a selection is active**              | The listener clears the selection first, so `canPop` is true and the self-pop's `maybePop` is not vetoed by the selection `PopScope` (§5.2). Needs its own test — this is the one interaction that can resurrect the known "refused pop settles a dead page" issue. |
+| E-22 | Web: folder changed via browser Back/Forward, not a card tap                 | Same explicit `currentFolderId` clear (§5.1). `AppNavigate` does not fire for same-route history moves either.                                                                                                                                                      |
+| E-23 | Web: `?folder=` stripped by the stale-folder fallback (`+page.svelte:87-93`) | Treated as a `currentFolderId` change like any other; selection clears.                                                                                                                                                                                             |
 
 ## 9. Test plan
 
@@ -464,12 +541,28 @@ Assert response **bodies**, not just statuses, and assert the resulting state vi
 - Partial failure re-selection (S-24, S-25, S-26) — assert exactly which ids remain.
 - Selection gating on `canManage` (S-10).
 - Drag payload carries the selection (S-22) and does not for an unselected card (S-23).
+- **The three clearing triggers, tested separately** (S-9, S-9a, S-9b): `currentFolderId` change,
+  `searchQuery` change, and `AppNavigate`. Each needs its own test, because the first two are exactly
+  the cases `AppNavigate` does **not** cover — a single "selection clears on navigation" test would
+  pass against the broken design.
+
+### 9.4a Server DTO validation
+
+- Empty `ids` → 400 (E-2). This test fails if the implementation reuses `BulkIdsDto`, which is the
+  point: it pins the §6.1 decision rather than restating it.
+- `ids` above the max → 400.
+- Duplicate ids → one response entry per distinct id (E-3).
 
 ### 9.5 Mobile — `flutter test`
 
 - Long-press entry, tap-toggle (S-14, S-15).
 - Back exits selection before popping (S-16) — two separate back presses with an assertion between.
 - The selection bar renders the count and the kind-appropriate actions (S-13).
+- **The `PopScope` does not veto the self-pop** (S-16a / E-21). Drive it through the existing stacked
+  folder-page harness with a selection active, and assert the page actually left the stack. Prove the
+  test is real by removing the "clear selection first" rule and watching it fail — without that
+  mutation evidence the test could pass for the wrong reason, since a page that pops for any reason
+  satisfies a naive assertion.
 
 ### 9.6 Test-quality rules
 
@@ -486,8 +579,25 @@ These are binding, not advisory:
 ## 10. i18n
 
 New EN keys in `i18n/en.json`, **and translated into the nine fork-maintained locales**: `de`, `es`,
-`fr`, `it`, `nl`, `pl`, `ru`, `zh_Hans`, `zh_Hant`. Those nine move in lockstep with `en` and are
-maintained in-repo, not via Weblate; the remaining locales are upstream's and are left alone.
+`fr`, `it`, `nl`, `pl`, `ru`, `zh_Hans`, `zh_Hant`.
+
+That set is not a guess — it is verifiable. Exactly those nine plus `en` carry the fork's
+`space_album_*` strings (55 each as of `7b1872a5217`); every other locale in `i18n/` carries zero and
+is maintained upstream via Weblate. `i18n/` holds ~90 files; touching the other ~80 would inject
+fork strings into files upstream owns and create rebase conflicts. Confirm the set before starting:
+
+```sh
+python3 -c "
+import json,glob,os
+for f in sorted(glob.glob('i18n/*.json')):
+    c=sum(1 for k in json.load(open(f)) if k.startswith('space_album'))
+    if c: print(os.path.basename(f), c)"
+```
+
+Terminology must match what each locale already uses rather than being invented: folder is
+`Ordner` / `Carpeta` / `Dossier` / `Cartella` / `Map` / `Folder` / `Папка` / `文件夹` / `資料夾`, and
+"Space" stays untranslated in de/es/nl/pl/ru/zh (fr uses _espaces_, it uses _Space_). Note `zh_Hans`
+uses `相簿` in this surface, not `相册`, matching its existing `space_album_*` strings.
 
 Keys needed (final names to be settled in the plan):
 
