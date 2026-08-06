@@ -199,4 +199,36 @@ describe('SpaceAlbumMultiSelectManager', () => {
     expect(m.ids).toEqual([]);
     expect(m.kind).toBe('none');
   });
+
+  // Final-review fix: a stale anchor must not survive reconcile when it's the anchor itself (not
+  // the whole selection) that dropped out — e.g. a partial-failure bulk action reconciles away
+  // exactly the ids that succeeded, and the anchor happened to be one of them. Without clearing
+  // it, #range()'s `indexOf(from) === -1` fallback makes every subsequent Shift-click add exactly
+  // one item — silently, and forever, since `#anchor ??= toId` never overwrites a non-null stale
+  // value. Uses a 7-item order so the proof range (d..g) passes through two ids (e, f) that no
+  // explicit click ever names — only a correctly re-armed anchor can pick them up.
+  it('clears a stale anchor on reconcile so a later Shift-click ranges correctly instead of only adding one item', () => {
+    const longOrder = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+    const m = new SpaceAlbumMultiSelectManager();
+    m.toggle('album', 'a', longOrder);
+    m.selectRange('album', 'c', longOrder);
+    expect(m.ids.sort()).toEqual(['a', 'b', 'c']);
+
+    // 'a' (the anchor) is the one that leaves the reconciled set; 'b' and 'c' survive.
+    const orderAfter = ['b', 'c', 'd', 'e', 'f', 'g'];
+    m.reconcile(orderAfter);
+    expect(m.ids.sort()).toEqual(['b', 'c']);
+
+    // First Shift-click after reconcile: with no valid anchor, this degrades to a plain add of
+    // just 'd' AND re-arms the anchor to 'd' (E-7) — expected and correct, on both the buggy and
+    // fixed manager.
+    m.selectRange('album', 'd', orderAfter);
+    expect(m.ids.sort()).toEqual(['b', 'c', 'd']);
+
+    // Second Shift-click is the actual proof: only a re-armed anchor ('d') can span through 'e'
+    // and 'f' to reach 'g'. A stale anchor ('a', no longer in orderAfter) falls into the
+    // indexOf === -1 fallback and would add only 'g'.
+    m.selectRange('album', 'g', orderAfter);
+    expect(m.ids.sort()).toEqual(['b', 'c', 'd', 'e', 'f', 'g']);
+  });
 });

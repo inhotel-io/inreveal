@@ -104,6 +104,17 @@ export class SpaceAlbumMultiSelectManager {
     if (this.#ids.size === 0) {
       this.#kind = 'none';
       this.#anchor = null;
+    } else if (this.#anchor !== null && !present.has(this.#anchor)) {
+      // The anchor can survive a reconcile that drops the REST of the selection down to zero
+      // items removed (so the `size === 0` branch above never fires) while the anchor's own id is
+      // the one that left `present` — e.g. a partial-failure bulk action reconciles away exactly
+      // the ids that succeeded, and the anchor happened to be one of them. #range()'s
+      // `indexOf(from) === -1` fallback then always returns `[toId]`, and the `#anchor ??= toId`
+      // in selectRange will not overwrite a non-null stale value — so Shift-click silently
+      // degrades to a plain add, indefinitely, until the user happens to make a plain click.
+      // Clearing it here lets the next Shift-click re-arm the anchor via that same `??=`, exactly
+      // like the first-interaction case (E-7).
+      this.#anchor = null;
     }
     // m-1: a stale preview must not survive reconciliation — isCandidate(id) must stop being
     // true for an id that just disappeared from the page's data.
