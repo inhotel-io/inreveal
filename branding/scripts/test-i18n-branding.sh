@@ -318,6 +318,44 @@ for lang in "${SHIPPED_LOCALES[@]}"; do
   fi
 done
 
+# The CTA is the one string where upstream's meaning is not merely off-brand but
+# false: the fork sells nothing, so "Kup Noodle Gallery" offers a purchase that
+# does not exist. Unlike the fork-voice keys above — scoped to the locales the
+# product ships in — this one is enforced for ALL 89, because a wrong CTA is worse
+# than an untranslated one. A locale that never defines the key is fine: it
+# inherits the branded English via svelte-i18n's fallbackLocale.
+echo "No locale offers to sell the fork (CTA keys, all locales):"
+CTA_KEYS=(buy purchase_button_buy_immich)
+cta_gaps=0
+cta_checked=0
+for locale_src in "$REPO"/i18n/*.json; do
+  lang=$(basename "$locale_src" .json)
+  [[ "$lang" == "en" ]] && continue
+  for cta_key in "${CTA_KEYS[@]}"; do
+    # Only locales that define the key can render upstream's wording; the rest
+    # fall back to en and are already correct.
+    [[ -z "$(jq -r --arg k "$cta_key" '.[$k] // empty' "$locale_src")" ]] && continue
+    cta_checked=$((cta_checked + 1))
+    lang_ov="$REPO/branding/i18n/overrides-${lang}.json"
+    ov_val=$([[ -f "$lang_ov" ]] && jq -r --arg k "$cta_key" '.[$k] // empty' "$lang_ov" || echo "")
+    if [[ -z "$ov_val" ]]; then
+      echo "  FAIL: ${lang} defines '$cta_key' but has no override — renders '$(jq -r --arg k "$cta_key" '.[$k]' "$locale_src")' rebranded"
+      cta_gaps=$((cta_gaps + 1))
+      continue
+    fi
+    got=$(val_at "$lang" "$cta_key")
+    if [[ "$got" != "$ov_val" ]]; then
+      echo "  FAIL: ${lang}[$cta_key] = '$got' but its override says '$ov_val' (merge did not apply)"
+      cta_gaps=$((cta_gaps + 1))
+    fi
+  done
+done
+if [[ $cta_gaps -eq 0 ]]; then
+  echo "  ok:   $cta_checked locale/key CTA pairs all served by an override"
+else
+  fails=$((fails + cta_gaps))
+fi
+
 echo "Unrelated localized strings are preserved (no collateral damage):"
 # 'albums' is a generic key the fork does not rebrand; it must keep its German value.
 de_albums=$(jq -r '.albums // " ABSENT"' "$TMP/i18n/de.json")
