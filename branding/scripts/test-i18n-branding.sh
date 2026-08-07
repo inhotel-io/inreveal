@@ -356,6 +356,39 @@ else
   fails=$((fails + cta_gaps))
 fi
 
+# The rebrand is case-sensitive so that docs.immich.app and the app.immich://
+# scheme survive it. The cost is that a translator who lowercased the brand in
+# prose — "Witamy w immich", "ברוכים הבאים אל immich" — leaks it, and the scans
+# above cannot see it either: they grep the capitalised name. Shielding the real
+# identifiers first lets the bare mentions be rewritten without touching them.
+#
+# Asserted over the SHIELDED text, so this stays honest as translations change:
+# anything still naming the upstream project in lowercase is either a leak or a
+# new identifier form that belongs in UPSTREAM_IDENTIFIERS_JSON.
+echo "No lowercase brand mention survives, outside real identifiers:"
+lower_leaks=0
+for locale_file in "$TMP"/i18n/*.json; do
+  lang=$(basename "$locale_file" .json)
+  leaked=$(jq -r --arg lower "$UPSTREAM_NAME_LOWER" --argjson ids "$UPSTREAM_IDENTIFIERS_JSON" '
+    def shield: reduce $ids[] as $id (.; split($id) | join(" "));
+    paths(scalars) as $p
+    | select((getpath($p) | type) == "string")
+    | select((getpath($p) | shield | contains($lower)))
+    | "\($p | join(".")) = \(getpath($p))"' "$locale_file")
+  if [[ -n "$leaked" ]]; then
+    while IFS= read -r line; do
+      echo "  FAIL: ${lang}.json leaks the lowercase name — $line"
+      lower_leaks=$((lower_leaks + 1))
+    done <<<"$leaked"
+  fi
+done
+if [[ $lower_leaks -eq 0 ]]; then
+  lower_locales=("$TMP"/i18n/*.json)
+  echo "  ok:   0 lowercase leaks across ${#lower_locales[@]} locales"
+else
+  fails=$((fails + lower_leaks))
+fi
+
 echo "Unrelated localized strings are preserved (no collateral damage):"
 # 'albums' is a generic key the fork does not rebrand; it must keep its German value.
 de_albums=$(jq -r '.albums // " ABSENT"' "$TMP/i18n/de.json")
