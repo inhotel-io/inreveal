@@ -238,6 +238,86 @@ else
   fails=$((fails + gb_drift))
 fi
 
+# Some overrides don't just swap the brand name, they say something DIFFERENT from
+# upstream: the fork sells nothing ("Buy Immich" -> "Support Noodle Gallery"), is
+# written by someone else ("Your friend, Alex" -> "...Pierre"), and links to the
+# instance rather than my.immich.app. Step 3's name swap cannot express any of
+# that — it only renames — so a locale with no override of its own keeps saying
+# upstream's thing under the fork's brand ("Kup Noodle Gallery"). Those keys need a
+# real translation in every locale the product actually ships in.
+SHIPPED_LOCALES=(de fr nl it es pl)   # en and en_GB are asserted above
+FORK_VOICE_KEYS=(
+  admin.notification_email_from_address_description
+  buy
+  install_app_title
+  my_immich_description
+  my_immich_title
+  purchase_button_buy_immich
+  purchase_discord_title
+  purchase_github_description
+  purchase_panel_info_2
+  version_announcement_closing
+)
+
+# Keep FORK_VOICE_KEYS honest: derive the same set from the files and fail if the
+# list is missing anything. A key qualifies when the fork's override says something
+# the brand swap alone would not produce. version_announcement_closing is the one
+# exception — the fork edited i18n/en.json in place (commit 4adfd17eafb) so source
+# and override already agree, and no derivation can see it.
+echo "FORK_VOICE_KEYS covers every override that changed the meaning:"
+derived=$(jq -n --slurpfile s "$REPO/i18n/en.json" --slurpfile o "$REPO/branding/i18n/overrides-en.json" -r '
+  [$o[0] | paths(scalars)] as $ps
+  | [ $ps[] | . as $p | ($s[0] | getpath($p)) as $u | ($o[0] | getpath($p)) as $f
+      | select($u != null and ($u | type) == "string")
+      | select(($u | split("Immich") | join("Noodle Gallery")) != $f)
+      | ($p | join(".")) ] | .[]')
+missing_from_list=0
+while IFS= read -r d; do
+  [[ -z "$d" ]] && continue
+  if ! printf '%s\n' "${FORK_VOICE_KEYS[@]}" | grep -qxF "$d"; then
+    echo "  FAIL: '$d' changes meaning vs i18n/en.json but is not in FORK_VOICE_KEYS — add it, and translate it in ${SHIPPED_LOCALES[*]}"
+    missing_from_list=$((missing_from_list + 1))
+  fi
+done <<<"$derived"
+if [[ $missing_from_list -eq 0 ]]; then
+  echo "  ok:   all $(echo "$derived" | grep -c .) derived keys are listed"
+else
+  fails=$((fails + missing_from_list))
+fi
+
+echo "Every shipped locale translates the fork's own wording:"
+voice_gaps=0
+for lang in "${SHIPPED_LOCALES[@]}"; do
+  lang_ov="$REPO/branding/i18n/overrides-${lang}.json"
+  for vkey in "${FORK_VOICE_KEYS[@]}"; do
+    if [[ ! -f "$lang_ov" ]] || [[ -z "$(jq -r --arg k "$vkey" 'getpath($k | split(".")) // empty' "$lang_ov")" ]]; then
+      echo "  FAIL: ${lang} has no override for '$vkey' — it will render upstream's meaning under the fork's brand"
+      voice_gaps=$((voice_gaps + 1))
+    fi
+  done
+done
+if [[ $voice_gaps -eq 0 ]]; then
+  echo "  ok:   ${#SHIPPED_LOCALES[@]} locales x ${#FORK_VOICE_KEYS[@]} fork-voice keys all translated"
+else
+  fails=$((fails + voice_gaps))
+fi
+
+# Spot-check the two that started this, so a failure reads as the bug not a count.
+echo "The reported strings, in every shipped locale:"
+for lang in "${SHIPPED_LOCALES[@]}"; do
+  cta=$(val_at "$lang" "$KEY")
+  sign=$(val_at "$lang" version_announcement_closing)
+  if echo "$sign" | grep -qiE 'alex|aleks'; then
+    echo "  FAIL: ${lang} release sign-off still names upstream's author: '$sign'"
+    fails=$((fails + 1))
+  elif [[ "$cta" == "$(jq -r --arg k "$KEY" '.[$k] // ""' "$REPO/branding/i18n/overrides-${lang}.json")" && -n "$cta" ]]; then
+    echo "  ok:   ${lang} — CTA '$cta', sign-off '$sign'"
+  else
+    echo "  FAIL: ${lang} CTA did not come from its override file: '$cta'"
+    fails=$((fails + 1))
+  fi
+done
+
 echo "Unrelated localized strings are preserved (no collateral damage):"
 # 'albums' is a generic key the fork does not rebrand; it must keep its German value.
 de_albums=$(jq -r '.albums // " ABSENT"' "$TMP/i18n/de.json")
