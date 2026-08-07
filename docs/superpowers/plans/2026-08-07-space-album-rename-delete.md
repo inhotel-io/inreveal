@@ -23,7 +23,12 @@
 - **Gate commands (verified — CLAUDE.md is stale here).** The Makefile has **no** `check-*` or
   `lint-*` targets. Use `cd server && pnpm run check && pnpm run lint`, and from `web/`:
   `pnpm check:typescript`, `pnpm check:svelte`, `pnpm lint`. `make open-api` **does** exist.
-- **Prettier:** run on any markdown under `docs/`. CI Docs Build is strict.
+- **Prettier is a SEPARATE CI gate from eslint** — `pnpm run lint` passing does not mean prettier
+  passes. Every task that touches server or web source must finish with
+  `npx prettier --check <the files you touched>` and fix what it reports. Note that shortening a
+  function body can make prettier want to collapse its multi-line signature, so a later task can
+  leave an earlier task's file dirty. Also run prettier on any markdown under `docs/` — CI Docs
+  Build is strict.
 - **Delete copy must say the album is destroyed for everyone**, not merely removed from the space — that is the whole distinction from the adjacent Unlink action.
 - **Test bodies written out vs. specified.** Tasks 1, 2, 5, 6, 9 and 10 carry complete, literal test
   code — write it as given. Tasks 3, 7 (list + page steps), 8, 11 and 12 give each test's **name and
