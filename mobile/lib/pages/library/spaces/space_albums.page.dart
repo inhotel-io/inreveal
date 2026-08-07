@@ -22,12 +22,29 @@ import 'package:immich_mobile/providers/infrastructure/asset.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album_actions.dart';
+import 'package:immich_mobile/providers/spaces/space_album_selection.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:immich_mobile/utils/space_album_folders.dart';
 import 'package:immich_mobile/widgets/common/collection_sort_button.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
 import 'package:immich_mobile/widgets/common/search_field.dart';
 import 'package:openapi/api.dart' show ApiException;
+
+/// Compact padding for [SpaceAlbumsPage]'s three labelled app-bar actions (New folder / New album /
+/// Link).
+///
+/// Material 3's `TextButton.icon` default is `EdgeInsetsDirectional.only(start: 12, end: 16)` —
+/// 28dp per button, 54dp of total chrome once the icon and its gap are counted. Three of those
+/// overran the toolbar on a phone-width screen: `NavigationToolbar` then gave the title zero width
+/// and pushed the whole actions row left until it sat underneath the back button. 8dp either side
+/// trims each to 42dp, buying back 36dp across the row — enough for the title to survive and for
+/// the row to clear the leading.
+const _appBarActionStyle = ButtonStyle(
+  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 8)),
+  // The default 64dp min width is inert here (every label is wider than that), but pinning it to
+  // zero keeps the horizontal padding above as the only thing setting each button's width.
+  minimumSize: WidgetStatePropertyAll(Size(0, kMinInteractiveDimension)),
+);
 
 /// Space Albums list/manage page — Surface 2 of the Phase-2B design.
 ///
@@ -110,6 +127,14 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     final folders = ref.watch(spaceAlbumFoldersProvider(spaceId)).valueOrNull ?? const <SpaceAlbumFolder>[];
     final sortConfig = ref.watch(appConfigProvider.select((config) => config.spaceAlbums));
 
+    // Task 14 (multi-select) — `spaceAlbumSelectionProvider` is a single GLOBAL provider (no
+    // spaceId/folderId key), matching the web manager's page-lifetime-scoped state. `canEdit`
+    // (S-10) gates whether THIS page instance can ever start or grow a selection — long-press is
+    // wired to `null` below when `canEdit` is false, so a viewer page can never write to it — but
+    // the read here stays unconditional, matching the brief's literal `canPop: selection.isEmpty`.
+    final selection = ref.watch(spaceAlbumSelectionProvider);
+    final selectionNotifier = ref.read(spaceAlbumSelectionProvider.notifier);
+
     final queryController = useTextEditingController();
     final query = useState('');
     useEffect(() {
@@ -117,6 +142,49 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       queryController.addListener(listener);
       return () => queryController.removeListener(listener);
     }, [queryController]);
+
+    // Task 14 fix round 1 (I-1/I-2) — clears a live selection when the identity of "what is being
+    // browsed" changes: a different space, a different folder, or a changed search query. Needed
+    // because leaving a selection active does not always pop THIS page: the `PopScope` and the
+    // vanished-folder `ref.listen` clear (further down / in the giant U-11 comment below) both
+    // only run on an actual `didPop`, and `router.replaceAll` — the 401 -> `LoginRoute` redirect
+    // (`auth_guard.dart:31,57,68`), Android VIEW-intent handling
+    // (`view_intent_handler_android.dart:99`), and the splash-screen login redirect
+    // (`splash_screen.page.dart:355,362`) — tears the OLD route down WITHOUT one. Because
+    // `SpaceAlbumsRoute` is self-recursive, `AutoRoutePage.canUpdate` matches on the route NAME
+    // alone (see the class doc above), so a `replaceAll` that swaps in a same-SHAPE page list
+    // (same route names at the same stack depths, just different args — e.g. a different
+    // `spaceId`) can have Flutter's Navigator UPDATE this widget's existing Element in place with
+    // the new args rather than disposing and recreating it: this widget's own hook state
+    // (including the guard below) persists across what looks, from the user's perspective, like
+    // landing on an entirely different page. `spaceAlbumSelectionProvider` is a single GLOBAL,
+    // app-lifetime-scoped provider (Task 13), so without this, a selection made in space A
+    // survives untouched into space B.
+    //
+    // Mirrors web's `space-albums-list.svelte` Triggers 1-3 (currentFolderId/searchQuery/spaceId,
+    // :283-325): the guard compares against the LAST VALUE this effect actually saw, initialized
+    // on the very first run WITHOUT clearing, so an unrelated rebuild can never spuriously wipe a
+    // selection — only a genuine change to one of the three tracked values does. `query.value`
+    // (not a trimmed/searching-only derivative) mirrors web's raw `searchQuery`. Dart records have
+    // built-in value equality, so the whole triple can be compared in one shot.
+    //
+    // The actual `clear()` is deferred via `Future.microtask`, NOT called directly in the body
+    // below: unlike React, flutter_hooks runs a `useEffect` callback SYNCHRONOUSLY inside
+    // `initHook`/`didUpdateHook` — i.e. mid-BUILD, not after the frame — and Riverpod's
+    // `UncontrolledProviderScope` hard-asserts against mutating provider state while the widget
+    // tree is building ("Tried to modify a provider while the widget tree was building"),
+    // exactly the failure this produced before the fix. `Future.microtask` is Riverpod's own
+    // documented workaround for this error and runs before the next frame, so there is no
+    // user-visible delay.
+    final lastBrowseIdentity = useRef<(String, String?, String)?>(null);
+    useEffect(() {
+      final identity = (spaceId, folderId, query.value);
+      if (lastBrowseIdentity.value != null && lastBrowseIdentity.value != identity) {
+        Future.microtask(selectionNotifier.clear);
+      }
+      lastBrowseIdentity.value = identity;
+      return null;
+    }, [spaceId, folderId, query.value]);
 
     // U-11: the folder we're browsing can vanish out from under us at any moment — an incoming
     // sync, not just navigation — so pop reactively rather than only checking at mount. Only
@@ -261,6 +329,17 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       final list = next.valueOrNull;
       if (list == null) return;
       if (!list.any((f) => f.id == currentFolderId)) {
+        // Task 14 (multi-select) hazard, S-16a/E-21 — this MUST run before either branch below
+        // schedules or performs a self-pop. The selection `PopScope` further down this file is
+        // `canPop: selection.isEmpty`; if a selection were still active the moment `maybePop()`
+        // actually runs (either right below, or later via `trySelfPop` once a buried page becomes
+        // topmost), that PopScope would swallow the pop — and `trySelfPop` has already cleared
+        // `pendingSelfPop` by the time `maybePop` resolves, so a swallowed pop leaves a visible,
+        // dead page with no retry (see the class doc above). Clearing here, synchronously and
+        // before either branch, guarantees `canPop` has already flipped back to `true` on the
+        // next rebuild by the time any `maybePop()` call — immediate or deferred — actually runs.
+        // Do NOT touch the self-pop branching itself below; this is the only change.
+        selectionNotifier.clear();
         if (isTopmost()) {
           unawaited(context.maybePop());
         } else {
@@ -274,6 +353,27 @@ class SpaceAlbumsPage extends HookConsumerWidget {
         pendingSelfPop.value = false;
       }
     });
+
+    // Task 15 (bulk actions) — item 1 of the task-15 brief: `SpaceAlbumSelectionNotifier.reconcile`
+    // (Task 13) had no call site on mobile before this task. Without it, an album/folder another
+    // member unlinks/deletes stays in a live selection here, and a subsequent bulk action would
+    // ship its now-stale id straight into the request payload. Mirrors web's own E-5 effect
+    // (`space-albums-list.svelte`): `presentIds` is the union of every CURRENTLY KNOWN album and
+    // folder id in the space (not just this level — `folders`/`albumsAsync` are already the
+    // whole-space lists used elsewhere on this page), reconciled on every stream emission, not on
+    // a timer. `reconcile` is a no-op when nothing actually needs dropping
+    // (`SpaceAlbumSelection`'s `==` short-circuits the state update), so firing this
+    // unconditionally on every emission — including ones a selection never sees — is harmless.
+    //
+    // Deferred via `Future.microtask`, same reason as the browse-identity clear above: `useEffect`
+    // runs mid-BUILD, and Riverpod's `UncontrolledProviderScope` asserts against mutating provider
+    // state while the widget tree is still building.
+    final currentAlbums = albumsAsync.valueOrNull;
+    useEffect(() {
+      final presentIds = {...?currentAlbums?.map((a) => a.id), ...folders.map((f) => f.id)};
+      Future.microtask(() => selectionNotifier.reconcile(presentIds));
+      return null;
+    }, [currentAlbums, folders]);
 
     // Folder CRUD (app-bar "New folder" + folder-card ⋮). Defined here, above the `albumsAsync`
     // branch, rather than inside `data: (albums) {...}` below: none of these need the album list,
@@ -382,9 +482,10 @@ class SpaceAlbumsPage extends HookConsumerWidget {
         folders: folders,
         // The folder itself and its whole subtree must not be offered as a destination — a folder
         // can never become its own descendant. Same guard as the picker sheet's own Task 6
-        // `isDescendant` check; passing `excludeFolderId` here is what actually engages it for
-        // this call site (the album-move path above passes `null` since an album has no subtree).
-        excludeFolderId: folder.id,
+        // `isDescendant` check; passing `excludeFolderIds` here is what actually engages it for
+        // this call site (the album-move path above passes `const []` since an album has no
+        // subtree).
+        excludeFolderIds: [folder.id],
         currentFolderId: folder.parentId,
       );
       // Same picked-vs-folderId==null distinction as moveAlbumToFolder below: both a dismissal and
@@ -422,84 +523,306 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       }
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_title(context, folders)),
-        centerTitle: false,
-        actions: [
-          if (canEdit) ...[
-            TextButton.icon(
-              key: const Key('space-albums-new-folder-action'),
-              onPressed: createFolder,
-              icon: const Icon(Icons.create_new_folder_outlined),
-              label: Text('space_album_folder_new'.t(context: context)),
-            ),
-            TextButton.icon(
-              key: const Key('space-albums-new-album-action'),
-              onPressed: createAlbum,
-              icon: const Icon(Icons.photo_album_outlined),
-              label: Text('space_album_new'.t(context: context)),
-            ),
-            TextButton.icon(
-              key: const Key('space-albums-link-action'),
-              onPressed: () => onLink(folderId),
-              icon: const Icon(Icons.add),
-              label: Text('link'.t(context: context)),
-            ),
-          ],
-        ],
-      ),
-      body: albumsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(
-          child: Text('space_albums_load_failed'.t(context: context, args: {'error': error.toString()})),
-        ),
-        data: (albums) {
-          Future<void> moveAlbumToFolder(SpaceAlbum album) async {
-            final result = await showSpaceAlbumFolderPicker(
-              context,
-              folders: folders,
-              excludeFolderId: null,
-              currentFolderId: album.folderId,
-            );
-            // Both a dismissal and picking the root resolve `folderId: null` — only `picked`
-            // tells them apart. Branching on `folderId == null` alone would treat a dismissal
-            // as "move to the root".
-            if (!result.picked) return;
-            if (!context.mounted) return;
-            try {
-              await ref.read(spaceAlbumActionsProvider).moveAlbumToFolder(spaceId, album.id, result.folderId);
-            } catch (_) {
-              if (context.mounted) {
-                ImmichToast.show(
-                  context: context,
-                  msg: 'space_album_folder_error_move'.t(context: context),
-                  toastType: ToastType.error,
-                );
+    // Task 15 (bulk actions), S-18/S-19 — album kind only: whether EVERY selected album is
+    // already in the timeline, decides the toggle action's label/icon/direction. Mirrors web's
+    // `allSelectedAlbumsInTimeline` (`space-albums-list.svelte`): `.every` is false the moment
+    // ANY selected album is off-timeline, so a MIXED selection resolves toward "Add to timeline"
+    // — only a selection that is ALREADY entirely in the timeline reads as "remove".
+    final isAllInTimeline =
+        selection.kind == SpaceAlbumSelectionKind.album &&
+        selection.ids.isNotEmpty &&
+        selection.ids.every((id) => currentAlbums?.firstWhereOrNull((a) => a.id == id)?.showInTimeline == true);
+
+    // Task 15 (bulk actions) — wires the Task 14 selection bar's previously-disabled
+    // (`onPressed: null`) action icons to the generated bulk endpoints. All four handlers below
+    // share the same failure contract: `SpaceAlbumActions`'s `bulkX` methods return the SUBSET of
+    // ids that failed (empty on total success, everything on a total failure OR a thrown
+    // request — see that class's own doc), and `reconcile(failedIds)` composes directly against
+    // that: total success reconciles to nothing selected (S-26), a partial failure keeps only the
+    // failures (S-24), and a total failure/throw keeps everything (S-25) — without this page ever
+    // inspecting *why* the batch failed.
+    void notifyBulkFailures(int failedCount) {
+      if (failedCount == 0 || !context.mounted) return;
+      ImmichToast.show(
+        context: context,
+        msg: 'space_album_bulk_partial_failure'.t(context: context, args: {'count': failedCount.toString()}),
+        toastType: ToastType.error,
+      );
+    }
+
+    Future<void> bulkUnlink() async {
+      final ids = selection.ids;
+      final confirmed = await _confirmBulkAction(
+        context,
+        title: 'space_album_bulk_unlink_title'.t(context: context, args: {'count': ids.length.toString()}),
+        content: 'space_album_bulk_unlink_confirm'.t(context: context),
+        confirmLabel: 'space_album_unlink_from_space'.t(context: context),
+        cancelKey: const Key('space-album-bulk-unlink-cancel'),
+        confirmKey: const Key('space-album-bulk-unlink-confirm'),
+      );
+      if (!confirmed || !context.mounted) return;
+      final failedIds = await ref.read(spaceAlbumActionsProvider).bulkUnlink(spaceId, ids);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
+    Future<void> bulkMove() async {
+      final ids = selection.ids;
+      final kind = selection.kind;
+      final result = await showSpaceAlbumFolderPicker(
+        context,
+        folders: folders,
+        // Task 15 fix round 1 (I-4) — every selected folder (and each one's own subtree) is
+        // excluded, not just "the folder" for a single-folder batch: offering ANY batch member as
+        // a destination for the WHOLE batch guarantees that member's own move fails server-side
+        // (a folder can never become its own descendant), and the picker previously had no way to
+        // say so — see `SpaceAlbumFolderPickerSheet`'s own doc for the exact failure this closes.
+        excludeFolderIds: kind == SpaceAlbumSelectionKind.folder ? ids.toList() : const [],
+        currentFolderId: currentFolderId,
+      );
+      if (!result.picked || !context.mounted) return;
+      final actions = ref.read(spaceAlbumActionsProvider);
+      final failedIds = kind == SpaceAlbumSelectionKind.folder
+          ? await actions.bulkMoveFolders(spaceId, ids, parentId: result.folderId)
+          : await actions.bulkSetAlbumFolder(spaceId, ids, folderId: result.folderId);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
+    Future<void> bulkToggleTimeline(bool showInTimeline) async {
+      final ids = selection.ids;
+      final failedIds = await ref
+          .read(spaceAlbumActionsProvider)
+          .bulkSetAlbumTimeline(spaceId, ids, showInTimeline: showInTimeline);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
+    Future<void> bulkDeleteFolders() async {
+      final ids = selection.ids;
+      final confirmed = await _confirmBulkAction(
+        context,
+        title: 'space_album_bulk_folder_delete_title'.t(context: context, args: {'count': ids.length.toString()}),
+        content: 'space_album_bulk_folder_delete_confirm'.t(context: context),
+        confirmLabel: 'delete'.t(context: context),
+        cancelKey: const Key('space-album-bulk-delete-cancel'),
+        confirmKey: const Key('space-album-bulk-delete-confirm'),
+        destructive: true,
+      );
+      if (!confirmed || !context.mounted) return;
+      final failedIds = await ref.read(spaceAlbumActionsProvider).bulkDeleteFolders(spaceId, ids);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
+    // Task 14 (multi-select), S-10 — a selection can only ever be non-empty on a canEdit page (see
+    // the canEdit-gated long-press wiring above), but gating the BAR on `canEdit` too, not just
+    // `selection.isEmpty`, keeps a viewer page from ever rendering it even in the theoretical case
+    // of stale global-provider state left over from a different (editor) space.
+    final showSelectionBar = canEdit && !selection.isEmpty;
+
+    return PopScope(
+      // Task 14 (multi-select), S-16/S-16a/E-21 — inert (`canPop: true`) whenever there is no
+      // selection, so it can never intercept the pre-existing folder-vanished self-pop's
+      // `context.maybePop()` (space_albums.page.dart, the `trySelfPop`/`ref.listen` block above)
+      // on a page with no selection — which is every page except one where the user is mid-select.
+      // The one page where a selection COULD be active when a self-pop fires is handled by
+      // clearing the selection first, at the top of the vanished-folder `ref.listen` callback
+      // above — by the time either that callback's own `maybePop()` or a later `trySelfPop()` call
+      // runs, `canPop` has already flipped back to `true`.
+      canPop: selection.isEmpty,
+      onPopInvokedWithResult: (_, __) {
+        if (!selection.isEmpty) {
+          selectionNotifier.clear();
+        }
+      },
+      child: Scaffold(
+        appBar: showSelectionBar
+            ? _SelectionAppBar(
+                key: const Key('space-album-selection-bar'),
+                kind: selection.kind,
+                count: selection.count,
+                onClear: selectionNotifier.clear,
+                isAllInTimeline: isAllInTimeline,
+                onUnlink: bulkUnlink,
+                onMove: bulkMove,
+                onToggleTimeline: bulkToggleTimeline,
+                onDelete: bulkDeleteFolders,
+              )
+            : AppBar(
+                title: Text(_title(context, folders)),
+                centerTitle: false,
+                // [_appBarActionStyle] trims the trailing action's own padding to 8dp, which alone
+                // would leave "Link" almost touching the screen edge. Add the missing 8dp back here
+                // so the row keeps a conventional 16dp end margin without re-widening the gaps
+                // *between* the actions.
+                actionsPadding: const EdgeInsetsDirectional.only(end: 8),
+                actions: [
+                  if (canEdit) ...[
+                    TextButton.icon(
+                      key: const Key('space-albums-new-folder-action'),
+                      style: _appBarActionStyle,
+                      onPressed: createFolder,
+                      icon: const Icon(Icons.create_new_folder_outlined),
+                      label: Text('space_album_folder_new'.t(context: context)),
+                    ),
+                    TextButton.icon(
+                      key: const Key('space-albums-new-album-action'),
+                      style: _appBarActionStyle,
+                      onPressed: createAlbum,
+                      icon: const Icon(Icons.photo_album_outlined),
+                      label: Text('space_album_new'.t(context: context)),
+                    ),
+                    TextButton.icon(
+                      key: const Key('space-albums-link-action'),
+                      style: _appBarActionStyle,
+                      onPressed: () => onLink(folderId),
+                      icon: const Icon(Icons.add),
+                      label: Text('link'.t(context: context)),
+                    ),
+                  ],
+                ],
+              ),
+        body: albumsAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (error, _) => Center(
+            child: Text('space_albums_load_failed'.t(context: context, args: {'error': error.toString()})),
+          ),
+          data: (albums) {
+            Future<void> moveAlbumToFolder(SpaceAlbum album) async {
+              final result = await showSpaceAlbumFolderPicker(
+                context,
+                folders: folders,
+                excludeFolderIds: const [],
+                currentFolderId: album.folderId,
+              );
+              // Both a dismissal and picking the root resolve `folderId: null` — only `picked`
+              // tells them apart. Branching on `folderId == null` alone would treat a dismissal
+              // as "move to the root".
+              if (!result.picked) return;
+              if (!context.mounted) return;
+              try {
+                await ref.read(spaceAlbumActionsProvider).moveAlbumToFolder(spaceId, album.id, result.folderId);
+              } catch (_) {
+                if (context.mounted) {
+                  ImmichToast.show(
+                    context: context,
+                    msg: 'space_album_folder_error_move'.t(context: context),
+                    toastType: ToastType.error,
+                  );
+                }
               }
             }
-          }
 
-          final trimmedQuery = query.value.trim();
-          final isSearching = trimmedQuery.isNotEmpty;
-          final hasQuery = query.value.isNotEmpty;
+            final trimmedQuery = query.value.trim();
+            final isSearching = trimmedQuery.isNotEmpty;
+            final hasQuery = query.value.isNotEmpty;
 
-          void onAlbumTap(String albumId) =>
+            // Task 14 (multi-select), S-15/S-3 on mobile — while a selection is active, a tap
+            // toggles the tapped item instead of navigating; `toggle` itself resolves the
+            // never-mixed-kinds rule (toggling an album while a folder selection is active
+            // replaces it wholesale), so this call site does not need to check kinds itself.
+            void onAlbumTap(String albumId) {
+              if (canEdit && !selection.isEmpty) {
+                selectionNotifier.toggle(SpaceAlbumSelectionKind.album, albumId);
+                return;
+              }
               context.pushRoute(SpaceAlbumDetailRoute(spaceId: spaceId, albumId: albumId, canEdit: canEdit));
+            }
 
-          Future<void> onSortChanged(SpaceAlbumSortMode mode, bool isReverse) async {
-            final settings = ref.read(settingsProvider);
-            await settings.write(SettingsKey.spaceAlbumsSortMode, mode);
-            await settings.write(SettingsKey.spaceAlbumsIsReverse, isReverse);
-          }
+            // Task 14 (multi-select), S-14/S-10 on mobile — `null` (not a canEdit-checking body)
+            // when `canEdit` is false, so the gesture itself is a structural no-op for a viewer
+            // rather than relying on a runtime check that could accidentally mutate the (global)
+            // selection provider from a page that must never be able to start a selection.
+            void Function(String albumId)? onAlbumLongPress = canEdit
+                ? (albumId) => selectionNotifier.toggle(SpaceAlbumSelectionKind.album, albumId)
+                : null;
 
-          if (isSearching) {
-            // Restored pre-folder-tree behaviour: a genuinely empty SPACE (not just "this query
-            // matched nothing") takes priority over the no-match state, even mid-search — e.g. the
-            // last linked album was unlinked elsewhere while the user still had a query typed. The
-            // no-match copy implies "try another query", which would be misleading when there is
-            // nothing in the space to search at all.
-            if (albums.isEmpty) {
+            Future<void> onSortChanged(SpaceAlbumSortMode mode, bool isReverse) async {
+              final settings = ref.read(settingsProvider);
+              await settings.write(SettingsKey.spaceAlbumsSortMode, mode);
+              await settings.write(SettingsKey.spaceAlbumsIsReverse, isReverse);
+            }
+
+            if (isSearching) {
+              // Restored pre-folder-tree behaviour: a genuinely empty SPACE (not just "this query
+              // matched nothing") takes priority over the no-match state, even mid-search — e.g. the
+              // last linked album was unlinked elsewhere while the user still had a query typed. The
+              // no-match copy implies "try another query", which would be misleading when there is
+              // nothing in the space to search at all.
+              if (albums.isEmpty) {
+                return _EmptyState(
+                  key: const Key('space-albums-empty'),
+                  canEdit: canEdit,
+                  onLink: () => onLink(folderId),
+                );
+              }
+
+              // U-09: a query escapes the folder tree entirely — folders are hidden and every
+              // matching album in the SPACE (not just this level) is listed with its path.
+              final hits = flattenForSearch(folders, albums, query.value);
+              // flattenForSearch returns raw server (watchLinkedAlbums) order — re-apply the active
+              // sort so a search doesn't silently discard the user's chosen ordering. Mirrors web's
+              // space-albums-list.svelte, which re-sorts its own search hits for the same reason.
+              final pathByAlbumId = {for (final hit in hits) hit.album.id: hit.path};
+              final sortedHitAlbums = filterAndSortSpaceAlbums(
+                hits.map((hit) => hit.album).toList(),
+                '',
+                sortConfig.sortMode,
+                sortConfig.isReverse,
+              );
+              final sortedHits = [for (final a in sortedHitAlbums) FolderSearchHit(a, pathByAlbumId[a.id] ?? const [])];
+
+              return Column(
+                children: [
+                  _SearchAndSortBar(
+                    controller: queryController,
+                    hasQuery: hasQuery,
+                    onClear: queryController.clear,
+                    resultCount: sortedHits.length,
+                    totalCount: albums.length,
+                    query: trimmedQuery,
+                    sortMode: sortConfig.sortMode,
+                    isReverse: sortConfig.isReverse,
+                    onSortChanged: onSortChanged,
+                  ),
+                  Expanded(
+                    // U-13: keep the existing no-match state for the zero-hit case — tree-wide
+                    // search must preserve this pre-existing behaviour, not regress to a blank grid.
+                    child: sortedHits.isEmpty
+                        ? _NoMatch(key: const Key('space-albums-no-match'), query: query.value)
+                        : _SearchResultsGrid(
+                            hits: sortedHits,
+                            canEdit: canEdit,
+                            onToggle: onToggle,
+                            onUnlink: onUnlink,
+                            onMove: moveAlbumToFolder,
+                            onTap: onAlbumTap,
+                            selection: selection,
+                            onLongPress: onAlbumLongPress,
+                          ),
+                  ),
+                ],
+              );
+            }
+
+            // U-01/U-04/U-05: level view — only this level's folders and albums (T-08's fallback,
+            // via `folderContents`, already keeps a not-yet-synced album's parent from hiding it).
+            final contents = folderContents(folders, albums, currentFolderId);
+            final sortedFolders = _sortFolders(contents.folders, sortConfig.isReverse);
+            final sortedAlbums = filterAndSortSpaceAlbums(
+              contents.albums,
+              '',
+              sortConfig.sortMode,
+              sortConfig.isReverse,
+            );
+
+            if (sortedFolders.isEmpty && sortedAlbums.isEmpty) {
+              if (currentFolderId != null) {
+                // U-05: reusing the space-level empty state here would wrongly claim the space has
+                // no albums at all, when it only means THIS folder is empty.
+                return const _FolderEmptyState(key: Key('space-album-folder-empty'));
+              }
               return _EmptyState(
                 key: const Key('space-albums-empty'),
                 canEdit: canEdit,
@@ -507,28 +830,13 @@ class SpaceAlbumsPage extends HookConsumerWidget {
               );
             }
 
-            // U-09: a query escapes the folder tree entirely — folders are hidden and every
-            // matching album in the SPACE (not just this level) is listed with its path.
-            final hits = flattenForSearch(folders, albums, query.value);
-            // flattenForSearch returns raw server (watchLinkedAlbums) order — re-apply the active
-            // sort so a search doesn't silently discard the user's chosen ordering. Mirrors web's
-            // space-albums-list.svelte, which re-sorts its own search hits for the same reason.
-            final pathByAlbumId = {for (final hit in hits) hit.album.id: hit.path};
-            final sortedHitAlbums = filterAndSortSpaceAlbums(
-              hits.map((hit) => hit.album).toList(),
-              '',
-              sortConfig.sortMode,
-              sortConfig.isReverse,
-            );
-            final sortedHits = [for (final a in sortedHitAlbums) FolderSearchHit(a, pathByAlbumId[a.id] ?? const [])];
-
             return Column(
               children: [
                 _SearchAndSortBar(
                   controller: queryController,
                   hasQuery: hasQuery,
                   onClear: queryController.clear,
-                  resultCount: sortedHits.length,
+                  resultCount: sortedAlbums.length,
                   totalCount: albums.length,
                   query: trimmedQuery,
                   sortMode: sortConfig.sortMode,
@@ -536,82 +844,52 @@ class SpaceAlbumsPage extends HookConsumerWidget {
                   onSortChanged: onSortChanged,
                 ),
                 Expanded(
-                  // U-13: keep the existing no-match state for the zero-hit case — tree-wide
-                  // search must preserve this pre-existing behaviour, not regress to a blank grid.
-                  child: sortedHits.isEmpty
-                      ? _NoMatch(key: const Key('space-albums-no-match'), query: query.value)
-                      : _SearchResultsGrid(
-                          hits: sortedHits,
+                  child: _LevelGrid(
+                    folders: sortedFolders,
+                    albums: sortedAlbums,
+                    allFolders: folders,
+                    allAlbums: albums,
+                    canEdit: canEdit,
+                    selection: selection,
+                    onFolderTap: (folder) {
+                      // Task 14 (multi-select), S-15 — a tap toggles rather than navigating while a
+                      // selection is active, mirroring `onAlbumTap` above.
+                      if (canEdit && !selection.isEmpty) {
+                        selectionNotifier.toggle(SpaceAlbumSelectionKind.folder, folder.id);
+                        return;
+                      }
+                      context.pushRoute(
+                        SpaceAlbumsRoute(
+                          spaceId: spaceId,
                           canEdit: canEdit,
+                          folderId: folder.id,
+                          // Forward the raw callback, NOT one bound to this page's folderId — the
+                          // child is a level deeper and must link into its OWN folder.
+                          onLink: onLink,
                           onToggle: onToggle,
                           onUnlink: onUnlink,
-                          onMove: moveAlbumToFolder,
-                          onTap: onAlbumTap,
                         ),
+                      );
+                    },
+                    // Task 14 (multi-select), S-14/S-10 on mobile — same canEdit-gated no-op-vs-wired
+                    // shape as `onAlbumLongPress` above.
+                    onFolderLongPress: canEdit
+                        ? (folder) => selectionNotifier.toggle(SpaceAlbumSelectionKind.folder, folder.id)
+                        : null,
+                    onToggle: onToggle,
+                    onUnlink: onUnlink,
+                    onMove: moveAlbumToFolder,
+                    onAlbumTap: onAlbumTap,
+                    onAlbumLongPress: onAlbumLongPress,
+                    onRenameFolder: renameFolder,
+                    onMoveFolder: moveFolder,
+                    onDeleteFolder: deleteFolder,
+                  ),
                 ),
               ],
             );
-          }
-
-          // U-01/U-04/U-05: level view — only this level's folders and albums (T-08's fallback,
-          // via `folderContents`, already keeps a not-yet-synced album's parent from hiding it).
-          final contents = folderContents(folders, albums, currentFolderId);
-          final sortedFolders = _sortFolders(contents.folders, sortConfig.isReverse);
-          final sortedAlbums = filterAndSortSpaceAlbums(contents.albums, '', sortConfig.sortMode, sortConfig.isReverse);
-
-          if (sortedFolders.isEmpty && sortedAlbums.isEmpty) {
-            if (currentFolderId != null) {
-              // U-05: reusing the space-level empty state here would wrongly claim the space has
-              // no albums at all, when it only means THIS folder is empty.
-              return const _FolderEmptyState(key: Key('space-album-folder-empty'));
-            }
-            return _EmptyState(key: const Key('space-albums-empty'), canEdit: canEdit, onLink: () => onLink(folderId));
-          }
-
-          return Column(
-            children: [
-              _SearchAndSortBar(
-                controller: queryController,
-                hasQuery: hasQuery,
-                onClear: queryController.clear,
-                resultCount: sortedAlbums.length,
-                totalCount: albums.length,
-                query: trimmedQuery,
-                sortMode: sortConfig.sortMode,
-                isReverse: sortConfig.isReverse,
-                onSortChanged: onSortChanged,
-              ),
-              Expanded(
-                child: _LevelGrid(
-                  folders: sortedFolders,
-                  albums: sortedAlbums,
-                  allFolders: folders,
-                  allAlbums: albums,
-                  canEdit: canEdit,
-                  onFolderTap: (folder) => context.pushRoute(
-                    SpaceAlbumsRoute(
-                      spaceId: spaceId,
-                      canEdit: canEdit,
-                      folderId: folder.id,
-                      // Forward the raw callback, NOT one bound to this page's folderId — the
-                      // child is a level deeper and must link into its OWN folder.
-                      onLink: onLink,
-                      onToggle: onToggle,
-                      onUnlink: onUnlink,
-                    ),
-                  ),
-                  onToggle: onToggle,
-                  onUnlink: onUnlink,
-                  onMove: moveAlbumToFolder,
-                  onAlbumTap: onAlbumTap,
-                  onRenameFolder: renameFolder,
-                  onMoveFolder: moveFolder,
-                  onDeleteFolder: deleteFolder,
-                ),
-              ),
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -776,6 +1054,42 @@ Future<bool> _confirmDeleteFolder(BuildContext context, SpaceAlbumFolder folder)
   return confirmed == true;
 }
 
+/// Task 15 (bulk actions) — the shared "act on N items" confirm-dialog shape (bulk unlink / bulk
+/// folder delete), one dialog for the WHOLE batch naming the count. Mirrors [_confirmDeleteFolder]
+/// above exactly (Cancel + a labelled confirm `TextButton`, error-tinted only when [destructive]),
+/// just parameterised since the two callers use different keys/copy/tint.
+Future<bool> _confirmBulkAction(
+  BuildContext context, {
+  required String title,
+  required String content,
+  required String confirmLabel,
+  required Key cancelKey,
+  required Key confirmKey,
+  bool destructive = false,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: Text(content),
+      actions: [
+        TextButton(
+          key: cancelKey,
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: Text('cancel'.t(context: ctx)),
+        ),
+        TextButton(
+          key: confirmKey,
+          onPressed: () => Navigator.of(ctx).pop(true),
+          style: destructive ? TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error) : null,
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+  return confirmed == true;
+}
+
 // ---------------------------------------------------------------------------
 // Search + sort bar
 // ---------------------------------------------------------------------------
@@ -870,11 +1184,14 @@ class _LevelGrid extends StatelessWidget {
     required this.allFolders,
     required this.allAlbums,
     required this.canEdit,
+    required this.selection,
     required this.onFolderTap,
+    this.onFolderLongPress,
     required this.onToggle,
     required this.onUnlink,
     required this.onMove,
     required this.onAlbumTap,
+    this.onAlbumLongPress,
     required this.onRenameFolder,
     required this.onMoveFolder,
     required this.onDeleteFolder,
@@ -891,11 +1208,18 @@ class _LevelGrid extends StatelessWidget {
   final List<SpaceAlbumFolder> allFolders;
   final List<SpaceAlbum> allAlbums;
   final bool canEdit;
+
+  /// Task 14 (multi-select) — read here only to derive each card's `isSelected` badge; the
+  /// tap-vs-toggle routing decision itself is made by the caller (`onFolderTap`/`onAlbumTap`
+  /// already resolve to a toggle when a selection is active), so this grid does not branch on it.
+  final SpaceAlbumSelection selection;
   final void Function(SpaceAlbumFolder folder) onFolderTap;
+  final void Function(SpaceAlbumFolder folder)? onFolderLongPress;
   final void Function(String albumId) onToggle;
   final void Function(String albumId) onUnlink;
   final void Function(SpaceAlbum album) onMove;
   final void Function(String albumId) onAlbumTap;
+  final void Function(String albumId)? onAlbumLongPress;
   final void Function(SpaceAlbumFolder folder) onRenameFolder;
   final void Function(SpaceAlbumFolder folder) onMoveFolder;
   final void Function(SpaceAlbumFolder folder) onDeleteFolder;
@@ -917,7 +1241,9 @@ class _LevelGrid extends StatelessWidget {
                   albumCount: recursiveAlbumCount(allFolders, allAlbums, folder.id),
                   previewAlbums: folderPreviewAlbums(allFolders, allAlbums, folder.id),
                   canEdit: canEdit,
+                  isSelected: selection.kind == SpaceAlbumSelectionKind.folder && selection.ids.contains(folder.id),
                   onTap: () => onFolderTap(folder),
+                  onLongPress: onFolderLongPress == null ? null : () => onFolderLongPress!(folder),
                   onRename: () => onRenameFolder(folder),
                   onMove: () => onMoveFolder(folder),
                   onDelete: () => onDeleteFolder(folder),
@@ -936,10 +1262,12 @@ class _LevelGrid extends StatelessWidget {
                   key: Key('space-album-card-${album.id}'),
                   album: album,
                   canEdit: canEdit,
+                  isSelected: selection.kind == SpaceAlbumSelectionKind.album && selection.ids.contains(album.id),
                   onToggle: onToggle,
                   onUnlink: onUnlink,
                   onMove: onMove,
                   onTap: onAlbumTap,
+                  onLongPress: onAlbumLongPress,
                 );
               }, childCount: albums.length),
             ),
@@ -961,6 +1289,8 @@ class _SearchResultsGrid extends StatelessWidget {
     required this.onUnlink,
     required this.onMove,
     required this.onTap,
+    required this.selection,
+    this.onLongPress,
   });
 
   final List<FolderSearchHit> hits;
@@ -969,6 +1299,11 @@ class _SearchResultsGrid extends StatelessWidget {
   final void Function(String albumId) onUnlink;
   final void Function(SpaceAlbum album) onMove;
   final void Function(String albumId) onTap;
+
+  /// Task 14 (multi-select) — see the identical field on `_LevelGrid` above: read only to derive
+  /// each card's `isSelected` badge.
+  final SpaceAlbumSelection selection;
+  final void Function(String albumId)? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -986,10 +1321,12 @@ class _SearchResultsGrid extends StatelessWidget {
                 key: Key('space-album-card-${hit.album.id}'),
                 album: hit.album,
                 canEdit: canEdit,
+                isSelected: selection.kind == SpaceAlbumSelectionKind.album && selection.ids.contains(hit.album.id),
                 onToggle: onToggle,
                 onUnlink: onUnlink,
                 onMove: onMove,
                 onTap: onTap,
+                onLongPress: onLongPress,
               ),
             ),
             if (hit.path.isNotEmpty)
@@ -1023,6 +1360,8 @@ class _AlbumCard extends ConsumerWidget {
     required this.onUnlink,
     required this.onMove,
     required this.onTap,
+    this.isSelected = false,
+    this.onLongPress,
   });
 
   final SpaceAlbum album;
@@ -1031,6 +1370,14 @@ class _AlbumCard extends ConsumerWidget {
   final void Function(String albumId) onUnlink;
   final void Function(SpaceAlbum album) onMove;
   final void Function(String albumId) onTap;
+
+  /// Task 14 (multi-select) — true while this album is part of the current selection. Purely
+  /// visual: the card renders a check-circle badge and a tinted border.
+  final bool isSelected;
+
+  /// Task 14 (multi-select) — long-pressing enters selection mode with this album selected.
+  /// `null` when selection is unavailable (viewer / `canEdit: false`).
+  final void Function(String albumId)? onLongPress;
 
   Widget _buildFallback(ColorScheme cs) {
     return Container(
@@ -1072,6 +1419,7 @@ class _AlbumCard extends ConsumerWidget {
       // name Text was hittable). Opaque makes the whole card tappable.
       behavior: HitTestBehavior.opaque,
       onTap: () => onTap(album.id),
+      onLongPress: onLongPress == null ? null : () => onLongPress!(album.id),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1079,12 +1427,31 @@ class _AlbumCard extends ConsumerWidget {
           Expanded(
             child: Stack(
               children: [
-                Opacity(opacity: isOffTimeline ? 0.6 : 1.0, child: _buildCoverArt(context, ref, cs)),
+                Container(
+                  decoration: isSelected
+                      ? BoxDecoration(
+                          borderRadius: const BorderRadius.all(Radius.circular(16)),
+                          border: Border.all(color: cs.primary, width: 3),
+                        )
+                      : null,
+                  child: Opacity(opacity: isOffTimeline ? 0.6 : 1.0, child: _buildCoverArt(context, ref, cs)),
+                ),
                 // Off-timeline badge
                 if (isOffTimeline)
                   Positioned.fill(
                     child: Center(
                       child: Icon(Icons.visibility_off, size: 24, color: cs.onSurface.withValues(alpha: 0.7)),
+                    ),
+                  ),
+                if (isSelected)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Icon(
+                      Icons.check_circle,
+                      key: Key('space-album-card-selected-${album.id}'),
+                      size: 24,
+                      color: cs.primary,
                     ),
                   ),
               ],
@@ -1168,6 +1535,99 @@ class _AlbumCard extends ConsumerWidget {
 }
 
 enum _CardAction { toggle, unlink, move }
+
+// ---------------------------------------------------------------------------
+// Selection bar — Task 14 (multi-select) built the shape, Task 15 wired the
+// actions. Replaces the normal AppBar while a selection is active
+// (S-13/S-14/S-15). Mirrors the shape of web's `space-album-select-bar.svelte`
+// (count + kind-appropriate actions) and this codebase's own
+// `SelectionSliverAppBar` convention (leading close icon, count in the title).
+// ---------------------------------------------------------------------------
+
+class _SelectionAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const _SelectionAppBar({
+    super.key,
+    required this.kind,
+    required this.count,
+    required this.onClear,
+    required this.isAllInTimeline,
+    required this.onUnlink,
+    required this.onMove,
+    required this.onToggleTimeline,
+    required this.onDelete,
+  });
+
+  final SpaceAlbumSelectionKind kind;
+  final int count;
+  final VoidCallback onClear;
+
+  /// Task 15, S-18/S-19 — album kind only: whether EVERY selected album is already in the
+  /// timeline, decides whether the toggle action reads/acts as "Add" or "Remove". Mirrors web's
+  /// `allInTimeline` prop on `SpaceAlbumSelectBar`.
+  final bool isAllInTimeline;
+
+  final VoidCallback onUnlink;
+  final VoidCallback onMove;
+
+  /// Called with the `showInTimeline` value to send — always `!isAllInTimeline`, i.e. the
+  /// resolved direction (a mixed selection resolves toward include).
+  final void Function(bool showInTimeline) onToggleTimeline;
+  final VoidCallback onDelete;
+
+  @override
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBar(
+      leading: IconButton(
+        key: const Key('space-album-selection-clear'),
+        icon: const Icon(Icons.close),
+        tooltip: 'close'.t(context: context),
+        onPressed: onClear,
+      ),
+      title: Text('space_album_selected_count'.t(context: context, args: {'count': count.toString()})),
+      actions: [
+        if (kind == SpaceAlbumSelectionKind.album) ...[
+          IconButton(
+            key: const Key('space-album-selection-unlink'),
+            icon: const Icon(Icons.link_off),
+            tooltip: 'space_album_unlink_from_space'.t(context: context),
+            onPressed: onUnlink,
+          ),
+          IconButton(
+            key: const Key('space-album-selection-move'),
+            icon: const Icon(Icons.drive_file_move_outline),
+            tooltip: 'space_album_folder_move'.t(context: context),
+            onPressed: onMove,
+          ),
+          IconButton(
+            key: const Key('space-album-selection-toggle-timeline'),
+            icon: Icon(isAllInTimeline ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+            tooltip: (isAllInTimeline ? 'space_album_bulk_remove_from_timeline' : 'space_album_bulk_add_to_timeline').t(
+              context: context,
+            ),
+            onPressed: () => onToggleTimeline(!isAllInTimeline),
+          ),
+        ] else if (kind == SpaceAlbumSelectionKind.folder) ...[
+          IconButton(
+            key: const Key('space-album-selection-move'),
+            icon: const Icon(Icons.drive_file_move_outline),
+            tooltip: 'space_album_folder_move'.t(context: context),
+            onPressed: onMove,
+          ),
+          IconButton(
+            key: const Key('space-album-selection-delete'),
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'space_album_folder_delete'.t(context: context),
+            color: Theme.of(context).colorScheme.error,
+            onPressed: onDelete,
+          ),
+        ],
+      ],
+    );
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Empty states

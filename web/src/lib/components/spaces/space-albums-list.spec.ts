@@ -1,12 +1,15 @@
 import type { SharedSpaceAlbumFolderDto, SharedSpaceLinkedAlbumDto, SharedSpaceMemberResponseDto } from '@immich/sdk';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import { get } from 'svelte/store';
 import SpaceAlbumsList from '$lib/components/spaces/space-albums-list.svelte';
 import { authManager } from '$lib/managers/auth-manager.svelte';
+import { eventManager } from '$lib/managers/event-manager.svelte';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
-import { toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
+import { readDragPayload } from '$lib/utils/space-album-folder-dnd';
+import { expandAllSpaceAlbumGroups, toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
+import { renderWithTooltips } from '$tests/helpers';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: vi.fn() }));
@@ -402,6 +405,750 @@ describe('SpaceAlbumsList', () => {
       expect(screen.getByText('Rome')).toBeInTheDocument();
       expect(screen.getByText('Venice')).toBeInTheDocument();
       expect(screen.queryByTestId('space-albums-loading')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('multi-select', () => {
+    // Alphabetic names keyed to id so Title/Asc sort yields a, b, c, d, e, f in order —
+    // deterministic without depending on the store's default sort.
+    const NAMES: Record<string, string> = { a: 'Alpha', b: 'Bravo', c: 'Charlie', d: 'Delta', e: 'Echo', f: 'Foxtrot' };
+    function linkedAlbum(id: string, overrides: Partial<SharedSpaceLinkedAlbumDto> = {}): SharedSpaceLinkedAlbumDto {
+      return makeAlbum({ id, albumName: NAMES[id] ?? id, ...overrides });
+    }
+    function folderDto(id: string): SharedSpaceAlbumFolderDto {
+      return {
+        id,
+        spaceId: 's-1',
+        parentId: null,
+        name: NAMES[id] ?? id,
+        createdById: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+    }
+
+    const props = {
+      spaceId: 's-1',
+      albums: [linkedAlbum('a'), linkedAlbum('b')],
+      folders: [folderDto('f')],
+      canManage: true,
+      currentFolderId: null as string | null,
+      searchQuery: '',
+    };
+
+    // canManage: true renders the per-item kebab menu (ButtonContextMenu → Tooltip), which needs a
+    // TooltipProvider ancestor — plain `render` throws "Context Tooltip.Provider not found" the
+    // moment a folder or album with canManage renders. renderWithTooltips wraps in one.
+    const renderList = (componentProps: typeof props & Record<string, unknown>) =>
+      renderWithTooltips(SpaceAlbumsList, componentProps);
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      spaceAlbumViewSettings.reset();
+      spaceAlbumViewSettings.update((s) => ({ ...s, sortBy: AlbumSortBy.Title, sortOrder: SortOrder.Asc }));
+    });
+
+    // `fireEvent` types its targets as Window (not `typeof globalThis`), even though they're the
+    // same object in happy-dom — cast once and reuse rather than repeating `as unknown as Window`.
+    const win = globalThis as unknown as Window;
+
+    // keyboardManager is a module-level singleton (addEventListener('keydown'/'keyup') — reset it
+    // after every test so a shift left "held" by one test can't leak into the next.
+    afterEach(async () => {
+      await fireEvent.blur(win);
+    });
+
+    // S-1
+    it('clicking the check circle enters selection without navigating', async () => {
+      const onOpen = vi.fn();
+      renderList({ ...props, onOpenAlbum: onOpen });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toBeInTheDocument();
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    // S-2
+    it('clicking a card while a selection is active toggles instead of navigating', async () => {
+      const onOpen = vi.fn();
+      renderList({ ...props, onOpenAlbum: onOpen });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-card-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    // S-3
+    it('clicking a card with no selection opens the album', async () => {
+      const onOpen = vi.fn();
+      renderList({ ...props, onOpenAlbum: onOpen });
+      await fireEvent.click(screen.getByTestId('space-album-card-b'));
+      expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }));
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // S-9 — the trigger AppNavigate does NOT cover.
+    it('clears the selection when currentFolderId changes', async () => {
+      const { rerender } = renderList({ ...props, currentFolderId: null });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-select-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, currentFolderId: 'folder-1' },
+      });
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // S-9b — searchQuery is local $state, so no navigation fires at all.
+    it('clears the selection when searchQuery changes', async () => {
+      // 'bra' matches only 'Bravo' (album b) — 'Alpha' does not contain that substring.
+      const { rerender } = renderList({ ...props, searchQuery: 'bra' });
+      await fireEvent.click(screen.getByTestId('space-album-select-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, searchQuery: 'brav' },
+      });
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // S-9c — the trigger currentFolderId/searchQuery do NOT cover: navigating between two DIFFERENT
+    // spaces hits the same route id (`/spaces/[spaceId]/albums`), so SpaceAlbumsList is not
+    // remounted, and neither currentFolderId nor searchQuery necessarily change either. Only
+    // AppNavigate catches this.
+    it('clears the selection on AppNavigate', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+      eventManager.emit('AppNavigate');
+
+      await waitFor(() => expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument());
+    });
+
+    it('clears the selection when Escape is pressed', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toBeInTheDocument();
+
+      await fireEvent.keyDown(win, { key: 'Escape' });
+
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // S-10
+    it('renders no check circle when canManage is false', () => {
+      renderList({ ...props, canManage: false });
+      // Positive control: the cards themselves ARE rendered, so this is not vacuous.
+      expect(screen.getByTestId('space-album-card-a')).toBeInTheDocument();
+      expect(screen.queryByTestId('space-album-select-a')).not.toBeInTheDocument();
+    });
+
+    // S-13. NOTE: unlike most web unit tests in this codebase, this file's beforeAll registers the
+    // REAL en-US locale (see the "folders" describe block's own comment above), so $t() resolves
+    // actual copy here rather than the raw i18n key — assert on the rendered English text.
+    it('offers move and delete but not unlink for a folder selection', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+      const bar = screen.getByTestId('space-album-select-bar');
+      expect(within(bar).getByRole('button', { name: 'Move to folder…' })).toBeInTheDocument();
+      expect(within(bar).getByRole('button', { name: 'Delete folder' })).toBeInTheDocument();
+      expect(within(bar).queryByRole('button', { name: 'Unlink from space' })).not.toBeInTheDocument();
+    });
+
+    // S-11 at the component level: selecting a folder replaces an album selection.
+    it('replaces an album selection when a folder is selected', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'); // positive control
+      await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+      expect(screen.getByTestId('space-album-card-a')).not.toHaveAttribute('data-selected', 'true');
+    });
+
+    // The bar offers only the kind's actions — album side of S-13.
+    it('offers unlink and timeline actions but not delete for an album selection', async () => {
+      renderList(props);
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      const bar = screen.getByTestId('space-album-select-bar');
+      expect(within(bar).getByRole('button', { name: 'Unlink from space' })).toBeInTheDocument();
+      expect(within(bar).getByRole('button', { name: 'Move to folder…' })).toBeInTheDocument();
+      expect(within(bar).queryByRole('button', { name: 'Delete folder' })).not.toBeInTheDocument();
+    });
+
+    // S-4-equivalent at the UI level: a Shift-click while a selection is active commits the
+    // contiguous range from the anchor.
+    it('shift-clicking a card selects the contiguous range from the anchor', async () => {
+      renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')],
+        folders: [],
+      });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-card-c'), { shiftKey: true });
+
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3');
+      expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-selected', 'true');
+    });
+
+    // §4.3 / forward-note 2: folders always sort before albums in `orderedIds`, so the two kinds
+    // stay CONTIGUOUS blocks. If they were interleaved, this album-only range could pull the
+    // folder's id into the (kind: 'album') selection, inflating the count past 3.
+    it('keeps folder and album ids contiguous so an album-only range never pulls in the folder', async () => {
+      renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')],
+        folders: [folderDto('f')],
+      });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-card-c'), { shiftKey: true });
+
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3');
+      expect(screen.getByTestId('space-album-folder-card')).not.toHaveAttribute('data-selected', 'true');
+    });
+
+    // Forward-note 5: `selectRange` keeps the anchor via `??=` so repeated Shift interactions stay
+    // anchored to the FIRST click, not the most recent one. A regression to an unconditional `=`
+    // passes all 19 manager unit tests (they never exercise a third interaction), so this has to be
+    // proven through rendered output: `previewRange` EXCLUDES already-selected ids, so hovering
+    // beyond the anchor reveals exactly which id the manager thinks the anchor is.
+    //
+    // Sequence: click a (anchor=a) → shift-click d (selects a,b,c,d; anchor stays a) → toggle c OFF
+    // (selected={a,b,d}, anchor untouched) → Shift+hover e.
+    //   Correct (anchor=a): range(a,e) minus {a,b,d} = {c,e} — c is highlighted.
+    //   Buggy (anchor drifted to d): range(d,e) minus {a,b,d} = {e} only — c is NOT highlighted.
+    it('keeps the original Shift anchor across repeated Shift interactions', async () => {
+      renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c'), linkedAlbum('d'), linkedAlbum('e')],
+        folders: [],
+      });
+
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-card-d'), { shiftKey: true });
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('4'); // a,b,c,d
+
+      await fireEvent.click(screen.getByTestId('space-album-select-c')); // toggle c off
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3'); // a,b,d
+
+      await fireEvent.keyDown(win, { key: 'Shift', shiftKey: true });
+      await fireEvent.mouseEnter(screen.getByTestId('space-album-card-e'));
+
+      expect(screen.getByTestId('space-album-card-c')).toHaveAttribute('data-candidate', 'true');
+    });
+
+    // reconcile (E-5): an item that disappears from the incoming props while selected must drop out
+    // of the selection silently, updating the count — without wiping an unrelated in-progress
+    // interaction test (covered separately by the anchor test above using the SAME candidate path).
+    it('drops a selected album from the selection when it disappears from props', async () => {
+      const { rerender } = renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b')],
+      });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      await fireEvent.click(screen.getByTestId('space-album-select-b'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, albums: [linkedAlbum('b')] }, // 'a' unlinked elsewhere
+      });
+
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+    });
+
+    // I-2: switching spaces is a same-route transition (`/spaces/A/albums` → `/spaces/B/albums`
+    // share the route id `/(user)/spaces/[spaceId]/albums`), so AppNavigate does NOT fire — and an
+    // album present in BOTH spaces would survive reconcile too (it's genuinely still present in
+    // the new space's data), so reconcile is not a reliable backstop either. spaceId itself has to
+    // be an explicit clearing trigger.
+    it('clears the selection when spaceId changes', async () => {
+      const { rerender } = renderList({ ...props, spaceId: 'space-a' });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+      // Same album id present in the "new" space's data too — reconcile alone would keep it.
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, spaceId: 'space-b' },
+      });
+
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+    });
+
+    // Trigger 5 / I-1 (fix round 2): a drag-move can move any subset of the selected items out of
+    // the current level without currentFolderId/searchQuery/spaceId changing, without AppNavigate
+    // firing, and without E-5's reconcile catching it (the moved items are still PRESENT in the
+    // space's data, just under a different folderId/parentId). +page.svelte bumps `selectionMove`
+    // — carrying WHICH ids actually moved, not a bare counter — once a move settles; these prove
+    // the list reconciles PRECISELY: only the moved ids drop out, everything else selected stays.
+    describe('selectionMove (Trigger 5)', () => {
+      it('drops only the moved id, keeping the rest of the selection', async () => {
+        const threeAlbums = { albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')], folders: [] };
+        const { rerender } = renderList({ ...props, ...threeAlbums, selectionMove: { seq: 0, movedIds: [] } });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        await fireEvent.click(screen.getByTestId('space-album-select-c'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3'); // positive control
+
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, ...threeAlbums, selectionMove: { seq: 1, movedIds: ['b'] } },
+        });
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+        expect(screen.getByTestId('space-album-card-a')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-b')).not.toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-c')).toHaveAttribute('data-selected', 'true');
+      });
+
+      it('clears the whole selection when every selected id moved', async () => {
+        const { rerender } = renderList({ ...props, selectionMove: { seq: 0, movedIds: [] } });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, selectionMove: { seq: 1, movedIds: ['a', 'b'] } },
+        });
+
+        expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+      });
+
+      // Negative (fix round 2): a moved id that was never selected must not disturb an unrelated
+      // live selection — this is the list-level half of "dragging an unselected card while a
+      // selection is live must leave that selection untouched," now composed through reconcile
+      // rather than a gate this function would have to get right.
+      it('leaves an unrelated selection untouched when the moved id was never selected', async () => {
+        const threeAlbums = { albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')], folders: [] };
+        const { rerender } = renderList({ ...props, ...threeAlbums, selectionMove: { seq: 0, movedIds: [] } });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, ...threeAlbums, selectionMove: { seq: 1, movedIds: ['c'] } },
+        });
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+        expect(screen.getByTestId('space-album-card-a')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-selected', 'true');
+      });
+
+      // Negative (fix round 2): an unrelated re-render (same seq, some OTHER prop changed) must
+      // not re-trigger the effect's reconcile — mirrors the last-seen-value guard already proven
+      // for Triggers 1-4 (a prop spread re-render must not spuriously fire them).
+      it('does not touch the selection on an unrelated re-render with the same seq', async () => {
+        const { rerender } = renderList({ ...props, selectionMove: { seq: 0, movedIds: ['a'] } });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        // Same seq (0), same movedIds — only an unrelated prop (foldersUnavailable) changed.
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, foldersUnavailable: true, selectionMove: { seq: 0, movedIds: ['a'] } },
+        });
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+      });
+    });
+
+    // M-3 / E-15: canManage can flip to false mid-selection (a role downgrade plus some unrelated
+    // invalidateAll() refreshing `members`). The bar is already gated on canManage and disappears,
+    // but without also clearing the selection itself, every subsequent card click would silently
+    // toggle an invisible selection instead of opening the album.
+    it('clears the selection when canManage goes false, so cards remain openable', async () => {
+      const onOpen = vi.fn();
+      const { rerender } = renderList({ ...props, canManage: true, onOpenAlbum: onOpen });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+      await rerender({
+        component: SpaceAlbumsList,
+        componentProps: { ...props, canManage: false, onOpenAlbum: onOpen },
+      });
+
+      expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+
+      await fireEvent.click(screen.getByTestId('space-album-card-b'));
+      expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }));
+    });
+
+    // M-2: the hover handlers only run on `mouseenter`, so releasing Shift mid-hover (without a
+    // new mouseenter elsewhere) must not leave the candidate outline stuck on whatever was last
+    // previewed.
+    it('clears the Shift-hover preview when Shift is released', async () => {
+      renderList({
+        ...props,
+        albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')],
+        folders: [],
+      });
+      await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+      await fireEvent.keyDown(win, { key: 'Shift', shiftKey: true });
+      await fireEvent.mouseEnter(screen.getByTestId('space-album-card-c'));
+      expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-candidate', 'true'); // positive control
+
+      await fireEvent.keyUp(win, { key: 'Shift', shiftKey: false });
+
+      expect(screen.getByTestId('space-album-card-b')).not.toHaveAttribute('data-candidate', 'true');
+    });
+
+    // I-1: §4.3 says a range cannot pass THROUGH collapsed items; E-14 says collapsing must not
+    // deselect what's already selected inside a group. Neither rule is exercised by any other
+    // test in this file, and both directions are cheap to break independently (see the guard at
+    // `orderedAlbumIds`'s isGrouped branch, and the `presentIds` reconcile source).
+    describe('collapsed groups', () => {
+      beforeEach(() => {
+        // `spaceAlbumViewSettings.reset()` (outer beforeEach) resets the store back to the SAME
+        // default object `persisted()` was constructed with (svelte-persisted-store does not
+        // clone it) — and `toggleSpaceAlbumGroupCollapsing` mutates `collapsedGroups` in place, so
+        // a collapse from an EARLIER test can leak through `reset()` into this one.
+        // `collapsedGroups` is keyed by groupBy, so set groupBy to Year FIRST — expanding while
+        // still on the group-by the previous test left behind would clear the wrong bucket.
+        spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+        expandAllSpaceAlbumGroups();
+      });
+
+      // Sorted by year, group order defaults to Desc: 2024, 2023, 2022.
+      const groupedAlbums = [
+        linkedAlbum('a', { endDate: '2024-01-01T00:00:00.000Z' }),
+        linkedAlbum('b', { endDate: '2023-01-01T00:00:00.000Z' }),
+        linkedAlbum('c', { endDate: '2022-01-01T00:00:00.000Z' }),
+      ];
+
+      it('a Shift-range does not pull in an album hidden inside a collapsed group', async () => {
+        renderList({ ...props, albums: groupedAlbums, folders: [] });
+
+        toggleSpaceAlbumGroupCollapsing('2023');
+        await waitFor(() =>
+          expect(screen.getByTestId('space-album-group-2023')).toHaveAttribute('aria-expanded', 'false'),
+        );
+
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-card-c'), { shiftKey: true });
+
+        // 'a' (2024) and 'c' (2022) were both visible and selected; 'b' lives inside the collapsed
+        // 2023 group. Without the collapsed-group filter, the range would also pull in 'b',
+        // producing a count of 3 instead of 2.
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+      });
+
+      it('collapsing a group does not deselect an album already selected inside it (E-14)', async () => {
+        renderList({ ...props, albums: groupedAlbums, folders: [] });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'); // positive control
+
+        toggleSpaceAlbumGroupCollapsing('2023');
+        await waitFor(() =>
+          expect(screen.getByTestId('space-album-group-2023')).toHaveAttribute('aria-expanded', 'false'),
+        );
+
+        // If reconcile were driven by the (now collapsed-filtered) orderedIds instead of the full
+        // albums/folders props, 'b' would drop out of the selection the instant it collapsed.
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+      });
+    });
+
+    // I-3: the five selection-related props threaded into SpaceAlbumsTable (onOpenAlbum,
+    // onToggleSelectAlbum, onToggleSelectFolder, isAlbumSelected, isFolderSelected) have no
+    // coverage anywhere else — space-albums-table.spec.ts only exercises the table in isolation
+    // with hand-injected predicates, and every OTHER test in this file renders Cover mode.
+    describe('List view wiring', () => {
+      beforeEach(() => {
+        spaceAlbumViewSettings.update((s) => ({ ...s, view: AlbumViewMode.List }));
+      });
+
+      it('check circle toggles an album row into the selection and marks it selected', async () => {
+        renderList({ ...props, folders: [] });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+        expect(screen.getByTestId('space-album-row-a').closest('tr')).toHaveAttribute('data-selected', 'true');
+        // Positive control: an unselected row does not carry the attribute.
+        expect(screen.getByTestId('space-album-row-b').closest('tr')).not.toHaveAttribute('data-selected', 'true');
+      });
+
+      it('clicking a row toggles instead of opening once a selection is active', async () => {
+        const onOpen = vi.fn();
+        renderList({ ...props, folders: [], onOpenAlbum: onOpen });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        onOpen.mockClear();
+        await fireEvent.click(screen.getByTestId('space-album-row-b'));
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+        expect(onOpen).not.toHaveBeenCalled();
+      });
+
+      it('check circle toggles a folder row into the selection and marks it selected', async () => {
+        renderList(props); // props already includes folderDto('f')
+
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+        expect(screen.getByTestId('space-album-folder-row-f')).toHaveAttribute('data-selected', 'true');
+      });
+
+      it('search + List view: check circle toggles selection on a search hit', async () => {
+        renderList({ ...props, searchQuery: 'bra', folders: [] });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+        expect(screen.getByTestId('space-album-row-b').closest('tr')).toHaveAttribute('data-selected', 'true');
+      });
+
+      // Fix round 2: SpaceAlbumsTable is rendered at a THIRD site — the {#if isGrouped} branch —
+      // which none of the tests above reach, since none of them set groupBy away from its default
+      // None. Grouped List is an ordinary combination a user reaches from the existing view
+      // controls, and the props threaded into that call site had zero coverage.
+      describe('grouped', () => {
+        beforeEach(() => {
+          // Same ordering as the "collapsed groups" describe above, and for the same reason:
+          // collapsedGroups is keyed by groupBy and reset() does not clone it, so a Year-grouping
+          // collapse from an earlier test could otherwise leak in. Set groupBy first, then expand.
+          spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+          expandAllSpaceAlbumGroups();
+        });
+
+        it('check circle toggles an album row into the selection inside a grouped List table', async () => {
+          renderList({
+            ...props,
+            albums: [
+              linkedAlbum('a', { endDate: '2024-01-01T00:00:00.000Z' }),
+              linkedAlbum('b', { endDate: '2023-01-01T00:00:00.000Z' }),
+            ],
+            folders: [],
+          });
+
+          // Positive control: proves this render actually reached the grouped branch (which
+          // renders a group-header row) rather than silently falling through to the ungrouped
+          // table — a group header only exists in {#if isGrouped} branch's markup.
+          expect(screen.getByTestId('space-album-group-header-2024')).toBeInTheDocument();
+
+          await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+          expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+          expect(screen.getByTestId('space-album-row-a').closest('tr')).toHaveAttribute('data-selected', 'true');
+          // Positive control: an unselected row does not carry the attribute.
+          expect(screen.getByTestId('space-album-row-b').closest('tr')).not.toHaveAttribute('data-selected', 'true');
+        });
+      });
+    });
+
+    describe('bulk actions', () => {
+      const makeDataTransfer = () => {
+        const store = new Map<string, string>();
+        return {
+          setData: (type: string, value: string) => store.set(type, value),
+          getData: (type: string) => store.get(type) ?? '',
+          types: [...store.keys()],
+        } as unknown as DataTransfer;
+      };
+
+      // S-19: every selected album is already in the timeline -> the button offers to remove.
+      it('labels the timeline button "Remove from timeline" when every selected album is already in the timeline', async () => {
+        renderList({
+          ...props,
+          albums: [linkedAlbum('a', { showInTimeline: true }), linkedAlbum('b', { showInTimeline: true })],
+          folders: [],
+        });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        const bar = screen.getByTestId('space-album-select-bar');
+        expect(within(bar).getByRole('button', { name: 'Remove from timeline' })).toBeInTheDocument();
+        expect(within(bar).queryByRole('button', { name: 'Add to timeline' })).not.toBeInTheDocument();
+      });
+
+      // S-18: a mixed selection resolves toward INCLUDE, not exclude.
+      it('labels the timeline button "Add to timeline" for a mixed selection', async () => {
+        renderList({
+          ...props,
+          albums: [linkedAlbum('a', { showInTimeline: true }), linkedAlbum('b', { showInTimeline: false })],
+          folders: [],
+        });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        expect(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Add to timeline' }),
+        ).toBeInTheDocument();
+      });
+
+      it('clicking the timeline button calls onBulkToggleAlbumsTimeline with the target value and the selected ids', async () => {
+        const onBulkToggleAlbumsTimeline = vi.fn().mockResolvedValue([]);
+        renderList({
+          ...props,
+          albums: [linkedAlbum('a', { showInTimeline: true }), linkedAlbum('b', { showInTimeline: false })],
+          folders: [],
+          onBulkToggleAlbumsTimeline,
+        });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Add to timeline' }),
+        );
+
+        expect(onBulkToggleAlbumsTimeline).toHaveBeenCalledTimes(1);
+        const [ids, showInTimeline] = onBulkToggleAlbumsTimeline.mock.calls[0];
+        expect((ids as string[]).slice().sort()).toEqual(['a', 'b']);
+        expect(showInTimeline).toBe(true);
+      });
+
+      it('clicking "Unlink from space" calls onBulkUnlink with the selected album ids', async () => {
+        const onBulkUnlink = vi.fn().mockResolvedValue([]);
+        renderList({ ...props, folders: [], onBulkUnlink });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+        );
+
+        expect(onBulkUnlink).toHaveBeenCalledTimes(1);
+        expect((onBulkUnlink.mock.calls[0][0] as string[]).slice().sort()).toEqual(['a', 'b']);
+      });
+
+      // S-24: exactly the failures stay selected, and the successes do not.
+      it('keeps exactly the failed items selected after a partial failure', async () => {
+        const onBulkUnlink = vi.fn().mockResolvedValue(['b']);
+        renderList({
+          ...props,
+          albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')],
+          folders: [],
+          onBulkUnlink,
+        });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        await fireEvent.click(screen.getByTestId('space-album-select-c'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('3'); // positive control
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+        );
+
+        await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+        expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-a')).not.toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-c')).not.toHaveAttribute('data-selected', 'true');
+      });
+
+      // S-26: total success clears the selection and the bar disappears.
+      it('clears the selection when every item succeeds', async () => {
+        const onBulkUnlink = vi.fn().mockResolvedValue([]);
+        renderList({ ...props, albums: [linkedAlbum('a')], folders: [], onBulkUnlink });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+        );
+
+        await waitFor(() => expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument());
+      });
+
+      // E-19: even if the wired handler itself rejects — the page's own bulk-action wrappers never
+      // do (they catch a failed request and report every id as failed instead; see
+      // space-album-bulk-actions.ts), but this component's own defence-in-depth try/catch must
+      // hold regardless — nothing may be silently deselected.
+      it('keeps the whole selection when the bulk handler rejects', async () => {
+        const onBulkUnlink = vi.fn().mockRejectedValue(new Error('offline'));
+        renderList({ ...props, albums: [linkedAlbum('a'), linkedAlbum('b')], folders: [], onBulkUnlink });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Unlink from space' }),
+        );
+
+        await waitFor(() => expect(onBulkUnlink).toHaveBeenCalled());
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+        expect(screen.getByTestId('space-album-card-a')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-b')).toHaveAttribute('data-selected', 'true');
+      });
+
+      it('clicking "Move to folder…" calls onBulkMoveAlbums with the selected album ids', async () => {
+        const onBulkMoveAlbums = vi.fn().mockResolvedValue([]);
+        renderList({ ...props, folders: [], onBulkMoveAlbums });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Move to folder…' }),
+        );
+
+        expect(onBulkMoveAlbums).toHaveBeenCalledWith(['a']);
+      });
+
+      it('clicking "Move to folder…" calls onBulkMoveFolders for a folder selection', async () => {
+        const onBulkMoveFolders = vi.fn().mockResolvedValue([]);
+        renderList({ ...props, onBulkMoveFolders }); // props already includes folder 'f'
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Move to folder…' }),
+        );
+
+        expect(onBulkMoveFolders).toHaveBeenCalledWith(['f']);
+      });
+
+      it('clicking "Delete folder" calls onBulkDeleteFolders and reconciles on partial failure', async () => {
+        const onBulkDeleteFolders = vi.fn().mockResolvedValue(['f']);
+        renderList({ ...props, albums: [], folders: [folderDto('f'), folderDto('g')], onBulkDeleteFolders });
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-g'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        await fireEvent.click(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Delete folder' }),
+        );
+
+        await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+        expect(onBulkDeleteFolders).toHaveBeenCalledTimes(1);
+        expect((onBulkDeleteFolders.mock.calls[0][0] as string[]).slice().sort()).toEqual(['f', 'g']);
+      });
+
+      // S-22/S-23: proves selection state actually reaches the dragged card's payload — the pure
+      // buildDragPayload function is unit-tested on its own in space-album-folder-dnd.spec.ts.
+      it('dragging a selected card carries the whole selection', async () => {
+        renderList({ ...props, albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')], folders: [] });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+
+        const cardB = screen
+          .getByTestId('space-album-card-b')
+          .querySelector('[data-testid="space-album-card"]') as HTMLElement;
+        const dataTransfer = makeDataTransfer();
+        await fireEvent.dragStart(cardB, { dataTransfer });
+
+        const payload = readDragPayload(dataTransfer);
+        expect(payload?.kind).toBe('album');
+        expect(payload?.ids.slice().sort()).toEqual(['a', 'b']);
+      });
+
+      it('dragging an unselected card carries only that card and leaves the selection untouched', async () => {
+        renderList({ ...props, albums: [linkedAlbum('a'), linkedAlbum('b'), linkedAlbum('c')], folders: [] });
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        const cardC = screen
+          .getByTestId('space-album-card-c')
+          .querySelector('[data-testid="space-album-card"]') as HTMLElement;
+        const dataTransfer = makeDataTransfer();
+        await fireEvent.dragStart(cardC, { dataTransfer });
+
+        expect(readDragPayload(dataTransfer)).toEqual({ kind: 'album', ids: ['c'] });
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
+      });
     });
   });
 });

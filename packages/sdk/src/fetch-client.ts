@@ -2797,6 +2797,16 @@ export type SharedSpaceAlbumFolderCreateDto = {
     /** Parent folder ID; omit or null for the space root */
     parentId?: string | null;
 };
+export type SharedSpaceBulkFolderIdsDto = {
+    /** IDs to process */
+    ids: string[];
+};
+export type SharedSpaceBulkFolderParentDto = {
+    /** IDs to process */
+    ids: string[];
+    /** Destination parent folder ID; null moves the folders to the root */
+    parentId: string | null;
+};
 export type SharedSpaceAlbumFolderUpdateDto = {
     /** New folder name */
     name?: string;
@@ -2843,6 +2853,22 @@ export type SharedSpaceLinkedAlbumDto = {
     startDate?: string;
     /** Last update date */
     updatedAt: string;
+};
+export type SharedSpaceBulkAlbumFolderMoveDto = {
+    /** Destination folder ID; null moves the albums to the space root */
+    folderId: string | null;
+    /** IDs to process */
+    ids: string[];
+};
+export type SharedSpaceBulkAlbumTimelineDto = {
+    /** IDs to process */
+    ids: string[];
+    /** Whether the albums appear in the space timeline */
+    showInTimeline: boolean;
+};
+export type SharedSpaceBulkAlbumIdsDto = {
+    /** IDs to process */
+    ids: string[];
 };
 export type SharedSpaceAlbumLinkUpdateDto = {
     /** Include this album in the space timeline */
@@ -7691,6 +7717,38 @@ export function createSharedSpaceAlbumFolder({ id, sharedSpaceAlbumFolderCreateD
     })));
 }
 /**
+ * Delete several album folders
+ */
+export function bulkDeleteAlbumFolders({ id, sharedSpaceBulkFolderIdsDto }: {
+    id: string;
+    sharedSpaceBulkFolderIdsDto: SharedSpaceBulkFolderIdsDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: BulkIdResponseDto[];
+    }>(`/shared-spaces/${encodeURIComponent(id)}/album-folders/bulk-delete`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: sharedSpaceBulkFolderIdsDto
+    })));
+}
+/**
+ * Move several album folders to a new parent
+ */
+export function bulkMoveAlbumFolders({ id, sharedSpaceBulkFolderParentDto }: {
+    id: string;
+    sharedSpaceBulkFolderParentDto: SharedSpaceBulkFolderParentDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: BulkIdResponseDto[];
+    }>(`/shared-spaces/${encodeURIComponent(id)}/album-folders/bulk-parent`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: sharedSpaceBulkFolderParentDto
+    })));
+}
+/**
  * Delete an album folder
  */
 export function deleteSharedSpaceAlbumFolder({ folderId, id }: {
@@ -7728,6 +7786,54 @@ export function getSharedSpaceAlbums({ id }: {
     }>(`/shared-spaces/${encodeURIComponent(id)}/albums`, {
         ...opts
     }));
+}
+/**
+ * Move several linked albums into a folder
+ */
+export function bulkSetAlbumFolder({ id, sharedSpaceBulkAlbumFolderMoveDto }: {
+    id: string;
+    sharedSpaceBulkAlbumFolderMoveDto: SharedSpaceBulkAlbumFolderMoveDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: BulkIdResponseDto[];
+    }>(`/shared-spaces/${encodeURIComponent(id)}/albums/bulk-folder`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: sharedSpaceBulkAlbumFolderMoveDto
+    })));
+}
+/**
+ * Set the timeline flag for several linked albums
+ */
+export function bulkSetAlbumTimeline({ id, sharedSpaceBulkAlbumTimelineDto }: {
+    id: string;
+    sharedSpaceBulkAlbumTimelineDto: SharedSpaceBulkAlbumTimelineDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: BulkIdResponseDto[];
+    }>(`/shared-spaces/${encodeURIComponent(id)}/albums/bulk-timeline`, oazapfts.json({
+        ...opts,
+        method: "PUT",
+        body: sharedSpaceBulkAlbumTimelineDto
+    })));
+}
+/**
+ * Unlink several albums from a shared space
+ */
+export function bulkUnlinkAlbums({ id, sharedSpaceBulkAlbumIdsDto }: {
+    id: string;
+    sharedSpaceBulkAlbumIdsDto: SharedSpaceBulkAlbumIdsDto;
+}, opts?: Oazapfts.RequestOpts) {
+    return oazapfts.ok(oazapfts.fetchJson<{
+        status: 200;
+        data: BulkIdResponseDto[];
+    }>(`/shared-spaces/${encodeURIComponent(id)}/albums/bulk-unlink`, oazapfts.json({
+        ...opts,
+        method: "POST",
+        body: sharedSpaceBulkAlbumIdsDto
+    })));
 }
 /**
  * Unlink an album from a shared space

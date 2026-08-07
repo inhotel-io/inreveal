@@ -167,12 +167,59 @@ describe('SpaceAlbumCard', () => {
 
     await fireEvent.dragStart(card, { dataTransfer });
 
-    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'album', id: 'a-9' });
-    expect(getActiveDragPayload()).toEqual({ kind: 'album', id: 'a-9' });
+    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'album', ids: ['a-9'] });
+    expect(getActiveDragPayload()).toEqual({ kind: 'album', ids: ['a-9'] });
 
     await fireEvent.dragEnd(card);
 
     expect(getActiveDragPayload()).toBeNull();
+  });
+
+  // S-22/S-23: buildDragPayload is unit-tested on its own in space-album-folder-dnd.spec.ts; this
+  // proves the card actually WIRES its selectedIds/selectedKind props into that call, rather than
+  // the pure function merely existing unused.
+  it('dragging a card that is part of the current selection carries the whole selection', async () => {
+    const { container } = renderWithTooltips(SpaceAlbumCard, {
+      spaceId: 's-1',
+      album: { ...album, id: 'b' },
+      canManage: true,
+      selectedIds: ['a', 'b', 'c'],
+      selectedKind: 'album',
+    });
+    const card = container.querySelector('[data-testid="space-album-card"]')!;
+    const store = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? '',
+      types: [] as string[],
+    } as unknown as DataTransfer;
+
+    await fireEvent.dragStart(card, { dataTransfer });
+
+    const payload = readDragPayload(dataTransfer);
+    expect(payload?.kind).toBe('album');
+    expect(payload?.ids.slice().sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('dragging a card NOT part of the current selection carries only itself', async () => {
+    const { container } = renderWithTooltips(SpaceAlbumCard, {
+      spaceId: 's-1',
+      album: { ...album, id: 'd' },
+      canManage: true,
+      selectedIds: ['a', 'b'],
+      selectedKind: 'album',
+    });
+    const card = container.querySelector('[data-testid="space-album-card"]')!;
+    const store = new Map<string, string>();
+    const dataTransfer = {
+      setData: (type: string, value: string) => store.set(type, value),
+      getData: (type: string) => store.get(type) ?? '',
+      types: [] as string[],
+    } as unknown as DataTransfer;
+
+    await fireEvent.dragStart(card, { dataTransfer });
+
+    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'album', ids: ['d'] });
   });
 
   // draggable="false" on the outer div does not stop the inner <a>/cover image from being
@@ -195,5 +242,58 @@ describe('SpaceAlbumCard', () => {
 
     expect(dataTransfer.setData).not.toHaveBeenCalled();
     expect(getActiveDragPayload()).toBeNull();
+  });
+
+  describe('multi-select', () => {
+    it('renders a check circle when canManage is true', () => {
+      renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: true });
+      expect(screen.getByTestId(`space-album-select-${album.id}`)).toBeInTheDocument();
+    });
+
+    it('renders no check circle when canManage is false', () => {
+      renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: false });
+      expect(screen.queryByTestId(`space-album-select-${album.id}`)).not.toBeInTheDocument();
+    });
+
+    it('clicking the check circle calls onToggleSelect with the shift key state and never onOpen', async () => {
+      const onToggleSelect = vi.fn();
+      const onOpen = vi.fn();
+      renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: true, onToggleSelect, onOpen });
+
+      await fireEvent.click(screen.getByTestId(`space-album-select-${album.id}`), { shiftKey: true });
+
+      expect(onToggleSelect).toHaveBeenCalledWith(true);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it('clicking the card body calls onOpen with the album and the shift key state', async () => {
+      const onOpen = vi.fn();
+      const onToggleSelect = vi.fn();
+      renderWithTooltips(SpaceAlbumCard, { spaceId: 's-1', album, canManage: true, onOpen, onToggleSelect });
+
+      await fireEvent.click(screen.getByTestId(`space-album-card-${album.id}`), { shiftKey: true });
+
+      expect(onOpen).toHaveBeenCalledWith(album, true);
+      expect(onToggleSelect).not.toHaveBeenCalled();
+    });
+
+    // Regression guard for the stopPropagation fix on the kebab menu wrapper: without it, a click
+    // on a menu option would ALSO bubble into the card-body click handler and fire onOpen.
+    it('clicking a kebab menu option does not also fire onOpen', async () => {
+      const onOpen = vi.fn();
+      renderWithTooltips(SpaceAlbumCard, {
+        spaceId: 's-1',
+        album,
+        canManage: true,
+        onOpen,
+        onUnlink: vi.fn(),
+        onToggleTimeline: vi.fn(),
+        onMove: vi.fn(),
+      });
+
+      await fireEvent.click(screen.getByText('Move to folder…'));
+
+      expect(onOpen).not.toHaveBeenCalled();
+    });
   });
 });

@@ -182,6 +182,331 @@ class SharedSpacesApi {
     }
   }
 
+  /// Delete several album folders
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Direct children of each deleted folder are promoted one level up. Requires space Editor.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkFolderIdsDto] sharedSpaceBulkFolderIdsDto (required):
+  Future<Response> bulkDeleteAlbumFoldersWithHttpInfo(String id, SharedSpaceBulkFolderIdsDto sharedSpaceBulkFolderIdsDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/album-folders/bulk-delete'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceBulkFolderIdsDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Delete several album folders
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Direct children of each deleted folder are promoted one level up. Requires space Editor.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkFolderIdsDto] sharedSpaceBulkFolderIdsDto (required):
+  Future<List<BulkIdResponseDto>?> bulkDeleteAlbumFolders(String id, SharedSpaceBulkFolderIdsDto sharedSpaceBulkFolderIdsDto, { Future<void>? abortTrigger, }) async {
+    final response = await bulkDeleteAlbumFoldersWithHttpInfo(id, sharedSpaceBulkFolderIdsDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<BulkIdResponseDto>') as List)
+        .cast<BulkIdResponseDto>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
+  /// Move several album folders to a new parent
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Pass parentId: null to move the folders to the space root. Requires space Editor.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkFolderParentDto] sharedSpaceBulkFolderParentDto (required):
+  Future<Response> bulkMoveAlbumFoldersWithHttpInfo(String id, SharedSpaceBulkFolderParentDto sharedSpaceBulkFolderParentDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/album-folders/bulk-parent'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceBulkFolderParentDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PUT',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Move several album folders to a new parent
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Pass parentId: null to move the folders to the space root. Requires space Editor.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkFolderParentDto] sharedSpaceBulkFolderParentDto (required):
+  Future<List<BulkIdResponseDto>?> bulkMoveAlbumFolders(String id, SharedSpaceBulkFolderParentDto sharedSpaceBulkFolderParentDto, { Future<void>? abortTrigger, }) async {
+    final response = await bulkMoveAlbumFoldersWithHttpInfo(id, sharedSpaceBulkFolderParentDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<BulkIdResponseDto>') as List)
+        .cast<BulkIdResponseDto>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
+  /// Move several linked albums into a folder
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Pass folderId: null to move the albums to the space root. Requires space Editor.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkAlbumFolderMoveDto] sharedSpaceBulkAlbumFolderMoveDto (required):
+  Future<Response> bulkSetAlbumFolderWithHttpInfo(String id, SharedSpaceBulkAlbumFolderMoveDto sharedSpaceBulkAlbumFolderMoveDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/albums/bulk-folder'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceBulkAlbumFolderMoveDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PUT',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Move several linked albums into a folder
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Pass folderId: null to move the albums to the space root. Requires space Editor.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkAlbumFolderMoveDto] sharedSpaceBulkAlbumFolderMoveDto (required):
+  Future<List<BulkIdResponseDto>?> bulkSetAlbumFolder(String id, SharedSpaceBulkAlbumFolderMoveDto sharedSpaceBulkAlbumFolderMoveDto, { Future<void>? abortTrigger, }) async {
+    final response = await bulkSetAlbumFolderWithHttpInfo(id, sharedSpaceBulkAlbumFolderMoveDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<BulkIdResponseDto>') as List)
+        .cast<BulkIdResponseDto>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
+  /// Set the timeline flag for several linked albums
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Requires space Editor.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkAlbumTimelineDto] sharedSpaceBulkAlbumTimelineDto (required):
+  Future<Response> bulkSetAlbumTimelineWithHttpInfo(String id, SharedSpaceBulkAlbumTimelineDto sharedSpaceBulkAlbumTimelineDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/albums/bulk-timeline'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceBulkAlbumTimelineDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PUT',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Set the timeline flag for several linked albums
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Requires space Editor.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkAlbumTimelineDto] sharedSpaceBulkAlbumTimelineDto (required):
+  Future<List<BulkIdResponseDto>?> bulkSetAlbumTimeline(String id, SharedSpaceBulkAlbumTimelineDto sharedSpaceBulkAlbumTimelineDto, { Future<void>? abortTrigger, }) async {
+    final response = await bulkSetAlbumTimelineWithHttpInfo(id, sharedSpaceBulkAlbumTimelineDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<BulkIdResponseDto>') as List)
+        .cast<BulkIdResponseDto>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
+  /// Unlink several albums from a shared space
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Unlike the other bulk album/folder endpoints, this authorizes per item rather than with a single space-Editor check: an album's owner may always revoke a link to their own album, even without space membership (mirrors DELETE :id/albums/:albumId).
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkAlbumIdsDto] sharedSpaceBulkAlbumIdsDto (required):
+  Future<Response> bulkUnlinkAlbumsWithHttpInfo(String id, SharedSpaceBulkAlbumIdsDto sharedSpaceBulkAlbumIdsDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/albums/bulk-unlink'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceBulkAlbumIdsDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Unlink several albums from a shared space
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Unlike the other bulk album/folder endpoints, this authorizes per item rather than with a single space-Editor check: an album's owner may always revoke a link to their own album, even without space membership (mirrors DELETE :id/albums/:albumId).
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkAlbumIdsDto] sharedSpaceBulkAlbumIdsDto (required):
+  Future<List<BulkIdResponseDto>?> bulkUnlinkAlbums(String id, SharedSpaceBulkAlbumIdsDto sharedSpaceBulkAlbumIdsDto, { Future<void>? abortTrigger, }) async {
+    final response = await bulkUnlinkAlbumsWithHttpInfo(id, sharedSpaceBulkAlbumIdsDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<BulkIdResponseDto>') as List)
+        .cast<BulkIdResponseDto>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
   /// Create an album folder in a shared space
   ///
   /// Note: This method returns the HTTP [Response].

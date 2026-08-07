@@ -78,6 +78,18 @@
       case 'album_unlink': {
         return $t('spaces_activity_unlinked_album', { values: { name, albumName: String(data.albumName ?? '') } });
       }
+      case 'album_bulk_unlink': {
+        // The server logs ONE row per batch (spec §6.4) with `count` = the TOTAL succeeded, not
+        // "others" — mirrored from the pinned server behaviour (shared-space.service.ts's
+        // bulkUnlinkAlbums, `data: { count: succeeded.length, albumName: names.get(succeeded[0]) }`).
+        // The i18n string itself reads "{albumName} and N other(s)", so the count fed to it here
+        // is the total minus the one already named, clamped so a lone bulk-unlink of 1 album
+        // (0 others) never goes negative.
+        const others = Math.max(count - 1, 0);
+        return $t('spaces_activity_bulk_unlinked_albums', {
+          values: { name, albumName: String(data.albumName ?? ''), count: others },
+        });
+      }
       case 'person_update': {
         return $t('spaces_activity_updated_person', { values: { name, personName: String(data.personName ?? '') } });
       }

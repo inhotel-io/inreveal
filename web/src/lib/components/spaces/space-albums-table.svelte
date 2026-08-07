@@ -13,7 +13,7 @@
   import { Route } from '$lib/route';
   import { type SharedSpaceAlbumFolderDto, type SharedSpaceLinkedAlbumDto } from '@immich/sdk';
   import { Icon } from '@immich/ui';
-  import { mdiChevronRight, mdiDotsVertical, mdiFolder } from '@mdi/js';
+  import { mdiCheckCircle, mdiChevronRight, mdiDotsVertical, mdiFolder } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import { slide } from 'svelte/transition';
 
@@ -29,7 +29,14 @@
     currentFolderId?: string | null;
     onUnlink?: (album: SharedSpaceLinkedAlbumDto) => void;
     onToggleTimeline?: (album: SharedSpaceLinkedAlbumDto) => void;
-    onOpenFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
+    /** Fired on a plain row click. The caller decides open-vs-toggle. */
+    onOpenFolder?: (folder: SharedSpaceAlbumFolderDto, shiftKey?: boolean) => void;
+    onOpenAlbum?: (album: SharedSpaceLinkedAlbumDto, shiftKey: boolean) => void;
+    /** Fired ONLY from a row's check circle — always enters/extends the selection. */
+    onToggleSelectAlbum?: (album: SharedSpaceLinkedAlbumDto, shiftKey: boolean) => void;
+    onToggleSelectFolder?: (folder: SharedSpaceAlbumFolderDto, shiftKey: boolean) => void;
+    isAlbumSelected?: (id: string) => boolean;
+    isFolderSelected?: (id: string) => boolean;
   }
 
   let {
@@ -44,7 +51,28 @@
     onUnlink,
     onToggleTimeline,
     onOpenFolder,
+    onOpenAlbum,
+    onToggleSelectAlbum,
+    onToggleSelectFolder,
+    isAlbumSelected = () => false,
+    isFolderSelected = () => false,
   }: Props = $props();
+
+  // Ctrl/Cmd-click is exempted so the name link still opens the album in a new tab — every OTHER
+  // click on the row is routed through onOpenAlbum instead of letting the anchor navigate.
+  const handleAlbumRowClick = (event: MouseEvent, album: SharedSpaceLinkedAlbumDto) => {
+    if (event.ctrlKey || event.metaKey) {
+      return;
+    }
+    event.preventDefault();
+    onOpenAlbum?.(album, event.shiftKey);
+  };
+
+  const handleSelectClick = (event: MouseEvent, onToggleSelect: ((shiftKey: boolean) => void) | undefined) => {
+    event.stopPropagation();
+    event.preventDefault();
+    onToggleSelect?.(event.shiftKey);
+  };
 
   const dateLocaleString = (dateString: string) => {
     return new Date(dateString).toLocaleDateString($locale, dateFormats.album);
@@ -64,9 +92,28 @@
 </script>
 
 {#snippet albumRow(album: SharedSpaceLinkedAlbumDto)}
+  {@const selected = isAlbumSelected(album.id)}
   <tr
-    class="flex w-full place-items-center border-3 border-transparent p-2 text-center odd:bg-subtle/80 even:bg-subtle/20 hover:border-immich-primary/75 md:px-5 md:py-2 odd:dark:bg-immich-dark-gray/75 even:dark:bg-immich-dark-gray/50 dark:hover:border-immich-dark-primary/75"
+    data-selected={selected ? 'true' : undefined}
+    class={[
+      'flex w-full place-items-center border-3 p-2 text-center odd:bg-subtle/80 even:bg-subtle/20 hover:border-immich-primary/75 md:px-5 md:py-2 odd:dark:bg-immich-dark-gray/75 even:dark:bg-immich-dark-gray/50 dark:hover:border-immich-dark-primary/75',
+      selected ? 'border-primary/70' : 'border-transparent',
+    ]}
+    onclick={(event) => handleAlbumRowClick(event, album)}
   >
+    {#if canManage}
+      <td class="w-8 shrink-0 text-center">
+        <button
+          type="button"
+          data-testid="space-album-select-{album.id}"
+          aria-pressed={selected}
+          aria-label={$t('select')}
+          onclick={(event) => handleSelectClick(event, (shiftKey) => onToggleSelectAlbum?.(album, shiftKey))}
+        >
+          <Icon icon={mdiCheckCircle} size="20" class={selected ? 'text-primary' : 'opacity-50'} />
+        </button>
+      </td>
+    {/if}
     <td class="text-md w-8/12 items-center text-start text-ellipsis sm:w-4/12 md:w-4/12 xl:w-[30%] 2xl:w-[40%]">
       <a
         href={Route.viewSpaceAlbum({ spaceId, albumId: album.id })}
@@ -86,7 +133,11 @@
       {dateLocaleString(album.createdAt)}
     </td>
     {#if canManage}
-      <td class="text-md w-1/12 text-end" data-testid="space-album-row-menu-{album.id}">
+      <td
+        class="text-md w-1/12 text-end"
+        data-testid="space-album-row-menu-{album.id}"
+        onclick={(event) => event.stopPropagation()}
+      >
         <ButtonContextMenu
           icon={mdiDotsVertical}
           title={$t('more')}
@@ -108,11 +159,29 @@
 {/snippet}
 
 {#snippet folderRow(folder: SharedSpaceAlbumFolderDto)}
+  {@const selected = isFolderSelected(folder.id)}
   <tr
-    class="flex w-full cursor-pointer place-items-center border-3 border-transparent p-2 text-center odd:bg-subtle/80 even:bg-subtle/20 hover:border-immich-primary/75 md:px-5 md:py-2 odd:dark:bg-immich-dark-gray/75 even:dark:bg-immich-dark-gray/50 dark:hover:border-immich-dark-primary/75"
+    data-selected={selected ? 'true' : undefined}
+    class={[
+      'flex w-full cursor-pointer place-items-center border-3 p-2 text-center odd:bg-subtle/80 even:bg-subtle/20 hover:border-immich-primary/75 md:px-5 md:py-2 odd:dark:bg-immich-dark-gray/75 even:dark:bg-immich-dark-gray/50 dark:hover:border-immich-dark-primary/75',
+      selected ? 'border-primary/70' : 'border-transparent',
+    ]}
     data-testid="space-album-folder-row-{folder.id}"
-    onclick={() => onOpenFolder?.(folder)}
+    onclick={(event) => onOpenFolder?.(folder, event.shiftKey)}
   >
+    {#if canManage}
+      <td class="w-8 shrink-0 text-center">
+        <button
+          type="button"
+          data-testid="space-album-folder-select-{folder.id}"
+          aria-pressed={selected}
+          aria-label={$t('select')}
+          onclick={(event) => handleSelectClick(event, (shiftKey) => onToggleSelectFolder?.(folder, shiftKey))}
+        >
+          <Icon icon={mdiCheckCircle} size="20" class={selected ? 'text-primary' : 'opacity-50'} />
+        </button>
+      </td>
+    {/if}
     <td
       class="text-md flex w-8/12 items-center gap-2 text-start text-ellipsis sm:w-4/12 md:w-4/12 xl:w-[30%] 2xl:w-[40%]"
     >

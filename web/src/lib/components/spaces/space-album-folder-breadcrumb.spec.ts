@@ -111,7 +111,7 @@ describe('SpaceAlbumFolderBreadcrumb', () => {
         onNavigate: vi.fn(),
       });
 
-      setActiveDragPayload({ kind: 'album', id: 'a1' });
+      setActiveDragPayload({ kind: 'album', ids: ['a1'] });
       const notPrevented = await fireEvent.dragOver(screen.getByTestId('breadcrumb-root'));
 
       expect(notPrevented).toBe(true);
@@ -131,7 +131,7 @@ describe('SpaceAlbumFolderBreadcrumb', () => {
       const rootCrumb = screen.getByTestId('breadcrumb-root');
       const tripsCrumb = screen.getByTestId('breadcrumb-trips');
 
-      setActiveDragPayload({ kind: 'album', id: 'a1' });
+      setActiveDragPayload({ kind: 'album', ids: ['a1'] });
       const notPrevented = await fireEvent.dragOver(rootCrumb);
 
       expect(notPrevented).toBe(false); // preventDefault WAS called
@@ -140,10 +140,10 @@ describe('SpaceAlbumFolderBreadcrumb', () => {
       expect(tripsCrumb).not.toHaveClass('ring-2');
 
       const dataTransfer = makeDataTransfer();
-      writeDragPayload(dataTransfer, { kind: 'album', id: 'a1' });
+      writeDragPayload(dataTransfer, { kind: 'album', ids: ['a1'] });
       await fireEvent.drop(rootCrumb, { dataTransfer });
 
-      expect(onDropItem).toHaveBeenCalledWith({ kind: 'album', id: 'a1' }, null);
+      expect(onDropItem).toHaveBeenCalledWith({ kind: 'album', ids: ['a1'] }, null);
     });
 
     it('preventDefaults and highlights a folder crumb, and calls onDropItem(payload, folderId) on drop', async () => {
@@ -159,7 +159,7 @@ describe('SpaceAlbumFolderBreadcrumb', () => {
       const tripsCrumb = screen.getByTestId('breadcrumb-trips');
       const rootCrumb = screen.getByTestId('breadcrumb-root');
 
-      setActiveDragPayload({ kind: 'album', id: 'a1' });
+      setActiveDragPayload({ kind: 'album', ids: ['a1'] });
       const notPrevented = await fireEvent.dragOver(tripsCrumb);
 
       expect(notPrevented).toBe(false);
@@ -168,10 +168,10 @@ describe('SpaceAlbumFolderBreadcrumb', () => {
       expect(rootCrumb).not.toHaveClass('ring-2');
 
       const dataTransfer = makeDataTransfer();
-      writeDragPayload(dataTransfer, { kind: 'album', id: 'a1' });
+      writeDragPayload(dataTransfer, { kind: 'album', ids: ['a1'] });
       await fireEvent.drop(tripsCrumb, { dataTransfer });
 
-      expect(onDropItem).toHaveBeenCalledWith({ kind: 'album', id: 'a1' }, 'trips');
+      expect(onDropItem).toHaveBeenCalledWith({ kind: 'album', ids: ['a1'] }, 'trips');
     });
 
     // A drop can be the tail end of a drag whose source node the resulting move already
@@ -190,9 +190,9 @@ describe('SpaceAlbumFolderBreadcrumb', () => {
       });
       const tripsCrumb = screen.getByTestId('breadcrumb-trips');
 
-      setActiveDragPayload({ kind: 'album', id: 'a1' });
+      setActiveDragPayload({ kind: 'album', ids: ['a1'] });
       const dataTransfer = makeDataTransfer();
-      writeDragPayload(dataTransfer, { kind: 'album', id: 'a1' });
+      writeDragPayload(dataTransfer, { kind: 'album', ids: ['a1'] });
       await fireEvent.drop(tripsCrumb, { dataTransfer });
 
       expect(getActiveDragPayload()).toBeNull();

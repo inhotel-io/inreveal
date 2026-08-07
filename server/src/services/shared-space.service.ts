@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { AssetFace, SharedSpacePerson } from 'src/database';
 import { OnEvent, OnJob } from 'src/decorators';
 import { MapAlbumDto, mapAlbum } from 'src/dtos/album.dto';
+import { BulkIdErrorReason, BulkIdResponseDto } from 'src/dtos/asset-ids.response.dto';
 import { AuthDto } from 'src/dtos/auth.dto';
 import type { FilteredMapMarkerDto } from 'src/dtos/gallery-map.dto';
 import type { MapMarkerResponseDto } from 'src/dtos/map.dto';
@@ -12,6 +13,13 @@ import {
   PersonFacePageResponseDto,
   PersonStatisticsResponseDto,
 } from 'src/dtos/person.dto';
+import {
+  SharedSpaceBulkAlbumFolderMoveDto,
+  SharedSpaceBulkAlbumIdsDto,
+  SharedSpaceBulkAlbumTimelineDto,
+  SharedSpaceBulkFolderIdsDto,
+  SharedSpaceBulkFolderParentDto,
+} from 'src/dtos/shared-space-bulk.dto';
 import {
   SharedSpacePeopleStatisticsResponseDto,
   SharedSpacePersonAliasDto,
@@ -810,6 +818,27 @@ export class SharedSpaceService extends BaseService {
   }
 
   async unlinkAlbum(auth: AuthDto, spaceId: string, albumId: string): Promise<void> {
+    const { albumName } = await this.#unlinkAlbumChecked(auth, spaceId, albumId);
+    await this.sharedSpaceRepository.logActivity({
+      spaceId,
+      userId: auth.user.id,
+      type: SharedSpaceActivityType.AlbumUnlink,
+      data: { albumId, albumName },
+    });
+    // correctness-4: reconcile grants for the just-unlinked album (its grant revocation
+    // in shared_space_album_delete_audit could have lost a delete to a concurrent revocation).
+    await this.queueAlbumGrantReconcile([albumId]);
+  }
+
+  // Checked core shared by the single-item unlinkAlbum above and the future bulk-unlink path
+  // (Task 3): authorization + validation + the removal itself, with NO activity logging and NO
+  // grant-reconcile queueing — those are batched by the caller (one row / one job per request,
+  // not per item) so a bulk unlink of N albums doesn't spam N activity rows and N reconcile jobs.
+  async #unlinkAlbumChecked(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+  ): Promise<{ albumName: string; orphanedAssetIds: string[] }> {
     // rbac-6: current-space Editors curate space links; ADDITIONALLY the album owner can always
     // revoke a link to their own album, even without space membership (otherwise an owner cannot
     // discover or undo an editor's link). The Editor path short-circuits, so it is not weakened.
@@ -823,9 +852,10 @@ export class SharedSpaceService extends BaseService {
     }
 
     // Fork RBAC (Slice 4 / M11): the owner arm authorizes on album ownership only and never verified
-    // the album is actually linked to this space. Without this guard, logActivity below injects an
-    // AlbumUnlink row into an arbitrary space's feed (activity spam via a leaked spaceId), and a
-    // nonexistent spaceId 500s on the FK. Guard both paths: no link -> 404, before any side effect.
+    // the album is actually linked to this space. Without this guard, the caller's logActivity
+    // could inject an AlbumUnlink row into an arbitrary space's feed (activity spam via a leaked
+    // spaceId), and a nonexistent spaceId 500s on the FK. Guard both paths: no link -> 404, before
+    // any side effect.
     const linked = await this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId);
     if (!linked) {
       throw new NotFoundException('Album is not linked to this space');
@@ -834,20 +864,12 @@ export class SharedSpaceService extends BaseService {
     const album = await this.albumRepository.getById(albumId, { withAssets: false });
     const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
     await this.sharedSpaceRepository.removeAlbum(spaceId, albumId);
-    await this.sharedSpaceRepository.logActivity({
-      spaceId,
-      userId: auth.user.id,
-      type: SharedSpaceActivityType.AlbumUnlink,
-      data: { albumId, albumName: album?.albumName ?? '' },
-    });
     if (orphanedAssetIds.length > 0) {
       await this.sharedSpaceRepository.removePersonFacesByAssetIds(spaceId, orphanedAssetIds);
       await this.sharedSpaceRepository.deleteOrphanedPersons(spaceId);
       await this.queueSpacePersonMetadataBackfill();
     }
-    // correctness-4: reconcile grants for the just-unlinked album (its grant revocation
-    // in shared_space_album_delete_audit could have lost a delete to a concurrent revocation).
-    await this.queueAlbumGrantReconcile([albumId]);
+    return { albumName: album?.albumName ?? '', orphanedAssetIds };
   }
 
   async updateAlbumLink(
@@ -856,8 +878,18 @@ export class SharedSpaceService extends BaseService {
     albumId: string,
     dto: SharedSpaceAlbumLinkUpdateDto,
   ): Promise<void> {
+    await this.#setAlbumTimelineChecked(auth, spaceId, albumId, dto.showInTimeline);
+  }
+
+  // Checked core shared by updateAlbumLink above and the future bulk path (Task 3).
+  async #setAlbumTimelineChecked(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+    showInTimeline: boolean,
+  ): Promise<void> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
-    await this.sharedSpaceRepository.setAlbumShowInTimeline(spaceId, albumId, dto.showInTimeline);
+    await this.sharedSpaceRepository.setAlbumShowInTimeline(spaceId, albumId, showInTimeline);
   }
 
   async setAlbumFolder(
@@ -866,12 +898,20 @@ export class SharedSpaceService extends BaseService {
     albumId: string,
     dto: SharedSpaceAlbumFolderMoveAlbumDto,
   ): Promise<void> {
+    await this.#setAlbumFolderChecked(auth, spaceId, albumId, dto.folderId ?? null);
+  }
+
+  // Checked core shared by setAlbumFolder above and the future bulk path (Task 3).
+  async #setAlbumFolderChecked(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+    folderId: string | null,
+  ): Promise<void> {
     // Space Editor only — album ownership is deliberately not required. Folders are
     // space-scoped metadata, so any editor may reorganise any linked album. Matches
     // updateAlbumLink, which gates on space Editor alone.
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
-
-    const folderId = dto.folderId ?? null;
 
     if (folderId !== null) {
       // Space-scoped lookup: this is the only thing preventing a cross-space placement,
@@ -886,6 +926,94 @@ export class SharedSpaceService extends BaseService {
     if (!updated) {
       throw new BadRequestException('Album is not linked to this space');
     }
+  }
+
+  /**
+   * Runs `fn` per id and converts each outcome into a BulkIdResponseDto. Deliberately sequential:
+   * folder moves mutate the tree that later items are validated against (E-9/E-10), so parallelism
+   * would make results order-dependent in a way callers cannot reason about.
+   *
+   * Never throws for a per-item failure — the endpoint returns 200 with per-item reasons.
+   */
+  async #runBulk(ids: string[], fn: (id: string) => Promise<void>): Promise<BulkIdResponseDto[]> {
+    const results: BulkIdResponseDto[] = [];
+    for (const id of new Set(ids)) {
+      try {
+        await fn(id);
+        results.push({ id, success: true });
+      } catch (error) {
+        results.push({ id, success: false, ...this.#bulkErrorFor(error) });
+      }
+    }
+    return results;
+  }
+
+  #bulkErrorFor(error: unknown): { error: BulkIdErrorReason; errorMessage?: string } {
+    const message = error instanceof Error ? error.message : undefined;
+    if (error instanceof ForbiddenException) {
+      return { error: BulkIdErrorReason.NO_PERMISSION, errorMessage: message };
+    }
+    if (error instanceof NotFoundException) {
+      return { error: BulkIdErrorReason.NOT_FOUND, errorMessage: message };
+    }
+    if (error instanceof BadRequestException) {
+      return { error: BulkIdErrorReason.VALIDATION, errorMessage: message };
+    }
+    this.logger.error(`Bulk operation item failed: ${message}`);
+    return { error: BulkIdErrorReason.UNKNOWN, errorMessage: message };
+  }
+
+  async bulkUnlinkAlbums(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkAlbumIdsDto,
+  ): Promise<BulkIdResponseDto[]> {
+    const names = new Map<string, string>();
+    const results = await this.#runBulk(dto.ids, async (albumId) => {
+      const { albumName } = await this.#unlinkAlbumChecked(auth, spaceId, albumId);
+      names.set(albumId, albumName);
+    });
+
+    const succeeded = results.filter((r) => r.success).map((r) => r.id);
+    if (succeeded.length > 0) {
+      // ONE row for the batch (spec §6.4). albumName carries the first album so the feed can render
+      // "X and N others", mirroring how person_merge renders {personName, count}.
+      await this.sharedSpaceRepository.logActivity({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumBulkUnlink,
+        data: { count: succeeded.length, albumName: names.get(succeeded[0]) ?? '' },
+      });
+      await this.queueAlbumGrantReconcile(succeeded);
+    }
+    return results;
+  }
+
+  async bulkSetAlbumFolder(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkAlbumFolderMoveDto,
+  ): Promise<BulkIdResponseDto[]> {
+    // Hoisted on top of the per-item check inside #setAlbumFolderChecked (spec S-28/S-29, fix
+    // round found during Task 4 review): unlike bulkUnlinkAlbums (S-29a — the album-owner arm
+    // needs a per-item decision), this endpoint has no owner-without-membership carve-out, so a
+    // viewer/non-member gets one clean 403 for the whole request instead of every item reporting
+    // no_permission. #setAlbumFolderChecked's own requireRole still runs per item — this does not
+    // replace it.
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    return this.#runBulk(dto.ids, (albumId) => this.#setAlbumFolderChecked(auth, spaceId, albumId, dto.folderId));
+  }
+
+  async bulkSetAlbumTimeline(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkAlbumTimelineDto,
+  ): Promise<BulkIdResponseDto[]> {
+    // See the comment on bulkSetAlbumFolder above — same hoist, same reasoning.
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    return this.#runBulk(dto.ids, (albumId) =>
+      this.#setAlbumTimelineChecked(auth, spaceId, albumId, dto.showInTimeline),
+    );
   }
 
   async getLinkedAlbums(auth: AuthDto, spaceId: string): Promise<SharedSpaceLinkedAlbumDto[]> {
@@ -994,7 +1122,47 @@ export class SharedSpaceService extends BaseService {
     const destinationParentId = isMove ? (dto.parentId ?? null) : folder.parentId;
     const name = dto.name === undefined ? folder.name : this.normalizeAlbumFolderName(dto.name);
 
-    if (isMove && destinationParentId !== null) {
+    if (isMove) {
+      // dto.name undefined => forward undefined to keep #moveAlbumFolderOrThrow's repository call
+      // a move-only update (matches moveAlbumFolderChecked's own "name omitted = keep it" contract).
+      await this.#moveAlbumFolderOrThrow(
+        spaceId,
+        folderId,
+        destinationParentId,
+        dto.name === undefined ? undefined : name,
+      );
+      return;
+    }
+
+    // excludeId = folderId: renaming to the current name must not collide with the row being
+    // renamed.
+    await this.assertNoAlbumFolderNameConflict(spaceId, destinationParentId, name, folderId);
+    await this.withAlbumFolderNameConflictMapped(() =>
+      this.sharedSpaceRepository.updateAlbumFolder(spaceId, folderId, { name }),
+    );
+  }
+
+  /**
+   * The move branch lifted out of updateAlbumFolder so the single-item and bulk paths cannot
+   * drift (see bulkMoveAlbumFolders below). Runs everything a direct call to the repository's
+   * moveAlbumFolderChecked would skip: the self/cycle/depth guards, the name-conflict pre-check,
+   * and mapping the repository's 'cycle' / 'notfound' outcome strings to exceptions — the
+   * repository itself never throws for those, it resolves with the outcome.
+   *
+   * `name` is forwarded to the repository as-is: undefined means "move only, keep the current
+   * name" (mirrors moveAlbumFolderChecked's own "name omitted" contract). The name-conflict
+   * pre-check still needs *a* name to check even when not renaming — the folder keeps its old
+   * name, but the destination may already have a same-named child (M-07/M-09) — so when `name`
+   * is undefined this re-fetches the folder to resolve its current name for that check only; the
+   * value actually sent to the repository is untouched by that fetch.
+   */
+  async #moveAlbumFolderOrThrow(
+    spaceId: string,
+    folderId: string,
+    destinationParentId: string | null,
+    name?: string,
+  ): Promise<void> {
+    if (destinationParentId !== null) {
       if (destinationParentId === folderId) {
         throw new BadRequestException('A folder cannot be moved into itself');
       }
@@ -1019,36 +1187,56 @@ export class SharedSpaceService extends BaseService {
       }
     }
 
-    // excludeId = folderId: renaming to the current name, or moving into the current parent,
-    // must not collide with the row being modified. This is an optimistic pre-check against the
-    // intended END state — moveAlbumFolderChecked applies the rename and the reparent in the
-    // same statement, so the row is never persisted mid-transition under a name/parent
-    // combination this check didn't clear (B-1: a two-statement move-then-rename could write the
-    // folder into the destination still under its OLD name, colliding with a same-named sibling
-    // already there even though the new name would have been fine).
-    await this.assertNoAlbumFolderNameConflict(spaceId, destinationParentId, name, folderId);
-
-    if (isMove) {
-      const outcome = await this.withAlbumFolderNameConflictMapped(() =>
-        this.sharedSpaceRepository.moveAlbumFolderChecked(
-          spaceId,
-          folderId,
-          destinationParentId,
-          dto.name === undefined ? undefined : name,
-        ),
-      );
-      if (outcome === 'cycle') {
-        throw new BadRequestException('A folder cannot be moved into one of its own descendants');
-      }
-      if (outcome === 'notfound') {
-        throw new BadRequestException('Folder not found');
-      }
-      return;
+    // excludeId = folderId: moving into the current parent, or moving without a rename, must not
+    // collide with the row being moved. This is an optimistic pre-check against the intended END
+    // state — moveAlbumFolderChecked applies the rename and the reparent in the same statement,
+    // so the row is never persisted mid-transition under a name/parent combination this check
+    // didn't clear (B-1: a two-statement move-then-rename could write the folder into the
+    // destination still under its OLD name, colliding with a same-named sibling already there
+    // even though the new name would have been fine).
+    const currentFolder =
+      name === undefined ? await this.sharedSpaceRepository.getAlbumFolderById(spaceId, folderId) : undefined;
+    const nameToCheck = name ?? currentFolder?.name;
+    if (nameToCheck !== undefined) {
+      await this.assertNoAlbumFolderNameConflict(spaceId, destinationParentId, nameToCheck, folderId);
     }
 
-    await this.withAlbumFolderNameConflictMapped(() =>
-      this.sharedSpaceRepository.updateAlbumFolder(spaceId, folderId, { name }),
+    const outcome = await this.withAlbumFolderNameConflictMapped(() =>
+      this.sharedSpaceRepository.moveAlbumFolderChecked(spaceId, folderId, destinationParentId, name),
     );
+    if (outcome === 'cycle') {
+      throw new BadRequestException('A folder cannot be moved into one of its own descendants');
+    }
+    if (outcome === 'notfound') {
+      throw new BadRequestException('Folder not found');
+    }
+  }
+
+  async bulkMoveAlbumFolders(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkFolderParentDto,
+  ): Promise<BulkIdResponseDto[]> {
+    // moveAlbumFolderChecked takes no auth, and #moveAlbumFolderOrThrow doesn't check role either
+    // — this is the ONLY authorization gate the move path has, so it must run once up front rather
+    // than be threaded per item (design spec §9.3: a non-editor gets 403 for the whole call).
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    // Sequential and per-item on purpose (matches #runBulk generally, spec §6.3/§8 E-9/E-10): the
+    // repository call takes the advisory lock and runs cycle detection against the tree AS IT IS
+    // NOW, and earlier items in this batch change that tree. Calling the repository directly here
+    // — or in #runBulk's place — would bypass the depth and name-conflict guards above it.
+    return this.#runBulk(dto.ids, (folderId) => this.#moveAlbumFolderOrThrow(spaceId, folderId, dto.parentId));
+  }
+
+  async bulkDeleteAlbumFolders(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkFolderIdsDto,
+  ): Promise<BulkIdResponseDto[]> {
+    await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
+    // deleteAlbumFolder re-checks the role per item; that is redundant here but harmless, and
+    // reusing it verbatim keeps the promoting-delete semantics in exactly one place.
+    return this.#runBulk(dto.ids, (folderId) => this.deleteAlbumFolder(auth, spaceId, folderId));
   }
 
   async deleteAlbumFolder(auth: AuthDto, spaceId: string, folderId: string): Promise<void> {

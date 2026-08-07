@@ -91,6 +91,7 @@ export enum SharedSpaceActivityType {
   PersonMerge = 'person_merge',
   AlbumLink = 'album_link',
   AlbumUnlink = 'album_unlink',
+  AlbumBulkUnlink = 'album_bulk_unlink',
 }
 
 export enum AssetOrder {

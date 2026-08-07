@@ -13,7 +13,14 @@
   import { Route } from '$lib/route';
   import { handleError } from '$lib/utils/handle-error';
   import { createAlbum } from '$lib/utils/album-utils';
-  import { canDrop, type DragPayload } from '$lib/utils/space-album-folder-dnd';
+  import {
+    bulkDeleteAlbumFoldersAction,
+    bulkMoveAlbumFoldersAction,
+    bulkSetAlbumFolderAction,
+    bulkSetAlbumTimelineAction,
+    bulkUnlinkAlbumsAction,
+  } from '$lib/utils/space-album-bulk-actions';
+  import { canDrop, canDropOne, type DragPayload } from '$lib/utils/space-album-folder-dnd';
   import { getFolderPath } from '$lib/utils/space-album-folders';
   import {
     createSharedSpaceAlbumFolder,
@@ -31,7 +38,7 @@
     type SharedSpaceMemberResponseDto,
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
-  import { Button, Icon, modalManager } from '@immich/ui';
+  import { Button, Icon, modalManager, toastManager } from '@immich/ui';
   import { mdiFolderPlusOutline, mdiImageMultipleOutline, mdiLinkVariantPlus, mdiPlus } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
@@ -55,6 +62,22 @@
   let foldersLoadFailed = $state(false);
   let groupIds = $state<string[]>([]);
   let searchQuery = $state('');
+  // I-1 (fix round 2): bumped after ANY drag-move settles, so SpaceAlbumsList's own Trigger 5
+  // effect can reconcile a selection whose moved members just left view — see that effect's own
+  // comment for why nothing else (route change, prop change, reconcile) catches this. `movedIds`
+  // (not a bare success/fail boolean) is what lets Trigger 5 drop exactly what moved and keep
+  // exactly what didn't — a failed item stayed exactly where it was and is still visible, so it
+  // must stay selected, matching S-24/S-25's contract for every other bulk action in this feature.
+  // `seq` (not just comparing movedIds by value) is what makes two consecutive moves of the SAME
+  // id register as two distinct signals rather than looking unchanged to Trigger 5's guard.
+  let selectionMove = $state<{ seq: number; movedIds: string[] }>({ seq: 0, movedIds: [] });
+  // Safe to call unconditionally on ANY settled move — single-item or bulk, drag or (since
+  // moveAlbumToFolder is shared with the kebab's "Move to folder…") that too: an id that was
+  // never part of the current selection reconciles to a no-op on the list's side, so there is no
+  // "was this actually a multi-select drag" gate this function needs to get right.
+  function markSelectionMoved(movedIds: string[]) {
+    selectionMove = { seq: selectionMove.seq + 1, movedIds };
+  }
 
   const currentMember = $derived(members.find((m) => m.userId === authManager.user.id));
   const isEditor = $derived(
@@ -138,6 +161,12 @@
   // A real (pushState) navigation, not a replace — drilling into a folder must be undoable with
   // the browser back button.
   const navigateToFolder = (folderId: string | null) => goto(Route.viewSpaceAlbums({ id: space.id, folderId }));
+
+  // Fired by SpaceAlbumsList when the user opens an album with no selection active (design §5.1).
+  // Selection state — and the clearing triggers that watch currentFolderId/searchQuery — live
+  // inside SpaceAlbumsList itself (its own props), not here; see that component for why.
+  const openAlbum = (album: SharedSpaceLinkedAlbumDto) =>
+    goto(Route.viewSpaceAlbum({ spaceId: space.id, albumId: album.id }));
 
   async function handleUnlink(album: SharedSpaceLinkedAlbumDto) {
     const confirmed = await modalManager.showDialog({
@@ -264,6 +293,14 @@
         folderId,
         sharedSpaceAlbumFolderUpdateDto: { parentId },
       });
+      // Fix round 3: the last remaining "moved out of view but still present in the data" gap —
+      // moveFolder is the kebab-only counterpart to moveAlbumToFolder, and unlike that function
+      // (bumped in round 2), this one was never wired up. The kebab is always in the DOM (only
+      // opacity-gated by group-hover), so hovering a card while a selection is live reaches it: a
+      // multi-folder selection with one moved via the kebab left the bar counting an invisible
+      // folder and offering "Delete folder" against it. Marked BEFORE reload() for the same
+      // bump-before-awaits reason as every other move path.
+      markSelectionMoved([folderId]);
       await reload();
     } catch (error) {
       handleError(error, $t('space_album_folder_error_move'));
@@ -273,7 +310,7 @@
   async function handleMoveFolder(folder: SharedSpaceAlbumFolderDto) {
     const result = await modalManager.show(SpaceAlbumFolderPickerModal, {
       folders,
-      excludeFolderId: folder.id,
+      excludeFolderIds: [folder.id],
       currentFolderId: folder.parentId,
     });
     if (!result) {
@@ -313,6 +350,10 @@
         albumId,
         sharedSpaceAlbumFolderMoveAlbumDto: { folderId: targetFolderId },
       });
+      // Marked BEFORE reload()/invalidateAll() (fix round 2, cheap item): if either of those two
+      // rejects even though the move itself already succeeded, the bump must not be skipped —
+      // the album really did move.
+      markSelectionMoved([albumId]);
       await reload();
       // reload() only refreshes THIS page's state. The [spaceId] layout separately caches
       // linkedAlbums, and each of those rows carries the folderId that the album detail page's
@@ -331,7 +372,7 @@
   async function handleMoveAlbum(album: SharedSpaceLinkedAlbumDto) {
     const result = await modalManager.show(SpaceAlbumFolderPickerModal, {
       folders,
-      excludeFolderId: null,
+      excludeFolderIds: [],
       currentFolderId: album.folderId ?? null,
     });
     if (!result) {
@@ -340,26 +381,177 @@
     await moveAlbumToFolder(album.id, result.folderId);
   }
 
-  // The client-side canDrop guard means an illegal or pointless drop (dropping onto itself, a
-  // descendant, or the parent it already has) never fires a request at all.
+  // A single warning toast for however many items a bulk call failed on (S-24/S-25) — the key's
+  // own plural form covers both a partial and a total failure, so one call site is enough.
+  function notifyBulkFailures(failedCount: number) {
+    if (failedCount > 0) {
+      toastManager.warning($t('space_album_bulk_partial_failure', { values: { count: failedCount } }));
+    }
+  }
+
+  // Every onBulk* handler below returns "the ids that should remain selected" (see
+  // SpaceAlbumsList's own prop doc): the untouched input `ids` when the user cancels the confirm
+  // dialog (nothing happened, so nothing should be deselected), otherwise the bulk action's own
+  // `failedIds` — empty on total success, everything on a request that never reached the server
+  // (bulkXAction's own catch already marks every id failed for that case; see
+  // space-album-bulk-actions.ts), exactly the failures on a partial one.
+  async function handleBulkUnlink(ids: string[]): Promise<string[]> {
+    const confirmed = await modalManager.showDialog({
+      title: $t('space_album_bulk_unlink_title', { values: { count: ids.length } }),
+      prompt: $t('space_album_bulk_unlink_confirm'),
+    });
+    if (!confirmed) {
+      return ids;
+    }
+    const { failedIds, failedCount } = await bulkUnlinkAlbumsAction(space.id, ids);
+    notifyBulkFailures(failedCount);
+    if (failedCount < ids.length) {
+      // Mirrors the single-unlink path: only fire once something actually changed.
+      eventManager.emit('SpaceUnlinkAlbum', { spaceId: space.id });
+    }
+    await reload();
+    // Refresh the [spaceId] layout's cached linkedAlbums, same reason as the single-unlink path.
+    await invalidateAll();
+    return failedIds;
+  }
+
+  async function handleBulkMoveAlbums(ids: string[]): Promise<string[]> {
+    // No excludeFolderIds: unlike a single album (which can only ever be "not currently here"), a
+    // batch has no one destination to forbid — the bulk endpoint validates per item anyway, so an
+    // album already at the chosen destination is simply a no-op success, not a blocked choice.
+    const result = await modalManager.show(SpaceAlbumFolderPickerModal, {
+      folders,
+      excludeFolderIds: [],
+      currentFolderId: currentFolderId ?? null,
+    });
+    if (!result) {
+      return ids;
+    }
+    const { failedIds, failedCount } = await bulkSetAlbumFolderAction(space.id, ids, result.folderId);
+    notifyBulkFailures(failedCount);
+    await reload();
+    await invalidateAll();
+    return failedIds;
+  }
+
+  async function handleBulkToggleAlbumsTimeline(ids: string[], showInTimeline: boolean): Promise<string[]> {
+    const { failedIds, failedCount } = await bulkSetAlbumTimelineAction(space.id, ids, showInTimeline);
+    notifyBulkFailures(failedCount);
+    await reload();
+    await invalidateAll();
+    return failedIds;
+  }
+
+  async function handleBulkMoveFolders(ids: string[]): Promise<string[]> {
+    // Fix round 1, Minor #2: every folder in the batch is excluded (plus each of their own
+    // descendants), not just left unexcluded — the earlier "no exclusion, the server validates
+    // anyway" reasoning was right for CROSS-batch legality (§6.3 still owns cycle/depth) but wrong
+    // for the degenerate single-selection case: selecting one folder "Trips" and moving it used to
+    // offer "Trips" itself as a destination, guaranteeing a 100% failure with no explanation —
+    // exactly what the single-item kebab's picker (handleMoveFolder above) already prevented.
+    const result = await modalManager.show(SpaceAlbumFolderPickerModal, {
+      folders,
+      excludeFolderIds: ids,
+      currentFolderId: currentFolderId ?? null,
+    });
+    if (!result) {
+      return ids;
+    }
+    const { failedIds, failedCount } = await bulkMoveAlbumFoldersAction(space.id, ids, result.folderId);
+    notifyBulkFailures(failedCount);
+    await reload();
+    await invalidateAll();
+    return failedIds;
+  }
+
+  async function handleBulkDeleteFolders(ids: string[]): Promise<string[]> {
+    const confirmed = await modalManager.showDialog({
+      title: $t('space_album_bulk_folder_delete_title', { values: { count: ids.length } }),
+      prompt: $t('space_album_bulk_folder_delete_confirm'),
+    });
+    if (!confirmed) {
+      return ids;
+    }
+    const { failedIds, failedCount } = await bulkDeleteAlbumFoldersAction(space.id, ids);
+    notifyBulkFailures(failedCount);
+    // If we were standing inside a deleted folder, the fallback effect above returns us to the
+    // root. Deleting promotes children one level up, changing albums' folderId too — same
+    // layout-cache staleness as the single-folder-delete path.
+    await reload();
+    await invalidateAll();
+    return failedIds;
+  }
+
+  // Drag counterparts of handleBulkMoveAlbums/handleBulkMoveFolders above, for a multi-id drop
+  // (S-22): no confirm (a drag is not destructive) and no folder-picker modal (the target is the
+  // drop's own destination), otherwise the same bulk-action-plus-toast shape. `markSelectionMoved`
+  // (I-1, fix round 2) is passed only the ids that actually SUCCEEDED — a failed id is still
+  // linked/parented exactly where it was, still visible, and must stay selected, matching
+  // S-24/S-25's contract for every other bulk action in this feature.
+  async function bulkMoveAlbumsToFolder(ids: string[], targetFolderId: string | null) {
+    const { failedIds, failedCount } = await bulkSetAlbumFolderAction(space.id, ids, targetFolderId);
+    notifyBulkFailures(failedCount);
+    // Marked BEFORE reload()/invalidateAll() (fix round 2, cheap item): a rejection there must
+    // not skip the bump. Only the ids that actually SUCCEEDED count as "moved" — a failed id
+    // stayed exactly where it was and must stay selected, not get reconciled away too.
+    markSelectionMoved(ids.filter((id) => !failedIds.includes(id)));
+    await reload();
+    await invalidateAll();
+  }
+
+  async function bulkMoveFoldersToParent(ids: string[], targetParentId: string | null) {
+    const { failedIds, failedCount } = await bulkMoveAlbumFoldersAction(space.id, ids, targetParentId);
+    notifyBulkFailures(failedCount);
+    markSelectionMoved(ids.filter((id) => !failedIds.includes(id)));
+    // Matches the single-folder-move branch below: folder-to-folder reparenting does not touch
+    // any album's folderId, so the layout's cached linkedAlbums stay valid — no invalidateAll.
+    await reload();
+  }
+
+  // The client-side canDrop guard means a drop with NOTHING legal in it never fires a request at
+  // all. `canDrop` itself only proves "at least one id in the batch can legally move" (§ canDrop's
+  // own doc comment) — Minor #3 (fix round 1): dispatching the FULL payload after that check would
+  // still send along any illegal members (e.g. dragging folders {A, B, C} onto A itself sends A
+  // too), which the server correctly rejects but surfaces as a confusing "N could not be updated"
+  // toast for something the user never asked to move. Filtering to exactly the ids `canDropOne`
+  // itself accepts — the same predicate `canDrop`'s `.some()` is built from — means the dispatched
+  // batch is always legal by construction, and a filtered-down batch of exactly one id falls
+  // through to the existing single-item paths below rather than a needless one-item bulk call.
   async function handleDropItem(payload: DragPayload, targetFolderId: string | null) {
     if (!canDrop(folders, albums, payload, targetFolderId)) {
       return;
     }
 
+    const legalIds = payload.ids.filter((id) => canDropOne(folders, albums, payload.kind, id, targetFolderId));
+
     if (payload.kind === 'album') {
-      await moveAlbumToFolder(payload.id, targetFolderId);
+      if (legalIds.length === 1) {
+        await moveAlbumToFolder(legalIds[0], targetFolderId);
+      } else {
+        await bulkMoveAlbumsToFolder(legalIds, targetFolderId);
+      }
       return;
     }
 
+    if (legalIds.length > 1) {
+      await bulkMoveFoldersToParent(legalIds, targetFolderId);
+      return;
+    }
+
+    const folderId = legalIds[0];
     const previous = folders;
-    folders = folders.map((f) => (f.id === payload.id ? { ...f, parentId: targetFolderId } : f));
+    folders = folders.map((f) => (f.id === folderId ? { ...f, parentId: targetFolderId } : f));
     try {
       await updateSharedSpaceAlbumFolder({
         id: space.id,
-        folderId: payload.id,
+        folderId,
         sharedSpaceAlbumFolderUpdateDto: { parentId: targetFolderId },
       });
+      // I-1 (fix round 2): this is the exact branch probe B reaches — a multi-id folder drag that
+      // canDropOne filters down to one legal id (e.g. {Trips, Family} dropped onto Trips: Trips
+      // filters itself out) lands HERE, not in the bulk branch above. Without this bump, that
+      // filtered-down single-item move was the one path fix round 1 left uncovered.
+      markSelectionMoved([folderId]);
       await reload();
     } catch (error) {
       folders = previous; // rollback
@@ -445,11 +637,18 @@
         onUnlink={handleUnlink}
         onToggleTimeline={handleToggleTimeline}
         onMoveAlbum={handleMoveAlbum}
+        onOpenAlbum={(album) => void openAlbum(album)}
         onOpenFolder={(f) => void navigateToFolder(f.id)}
         onRenameFolder={handleRenameFolder}
         onMoveFolder={handleMoveFolder}
         onDeleteFolder={handleDeleteFolder}
         onDropItem={handleDropItem}
+        {selectionMove}
+        onBulkUnlink={handleBulkUnlink}
+        onBulkMoveAlbums={handleBulkMoveAlbums}
+        onBulkToggleAlbumsTimeline={handleBulkToggleAlbumsTimeline}
+        onBulkMoveFolders={handleBulkMoveFolders}
+        onBulkDeleteFolders={handleBulkDeleteFolders}
       />
     </div>
   {/if}

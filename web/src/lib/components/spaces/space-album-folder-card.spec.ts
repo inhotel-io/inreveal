@@ -103,12 +103,46 @@ describe('SpaceAlbumFolderCard', () => {
 
     await fireEvent.dragStart(card, { dataTransfer });
 
-    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'folder', id: folder.id });
-    expect(getActiveDragPayload()).toEqual({ kind: 'folder', id: folder.id });
+    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'folder', ids: [folder.id] });
+    expect(getActiveDragPayload()).toEqual({ kind: 'folder', ids: [folder.id] });
 
     await fireEvent.dragEnd(card);
 
     expect(getActiveDragPayload()).toBeNull();
+  });
+
+  // S-22/S-23: proves the wiring (selectedIds/selectedKind props -> buildDragPayload), not just
+  // that the pure function exists — mirrors the same pair of tests on SpaceAlbumCard.
+  it('dragging a folder that is part of the current selection carries the whole selection', async () => {
+    const { container } = renderWithTooltips(SpaceAlbumFolderCard, {
+      ...defaults,
+      folder: otherFolder,
+      selectedIds: ['trips', 'family'],
+      selectedKind: 'folder',
+    });
+    const card = container.querySelector('[data-testid="space-album-folder-card"]')!;
+    const dataTransfer = makeDataTransfer();
+
+    await fireEvent.dragStart(card, { dataTransfer });
+
+    const payload = readDragPayload(dataTransfer);
+    expect(payload?.kind).toBe('folder');
+    expect(payload?.ids.slice().sort()).toEqual(['family', 'trips']);
+  });
+
+  it('dragging a folder NOT part of the current selection carries only itself', async () => {
+    const { container } = renderWithTooltips(SpaceAlbumFolderCard, {
+      ...defaults,
+      folder: otherFolder,
+      selectedIds: ['trips'],
+      selectedKind: 'folder',
+    });
+    const card = container.querySelector('[data-testid="space-album-folder-card"]')!;
+    const dataTransfer = makeDataTransfer();
+
+    await fireEvent.dragStart(card, { dataTransfer });
+
+    expect(readDragPayload(dataTransfer)).toEqual({ kind: 'folder', ids: [otherFolder.id] });
   });
 
   describe('as a drop target', () => {
@@ -138,7 +172,7 @@ describe('SpaceAlbumFolderCard', () => {
       });
       const card = container.querySelector('[data-testid="space-album-folder-card"]')!;
 
-      setActiveDragPayload({ kind: 'folder', id: folder.id });
+      setActiveDragPayload({ kind: 'folder', ids: [folder.id] });
       const notPrevented = await fireEvent.dragOver(card);
 
       expect(notPrevented).toBe(true);
@@ -154,7 +188,7 @@ describe('SpaceAlbumFolderCard', () => {
       });
       const card = container.querySelector('[data-testid="space-album-folder-card"]')!;
 
-      setActiveDragPayload({ kind: 'album', id: 'a1' });
+      setActiveDragPayload({ kind: 'album', ids: ['a1'] });
       const notPrevented = await fireEvent.dragOver(card);
 
       expect(notPrevented).toBe(true);
@@ -171,17 +205,65 @@ describe('SpaceAlbumFolderCard', () => {
       });
       const card = container.querySelector('[data-testid="space-album-folder-card"]')!;
 
-      setActiveDragPayload({ kind: 'album', id: 'a1' });
+      setActiveDragPayload({ kind: 'album', ids: ['a1'] });
       const notPrevented = await fireEvent.dragOver(card);
 
       expect(notPrevented).toBe(false); // preventDefault WAS called
       expect(card).toHaveClass('ring-2');
 
       const dataTransfer = makeDataTransfer();
-      writeDragPayload(dataTransfer, { kind: 'album', id: 'a1' });
+      writeDragPayload(dataTransfer, { kind: 'album', ids: ['a1'] });
       await fireEvent.drop(card, { dataTransfer });
 
-      expect(onDropItem).toHaveBeenCalledWith({ kind: 'album', id: 'a1' }, folder.id);
+      expect(onDropItem).toHaveBeenCalledWith({ kind: 'album', ids: ['a1'] }, folder.id);
+    });
+  });
+
+  describe('multi-select', () => {
+    it('renders a check circle when canManage is true', () => {
+      renderWithTooltips(SpaceAlbumFolderCard, defaults);
+      expect(screen.getByTestId(`space-album-folder-select-${folder.id}`)).toBeInTheDocument();
+    });
+
+    it('renders no check circle when canManage is false', () => {
+      renderWithTooltips(SpaceAlbumFolderCard, { ...defaults, canManage: false });
+      expect(screen.queryByTestId(`space-album-folder-select-${folder.id}`)).not.toBeInTheDocument();
+    });
+
+    it('clicking the check circle calls onToggleSelect with the shift key state and never onOpen', async () => {
+      const onToggleSelect = vi.fn();
+      const onOpen = vi.fn();
+      renderWithTooltips(SpaceAlbumFolderCard, { ...defaults, onToggleSelect, onOpen });
+
+      await fireEvent.click(screen.getByTestId(`space-album-folder-select-${folder.id}`), { shiftKey: true });
+
+      expect(onToggleSelect).toHaveBeenCalledWith(true);
+      expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it('clicking the open region calls onOpen with the folder and the shift key state', async () => {
+      const onOpen = vi.fn();
+      const onToggleSelect = vi.fn();
+      renderWithTooltips(SpaceAlbumFolderCard, { ...defaults, onOpen, onToggleSelect });
+
+      await fireEvent.click(screen.getByTestId('space-album-folder-card-open'), { shiftKey: true });
+
+      expect(onOpen).toHaveBeenCalledWith(folder, true);
+      expect(onToggleSelect).not.toHaveBeenCalled();
+    });
+
+    it('data-selected/data-candidate reflect the selected and selectionCandidate props', async () => {
+      const { rerender } = renderWithTooltips(SpaceAlbumFolderCard, { ...defaults, selected: true });
+      expect(screen.getByTestId('space-album-folder-card')).toHaveAttribute('data-selected', 'true');
+
+      // renderWithTooltips mounts a generic TestWrapper, so rerender operates on ITS props
+      // ({component, componentProps}), not directly on SpaceAlbumFolderCard's.
+      await rerender({
+        component: SpaceAlbumFolderCard,
+        componentProps: { ...defaults, selected: false, selectionCandidate: true },
+      });
+      expect(screen.getByTestId('space-album-folder-card')).toHaveAttribute('data-candidate', 'true');
+      expect(screen.getByTestId('space-album-folder-card')).not.toHaveAttribute('data-selected', 'true');
     });
   });
 });

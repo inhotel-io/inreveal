@@ -1,5 +1,5 @@
 import type { SharedSpaceLinkedAlbumDto } from '@immich/sdk';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { init, register, waitLocale } from 'svelte-i18n';
 import SpaceAlbumsTable from '$lib/components/spaces/space-albums-table.svelte';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
@@ -93,6 +93,121 @@ describe('SpaceAlbumsTable', () => {
       await waitFor(() =>
         expect(screen.getByTestId('space-album-group-header-2024')).toHaveAttribute('aria-expanded', 'false'),
       );
+    });
+  });
+
+  describe('multi-select', () => {
+    const folder = {
+      id: 'f-1',
+      spaceId: 's-1',
+      parentId: null,
+      name: 'Trips',
+      createdById: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    // canManage: true renders the album row's kebab menu (ButtonContextMenu → Tooltip), which
+    // needs a TooltipProvider ancestor — see the same note in space-albums-list.spec.ts.
+    it('renders a check circle per row when canManage is true', () => {
+      renderWithTooltips(SpaceAlbumsTable, { spaceId: 's-1', albums: [a1], folders: [folder], canManage: true });
+      expect(screen.getByTestId(`space-album-select-${a1.id}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`space-album-folder-select-${folder.id}`)).toBeInTheDocument();
+    });
+
+    it('renders no check circle when canManage is false', () => {
+      render(SpaceAlbumsTable, { spaceId: 's-1', albums: [a1], folders: [folder], canManage: false });
+      expect(screen.queryByTestId(`space-album-select-${a1.id}`)).not.toBeInTheDocument();
+      expect(screen.queryByTestId(`space-album-folder-select-${folder.id}`)).not.toBeInTheDocument();
+    });
+
+    it('clicking an album checkbox calls onToggleSelectAlbum with the shift key state, never onOpenAlbum', async () => {
+      const onToggleSelectAlbum = vi.fn();
+      const onOpenAlbum = vi.fn();
+      renderWithTooltips(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [a1],
+        canManage: true,
+        onToggleSelectAlbum,
+        onOpenAlbum,
+      });
+
+      await fireEvent.click(screen.getByTestId(`space-album-select-${a1.id}`), { shiftKey: true });
+
+      expect(onToggleSelectAlbum).toHaveBeenCalledWith(a1, true);
+      expect(onOpenAlbum).not.toHaveBeenCalled();
+    });
+
+    it('clicking an album row calls onOpenAlbum with the shift key state', async () => {
+      const onOpenAlbum = vi.fn();
+      renderWithTooltips(SpaceAlbumsTable, { spaceId: 's-1', albums: [a1], canManage: true, onOpenAlbum });
+
+      await fireEvent.click(screen.getByTestId(`space-album-row-${a1.id}`), { shiftKey: true });
+
+      expect(onOpenAlbum).toHaveBeenCalledWith(a1, true);
+    });
+
+    it('clicking a folder checkbox calls onToggleSelectFolder, never onOpenFolder', async () => {
+      const onToggleSelectFolder = vi.fn();
+      const onOpenFolder = vi.fn();
+      render(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [],
+        folders: [folder],
+        canManage: true,
+        onToggleSelectFolder,
+        onOpenFolder,
+      });
+
+      await fireEvent.click(screen.getByTestId(`space-album-folder-select-${folder.id}`), { shiftKey: true });
+
+      expect(onToggleSelectFolder).toHaveBeenCalledWith(folder, true);
+      expect(onOpenFolder).not.toHaveBeenCalled();
+    });
+
+    it('clicking a folder row calls onOpenFolder with the shift key state', async () => {
+      const onOpenFolder = vi.fn();
+      render(SpaceAlbumsTable, { spaceId: 's-1', albums: [], folders: [folder], canManage: true, onOpenFolder });
+
+      await fireEvent.click(screen.getByTestId(`space-album-folder-row-${folder.id}`), { shiftKey: true });
+
+      expect(onOpenFolder).toHaveBeenCalledWith(folder, true);
+    });
+
+    it('reflects isAlbumSelected / isFolderSelected via data-selected on the row', () => {
+      renderWithTooltips(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [a1],
+        folders: [folder],
+        canManage: true,
+        isAlbumSelected: (id: string) => id === a1.id,
+        isFolderSelected: () => false,
+      });
+      expect(screen.getByTestId(`space-album-row-${a1.id}`).closest('tr')).toHaveAttribute('data-selected', 'true');
+      expect(screen.getByTestId(`space-album-folder-row-${folder.id}`)).not.toHaveAttribute('data-selected', 'true');
+    });
+
+    // M-1: without stopPropagation on the menu cell, opening the kebab and clicking an option
+    // would ALSO bubble to the <tr>'s onclick and fire onOpenAlbum — orphaning whatever the menu
+    // option triggered (here, an unlink confirm dialog would open behind a navigation).
+    it('clicking the row kebab menu does not also fire onOpenAlbum', async () => {
+      const onOpenAlbum = vi.fn();
+      const onUnlink = vi.fn();
+      renderWithTooltips(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [a1],
+        canManage: true,
+        onOpenAlbum,
+        onUnlink,
+        onToggleTimeline: vi.fn(),
+      });
+
+      const menuButton = screen.getByTestId(`space-album-row-menu-${a1.id}`).querySelector('button')!;
+      await fireEvent.click(menuButton);
+      await fireEvent.click(await screen.findByText('Unlink album'));
+
+      expect(onUnlink).toHaveBeenCalledWith(a1);
+      expect(onOpenAlbum).not.toHaveBeenCalled();
     });
   });
 });

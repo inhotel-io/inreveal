@@ -1,4 +1,13 @@
-import { LoginResponseDto, SharedSpaceResponseDto, SharedSpaceRole } from '@immich/sdk';
+import {
+  AlbumResponseDto,
+  AlbumUserRole,
+  LoginResponseDto,
+  SharedSpaceAlbumFolderDto,
+  SharedSpaceResponseDto,
+  SharedSpaceRole,
+  addUsersToAlbum,
+} from '@immich/sdk';
+import { randomUUID } from 'node:crypto';
 import { createUserDto } from 'src/fixtures';
 import { app, asBearerAuth, utils } from 'src/utils';
 import request from 'supertest';
@@ -401,5 +410,288 @@ describe('/shared-spaces/:id/album-folders', () => {
       .send({ folderId });
 
     expect(status).toBe(403);
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // Task 5: the five bulk album/folder endpoints (design spec §6.1) and their RBAC matrix.
+  //
+  // Error-reason split (design spec §6.2, task 5 Addition 3): the two families deliberately report
+  // a vanished item differently — albums/bulk-unlink yields `not_found` (#unlinkAlbumChecked throws
+  // NotFoundException), while the two folder families yield `validation` (deleteAlbumFolder /
+  // #moveAlbumFolderOrThrow throw BadRequestException). Every assertion below pins the EXACT string
+  // so a later partial-failure UI cannot branch on `not_found` alone.
+  //
+  // RBAC split (design spec S-28/S-29 vs S-29a, amended 2026-08-06 during Task 5): bulk-folder,
+  // bulk-timeline, bulk-parent and bulk-delete are space-Editor-only via a single hoisted
+  // requireRole — a viewer or non-member gets one 403 for the whole request. albums/bulk-unlink is
+  // the deliberate exception: the album-owner arm (rbac-6) means it authorizes PER ITEM, so a
+  // viewer/non-member instead gets 200 with per-item `no_permission` (or `success: true` for an
+  // album they own).
+  // ---------------------------------------------------------------------------------------------
+  describe('bulk endpoints', () => {
+    let albumA: AlbumResponseDto;
+    let albumB: AlbumResponseDto;
+    let albumC: AlbumResponseDto;
+    let foreignAlbum: AlbumResponseDto;
+    let folder: SharedSpaceAlbumFolderDto;
+    let parentFolder: SharedSpaceAlbumFolderDto;
+    let childFolder: SharedSpaceAlbumFolderDto;
+
+    beforeAll(async () => {
+      [albumA, albumB, albumC] = await Promise.all([
+        utils.createAlbum(owner.accessToken, { albumName: 'Bulk A' }),
+        utils.createAlbum(owner.accessToken, { albumName: 'Bulk B' }),
+        utils.createAlbum(owner.accessToken, { albumName: 'Bulk C' }),
+      ]);
+      await Promise.all([
+        utils.linkSpaceAlbum(owner.accessToken, space.id, albumA.id),
+        utils.linkSpaceAlbum(owner.accessToken, space.id, albumB.id),
+        utils.linkSpaceAlbum(owner.accessToken, space.id, albumC.id),
+      ]);
+
+      // foreignAlbum is linked to otherSpace, not space — R-20 unlinks it via space's bulk-unlink
+      // and expects not_found, exercising the same space-scoped hasAlbumLink guard (M11) closed for
+      // the single-item path.
+      foreignAlbum = await utils.createAlbum(stranger.accessToken, { albumName: 'Bulk Foreign' });
+      await utils.linkSpaceAlbum(stranger.accessToken, otherSpace.id, foreignAlbum.id);
+
+      const folderRes = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders`)
+        .set(asBearerAuth(owner.accessToken))
+        .send({ name: 'Bulk Folder' });
+      folder = folderRes.body;
+
+      const parentRes = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders`)
+        .set(asBearerAuth(owner.accessToken))
+        .send({ name: 'Bulk Parent' });
+      parentFolder = parentRes.body;
+
+      const childRes = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders`)
+        .set(asBearerAuth(owner.accessToken))
+        .send({ name: 'Bulk Child', parentId: parentFolder.id });
+      childFolder = childRes.body;
+    });
+
+    // S-27
+    it('R-20 unlinks a batch and reports per-item outcomes', async () => {
+      const { status, body } = await request(app)
+        .post(`/shared-spaces/${space.id}/albums/bulk-unlink`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [albumA.id, foreignAlbum.id] });
+      expect(status).toBe(200);
+      expect(body).toEqual([
+        { id: albumA.id, success: true },
+        expect.objectContaining({ id: foreignAlbum.id, success: false, error: 'not_found' }),
+      ]);
+
+      const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
+      expect(list.body.map((l: { id: string }) => l.id)).not.toContain(albumA.id);
+    });
+
+    // S-29a (amended 2026-08-06, during Task 5): albums/bulk-unlink authorizes PER ITEM, unlike
+    // the other four bulk endpoints below — the album-owner arm (rbac-6) means a space viewer who
+    // owns none of the batch's albums gets 200 with per-item no_permission, not a request-level 403.
+    it('R-21 a space viewer who owns none of the albums gets 200 with per-item no_permission', async () => {
+      const { status, body } = await request(app)
+        .post(`/shared-spaces/${space.id}/albums/bulk-unlink`)
+        .set(asBearerAuth(viewer.accessToken))
+        .send({ ids: [albumB.id] });
+      expect(status).toBe(200);
+      expect(body).toEqual([expect.objectContaining({ id: albumB.id, success: false, error: 'no_permission' })]);
+
+      const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
+      expect(list.body.map((l: { id: string }) => l.id)).toContain(albumB.id);
+    });
+
+    // S-29a, second clause: a non-member who owns one of the batch's albums (via the rbac-6 owner
+    // arm) still gets that item unlinked; only the OTHER ids fail. strangerAlbum is owned by
+    // `stranger` and linked to `space` by `owner` — linkAlbum requires the caller to hold BOTH
+    // space-Editor and album owner/editor, so `owner` is first granted album-editor access.
+    it('R-22 a non-member who owns one linked album unlinks it and gets no_permission for the rest', async () => {
+      const strangerAlbum = await utils.createAlbum(stranger.accessToken, { albumName: 'Bulk Stranger Owned' });
+      await addUsersToAlbum(
+        { id: strangerAlbum.id, addUsersDto: { albumUsers: [{ userId: owner.userId, role: AlbumUserRole.Editor }] } },
+        { headers: asBearerAuth(stranger.accessToken) },
+      );
+      await utils.linkSpaceAlbum(owner.accessToken, space.id, strangerAlbum.id);
+
+      const { status, body } = await request(app)
+        .post(`/shared-spaces/${space.id}/albums/bulk-unlink`)
+        .set(asBearerAuth(stranger.accessToken))
+        .send({ ids: [strangerAlbum.id, albumC.id] });
+
+      expect(status).toBe(200);
+      // Fix round 1, M-3: pin exact array shape (length + order), not just membership — #runBulk
+      // iterates `new Set(ids)` in request order, so strangerAlbum (first) precedes albumC
+      // (second). `arrayContaining` would pass even if dedup/reordering duplicated or reshuffled
+      // entries.
+      expect(body).toEqual([
+        { id: strangerAlbum.id, success: true },
+        expect.objectContaining({ id: albumC.id, success: false, error: 'no_permission' }),
+      ]);
+
+      const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
+      expect(list.body.map((l: { id: string }) => l.id)).not.toContain(strangerAlbum.id);
+      expect(list.body.map((l: { id: string }) => l.id)).toContain(albumC.id);
+    });
+
+    // E-2
+    it('R-23 rejects an empty ids array with 400', async () => {
+      const { status } = await request(app)
+        .post(`/shared-spaces/${space.id}/albums/bulk-unlink`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [] });
+      expect(status).toBe(400);
+    });
+
+    it('R-24 moves a batch of albums into a folder and the list reflects it', async () => {
+      const { status, body } = await request(app)
+        .put(`/shared-spaces/${space.id}/albums/bulk-folder`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [albumB.id, albumC.id], folderId: folder.id });
+      expect(status).toBe(200);
+      // Fix round 1, I-1: `body.every(...)` is vacuously true on an empty array, so this used to
+      // pass even if the endpoint returned `[]`. Pin the exact response shape.
+      expect(body).toEqual([
+        { id: albumB.id, success: true },
+        { id: albumC.id, success: true },
+      ]);
+
+      const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
+      const placed = list.body.filter((l: { folderId: string | null }) => l.folderId === folder.id);
+      expect(placed).toHaveLength(2);
+    });
+
+    it('R-25 applies the timeline flag to a batch', async () => {
+      const { status, body } = await request(app)
+        .put(`/shared-spaces/${space.id}/albums/bulk-timeline`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [albumB.id], showInTimeline: false });
+      expect(status).toBe(200);
+      // Fix round 1, I-1: this test previously asserted no body at all — pin it.
+      expect(body).toEqual([{ id: albumB.id, success: true }]);
+      const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
+      expect(list.body.find((l: { id: string }) => l.id === albumB.id).showInTimeline).toBe(false);
+    });
+
+    // Task 5 Addition 2: Task 3's review found bulkSetAlbumFolder had no coverage of
+    // `folderId: null` ("move back to the space root"). Mutating the implementation to
+    // `dto.folderId ?? 'root-sentinel'` survives the entire unit suite, so this pins the null case
+    // at the HTTP layer with a body assertion, not just a 200.
+    it('R-26 sending folderId: null moves a batch of albums back to the space root', async () => {
+      const rootAlbum = await utils.createAlbum(owner.accessToken, { albumName: 'Bulk Root Return' });
+      await utils.linkSpaceAlbum(owner.accessToken, space.id, rootAlbum.id);
+      const placed = await request(app)
+        .put(`/shared-spaces/${space.id}/albums/${rootAlbum.id}/folder`)
+        .set(asBearerAuth(owner.accessToken))
+        .send({ folderId: folder.id });
+      expect(placed.status).toBe(204);
+
+      const { status } = await request(app)
+        .put(`/shared-spaces/${space.id}/albums/bulk-folder`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [rootAlbum.id], folderId: null });
+      expect(status).toBe(200);
+
+      const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
+      expect(list.body.find((l: { id: string }) => l.id === rootAlbum.id).folderId).toBeNull();
+    });
+
+    // S-30
+    it('R-27 rejects a cycle in a bulk folder move with a validation entry', async () => {
+      const { status, body } = await request(app)
+        .put(`/shared-spaces/${space.id}/album-folders/bulk-parent`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [parentFolder.id], parentId: childFolder.id });
+      expect(status).toBe(200);
+      expect(body[0]).toMatchObject({ success: false, error: 'validation' });
+    });
+
+    // Task 5 Addition 3: the folder families report a missing/foreign folder as `validation`,
+    // never `not_found` — the mirror image of R-20's album-family `not_found`.
+    it('R-28 bulk-parent reports validation, not not_found, for a foreign destination folder', async () => {
+      const created = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders`)
+        .set(asBearerAuth(owner.accessToken))
+        .send({ name: 'R-28 Movable' });
+      expect(created.status).toBe(201);
+
+      const { status, body } = await request(app)
+        .put(`/shared-spaces/${space.id}/album-folders/bulk-parent`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [created.body.id], parentId: otherSpaceFolderId });
+
+      expect(status).toBe(200);
+      expect(body[0]).toMatchObject({ success: false, error: 'validation' });
+    });
+
+    // S-21
+    it('R-29 bulk deletes folders and promotes their children', async () => {
+      const { status } = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders/bulk-delete`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [folder.id] });
+      expect(status).toBe(200);
+      const list = await request(app).get(`/shared-spaces/${space.id}/albums`).set(asBearerAuth(editor.accessToken));
+      expect(list.body.find((l: { id: string }) => l.id === albumB.id).folderId).toBeNull();
+    });
+
+    // Task 5 Addition 3, continued: same validation/not_found split, for bulk-delete.
+    it('R-30 bulk-delete reports validation, not not_found, for a foreign folder id', async () => {
+      const { status, body } = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders/bulk-delete`)
+        .set(asBearerAuth(editor.accessToken))
+        .send({ ids: [otherSpaceFolderId] });
+
+      expect(status).toBe(200);
+      expect(body[0]).toMatchObject({ success: false, error: 'validation' });
+    });
+
+    it('R-31 refuses a viewer on bulk folder delete with 403', async () => {
+      const { status } = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders/bulk-delete`)
+        .set(asBearerAuth(viewer.accessToken))
+        .send({ ids: [parentFolder.id] });
+      expect(status).toBe(403);
+    });
+
+    // Task 5 Addition 1 (RBAC gap found reviewing Task 4): bulk-folder, bulk-timeline, bulk-parent
+    // and bulk-delete are all hoisted-Editor-gated (S-28/S-29) — unlike bulk-unlink (S-29a). A
+    // viewer or a non-member gets exactly 403 for the whole request, before any item is even
+    // looked at (random ids that don't exist still 403, never 200/404). Fix round 1, M-2: R-31
+    // above only covers a viewer on bulk-delete — bulk-delete is folded into this matrix too so a
+    // non-member is proven refused there as well (every OTHER endpoint already was).
+    it.each([
+      ['R-32', 'viewer', () => viewer.accessToken],
+      ['R-33', 'non-member', () => stranger.accessToken],
+    ])('%s: a %s is refused every other Editor-gated bulk endpoint with 403', async (_label, _role, getToken) => {
+      const token = getToken();
+
+      const folderMove = await request(app)
+        .put(`/shared-spaces/${space.id}/albums/bulk-folder`)
+        .set(asBearerAuth(token))
+        .send({ ids: [randomUUID()], folderId: null });
+      expect(folderMove.status).toBe(403);
+
+      const timeline = await request(app)
+        .put(`/shared-spaces/${space.id}/albums/bulk-timeline`)
+        .set(asBearerAuth(token))
+        .send({ ids: [randomUUID()], showInTimeline: true });
+      expect(timeline.status).toBe(403);
+
+      const folderParent = await request(app)
+        .put(`/shared-spaces/${space.id}/album-folders/bulk-parent`)
+        .set(asBearerAuth(token))
+        .send({ ids: [randomUUID()], parentId: null });
+      expect(folderParent.status).toBe(403);
+
+      const folderDelete = await request(app)
+        .post(`/shared-spaces/${space.id}/album-folders/bulk-delete`)
+        .set(asBearerAuth(token))
+        .send({ ids: [randomUUID()] });
+      expect(folderDelete.status).toBe(403);
+    });
   });
 });

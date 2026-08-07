@@ -38,7 +38,7 @@ import 'package:immich_mobile/repositories/drift_album_api_repository.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:openapi/api.dart' show ApiException;
+import 'package:openapi/api.dart' show ApiException, BulkIdErrorReason, BulkIdResponseDto, Optional;
 
 import '../../test_utils.dart';
 import '../../widget_tester_extensions.dart';
@@ -149,7 +149,10 @@ RemoteAlbum _newAlbumFixture(String id) => RemoteAlbum(
 );
 
 /// Task 10 (U-*) test fixture — positional (id, name), matching the plan's brief verbatim.
-SpaceAlbum album(String id, String name, {String? folderId}) => _album(id: id, name: name, folderId: folderId);
+/// [showInTimeline] (Task 15) defaults to `true`, matching `_album`'s own default, so every
+/// pre-existing call site is unaffected.
+SpaceAlbum album(String id, String name, {String? folderId, bool showInTimeline = true}) =>
+    _album(id: id, name: name, folderId: folderId, showInTimeline: showInTimeline);
 
 /// Task 10 (U-*) test fixture — positional (id, name), matching the plan's brief verbatim.
 SpaceAlbumFolder folder(String id, String name, {String? parentId}) =>
@@ -1615,4 +1618,1032 @@ void main() {
       await settleToast(tester);
     },
   );
+
+  // ---------------------------------------------------------------------
+  // Task 14 — multi-select gestures, selection bar, and the selection
+  // PopScope (S-14, S-15, S-3 on mobile, S-10 on mobile, S-16, S-16a/E-21).
+  // ---------------------------------------------------------------------
+
+  /// Pushes [SpaceAlbumsPage] onto a real AutoRoute stack (harness home a plain placeholder,
+  /// matching [pumpRoutedPage] above) with a THIRD route registered under
+  /// [SpaceAlbumDetailRoute]'s own name — a stub page that records the tapped album id into
+  /// [openedAlbumIds] instead of building the real (heavyweight, DB-backed)
+  /// `SpaceAlbumDetailPage`. A real router is required (not the router-less [pumpPage]) because
+  /// proving "tap with no selection opens the album" (S-3) means proving `context.pushRoute`
+  /// actually fires — which throws with no `AutoRouter` ancestor at all.
+  ///
+  /// Uses the same taller-than-default viewport as [pumpPage] above (folder + album cards
+  /// together need more room than the default 800x600 test surface — see that helper's own
+  /// comment) so I-4's folder-plus-album fixture actually builds both cards, rather than one of
+  /// them silently going unbuilt outside the sliver's cache extent and any assertion about it
+  /// passing vacuously.
+  Future<RootStackRouter> pumpSpaceAlbumsPage(
+    WidgetTester tester, {
+    required List<SpaceAlbum> albums,
+    List<SpaceAlbumFolder> folders = const [],
+    String? folderId,
+    bool canManage = true,
+    required List<String> openedAlbumIds,
+  }) async {
+    tester.view.devicePixelRatio = 3.0;
+    tester.view.physicalSize = const Size(2400, 3600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final router = RootStackRouter.build(
+      routes: [
+        AutoRoute(initial: true, page: PageInfo('SpaceAlbumsHarness', builder: (_) => const SizedBox.shrink())),
+        AutoRoute(page: SpaceAlbumsRoute.page),
+        AutoRoute(
+          page: PageInfo(
+            SpaceAlbumDetailRoute.name,
+            builder: (data) {
+              final args = data.argsAs<SpaceAlbumDetailRouteArgs>();
+              openedAlbumIds.add(args.albumId);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: locales.values.toList(),
+        path: translationsPath,
+        startLocale: locales.values.first,
+        fallbackLocale: locales.values.first,
+        saveLocale: false,
+        useFallbackTranslations: true,
+        assetLoader: const CodegenLoader(),
+        child: ProviderScope(
+          overrides: [
+            spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value(albums)),
+            spaceAlbumFoldersProvider(spaceId).overrideWith((_) => Stream.value(folders)),
+          ],
+          child: Builder(
+            builder: (context) => MaterialApp.router(
+              debugShowCheckedModeBanner: false,
+              routerConfig: router.config(),
+              localizationsDelegates: context.localizationDelegates,
+              supportedLocales: context.supportedLocales,
+              locale: context.locale,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    // NOT awaited — see the identical comment on `pumpRoutedPage` above: `push`'s Future only
+    // resolves once this route is popped.
+    unawaited(router.push(SpaceAlbumsRoute(spaceId: spaceId, canEdit: canManage, folderId: folderId)));
+    await tester.pumpAndSettle();
+    return router;
+  }
+
+  // I-1 (fix round 1) — the reviewer's probes proved a selection made in one space survives
+  // into another: `router.replaceAll` (401 -> LoginRoute, Android VIEW-intent handling, the
+  // splash-screen login redirect) tears the OLD route down without a `didPop`, and because
+  // `SpaceAlbumsRoute` is self-recursive, `AutoRoutePage.canUpdate` matching on route NAME alone
+  // means a same-shaped `replaceAll` can update THIS widget's existing Element in place with a
+  // new `spaceId` rather than disposing/recreating it — so this widget's own hook state
+  // (including the new clearing effect) persists across what looks like landing on an entirely
+  // different page. Reproduced directly here via plain Flutter element-reuse semantics (no
+  // router needed): pumping the SAME `SpaceAlbumsPage` type, unkeyed, at the same tree position
+  // TWICE with a different `spaceId` updates the existing Element rather than recreating it —
+  // exactly the premise the production `replaceAll` case relies on.
+  testWidgets('I-1: switching to a different space clears an active selection', (tester) async {
+    const spaceB = 'space-2';
+    final overrides = [
+      spaceAlbumsProvider(spaceId).overrideWith((_) => Stream.value([_album(id: 'a1', name: 'Album A')])),
+      spaceAlbumFoldersProvider(spaceId).overrideWith((_) => Stream.value(const <SpaceAlbumFolder>[])),
+      spaceAlbumsProvider(spaceB).overrideWith((_) => Stream.value([_album(id: 'b1', name: 'Album B')])),
+      spaceAlbumFoldersProvider(spaceB).overrideWith((_) => Stream.value(const <SpaceAlbumFolder>[])),
+    ];
+
+    await tester.pumpConsumerWidget(const SpaceAlbumsPage(spaceId: spaceId, canEdit: true), overrides: overrides);
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget); // positive control
+
+    await tester.pumpConsumerWidget(const SpaceAlbumsPage(spaceId: spaceB, canEdit: true), overrides: overrides);
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+    expect(find.byKey(const Key('space-album-card-b1')), findsOneWidget); // proves space B actually rendered
+  });
+
+  // I-2 (fix round 1) — the reviewer's probe: long-press "Hawaii", type "Sunsets" -> the bar kept
+  // reading "1 selected" with the selected card gone from the tree, because the AppBar is
+  // replaced while selecting but the body's `_SearchAndSortBar` is not, so the search field
+  // stays live and reachable the whole time.
+  testWidgets('I-2: changing the search query clears an active selection', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget); // positive control
+
+    await tester.enterText(find.byKey(const Key('space-albums-search-field')), 'b');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+  });
+
+  testWidgets('S-14: long-press enters selection mode with that album selected', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(openedAlbumIds, isEmpty); // long-press must not also open the album
+  });
+
+  testWidgets('S-15: tap toggles a second album once selection mode is active', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-card-b')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 selected'), findsOneWidget);
+    expect(openedAlbumIds, isEmpty); // tap must not navigate while selecting
+  });
+
+  testWidgets('S-3 on mobile: tap with no selection opens the album', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(tester, albums: [album('a', 'Album A')], openedAlbumIds: openedAlbumIds);
+
+    await tester.tap(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+
+    expect(openedAlbumIds, ['a']);
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+  });
+
+  // I-3 (fix round 1) — the original assertion only proved the BAR was absent, but
+  // `showSelectionBar = canEdit && !selection.isEmpty` hides the bar independently of the
+  // gesture gate: removing `canEdit` from `onAlbumLongPress` entirely still passes this test,
+  // since a viewer page would still compute `showSelectionBar: false` even with a live selection
+  // sitting in the (global) provider. Also asserting the card's own selected badge is absent
+  // binds this test to the GESTURE gate itself — `isSelected` doesn't consult `canEdit` at all,
+  // so if `onAlbumLongPress` ever wrote into the provider despite `canManage: false`, the badge
+  // would render here regardless of the bar's own visibility.
+  testWidgets('S-10 on mobile: long-press does nothing when canManage is false', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [album('a', 'Album A')],
+      canManage: false,
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+    expect(find.byKey(const Key('space-album-card-selected-a')), findsNothing);
+  });
+
+  // I-4 (fix round 1) — folder selection had zero coverage: no test long-pressed a folder card.
+  // This single test closes four survivors the reviewer's mutation pass found: folder
+  // long-press registering kind `album` instead of `folder` (fails the folder-badge assertion
+  // AND flips the bar to album actions), a badge rendering on every card regardless of kind
+  // (fails the album-badge-absent assertion), the bar rendering album actions for a folder-kind
+  // selection (fails the Unlink/toggle-timeline-absent assertions), AND dropping the
+  // never-mixed-kind guard from `isSelected` (`selection.kind == kind && ids.contains(id)`
+  // collapsing to a bare `ids.contains(id)`).
+  //
+  // The folder and album fixtures DELIBERATELY share the id 'x': with distinct ids, the
+  // kind-guard-drop mutation is invisible — a folder-only selection's `ids` would never contain
+  // a different album's id regardless of whether the kind is checked, so nothing would diverge.
+  // A shared id is what forces the two kinds' badges to actually disagree once the guard is gone.
+  testWidgets('I-4: long-press a folder card selects the folder with folder-only bar actions', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      folders: [folder('x', 'Trips')],
+      albums: [album('x', 'Album X')],
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-folder-card-x')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+    expect(find.text('1 selected'), findsOneWidget);
+    // The folder itself shows selected...
+    expect(find.byKey(const Key('space-album-folder-card-selected-x')), findsOneWidget);
+    // ...but the (present, rendered) album card sharing the same raw id does NOT.
+    expect(find.byKey(const Key('space-album-card-x')), findsOneWidget); // positive control
+    expect(find.byKey(const Key('space-album-card-selected-x')), findsNothing);
+    // Folder-kind actions only: Move + Delete, never Unlink/toggle-timeline.
+    expect(find.byKey(const Key('space-album-selection-move')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-selection-delete')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-selection-unlink')), findsNothing);
+    expect(find.byKey(const Key('space-album-selection-toggle-timeline')), findsNothing);
+    expect(openedAlbumIds, isEmpty);
+  });
+
+  testWidgets('S-16: back exits selection before popping', (tester) async {
+    final openedAlbumIds = <String>[];
+    final router = await pumpSpaceAlbumsPage(tester, albums: [album('a', 'Album A')], openedAlbumIds: openedAlbumIds);
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+
+    // First back: exits selection, page stays displayed.
+    await router.maybePop();
+    await tester.pumpAndSettle();
+    expect(find.byType(SpaceAlbumsPage), findsOneWidget);
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+
+    // Second back: no selection left to intercept — the page pops normally.
+    await router.maybePop();
+    await tester.pumpAndSettle();
+    expect(find.byType(SpaceAlbumsPage), findsNothing);
+  });
+
+  // S-16a / E-21 — the interaction guard: the selection PopScope must not veto the pre-existing
+  // folder-vanished self-pop (U-11 stacked, above). Reuses that harness
+  // (`pumpStackedFolderPagesWithFolderStream`) exactly, plus a selection entered on the page
+  // that will end up buried WHILE it is still topmost — a buried page's widgets are not
+  // independently interactable in this harness (see the comment on the sibling U-11 stacked
+  // tests above) — then buries it under a second push before driving the vanish.
+  testWidgets('S-16a/E-21: the selection PopScope does not veto the folder-vanished self-pop', (tester) async {
+    final controller = StreamController<List<SpaceAlbumFolder>>();
+    addTearDown(controller.close);
+    final router = await pumpStackedFolderPagesWithFolderStream(
+      tester,
+      controller.stream,
+      folderIds: ['folder-a'],
+      albums: [album('a1', 'Rome', folderId: 'folder-a')],
+    );
+
+    controller.add([folder('folder-a', 'Folder A')]);
+    await tester.pumpAndSettle();
+    expect(router.stackData.length, 2); // harness + A
+
+    // Select an album on A while it is still topmost and interactable.
+    await tester.longPress(find.byKey(const Key('space-album-card-a1')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+
+    // Bury A under B — the selection stays live (A is covered, not disposed).
+    unawaited(router.push(SpaceAlbumsRoute(spaceId: spaceId, canEdit: true, folderId: 'folder-b')));
+    await tester.pumpAndSettle();
+    expect(router.stackData.length, 3); // harness + A + B
+
+    // folder-a (A's own folder) vanishes while A is buried, selection still active on A.
+    controller.add([folder('folder-b', 'Folder B')]);
+    await tester.pumpAndSettle();
+    expect(router.stackData.length, 3); // nothing popped yet — A is buried, now pending
+
+    // The user backs out of B. A becomes topmost and must self-pop despite the earlier
+    // selection — proving the selection was cleared before `maybePop` ran, not vetoed by it.
+    await router.maybePop();
+    await tester.pumpAndSettle();
+
+    expect(router.stackData.length, 1); // harness root only — A left the stack
+    expect(find.byType(SpaceAlbumsPage), findsNothing);
+  });
+
+  // ---------------------------------------------------------------------
+  // Task 15 — mobile bulk actions (S-17..S-20, S-24..S-26), wired against
+  // the Task 14 selection bar's previously-disabled action icons.
+  //
+  // Every test here overrides `sharedSpaceApiRepositoryProvider` +
+  // `backgroundSyncProvider` + `driftAlbumApiRepositoryProvider` and pumps
+  // through the REAL `spaceAlbumActionsProvider` (never mocked), matching
+  // the Task 10 "move to folder" tests above (`repo.setAlbumFolder(...)`):
+  // this lets each test assert the exact bulk-endpoint call the real
+  // `SpaceAlbumActions.bulkX` methods make, one layer below the mock.
+  // ---------------------------------------------------------------------
+
+  /// Builds a multi-select via long-press + tap — the same gesture sequence S-14/S-15 already
+  /// prove: long-press the first id to enter selection mode, then tap each remaining id to add
+  /// it. Assumes every id in [ids] is a currently-rendered ALBUM card.
+  Future<void> selectAlbums(WidgetTester tester, List<String> ids) async {
+    await tester.longPress(find.byKey(Key('space-album-card-${ids.first}')));
+    await tester.pumpAndSettle();
+    for (final id in ids.skip(1)) {
+      await tester.tap(find.byKey(Key('space-album-card-$id')));
+      await tester.pumpAndSettle();
+    }
+  }
+
+  /// Folder-kind counterpart of [selectAlbums] — same gesture on a folder card (see I-4 above).
+  Future<void> selectFolders(WidgetTester tester, List<String> ids) async {
+    await tester.longPress(find.byKey(Key('space-album-folder-card-${ids.first}')));
+    await tester.pumpAndSettle();
+    for (final id in ids.skip(1)) {
+      await tester.tap(find.byKey(Key('space-album-folder-card-$id')));
+      await tester.pumpAndSettle();
+    }
+  }
+
+  /// An all-success bulk response for exactly [ids].
+  List<BulkIdResponseDto> allSucceed(Iterable<String> ids) => [
+    for (final id in ids) BulkIdResponseDto(id: id, success: true),
+  ];
+
+  /// An all-failed bulk response for exactly [ids] — the specific reason never matters to the
+  /// page (item 2 of the task-15 brief: never branch on `not_found` alone), so every test that
+  /// needs a failure uses the same `noPermission` stand-in.
+  List<BulkIdResponseDto> allFail(Iterable<String> ids) => [
+    for (final id in ids)
+      BulkIdResponseDto(id: id, success: false, error: const Optional.present(BulkIdErrorReason.noPermission)),
+  ];
+
+  testWidgets(
+    'S-17: confirming bulk unlink calls the bulk endpoint once for the whole batch and clears the selection',
+    (tester) async {
+      final api = MockSharedSpaceApiRepository();
+      final syncMgr = MockBackgroundSyncManager();
+      when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+      when(() => api.bulkUnlinkAlbums(any(), any())).thenAnswer((_) async => allSucceed({'a', 'b'}));
+
+      await pumpPage(
+        tester,
+        folders: const [],
+        albums: [album('a', 'Album A'), album('b', 'Album B')],
+        overrides: [
+          sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+          backgroundSyncProvider.overrideWithValue(syncMgr),
+          driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+        ],
+      );
+
+      await selectAlbums(tester, ['a', 'b']);
+      expect(find.text('2 selected'), findsOneWidget); // positive control
+
+      await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+      await tester.pumpAndSettle();
+      // One confirm dialog for the whole batch, naming the count.
+      expect(find.text('Unlink 2 albums?'), findsOneWidget);
+      verifyNever(() => api.bulkUnlinkAlbums(any(), any())); // not fired before confirming
+
+      await tester.tap(find.byKey(const Key('space-album-bulk-unlink-confirm')));
+      await tester.pumpAndSettle();
+
+      verify(() => api.bulkUnlinkAlbums(spaceId, {'a', 'b'})).called(1);
+      verify(() => syncMgr.syncRemote()).called(1);
+      expect(find.byKey(const Key('space-album-selection-bar')), findsNothing); // total success clears (S-26)
+    },
+  );
+
+  // Fix round 1 (I-2/R9) — every OTHER bulk test in this file selects 100% of its own fixture, so
+  // none of them can distinguish "the payload is the selection" from "the payload is every
+  // rendered/known album id". Three albums render here; only two are SELECTED (positive control:
+  // "2 selected", not "3 selected", proving 'c' really is excluded from the selection) — a
+  // mutation that sources the bulk payload from the rendered list instead of `selection.ids`
+  // would ship 'c' too and fail the `verify` below even though every visible assertion up to that
+  // point still passes.
+  testWidgets('bulk unlink sends only the selected ids, not every rendered album', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkUnlinkAlbums(any(), any())).thenAnswer((_) async => allSucceed({'a', 'b'}));
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A'), album('b', 'Album B'), album('c', 'Album C')],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    expect(find.text('2 selected'), findsOneWidget); // positive control — 'c' is rendered, not selected
+
+    await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-bulk-unlink-confirm')));
+    await tester.pumpAndSettle();
+
+    verify(() => api.bulkUnlinkAlbums(spaceId, {'a', 'b'})).called(1);
+  });
+
+  testWidgets('cancelling the bulk-unlink confirm dialog fires no request and keeps the selection', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(MockBackgroundSyncManager()),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-bulk-unlink-cancel')));
+    await tester.pumpAndSettle();
+
+    verifyNever(() => api.bulkUnlinkAlbums(any(), any()));
+    expect(find.text('2 selected'), findsOneWidget);
+  });
+
+  testWidgets('S-24: a partial failure keeps exactly the failed albums selected and shows the toast', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkUnlinkAlbums(any(), any())).thenAnswer(
+      (_) async => [
+        BulkIdResponseDto(id: 'a', success: true),
+        BulkIdResponseDto(id: 'b', success: false, error: const Optional.present(BulkIdErrorReason.noPermission)),
+      ],
+    );
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    expect(find.text('2 selected'), findsOneWidget); // positive control
+
+    await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-bulk-unlink-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-b')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-a')), findsNothing);
+    expect(find.text('1 item could not be updated'), findsOneWidget);
+
+    await settleToast(tester);
+  });
+
+  // Fix round 1 (I-3) — `_bulkFailures` is correct (it reads only `success`), but nothing pinned
+  // that on the CLIENT side: the server-side albums/folders `not_found` vs `validation` asymmetry
+  // is deliberately pinned by e2e (`shared-space-album-folder.e2e-spec.ts`), with an explicit
+  // comment that the UI must not branch on it — this is that guard's mobile-side pin. Mixes BOTH
+  // failure reasons in one response; a mutation that folds either reason into "succeeded" changes
+  // which card stays selected and this fails.
+  testWidgets('a mix of not_found and validation failures both stay selected', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkUnlinkAlbums(any(), any())).thenAnswer(
+      (_) async => [
+        BulkIdResponseDto(id: 'a', success: true),
+        BulkIdResponseDto(id: 'b', success: false, error: const Optional.present(BulkIdErrorReason.notFound)),
+        BulkIdResponseDto(id: 'c', success: false, error: const Optional.present(BulkIdErrorReason.validation)),
+      ],
+    );
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A'), album('b', 'Album B'), album('c', 'Album C')],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b', 'c']);
+    await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-bulk-unlink-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 selected'), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-b')), findsOneWidget); // not_found
+    expect(find.byKey(const Key('space-album-card-selected-c')), findsOneWidget); // validation
+    expect(find.byKey(const Key('space-album-card-selected-a')), findsNothing);
+
+    await settleToast(tester);
+  });
+
+  testWidgets('a total failure keeps every selected album selected', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkUnlinkAlbums(any(), any())).thenAnswer((_) async => allFail({'a', 'b'}));
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-bulk-unlink-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 selected'), findsOneWidget);
+    // A total failure still shows the failure toast (both ids failed) — settle it so its
+    // fluttertoast Timer doesn't leak into teardown (see `settleToast`'s own doc above).
+    expect(find.text('2 items could not be updated'), findsOneWidget);
+    await settleToast(tester);
+  });
+
+  testWidgets('a thrown bulk request keeps every selected album selected', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    when(() => api.bulkUnlinkAlbums(any(), any())).thenThrow(Exception('network error'));
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(MockBackgroundSyncManager()),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    await tester.tap(find.byKey(const Key('space-album-selection-unlink')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-bulk-unlink-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 selected'), findsOneWidget);
+    // A thrown request is folded into "every id failed" too (see `SpaceAlbumActions.bulkUnlink`'s
+    // own catch) — same toast, same need to settle it before teardown.
+    expect(find.text('2 items could not be updated'), findsOneWidget);
+    await settleToast(tester);
+  });
+
+  testWidgets('S-18/S-19: the timeline action resolves toward include for a mixed selection', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(
+      () => api.bulkSetAlbumTimeline(any(), any(), showInTimeline: any(named: 'showInTimeline')),
+    ).thenAnswer((_) async => allSucceed({'a', 'b'}));
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A', showInTimeline: true), album('b', 'Album B', showInTimeline: false)],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    expect(find.byTooltip('Add to timeline'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('space-album-selection-toggle-timeline')));
+    await tester.pumpAndSettle();
+
+    verify(() => api.bulkSetAlbumTimeline(spaceId, {'a', 'b'}, showInTimeline: true)).called(1);
+  });
+
+  testWidgets('the timeline action offers removal and sends false when every album is already included', (
+    tester,
+  ) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(
+      () => api.bulkSetAlbumTimeline(any(), any(), showInTimeline: any(named: 'showInTimeline')),
+    ).thenAnswer((_) async => allSucceed({'a', 'b'}));
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A', showInTimeline: true), album('b', 'Album B', showInTimeline: true)],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    expect(find.byTooltip('Remove from timeline'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('space-album-selection-toggle-timeline')));
+    await tester.pumpAndSettle();
+
+    verify(() => api.bulkSetAlbumTimeline(spaceId, {'a', 'b'}, showInTimeline: false)).called(1);
+  });
+
+  // Fix round 1 (I-1) — the reviewer's mutation R11 regressed `bulkToggleTimeline`'s own
+  // `reconcile(failedIds)` (space_albums.page.dart:580) to `clear()` and the whole suite stayed
+  // green, because only `bulkUnlink` had a partial-failure test. This pins the SAME contract for
+  // the timeline action.
+  testWidgets('a partial failure on the bulk timeline toggle keeps exactly the failed albums selected', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkSetAlbumTimeline(any(), any(), showInTimeline: any(named: 'showInTimeline'))).thenAnswer(
+      (_) async => [
+        BulkIdResponseDto(id: 'a', success: true),
+        BulkIdResponseDto(id: 'b', success: false, error: const Optional.present(BulkIdErrorReason.noPermission)),
+      ],
+    );
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [album('a', 'Album A', showInTimeline: false), album('b', 'Album B', showInTimeline: false)],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    await tester.tap(find.byKey(const Key('space-album-selection-toggle-timeline')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-b')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-a')), findsNothing);
+
+    await settleToast(tester);
+  });
+
+  testWidgets('S-20: bulk move places every selected album in the folder', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(
+      () => api.bulkSetAlbumFolder(any(), any(), folderId: any(named: 'folderId')),
+    ).thenAnswer((_) async => allSucceed({'a', 'b'}));
+
+    await pumpPage(
+      tester,
+      folders: [folder('f', 'Trips')],
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    await tester.tap(find.byKey(const Key('space-album-selection-move')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folder-option-f')));
+    await tester.pumpAndSettle();
+
+    verify(() => api.bulkSetAlbumFolder(spaceId, {'a', 'b'}, folderId: 'f')).called(1);
+    verifyNever(() => api.bulkMoveAlbumFolders(any(), any(), parentId: any(named: 'parentId')));
+  });
+
+  // Fix round 1 (I-1) — R10 regressed `bulkMove`'s own `reconcile(failedIds)`
+  // (space_albums.page.dart:571) to `clear()` and the whole suite stayed green. Same partial-
+  // failure contract as bulk unlink/timeline-toggle, pinned here for bulk move.
+  testWidgets('a partial failure on bulk move keeps exactly the failed albums selected', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkSetAlbumFolder(any(), any(), folderId: any(named: 'folderId'))).thenAnswer(
+      (_) async => [
+        BulkIdResponseDto(id: 'a', success: true),
+        BulkIdResponseDto(id: 'b', success: false, error: const Optional.present(BulkIdErrorReason.noPermission)),
+      ],
+    );
+
+    await pumpPage(
+      tester,
+      folders: [folder('f', 'Trips')],
+      albums: [album('a', 'Album A'), album('b', 'Album B')],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    await tester.tap(find.byKey(const Key('space-album-selection-move')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folder-option-f')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-b')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-a')), findsNothing);
+
+    await settleToast(tester);
+  });
+
+  testWidgets('bulk move for a folder-kind selection calls the folder endpoint, not the album one', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(
+      () => api.bulkMoveAlbumFolders(any(), any(), parentId: any(named: 'parentId')),
+    ).thenAnswer((_) async => allSucceed({'x'}));
+
+    await pumpPage(
+      tester,
+      folders: [folder('x', 'Trips'), folder('y', 'Archive')],
+      albums: const [],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectFolders(tester, ['x']);
+    await tester.tap(find.byKey(const Key('space-album-selection-move')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folder-option-y')));
+    await tester.pumpAndSettle();
+
+    verify(() => api.bulkMoveAlbumFolders(spaceId, {'x'}, parentId: 'y')).called(1);
+    verifyNever(() => api.bulkSetAlbumFolder(any(), any(), folderId: any(named: 'folderId')));
+  });
+
+  // Fix round 1 (I-4/R5) — the reviewer's own probe: the SINGLE-folder exclusion this page has
+  // wired since Task 15's first pass had NO test at all proving the excluded folder is actually
+  // disabled in the picker (the sibling test above only ever taps the OTHER folder, 'y'). Pins it
+  // directly against the picker's own disabled state, mirroring `space_album_folder_card_test.dart`'s
+  // `tileEnabled` convention (`onTap == null` means disabled).
+  testWidgets('bulk move for a single selected folder disables it as a destination in the picker', (tester) async {
+    await pumpPage(
+      tester,
+      folders: [folder('x', 'Trips'), folder('y', 'Archive')],
+      albums: const [],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(MockSharedSpaceApiRepository()),
+        backgroundSyncProvider.overrideWithValue(MockBackgroundSyncManager()),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectFolders(tester, ['x']);
+    await tester.tap(find.byKey(const Key('space-album-selection-move')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<ListTile>(find.byKey(const Key('folder-option-x'))).onTap, isNull);
+    expect(tester.widget<ListTile>(find.byKey(const Key('folder-option-y'))).onTap, isNotNull);
+  });
+
+  // Fix round 1 (I-4) — the actual gap the reviewer flagged: selecting Trips + Archive and
+  // picking Trips as the destination for the WHOLE batch used to be offered by the picker,
+  // guaranteeing Trips's own move fails server-side with no indication why. Proves EVERY selected
+  // folder — not just "the folder" for a batch of one — is excluded.
+  testWidgets('bulk move for a multi-folder selection disables every selected folder as a destination', (tester) async {
+    await pumpPage(
+      tester,
+      folders: [folder('x', 'Trips'), folder('y', 'Archive'), folder('z', 'Other')],
+      albums: const [],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(MockSharedSpaceApiRepository()),
+        backgroundSyncProvider.overrideWithValue(MockBackgroundSyncManager()),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectFolders(tester, ['x', 'y']);
+    await tester.tap(find.byKey(const Key('space-album-selection-move')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<ListTile>(find.byKey(const Key('folder-option-x'))).onTap, isNull);
+    expect(tester.widget<ListTile>(find.byKey(const Key('folder-option-y'))).onTap, isNull);
+    expect(tester.widget<ListTile>(find.byKey(const Key('folder-option-z'))).onTap, isNotNull);
+  });
+
+  testWidgets('bulk folder delete calls the folder-delete endpoint for the whole batch', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkDeleteAlbumFolders(any(), any())).thenAnswer((_) async => allSucceed({'x', 'y'}));
+
+    await pumpPage(
+      tester,
+      folders: [folder('x', 'Trips'), folder('y', 'Archive')],
+      albums: const [],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectFolders(tester, ['x', 'y']);
+    await tester.tap(find.byKey(const Key('space-album-selection-delete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete 2 folders?'), findsOneWidget);
+    verifyNever(() => api.bulkDeleteAlbumFolders(any(), any())); // not fired before confirming
+
+    await tester.tap(find.byKey(const Key('space-album-bulk-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    verify(() => api.bulkDeleteAlbumFolders(spaceId, {'x', 'y'})).called(1);
+    verifyNever(() => api.bulkUnlinkAlbums(any(), any()));
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+  });
+
+  // Fix round 1 (I-1) — R12 regressed `bulkDeleteFolders`'s own `reconcile(failedIds)`
+  // (space_albums.page.dart:597) to `clear()` and the whole suite stayed green. Same
+  // partial-failure contract, pinned here for bulk folder delete: an editor bulk-deleting 5
+  // folders where 2 fail a permission check must not silently lose track of which 2.
+  testWidgets('a partial failure on bulk folder delete keeps exactly the failed folders selected', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkDeleteAlbumFolders(any(), any())).thenAnswer(
+      (_) async => [
+        BulkIdResponseDto(id: 'x', success: true),
+        BulkIdResponseDto(id: 'y', success: false, error: const Optional.present(BulkIdErrorReason.noPermission)),
+      ],
+    );
+
+    await pumpPage(
+      tester,
+      folders: [folder('x', 'Trips'), folder('y', 'Archive')],
+      albums: const [],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+      ],
+    );
+
+    await selectFolders(tester, ['x', 'y']);
+    await tester.tap(find.byKey(const Key('space-album-selection-delete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-bulk-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.byKey(const Key('space-album-folder-card-selected-y')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-folder-card-selected-x')), findsNothing);
+
+    await settleToast(tester);
+  });
+
+  // Item 1 of the task-15 brief: `reconcile()` had no call site on mobile before this task. This
+  // proves it is now wired against the live album/folder stream — an id another member deletes
+  // (unlinked elsewhere, so it drops out of the NEXT sync emission) must silently drop out of an
+  // already-active selection, independent of any bulk action this page itself performs.
+  testWidgets('reconcile: a selected album that vanishes from the incoming list drops out of the selection', (
+    tester,
+  ) async {
+    final controller = StreamController<List<SpaceAlbum>>();
+    addTearDown(controller.close);
+
+    // Not `pumpConsumerWidget`: its own auto-`pumpAndSettle()` never converges while `albumsAsync`
+    // is still `loading` (no emission has happened yet) — `albumsAsync.when`'s `loading` branch
+    // renders an indeterminately-animating `CircularProgressIndicator`. Built manually instead
+    // (mirrors `pumpPageWithFolderStream` above), pumping a single frame before the controller
+    // has any data so the loading spinner never has to settle.
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: locales.values.toList(),
+        path: translationsPath,
+        startLocale: locales.values.first,
+        fallbackLocale: locales.values.first,
+        saveLocale: false,
+        useFallbackTranslations: true,
+        assetLoader: const CodegenLoader(),
+        child: ProviderScope(
+          overrides: [
+            spaceAlbumsProvider(spaceId).overrideWith((_) => controller.stream),
+            spaceAlbumFoldersProvider(spaceId).overrideWith((_) => Stream.value(const <SpaceAlbumFolder>[])),
+          ],
+          child: Builder(
+            builder: (context) => MaterialApp(
+              debugShowCheckedModeBanner: false,
+              localizationsDelegates: context.localizationDelegates,
+              supportedLocales: context.supportedLocales,
+              locale: context.locale,
+              home: const Material(child: SpaceAlbumsPage(spaceId: spaceId, canEdit: true)),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    controller.add([album('a', 'Album A'), album('b', 'Album B')]);
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-card-b')));
+    await tester.pumpAndSettle();
+    expect(find.text('2 selected'), findsOneWidget); // positive control
+
+    // Another member unlinks 'b' elsewhere — the next sync emission drops it from the list.
+    controller.add([album('a', 'Album A')]);
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-a')), findsOneWidget);
+  });
+
+  // The three editor actions (New folder / New album / Link) are labelled `TextButton.icon`s, and
+  // every other test in this file pumps at the helper's 800dp TABLET width — where they fit with
+  // room to spare. On a phone they did not: with M3's default `TextButton.icon` padding
+  // (`EdgeInsetsDirectional.only(start: 12, end: 16)` = 28dp each) the row overran the toolbar,
+  // `NavigationToolbar` gave the title zero width, and the whole row was pushed left until it sat
+  // underneath the back button.
+  //
+  // This asserts the CHROME each action wraps around its label — icon + icon/label gap + padding —
+  // rather than any absolute toolbar width. That is deliberate: the widget-test font renders every
+  // glyph as a fixed-width box, so label widths here are ~1.8x their on-device value and no
+  // absolute "fits at 411dp" assertion would mean anything. Chrome is font-independent, and it is
+  // the only part of the width this page controls.
+  testWidgets('editor app-bar actions wrap their labels in compact chrome', (tester) async {
+    final router = RootStackRouter.build(
+      routes: [
+        AutoRoute(initial: true, page: PageInfo('SpaceAlbumsHarness', builder: (_) => const SizedBox.shrink())),
+        AutoRoute(page: SpaceAlbumsRoute.page),
+      ],
+    );
+
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: locales.values.toList(),
+        path: translationsPath,
+        startLocale: locales.values.first,
+        fallbackLocale: locales.values.first,
+        saveLocale: false,
+        useFallbackTranslations: true,
+        assetLoader: const CodegenLoader(),
+        child: ProviderScope(
+          overrides: _overrides(spaceId: spaceId, albums: const []),
+          child: Builder(
+            builder: (context) => MaterialApp.router(
+              debugShowCheckedModeBanner: false,
+              routerConfig: router.config(),
+              localizationsDelegates: context.localizationDelegates,
+              supportedLocales: context.supportedLocales,
+              locale: context.locale,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    // Pushed (not `initial`) so the AppBar gets its implicit back button — the widget the actions
+    // were crowding. See `pumpPageWithFolderStream` for why this push is deliberately not awaited.
+    unawaited(router.push(SpaceAlbumsRoute(spaceId: spaceId, canEdit: true)));
+    await tester.pumpAndSettle();
+
+    // Measured: 42dp with the compact style (icon + gap + 8dp padding either side), 54dp with M3's
+    // default `TextButton.icon` padding. 48dp sits between them with ~6dp of slack on both sides —
+    // enough to absorb M3 metric drift, not enough to let the default padding back in.
+    const maxChromePerAction = 48.0;
+
+    for (final (key, label) in [
+      ('space-albums-new-folder-action', 'New folder'),
+      ('space-albums-new-album-action', 'New album'),
+      ('space-albums-link-action', 'Link'),
+    ]) {
+      final action = find.byKey(Key(key));
+      expect(action, findsOneWidget, reason: '$key must be present for this measurement to mean anything');
+      final chrome =
+          tester.getSize(action).width - tester.getSize(find.descendant(of: action, matching: find.text(label))).width;
+      expect(chrome, lessThanOrEqualTo(maxChromePerAction), reason: '$key wraps its label in ${chrome}dp of chrome');
+    }
+  });
 }

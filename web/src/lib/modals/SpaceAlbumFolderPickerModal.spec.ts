@@ -36,7 +36,7 @@ describe('SpaceAlbumFolderPickerModal', () => {
   it('W-17: disables the moved folder and all of its descendants', () => {
     render(SpaceAlbumFolderPickerModal, {
       folders,
-      excludeFolderId: 'trips',
+      excludeFolderIds: ['trips'],
       currentFolderId: null,
       onClose: vi.fn(),
     });
@@ -51,7 +51,7 @@ describe('SpaceAlbumFolderPickerModal', () => {
   it('W-17: leaves every folder selectable when no folder is excluded', () => {
     render(SpaceAlbumFolderPickerModal, {
       folders,
-      excludeFolderId: null,
+      excludeFolderIds: [],
       currentFolderId: null,
       onClose: vi.fn(),
     });
@@ -61,10 +61,27 @@ describe('SpaceAlbumFolderPickerModal', () => {
     }
   });
 
+  // Fix round 1, Minor #2: a bulk folder move excludes EVERY folder in the batch (plus each of
+  // their own descendants), not just the first — otherwise a batch containing "family" would
+  // still offer "family" itself as a legal destination for the OTHER folders in the same move.
+  it('Minor #2: disables every folder in excludeFolderIds and their descendants', () => {
+    render(SpaceAlbumFolderPickerModal, {
+      folders,
+      excludeFolderIds: ['trips', 'family'],
+      currentFolderId: null,
+      onClose: vi.fn(),
+    });
+
+    expect(screen.getByTestId('folder-option-trips')).toBeDisabled();
+    expect(screen.getByTestId('folder-option-y2026')).toBeDisabled();
+    expect(screen.getByTestId('folder-option-italy')).toBeDisabled();
+    expect(screen.getByTestId('folder-option-family')).toBeDisabled();
+  });
+
   it('offers the space root as a destination', () => {
     render(SpaceAlbumFolderPickerModal, {
       folders,
-      excludeFolderId: null,
+      excludeFolderIds: [],
       currentFolderId: 'trips',
       onClose: vi.fn(),
     });

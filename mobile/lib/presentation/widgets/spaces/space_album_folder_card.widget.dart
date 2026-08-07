@@ -33,7 +33,9 @@ class SpaceAlbumFolderCard extends StatelessWidget {
     required this.albumCount,
     required this.previewAlbums,
     required this.canEdit,
+    this.isSelected = false,
     this.onTap,
+    this.onLongPress,
     this.onRename,
     this.onMove,
     this.onDelete,
@@ -43,7 +45,15 @@ class SpaceAlbumFolderCard extends StatelessWidget {
   final int albumCount;
   final List<SpaceAlbum> previewAlbums;
   final bool canEdit;
+
+  /// Task 14 (multi-select) — true while this folder is part of the current selection. Purely
+  /// visual: the card renders a check-circle badge and a tinted border, mirroring `_AlbumCard`.
+  final bool isSelected;
   final VoidCallback? onTap;
+
+  /// Task 14 (multi-select) — long-pressing enters selection mode with this folder selected.
+  /// `null` when selection is unavailable (viewer / `canEdit: false`), matching `_AlbumCard`.
+  final VoidCallback? onLongPress;
   final VoidCallback? onRename;
   final VoidCallback? onMove;
   final VoidCallback? onDelete;
@@ -59,6 +69,7 @@ class SpaceAlbumFolderCard extends StatelessWidget {
       // whole card tappable, matching `_AlbumCard`.
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -66,9 +77,17 @@ class SpaceAlbumFolderCard extends StatelessWidget {
             child: Stack(
               children: [
                 Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.all(Radius.circular(16)),
-                    child: _FolderCoverCollage(previewAlbums: previewAlbums),
+                  child: Container(
+                    decoration: isSelected
+                        ? BoxDecoration(
+                            borderRadius: const BorderRadius.all(Radius.circular(16)),
+                            border: Border.all(color: cs.primary, width: 3),
+                          )
+                        : null,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.all(Radius.circular(16)),
+                      child: _FolderCoverCollage(previewAlbums: previewAlbums),
+                    ),
                   ),
                 ),
                 // Badge, so a folder is never mistaken for an album at a glance.
@@ -81,6 +100,17 @@ class SpaceAlbumFolderCard extends StatelessWidget {
                     child: const Icon(Icons.folder, size: 16, color: Colors.white),
                   ),
                 ),
+                if (isSelected)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Icon(
+                      Icons.check_circle,
+                      key: Key('space-album-folder-card-selected-${folder.id}'),
+                      size: 24,
+                      color: cs.primary,
+                    ),
+                  ),
               ],
             ),
           ),

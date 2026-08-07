@@ -293,6 +293,11 @@ Class | Method | HTTP request | Description
 *SharedSpacesApi* | [**addAssets**](doc//SharedSpacesApi.md#addassets) | **POST** /shared-spaces/{id}/assets | Add assets to a shared space
 *SharedSpacesApi* | [**addMember**](doc//SharedSpacesApi.md#addmember) | **POST** /shared-spaces/{id}/members | Add a member to a shared space
 *SharedSpacesApi* | [**bulkAddAssets**](doc//SharedSpacesApi.md#bulkaddassets) | **POST** /shared-spaces/{id}/assets/bulk-add | Add all user assets to a shared space
+*SharedSpacesApi* | [**bulkDeleteAlbumFolders**](doc//SharedSpacesApi.md#bulkdeletealbumfolders) | **POST** /shared-spaces/{id}/album-folders/bulk-delete | Delete several album folders
+*SharedSpacesApi* | [**bulkMoveAlbumFolders**](doc//SharedSpacesApi.md#bulkmovealbumfolders) | **PUT** /shared-spaces/{id}/album-folders/bulk-parent | Move several album folders to a new parent
+*SharedSpacesApi* | [**bulkSetAlbumFolder**](doc//SharedSpacesApi.md#bulksetalbumfolder) | **PUT** /shared-spaces/{id}/albums/bulk-folder | Move several linked albums into a folder
+*SharedSpacesApi* | [**bulkSetAlbumTimeline**](doc//SharedSpacesApi.md#bulksetalbumtimeline) | **PUT** /shared-spaces/{id}/albums/bulk-timeline | Set the timeline flag for several linked albums
+*SharedSpacesApi* | [**bulkUnlinkAlbums**](doc//SharedSpacesApi.md#bulkunlinkalbums) | **POST** /shared-spaces/{id}/albums/bulk-unlink | Unlink several albums from a shared space
 *SharedSpacesApi* | [**createSharedSpaceAlbumFolder**](doc//SharedSpacesApi.md#createsharedspacealbumfolder) | **POST** /shared-spaces/{id}/album-folders | Create an album folder in a shared space
 *SharedSpacesApi* | [**createSpace**](doc//SharedSpacesApi.md#createspace) | **POST** /shared-spaces | Create a shared space
 *SharedSpacesApi* | [**deduplicateSpacePeople**](doc//SharedSpacesApi.md#deduplicatespacepeople) | **POST** /shared-spaces/{id}/people/deduplicate | Deduplicate people in a shared space
@@ -697,6 +702,11 @@ Class | Method | HTTP request | Description
  - [SharedSpaceAssetAddDto](doc//SharedSpaceAssetAddDto.md)
  - [SharedSpaceAssetLinkedAlbumDto](doc//SharedSpaceAssetLinkedAlbumDto.md)
  - [SharedSpaceAssetRemoveDto](doc//SharedSpaceAssetRemoveDto.md)
+ - [SharedSpaceBulkAlbumFolderMoveDto](doc//SharedSpaceBulkAlbumFolderMoveDto.md)
+ - [SharedSpaceBulkAlbumIdsDto](doc//SharedSpaceBulkAlbumIdsDto.md)
+ - [SharedSpaceBulkAlbumTimelineDto](doc//SharedSpaceBulkAlbumTimelineDto.md)
+ - [SharedSpaceBulkFolderIdsDto](doc//SharedSpaceBulkFolderIdsDto.md)
+ - [SharedSpaceBulkFolderParentDto](doc//SharedSpaceBulkFolderParentDto.md)
  - [SharedSpaceCreateDto](doc//SharedSpaceCreateDto.md)
  - [SharedSpaceLibraryLinkDto](doc//SharedSpaceLibraryLinkDto.md)
  - [SharedSpaceLinkedAlbumDto](doc//SharedSpaceLinkedAlbumDto.md)
