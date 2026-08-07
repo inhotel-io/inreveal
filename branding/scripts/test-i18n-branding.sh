@@ -184,6 +184,60 @@ else
   echo "  ok:   0 upstream-name values in branded en.json"
 fi
 
+# The "Buy Noodle Gallery" CTA seen on the personal instance (2026-08-07). en_GB
+# is a PARTIAL Weblate locale — 2,278 of en's 3,123 keys — that svelte-i18n
+# resolves on top of en (web/src/lib/utils.ts inits with
+# `fallbackLocale: defaultLang.code` = 'en'), so every key en_GB omits already
+# renders the branded English. The keys it DOES define carry upstream's wording,
+# and step 3's name swap turns "Buy Immich" into "Buy Noodle Gallery": branded,
+# grammatical, and wrong, because the fork sells nothing. Every leak scan above is
+# blind to it — the string contains no upstream name. Same shape for
+# version_announcement_closing, which signs the release note "Your friend, Alex".
+echo "English-variant locales carry the fork's English wording (en_GB):"
+eq en_GB "$KEY" "Support Noodle Gallery" 'en_GB buy button is the branded English CTA, not "Buy"'
+eq en_GB version_announcement_closing "Your friend, Pierre" "en_GB release sign-off names the fork author, not upstream's"
+
+# Structural guard, not a spot check: for EVERY overridden key, branded en_GB must
+# equal branded en unless the difference is a deliberate UK variant listed below.
+# A Weblate sync that retranslates one of these now fails here instead of shipping
+# upstream's wording under the fork's brand.
+# Genuine en_GB English, not upstream wording — keep Weblate's version. Each entry
+# is a conscious decision to let en_GB differ; adding a key here waives future
+# drift on it too, so only list keys whose divergence is purely dialectal.
+EN_GB_ALLOWED_VARIANTS=(
+  empty_trash_confirmation                                    # "bin" for "trash"
+  backup_controller_page_background_battery_info_message      # "optimisations"
+  admin.asset_offline_description                             # "moved to the bin"
+  admin.theme_custom_css_settings_description                 # "customised"
+  admin.theme_settings_description                            # "customisation"
+  admin.maintenance_integrity_checksum_mismatch_description   # "which ... had stored"
+)
+en_gb_variant_allowed() {
+  local candidate
+  for candidate in "${EN_GB_ALLOWED_VARIANTS[@]}"; do
+    [[ "$candidate" == "$1" ]] && return 0
+  done
+  return 1
+}
+gb_drift=0
+while IFS= read -r ov_key; do
+  gb_val=$(val_at en_GB "$ov_key")
+  [[ -z "$gb_val" ]] && continue          # undefined in en_GB -> falls back to branded en
+  en_val=$(val_at en "$ov_key")
+  [[ "$gb_val" == "$en_val" ]] && continue
+  if en_gb_variant_allowed "$ov_key"; then
+    echo "  ok:   en_GB keeps a deliberate UK variant of '$ov_key'"
+  else
+    echo "  FAIL: en_GB[$ov_key] = '$gb_val' but the fork's English is '$en_val'"
+    gb_drift=$((gb_drift + 1))
+  fi
+done < <(jq -r '[paths(scalars)] | .[] | join(".")' "$REPO/branding/i18n/overrides-en.json")
+if [[ $gb_drift -eq 0 ]]; then
+  echo "  ok:   en_GB matches the fork's English on every overridden key (${#EN_GB_ALLOWED_VARIANTS[@]} UK variants waived)"
+else
+  fails=$((fails + gb_drift))
+fi
+
 echo "Unrelated localized strings are preserved (no collateral damage):"
 # 'albums' is a generic key the fork does not rebrand; it must keep its German value.
 de_albums=$(jq -r '.albums // " ABSENT"' "$TMP/i18n/de.json")
