@@ -903,12 +903,7 @@ export class SharedSpaceService extends BaseService {
    * album itself — which is how an owner who is not a space member can still rename their own
    * album.
    */
-  async renameAlbum(
-    auth: AuthDto,
-    spaceId: string,
-    albumId: string,
-    dto: SharedSpaceAlbumRenameDto,
-  ): Promise<void> {
+  async renameAlbum(auth: AuthDto, spaceId: string, albumId: string, dto: SharedSpaceAlbumRenameDto): Promise<void> {
     await this.#requireEditorOrAlbumAccess(auth, spaceId, albumId, Permission.AlbumUpdate);
 
     const album = await this.albumRepository.getById(albumId, { withAssets: false });
