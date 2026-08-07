@@ -210,4 +210,78 @@ describe('SpaceAlbumsTable', () => {
       expect(onOpenAlbum).not.toHaveBeenCalled();
     });
   });
+
+  // This file registers a real 'en-US' locale in beforeAll above (unlike most spec files in this
+  // repo), so $t() renders actual translated text here rather than raw message keys — assertions
+  // below match the real strings, consistent with the rest of this file (e.g. 'Unlink album').
+  //
+  // The table's row menu has no Move item at all (no onMove prop exists on this component) — only
+  // the capability split is mirrored here, not the card's third option.
+  describe('capability-gated menu', () => {
+    // Scenario 26 — the positive case the negatives below depend on.
+    it('shows Rename and Delete to an editor who owns the album', () => {
+      renderWithTooltips(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [a1],
+        canManage: true,
+        canRename: true,
+        canDelete: true,
+        onUnlink: vi.fn(),
+        onToggleTimeline: vi.fn(),
+        onRename: vi.fn(),
+        onDelete: vi.fn(),
+      });
+
+      expect(screen.getByText('Rename album')).toBeInTheDocument();
+      expect(screen.getByText('Delete album')).toBeInTheDocument();
+      expect(screen.getByText('Unlink album')).toBeInTheDocument();
+    });
+
+    // Scenario 27
+    it('shows Rename but not Delete to an editor who does not own the album', () => {
+      renderWithTooltips(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [a1],
+        canManage: true,
+        canRename: true,
+        canDelete: false,
+        onUnlink: vi.fn(),
+        onToggleTimeline: vi.fn(),
+        onRename: vi.fn(),
+      });
+
+      expect(screen.getByText('Rename album')).toBeInTheDocument();
+      expect(screen.queryByText('Delete album')).not.toBeInTheDocument();
+    });
+
+    // Scenario 28
+    it('shows only Rename and Delete to a viewer who owns the album', () => {
+      renderWithTooltips(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [a1],
+        canManage: false,
+        canRename: true,
+        canDelete: true,
+        onRename: vi.fn(),
+        onDelete: vi.fn(),
+      });
+
+      expect(screen.getByText('Rename album')).toBeInTheDocument();
+      expect(screen.getByText('Delete album')).toBeInTheDocument();
+      expect(screen.queryByText('Unlink album')).not.toBeInTheDocument();
+    });
+
+    // Scenario 29
+    it('renders no menu at all for a viewer who does not own the album', () => {
+      render(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [a1],
+        canManage: false,
+        canRename: false,
+        canDelete: false,
+      });
+
+      expect(screen.queryByTestId(`space-album-row-menu-${a1.id}`)).not.toBeInTheDocument();
+    });
+  });
 });

@@ -296,4 +296,91 @@ describe('SpaceAlbumCard', () => {
       expect(onOpen).not.toHaveBeenCalled();
     });
   });
+
+  // This file registers a real 'en-US' locale in beforeAll above (unlike most spec files in this
+  // repo), so $t() renders actual translated text here rather than raw message keys — assertions
+  // below match the real strings, consistent with the rest of this file (e.g. 'Move to folder…').
+  describe('capability-gated menu', () => {
+    // Scenario 26 — the positive case the negatives below depend on.
+    it('shows Rename and Delete to an editor who owns the album', () => {
+      renderWithTooltips(SpaceAlbumCard, {
+        spaceId: 's-1',
+        album,
+        canManage: true,
+        canRename: true,
+        canDelete: true,
+        onUnlink: vi.fn(),
+        onToggleTimeline: vi.fn(),
+        onMove: vi.fn(),
+        onRename: vi.fn(),
+        onDelete: vi.fn(),
+      });
+
+      expect(screen.getByText('Rename album')).toBeInTheDocument();
+      expect(screen.getByText('Delete album')).toBeInTheDocument();
+      expect(screen.getByText('Unlink album')).toBeInTheDocument();
+    });
+
+    // Scenario 27
+    it('shows Rename but not Delete to an editor who does not own the album', () => {
+      renderWithTooltips(SpaceAlbumCard, {
+        spaceId: 's-1',
+        album,
+        canManage: true,
+        canRename: true,
+        canDelete: false,
+        onUnlink: vi.fn(),
+        onToggleTimeline: vi.fn(),
+        onMove: vi.fn(),
+        onRename: vi.fn(),
+      });
+
+      expect(screen.getByText('Rename album')).toBeInTheDocument();
+      expect(screen.queryByText('Delete album')).not.toBeInTheDocument();
+    });
+
+    // Scenario 28
+    it('shows only Rename and Delete to a viewer who owns the album', () => {
+      renderWithTooltips(SpaceAlbumCard, {
+        spaceId: 's-1',
+        album,
+        canManage: false,
+        canRename: true,
+        canDelete: true,
+        onRename: vi.fn(),
+        onDelete: vi.fn(),
+      });
+
+      expect(screen.getByText('Rename album')).toBeInTheDocument();
+      expect(screen.getByText('Delete album')).toBeInTheDocument();
+      expect(screen.queryByText('Unlink album')).not.toBeInTheDocument();
+      expect(screen.queryByText('Move to folder…')).not.toBeInTheDocument();
+    });
+
+    // Scenario 29
+    it('renders no menu at all for a viewer who does not own the album', () => {
+      renderWithTooltips(SpaceAlbumCard, {
+        spaceId: 's-1',
+        album,
+        canManage: false,
+        canRename: false,
+        canDelete: false,
+      });
+
+      expect(screen.queryByTestId('space-album-card-menu')).not.toBeInTheDocument();
+    });
+
+    // Scenario 30 — ownership grants rename and delete, never re-organisation.
+    it('does not make the card draggable for a viewer who owns the album', () => {
+      renderWithTooltips(SpaceAlbumCard, {
+        spaceId: 's-1',
+        album,
+        canManage: false,
+        canRename: true,
+        canDelete: true,
+      });
+
+      expect(screen.getByTestId('space-album-card')).toHaveAttribute('draggable', 'false');
+    });
+  });
 });

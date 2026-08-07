@@ -13,9 +13,17 @@
     spaceId: string;
     album: SharedSpaceLinkedAlbumDto;
     canManage: boolean;
+    /** Rename is allowed for a space Editor (canManage) OR the album's own owner. Defaults to
+     * false so a caller that hasn't wired capability derivation yet fails closed rather than
+     * breaking the type check — same rationale as SpaceAlbumFolderNameModal's icon/label. */
+    canRename?: boolean;
+    /** Delete is allowed for the album's own owner ONLY — never granted by canManage alone. */
+    canDelete?: boolean;
     onUnlink?: (album: SharedSpaceLinkedAlbumDto) => void;
     onToggleTimeline?: (album: SharedSpaceLinkedAlbumDto) => void;
     onMove?: (album: SharedSpaceLinkedAlbumDto) => void;
+    onRename?: (album: SharedSpaceLinkedAlbumDto) => void;
+    onDelete?: (album: SharedSpaceLinkedAlbumDto) => void;
     /** Whether this album is part of the active multi-selection (design §4). */
     selected?: boolean;
     /** Live Shift-hover range preview (design §4.3). */
@@ -37,9 +45,13 @@
     spaceId,
     album,
     canManage,
+    canRename = false,
+    canDelete = false,
     onUnlink,
     onToggleTimeline,
     onMove,
+    onRename,
+    onDelete,
     selected = false,
     selectionCandidate = false,
     selectedIds = [],
@@ -132,7 +144,7 @@
     <!-- ⋯ menu — sibling of the anchor, not inside it. stopPropagation keeps a click anywhere in
          this menu (including its portal-free dropdown content, which renders as a DOM descendant
          of this div) from also bubbling into the card-body click handler above. -->
-    {#if canManage}
+    {#if canManage || canRename || canDelete}
       <div
         class="absolute inset-e-6 top-6 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100"
         data-testid="space-album-card-menu"
@@ -149,12 +161,22 @@
           direction="left"
           buttonClass="icon-white-drop-shadow"
         >
-          <MenuOption
-            text={album.showInTimeline ? $t('spaces_hide_from_timeline') : $t('spaces_linked_albums_show_in_timeline')}
-            onClick={() => onToggleTimeline?.(album)}
-          />
-          <MenuOption text={$t('space_album_folder_move')} onClick={() => onMove?.(album)} />
-          <MenuOption text={$t('spaces_linked_albums_unlink')} onClick={() => onUnlink?.(album)} />
+          {#if canManage}
+            <MenuOption
+              text={album.showInTimeline
+                ? $t('spaces_hide_from_timeline')
+                : $t('spaces_linked_albums_show_in_timeline')}
+              onClick={() => onToggleTimeline?.(album)}
+            />
+            <MenuOption text={$t('space_album_folder_move')} onClick={() => onMove?.(album)} />
+            <MenuOption text={$t('spaces_linked_albums_unlink')} onClick={() => onUnlink?.(album)} />
+          {/if}
+          {#if canRename}
+            <MenuOption text={$t('space_album_rename')} onClick={() => onRename?.(album)} />
+          {/if}
+          {#if canDelete}
+            <MenuOption text={$t('space_album_delete')} onClick={() => onDelete?.(album)} />
+          {/if}
         </ButtonContextMenu>
       </div>
     {/if}

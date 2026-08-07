@@ -21,6 +21,12 @@
     spaceId: string;
     albums: SharedSpaceLinkedAlbumDto[];
     canManage: boolean;
+    /** Rename is allowed for a space Editor (canManage) OR the album's own owner. Defaults to
+     * false so a caller that hasn't wired capability derivation yet fails closed rather than
+     * breaking the type check — same rationale as SpaceAlbumFolderNameModal's icon/label. */
+    canRename?: boolean;
+    /** Delete is allowed for the album's own owner ONLY — never granted by canManage alone. */
+    canDelete?: boolean;
     groups?: SpaceAlbumGroup[];
     grouped?: boolean;
     folders?: SharedSpaceAlbumFolderDto[];
@@ -29,6 +35,8 @@
     currentFolderId?: string | null;
     onUnlink?: (album: SharedSpaceLinkedAlbumDto) => void;
     onToggleTimeline?: (album: SharedSpaceLinkedAlbumDto) => void;
+    onRename?: (album: SharedSpaceLinkedAlbumDto) => void;
+    onDelete?: (album: SharedSpaceLinkedAlbumDto) => void;
     /** Fired on a plain row click. The caller decides open-vs-toggle. */
     onOpenFolder?: (folder: SharedSpaceAlbumFolderDto, shiftKey?: boolean) => void;
     onOpenAlbum?: (album: SharedSpaceLinkedAlbumDto, shiftKey: boolean) => void;
@@ -43,6 +51,8 @@
     spaceId,
     albums,
     canManage,
+    canRename = false,
+    canDelete = false,
     groups = [],
     grouped = false,
     folders = [],
@@ -50,6 +60,8 @@
     currentFolderId = null,
     onUnlink,
     onToggleTimeline,
+    onRename,
+    onDelete,
     onOpenFolder,
     onOpenAlbum,
     onToggleSelectAlbum,
@@ -132,7 +144,7 @@
     <td class="text-md hidden w-3/12 text-center text-ellipsis sm:block xl:w-[15%] 2xl:w-[12%]">
       {dateLocaleString(album.createdAt)}
     </td>
-    {#if canManage}
+    {#if canManage || canRename || canDelete}
       <td
         class="text-md w-1/12 text-end"
         data-testid="space-album-row-menu-{album.id}"
@@ -147,11 +159,21 @@
           align="top-right"
           direction="left"
         >
-          <MenuOption
-            text={album.showInTimeline ? $t('spaces_hide_from_timeline') : $t('spaces_linked_albums_show_in_timeline')}
-            onClick={() => onToggleTimeline?.(album)}
-          />
-          <MenuOption text={$t('spaces_linked_albums_unlink')} onClick={() => onUnlink?.(album)} />
+          {#if canManage}
+            <MenuOption
+              text={album.showInTimeline
+                ? $t('spaces_hide_from_timeline')
+                : $t('spaces_linked_albums_show_in_timeline')}
+              onClick={() => onToggleTimeline?.(album)}
+            />
+            <MenuOption text={$t('spaces_linked_albums_unlink')} onClick={() => onUnlink?.(album)} />
+          {/if}
+          {#if canRename}
+            <MenuOption text={$t('space_album_rename')} onClick={() => onRename?.(album)} />
+          {/if}
+          {#if canDelete}
+            <MenuOption text={$t('space_album_delete')} onClick={() => onDelete?.(album)} />
+          {/if}
         </ButtonContextMenu>
       </td>
     {/if}
@@ -195,7 +217,7 @@
     </td>
     <td class="text-md hidden w-3/12 text-center text-ellipsis sm:block xl:w-[15%] 2xl:w-[12%]"></td>
     <td class="text-md hidden w-3/12 text-center text-ellipsis sm:block xl:w-[15%] 2xl:w-[12%]"></td>
-    {#if canManage}
+    {#if canManage || canRename || canDelete}
       <td class="text-md w-1/12 text-end"></td>
     {/if}
   </tr>
@@ -210,7 +232,7 @@
       >
       <th class="text-md hidden text-center sm:block xl:w-[15%] 2xl:w-[12%]">{$t('sort_modified')}</th>
       <th class="text-md hidden text-center sm:block xl:w-[15%] 2xl:w-[12%]">{$t('date_created')}</th>
-      {#if canManage}
+      {#if canManage || canRename || canDelete}
         <th class="text-md w-1/12 text-end"></th>
       {/if}
     </tr>

@@ -7,10 +7,19 @@
     title: string;
     /** Pre-filled when renaming; empty when creating. */
     initialName?: string;
+    /** Defaults keep every existing folder call site working unchanged. */
+    icon?: string;
+    label?: string;
     onClose: (name?: string) => void;
   };
 
-  const { title, initialName = '', onClose }: Props = $props();
+  const {
+    title,
+    initialName = '',
+    icon = mdiFolderPlusOutline,
+    label = $t('space_album_folder_name_label'),
+    onClose,
+  }: Props = $props();
 
   let value = $state(initialName);
 
@@ -22,8 +31,8 @@
   };
 </script>
 
-<FormModal {title} icon={mdiFolderPlusOutline} {onClose} {onSubmit} size="small" submitText={$t('save')}>
-  <Field label={$t('space_album_folder_name_label')}>
+<FormModal {title} {icon} {onClose} {onSubmit} size="small" submitText={$t('save')}>
+  <Field {label}>
     <Input bind:value />
   </Field>
 </FormModal>

@@ -1,5 +1,6 @@
 import {
   bulkDeleteAlbumFolders,
+  bulkDeleteAlbums,
   bulkMoveAlbumFolders,
   bulkSetAlbumFolder,
   bulkSetAlbumTimeline,
@@ -69,3 +70,10 @@ export const bulkMoveAlbumFoldersAction = (
 
 export const bulkDeleteAlbumFoldersAction = (spaceId: string, ids: string[]): Promise<BulkActionResult> =>
   runBulkAction(ids, () => bulkDeleteAlbumFolders({ id: spaceId, sharedSpaceBulkFolderIdsDto: { ids } }));
+
+/**
+ * Deletes the ALBUMS, not just their space links. Serves single delete too — the card menu sends
+ * a one-element array — so there is one code path and one failure contract.
+ */
+export const bulkDeleteAlbumsAction = (spaceId: string, ids: string[]): Promise<BulkActionResult> =>
+  runBulkAction(ids, () => bulkDeleteAlbums({ id: spaceId, sharedSpaceBulkAlbumIdsDto: { ids } }));

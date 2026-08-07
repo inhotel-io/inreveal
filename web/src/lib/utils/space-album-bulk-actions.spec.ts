@@ -1,5 +1,6 @@
 import {
   bulkDeleteAlbumFolders,
+  bulkDeleteAlbums,
   bulkMoveAlbumFolders,
   bulkSetAlbumFolder,
   bulkSetAlbumTimeline,
@@ -9,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyBulkResult,
   bulkDeleteAlbumFoldersAction,
+  bulkDeleteAlbumsAction,
   bulkMoveAlbumFoldersAction,
   bulkSetAlbumFolderAction,
   bulkSetAlbumTimelineAction,
@@ -22,6 +24,7 @@ vi.mock('@immich/sdk', async () => ({
   bulkSetAlbumTimeline: vi.fn(),
   bulkMoveAlbumFolders: vi.fn(),
   bulkDeleteAlbumFolders: vi.fn(),
+  bulkDeleteAlbums: vi.fn(),
 }));
 
 describe('applyBulkResult', () => {
@@ -205,5 +208,30 @@ describe('bulkDeleteAlbumFoldersAction', () => {
     const result = await bulkDeleteAlbumFoldersAction('space-1', ['f1', 'f2']);
 
     expect(result).toEqual({ failedIds: ['f1', 'f2'], failedCount: 2 });
+  });
+});
+
+describe('bulkDeleteAlbumsAction', () => {
+  // Scenario 39
+  it('returns exactly the failed subset on a partial failure', async () => {
+    vi.mocked(bulkDeleteAlbums).mockResolvedValue([
+      { id: 'a', success: true },
+      { id: 'b', success: false },
+    ]);
+
+    await expect(bulkDeleteAlbumsAction('space-1', ['a', 'b'])).resolves.toEqual({
+      failedIds: ['b'],
+      failedCount: 1,
+    });
+  });
+
+  // Scenario 40
+  it('reports every id failed when the request throws', async () => {
+    vi.mocked(bulkDeleteAlbums).mockRejectedValue(new Error('offline'));
+
+    await expect(bulkDeleteAlbumsAction('space-1', ['a', 'b'])).resolves.toEqual({
+      failedIds: ['a', 'b'],
+      failedCount: 2,
+    });
   });
 });
