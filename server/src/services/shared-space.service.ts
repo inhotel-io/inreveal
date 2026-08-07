@@ -831,6 +831,38 @@ export class SharedSpaceService extends BaseService {
     await this.queueAlbumGrantReconcile([albumId]);
   }
 
+  // Shared editor-or-owner gate for space-linked album mutations (originally inlined in
+  // #unlinkAlbumChecked; extracted for renameAlbum in fix round 1 — see the review finding in
+  // task-1-report.md). A current-space Editor short-circuits; otherwise the caller must hold
+  // `permission` on the album itself, which is how an owner who is not a space member can still
+  // act on their own album. `permission` lets each caller pick its own Permission (AlbumDelete
+  // for unlink, AlbumUpdate for rename) while sharing the exact same gate shape.
+  //
+  // The hasAlbumLink check runs AFTER the branch, in BOTH arms: without it in the owner arm, a
+  // leaked spaceId could let the caller's follow-up logActivity inject a row into an unrelated
+  // space's feed (activity spam), and a nonexistent spaceId 500s on the FK. Callers that log
+  // activity or otherwise cause a side effect must do so only after this resolves.
+  async #requireEditorOrAlbumAccess(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+    permission: Permission,
+  ): Promise<void> {
+    const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
+    const isSpaceEditor = !!member && getSharedSpaceRoleScore(member.role) >= ROLE_HIERARCHY[SharedSpaceRole.Editor];
+    if (!isSpaceEditor) {
+      const allowed = await this.checkAccess({ auth, permission, ids: [albumId] });
+      if (!allowed.has(albumId)) {
+        throw new ForbiddenException('Insufficient role');
+      }
+    }
+
+    const linked = await this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId);
+    if (!linked) {
+      throw new NotFoundException('Album is not linked to this space');
+    }
+  }
+
   // Checked core shared by the single-item unlinkAlbum above and the future bulk-unlink path
   // (Task 3): authorization + validation + the removal itself, with NO activity logging and NO
   // grant-reconcile queueing — those are batched by the caller (one row / one job per request,
@@ -843,24 +875,7 @@ export class SharedSpaceService extends BaseService {
     // rbac-6: current-space Editors curate space links; ADDITIONALLY the album owner can always
     // revoke a link to their own album, even without space membership (otherwise an owner cannot
     // discover or undo an editor's link). The Editor path short-circuits, so it is not weakened.
-    const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
-    const isSpaceEditor = !!member && getSharedSpaceRoleScore(member.role) >= ROLE_HIERARCHY[SharedSpaceRole.Editor];
-    if (!isSpaceEditor) {
-      const ownedAlbums = await this.checkAccess({ auth, permission: Permission.AlbumDelete, ids: [albumId] });
-      if (!ownedAlbums.has(albumId)) {
-        throw new ForbiddenException('Insufficient role');
-      }
-    }
-
-    // Fork RBAC (Slice 4 / M11): the owner arm authorizes on album ownership only and never verified
-    // the album is actually linked to this space. Without this guard, the caller's logActivity
-    // could inject an AlbumUnlink row into an arbitrary space's feed (activity spam via a leaked
-    // spaceId), and a nonexistent spaceId 500s on the FK. Guard both paths: no link -> 404, before
-    // any side effect.
-    const linked = await this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId);
-    if (!linked) {
-      throw new NotFoundException('Album is not linked to this space');
-    }
+    await this.#requireEditorOrAlbumAccess(auth, spaceId, albumId, Permission.AlbumDelete);
 
     const album = await this.albumRepository.getById(albumId, { withAssets: false });
     const orphanedAssetIds = await this.sharedSpaceRepository.getAlbumAssetIdsWithoutOtherSpacePath(spaceId, albumId);
@@ -883,13 +898,10 @@ export class SharedSpaceService extends BaseService {
   }
 
   /**
-   * Rename a space-linked album. Gate mirrors #unlinkAlbumChecked: a current-space Editor
-   * short-circuits, otherwise the caller must hold AlbumUpdate on the album itself — which is how
-   * an owner who is not a space member can still rename their own album.
-   *
-   * The hasAlbumLink guard runs in BOTH arms, below the branch: without it in the owner arm, a
-   * leaked spaceId would inject an AlbumRename row into an unrelated space's activity feed, and a
-   * nonexistent spaceId 500s on the FK.
+   * Rename a space-linked album. Gate is #requireEditorOrAlbumAccess with Permission.AlbumUpdate:
+   * a current-space Editor short-circuits, otherwise the caller must hold AlbumUpdate on the
+   * album itself — which is how an owner who is not a space member can still rename their own
+   * album.
    */
   async renameAlbum(
     auth: AuthDto,
@@ -897,19 +909,7 @@ export class SharedSpaceService extends BaseService {
     albumId: string,
     dto: SharedSpaceAlbumRenameDto,
   ): Promise<void> {
-    const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
-    const isSpaceEditor = !!member && getSharedSpaceRoleScore(member.role) >= ROLE_HIERARCHY[SharedSpaceRole.Editor];
-    if (!isSpaceEditor) {
-      const allowed = await this.checkAccess({ auth, permission: Permission.AlbumUpdate, ids: [albumId] });
-      if (!allowed.has(albumId)) {
-        throw new ForbiddenException('Insufficient role');
-      }
-    }
-
-    const linked = await this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId);
-    if (!linked) {
-      throw new NotFoundException('Album is not linked to this space');
-    }
+    await this.#requireEditorOrAlbumAccess(auth, spaceId, albumId, Permission.AlbumUpdate);
 
     const album = await this.albumRepository.getById(albumId, { withAssets: false });
     const previousName = album?.albumName ?? '';
