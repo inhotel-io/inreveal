@@ -15047,6 +15047,76 @@
         "x-immich-state": "Beta"
       }
     },
+    "/shared-spaces/{id}/albums/bulk-delete": {
+      "post": {
+        "description": "Per-item results; the request succeeds with 200 even when every item fails. Deletes the ALBUMS, not just their space links — assets survive in their owner library. Authorizes per item on album ownership only, with no space-Editor arm, so a space Owner who does not own an album cannot delete it, while an album owner who is not a space member can. Scoped Permission.AlbumDelete rather than SharedSpaceAlbumDelete so a space-scoped API key cannot destroy albums. Shares its request body validation with bulk-unlink — see SharedSpaceBulkAlbumIdsDto.",
+        "operationId": "bulkDeleteAlbums",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceBulkAlbumIdsDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BulkIdResponseDto"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Delete several albums linked to a shared space",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "album.delete",
+        "x-immich-state": "Beta"
+      }
+    },
     "/shared-spaces/{id}/albums/bulk-folder": {
       "put": {
         "description": "Per-item results; the request succeeds with 200 even when every item fails. Pass folderId: null to move the albums to the space root. Requires space Editor.",
@@ -15520,6 +15590,76 @@
           }
         ],
         "x-immich-permission": "sharedSpaceAlbum.update",
+        "x-immich-state": "Beta"
+      }
+    },
+    "/shared-spaces/{id}/albums/{albumId}/name": {
+      "put": {
+        "description": "Requires space Editor OR album owner. Scoped Permission.AlbumUpdate rather than SharedSpaceAlbumUpdate on purpose: @Authenticated gates API-KEY scope, and the effect of this call is an album mutation visible everywhere in the product, not a change to space-link metadata. A key holding only space-album scope must not be able to rename arbitrary albums through this route's editor arm.",
+        "operationId": "renameSharedSpaceAlbum",
+        "parameters": [
+          {
+            "name": "albumId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SharedSpaceAlbumRenameDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          },
+          {
+            "api_key": []
+          }
+        ],
+        "summary": "Rename a space-linked album",
+        "tags": [
+          "Shared Spaces"
+        ],
+        "x-immich-history": [
+          {
+            "version": "v1",
+            "state": "Added"
+          },
+          {
+            "version": "v1",
+            "state": "Beta"
+          }
+        ],
+        "x-immich-permission": "album.update",
         "x-immich-state": "Beta"
       }
     },
@@ -30961,6 +31101,19 @@
         },
         "required": [
           "showInTimeline"
+        ],
+        "type": "object"
+      },
+      "SharedSpaceAlbumRenameDto": {
+        "properties": {
+          "name": {
+            "description": "New album name",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ],
         "type": "object"
       },

@@ -294,6 +294,7 @@ Class | Method | HTTP request | Description
 *SharedSpacesApi* | [**addMember**](doc//SharedSpacesApi.md#addmember) | **POST** /shared-spaces/{id}/members | Add a member to a shared space
 *SharedSpacesApi* | [**bulkAddAssets**](doc//SharedSpacesApi.md#bulkaddassets) | **POST** /shared-spaces/{id}/assets/bulk-add | Add all user assets to a shared space
 *SharedSpacesApi* | [**bulkDeleteAlbumFolders**](doc//SharedSpacesApi.md#bulkdeletealbumfolders) | **POST** /shared-spaces/{id}/album-folders/bulk-delete | Delete several album folders
+*SharedSpacesApi* | [**bulkDeleteAlbums**](doc//SharedSpacesApi.md#bulkdeletealbums) | **POST** /shared-spaces/{id}/albums/bulk-delete | Delete several albums linked to a shared space
 *SharedSpacesApi* | [**bulkMoveAlbumFolders**](doc//SharedSpacesApi.md#bulkmovealbumfolders) | **PUT** /shared-spaces/{id}/album-folders/bulk-parent | Move several album folders to a new parent
 *SharedSpacesApi* | [**bulkSetAlbumFolder**](doc//SharedSpacesApi.md#bulksetalbumfolder) | **PUT** /shared-spaces/{id}/albums/bulk-folder | Move several linked albums into a folder
 *SharedSpacesApi* | [**bulkSetAlbumTimeline**](doc//SharedSpacesApi.md#bulksetalbumtimeline) | **PUT** /shared-spaces/{id}/albums/bulk-timeline | Set the timeline flag for several linked albums
@@ -328,6 +329,7 @@ Class | Method | HTTP request | Description
 *SharedSpacesApi* | [**removeAssets**](doc//SharedSpacesApi.md#removeassets) | **DELETE** /shared-spaces/{id}/assets | Remove assets from a shared space
 *SharedSpacesApi* | [**removeMember**](doc//SharedSpacesApi.md#removemember) | **DELETE** /shared-spaces/{id}/members/{userId} | Remove a member from a shared space
 *SharedSpacesApi* | [**removeSpace**](doc//SharedSpacesApi.md#removespace) | **DELETE** /shared-spaces/{id} | Delete a shared space
+*SharedSpacesApi* | [**renameSharedSpaceAlbum**](doc//SharedSpacesApi.md#renamesharedspacealbum) | **PUT** /shared-spaces/{id}/albums/{albumId}/name | Rename a space-linked album
 *SharedSpacesApi* | [**setSharedSpaceAlbumFolder**](doc//SharedSpacesApi.md#setsharedspacealbumfolder) | **PUT** /shared-spaces/{id}/albums/{albumId}/folder | Move a linked album into a folder
 *SharedSpacesApi* | [**setSpacePersonAlias**](doc//SharedSpacesApi.md#setspacepersonalias) | **PUT** /shared-spaces/{id}/people/{personId}/alias | Set a person alias in a shared space
 *SharedSpacesApi* | [**unlinkAlbum**](doc//SharedSpacesApi.md#unlinkalbum) | **DELETE** /shared-spaces/{id}/albums/{albumId} | Unlink an album from a shared space
@@ -699,6 +701,7 @@ Class | Method | HTTP request | Description
  - [SharedSpaceAlbumFolderMoveAlbumDto](doc//SharedSpaceAlbumFolderMoveAlbumDto.md)
  - [SharedSpaceAlbumFolderUpdateDto](doc//SharedSpaceAlbumFolderUpdateDto.md)
  - [SharedSpaceAlbumLinkUpdateDto](doc//SharedSpaceAlbumLinkUpdateDto.md)
+ - [SharedSpaceAlbumRenameDto](doc//SharedSpaceAlbumRenameDto.md)
  - [SharedSpaceAssetAddDto](doc//SharedSpaceAssetAddDto.md)
  - [SharedSpaceAssetLinkedAlbumDto](doc//SharedSpaceAssetLinkedAlbumDto.md)
  - [SharedSpaceAssetRemoveDto](doc//SharedSpaceAssetRemoveDto.md)

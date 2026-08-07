@@ -347,6 +347,7 @@ part 'model/shared_space_album_folder_dto.dart';
 part 'model/shared_space_album_folder_move_album_dto.dart';
 part 'model/shared_space_album_folder_update_dto.dart';
 part 'model/shared_space_album_link_update_dto.dart';
+part 'model/shared_space_album_rename_dto.dart';
 part 'model/shared_space_asset_add_dto.dart';
 part 'model/shared_space_asset_linked_album_dto.dart';
 part 'model/shared_space_asset_remove_dto.dart';

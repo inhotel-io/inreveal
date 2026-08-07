@@ -247,6 +247,71 @@ class SharedSpacesApi {
     return null;
   }
 
+  /// Delete several albums linked to a shared space
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Deletes the ALBUMS, not just their space links — assets survive in their owner library. Authorizes per item on album ownership only, with no space-Editor arm, so a space Owner who does not own an album cannot delete it, while an album owner who is not a space member can. Scoped Permission.AlbumDelete rather than SharedSpaceAlbumDelete so a space-scoped API key cannot destroy albums. Shares its request body validation with bulk-unlink — see SharedSpaceBulkAlbumIdsDto.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkAlbumIdsDto] sharedSpaceBulkAlbumIdsDto (required):
+  Future<Response> bulkDeleteAlbumsWithHttpInfo(String id, SharedSpaceBulkAlbumIdsDto sharedSpaceBulkAlbumIdsDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/albums/bulk-delete'
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceBulkAlbumIdsDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Delete several albums linked to a shared space
+  ///
+  /// Per-item results; the request succeeds with 200 even when every item fails. Deletes the ALBUMS, not just their space links — assets survive in their owner library. Authorizes per item on album ownership only, with no space-Editor arm, so a space Owner who does not own an album cannot delete it, while an album owner who is not a space member can. Scoped Permission.AlbumDelete rather than SharedSpaceAlbumDelete so a space-scoped API key cannot destroy albums. Shares its request body validation with bulk-unlink — see SharedSpaceBulkAlbumIdsDto.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceBulkAlbumIdsDto] sharedSpaceBulkAlbumIdsDto (required):
+  Future<List<BulkIdResponseDto>?> bulkDeleteAlbums(String id, SharedSpaceBulkAlbumIdsDto sharedSpaceBulkAlbumIdsDto, { Future<void>? abortTrigger, }) async {
+    final response = await bulkDeleteAlbumsWithHttpInfo(id, sharedSpaceBulkAlbumIdsDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      final responseBody = await _decodeBodyBytes(response);
+      return (await apiClient.deserializeAsync(responseBody, 'List<BulkIdResponseDto>') as List)
+        .cast<BulkIdResponseDto>()
+        .toList(growable: false);
+
+    }
+    return null;
+  }
+
   /// Move several album folders to a new parent
   ///
   /// Per-item results; the request succeeds with 200 even when every item fails. Pass parentId: null to move the folders to the space root. Requires space Editor.
@@ -2471,6 +2536,65 @@ class SharedSpacesApi {
   /// * [String] id (required):
   Future<void> removeSpace(String id, { Future<void>? abortTrigger, }) async {
     final response = await removeSpaceWithHttpInfo(id, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+  }
+
+  /// Rename a space-linked album
+  ///
+  /// Requires space Editor OR album owner. Scoped Permission.AlbumUpdate rather than SharedSpaceAlbumUpdate on purpose: @Authenticated gates API-KEY scope, and the effect of this call is an album mutation visible everywhere in the product, not a change to space-link metadata. A key holding only space-album scope must not be able to rename arbitrary albums through this route's editor arm.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] albumId (required):
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceAlbumRenameDto] sharedSpaceAlbumRenameDto (required):
+  Future<Response> renameSharedSpaceAlbumWithHttpInfo(String albumId, String id, SharedSpaceAlbumRenameDto sharedSpaceAlbumRenameDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{id}/albums/{albumId}/name'
+      .replaceAll('{albumId}', albumId)
+      .replaceAll('{id}', id);
+
+    // ignore: prefer_final_locals
+    Object? postBody = sharedSpaceAlbumRenameDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'PUT',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Rename a space-linked album
+  ///
+  /// Requires space Editor OR album owner. Scoped Permission.AlbumUpdate rather than SharedSpaceAlbumUpdate on purpose: @Authenticated gates API-KEY scope, and the effect of this call is an album mutation visible everywhere in the product, not a change to space-link metadata. A key holding only space-album scope must not be able to rename arbitrary albums through this route's editor arm.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] albumId (required):
+  ///
+  /// * [String] id (required):
+  ///
+  /// * [SharedSpaceAlbumRenameDto] sharedSpaceAlbumRenameDto (required):
+  Future<void> renameSharedSpaceAlbum(String albumId, String id, SharedSpaceAlbumRenameDto sharedSpaceAlbumRenameDto, { Future<void>? abortTrigger, }) async {
+    final response = await renameSharedSpaceAlbumWithHttpInfo(albumId, id, sharedSpaceAlbumRenameDto, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }
