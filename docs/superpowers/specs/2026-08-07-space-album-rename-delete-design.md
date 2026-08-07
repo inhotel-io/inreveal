@@ -23,13 +23,13 @@ so no upstream permission semantics change and no rebase surface is added there.
 
 ### 2.1 What exists today
 
-| Surface             | File                                                                    | Card ⋮ actions today                                    |
-| ------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------- |
-| Web grid            | `web/src/lib/components/spaces/space-album-card.svelte`                 | Show/Hide in timeline · Move to folder · Unlink         |
-| Web list            | `web/src/lib/components/spaces/space-albums-table.svelte`               | same three                                              |
-| Web select bar      | `web/src/lib/components/spaces/space-album-select-bar.svelte`           | album: Unlink · Move · Timeline — folder: Move · Delete |
-| Mobile grid         | `mobile/lib/pages/library/spaces/space_albums.page.dart` (`_AlbumCard`) | Toggle timeline · Unlink · Move to folder               |
-| Mobile album detail | `mobile/lib/presentation/widgets/spaces/space_album_kebab.widget.dart`  | Add photos · Toggle timeline · Unlink                   |
+| Surface             | File                                                                    | Card ⋮ actions today                                               |
+| ------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Web grid            | `web/src/lib/components/spaces/space-album-card.svelte`                 | Show/Hide in timeline · Move to folder · Unlink                    |
+| Web list            | `web/src/lib/components/spaces/space-albums-table.svelte`               | Show/Hide in timeline · Unlink (no Move — it has no `onMove` prop) |
+| Web select bar      | `web/src/lib/components/spaces/space-album-select-bar.svelte`           | album: Unlink · Move · Timeline — folder: Move · Delete            |
+| Mobile grid         | `mobile/lib/pages/library/spaces/space_albums.page.dart` (`_AlbumCard`) | Toggle timeline · Unlink · Move to folder                          |
+| Mobile album detail | `mobile/lib/presentation/widgets/spaces/space_album_kebab.widget.dart`  | Add photos · Toggle timeline · Unlink                              |
 
 Every one of those is behind a single master gate — `canManage` on web, `canEdit` on mobile — meaning
 **space Editor**. Neither rename nor delete exists on any of them.
@@ -99,7 +99,10 @@ only a space _viewer_ gains rename and delete.
 
 Two derived rules keep the surfaces coherent:
 
-- **Selectable predicate.** An album card is selectable iff `canManage || isOwner(album)`. A folder
+- **Selectable predicate.** An album card is selectable iff `canManage || isOwner(album)`. On mobile
+  this means both the `canEdit`-gated long-press wiring **and** `showSelectionBar = canEdit &&
+!selection.isEmpty` (`space_albums.page.dart`) must widen together; widening only one leaves a
+  viewer able to select with no bar, or a bar that can never appear. A folder
   card stays `canManage`, so a space viewer can never select a folder and the never-mixed
   album/folder selection invariant is untouched.
 - **Per-button rendering.** Each select-bar button renders iff its own capability holds. A viewer's
