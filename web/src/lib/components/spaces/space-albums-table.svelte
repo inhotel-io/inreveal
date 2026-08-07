@@ -21,24 +21,18 @@
     spaceId: string;
     albums: SharedSpaceLinkedAlbumDto[];
     canManage: boolean;
-    /** Rename is allowed for a space Editor (canManage) OR the album's own owner. Defaults to
-     * false so a caller that hasn't wired capability derivation yet fails closed rather than
-     * breaking the type check — same rationale as SpaceAlbumFolderNameModal's icon/label.
-     *
-     * Deliberately a table-WIDE scalar, not per-row: this single call renders every album passed
-     * in `albums`, unlike SpaceAlbumCard (instantiated once per album), so there is no single
-     * album here to derive an owner-specific value from. A caller with a mixed-ownership
-     * selection can only pass a value that is safe for every row it renders — e.g. `canManage`
-     * alone, which never wrongly grants Rename to a row the viewer does not own. Row-level
-     * SELECTABILITY does not share this limitation; see `canSelectAlbum` below. */
-    canRename?: boolean;
+    /** Rename is allowed for a space Editor (canManage) OR the album's own owner — genuinely
+     * per-row, since this single call renders every album in `albums` and two rows can have
+     * different owners. Defaults to `() => false` so a caller that hasn't wired capability
+     * derivation yet fails closed rather than breaking the type check — same rationale as
+     * SpaceAlbumFolderNameModal's icon/label. */
+    canRename?: (album: SharedSpaceLinkedAlbumDto) => boolean;
     /** Delete is allowed for the album's own owner ONLY — never granted by canManage alone. Same
-     * table-wide-scalar caveat as `canRename` above. */
-    canDelete?: boolean;
-    /** Per-ROW selectability (the check circle), independent of canRename/canDelete above — a
-     * viewer who owns just SOME of the rendered albums must still be able to select the ones they
-     * own. Defaults to `() => canManage` so a caller that hasn't wired per-album ownership keeps
-     * today's canManage-only behaviour. */
+     * per-row shape and fail-closed default as `canRename` above. */
+    canDelete?: (album: SharedSpaceLinkedAlbumDto) => boolean;
+    /** Per-ROW selectability (the check circle) — a viewer who owns just SOME of the rendered
+     * albums must still be able to select the ones they own. Defaults to `() => canManage` so a
+     * caller that hasn't wired per-album ownership keeps today's canManage-only behaviour. */
     canSelectAlbum?: (album: SharedSpaceLinkedAlbumDto) => boolean;
     groups?: SpaceAlbumGroup[];
     grouped?: boolean;
@@ -64,8 +58,8 @@
     spaceId,
     albums,
     canManage,
-    canRename = false,
-    canDelete = false,
+    canRename = () => false,
+    canDelete = () => false,
     canSelectAlbum = () => canManage,
     groups = [],
     grouped = false,
@@ -115,6 +109,15 @@
           : a.name.localeCompare(b.name),
       ),
   );
+
+  // Structural threshold for the actions column as a WHOLE (header `<th>` and every folder row's
+  // trailing filler `<td>`, neither of which has a single album to evaluate a per-row predicate
+  // against): the column must exist the moment ANY rendered album row would show it, so the header
+  // and folder rows stay aligned with the album rows underneath them (Task 6's column-alignment
+  // fix). Per-row presence inside `albumRow` itself uses `canRename(album)`/`canDelete(album)`
+  // directly and does not read this. `albums` is already the full flat list the table renders even
+  // when `grouped` — `groups` is derived from it, not a separate source — so this covers both.
+  const anyAlbumEditable = $derived(canManage || albums.some((album) => canRename(album) || canDelete(album)));
 </script>
 
 {#snippet albumRow(album: SharedSpaceLinkedAlbumDto)}
@@ -127,10 +130,11 @@
     ]}
     onclick={(event) => handleAlbumRowClick(event, album)}
   >
-    <!-- Per-ROW, unlike canRename/canDelete below (which stay table-wide scalars for the ⋮ menu —
-         see canSelectAlbum's own doc comment): a viewer who owns THIS album must be able to enter
-         selection even though canManage (space Editor) is false for them, without also exposing
-         the check circle on a row for an album they do not own. -->
+    <!-- Independent predicate from canRename/canDelete below (selectability and rename/delete are
+         different capabilities that happen to often coincide, not the same thing under two names):
+         a viewer who owns THIS album must be able to enter selection even though canManage (space
+         Editor) is false for them, without also exposing the check circle on a row for an album
+         they do not own. -->
     {#if canSelectAlbum(album)}
       <td class="w-8 shrink-0 text-center">
         <button
@@ -162,7 +166,7 @@
     <td class="text-md hidden w-3/12 text-center text-ellipsis sm:block xl:w-[15%] 2xl:w-[12%]">
       {dateLocaleString(album.createdAt)}
     </td>
-    {#if canManage || canRename || canDelete}
+    {#if canManage || canRename(album) || canDelete(album)}
       <td
         class="text-md w-1/12 text-end"
         data-testid="space-album-row-menu-{album.id}"
@@ -186,10 +190,10 @@
             />
             <MenuOption text={$t('spaces_linked_albums_unlink')} onClick={() => onUnlink?.(album)} />
           {/if}
-          {#if canRename}
+          {#if canRename(album)}
             <MenuOption text={$t('space_album_rename')} onClick={() => onRename?.(album)} />
           {/if}
-          {#if canDelete}
+          {#if canDelete(album)}
             <MenuOption text={$t('space_album_delete')} onClick={() => onDelete?.(album)} />
           {/if}
         </ButtonContextMenu>
@@ -235,7 +239,7 @@
     </td>
     <td class="text-md hidden w-3/12 text-center text-ellipsis sm:block xl:w-[15%] 2xl:w-[12%]"></td>
     <td class="text-md hidden w-3/12 text-center text-ellipsis sm:block xl:w-[15%] 2xl:w-[12%]"></td>
-    {#if canManage || canRename || canDelete}
+    {#if anyAlbumEditable}
       <td class="text-md w-1/12 text-end"></td>
     {/if}
   </tr>
@@ -250,7 +254,7 @@
       >
       <th class="text-md hidden text-center sm:block xl:w-[15%] 2xl:w-[12%]">{$t('sort_modified')}</th>
       <th class="text-md hidden text-center sm:block xl:w-[15%] 2xl:w-[12%]">{$t('date_created')}</th>
-      {#if canManage || canRename || canDelete}
+      {#if anyAlbumEditable}
         <th class="text-md w-1/12 text-end"></th>
       {/if}
     </tr>

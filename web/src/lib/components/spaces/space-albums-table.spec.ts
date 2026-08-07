@@ -217,6 +217,13 @@ describe('SpaceAlbumsTable', () => {
   //
   // The table's row menu has no Move item at all (no onMove prop exists on this component) — only
   // the capability split is mirrored here, not the card's third option.
+  //
+  // canRename/canDelete are per-row PREDICATES `(album) => boolean` (fix round 1: the table
+  // renders every album in `albums` from one call, unlike SpaceAlbumCard which is instantiated
+  // once per album — a scalar cannot express "owns row A, not row B" at all). Every test below
+  // still exercises a single-album table, so `() => true`/`() => false` reproduce the exact
+  // per-scenario capability the original literal booleans encoded; the dedicated "mixed ownership"
+  // test further down is what actually proves the per-row behaviour a scalar could never express.
   describe('capability-gated menu', () => {
     // Scenario 26 — the positive case the negatives below depend on.
     it('shows Rename and Delete to an editor who owns the album', () => {
@@ -224,8 +231,8 @@ describe('SpaceAlbumsTable', () => {
         spaceId: 's-1',
         albums: [a1],
         canManage: true,
-        canRename: true,
-        canDelete: true,
+        canRename: () => true,
+        canDelete: () => true,
         onUnlink: vi.fn(),
         onToggleTimeline: vi.fn(),
         onRename: vi.fn(),
@@ -243,8 +250,8 @@ describe('SpaceAlbumsTable', () => {
         spaceId: 's-1',
         albums: [a1],
         canManage: true,
-        canRename: true,
-        canDelete: false,
+        canRename: () => true,
+        canDelete: () => false,
         onUnlink: vi.fn(),
         onToggleTimeline: vi.fn(),
         onRename: vi.fn(),
@@ -260,8 +267,8 @@ describe('SpaceAlbumsTable', () => {
         spaceId: 's-1',
         albums: [a1],
         canManage: false,
-        canRename: true,
-        canDelete: true,
+        canRename: () => true,
+        canDelete: () => true,
         onRename: vi.fn(),
         onDelete: vi.fn(),
       });
@@ -277,11 +284,40 @@ describe('SpaceAlbumsTable', () => {
         spaceId: 's-1',
         albums: [a1],
         canManage: false,
-        canRename: false,
-        canDelete: false,
+        canRename: () => false,
+        canDelete: () => false,
       });
 
       expect(screen.queryByTestId(`space-album-row-menu-${a1.id}`)).not.toBeInTheDocument();
+    });
+
+    // Fix round 1 (Task 7 review finding): before canRename/canDelete became per-row predicates,
+    // a mixed-ownership List-view render had no way to grant Delete on an owned row without ALSO
+    // granting it on every other row rendered in the same table — under-granting everyone (owners
+    // included), never over-granting, but still wrong. Two albums, one owned ('a1') one not
+    // ('a2'), in a SINGLE table render is the only shape of test that can catch this: a scalar
+    // prop could produce identical output for a1 and a2 no matter what value was chosen, so this
+    // could not have been written before canRename/canDelete gained a per-row shape.
+    it('shows Delete on the owned row and not on the unowned row within the same render', () => {
+      const owned = makeAlbum({ id: 'owned', albumName: 'Mine', ownerId: 'me' });
+      const unowned = makeAlbum({ id: 'unowned', albumName: 'Theirs', ownerId: 'someone-else' });
+      renderWithTooltips(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [owned, unowned],
+        canManage: false,
+        canRename: (album: SharedSpaceLinkedAlbumDto) => album.ownerId === 'me',
+        canDelete: (album: SharedSpaceLinkedAlbumDto) => album.ownerId === 'me',
+        onRename: vi.fn(),
+        onDelete: vi.fn(),
+      });
+
+      // Positive control: both rows render, so the absence below is a real per-row decision, not
+      // a render failure.
+      expect(screen.getByTestId('space-album-row-owned')).toBeInTheDocument();
+      expect(screen.getByTestId('space-album-row-unowned')).toBeInTheDocument();
+
+      expect(screen.getByTestId('space-album-row-menu-owned')).toBeInTheDocument();
+      expect(screen.queryByTestId('space-album-row-menu-unowned')).not.toBeInTheDocument();
     });
   });
 });

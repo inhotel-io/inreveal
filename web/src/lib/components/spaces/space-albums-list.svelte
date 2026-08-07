@@ -457,7 +457,8 @@
       {spaceId}
       albums={searchHitAlbums}
       {canManage}
-      canRename={canManage}
+      canRename={(album) => canManage || isOwner(album)}
+      canDelete={(album) => isOwner(album)}
       {canSelectAlbum}
       {onUnlink}
       {onToggleTimeline}
@@ -516,7 +517,8 @@
         allAlbums={albums}
         {currentFolderId}
         {canManage}
-        canRename={canManage}
+        canRename={(album) => canManage || isOwner(album)}
+        canDelete={(album) => isOwner(album)}
         {canSelectAlbum}
         {groups}
         grouped
@@ -539,7 +541,8 @@
         allAlbums={albums}
         {currentFolderId}
         {canManage}
-        canRename={canManage}
+        canRename={(album) => canManage || isOwner(album)}
+        canDelete={(album) => isOwner(album)}
         {canSelectAlbum}
         {onUnlink}
         {onToggleTimeline}
