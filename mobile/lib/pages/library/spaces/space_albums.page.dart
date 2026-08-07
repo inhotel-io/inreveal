@@ -30,6 +30,22 @@ import 'package:immich_mobile/widgets/common/immich_toast.dart';
 import 'package:immich_mobile/widgets/common/search_field.dart';
 import 'package:openapi/api.dart' show ApiException;
 
+/// Compact padding for [SpaceAlbumsPage]'s three labelled app-bar actions (New folder / New album /
+/// Link).
+///
+/// Material 3's `TextButton.icon` default is `EdgeInsetsDirectional.only(start: 12, end: 16)` —
+/// 28dp per button, 54dp of total chrome once the icon and its gap are counted. Three of those
+/// overran the toolbar on a phone-width screen: `NavigationToolbar` then gave the title zero width
+/// and pushed the whole actions row left until it sat underneath the back button. 8dp either side
+/// trims each to 42dp, buying back 36dp across the row — enough for the title to survive and for
+/// the row to clear the leading.
+const _appBarActionStyle = ButtonStyle(
+  padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 8)),
+  // The default 64dp min width is inert here (every label is wider than that), but pinning it to
+  // zero keeps the horizontal padding above as the only thing setting each button's width.
+  minimumSize: WidgetStatePropertyAll(Size(0, kMinInteractiveDimension)),
+);
+
 /// Space Albums list/manage page — Surface 2 of the Phase-2B design.
 ///
 /// Pushed via [SpaceAlbumsRoute(spaceId, canEdit)] (standard slide-right).
@@ -636,22 +652,30 @@ class SpaceAlbumsPage extends HookConsumerWidget {
             : AppBar(
                 title: Text(_title(context, folders)),
                 centerTitle: false,
+                // [_appBarActionStyle] trims the trailing action's own padding to 8dp, which alone
+                // would leave "Link" almost touching the screen edge. Add the missing 8dp back here
+                // so the row keeps a conventional 16dp end margin without re-widening the gaps
+                // *between* the actions.
+                actionsPadding: const EdgeInsetsDirectional.only(end: 8),
                 actions: [
                   if (canEdit) ...[
                     TextButton.icon(
                       key: const Key('space-albums-new-folder-action'),
+                      style: _appBarActionStyle,
                       onPressed: createFolder,
                       icon: const Icon(Icons.create_new_folder_outlined),
                       label: Text('space_album_folder_new'.t(context: context)),
                     ),
                     TextButton.icon(
                       key: const Key('space-albums-new-album-action'),
+                      style: _appBarActionStyle,
                       onPressed: createAlbum,
                       icon: const Icon(Icons.photo_album_outlined),
                       label: Text('space_album_new'.t(context: context)),
                     ),
                     TextButton.icon(
                       key: const Key('space-albums-link-action'),
+                      style: _appBarActionStyle,
                       onPressed: () => onLink(folderId),
                       icon: const Icon(Icons.add),
                       label: Text('link'.t(context: context)),

@@ -2579,4 +2579,71 @@ void main() {
     expect(find.text('1 selected'), findsOneWidget);
     expect(find.byKey(const Key('space-album-card-selected-a')), findsOneWidget);
   });
+
+  // The three editor actions (New folder / New album / Link) are labelled `TextButton.icon`s, and
+  // every other test in this file pumps at the helper's 800dp TABLET width — where they fit with
+  // room to spare. On a phone they did not: with M3's default `TextButton.icon` padding
+  // (`EdgeInsetsDirectional.only(start: 12, end: 16)` = 28dp each) the row overran the toolbar,
+  // `NavigationToolbar` gave the title zero width, and the whole row was pushed left until it sat
+  // underneath the back button.
+  //
+  // This asserts the CHROME each action wraps around its label — icon + icon/label gap + padding —
+  // rather than any absolute toolbar width. That is deliberate: the widget-test font renders every
+  // glyph as a fixed-width box, so label widths here are ~1.8x their on-device value and no
+  // absolute "fits at 411dp" assertion would mean anything. Chrome is font-independent, and it is
+  // the only part of the width this page controls.
+  testWidgets('editor app-bar actions wrap their labels in compact chrome', (tester) async {
+    final router = RootStackRouter.build(
+      routes: [
+        AutoRoute(initial: true, page: PageInfo('SpaceAlbumsHarness', builder: (_) => const SizedBox.shrink())),
+        AutoRoute(page: SpaceAlbumsRoute.page),
+      ],
+    );
+
+    await tester.pumpWidget(
+      EasyLocalization(
+        supportedLocales: locales.values.toList(),
+        path: translationsPath,
+        startLocale: locales.values.first,
+        fallbackLocale: locales.values.first,
+        saveLocale: false,
+        useFallbackTranslations: true,
+        assetLoader: const CodegenLoader(),
+        child: ProviderScope(
+          overrides: _overrides(spaceId: spaceId, albums: const []),
+          child: Builder(
+            builder: (context) => MaterialApp.router(
+              debugShowCheckedModeBanner: false,
+              routerConfig: router.config(),
+              localizationsDelegates: context.localizationDelegates,
+              supportedLocales: context.supportedLocales,
+              locale: context.locale,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    // Pushed (not `initial`) so the AppBar gets its implicit back button — the widget the actions
+    // were crowding. See `pumpPageWithFolderStream` for why this push is deliberately not awaited.
+    unawaited(router.push(SpaceAlbumsRoute(spaceId: spaceId, canEdit: true)));
+    await tester.pumpAndSettle();
+
+    // Measured: 42dp with the compact style (icon + gap + 8dp padding either side), 54dp with M3's
+    // default `TextButton.icon` padding. 48dp sits between them with ~6dp of slack on both sides —
+    // enough to absorb M3 metric drift, not enough to let the default padding back in.
+    const maxChromePerAction = 48.0;
+
+    for (final (key, label) in [
+      ('space-albums-new-folder-action', 'New folder'),
+      ('space-albums-new-album-action', 'New album'),
+      ('space-albums-link-action', 'Link'),
+    ]) {
+      final action = find.byKey(Key(key));
+      expect(action, findsOneWidget, reason: '$key must be present for this measurement to mean anything');
+      final chrome =
+          tester.getSize(action).width - tester.getSize(find.descendant(of: action, matching: find.text(label))).width;
+      expect(chrome, lessThanOrEqualTo(maxChromePerAction), reason: '$key wraps its label in ${chrome}dp of chrome');
+    }
+  });
 }
