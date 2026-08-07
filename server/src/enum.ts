@@ -92,6 +92,7 @@ export enum SharedSpaceActivityType {
   AlbumLink = 'album_link',
   AlbumUnlink = 'album_unlink',
   AlbumBulkUnlink = 'album_bulk_unlink',
+  AlbumRename = 'album_rename',
 }
 
 export enum AssetOrder {

@@ -178,6 +178,16 @@ const SharedSpaceAlbumFolderMoveAlbumSchema = z
   })
   .meta({ id: 'SharedSpaceAlbumFolderMoveAlbumDto' });
 
+// Its own route rather than a field on PATCH :id/albums/:albumId, because that endpoint's
+// showInTimeline is deliberately required — an optional field there regenerates the Dart client
+// into three-state (isPresent) territory. Mirrors why PUT :id/albums/:albumId/folder exists.
+//
+// No .max(): upstream's albumName is an uncapped z.string(), so a cap here would make names
+// settable via PATCH /albums/{id} but not re-settable through this route.
+const SharedSpaceAlbumRenameSchema = z
+  .object({ name: z.string().trim().min(1).describe('New album name') })
+  .meta({ id: 'SharedSpaceAlbumRenameDto' });
+
 const SharedSpaceAlbumParamSchema = z.object({
   id: z.uuidv4(),
   albumId: z.uuidv4(),
@@ -293,6 +303,7 @@ export class SharedSpaceAlbumFolderDto extends createZodDto(SharedSpaceAlbumFold
 export class SharedSpaceAlbumFolderCreateDto extends createZodDto(SharedSpaceAlbumFolderCreateSchema) {}
 export class SharedSpaceAlbumFolderUpdateDto extends createZodDto(SharedSpaceAlbumFolderUpdateSchema) {}
 export class SharedSpaceAlbumFolderMoveAlbumDto extends createZodDto(SharedSpaceAlbumFolderMoveAlbumSchema) {}
+export class SharedSpaceAlbumRenameDto extends createZodDto(SharedSpaceAlbumRenameSchema) {}
 export class SharedSpaceAlbumParamDto extends createZodDto(SharedSpaceAlbumParamSchema) {}
 export class SharedSpaceAlbumLinkQueryDto extends createZodDto(SharedSpaceAlbumLinkQuerySchema) {}
 export class SharedSpaceAlbumFolderParamDto extends createZodDto(SharedSpaceAlbumFolderParamSchema) {}

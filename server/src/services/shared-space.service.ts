@@ -37,6 +37,7 @@ import {
   SharedSpaceAlbumFolderMoveAlbumDto,
   SharedSpaceAlbumFolderUpdateDto,
   SharedSpaceAlbumLinkUpdateDto,
+  SharedSpaceAlbumRenameDto,
   SharedSpaceAssetAddDto,
   SharedSpaceAssetLinkedAlbumDto,
   SharedSpaceAssetRemoveDto,
@@ -879,6 +880,55 @@ export class SharedSpaceService extends BaseService {
     dto: SharedSpaceAlbumLinkUpdateDto,
   ): Promise<void> {
     await this.#setAlbumTimelineChecked(auth, spaceId, albumId, dto.showInTimeline);
+  }
+
+  /**
+   * Rename a space-linked album. Gate mirrors #unlinkAlbumChecked: a current-space Editor
+   * short-circuits, otherwise the caller must hold AlbumUpdate on the album itself — which is how
+   * an owner who is not a space member can still rename their own album.
+   *
+   * The hasAlbumLink guard runs in BOTH arms, below the branch: without it in the owner arm, a
+   * leaked spaceId would inject an AlbumRename row into an unrelated space's activity feed, and a
+   * nonexistent spaceId 500s on the FK.
+   */
+  async renameAlbum(
+    auth: AuthDto,
+    spaceId: string,
+    albumId: string,
+    dto: SharedSpaceAlbumRenameDto,
+  ): Promise<void> {
+    const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
+    const isSpaceEditor = !!member && getSharedSpaceRoleScore(member.role) >= ROLE_HIERARCHY[SharedSpaceRole.Editor];
+    if (!isSpaceEditor) {
+      const allowed = await this.checkAccess({ auth, permission: Permission.AlbumUpdate, ids: [albumId] });
+      if (!allowed.has(albumId)) {
+        throw new ForbiddenException('Insufficient role');
+      }
+    }
+
+    const linked = await this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId);
+    if (!linked) {
+      throw new NotFoundException('Album is not linked to this space');
+    }
+
+    const album = await this.albumRepository.getById(albumId, { withAssets: false });
+    const previousName = album?.albumName ?? '';
+    if (previousName === dto.name) {
+      // A no-op rename must not spam the space feed.
+      return;
+    }
+
+    // Third argument is required — it is the id withAlbumUsers(authUserId) projects against.
+    // Pass the CALLER's id, not the owner's: a space editor renaming someone else's album is the
+    // caller, exactly as album.service.ts#update does.
+    await this.albumRepository.update(albumId, { id: albumId, albumName: dto.name }, auth.user.id);
+
+    await this.sharedSpaceRepository.logActivity({
+      spaceId,
+      userId: auth.user.id,
+      type: SharedSpaceActivityType.AlbumRename,
+      data: { albumId, albumName: dto.name, previousName },
+    });
   }
 
   // Checked core shared by updateAlbumLink above and the future bulk path (Task 3).

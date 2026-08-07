@@ -52,6 +52,7 @@ import {
   SharedSpaceAlbumLinkQueryDto,
   SharedSpaceAlbumLinkUpdateDto,
   SharedSpaceAlbumParamDto,
+  SharedSpaceAlbumRenameDto,
   SharedSpaceAssetAddDto,
   SharedSpaceAssetLinkedAlbumDto,
   SharedSpaceAssetRemoveDto,
@@ -819,5 +820,26 @@ export class SharedSpaceController {
     @Body() dto: SharedSpaceAlbumFolderMoveAlbumDto,
   ): Promise<void> {
     return this.service.setAlbumFolder(auth, id, albumId, dto);
+  }
+
+  @Put(':id/albums/:albumId/name')
+  @Authenticated({ permission: Permission.AlbumUpdate })
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Endpoint({
+    summary: 'Rename a space-linked album',
+    description:
+      'Requires space Editor OR album owner. Scoped Permission.AlbumUpdate rather than ' +
+      'SharedSpaceAlbumUpdate on purpose: @Authenticated gates API-KEY scope, and the effect of ' +
+      'this call is an album mutation visible everywhere in the product, not a change to ' +
+      'space-link metadata. A key holding only space-album scope must not be able to rename ' +
+      "arbitrary albums through this route's editor arm.",
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  renameSharedSpaceAlbum(
+    @Auth() auth: AuthDto,
+    @Param() { id, albumId }: SharedSpaceAlbumParamDto,
+    @Body() dto: SharedSpaceAlbumRenameDto,
+  ): Promise<void> {
+    return this.service.renameAlbum(auth, id, albumId, dto);
   }
 }

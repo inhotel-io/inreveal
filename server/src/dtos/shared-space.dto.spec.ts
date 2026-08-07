@@ -1,5 +1,6 @@
 import {
   SharedSpaceAlbumLinkQueryDto,
+  SharedSpaceAlbumRenameDto,
   SharedSpaceAssetAddDto,
   SharedSpaceAssetRemoveDto,
   SharedSpaceLibraryParamDto,
@@ -157,5 +158,16 @@ describe('SharedSpaceUpdateDto', () => {
   it('should accept an empty object, since every field is optional', () => {
     const result = SharedSpaceUpdateDto.schema.safeParse({});
     expect(result.success).toBe(true);
+  });
+});
+
+describe('SharedSpaceAlbumRenameDto', () => {
+  // Scenario 7 — so a blank name never reaches the service.
+  it('rejects a whitespace-only album name and trims a padded one', () => {
+    expect(SharedSpaceAlbumRenameDto.schema.safeParse({ name: ' '.repeat(3) }).success).toBe(false);
+    expect(SharedSpaceAlbumRenameDto.schema.safeParse({ name: '  Trip  ' })).toMatchObject({
+      success: true,
+      data: { name: 'Trip' },
+    });
   });
 });

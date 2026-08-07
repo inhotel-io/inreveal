@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { FACE_THUMBNAIL_SIZE } from 'src/constants';
 import { BulkIdErrorReason } from 'src/dtos/asset-ids.response.dto';
+import { AuthDto } from 'src/dtos/auth.dto';
 import { AssetEditAction } from 'src/dtos/editing.dto';
 import { MapMarkerResponseDto } from 'src/dtos/map.dto';
 import {
@@ -176,6 +177,29 @@ const setupBulkUnlinkAlbums = (mocks: ServiceMocks) => {
   mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
   return { auth, spaceId, a1, a2, a3 };
 };
+
+/** Editor-or-owner fixture for the renameAlbum tests. */
+const setupRenameAlbum = (mocks: ServiceMocks) => {
+  const auth = factory.auth();
+  const spaceId = newUuid();
+  const albumId = newUuid();
+  mocks.sharedSpace.hasAlbumLink.mockResolvedValue(true);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.album.getById.mockResolvedValue({ id: albumId, albumName: 'Old name' } as any);
+  mocks.album.update.mockResolvedValue({ id: albumId, albumName: 'New name' } as any);
+  return { auth, spaceId, albumId };
+};
+
+/** Makes the caller a space Editor. */
+const asSpaceEditor = (mocks: ServiceMocks, auth: AuthDto, spaceId: string) =>
+  mocks.sharedSpace.getMember.mockResolvedValue({
+    spaceId,
+    userId: auth.user.id,
+    role: SharedSpaceRole.Editor,
+  } as any);
+
+/** Makes the caller a non-member. */
+const asNonMember = (mocks: ServiceMocks) => mocks.sharedSpace.getMember.mockResolvedValue(void 0 as any);
 
 /** Helper to build an editor + destination folder fixture for the bulkSetAlbumFolder tests below. */
 const setupBulkSetAlbumFolder = (mocks: ServiceMocks) => {
@@ -9534,6 +9558,116 @@ describe(SharedSpaceService.name, () => {
       await expect(sut.updateAlbumLink(auth, space.id, newUuid(), { showInTimeline: false })).rejects.toThrow(
         ForbiddenException,
       );
+    });
+  });
+
+  describe('renameAlbum', () => {
+    // Scenario 1
+    it('lets a space Editor rename an album they do not own', async () => {
+      const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+      asSpaceEditor(mocks, auth, spaceId);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+      await sut.renameAlbum(auth, spaceId, albumId, { name: 'New name' });
+
+      expect(mocks.album.update).toHaveBeenCalledWith(albumId, { id: albumId, albumName: 'New name' }, auth.user.id);
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+        expect.objectContaining({
+          spaceId,
+          type: SharedSpaceActivityType.AlbumRename,
+          data: { albumId, albumName: 'New name', previousName: 'Old name' },
+        }),
+      );
+    });
+
+    // Scenario 2
+    it('lets the album owner rename even with no space membership', async () => {
+      const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+      asNonMember(mocks);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+
+      await sut.renameAlbum(auth, spaceId, albumId, { name: 'New name' });
+
+      expect(mocks.album.update).toHaveBeenCalled();
+    });
+
+    // Scenario 3
+    it('refuses a space Viewer who does not own the album, and logs nothing', async () => {
+      const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+      mocks.sharedSpace.getMember.mockResolvedValue({
+        spaceId,
+        userId: auth.user.id,
+        role: SharedSpaceRole.Viewer,
+      } as any);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+      await expect(sut.renameAlbum(auth, spaceId, albumId, { name: 'New name' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(mocks.album.update).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
+    });
+
+    // Scenario 4 — the guard must sit BELOW the branch, not inside the owner arm only.
+    it('404s for an unlinked album via the Editor arm, before any side effect', async () => {
+      const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+      asSpaceEditor(mocks, auth, spaceId);
+      mocks.sharedSpace.hasAlbumLink.mockResolvedValue(false);
+
+      await expect(sut.renameAlbum(auth, spaceId, albumId, { name: 'New name' })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(mocks.album.update).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
+    });
+
+    // Scenario 5 — same guard, owner arm.
+    it('404s for an unlinked album via the owner arm, before any side effect', async () => {
+      const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+      asNonMember(mocks);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set([albumId]));
+      mocks.sharedSpace.hasAlbumLink.mockResolvedValue(false);
+
+      await expect(sut.renameAlbum(auth, spaceId, albumId, { name: 'New name' })).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(mocks.album.update).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
+    });
+
+    // Scenario 6
+    it('is a no-op when the name is unchanged', async () => {
+      const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+      asSpaceEditor(mocks, auth, spaceId);
+
+      await sut.renameAlbum(auth, spaceId, albumId, { name: 'Old name' });
+
+      expect(mocks.album.update).not.toHaveBeenCalled();
+      expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
+    });
+
+    // Spec E6 — album names are NOT unique in Immich. Folder names are, and this endpoint sits
+    // right next to the folder ones, so pin the asymmetry before someone "helpfully" mirrors
+    // assertNoAlbumFolderNameConflict here.
+    it('allows renaming to a name another album already uses', async () => {
+      const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+      asSpaceEditor(mocks, auth, spaceId);
+
+      await sut.renameAlbum(auth, spaceId, albumId, { name: 'Trip B' });
+
+      expect(mocks.album.update).toHaveBeenCalledWith(albumId, { id: albumId, albumName: 'Trip B' }, auth.user.id);
+    });
+
+    // Scenario 20
+    it('logs the rename only in the space named in the path', async () => {
+      const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+      asSpaceEditor(mocks, auth, spaceId);
+      mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+      await sut.renameAlbum(auth, spaceId, albumId, { name: 'New name' });
+
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledTimes(1);
+      expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(expect.objectContaining({ spaceId }));
     });
   });
 
