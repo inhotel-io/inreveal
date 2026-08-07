@@ -56,6 +56,12 @@
     onRenameFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onMoveFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
     onDeleteFolder?: (folder: SharedSpaceAlbumFolderDto) => void;
+    /** Rename is canManage OR ownership; delete is ownership only (see isOwner/canSelectAlbum
+     * below). Named `*Album` (not the bare `onRename`/`onDelete` the card/table components use)
+     * to match the existing onRenameFolder/onMoveFolder/onDeleteFolder convention on this same
+     * Props interface. */
+    onRenameAlbum?: (album: SharedSpaceLinkedAlbumDto) => void;
+    onDeleteAlbum?: (album: SharedSpaceLinkedAlbumDto) => void;
     onDropItem?: (payload: DragPayload, targetFolderId: string | null) => void;
     // I-1 (fix round 2): bumped by the page after ANY drag-move — single-item or bulk, via
     // EITHER drop target (the folder grid, forwarded through onDropItem above, or the breadcrumb,
@@ -73,6 +79,7 @@
     onBulkToggleAlbumsTimeline?: (ids: string[], showInTimeline: boolean) => Promise<string[]>;
     onBulkMoveFolders?: (ids: string[]) => Promise<string[]>;
     onBulkDeleteFolders?: (ids: string[]) => Promise<string[]>;
+    onBulkDeleteAlbums?: (ids: string[]) => Promise<string[]>;
   }
 
   let {
@@ -94,6 +101,8 @@
     onRenameFolder,
     onMoveFolder,
     onDeleteFolder,
+    onRenameAlbum,
+    onDeleteAlbum,
     onDropItem,
     selectionMove = { seq: 0, movedIds: [] },
     onBulkUnlink,
@@ -101,7 +110,14 @@
     onBulkToggleAlbumsTimeline,
     onBulkMoveFolders,
     onBulkDeleteFolders,
+    onBulkDeleteAlbums,
   }: Props = $props();
+
+  // Ownership is a pure derivation — ownerId is already on SharedSpaceLinkedAlbumDto.
+  const isOwner = (album: SharedSpaceLinkedAlbumDto) => album.ownerId === authManager.user.id;
+  // §3 "Selectable predicate": a card is selectable iff canManage (space Editor) OR the viewer
+  // owns it. Folders have no owner concept at all and stay canManage-only (see selectFolder).
+  const canSelectAlbum = (album: SharedSpaceLinkedAlbumDto) => canManage || isOwner(album);
 
   const isSearching = $derived((searchQuery ?? '').trim().length > 0);
 
@@ -225,9 +241,18 @@
 
   // Design table (§5.1): "Click a card, selection active → toggles"; "no selection active →
   // opens". The card/row components have no opinion on which — they just report the click.
+  //
+  // canSelectAlbum gates the toggle branch too, not just the check circle's own render condition
+  // (space-album-card.svelte / space-albums-table.svelte): once a selection is active, a plain
+  // click anywhere on ANY card's body — including one with no check circle at all — routes here.
+  // Without this guard, a viewer with one owned album already selected could click the BODY of an
+  // album they do not own and silently join it to their selection despite it never having offered
+  // any select affordance.
   const handleAlbumClick = (album: SharedSpaceLinkedAlbumDto, shiftKey: boolean) => {
     if (selection.selectionActive) {
-      selectAlbum(album.id, shiftKey);
+      if (canSelectAlbum(album)) {
+        selectAlbum(album.id, shiftKey);
+      }
     } else {
       onOpenAlbum?.(album);
     }
@@ -383,6 +408,18 @@
     selection.kind === 'album' && selection.ids.every((id) => albums.find((a) => a.id === id)?.showInTimeline),
   );
 
+  // Bulk Delete is hidden, not disabled, the moment ownership stops being unanimous (§3) — this
+  // is the select bar's `canDelete`. `selection.count > 0` keeps an emptied-out selection (every
+  // id reconciled away) from reading `true` off a vacuous `.every()` on an empty array.
+  const allSelectedAlbumsOwned = $derived(
+    selection.kind === 'album' &&
+      selection.count > 0 &&
+      selection.ids.every((id) => {
+        const album = albums.find((a) => a.id === id);
+        return !!album && isOwner(album);
+      }),
+  );
+
   // Composes each bulk-action prop with the manager's own `reconcile` primitive (Task 10's review
   // hint): reconcile drops any selected id NOT in the given list, so handing it exactly "the ids
   // that should remain selected" — the contract each onBulk* prop above documents — makes total
@@ -420,8 +457,12 @@
       {spaceId}
       albums={searchHitAlbums}
       {canManage}
+      canRename={canManage}
+      {canSelectAlbum}
       {onUnlink}
       {onToggleTimeline}
+      onRename={onRenameAlbum}
+      onDelete={onDeleteAlbum}
       onOpenAlbum={handleAlbumClick}
       onToggleSelectAlbum={(album, shiftKey) => selectAlbum(album.id, shiftKey)}
       isAlbumSelected={(id) => selection.has('album', id)}
@@ -435,9 +476,13 @@
             {spaceId}
             album={hit.album}
             {canManage}
+            canRename={canManage || isOwner(hit.album)}
+            canDelete={isOwner(hit.album)}
             {onUnlink}
             {onToggleTimeline}
             onMove={onMoveAlbum}
+            onRename={onRenameAlbum}
+            onDelete={onDeleteAlbum}
             selected={selection.has('album', hit.album.id)}
             selectionCandidate={selection.isCandidate(hit.album.id)}
             selectedIds={selection.ids}
@@ -471,10 +516,14 @@
         allAlbums={albums}
         {currentFolderId}
         {canManage}
+        canRename={canManage}
+        {canSelectAlbum}
         {groups}
         grouped
         {onUnlink}
         {onToggleTimeline}
+        onRename={onRenameAlbum}
+        onDelete={onDeleteAlbum}
         onOpenFolder={handleFolderClick}
         onOpenAlbum={handleAlbumClick}
         onToggleSelectAlbum={(album, shiftKey) => selectAlbum(album.id, shiftKey)}
@@ -490,8 +539,12 @@
         allAlbums={albums}
         {currentFolderId}
         {canManage}
+        canRename={canManage}
+        {canSelectAlbum}
         {onUnlink}
         {onToggleTimeline}
+        onRename={onRenameAlbum}
+        onDelete={onDeleteAlbum}
         onOpenFolder={handleFolderClick}
         onOpenAlbum={handleAlbumClick}
         onToggleSelectAlbum={(album, shiftKey) => selectAlbum(album.id, shiftKey)}
@@ -556,9 +609,13 @@
                   {spaceId}
                   {album}
                   {canManage}
+                  canRename={canManage || isOwner(album)}
+                  canDelete={isOwner(album)}
                   {onUnlink}
                   {onToggleTimeline}
                   onMove={onMoveAlbum}
+                  onRename={onRenameAlbum}
+                  onDelete={onDeleteAlbum}
                   selected={selection.has('album', album.id)}
                   selectionCandidate={selection.isCandidate(album.id)}
                   selectedIds={selection.ids}
@@ -578,9 +635,13 @@
               {spaceId}
               {album}
               {canManage}
+              canRename={canManage || isOwner(album)}
+              canDelete={isOwner(album)}
               {onUnlink}
               {onToggleTimeline}
               onMove={onMoveAlbum}
+              onRename={onRenameAlbum}
+              onDelete={onDeleteAlbum}
               selected={selection.has('album', album.id)}
               selectionCandidate={selection.isCandidate(album.id)}
               selectedIds={selection.ids}
@@ -604,15 +665,18 @@
   </div>
 {/if}
 
-{#if canManage && selection.selectionActive}
+{#if (canManage || selection.kind === 'album') && selection.selectionActive}
   <SpaceAlbumSelectBar
     kind={selection.kind === 'folder' ? 'folder' : 'album'}
     count={selection.count}
     allInTimeline={allSelectedAlbumsInTimeline}
+    {canManage}
+    canDelete={allSelectedAlbumsOwned}
     onClear={() => selection.clear()}
     onUnlink={() => void runBulkAction(onBulkUnlink, selection.ids)}
     onMove={() => void runBulkAction(selection.kind === 'folder' ? onBulkMoveFolders : onBulkMoveAlbums, selection.ids)}
     onDelete={() => void runBulkAction(onBulkDeleteFolders, selection.ids)}
+    onDeleteAlbums={() => void runBulkAction(onBulkDeleteAlbums, selection.ids)}
     onToggleTimeline={(showInTimeline) =>
       void runBulkAction(
         onBulkToggleAlbumsTimeline && ((ids) => onBulkToggleAlbumsTimeline(ids, showInTimeline)),

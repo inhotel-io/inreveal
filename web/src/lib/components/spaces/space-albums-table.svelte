@@ -23,10 +23,23 @@
     canManage: boolean;
     /** Rename is allowed for a space Editor (canManage) OR the album's own owner. Defaults to
      * false so a caller that hasn't wired capability derivation yet fails closed rather than
-     * breaking the type check — same rationale as SpaceAlbumFolderNameModal's icon/label. */
+     * breaking the type check — same rationale as SpaceAlbumFolderNameModal's icon/label.
+     *
+     * Deliberately a table-WIDE scalar, not per-row: this single call renders every album passed
+     * in `albums`, unlike SpaceAlbumCard (instantiated once per album), so there is no single
+     * album here to derive an owner-specific value from. A caller with a mixed-ownership
+     * selection can only pass a value that is safe for every row it renders — e.g. `canManage`
+     * alone, which never wrongly grants Rename to a row the viewer does not own. Row-level
+     * SELECTABILITY does not share this limitation; see `canSelectAlbum` below. */
     canRename?: boolean;
-    /** Delete is allowed for the album's own owner ONLY — never granted by canManage alone. */
+    /** Delete is allowed for the album's own owner ONLY — never granted by canManage alone. Same
+     * table-wide-scalar caveat as `canRename` above. */
     canDelete?: boolean;
+    /** Per-ROW selectability (the check circle), independent of canRename/canDelete above — a
+     * viewer who owns just SOME of the rendered albums must still be able to select the ones they
+     * own. Defaults to `() => canManage` so a caller that hasn't wired per-album ownership keeps
+     * today's canManage-only behaviour. */
+    canSelectAlbum?: (album: SharedSpaceLinkedAlbumDto) => boolean;
     groups?: SpaceAlbumGroup[];
     grouped?: boolean;
     folders?: SharedSpaceAlbumFolderDto[];
@@ -53,6 +66,7 @@
     canManage,
     canRename = false,
     canDelete = false,
+    canSelectAlbum = () => canManage,
     groups = [],
     grouped = false,
     folders = [],
@@ -113,7 +127,11 @@
     ]}
     onclick={(event) => handleAlbumRowClick(event, album)}
   >
-    {#if canManage}
+    <!-- Per-ROW, unlike canRename/canDelete below (which stay table-wide scalars for the ⋮ menu —
+         see canSelectAlbum's own doc comment): a viewer who owns THIS album must be able to enter
+         selection even though canManage (space Editor) is false for them, without also exposing
+         the check circle on a row for an album they do not own. -->
+    {#if canSelectAlbum(album)}
       <td class="w-8 shrink-0 text-center">
         <button
           type="button"

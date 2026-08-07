@@ -15,6 +15,7 @@
   import { createAlbum } from '$lib/utils/album-utils';
   import {
     bulkDeleteAlbumFoldersAction,
+    bulkDeleteAlbumsAction,
     bulkMoveAlbumFoldersAction,
     bulkSetAlbumFolderAction,
     bulkSetAlbumTimelineAction,
@@ -28,6 +29,7 @@
     getSharedSpaceAlbumFolders,
     getSharedSpaceAlbums,
     linkAlbum,
+    renameSharedSpaceAlbum,
     setSharedSpaceAlbumFolder,
     SharedSpaceRole,
     unlinkAlbum,
@@ -39,7 +41,13 @@
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
   import { Button, Icon, modalManager, toastManager } from '@immich/ui';
-  import { mdiFolderPlusOutline, mdiImageMultipleOutline, mdiLinkVariantPlus, mdiPlus } from '@mdi/js';
+  import {
+    mdiFolderPlusOutline,
+    mdiImageMultipleOutline,
+    mdiLinkVariantPlus,
+    mdiPlus,
+    mdiRenameOutline,
+  } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -286,6 +294,34 @@
     }
   }
 
+  // Rename is canManage (space Editor) OR ownership — see space-albums-list.svelte's
+  // canRename={canManage || isOwner(album)}. Reuses SpaceAlbumFolderNameModal (Task 6's icon/label
+  // generalisation) rather than a second near-identical modal.
+  async function handleRenameAlbum(album: SharedSpaceLinkedAlbumDto) {
+    const name = await modalManager.show(SpaceAlbumFolderNameModal, {
+      title: $t('space_album_rename'),
+      initialName: album.albumName,
+      icon: mdiRenameOutline,
+      label: $t('space_album_name_label'),
+    });
+    if (!name) {
+      return;
+    }
+    try {
+      // NOT handleUpdateAlbum ($lib/services/album.service.ts) — that issues PATCH /albums/{id},
+      // which 403s for a space editor who does not own the album. This route carries the editor
+      // arm renameSharedSpaceAlbum was added for.
+      await renameSharedSpaceAlbum({ id: space.id, albumId: album.id, sharedSpaceAlbumRenameDto: { name } });
+      await reload();
+      // albumName is a field on the layout's cached linkedAlbums (same staleness concern as
+      // handleToggleTimeline/handleUnlink above) — without this, a re-mount via tab navigation
+      // would keep showing the pre-rename name until an unrelated full page refresh.
+      await invalidateAll();
+    } catch (error) {
+      handleError(error, $t('space_album_error_rename'));
+    }
+  }
+
   async function moveFolder(folderId: string, parentId: string | null) {
     try {
       await updateSharedSpaceAlbumFolder({
@@ -482,6 +518,44 @@
     return failedIds;
   }
 
+  // Serves single delete too — the card kebab's onDeleteAlbum passes one id (handleDeleteAlbum
+  // below) — so there is one code path and one failure contract, matching
+  // bulkDeleteAlbumsAction's own "single delete reuses the bulk path" design. The copy branches on
+  // length: the counted title/prompt (space_album_bulk_delete_title/_confirm) would read "Delete 1
+  // albums" for a lone item — the singular strings (space_album_delete /
+  // space_album_delete_confirm) exist specifically to avoid that.
+  async function handleBulkDeleteAlbums(ids: string[], albumName?: string): Promise<string[]> {
+    const single = ids.length === 1;
+    const confirmed = await modalManager.showDialog({
+      title: single ? $t('space_album_delete') : $t('space_album_bulk_delete_title', { values: { count: ids.length } }),
+      prompt: single
+        ? $t('space_album_delete_confirm', { values: { name: albumName ?? '' } })
+        : $t('space_album_bulk_delete_confirm'),
+      confirmText: $t('delete'),
+      confirmColor: 'danger',
+    });
+    if (!confirmed) {
+      // Nothing happened, so nothing should be deselected — same contract as every other bulk
+      // handler above.
+      return ids;
+    }
+    const { failedIds, failedCount } = await bulkDeleteAlbumsAction(space.id, ids);
+    notifyBulkFailures(failedCount);
+    await reload();
+    // The [spaceId] layout separately caches linkedAlbums (used by the Timeline tab and a
+    // re-mount on tab navigation) — same staleness concern as every other mutating handler above
+    // (handleUnlink, handleBulkUnlink, handleBulkDeleteFolders): a deleted album must not keep
+    // appearing there until an unrelated full page refresh.
+    await invalidateAll();
+    return failedIds;
+  }
+
+  // The card kebab's single-album Delete — routes through the same confirm/request/reconcile path
+  // as the bulk case above, just with a one-element array.
+  async function handleDeleteAlbum(album: SharedSpaceLinkedAlbumDto): Promise<void> {
+    await handleBulkDeleteAlbums([album.id], album.albumName);
+  }
+
   // Drag counterparts of handleBulkMoveAlbums/handleBulkMoveFolders above, for a multi-id drop
   // (S-22): no confirm (a drag is not destructive) and no folder-picker modal (the target is the
   // drop's own destination), otherwise the same bulk-action-plus-toast shape. `markSelectionMoved`
@@ -642,6 +716,8 @@
         onRenameFolder={handleRenameFolder}
         onMoveFolder={handleMoveFolder}
         onDeleteFolder={handleDeleteFolder}
+        onRenameAlbum={handleRenameAlbum}
+        onDeleteAlbum={handleDeleteAlbum}
         onDropItem={handleDropItem}
         {selectionMove}
         onBulkUnlink={handleBulkUnlink}
@@ -649,6 +725,7 @@
         onBulkToggleAlbumsTimeline={handleBulkToggleAlbumsTimeline}
         onBulkMoveFolders={handleBulkMoveFolders}
         onBulkDeleteFolders={handleBulkDeleteFolders}
+        onBulkDeleteAlbums={handleBulkDeleteAlbums}
       />
     </div>
   {/if}

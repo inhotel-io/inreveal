@@ -1150,5 +1150,75 @@ describe('SpaceAlbumsList', () => {
         expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2');
       });
     });
+
+    // Scenarios 36-38: a space viewer (canManage: false) who owns some but not all linked albums.
+    // authManager's current user id is 'me' (outer beforeEach) — makeAlbum/linkedAlbum default
+    // ownerId to 'owner-1', so an album must explicitly set ownerId: 'me' to count as owned here.
+    describe('viewer ownership gating', () => {
+      // Scenario 36
+      it('lets a viewer select an album they own but not one they do not', async () => {
+        renderList({
+          ...props,
+          canManage: false,
+          albums: [linkedAlbum('a', { ownerId: 'me' }), linkedAlbum('b', { ownerId: 'someone-else' })],
+          folders: [],
+        });
+
+        // Positive control: both cards render, so any absence below is a real gating decision,
+        // not a render failure.
+        expect(screen.getByTestId('space-album-card-a')).toBeInTheDocument();
+        expect(screen.getByTestId('space-album-card-b')).toBeInTheDocument();
+
+        // Owned album: the check circle exists and clicking it enters selection.
+        expect(screen.getByTestId('space-album-select-a')).toBeInTheDocument();
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+
+        // Unowned album: no check circle at all — nothing for the viewer to click to select it.
+        expect(screen.queryByTestId('space-album-select-b')).not.toBeInTheDocument();
+
+        // Every album selection entry point is gated, not just the check circle: clicking the
+        // BODY of the unowned card (selection is already active, so this would normally toggle
+        // it) must also be a no-op rather than silently joining a card with no select affordance.
+        await fireEvent.click(screen.getByTestId('space-album-card-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+        expect(screen.getByTestId('space-album-card-b')).not.toHaveAttribute('data-selected', 'true');
+      });
+
+      // Scenario 37
+      it('does not let a viewer select a folder', async () => {
+        renderList({ ...props, canManage: false, albums: [], folders: [folderDto('f')] });
+
+        // Positive control: the folder card itself renders.
+        expect(screen.getByTestId('space-album-folder-card')).toBeInTheDocument();
+        expect(screen.queryByTestId('space-album-folder-select-f')).not.toBeInTheDocument();
+
+        // A plain click on the folder card (no selection active) opens it rather than selecting —
+        // folder selection stays canManage-gated, with no owner-based widening.
+        await fireEvent.click(screen.getByTestId('space-album-folder-card'));
+        expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument();
+      });
+
+      // Scenario 38 — an editor (canManage: true) can select any album regardless of ownership;
+      // Delete only ever shows while the whole selection is unanimously owned.
+      it('hides bulk Delete once an unowned album joins the selection', async () => {
+        renderList({
+          ...props,
+          canManage: true,
+          albums: [linkedAlbum('a', { ownerId: 'me' }), linkedAlbum('b', { ownerId: 'someone-else' })],
+          folders: [],
+        });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        expect(
+          within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Delete album' }),
+        ).toBeInTheDocument(); // positive control
+
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(
+          within(screen.getByTestId('space-album-select-bar')).queryByRole('button', { name: 'Delete album' }),
+        ).not.toBeInTheDocument();
+      });
+    });
   });
 });

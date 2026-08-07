@@ -119,8 +119,12 @@
     ]}
   >
     <!-- Check circle — sibling of the anchor, not inside it. Always in the DOM (never hover-gated
-         for RENDERING, only for opacity) so it is directly clickable without first hovering. -->
-    {#if canManage}
+         for RENDERING, only for opacity) so it is directly clickable without first hovering.
+         Gated the same way as the ⋮ menu below: canManage || canRename || canDelete is exactly
+         the "selectable" predicate (canManage || isOwner(album)) once space-albums-list.svelte
+         derives canRename/canDelete per album — a viewer who owns this album must be able to
+         enter selection even though canManage (space Editor) is false for them. -->
+    {#if canManage || canRename || canDelete}
       <div
         class={[
           'absolute inset-s-6 top-6 z-10 transition-opacity',

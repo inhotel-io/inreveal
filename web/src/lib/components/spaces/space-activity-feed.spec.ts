@@ -93,6 +93,15 @@ describe('SpaceActivityFeed', () => {
         data: { albumName: 'Trip', count: 3 },
         text: 'unlinked "Trip" and 2 others',
       },
+      // Scenario 47. The server logs `previousName`/`albumName` (shared-space.service.ts's
+      // renameAlbum: `data: { albumId, albumName: dto.name, previousName }`), not `oldName`/
+      // `newName` — the getDescription case below reads those exact keys.
+      { type: 'album_rename', data: { previousName: 'A', albumName: 'B' }, text: 'renamed album "A" to "B"' },
+      { type: 'album_delete', data: { albumName: 'Trip' }, text: 'deleted album "Trip"' },
+      // Same convention as album_bulk_unlink: the server logs the TOTAL succeeded (bulkDeleteAlbums:
+      // `data: { count: succeeded.length, albumName: ... }`), and the i18n string reads "{albumName}
+      // and N other(s)" with no trailing "albums" — 3 succeeded renders as "and 2 others" here.
+      { type: 'album_bulk_delete', data: { albumName: 'Trip', count: 3 }, text: 'deleted "Trip" and 2 others' },
     ];
 
     for (const { type, data, text } of cases) {
@@ -130,6 +139,25 @@ describe('SpaceActivityFeed', () => {
       ];
       renderFeed({ activities, spaceColor: 'primary', onLoadMore: vi.fn(), hasMore: false });
       expect(screen.getByTestId('activity-item-act-bulk-solo')).toHaveTextContent('Bob unlinked "Solo" and 0 others');
+    });
+
+    // Scenario 47. Real server behaviour never produces album_bulk_delete with count: 1 —
+    // bulkDeleteAlbums only logs AlbumBulkDelete when succeeded.length > 1, routing a single
+    // success through the singular AlbumDelete type instead — but getDescription's clamp must stay
+    // defensively correct regardless, exactly mirroring the album_bulk_unlink test above.
+    it('renders album_bulk_delete with zero others when only one album was deleted', () => {
+      const activities = [
+        makeActivity({
+          id: 'act-bulk-delete-solo',
+          type: 'album_bulk_delete',
+          data: { albumName: 'Trip', count: 1 },
+          userName: 'Bob',
+        }),
+      ];
+      renderFeed({ activities, spaceColor: 'primary', onLoadMore: vi.fn(), hasMore: false });
+      expect(screen.getByTestId('activity-item-act-bulk-delete-solo')).toHaveTextContent(
+        'Bob deleted "Trip" and 0 others',
+      );
     });
   });
 });

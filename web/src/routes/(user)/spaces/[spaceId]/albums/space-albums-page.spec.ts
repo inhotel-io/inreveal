@@ -1724,6 +1724,90 @@ describe('Space albums page', () => {
       await waitFor(() => expect(modalManagerMock.showDialog).toHaveBeenCalled());
       expect(sdkMock.bulkDeleteAlbumFolders).not.toHaveBeenCalled();
     });
+
+    // Scenario 41. The select bar's album Delete button only ever shows when the whole selection
+    // is unanimously owned (space-albums-list.svelte's allSelectedAlbumsOwned), so the selected
+    // album must be owned by the current user ('current-user-id', set in the outer beforeEach) for
+    // "Delete album" to even render.
+    it('deselects nothing and issues no request when the delete confirm is cancelled', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(false);
+      renderPage([makeAlbum({ id: 'a1', albumName: 'Rome', ownerId: 'current-user-id' })], SharedSpaceRole.Editor);
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Delete album' }),
+      );
+
+      await waitFor(() => expect(modalManagerMock.showDialog).toHaveBeenCalled());
+      expect(sdkMock.bulkDeleteAlbums).not.toHaveBeenCalled();
+      // Nothing happened, so nothing should be deselected — mirrors the bulk-unlink/bulk-delete-
+      // folders "dismissing the confirm dialog" tests above.
+      expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1');
+    });
+
+    // Scenario 42
+    it('keeps the failed ids selected and warns once after a partial failure', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      sdkMock.bulkDeleteAlbums.mockResolvedValue([
+        { id: 'a1', success: true },
+        { id: 'a2', success: false, error: 'no_permission' },
+      ] as never);
+      sdkMock.getSharedSpaceAlbums.mockResolvedValue([
+        makeAlbum({ id: 'a2', albumName: 'Venice', ownerId: 'current-user-id' }),
+      ]);
+      renderPage(
+        [
+          makeAlbum({ id: 'a1', albumName: 'Rome', ownerId: 'current-user-id' }),
+          makeAlbum({ id: 'a2', albumName: 'Venice', ownerId: 'current-user-id' }),
+        ],
+        SharedSpaceRole.Editor,
+      );
+
+      await fireEvent.click(await screen.findByTestId('space-album-select-a1'));
+      await fireEvent.click(screen.getByTestId('space-album-select-a2'));
+      await fireEvent.click(
+        within(screen.getByTestId('space-album-select-bar')).getByRole('button', { name: 'Delete album' }),
+      );
+
+      // Exactly one warning toast, not one per failed item (notifyBulkFailures — shared with every
+      // other bulk action's partial-failure path).
+      await waitFor(() => expect(toastManager.warning).toHaveBeenCalledWith('1 item could not be updated'));
+      expect(toastManager.warning).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+      expect(screen.getByTestId('space-album-card-a2')).toHaveAttribute('data-selected', 'true');
+    });
+
+    // Scenario 43. modalManagerMock.show stands in for the real SpaceAlbumFolderNameModal, which
+    // trims on submit (SpaceAlbumFolderNameModal.svelte's onSubmit) — so a mocked resolution of an
+    // already-trimmed name matches exactly what the real modal would ever hand back. The point
+    // asserted here is that the page forwards that name verbatim to renameSharedSpaceAlbum (never
+    // the owner-only PATCH /albums/{id} handleUpdateAlbum would issue) and that a successful
+    // rename's reload() actually renders the server's new name, not just an optimistic local edit.
+    it('sends the trimmed name on rename and renders it', async () => {
+      modalManagerMock.show.mockResolvedValue('New Name');
+      sdkMock.renameSharedSpaceAlbum.mockResolvedValue(undefined as never);
+      const album = makeAlbum({ id: 'album-1', albumName: 'Old Name' });
+      renderPage([album], SharedSpaceRole.Editor);
+      await screen.findByText('Old Name'); // positive control
+
+      // Queued AFTER the initial render (which already consumed the standing mock via the
+      // on-mount reload) so it applies to the rename's OWN reload() call specifically.
+      sdkMock.getSharedSpaceAlbums.mockResolvedValueOnce([{ ...album, albumName: 'New Name' }]);
+
+      const menuButton = screen.getByTestId('space-album-card-menu').querySelector('button');
+      await fireEvent.click(menuButton!);
+      await fireEvent.click(await screen.findByText('Rename album'));
+
+      await waitFor(() =>
+        expect(sdkMock.renameSharedSpaceAlbum).toHaveBeenCalledWith({
+          id: 'space-1',
+          albumId: 'album-1',
+          sharedSpaceAlbumRenameDto: { name: 'New Name' },
+        }),
+      );
+      await waitFor(() => expect(screen.getByText('New Name')).toBeInTheDocument());
+      expect(screen.queryByText('Old Name')).not.toBeInTheDocument();
+    });
   });
 
   // ── Viewer gating: card menu and empty CTA ──────────────────────────────────

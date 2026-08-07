@@ -90,6 +90,24 @@
           values: { name, albumName: String(data.albumName ?? ''), count: others },
         });
       }
+      case 'album_rename': {
+        return $t('spaces_activity_renamed_album', {
+          values: { name, oldName: String(data.previousName ?? ''), newName: String(data.albumName ?? '') },
+        });
+      }
+      case 'album_delete': {
+        return $t('spaces_activity_deleted_album', { values: { name, albumName: String(data.albumName ?? '') } });
+      }
+      case 'album_bulk_delete': {
+        // Same convention as album_bulk_unlink above: the server logs `count` as the TOTAL
+        // succeeded, not "others", and the i18n string reads "{albumName} and N other(s)" — so the
+        // count fed to it here is the total minus the one already named, clamped so a lone delete
+        // (0 others) never goes negative.
+        const others = Math.max(count - 1, 0);
+        return $t('spaces_activity_bulk_deleted_albums', {
+          values: { name, albumName: String(data.albumName ?? ''), count: others },
+        });
+      }
       case 'person_update': {
         return $t('spaces_activity_updated_person', { values: { name, personName: String(data.personName ?? '') } });
       }
