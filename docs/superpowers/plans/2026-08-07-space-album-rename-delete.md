@@ -252,6 +252,18 @@ describe('renameAlbum', () => {
     expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
   });
 
+  // Spec E6 — album names are NOT unique in Immich. Folder names are, and this endpoint sits
+  // right next to the folder ones, so pin the asymmetry before someone "helpfully" mirrors
+  // assertNoAlbumFolderNameConflict here.
+  it('allows renaming to a name another album already uses', async () => {
+    const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
+    asSpaceEditor(mocks, auth, spaceId);
+
+    await sut.renameAlbum(auth, spaceId, albumId, { name: 'Trip B' });
+
+    expect(mocks.album.update).toHaveBeenCalledWith(albumId, { id: albumId, albumName: 'Trip B' }, auth.user.id);
+  });
+
   // Scenario 20
   it('logs the rename only in the space named in the path', async () => {
     const { auth, spaceId, albumId } = setupRenameAlbum(mocks);
