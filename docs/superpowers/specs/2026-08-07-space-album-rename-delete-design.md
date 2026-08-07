@@ -88,14 +88,20 @@ The single master gate is replaced by **per-action capabilities**, because the n
 both directions: a space Editor gains rename over albums they do not own, and an album owner who is
 only a space _viewer_ gains rename and delete.
 
-| Action                                    | Capability                                | Change    |
-| ----------------------------------------- | ----------------------------------------- | --------- |
-| Unlink · Move to folder · Toggle timeline | `canManage` (space Editor)                | unchanged |
-| Folder create / rename / move / delete    | `canManage`                               | unchanged |
-| Drag an album or folder card (web)        | `canManage`                               | unchanged |
-| **Rename album**                          | `canManage` **OR** `isOwner(album)`       | new       |
-| **Delete album**                          | `isOwner(album)` — _only_                 | new       |
-| **Bulk delete albums**                    | `isOwner(a)` for **every** selected album | new       |
+| Action                                    | Capability                                 | Change    |
+| ----------------------------------------- | ------------------------------------------ | --------- |
+| Unlink · Move to folder · Toggle timeline | `canManage` (space Editor)                 | unchanged |
+| Folder create / rename / move / delete    | `canManage`                                | unchanged |
+| Drag an album or folder card (web)        | `canManage`                                | unchanged |
+| **Rename album**                          | `canManage` **OR** `hasAlbumUpdate(album)` | new       |
+| **Delete album**                          | `isOwner(album)` — _only_                  | new       |
+| **Bulk delete albums**                    | `isOwner(a)` for **every** selected album  | new       |
+
+`hasAlbumUpdate(album)` is anyone holding `Permission.AlbumUpdate` on the album — its owner, **or** a
+classic album-level editor (`album_user.role = editor`). Deliberately wider than `isOwner`: a classic
+editor can already rename the album via `PATCH /albums/{id}`, so granting them rename from the space
+surface too gives nothing away, and restricting it to owner-only would make this route _stricter_ than
+the album's own page.
 
 Two derived rules keep the surfaces coherent:
 
@@ -160,8 +166,10 @@ deliberately — it matches the folder schemas and stops `"   "` reaching the se
 **Service** `renameAlbum(auth, spaceId, albumId, dto)`:
 
 1. Gate, mirroring `#unlinkAlbumChecked`: `getMember` → if the caller is space Editor or above,
-   short-circuit; otherwise `checkAccess({ permission: Permission.AlbumUpdate, ids: [albumId] })` must
-   return the album, else `ForbiddenException`.
+   short-circuit; otherwise the caller must hold `Permission.AlbumUpdate` on the album — its owner,
+   **or** a classic album-level editor (`access.ts:208-214`; that editor could already rename via
+   `PATCH /albums/{id}`, so this arm grants them nothing new) — via
+   `checkAccess({ permission: Permission.AlbumUpdate, ids: [albumId] })`, else `ForbiddenException`.
 2. **In both arms**, `hasAlbumLink(spaceId, albumId)` or `NotFoundException`, before any side effect.
 3. Read the album for `previousName`; if `previousName === name`, return without writing or logging
    (a no-op rename must not spam the feed).
