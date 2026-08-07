@@ -215,8 +215,19 @@ owner who is not a space member must succeed — so it must **not** hoist.
 - `succeeded.length === 1` → one `AlbumDelete` row `{ albumId, albumName }`.
 - `succeeded.length > 1` → one `AlbumBulkDelete` row `{ count, albumName }` where `albumName` is the
   first success, matching `AlbumBulkUnlink`'s shape so the feed can render "X and N others".
-- `succeeded.length === 0` → no activity row, no reconcile.
-- One `queueAlbumGrantReconcile(succeeded)` for the whole batch.
+- `succeeded.length === 0` → no activity row.
+
+**No `queueAlbumGrantReconcile` on this path** — unlike `bulkUnlinkAlbums`, which needs it. Traced
+through: `reconcileAlbumGrants` (`shared-space.repository.ts:1070`) does two inserts, the first
+selecting from `shared_space_album` joined to `album`, the second from `shared_space_album_user`. Both
+of those tables have `albumId` FKs to `album` with `ON DELETE CASCADE`
+(`shared-space-album.table.ts:42`, `shared-space-album-user.table.ts`), so by the time the job runs,
+every row it could read is gone and both inserts match nothing. Queueing it would be provably dead
+work, and pinning it in a test would mislead the next reader into thinking it is load-bearing. The
+tombstones clients actually need come from the `shared_space_album_delete_audit` trigger, not from
+reconcile — see §2.2(3) and scenario 18. The nightly
+`SharedSpaceAlbumGrantReconcileSweep` remains the backstop; its own comment already names
+"cascade-deletion strands" as what it exists to catch.
 
 ### 4.3 New activity types
 
@@ -224,6 +235,11 @@ Three values on `SharedSpaceActivityType` (`server/src/enum.ts`, beside `album_b
 `album_rename`, `album_delete`, `album_bulk_delete`. Each needs a `case` in
 `web/src/lib/components/spaces/space-activity-feed.svelte`; `album_bulk_delete` reuses the
 `Math.max(count - 1, 0)` "and N others" convention `album_bulk_unlink` documents.
+
+**No migration is required.** `shared_space_activity.type` is
+`@Column({ type: 'character varying', length: 30 })` — a plain varchar, not a Postgres enum
+(`shared-space-activity.table.ts:26`). The three new values are 12, 12 and 17 characters, all inside
+the cap. That 30-character ceiling is the constraint to remember if a fourth value is ever added.
 
 ### 4.4 Deliberately unchanged
 
@@ -254,6 +270,18 @@ fetch, no new store, no new load path.
 | `lib/components/spaces/space-activity-feed.svelte`                  | three new `case`s (§4.3)                                                                                                                                                                   |
 
 Reconcile behaviour, drag behaviour, grouping and the range-anchor logic are all untouched.
+
+Two things the table above must not be read loosely on:
+
+- **The rename handler calls the newly generated SDK function for `PUT …/albums/:albumId/name` — not
+  `handleUpdateAlbum`** (`lib/services/album.service.ts:305`). That helper issues `PATCH /albums/{id}`,
+  which is exactly the call that 403s for a space editor who does not own the album (§2.2(2)). Reaching
+  for it because "there's already an album-update helper" reintroduces the bug this route exists to fix.
+- **`space-album-select-bar.svelte`'s new `canManage` prop must default to `true`.** The existing
+  `space-album-select-bar.spec.ts` renders `{ kind: 'album', count: 3, onClear }` and asserts the
+  Unlink/Move/Timeline buttons are present without passing any capability prop; a `false` default would
+  break those specs for the wrong reason. `canDelete` defaults to `false` — the new capability is
+  opt-in.
 
 ## 6. Mobile design
 
@@ -289,6 +317,27 @@ tick. The server re-checks regardless, so a hidden affordance is the only possib
 | `pages/library/spaces/space_albums.page.dart`               | `_AlbumCard` takes `isOwnedByMe`; ⋮ items gated per capability; long-press selectable predicate widened; select bar gains Delete when ownership is unanimous. Reuses `_promptFolderName` for rename and the file's existing confirm-dialog shape for delete |
 | `presentation/widgets/spaces/space_album_kebab.widget.dart` | `canRename` / `canDelete` props and the two new items; the widget's own doc comment ("exactly 3 items") must be updated with it                                                                                                                             |
 | `pages/library/spaces/space_album_detail.page.dart`         | wire both; pop back to the albums list on successful delete                                                                                                                                                                                                 |
+
+One naming detail the implementer must not skip past: `_promptFolderName`'s dialog hard-codes the
+widget keys `space-album-folder-name-field` / `-cancel` / `-confirm`. Reusing it for album rename
+means the album tests select folder-named keys, which reads as a copy-paste bug to the next person.
+Parameterise the key prefix when the dialog is reused, and rename the helper to match its widened role.
+
+### 6.3 Refreshing the user's own album list
+
+`RemoteAlbumNotifier` (`providers/infrastructure/remote_album.provider.dart:44`) holds a **snapshot**
+in `state.albums`, not a reactive Drift watch — which is why its own `deleteAlbum` mutates state by
+hand (`state.copyWith(albums: …)`) after the API call. The space paths bypass that notifier entirely,
+so without an explicit step, an album you renamed or deleted from a space surface keeps its old name,
+or keeps existing, in the **Albums tab, the album picker and every add-to-album flow** until something
+calls `refresh()`. The sync nudge updates Drift; it does not touch that in-memory list.
+
+Therefore `SpaceAlbumActions.renameAlbum` and `bulkDeleteAlbums` must, after a successful server call,
+refresh the remote-album list — read through `ref` at the call site rather than injecting the notifier
+into `SpaceAlbumActions`, which is deliberately repository-only. Scenarios 46a/46b pin it.
+
+This applies to owned albums only, which is exactly the set these two actions can touch: an album you
+do not own has no `remote_album` row to go stale.
 
 ## 7. i18n
 
@@ -346,115 +395,184 @@ Delete:
 
 8. **Given** the caller owns the album, **when** bulk-delete with one id, **then**
    `eventRepository.emit('AlbumDelete', …)` is called **before** `albumRepository.delete`, one
-   `album_delete` activity row is logged, and `queueAlbumGrantReconcile` is called once.
+   `album_delete` activity row is logged, and **no** grant-reconcile job is queued (§4.2).
 9. **Given** the caller is the space **Owner** but does not own the album, **then** the item fails
    with `no_permission` and `albumRepository.delete` is never called. _(The regression most likely to
    creep back in — a future "owners can do anything in their space" change would break exactly this.)_
 10. **Given** the caller owns the album but is not a space member, **then** it succeeds.
 11. **Given** a mixed batch — two owned, one not — **then** 200 with per-item results, two successes,
-    one `no_permission`, exactly **one** `album_bulk_delete` row with `count: 2`, and **one**
-    reconcile call.
+    one `no_permission`, and exactly **one** `album_bulk_delete` row with `count: 2`.
 12. **Given** exactly one of several ids succeeds, **then** the row is `album_delete`, not
     `album_bulk_delete`.
-13. **Given** every item fails, **then** 200, no activity row, no reconcile.
+13. **Given** every item fails, **then** 200 and no activity row.
 14. **Given** an album not linked to this space, **then** `not_found`, and it is not deleted.
 15. **Given** the same id twice in one request, **then** one delete, one success entry.
 16. **Given** `ids: []`, **then** 400 from the DTO (`.min(1)`); **given** 1001 ids, 400 (`.max(1000)`).
 17. **Given** a non-member, non-owner caller, **then** every item reports `no_permission` and the
     request is still 200 — i.e. the absence of a hoisted `requireRole` is asserted, not assumed.
+18. **Given** the album is in the trash (`album.deletedAt` set), **when** delete or rename via the
+    **owner** arm, **then** `no_permission` / 403 — not `not_found`. `checkOwnerAccess` filters
+    `album.deletedAt is null` (`access.repository.ts:96`), so a trashed album is invisible to the
+    ownership check. Pinned so the reason code is a decision, not an accident.
+19. **Given** two concurrent requests delete the same album, **when** the second lands, **then** it
+    reports `no_permission` (the `album` row is gone, so `checkOwnerAccess` returns nothing), it does
+    **not** throw, and **no** second activity row is logged.
+20. **Given** a rename of an album linked to two spaces, **then** the `album_rename` row lands only in
+    the space named in the path, and the album's name changes in both. The delete counterpart is E12.
 
 ### 8.2 Server — medium (`server/test/medium`) and e2e
 
 Medium, against a real DB, in the existing
 `server/test/medium/specs/services/shared-space-album.service.spec.ts`:
 
-18. **Given** an album linked to two spaces, **when** deleted, **then** both `shared_space_album` rows
+21. **Given** an album linked to two spaces, **when** deleted, **then** both `shared_space_album` rows
     are gone (FK cascade) and `shared_space_album_audit` has a delete row for each — the sync path
     §2.2(3) claims. Asserting this is what stops a silent "album vanishes on web, lingers on mobile".
+22. **And** `shared_space_album_user_audit` has a tombstone for every member who lost access — kept a
+    separate scenario, because this is the assertion that actually earns the medium test.
+    `shared_space_album_delete_audit` is a statement-level `AFTER DELETE` trigger on
+    `shared_space_album` that computes "who loses access"; on an **album** delete, both
+    `shared_space_album` and `shared_space_album_user` cascade from the _same_ statement, and nothing
+    in the schema orders those two cascades relative to the trigger. So whether the trigger still sees
+    the grant rows it reasons about is an empirical property of Postgres here, not something the table
+    comment establishes. If it fires after the grants are gone, members' clients are never told they
+    lost access and hold stale space assets indefinitely — invisible in every unit test, since those
+    mock the DB. Also assert `shared_space_album_user` itself is empty for the album, confirming the
+    cascade ran at all.
 
 E2E (`e2e/src/specs/server/api/shared-space-album.e2e-spec.ts`, alongside the existing
 `shared-space-album-folder.e2e-spec.ts`):
 
-19. Full RBAC matrix over both routes: space Owner / Editor / Viewer / non-member × album owner / not,
+23. Full RBAC matrix over both routes: space Owner / Editor / Viewer / non-member × album owner / not,
     asserting status codes and, for bulk, per-item `error` reasons.
-20. An API key scoped only to `sharedSpaceAlbum.delete` is **refused** on `albums/bulk-delete`; a key
+24. An API key scoped only to `sharedSpaceAlbum.delete` is **refused** on `albums/bulk-delete`; a key
     with `album.delete` is accepted. Likewise `sharedSpaceAlbum.update` vs `album.update` on the
     rename route. This pins §4.1/§4.2's scope decision, which is otherwise invisible.
-21. Route-placement regression: a request whose path segment is the literal `bulk-delete` reaches the
+25. Route-placement regression: a request whose path segment is the literal `bulk-delete` reaches the
     bulk handler and not a `:albumId` route — i.e. it does not 400 with "invalid uuid". Cheap, and it
     is the test that fails the day someone adds a `@Post(':id/albums/:albumId')` above it (§4.2).
 
 ### 8.3 Web — vitest
 
-`space-album-card.spec.ts` / `space-albums-table.spec.ts`, each over the four combinations:
+`space-album-card.spec.ts` and `space-albums-table.spec.ts`, each over all four combinations. The
+positive cases (22, 24) and the negatives (23, 25) live in the **same file** by design: a negative
+alone would pass against a menu that never renders at all.
 
-22. editor + owner → Rename **and** Delete present, alongside the three existing items.
-23. editor + not owner → Rename present, Delete **absent** (same file also asserts Delete present in
-    (22), so the negative cannot pass vacuously).
-24. viewer + owner → ⋮ present with Rename and Delete only; Unlink / Move / Timeline absent.
-25. viewer + not owner → **no ⋮ at all**.
-26. viewer + owner → the card is **not** `draggable`.
+26. **Given** a space editor who owns the album, **when** the ⋮ opens, **then** Rename and Delete are
+    both present, alongside the three existing items.
+27. **Given** a space editor who does **not** own the album, **then** Rename is present and Delete is
+    absent.
+28. **Given** a space **viewer** who owns the album, **then** the ⋮ is present and contains Rename and
+    Delete only — Unlink, Move and Timeline are absent.
+29. **Given** a space viewer who does not own the album, **then** there is no ⋮ at all.
+30. **Given** a space viewer who owns the album, **then** the card is **not** `draggable` — ownership
+    grants rename and delete, never re-organisation.
 
 `space-album-select-bar.spec.ts`:
 
-27. `kind: 'album'`, `canDelete: true` → Delete present; `canDelete: false` → absent.
-28. `kind: 'album'`, `canManage: false`, `canDelete: true` → Delete **only**.
-29. `kind: 'folder'` → the album Delete is not rendered (the folder branch keeps its own).
-30. Clicking Delete calls `onDelete` exactly once.
+31. **Given** `kind: 'album'` and `canDelete: true`, **then** Delete is present; **given**
+    `canDelete: false`, **then** it is absent.
+32. **Given** `kind: 'album'`, `canManage: false`, `canDelete: true`, **then** Delete is the only
+    action button — the viewer's bar.
+33. **Given** `kind: 'folder'`, **then** the album Delete is not rendered and the folder branch keeps
+    its own.
+34. **When** Delete is clicked, **then** `onDelete` fires exactly once.
+35. **Given** no capability props at all (the pre-existing call shape), **then** Unlink, Move and
+    Timeline still render — pinning the `canManage = true` default §5 requires.
 
 `space-albums-list.spec.ts`:
 
-31. A viewer can select an album they own; selecting one they do not own is a no-op.
-32. A viewer cannot select a folder.
-33. `allSelectedAlbumsOwned` is false as soon as one unowned album joins the selection, and the bar's
-    Delete disappears.
+36. **Given** a viewer, **when** they click an album they own, **then** it is selected; **when** they
+    click one they do not own, **then** nothing is selected.
+37. **Given** a viewer, **when** they click a folder, **then** nothing is selected.
+38. **Given** a selection of owned albums, **when** an unowned album joins it, **then**
+    `allSelectedAlbumsOwned` is false and the bar's Delete disappears.
 
 `space-album-bulk-actions.spec.ts`:
 
-34. Partial failure → `failedIds` is exactly the failed subset, `failedCount` matches.
-35. A thrown request → every id reported failed.
+39. **Given** a partial-failure response, **then** `failedIds` is exactly the failed subset and
+    `failedCount` matches.
+40. **Given** the request throws, **then** every id is reported failed.
 
 `space-albums-page.spec.ts`:
 
-36. Cancelling the delete confirm deselects nothing and issues no request.
-37. After a partial failure the failed ids remain selected and one warning toast is shown.
-38. Rename submits the trimmed name and re-renders the new name.
+41. **Given** the delete confirm is cancelled, **then** nothing is deselected and no request is made.
+42. **Given** a partial failure, **then** the failed ids remain selected and exactly one warning toast
+    is shown.
+43. **Given** a rename submitted with surrounding whitespace, **then** the trimmed name is sent and
+    rendered.
+
+`space-album-detail-page.spec.ts` — the detail surface must not be left to the mobile suite alone:
+
+44. **Given** a space editor who does not own the album, **then** the detail menu offers Rename and
+    not Delete.
+45. **Given** a viewer who owns the album, **then** it offers Delete, and **when** delete succeeds,
+    **then** the app navigates to the space albums list.
+46. **Given** delete fails, **then** the page does **not** navigate and an error is surfaced.
 
 `space-activity-feed.spec.ts`:
 
-39. `album_rename`, `album_delete`, `album_bulk_delete` each render their string;
-    `album_bulk_delete` with `count: 1` renders "0 others" without going negative.
+47. **Given** each of `album_rename`, `album_delete`, `album_bulk_delete`, **then** its string renders;
+    **given** `album_bulk_delete` with `count: 1`, **then** it reads "0 others" rather than going
+    negative.
+
+`space-album-rename-delete-i18n.spec.ts` — a new spec following the existing
+`web/src/lib/i18n-add-all.spec.ts` pattern, which is how this repo pins per-feature locale coverage:
+
+48. **Given** each of the ten locales in §7, **then** every new key resolves to a string. Without
+    this, a missing locale surfaces only as a raw key in the UI, which no other gate catches.
 
 ### 8.4 Mobile — `flutter test`
 
 `test/medium/repositories/space_album_repository_test.dart`:
 
-40. **Given** a linked album with a `remote_album_user` owner row for the current user, **then**
+49. **Given** a linked album with a `remote_album_user` owner row for the current user, **then**
     `isOwnedByMe` is true.
-41. **Given** the owner row names a different user, **then** false.
-42. **Given** an album-level _editor_ row for the current user, **then** false — the join must key on
-    `role = owner`, not mere presence.
-43. **Given** no `remote_album_user` row at all (not yet synced), **then** false — fail-closed.
-44. **Given** a null current user id, **then** every album is false and the query does not throw.
+50. **Given** the owner row names a different user, **then** false.
+51. **Given** an album-level _editor_ row for the current user, **then** false — the join must key on
+    `role = owner`, not mere presence. Without this, every album shared _with_ you would read as
+    yours.
+52. **Given** no `remote_album_user` row at all (not yet synced), **then** false — fail-closed.
+53. **Given** a null current user id, **then** every album is false and the query does not throw.
 
 `test/providers/infrastructure/space_album_actions_test.dart`:
 
-45. `renameAlbum` calls the repo and fires the sync nudge; on API failure it rethrows and does **not**
-    nudge.
-46. `bulkDeleteAlbums` returns the failed subset on partial failure, every id on a throw, and nudges
-    on a 200-with-all-failed but not on a throw — matching the documented sibling contract.
+54. **Given** a successful rename, **then** the repo is called and the sync nudge fires; **given** the
+    API throws, **then** it rethrows and does **not** nudge.
+55. **Given** a partial-failure bulk delete, **then** the failed subset is returned; **given** a
+    throw, **then** every id is; **given** a 200 with every item failed, **then** it still nudges —
+    matching the documented sibling contract.
+56. **Given** a successful rename, **then** the remote-album list is refreshed (§6.3); **given** a
+    failure, **then** it is not.
+57. **Given** a bulk delete with at least one success, **then** the remote-album list is refreshed;
+    **given** every item failed, **then** it is not.
 
 `test/presentation/pages/space_albums_page_test.dart`:
 
-47–50. The four capability combinations of (22)–(25) on `_AlbumCard`'s ⋮, each with its positive
-counterpart in-file. 51. A viewer long-pressing an album they do not own does not start a selection; one they own does. 52. Bulk Delete is hidden the moment an unowned album joins the selection. 53. After a partial bulk delete, `reconcile(failedIds)` leaves exactly the failures selected. 54. The rename dialog's Cancel path fires no action call.
+58. **Given** a space editor who owns the album, **then** `_AlbumCard`'s ⋮ offers Rename and Delete.
+59. **Given** a space editor who does not own it, **then** Rename only.
+60. **Given** a viewer who owns it, **then** Rename and Delete only.
+61. **Given** a viewer who does not own it, **then** no ⋮.
+62. **Given** a viewer, **when** they long-press an album they do not own, **then** no selection
+    starts; **when** they long-press one they own, **then** it does.
+63. **Given** a selection of owned albums, **when** an unowned one joins, **then** bulk Delete is
+    hidden.
+64. **Given** a partial bulk delete, **then** `reconcile(failedIds)` leaves exactly the failures
+    selected.
+65. **Given** the rename dialog is cancelled, **then** no action call is made.
 
 `test/presentation/pages/space_album_detail_page_test.dart`:
 
-55. Rename shown for editor-non-owner; Delete not.
-56. Delete shown for owner-viewer; on success the page pops.
+66. **Given** an editor who does not own the album, **then** Rename is offered and Delete is not.
+67. **Given** a viewer who owns it, **then** Delete is offered, and **when** it succeeds, **then** the
+    page pops.
+68. **Given** a viewer who owns it, **then** `SpaceAlbumKebab` renders a menu — **this replaces the
+    existing test at `space_album_detail_page_test.dart:54`**, "viewer role (canEdit:false) —
+    SpaceAlbumKebab renders SizedBox.shrink", whose premise the new capability model falsifies.
+    `canEdit: false` now means "shrink **only if** the caller also does not own the album"; the
+    shrink case must be re-asserted with `canRename: false, canDelete: false` rather than deleted.
 
-The mobile page tests drive the real `SpaceAlbumsPage` with a mocked
+The mobile page tests drive the real `SpaceAlbumsPage` / `SpaceAlbumDetailPage` with a mocked
 `SharedSpaceApiRepository`, never a mocked `spaceAlbumActionsProvider`.
 
 ### 8.5 Gates
@@ -467,33 +585,40 @@ The mobile page tests drive the real `SpaceAlbumsPage` with a mocked
 
 ## 9. Edge cases and failure modes
 
-| #   | Case                                                                                    | Expected                                                                                                                                                          |
-| --- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E1  | Album deleted by its owner while another member has it open                             | Link row cascades; the audit trigger emits; the other client's stream drops it. Mobile's existing folder self-pop logic is unaffected — a _folder_ did not vanish |
-| E2  | Album unlinked by an editor between the client's ownership check and the delete request | `not_found` for that item; the album is **not** deleted                                                                                                           |
-| E3  | Ownership changes (album transferred) mid-selection                                     | Server re-checks per item → `no_permission`; the item stays selected and the partial-failure toast fires                                                          |
-| E4  | Rename to the identical name                                                            | No write, no activity row (§4.1 step 3)                                                                                                                           |
-| E5  | Rename with leading/trailing whitespace                                                 | Trimmed by the DTO before it reaches the service                                                                                                                  |
-| E6  | Rename to the same name as another album                                                | Allowed — album names are not unique in Immich. Unlike folder names, there is no conflict check to add                                                            |
-| E7  | Mobile offline                                                                          | Both actions surface the existing error toast; no local write is attempted for either (the server is the source of truth for space albums)                        |
-| E8  | Mobile: owned album not yet in `remote_album_user`                                      | Affordance hidden (fail-closed), self-heals on next sync                                                                                                          |
-| E9  | Bulk delete of 1000 ids                                                                 | Sequential `#runBulk`; bounded by the DTO's `.max(1000)`                                                                                                          |
-| E10 | Duplicate ids in one bulk request                                                       | `#runBulk`'s `new Set` collapses them; one result entry                                                                                                           |
-| E11 | Every item in a batch fails                                                             | 200, per-item reasons, no activity row, no reconcile                                                                                                              |
-| E12 | Album linked to several spaces, deleted from one                                        | Deleted globally; every space's link cascades. The activity row lands only in the space the request named — accepted, and consistent with where the user acted    |
-| E13 | Space viewer with zero owned albums                                                     | No ⋮ anywhere, no selection mode; the page is exactly as it is today                                                                                              |
+| #   | Case                                                                                    | Expected                                                                                                                                                                    |
+| --- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | Album deleted by its owner while another member has it open                             | Link row cascades; the audit trigger emits; the other client's stream drops it. Mobile's existing folder self-pop logic is unaffected — a _folder_ did not vanish           |
+| E2  | Album unlinked by an editor between the client's ownership check and the delete request | `not_found` for that item; the album is **not** deleted                                                                                                                     |
+| E3  | Ownership changes (album transferred) mid-selection                                     | Server re-checks per item → `no_permission`; the item stays selected and the partial-failure toast fires                                                                    |
+| E4  | Rename to the identical name                                                            | No write, no activity row (§4.1 step 3)                                                                                                                                     |
+| E5  | Rename with leading/trailing whitespace                                                 | Trimmed by the DTO before it reaches the service                                                                                                                            |
+| E6  | Rename to the same name as another album                                                | Allowed — album names are not unique in Immich. Unlike folder names, there is no conflict check to add                                                                      |
+| E7  | Mobile offline                                                                          | Both actions surface the existing error toast; no local write is attempted for either (the server is the source of truth for space albums)                                  |
+| E8  | Mobile: owned album not yet in `remote_album_user`                                      | Affordance hidden (fail-closed), self-heals on next sync                                                                                                                    |
+| E9  | Bulk delete of 1000 ids                                                                 | Sequential `#runBulk`; bounded by the DTO's `.max(1000)`                                                                                                                    |
+| E10 | Duplicate ids in one bulk request                                                       | `#runBulk`'s `new Set` collapses them; one result entry                                                                                                                     |
+| E11 | Every item in a batch fails                                                             | 200, per-item reasons, no activity row                                                                                                                                      |
+| E12 | Album linked to several spaces, deleted from one                                        | Deleted globally; every space's link cascades. The activity row lands only in the space the request named — accepted, and consistent with where the user acted              |
+| E13 | Space viewer with zero owned albums                                                     | No ⋮ anywhere, no selection mode; the page is exactly as it is today                                                                                                        |
+| E14 | Album is in the trash (`album.deletedAt` set)                                           | `checkOwnerAccess` filters it out, so both routes answer `no_permission` / 403 — **not** `not_found`. Deliberate, pinned by scenario 18                                     |
+| E15 | Two clients delete the same album at once                                               | The loser's `checkOwnerAccess` finds no row → `no_permission`; no throw, no second activity row (scenario 19)                                                               |
+| E16 | Owned album renamed or deleted from a space surface on mobile                           | `RemoteAlbumNotifier` is a snapshot, not a watch — the Albums tab and every picker keep the stale row until refreshed. §6.3 refreshes it explicitly; scenarios 56–57 pin it |
+| E17 | A fourth activity type is added later                                                   | `shared_space_activity.type` is `varchar(30)`; anything longer is a runtime failure, not a compile error (§4.3)                                                             |
 
 ---
 
 ## 10. Risks and rebase watch-items
 
 1. **`album.service.ts#delete` drift.** `#deleteAlbumChecked` replicates its two steps
-   (emit → delete). If upstream adds a third, the space path silently diverges. Mitigated by test (8)
+   (emit → delete). If upstream adds a third, the space path silently diverges. Mitigated by scenario 8
    pinning both calls and their order, plus a code comment naming `album.service.ts#delete` as the
    source of truth. Accepted rather than calling across services, which is not this codebase's pattern.
 2. **`Permission.AlbumUpdate` semantics.** Reading it, not changing it. If upstream widens it, the
    owner arm of rename widens with it — which is the correct behaviour, not a bug.
-3. **Ten-locale drift.** New keys must land in all ten or the branding/i18n check flags them.
+3. **Ten-locale drift.** Checked: there is **no** existing gate that would catch a missing key.
+   `web/src/lib/i18n.spec.ts` only asserts every `i18n/*.json` has a loader, and
+   `i18n-add-all.spec.ts` is a per-feature key list — which is precisely why scenario 48 adds one for
+   this feature. Without it, a locale left behind shows a raw key in the UI and CI stays green.
 4. **`mise open-api` timing.** Deferred to a single run at the end, per
    `reference_rebase_generated_api_artifacts` — regenerating between DTO slices produces churn that
    conflicts on rebase.
@@ -505,19 +630,24 @@ The mobile page tests drive the real `SpaceAlbumsPage` with a mocked
 - Deleting an album's **assets** along with it. `POST /shared-spaces/:id/albums/bulk-delete` deletes
   albums only; assets survive in their owner's library, exactly as `DELETE /albums/{id}` does today.
 - Any change to folder rename/delete, which already exist.
+- A **web Playwright** flow. `e2e/src/specs/web/spaces-selection-toolbar-album.e2e-spec.ts` is the
+  natural home for a browser-level bulk-delete journey, but §8.2's API-level RBAC matrix and §8.3's
+  component specs already cover the behaviour and the gates; adding a browser run for it is deferred
+  rather than forgotten. Revisit if the select bar grows a third destructive action.
 
 ## 12. Slice outline
 
 Each slice is red-first and independently reviewable. The full plan is produced by `writing-plans`.
 
-1. Server: rename DTO + service + controller (§4.1) — tests 1–7.
-2. Server: bulk-delete service + controller (§4.2) — tests 8–17.
-3. Server: activity types + medium/e2e coverage (§4.3, §8.2) — tests 18–21.
-4. `mise open-api` — one regeneration covering both slices.
-5. i18n: ten locales (§7).
-6. Web: bulk-action helper, modal props, card + table menus (§5) — tests 22–26, 34–35.
-7. Web: select bar, list selection, page handlers, detail page, activity feed (§5) — tests 27–33,
-   36–39.
-8. Mobile: repository join + model field + provider (§6.1) — tests 40–44.
-9. Mobile: API repo + actions (§6.2) — tests 45–46.
-10. Mobile: albums page + detail kebab wiring (§6.2) — tests 47–56.
+1. Server: rename DTO + service + controller (§4.1) — scenarios 1–7, 20.
+2. Server: bulk-delete service + controller (§4.2) — scenarios 8–19.
+3. Server: activity types + medium/e2e coverage (§4.3, §8.2) — scenarios 21–25.
+4. `mise open-api` — one regeneration covering both server slices.
+5. i18n: ten locales plus the coverage spec (§7) — scenario 48.
+6. Web: bulk-action helper, modal props, card + table menus (§5) — scenarios 26–30, 39–40.
+7. Web: select bar, list selection, page handlers, activity feed (§5) — scenarios 31–38, 41–43, 47.
+8. Web: space-album detail page (§5) — scenarios 44–46.
+9. Mobile: repository join + model field + provider (§6.1) — scenarios 49–53.
+10. Mobile: API repo + actions + remote-album refresh (§6.2, §6.3) — scenarios 54–57.
+11. Mobile: albums page wiring (§6.2) — scenarios 58–65.
+12. Mobile: detail kebab wiring, including the replaced shrink test (§6.2) — scenarios 66–68.
