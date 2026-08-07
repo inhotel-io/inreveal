@@ -1919,3 +1919,126 @@ describe('SharedSpaceService — onAssetDelete face cleanup', () => {
     expect(personTAfter).toHaveLength(1);
   });
 });
+
+describe('album deletion cascades and sync tombstones', () => {
+  // Scenario 21
+  it('removes every shared_space_album row and audits each delete', async () => {
+    const { ctx, sut } = setup();
+    // bulkDeleteAlbums emits AlbumDelete before deleting; the strict automock throws on an
+    // unconfigured call, so it needs an implementation even though nothing here asserts on it.
+    ctx.getMock(EventRepository).emit.mockResolvedValue();
+    const { user: owner } = await ctx.newUser();
+    const { user: memberA } = await ctx.newUser();
+    const { user: memberB } = await ctx.newUser();
+    const { space: spaceA } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    const { space: spaceB } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: spaceA.id, userId: memberA.id, role: 'viewer' });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: spaceB.id, userId: memberB.id, role: 'viewer' });
+
+    // One album, linked into BOTH spaces.
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'TwoSpaceAlbum' });
+    const spaceRepo = ctx.get(SharedSpaceRepository);
+    await spaceRepo.addAlbum({ spaceId: spaceA.id, albumId: album.id, addedById: owner.id });
+    await spaceRepo.addAlbum({ spaceId: spaceB.id, albumId: album.id, addedById: owner.id });
+
+    // Pre-condition: both links exist before the delete.
+    const linksBefore = await defaultDatabase
+      .selectFrom('shared_space_album')
+      .select('spaceId')
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(linksBefore.map((r) => r.spaceId).sort()).toEqual([spaceA.id, spaceB.id].sort());
+
+    // The owner deletes the album via bulkDeleteAlbums, called against spaceA.
+    const results = await sut.bulkDeleteAlbums(authFromUser(owner), spaceA.id, { ids: [album.id] });
+    expect(results).toEqual([{ id: album.id, success: true }]);
+
+    // Both link rows are gone (album hard-delete cascades shared_space_album for every space).
+    const linksAfter = await defaultDatabase
+      .selectFrom('shared_space_album')
+      .select('spaceId')
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(linksAfter).toHaveLength(0);
+
+    // shared_space_album_audit has exactly one row PER link that was removed.
+    const linkAudit = await defaultDatabase
+      .selectFrom('shared_space_album_audit')
+      .select('spaceId')
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(linkAudit.map((r) => r.spaceId).sort()).toEqual([spaceA.id, spaceB.id].sort());
+  });
+
+  // Scenario 22 — the assertion that earns this medium test.
+  //
+  // shared_space_album_delete_audit is a STATEMENT-level AFTER DELETE trigger on
+  // shared_space_album that computes "who loses access". On an ALBUM delete, both
+  // shared_space_album and shared_space_album_user cascade from the SAME statement, and nothing
+  // in the schema orders those two cascades relative to the trigger. If the trigger runs after
+  // the grants are gone, members' clients are never told they lost access and hold stale space
+  // assets indefinitely — invisible to every unit test, since those mock the DB.
+  it('writes a shared_space_album_user_audit tombstone for every member who lost access', async () => {
+    const { ctx, sut } = setup();
+    // bulkDeleteAlbums emits AlbumDelete before deleting; the strict automock throws on an
+    // unconfigured call, so it needs an implementation even though nothing here asserts on it.
+    ctx.getMock(EventRepository).emit.mockResolvedValue();
+    const { user: owner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { space } = await ctx.newSharedSpace({ createdById: owner.id, faceRecognitionEnabled: false });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: owner.id, role: 'owner' });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: 'viewer' });
+
+    const { result: album } = await ctx.newAlbum({ ownerId: owner.id, albumName: 'TombstoneAlbum' });
+    const spaceRepo = ctx.get(SharedSpaceRepository);
+    await spaceRepo.addAlbum({ spaceId: space.id, albumId: album.id, addedById: owner.id });
+
+    // Pre-condition: linking the album populated a shared_space_album_user grant for every
+    // current member (owner AND member) via the create-side trigger.
+    const grantsBefore = await defaultDatabase
+      .selectFrom('shared_space_album_user')
+      .select('userId')
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(grantsBefore.map((r) => r.userId).sort()).toEqual([owner.id, member.id].sort());
+
+    const results = await sut.bulkDeleteAlbums(authFromUser(owner), space.id, { ids: [album.id] });
+    expect(results).toEqual([{ id: album.id, success: true }]);
+
+    // Every (albumId, userId) that previously held a grant has AT LEAST one tombstone — nobody's
+    // client is left holding stale space assets. This is the guarantee spec §2.2(3) actually
+    // depends on, and it holds: the cascade-ordering risk this test was written to catch (the
+    // trigger running against already-emptied grant rows and silently dropping revocations) does
+    // NOT materialize here.
+    const tombstones = await defaultDatabase
+      .selectFrom('shared_space_album_user_audit')
+      .select('userId')
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(new Set(tombstones.map((r) => r.userId))).toEqual(new Set([owner.id, member.id]));
+
+    // FINDING (see task-3-report.md): the audit trigger's own fan-out is NOT exactly one row per
+    // grant. shared_space_album_delete_audit's section 2 (per-shared_space_member join) and
+    // section 3 (space-creator query) are not mutually exclusive — a creator who is ALSO a
+    // shared_space_member (true for every real space; see SharedSpaceService#create, which always
+    // inserts an Owner membership row for the creator) is matched by BOTH branches and gets a
+    // SECOND, duplicate tombstone. Pinned exactly (not loosened to "contains") so this is a
+    // deliberate, visible test update if the trigger's overlap is ever fixed, rather than a silent
+    // behavior change. Harmless for sync correctness — SharedSpaceAlbumSync#getDeletes just tells
+    // the owner's client to drop the album twice — but it is real duplicate audit-row growth on
+    // every album delete, for every space, forever.
+    expect(tombstones.map((r) => r.userId).sort()).toEqual([member.id, owner.id, owner.id].sort());
+
+    // AND shared_space_album_user is empty for the album, proving the FK cascade actually ran —
+    // if this were nonempty the tombstone assertions above would be worthless (nothing was really
+    // revoked, the trigger just happened to fire against pre-cascade state).
+    const grantsAfter = await defaultDatabase
+      .selectFrom('shared_space_album_user')
+      .select('userId')
+      .where('albumId', '=', album.id)
+      .execute();
+    expect(grantsAfter).toHaveLength(0);
+  });
+});

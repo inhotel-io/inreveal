@@ -6,10 +6,12 @@ import {
   getAlbumInfo,
   getSpaceActivities,
   LoginResponseDto,
+  Permission,
   SharedSpaceResponseDto,
   SharedSpaceRole,
 } from '@immich/sdk';
 import { createUserDto } from 'src/fixtures';
+import { errorDto } from 'src/responses';
 import { app, asBearerAuth, utils } from 'src/utils';
 import request from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -110,6 +112,20 @@ describe('/shared-spaces/:id/albums (T18)', () => {
   /** GET to list. Returns the raw response. */
   const listAlbums = (token: string) =>
     request(app).get(`/shared-spaces/${spaceId}/albums`).set('Authorization', `Bearer ${token}`);
+
+  /** PUT to rename. Returns the raw response. */
+  const renameAlbumRequest = (token: string, albumId: string, name: string) =>
+    request(app)
+      .put(`/shared-spaces/${spaceId}/albums/${albumId}/name`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name });
+
+  /** POST to bulk-delete. Returns the raw response. */
+  const bulkDeleteAlbums = (token: string, ids: string[]) =>
+    request(app)
+      .post(`/shared-spaces/${spaceId}/albums/bulk-delete`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ ids });
 
   // ─── PUT /shared-spaces/:id/albums/:albumId ───────────────────────────────
 
@@ -565,6 +581,218 @@ describe('/shared-spaces/:id/albums (T18)', () => {
       await linkAlbum(owner.accessToken, ownerAlbum.id);
       const { status } = await unlinkAlbum(owner.accessToken, ownerAlbum.id);
       expect(status).toBe(204);
+    });
+  });
+
+  // ─── Rename & bulk-delete (space-album-rename-delete spec, scenarios 23-25) ──
+  //
+  // Reuses the T18 users (owner/editor/viewer/nonMember) and spaceId established above, but never
+  // touches ownerAlbum — several of these calls destroy the album outright, which would break
+  // every other T18 test that assumes ownerAlbum survives. Every scenario gets its own album.
+  describe('/shared-spaces/:id/albums rename and delete', () => {
+    // Scenario 23 — full RBAC matrix.
+    describe('PUT /shared-spaces/:id/albums/:albumId/name', () => {
+      it('204s for a space Editor who does not own the album', async () => {
+        // Owned by owner, NOT editor — editor renames it purely on the space-Editor short-circuit.
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'Rename: editor-not-owner' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+
+        const { status } = await renameAlbumRequest(editor.accessToken, album.id, 'Renamed by editor');
+        expect(status).toBe(204);
+
+        const { body } = await listAlbums(owner.accessToken);
+        const linked = (body as Array<{ id: string; albumName: string }>).find((a) => a.id === album.id);
+        expect(linked?.albumName).toBe('Renamed by editor');
+      });
+
+      it('204s for the album owner with no space membership', async () => {
+        // nonMember owns the album outright but is never added to the space. Sharing it with
+        // owner as an album editor is what lets owner link it in without nonMember joining.
+        const album = await utils.createAlbum(nonMember.accessToken, {
+          albumName: 'Rename: owner-no-membership',
+          albumUsers: [{ userId: owner.userId, role: AlbumUserRole.Editor }],
+        });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+
+        const { status } = await renameAlbumRequest(nonMember.accessToken, album.id, 'Renamed by non-member owner');
+        expect(status).toBe(204);
+
+        const { body } = await listAlbums(owner.accessToken);
+        const linked = (body as Array<{ id: string; albumName: string }>).find((a) => a.id === album.id);
+        expect(linked?.albumName).toBe('Renamed by non-member owner');
+      });
+
+      it('403s for a space Viewer who does not own the album', async () => {
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'Rename: viewer-forbidden' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+
+        const { status } = await renameAlbumRequest(viewer.accessToken, album.id, 'Should not apply');
+        expect(status).toBe(403);
+
+        // Positive control in the SAME test: the refused attempt left the name untouched.
+        const { body } = await listAlbums(owner.accessToken);
+        const linked = (body as Array<{ id: string; albumName: string }>).find((a) => a.id === album.id);
+        expect(linked?.albumName).toBe('Rename: viewer-forbidden');
+      });
+
+      it('404s when the album is not linked to the space', async () => {
+        // Owned by owner (passes the album-access arm) but deliberately never linked.
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'Rename: unlinked' });
+
+        const { status } = await renameAlbumRequest(owner.accessToken, album.id, 'Should 404');
+        expect(status).toBe(404);
+      });
+
+      it('400s on a blank name', async () => {
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'Rename: blank-name' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+
+        const { status } = await renameAlbumRequest(owner.accessToken, album.id, '');
+        expect(status).toBe(400);
+
+        // Positive control: the rejected request left the name untouched.
+        const { body } = await listAlbums(owner.accessToken);
+        const linked = (body as Array<{ id: string; albumName: string }>).find((a) => a.id === album.id);
+        expect(linked?.albumName).toBe('Rename: blank-name');
+      });
+    });
+
+    describe('POST /shared-spaces/:id/albums/bulk-delete', () => {
+      it('200s with success for the album owner', async () => {
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'BulkDelete: owner-success' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+
+        const { status, body } = await bulkDeleteAlbums(owner.accessToken, [album.id]);
+        expect(status).toBe(200);
+        expect(body).toEqual([{ id: album.id, success: true }]);
+
+        // Positive proof the album is actually gone, not just a claimed success.
+        const { body: after } = await listAlbums(owner.accessToken);
+        expect((after as Array<{ id: string }>).map((a) => a.id)).not.toContain(album.id);
+      });
+
+      it('200s with no_permission for a space Owner who does not own the album', async () => {
+        // editor owns and links their own album; owner (space Owner, not album owner) then
+        // tries to delete it — bulk-delete's owner-only gate has no space-Editor arm.
+        const album = await utils.createAlbum(editor.accessToken, { albumName: 'BulkDelete: owner-no-permission' });
+        await utils.linkSpaceAlbum(editor.accessToken, spaceId, album.id);
+
+        const { status, body } = await bulkDeleteAlbums(owner.accessToken, [album.id]);
+        expect(status).toBe(200);
+        expect(body).toEqual([expect.objectContaining({ id: album.id, success: false, error: 'no_permission' })]);
+
+        // Positive control: the album survives the refused delete.
+        const { body: after } = await listAlbums(owner.accessToken);
+        expect((after as Array<{ id: string }>).map((a) => a.id)).toContain(album.id);
+      });
+
+      it('200s with per-item results on a mixed batch', async () => {
+        const ownedAlbum = await utils.createAlbum(owner.accessToken, { albumName: 'BulkDelete: mixed-owned' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, ownedAlbum.id);
+        const foreignAlbum = await utils.createAlbum(editor.accessToken, { albumName: 'BulkDelete: mixed-foreign' });
+        await utils.linkSpaceAlbum(editor.accessToken, spaceId, foreignAlbum.id);
+
+        const { status, body } = await bulkDeleteAlbums(owner.accessToken, [ownedAlbum.id, foreignAlbum.id]);
+        expect(status).toBe(200);
+        expect(body).toEqual([
+          { id: ownedAlbum.id, success: true },
+          expect.objectContaining({ id: foreignAlbum.id, success: false, error: 'no_permission' }),
+        ]);
+
+        const { body: after } = await listAlbums(owner.accessToken);
+        const afterIds = (after as Array<{ id: string }>).map((a) => a.id);
+        expect(afterIds).not.toContain(ownedAlbum.id);
+        expect(afterIds).toContain(foreignAlbum.id);
+      });
+
+      it('400s on an empty ids array', async () => {
+        const { status } = await bulkDeleteAlbums(owner.accessToken, []);
+        expect(status).toBe(400);
+      });
+    });
+
+    // Scenario 24 — pins the API-key scope decision, which is otherwise invisible: both routes
+    // are scoped to the plain album.* permission rather than sharedSpaceAlbum.*, because
+    // @Authenticated gates API-key scope and a space-scoped key must not be able to rename or
+    // destroy arbitrary albums through the space-Editor/space-Owner arms.
+    describe('api key scopes', () => {
+      it('refuses bulk-delete for a key scoped only to sharedSpaceAlbum.delete', async () => {
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'ApiKey: bulk-delete-wrong-scope' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+        const { secret } = await utils.createApiKey(owner.accessToken, [Permission.SharedSpaceAlbumDelete]);
+
+        const { status, body } = await request(app)
+          .post(`/shared-spaces/${spaceId}/albums/bulk-delete`)
+          .set('x-api-key', secret)
+          .send({ ids: [album.id] });
+        expect(status).toBe(403);
+        expect(body).toEqual(errorDto.missingPermission('album.delete'));
+
+        // Positive control: the album survives the refused call.
+        const { body: after } = await listAlbums(owner.accessToken);
+        expect((after as Array<{ id: string }>).map((a) => a.id)).toContain(album.id);
+      });
+
+      it('accepts bulk-delete for a key scoped to album.delete', async () => {
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'ApiKey: bulk-delete-right-scope' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+        const { secret } = await utils.createApiKey(owner.accessToken, [Permission.AlbumDelete]);
+
+        const { status, body } = await request(app)
+          .post(`/shared-spaces/${spaceId}/albums/bulk-delete`)
+          .set('x-api-key', secret)
+          .send({ ids: [album.id] });
+        expect(status).toBe(200);
+        expect(body).toEqual([{ id: album.id, success: true }]);
+      });
+
+      it('refuses rename for a key scoped only to sharedSpaceAlbum.update', async () => {
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'ApiKey: rename-wrong-scope' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+        const { secret } = await utils.createApiKey(owner.accessToken, [Permission.SharedSpaceAlbumUpdate]);
+
+        const { status, body } = await request(app)
+          .put(`/shared-spaces/${spaceId}/albums/${album.id}/name`)
+          .set('x-api-key', secret)
+          .send({ name: 'Should not apply' });
+        expect(status).toBe(403);
+        expect(body).toEqual(errorDto.missingPermission('album.update'));
+
+        const { body: after } = await listAlbums(owner.accessToken);
+        const linked = (after as Array<{ id: string; albumName: string }>).find((a) => a.id === album.id);
+        expect(linked?.albumName).toBe('ApiKey: rename-wrong-scope');
+      });
+
+      it('accepts rename for a key scoped to album.update', async () => {
+        const album = await utils.createAlbum(owner.accessToken, { albumName: 'ApiKey: rename-right-scope' });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+        const { secret } = await utils.createApiKey(owner.accessToken, [Permission.AlbumUpdate]);
+
+        const { status } = await request(app)
+          .put(`/shared-spaces/${spaceId}/albums/${album.id}/name`)
+          .set('x-api-key', secret)
+          .send({ name: 'Renamed via api key' });
+        expect(status).toBe(204);
+
+        const { body } = await listAlbums(owner.accessToken);
+        const linked = (body as Array<{ id: string; albumName: string }>).find((a) => a.id === album.id);
+        expect(linked?.albumName).toBe('Renamed via api key');
+      });
+    });
+
+    // Scenario 25 — fails the day someone adds @Post(':id/albums/:albumId') above the bulk route:
+    // the literal "bulk-delete" segment would be swallowed as an :albumId and 400 as an invalid
+    // uuid before ever reaching the bulk handler.
+    it('routes the literal bulk-delete segment to the bulk handler, not to :albumId', async () => {
+      const album = await utils.createAlbum(owner.accessToken, { albumName: 'RouteCheck: bulk-delete' });
+      await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+
+      const { status, body } = await bulkDeleteAlbums(owner.accessToken, [album.id]);
+      // A misrouted request would hit `:albumId = "bulk-delete"`, which 400s as an invalid uuid.
+      // Assert the REAL bulk-delete outcome instead of merely "not a 400".
+      expect(status).not.toBe(400);
+      expect(status).toBe(200);
+      expect(body).toEqual([{ id: album.id, success: true }]);
     });
   });
 });
