@@ -264,17 +264,29 @@ describe('renameAlbum', () => {
     expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(expect.objectContaining({ spaceId }));
   });
 });
+```
 
-// Scenario 7 — schema level, so a blank name never reaches the service.
-describe('SharedSpaceAlbumRenameDto', () => {
-  it('rejects a whitespace-only name and trims a padded one', () => {
-    expect(() => SharedSpaceAlbumRenameDto.zodSchema.parse({ name: '   ' })).toThrow();
-    expect(SharedSpaceAlbumRenameDto.zodSchema.parse({ name: '  Trip  ' })).toEqual({ name: 'Trip' });
+Scenario 7 is a **schema** test and belongs in `server/src/dtos/shared-space.dto.spec.ts`, not in the
+service spec — that is where this repo puts DTO validation, and the accessor is `.schema.safeParse`,
+not `.zodSchema.parse`:
+
+```ts
+// Scenario 7 — so a blank name never reaches the service.
+it('rejects a whitespace-only album name and trims a padded one', () => {
+  expect(SharedSpaceAlbumRenameDto.schema.safeParse({ name: '   ' }).success).toBe(false);
+  expect(SharedSpaceAlbumRenameDto.schema.safeParse({ name: '  Trip  ' })).toMatchObject({
+    success: true,
+    data: { name: 'Trip' },
   });
 });
 ```
 
-Add any missing imports at the top of the spec file: `ForbiddenException`, `NotFoundException` from `@nestjs/common`; `SharedSpaceActivityType`, `SharedSpaceRole` from `src/enum`; `SharedSpaceAlbumRenameDto` from `src/dtos/shared-space.dto`.
+Add any missing imports to `shared-space.service.spec.ts`: `ForbiddenException`, `NotFoundException`
+from `@nestjs/common`; `SharedSpaceActivityType`, `SharedSpaceRole` from `src/enum`. The file already
+imports `factory` / `newUuid` from `test/small.factory` and `ServiceMocks` from `test/utils`, and the
+mock names used above are the real ones (`mocks.access.album.checkOwnerAccess`, `mocks.album.getById`
+/ `.update`, `mocks.sharedSpace.*`). `SharedSpaceAlbumRenameDto` is imported by
+`shared-space.dto.spec.ts` instead.
 
 - [ ] **Step 4: Run the tests and verify they fail**
 
@@ -612,19 +624,17 @@ describe('bulkDeleteAlbums', () => {
     expect(mocks.album.delete).not.toHaveBeenCalled();
   });
 });
-
-// Scenario 16 — schema level.
-describe('SharedSpaceBulkAlbumIdsDto for bulk-delete', () => {
-  it('rejects an empty ids array and one over the cap', () => {
-    expect(() => SharedSpaceBulkAlbumIdsDto.zodSchema.parse({ ids: [] })).toThrow();
-    expect(() =>
-      SharedSpaceBulkAlbumIdsDto.zodSchema.parse({ ids: Array.from({ length: 1001 }, () => newUuid()) }),
-    ).toThrow();
-  });
-});
 ```
 
-Add imports if missing: `BulkIdErrorReason`, `JobName` from `src/enum`; `SharedSpaceBulkAlbumIdsDto` from `src/dtos/shared-space-bulk.dto`.
+**Scenario 16 needs no new test.** This route reuses `SharedSpaceBulkAlbumIdsDto` verbatim, and
+`server/src/dtos/shared-space-bulk.dto.spec.ts` already pins that exact DTO's empty-array, over-1000
+and non-uuid rejections. Do not write a duplicate — instead note in the controller's `@Endpoint`
+description that the DTO is shared, so the link between the endpoint and its validation coverage
+stays discoverable.
+
+Add imports if missing: `BulkIdErrorReason`, `JobName`, `SharedSpaceActivityType`, `SharedSpaceRole`
+from `src/enum`. `mocks.event.emit`, `mocks.album.delete` and `mocks.job.queue` are all real mock
+names on `ServiceMocks`.
 
 - [ ] **Step 3: Run the tests and verify they fail**
 
@@ -769,7 +779,9 @@ git commit -m "feat(server): bulk-delete space albums, owner-gated per item"
 **Files:**
 
 - Modify: `server/test/medium/specs/services/shared-space-album.service.spec.ts`
-- Create: `e2e/src/specs/server/api/shared-space-album.e2e-spec.ts`
+- Modify: `e2e/src/specs/server/api/shared-space-album.e2e-spec.ts` — **this file already exists**
+  (878 lines) with `PUT`/`PATCH`/`GET :id/albums` groups and an `album delete via /albums/:id` group.
+  Add the new describes into it; do not create a second file
 
 **Interfaces:**
 
@@ -819,7 +831,10 @@ Expected first run: FAIL (empty test bodies assert nothing / rows not found). Af
 
 - [ ] **Step 3: Write the e2e spec**
 
-Create `e2e/src/specs/server/api/shared-space-album.e2e-spec.ts`, modelled on `shared-space-album-folder.e2e-spec.ts`:
+Append to the **existing** `e2e/src/specs/server/api/shared-space-album.e2e-spec.ts`, reusing the
+fixtures its top-level `describe('/shared-spaces/:id/albums (T18)')` already sets up. Read its
+`album delete via /albums/:id` group first — it already establishes how a space-linked album delete is
+exercised end to end:
 
 ```ts
 describe('/shared-spaces/:id/albums rename and delete', () => {
@@ -1479,7 +1494,7 @@ async function handleRenameAlbum(album: SharedSpaceLinkedAlbumDto) {
     // NOT handleUpdateAlbum — that issues PATCH /albums/{id}, which 403s for a space editor
     // who does not own the album. This route carries the editor arm.
     await renameSharedSpaceAlbum({ id: space.id, albumId: album.id, sharedSpaceAlbumRenameDto: { name } });
-    await reloadAlbums();
+    await reload();
   } catch (error) {
     handleError(error, $t('space_album_error_rename'));
   }
@@ -1503,7 +1518,7 @@ async function handleBulkDeleteAlbums(ids: string[], albumName?: string): Promis
   }
   const { failedIds, failedCount } = await bulkDeleteAlbumsAction(space.id, ids);
   notifyBulkFailures(failedCount);
-  await reloadAlbums();
+  await reload();
   return failedIds;
 }
 
@@ -1512,7 +1527,10 @@ async function handleDeleteAlbum(album: SharedSpaceLinkedAlbumDto) {
 }
 ```
 
-Match the exact confirm-dialog and reload helper names already used by `handleBulkUnlink` / `handleBulkDeleteFolders` in this file. Pass `onRenameAlbum={handleRenameAlbum}`, `onDeleteAlbum={handleDeleteAlbum}` and `onBulkDeleteAlbums={handleBulkDeleteAlbums}` into `SpaceAlbumsList`.
+The page's reload helper is `reload()` (declared around line 120), and `handleError` is already
+imported from `$lib/utils/handle-error` — use both as named. Add `mdiRenameOutline` to the `@mdi/js`
+import. Match `modalManager.showDialog`'s option names against the existing `handleBulkUnlink` /
+`handleBulkDeleteFolders` calls in the same file. Pass `onRenameAlbum={handleRenameAlbum}`, `onDeleteAlbum={handleDeleteAlbum}` and `onBulkDeleteAlbums={handleBulkDeleteAlbums}` into `SpaceAlbumsList`.
 
 - [ ] **Step 9: Write the failing activity-feed test**
 
@@ -1656,8 +1674,12 @@ dart run easy_localization:generate -S ../i18n && dart run bin/generate_keys.dar
 Append to `mobile/test/medium/repositories/space_album_repository_test.dart`, inside the existing
 `group('watchLinkedAlbums', ...)`. `ctx.newRemoteAlbum(id:, ownerId:)` already inserts the matching
 `remote_album_user` **owner** row, so it doubles as the "I own this" fixture. Add
-`import 'package:immich_mobile/domain/models/album/album.model.dart';` for `AlbumUserRole` and
-`package:drift/drift.dart` for the manual companion insert.
+`import 'package:immich_mobile/domain/models/album/album.model.dart';` for `AlbumUserRole`,
+`package:drift/drift.dart` for `Value`, and
+`package:immich_mobile/infrastructure/entities/remote_album_user.entity.drift.dart` for
+`RemoteAlbumUserEntityCompanion`. `ctx.db` is a public `final Drift db` field. The Dart
+`AlbumUserRole` enum order is `editor, viewer, owner`, stored as an int index behind a "do not change
+this order!" comment — never reorder it to make a test read better.
 
 ```dart
 group('isOwnedByMe', () {
@@ -2188,7 +2210,10 @@ Add the two handlers beside `renameFolder` / `deleteFolder`:
     }
 ```
 
-Rename `_promptFolderName` to `_promptName` and give it `label` and `keyPrefix` parameters, so the album path does not select widget keys named `space-album-folder-name-*`. Update the two existing folder call sites to pass `label: 'space_album_folder_name_label'.t(...)` and `keyPrefix: 'space-album-folder-name'`, keeping their current keys byte-identical so the existing folder tests still pass.
+Rename `_promptFolderName` to `_promptName` and give it `label` and `keyPrefix` parameters. The keys
+are hardcoded one level down, in the `_FolderNameDialog` **widget** (`space-album-folder-name-field` /
+`-cancel` / `-confirm`), so `keyPrefix` and `label` must be threaded into that widget too — renaming
+only the function leaves the album path still selecting folder-named keys. Update the two existing folder call sites to pass `label: 'space_album_folder_name_label'.t(...)` and `keyPrefix: 'space-album-folder-name'`, keeping their current keys byte-identical so the existing folder tests still pass.
 
 Give `_AlbumCard` `canRename` and `canDelete` booleans, render its `PopupMenuButton` when `canEdit || canRename || canDelete`, keep the three existing items behind `canEdit`, and append Rename (`canRename`) and Delete (`canDelete`) items with keys `space-album-card-rename-${album.id}` / `space-album-card-delete-${album.id}`. At each `_AlbumCard` construction site pass `canRename: canEdit || album.isOwnedByMe` and `canDelete: album.isOwnedByMe`.
 

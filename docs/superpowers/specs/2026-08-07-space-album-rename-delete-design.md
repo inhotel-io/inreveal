@@ -443,8 +443,8 @@ Medium, against a real DB, in the existing
     mock the DB. Also assert `shared_space_album_user` itself is empty for the album, confirming the
     cascade ran at all.
 
-E2E (`e2e/src/specs/server/api/shared-space-album.e2e-spec.ts`, alongside the existing
-`shared-space-album-folder.e2e-spec.ts`):
+E2E — added to the **existing** `e2e/src/specs/server/api/shared-space-album.e2e-spec.ts` (878 lines;
+it already covers `PUT`/`PATCH`/`GET :id/albums` and an `album delete via /albums/:id` group):
 
 23. Full RBAC matrix over both routes: space Owner / Editor / Viewer / non-member × album owner / not,
     asserting status codes and, for bulk, per-item `error` reasons.
