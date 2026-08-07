@@ -178,6 +178,28 @@ const setupBulkUnlinkAlbums = (mocks: ServiceMocks) => {
   return { auth, spaceId, a1, a2, a3 };
 };
 
+/** Owner-of-everything fixture for the bulkDeleteAlbums tests. */
+const setupBulkDeleteAlbums = (mocks: ServiceMocks) => {
+  const auth = factory.auth();
+  const spaceId = newUuid();
+  const [a1, a2, a3] = [newUuid(), newUuid(), newUuid()];
+  const albumNames = new Map([
+    [a1, 'Trip A'],
+    [a2, 'Trip B'],
+    [a3, 'Trip C'],
+  ]);
+  mocks.access.album.checkOwnerAccess.mockImplementation((_userId: string, ids: Set<string>) =>
+    Promise.resolve(new Set(ids)),
+  );
+  mocks.sharedSpace.hasAlbumLink.mockResolvedValue(true);
+  mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+  mocks.album.getById.mockImplementation((id: string) =>
+    Promise.resolve({ albumName: albumNames.get(id) ?? 'Unknown' } as any),
+  );
+  mocks.album.delete.mockResolvedValue(void 0);
+  return { auth, spaceId, a1, a2, a3 };
+};
+
 /** Editor-or-owner fixture for the renameAlbum tests. */
 const setupRenameAlbum = (mocks: ServiceMocks) => {
   const auth = factory.auth();
@@ -9849,6 +9871,163 @@ describe(SharedSpaceService.name, () => {
 
         expect(result[0]).toEqual({ id: a1, success: false, error: BulkIdErrorReason.UNKNOWN, errorMessage: 'boom' });
         expect(result[1].success).toBe(true);
+      });
+    });
+
+    describe('bulkDeleteAlbums', () => {
+      // Scenario 8
+      it('emits AlbumDelete before deleting, logs one album_delete row, and queues NO reconcile', async () => {
+        const { auth, spaceId, a1 } = setupBulkDeleteAlbums(mocks);
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1] });
+
+        expect(result).toEqual([{ id: a1, success: true }]);
+        // Ordering matters: onAlbumDelete's orphan queries must run while the rows still exist.
+        const emitOrder = mocks.event.emit.mock.invocationCallOrder[0];
+        const deleteOrder = mocks.album.delete.mock.invocationCallOrder[0];
+        expect(emitOrder).toBeLessThan(deleteOrder);
+        expect(mocks.event.emit).toHaveBeenCalledWith('AlbumDelete', { albumId: a1 });
+        expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: SharedSpaceActivityType.AlbumDelete,
+            data: { albumId: a1, albumName: 'Trip A' },
+          }),
+        );
+        // Both tables reconcileAlbumGrants reads cascade from `album`, so a reconcile here is
+        // provably dead work. Pinning its ABSENCE stops it being "helpfully" reinstated.
+        expect(mocks.job.queue).not.toHaveBeenCalledWith(
+          expect.objectContaining({ name: JobName.SharedSpaceAlbumGrantReconcile }),
+        );
+      });
+
+      // Scenario 9 — the regression most likely to creep back in.
+      it('refuses a space Owner who does not own the album', async () => {
+        const { auth, spaceId, a1 } = setupBulkDeleteAlbums(mocks);
+        mocks.sharedSpace.getMember.mockResolvedValue({
+          spaceId,
+          userId: auth.user.id,
+          role: SharedSpaceRole.Owner,
+        } as any);
+        mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1] });
+
+        expect(result[0]).toMatchObject({ id: a1, success: false, error: BulkIdErrorReason.NO_PERMISSION });
+        expect(mocks.album.delete).not.toHaveBeenCalled();
+      });
+
+      // Scenario 10
+      it('lets a non-member owner delete their own album', async () => {
+        const { auth, spaceId, a1 } = setupBulkDeleteAlbums(mocks);
+        mocks.sharedSpace.getMember.mockResolvedValue(void 0 as any);
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1] });
+
+        expect(result[0].success).toBe(true);
+      });
+
+      // Scenario 11
+      it('reports per item on a mixed batch and logs exactly one bulk row', async () => {
+        const { auth, spaceId, a1, a2, a3 } = setupBulkDeleteAlbums(mocks);
+        mocks.access.album.checkOwnerAccess.mockImplementation((_userId: string, ids: Set<string>) =>
+          Promise.resolve(new Set([...ids].filter((id) => id !== a2))),
+        );
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1, a2, a3] });
+
+        expect(result[0].success).toBe(true);
+        expect(result[1]).toMatchObject({ id: a2, success: false, error: BulkIdErrorReason.NO_PERMISSION });
+        expect(result[2].success).toBe(true);
+        expect(mocks.album.delete).toHaveBeenCalledTimes(2);
+        expect(mocks.sharedSpace.logActivity).toHaveBeenCalledTimes(1);
+        expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: SharedSpaceActivityType.AlbumBulkDelete,
+            data: { count: 2, albumName: 'Trip A' },
+          }),
+        );
+      });
+
+      // Scenario 12
+      it('logs album_delete, not album_bulk_delete, when exactly one of several ids succeeds', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkDeleteAlbums(mocks);
+        mocks.access.album.checkOwnerAccess.mockImplementation((_userId: string, ids: Set<string>) =>
+          Promise.resolve(new Set([...ids].filter((id) => id === a1))),
+        );
+
+        await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(mocks.sharedSpace.logActivity).toHaveBeenCalledWith(
+          expect.objectContaining({ type: SharedSpaceActivityType.AlbumDelete }),
+        );
+      });
+
+      // Scenario 13
+      it('returns 200-shaped per-item failures and logs nothing when every item fails', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkDeleteAlbums(mocks);
+        mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(result).toHaveLength(2);
+        expect(result.every((r) => !r.success)).toBe(true);
+        expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
+      });
+
+      // Scenario 14
+      it('reports not_found for an album that is not linked to this space', async () => {
+        const { auth, spaceId, a1 } = setupBulkDeleteAlbums(mocks);
+        mocks.sharedSpace.hasAlbumLink.mockResolvedValue(false);
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1] });
+
+        expect(result[0]).toMatchObject({ id: a1, success: false, error: BulkIdErrorReason.NOT_FOUND });
+        expect(mocks.album.delete).not.toHaveBeenCalled();
+      });
+
+      // Scenario 15
+      it('deduplicates repeated ids', async () => {
+        const { auth, spaceId, a1 } = setupBulkDeleteAlbums(mocks);
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1, a1] });
+
+        expect(result).toEqual([{ id: a1, success: true }]);
+        expect(mocks.album.delete).toHaveBeenCalledTimes(1);
+      });
+
+      // Scenario 17 — pins the ABSENCE of a hoisted requireRole.
+      it('returns per-item no_permission for a non-member non-owner rather than throwing', async () => {
+        const { auth, spaceId, a1, a2 } = setupBulkDeleteAlbums(mocks);
+        mocks.sharedSpace.getMember.mockResolvedValue(void 0 as any);
+        mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1, a2] });
+
+        expect(result).toHaveLength(2);
+        expect(result.every((r) => r.error === BulkIdErrorReason.NO_PERMISSION)).toBe(true);
+      });
+
+      // Scenario 18 — a trashed album is invisible to checkOwnerAccess (it filters deletedAt IS NULL),
+      // so the reason is no_permission, NOT not_found. Pinned so it stays a decision.
+      it('reports no_permission for a trashed album', async () => {
+        const { auth, spaceId, a1 } = setupBulkDeleteAlbums(mocks);
+        mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1] });
+
+        expect(result[0]).toMatchObject({ error: BulkIdErrorReason.NO_PERMISSION });
+      });
+
+      // Scenario 19 — the loser of a concurrent delete.
+      it('reports no_permission and logs nothing when the album row is already gone', async () => {
+        const { auth, spaceId, a1 } = setupBulkDeleteAlbums(mocks);
+        mocks.access.album.checkOwnerAccess.mockResolvedValue(new Set());
+
+        const result = await sut.bulkDeleteAlbums(auth, spaceId, { ids: [a1] });
+
+        expect(result[0].success).toBe(false);
+        expect(mocks.sharedSpace.logActivity).not.toHaveBeenCalled();
+        expect(mocks.album.delete).not.toHaveBeenCalled();
       });
     });
 

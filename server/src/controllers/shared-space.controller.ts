@@ -608,7 +608,7 @@ export class SharedSpaceController {
     return this.service.getLinkedAlbums(auth, id);
   }
 
-  // These three bulk routes are declared BEFORE the `:albumId` param routes below on purpose:
+  // These four bulk routes are declared BEFORE the `:albumId` param routes below on purpose:
   // Nest/Express match routes in declaration order, and `PUT :id/albums/:albumId` (linkAlbum)
   // would otherwise swallow `PUT :id/albums/bulk-folder` / `bulk-timeline`, treating "bulk-folder"
   // as an albumId.
@@ -630,6 +630,29 @@ export class SharedSpaceController {
     @Body() dto: SharedSpaceBulkAlbumIdsDto,
   ): Promise<BulkIdResponseDto[]> {
     return this.service.bulkUnlinkAlbums(auth, id, dto);
+  }
+
+  @Post(':id/albums/bulk-delete')
+  @Authenticated({ permission: Permission.AlbumDelete })
+  @HttpCode(HttpStatus.OK)
+  @Endpoint({
+    summary: 'Delete several albums linked to a shared space',
+    description:
+      'Per-item results; the request succeeds with 200 even when every item fails. Deletes the ' +
+      'ALBUMS, not just their space links — assets survive in their owner library. Authorizes per ' +
+      'item on album ownership only, with no space-Editor arm, so a space Owner who does not own ' +
+      'an album cannot delete it, while an album owner who is not a space member can. Scoped ' +
+      'Permission.AlbumDelete rather than SharedSpaceAlbumDelete so a space-scoped API key cannot ' +
+      'destroy albums. Shares its request body validation with bulk-unlink — see ' +
+      'SharedSpaceBulkAlbumIdsDto.',
+    history: new HistoryBuilder().added('v1').beta('v1'),
+  })
+  bulkDeleteAlbums(
+    @Auth() auth: AuthDto,
+    @Param() { id }: UUIDParamDto,
+    @Body() dto: SharedSpaceBulkAlbumIdsDto,
+  ): Promise<BulkIdResponseDto[]> {
+    return this.service.bulkDeleteAlbums(auth, id, dto);
   }
 
   @Put(':id/albums/bulk-folder')

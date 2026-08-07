@@ -1066,6 +1066,78 @@ export class SharedSpaceService extends BaseService {
     );
   }
 
+  /**
+   * Owner-gated per item, with NO Editor arm — deletion destroys another user's album globally,
+   * so only its owner may do it. A space Owner who does not own the album gets no_permission.
+   *
+   * Replicates album.service.ts#delete's two steps in the same order rather than calling across
+   * services (not this codebase's pattern). Emitting BEFORE the delete is what lets
+   * onAlbumDelete's orphan queries run while the rows still exist. If album.service.ts#delete
+   * ever gains a third step, this must follow.
+   */
+  async #deleteAlbumChecked(auth: AuthDto, spaceId: string, albumId: string): Promise<string> {
+    const allowed = await this.checkAccess({ auth, permission: Permission.AlbumDelete, ids: [albumId] });
+    if (!allowed.has(albumId)) {
+      throw new ForbiddenException('Insufficient role');
+    }
+
+    const linked = await this.sharedSpaceRepository.hasAlbumLink(spaceId, albumId);
+    if (!linked) {
+      throw new NotFoundException('Album is not linked to this space');
+    }
+
+    // Captured before the delete — unreadable afterwards, and the activity row needs it.
+    const album = await this.albumRepository.getById(albumId, { withAssets: false });
+    const albumName = album?.albumName ?? '';
+
+    await this.eventRepository.emit('AlbumDelete', { albumId });
+    await this.albumRepository.delete(albumId);
+    return albumName;
+  }
+
+  /**
+   * Serves BOTH single and bulk delete — the card menu sends a one-element array, which is why
+   * there is no second route competing with DELETE :id/albums/:albumId (unlink) for a name.
+   *
+   * Deliberately NO hoisted requireRole: like bulkUnlinkAlbums, the owner arm needs a per-item
+   * decision, so an album owner who is not a space member must still succeed.
+   *
+   * Deliberately NO queueAlbumGrantReconcile either: reconcileAlbumGrants reads from
+   * shared_space_album and shared_space_album_user, and both cascade from `album`, so after the
+   * delete it has nothing to read. The tombstones clients need come from the
+   * shared_space_album_delete_audit trigger, and the nightly sweep is the backstop.
+   */
+  async bulkDeleteAlbums(
+    auth: AuthDto,
+    spaceId: string,
+    dto: SharedSpaceBulkAlbumIdsDto,
+  ): Promise<BulkIdResponseDto[]> {
+    const names = new Map<string, string>();
+    const results = await this.#runBulk(dto.ids, async (albumId) => {
+      names.set(albumId, await this.#deleteAlbumChecked(auth, spaceId, albumId));
+    });
+
+    const succeeded = results.filter((r) => r.success).map((r) => r.id);
+    if (succeeded.length === 1) {
+      await this.sharedSpaceRepository.logActivity({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumDelete,
+        data: { albumId: succeeded[0], albumName: names.get(succeeded[0]) ?? '' },
+      });
+    } else if (succeeded.length > 1) {
+      // ONE row for the batch; albumName carries the first success so the feed renders
+      // "X and N others", mirroring AlbumBulkUnlink.
+      await this.sharedSpaceRepository.logActivity({
+        spaceId,
+        userId: auth.user.id,
+        type: SharedSpaceActivityType.AlbumBulkDelete,
+        data: { count: succeeded.length, albumName: names.get(succeeded[0]) ?? '' },
+      });
+    }
+    return results;
+  }
+
   async getLinkedAlbums(auth: AuthDto, spaceId: string): Promise<SharedSpaceLinkedAlbumDto[]> {
     await this.requireMembership(auth, spaceId);
     const rows = await this.sharedSpaceRepository.getLinkedAlbums(spaceId);
