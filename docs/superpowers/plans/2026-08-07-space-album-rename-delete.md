@@ -20,6 +20,9 @@
 - **i18n locales (exactly these ten):** `de en es fr it nl pl ru zh_Hans zh_Hant`. Shared dir `i18n/` serves both web and mobile.
 - **`shared_space_activity.type` is `varchar(30)`.** New values must be ≤ 30 chars.
 - **Server import style:** absolute `src/...` paths only, no relative imports.
+- **Gate commands (verified — CLAUDE.md is stale here).** The Makefile has **no** `check-*` or
+  `lint-*` targets. Use `cd server && pnpm run check && pnpm run lint`, and from `web/`:
+  `pnpm check:typescript`, `pnpm check:svelte`, `pnpm lint`. `make open-api` **does** exist.
 - **Prettier:** run on any markdown under `docs/`. CI Docs Build is strict.
 - **Delete copy must say the album is destroyed for everyone**, not merely removed from the space — that is the whole distinction from the adjacent Unlink action.
 - **Test bodies written out vs. specified.** Tasks 1, 2, 5, 6, 9 and 10 carry complete, literal test
@@ -403,10 +406,11 @@ In `server/src/controllers/shared-space.controller.ts`, next to `@Put(':id/album
 - [ ] **Step 8: Type-check and lint**
 
 ```bash
-make check-server && make lint-server
+cd server && pnpm run check && pnpm run lint
 ```
 
-Expected: both clean.
+Expected: both clean. (`make check-server` / `make lint-server` do **not** exist in this
+repo's Makefile despite what CLAUDE.md says — verified during Task 1.)
 
 - [ ] **Step 9: Commit**
 
@@ -773,7 +777,7 @@ In `server/src/controllers/shared-space.controller.ts`, **inside the existing bu
 - [ ] **Step 7: Type-check and lint**
 
 ```bash
-make check-server && make lint-server
+cd server && pnpm run check && pnpm run lint
 ```
 
 - [ ] **Step 8: Commit**
@@ -2345,7 +2349,7 @@ git commit -m "feat(mobile): rename and delete a space album from its detail pag
 - [ ] **Run every gate**
 
 ```bash
-make check-all && make lint-all
+cd server && pnpm run check && pnpm run lint
 cd server && pnpm test -- --run src/services/shared-space.service.spec.ts
 cd web && pnpm test -- --run && pnpm check:typescript && pnpm check:svelte && pnpm lint
 cd mobile && flutter test && dart analyze --fatal-infos lib test && dart format --set-exit-if-changed lib test
