@@ -2865,6 +2865,37 @@ void main() {
     await settleToast(tester);
   });
 
+  // Fix round 1 — the review caught that `onDeleteAlbums`'s call site never supplied
+  // `singleAlbumName`, so a single-album selection rendered the confirmation as `Delete ""?`
+  // (empty name) instead of naming the album. This is the mainline flow for the persona this task
+  // targets: a viewer long-presses the one album they own (their selection can never grow past
+  // one, since they can't tap-add anything else — see scenario 62) and taps the bar's delete icon.
+  testWidgets('selecting exactly one owned album shows its name in the delete confirmation', (tester) async {
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [_album(id: 'a1', name: 'Rome', isOwnedByMe: true)],
+      canEdit: false,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-a1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-selection-delete-albums')));
+    await tester.pumpAndSettle();
+
+    // The real, single-album copy — proves `singleAlbumName` was resolved and threaded through.
+    expect(
+      find.text(
+        'Delete "Rome"? This permanently deletes the album for everyone in this space, not just '
+        'from this space. The photos in it are not deleted.',
+      ),
+      findsOneWidget,
+    );
+    // Negative — the exact regression the review caught, using the same substring-matching finder
+    // family (`find.textContaining`) so it isn't just the inverse of the positive assertion above.
+    expect(find.textContaining('Delete ""?'), findsNothing);
+  });
+
   // Scenario 65
   testWidgets('cancelling the rename dialog fires no action call', (tester) async {
     final api = MockSharedSpaceApiRepository();

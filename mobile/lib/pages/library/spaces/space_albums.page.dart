@@ -731,7 +731,17 @@ class SpaceAlbumsPage extends HookConsumerWidget {
                 onDelete: bulkDeleteFolders,
                 canManage: canEdit,
                 canDeleteAlbums: allSelectedAlbumsOwned,
-                onDeleteAlbums: () => deleteAlbums(selection.ids),
+                // Fix round 1 — `deleteAlbums` takes the single-album copy branch (which
+                // interpolates `{name}`) whenever the selection holds exactly one id, so that name
+                // has to be resolved HERE, the same lookup pattern `allSelectedAlbumsOwned` above
+                // already uses. Left null for a bulk (>1) selection, where `deleteAlbums` ignores
+                // it and uses the count-based copy instead.
+                onDeleteAlbums: () => deleteAlbums(
+                  selection.ids,
+                  singleAlbumName: selection.ids.length == 1
+                      ? currentAlbums?.firstWhereOrNull((a) => a.id == selection.ids.first)?.name
+                      : null,
+                ),
               )
             : AppBar(
                 title: Text(_title(context, folders)),
@@ -1655,10 +1665,12 @@ class _AlbumCard extends ConsumerWidget {
                   ],
                 ),
               ),
-              // Task 11 — the menu itself now renders whenever ANY of the three capabilities apply,
-              // not just `canEdit`: a viewer who owns this album gets a menu with Rename/Delete
-              // even though the three canEdit-only items below stay hidden for them.
-              if (canEdit || canRename || canDelete)
+              // Task 11 — the menu renders whenever Rename or Delete applies. `canEdit` is
+              // deliberately NOT part of this condition: `canRename` is always `canEdit ||
+              // isOwnedByMe`, so `canEdit || canRename` would just collapse back to `canRename` —
+              // a viewer who owns this album still gets a menu with Rename/Delete even though the
+              // three canEdit-only items below stay hidden for them.
+              if (canRename || canDelete)
                 SizedBox(
                   width: 24,
                   height: 24,
