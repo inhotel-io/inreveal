@@ -1739,6 +1739,21 @@ describe('Space albums page', () => {
       );
 
       await waitFor(() => expect(modalManagerMock.showDialog).toHaveBeenCalled());
+      // C1: the sibling folder test above pins its confirm's `title`; this one used to inspect
+      // nothing at all, which is exactly why it stayed green while the SELECT-BAR path (which
+      // calls the handler with ids only — runBulkAction passes one argument) rendered the
+      // single-album copy with an empty name. Pin the real name here.
+      expect(modalManagerMock.showDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Delete album',
+          prompt: expect.stringContaining('Delete "Rome"?'),
+        }),
+      );
+      // Negative for the exact regression, with the positive counterpart directly above so it
+      // cannot pass vacuously (a dialog that never opened would fail that one first).
+      expect(modalManagerMock.showDialog).not.toHaveBeenCalledWith(
+        expect.objectContaining({ prompt: expect.stringContaining('Delete ""?') }),
+      );
       expect(sdkMock.bulkDeleteAlbums).not.toHaveBeenCalled();
       // Nothing happened, so nothing should be deselected — mirrors the bulk-unlink/bulk-delete-
       // folders "dismissing the confirm dialog" tests above.

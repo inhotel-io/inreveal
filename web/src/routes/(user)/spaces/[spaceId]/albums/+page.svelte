@@ -526,10 +526,19 @@
   // space_album_delete_confirm) exist specifically to avoid that.
   async function handleBulkDeleteAlbums(ids: string[], albumName?: string): Promise<string[]> {
     const single = ids.length === 1;
+    // C1: only the card kebab (handleDeleteAlbum below) has an album object to pass a name from —
+    // the SELECT BAR reaches here through SpaceAlbumsList's runBulkAction, which calls the action
+    // with `ids` alone. A selection of exactly one album therefore arrived with `albumName`
+    // undefined and rendered `Delete ""?`, which is the primary flow for the persona this feature
+    // targets (a space viewer who owns one album). Resolve it here from the page's own `albums`,
+    // the same lookup mobile does at its call site (space_albums.page.dart's onDeleteAlbums).
+    // Falls back to '' only if the id has already vanished from `albums`, which the confirm's own
+    // reload/reconcile would follow up on anyway.
+    const singleName = single ? (albumName ?? albums.find((album) => album.id === ids[0])?.albumName ?? '') : '';
     const confirmed = await modalManager.showDialog({
       title: single ? $t('space_album_delete') : $t('space_album_bulk_delete_title', { values: { count: ids.length } }),
       prompt: single
-        ? $t('space_album_delete_confirm', { values: { name: albumName ?? '' } })
+        ? $t('space_album_delete_confirm', { values: { name: singleName } })
         : $t('space_album_bulk_delete_confirm'),
       confirmText: $t('delete'),
       confirmColor: 'danger',
