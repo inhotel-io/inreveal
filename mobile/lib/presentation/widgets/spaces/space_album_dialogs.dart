@@ -16,8 +16,10 @@ import 'package:immich_mobile/extensions/translate_extensions.dart';
 /// dialog serves both the album prompts (`space-album-name`) and the folder
 /// prompts (`space-album-folder-name`) without their widget keys colliding.
 ///
-/// The two ALBUM call sites ("New album" and "Rename album") pass
-/// `space_album_name_label`/`space-album-name`; the two FOLDER ones keep
+/// The three ALBUM call sites — the albums list page's "New album" and
+/// "Rename album", plus the album detail page's rename — pass
+/// `space_album_name_label`/`space-album-name`; the two FOLDER ones (both on
+/// the albums list page, "New folder" and "Rename folder") keep
 /// `space_album_folder_name_label`/`space-album-folder-name`.
 Future<String?> promptSpaceAlbumName(
   BuildContext context, {
