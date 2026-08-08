@@ -4,6 +4,7 @@ import {
   SharedSpaceRole,
   bulkDeleteAlbums,
   getAlbumInfo,
+  renameSharedSpaceAlbum,
   type AlbumResponseDto,
   type SharedSpaceMemberResponseDto,
   type SharedSpaceResponseDto,
@@ -1316,6 +1317,88 @@ describe('Space album detail page', () => {
 
       await waitFor(() => expect(handleErrorMock).toHaveBeenCalledWith(undefined, 'Unable to delete album'));
       expect(goto).not.toHaveBeenCalled();
+    });
+
+    // m-5: Scenario 44 only proved the Rename item RENDERS for an editor who does not own the
+    // album — the whole point of the editor arm is that it reaches renameSharedSpaceAlbum (the
+    // space route) and never handleUpdateAlbum's owner-only PATCH /albums/{id}, and nothing on
+    // this page asserted that. Clicking it through is what pins it.
+    it('sends the editor-arm rename through the space route', async () => {
+      modalManagerMock.show.mockResolvedValue('Renamed By Editor');
+      vi.mocked(renameSharedSpaceAlbum).mockResolvedValue(undefined as never);
+      vi.mocked(getAlbumInfo).mockResolvedValue(makeAlbum({ id: 'album-1', albumName: 'Renamed By Editor' }) as never);
+      renderPage({
+        members: [makeMember(SharedSpaceRole.Editor)],
+        album: makeAlbum({
+          id: 'album-1',
+          albumName: 'Vacation 2025',
+          albumUsers: [
+            {
+              user: { id: 'other-user-id', email: 'owner@example.com', name: 'Other User' } as never,
+              role: AlbumUserRole.Owner,
+            },
+          ],
+        }),
+      });
+
+      await openMenu();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Rename album' }));
+
+      await waitFor(() =>
+        expect(renameSharedSpaceAlbum).toHaveBeenCalledWith({
+          id: 'space-1',
+          albumId: 'album-1',
+          sharedSpaceAlbumRenameDto: { name: 'Renamed By Editor' },
+        }),
+      );
+    });
+
+    // m-2: `isOwned` reads the OWNER ROLE off albumUsers, not `albumUsers[0]`. Array order is not
+    // a contract, and the old positional check was wrong in BOTH directions — this test covers the
+    // over-granting one (current user first, but only a Viewer), the next covers the under-granting
+    // one and is its positive counterpart.
+    it('does not treat a first-listed non-owner as the owner', () => {
+      renderPage({
+        members: [makeMember(SharedSpaceRole.Viewer)],
+        album: makeAlbum({
+          albumUsers: [
+            {
+              user: { id: 'current-user-id', email: 'user@example.com', name: 'Current User' } as never,
+              role: AlbumUserRole.Viewer,
+            },
+            {
+              user: { id: 'other-user-id', email: 'owner@example.com', name: 'Other User' } as never,
+              role: AlbumUserRole.Owner,
+            },
+          ],
+        }),
+      });
+
+      // Space viewer, album viewer: neither canManage nor isOwned, so the whole ⋮ is gone.
+      expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument();
+    });
+
+    it('treats a later-listed owner as the owner', async () => {
+      renderPage({
+        members: [makeMember(SharedSpaceRole.Viewer)],
+        album: makeAlbum({
+          albumUsers: [
+            {
+              user: { id: 'other-user-id', email: 'other@example.com', name: 'Other User' } as never,
+              role: AlbumUserRole.Viewer,
+            },
+            {
+              user: { id: 'current-user-id', email: 'user@example.com', name: 'Current User' } as never,
+              role: AlbumUserRole.Owner,
+            },
+          ],
+        }),
+      });
+
+      await openMenu();
+
+      expect(screen.getByRole('menuitem', { name: 'Delete album' })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: 'Rename album' })).toBeInTheDocument();
     });
   });
 });

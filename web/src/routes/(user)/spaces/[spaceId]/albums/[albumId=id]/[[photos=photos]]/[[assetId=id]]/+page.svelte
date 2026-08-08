@@ -112,7 +112,12 @@
   );
   const canManage = $derived(isSpaceEditor || isAlbumEditor);
   // Album title/description editing is owner-gated, mirroring the regular album page's `isOwned`.
-  const isOwned = $derived(album.albumUsers[0]?.user.id === authManager.user.id);
+  // m-2: resolved by ROLE, not by `albumUsers[0]` — array order is not a contract, and the old
+  // positional read was wrong in both directions (a first-listed viewer counted as the owner; a
+  // later-listed owner did not). `isAlbumEditor` right above already matches on role.
+  const isOwned = $derived(
+    album.albumUsers.some((au) => au.user.id === authManager.user.id && au.role === AlbumUserRole.Owner),
+  );
 
   // Match the regular album flow: an abandoned empty + unnamed album (created here and left without a
   // title or any photos) is cleaned up on navigate-away. Deleting it also drops the shared_space_album
