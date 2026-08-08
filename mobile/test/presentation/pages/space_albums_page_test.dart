@@ -2787,13 +2787,76 @@ void main() {
     expect(openedAlbumIds, ['not-owned']); // still just the one nav — this long-press selected instead
   });
 
+  // I-1 (final whole-branch review) — Task 11 widened long-press (`canSelectAlbum`, per album) and
+  // `showSelectionBar`, but left `onAlbumTap`'s toggle branch on the page-wide `canEdit`. A viewer
+  // who owns two albums could therefore ENTER a selection but never extend it: the second tap
+  // pushed the detail route and abandoned the live selection behind a navigation, making bulk
+  // delete unreachable for the exact persona the capability model was widened for. Web routes on
+  // `selection.selectionActive` first and only then on the per-album predicate
+  // (space-albums-list.svelte's `handleAlbumClick`); these two tests pin the same shape on mobile.
+  testWidgets('a viewer tap-extends a selection across the albums they own', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [
+        _album(id: 'owned-1', name: 'Rome', isOwnedByMe: true),
+        _album(id: 'owned-2', name: 'Venice', isOwnedByMe: true),
+      ],
+      canManage: false,
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-owned-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 selected'), findsOneWidget); // positive control — the selection did start
+
+    await tester.tap(find.byKey(const Key('space-album-card-owned-2')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 selected'), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-owned-1')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-owned-2')), findsOneWidget);
+    // The whole point: the tap EXTENDED the selection instead of navigating away from it. With
+    // bulk delete gated on "owns every selected album", this is the only route to a >1 bulk
+    // delete for a viewer.
+    expect(find.byKey(const Key('space-album-selection-delete-albums')), findsOneWidget);
+    expect(openedAlbumIds, isEmpty);
+  });
+
+  testWidgets('a card the viewer cannot select is inert mid-selection, not a navigation', (tester) async {
+    final openedAlbumIds = <String>[];
+    await pumpSpaceAlbumsPage(
+      tester,
+      albums: [
+        _album(id: 'owned', name: 'Mine', isOwnedByMe: true),
+        _album(id: 'not-owned', name: 'Theirs', isOwnedByMe: false),
+      ],
+      canManage: false,
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-owned')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 selected'), findsOneWidget); // positive control
+
+    await tester.tap(find.byKey(const Key('space-album-card-not-owned')));
+    await tester.pumpAndSettle();
+
+    // Neither selected (it offers no select affordance at all) nor navigated to — the same
+    // "unselectable card is inert" contract web's `handleAlbumClick` already implements.
+    expect(find.byKey(const Key('space-album-card-selected-not-owned')), findsNothing);
+    expect(openedAlbumIds, isEmpty);
+    expect(find.text('1 selected'), findsOneWidget); // the live selection survived untouched
+  });
+
   // Scenario 63
   testWidgets('bulk Delete disappears once an unowned album joins the selection', (tester) async {
-    // Editor context: an editor can freely TAP-add any album to an existing selection regardless
-    // of ownership (`onAlbumTap`'s toggle path is `canEdit`-gated, unchanged by this task) — the
-    // only way to grow a selection past its first, long-press-entered member with an UNOWNED
-    // album. Bulk delete itself stays ownership-gated independent of `canEdit` (S-10's table:
-    // "owns every selected album", not an editor privilege).
+    // Editor context: `onAlbumTap`'s toggle branch is gated on `canSelectAlbum`, which is
+    // satisfied for an editor regardless of ownership (I-1), so an editor can TAP-add an album
+    // they do NOT own to an existing selection — the only way to grow a selection past its first,
+    // long-press-entered member with an unowned album. Bulk delete itself stays ownership-gated
+    // independent of `canEdit` (S-10's table: "owns every selected album", not an editor
+    // privilege).
     await pumpPage(
       tester,
       folders: const [],
@@ -2868,8 +2931,10 @@ void main() {
   // Fix round 1 — the review caught that `onDeleteAlbums`'s call site never supplied
   // `singleAlbumName`, so a single-album selection rendered the confirmation as `Delete ""?`
   // (empty name) instead of naming the album. This is the mainline flow for the persona this task
-  // targets: a viewer long-presses the one album they own (their selection can never grow past
-  // one, since they can't tap-add anything else — see scenario 62) and taps the bar's delete icon.
+  // targets: a viewer long-presses the one album they own and taps the bar's delete icon. (A
+  // viewer who owns SEVERAL albums can grow the selection past one by tapping — see "a viewer
+  // tap-extends a selection across the albums they own" above — and then gets the counted bulk
+  // copy instead, which is what makes the single-vs-bulk branch here worth pinning.)
   testWidgets('selecting exactly one owned album shows its name in the delete confirmation', (tester) async {
     await pumpPage(
       tester,

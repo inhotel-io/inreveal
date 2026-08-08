@@ -106,11 +106,13 @@ the album's own page.
 Two derived rules keep the surfaces coherent:
 
 - **Selectable predicate.** An album card is selectable iff `canManage || isOwner(album)`. On mobile
-  this means both the `canEdit`-gated long-press wiring **and** `showSelectionBar = canEdit &&
-!selection.isEmpty` (`space_albums.page.dart`) must widen together; widening only one leaves a
-  viewer able to select with no bar, or a bar that can never appear. A folder
-  card stays `canManage`, so a space viewer can never select a folder and the never-mixed
-  album/folder selection invariant is untouched.
+  this means the `canEdit`-gated long-press wiring, `showSelectionBar = canEdit && !selection.isEmpty`
+  **and** the tap router `onAlbumTap` (`space_albums.page.dart`) must all widen together; widening
+  only some of them leaves a viewer able to select with no bar, a bar that can never appear, or a
+  selection they can enter but never extend (the second tap navigates away instead of toggling). A
+  folder card stays `canManage`, so a space viewer can never select a folder and the never-mixed
+  album/folder selection invariant is untouched. Both clients also make an unselectable card **inert**
+  mid-selection rather than a navigation — web in `handleAlbumClick`, mobile in `onAlbumTap`.
 - **Per-button rendering.** Each select-bar button renders iff its own capability holds. A viewer's
   bar therefore shows _Delete_ alone; an editor with a mixed-ownership selection sees
   _Unlink / Move / Timeline_ but no _Delete_.

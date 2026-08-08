@@ -816,9 +816,27 @@ class SpaceAlbumsPage extends HookConsumerWidget {
             // toggles the tapped item instead of navigating; `toggle` itself resolves the
             // never-mixed-kinds rule (toggling an album while a folder selection is active
             // replaces it wholesale), so this call site does not need to check kinds itself.
+            //
+            // I-1 (final review): the ACTIVE-selection branch is decided by the same per-album
+            // `canSelectAlbum` that gates long-press and the check affordance — not the page-wide
+            // `canEdit` this used to read. On `canEdit` a viewer who owns two albums could enter a
+            // selection by long-press but never extend it: the second tap pushed the detail route
+            // and abandoned the live selection, leaving bulk delete unreachable for them. And a
+            // card that cannot be selected is INERT mid-selection rather than a navigation,
+            // matching web's `handleAlbumClick` (space-albums-list.svelte), which routes on
+            // `selection.selectionActive` first and only then on its own per-album predicate.
+            //
+            // Looks the id up in the whole-space `albums` (the same pattern `allSelectedAlbumsOwned`
+            // uses) rather than changing `_AlbumCard.onTap`'s `String albumId` contract. An id with
+            // no album behind it — it vanished between build and tap — is treated as unselectable
+            // and is likewise inert; navigating to an album that just disappeared would only land
+            // on a broken detail page.
             void onAlbumTap(String albumId) {
-              if (canEdit && !selection.isEmpty) {
-                selectionNotifier.toggle(SpaceAlbumSelectionKind.album, albumId);
+              if (!selection.isEmpty) {
+                final album = albums.firstWhereOrNull((a) => a.id == albumId);
+                if (album != null && canSelectAlbum(album)) {
+                  selectionNotifier.toggle(SpaceAlbumSelectionKind.album, albumId);
+                }
                 return;
               }
               context.pushRoute(SpaceAlbumDetailRoute(spaceId: spaceId, albumId: albumId, canEdit: canEdit));
