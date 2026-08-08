@@ -2756,6 +2756,7 @@
   "space_albums_hidden": "Ukryte",
   "space_albums_hidden_from_timeline": "Ukryte na osi czasu",
   "space_albums_load_failed": "Nie udało się wczytać albumów: {error}",
+  "space_albums_manage": "Zarządzaj ▸",
   "space_albums_no_match": "Żaden album nie pasuje do \"{query}\"",
   "space_albums_no_matching": "Żaden album nie pasuje do wyszukiwania",
   "space_albums_page_title": "Albumy",

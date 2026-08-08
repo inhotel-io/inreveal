@@ -2738,6 +2738,7 @@
   "space_albums_hidden": "Verborgen",
   "space_albums_hidden_from_timeline": "Verborgen uit tijdlijn",
   "space_albums_load_failed": "Albums laden mislukt: {error}",
+  "space_albums_manage": "Beheren ▸",
   "space_albums_no_match": "Geen albums komen overeen met \"{query}\"",
   "space_albums_no_matching": "Geen albums komen overeen met je zoekopdracht",
   "space_albums_page_title": "Albums",

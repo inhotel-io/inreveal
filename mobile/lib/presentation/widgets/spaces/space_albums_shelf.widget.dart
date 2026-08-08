@@ -80,8 +80,11 @@ class SpaceAlbumsShelf extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row: "Albums (N)  See all ▸"
-          _HeaderRow(count: albums.length, showSeeAll: albums.isNotEmpty, onSeeAll: onSeeAll),
+          // Header row: "Albums (N)  See all ▸" — the entry stays reachable for an
+          // editor even at zero albums, because that is the only route to album
+          // creation. Viewers at zero albums never get here: line 75 already
+          // returned SizedBox.shrink().
+          _HeaderRow(count: albums.length, showSeeAll: albums.isNotEmpty || canEdit, onSeeAll: onSeeAll),
           const SizedBox(height: 8),
           // Horizontal scroll of tiles
           Expanded(
@@ -137,11 +140,13 @@ class _HeaderRow extends StatelessWidget {
             'space_albums_shelf_title'.t(context: context, args: {'count': count}),
             style: context.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
           ),
-          if (showSeeAll)
+          if (showSeeAll && onSeeAll != null)
             GestureDetector(
               onTap: onSeeAll,
               child: Text(
-                'space_albums_see_all'.t(context: context),
+                // "See all" is a false promise when the list is empty; the empty
+                // state's job is to get the editor to album creation.
+                (count == 0 ? 'space_albums_manage' : 'space_albums_see_all').t(context: context),
                 style: context.textTheme.bodySmall?.copyWith(color: context.colorScheme.primary),
               ),
             ),

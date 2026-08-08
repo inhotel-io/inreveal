@@ -2740,6 +2740,7 @@
   "space_albums_hidden": "Скрыт",
   "space_albums_hidden_from_timeline": "Скрыт с временной шкалы",
   "space_albums_load_failed": "Не удалось загрузить альбомы: {error}",
+  "space_albums_manage": "Управление ▸",
   "space_albums_no_match": "Нет альбомов, соответствующих «{query}»",
   "space_albums_no_matching": "Нет альбомов, соответствующих вашему запросу",
   "space_albums_page_title": "Альбомы",

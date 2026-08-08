@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -98,15 +100,75 @@ void main() {
     expect(find.byIcon(Icons.visibility_off), findsOneWidget);
   });
 
-  testWidgets('count==0 + canEdit=true: shows only the Link tile', (tester) async {
+  testWidgets('count==0 + canEdit=true: shows the Link tile AND a "Manage ▸" entry', (tester) async {
     await tester.pumpConsumerWidget(
+      SpaceAlbumsShelf(spaceId: spaceId, canEdit: true, onLinkTap: () {}, onAlbumTap: (_) {}, onSeeAll: () {}),
+      overrides: _overrides(spaceId: spaceId, albums: const []),
+    );
+
+    expect(find.byKey(const Key('space-album-link-tile')), findsOneWidget);
+    expect(findByKeyPrefix('space-album-tile-'), findsNothing);
+    // The entry into album management (create album / create folder) must be
+    // reachable on an EMPTY space — that is the whole point of this fix.
+    expect(find.text('Manage ▸'), findsOneWidget);
+    // ...and it must not claim "See all" when there is nothing to see.
+    expect(find.text('See all ▸'), findsNothing);
+  });
+
+  testWidgets('count==0 + canEdit=true: tapping "Manage ▸" invokes onSeeAll', (tester) async {
+    var called = false;
+
+    await tester.pumpConsumerWidget(
+      SpaceAlbumsShelf(
+        spaceId: spaceId,
+        canEdit: true,
+        onLinkTap: () {},
+        onAlbumTap: (_) {},
+        onSeeAll: () => called = true,
+      ),
+      overrides: _overrides(spaceId: spaceId, albums: const []),
+    );
+
+    await tester.tap(find.text('Manage ▸'));
+    expect(called, isTrue);
+  });
+
+  testWidgets('count>0 + canEdit=false: viewer still sees "See all ▸"', (tester) async {
+    final albums = [_album(id: 'a1', name: 'Hawaii')];
+
+    await tester.pumpConsumerWidget(
+      SpaceAlbumsShelf(spaceId: spaceId, canEdit: false, onLinkTap: () {}, onAlbumTap: (_) {}, onSeeAll: () {}),
+      overrides: _overrides(spaceId: spaceId, albums: albums),
+    );
+
+    expect(find.text('See all ▸'), findsOneWidget);
+    expect(find.text('Manage ▸'), findsNothing);
+  });
+
+  testWidgets('provider still loading: renders nothing, so no entry flashes in', (tester) async {
+    await tester.pumpConsumerWidget(
+      SpaceAlbumsShelf(spaceId: spaceId, canEdit: true, onLinkTap: () {}, onAlbumTap: (_) {}, onSeeAll: () {}),
+      overrides: [
+        // A stream that never emits keeps the provider in AsyncLoading.
+        spaceAlbumsProvider(
+          spaceId,
+        ).overrideWith((_) => Stream<List<SpaceAlbum>>.fromFuture(Completer<List<SpaceAlbum>>().future)),
+      ],
+    );
+
+    expect(find.byKey(const Key('space-albums-shelf')), findsNothing);
+    expect(find.text('Manage ▸'), findsNothing);
+  });
+
+  testWidgets('onSeeAll omitted: the entry is not rendered, so it can never be dead', (tester) async {
+    await tester.pumpConsumerWidget(
+      // No onSeeAll passed.
       SpaceAlbumsShelf(spaceId: spaceId, canEdit: true, onLinkTap: () {}, onAlbumTap: (_) {}),
       overrides: _overrides(spaceId: spaceId, albums: const []),
     );
 
     expect(find.byKey(const Key('space-album-link-tile')), findsOneWidget);
-    // No cover tiles
-    expect(findByKeyPrefix('space-album-tile-'), findsNothing);
+    expect(find.text('Manage ▸'), findsNothing);
   });
 
   testWidgets('count==0 + canEdit=false: renders nothing', (tester) async {

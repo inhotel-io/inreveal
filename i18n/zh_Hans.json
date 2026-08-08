@@ -2738,6 +2738,7 @@
   "space_albums_hidden": "已隐藏",
   "space_albums_hidden_from_timeline": "已从时间线中隐藏",
   "space_albums_load_failed": "加载相簿失败：{error}",
+  "space_albums_manage": "管理 ▸",
   "space_albums_no_match": "没有与“{query}”匹配的相簿",
   "space_albums_no_matching": "没有与您的搜索匹配的相簿",
   "space_albums_page_title": "相簿",

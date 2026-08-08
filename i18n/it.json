@@ -2738,6 +2738,7 @@
   "space_albums_hidden": "Nascosto",
   "space_albums_hidden_from_timeline": "Nascosto dalla timeline",
   "space_albums_load_failed": "Impossibile caricare gli album: {error}",
+  "space_albums_manage": "Gestisci ▸",
   "space_albums_no_match": "Nessun album corrisponde a \"{query}\"",
   "space_albums_no_matching": "Nessun album corrisponde alla tua ricerca",
   "space_albums_page_title": "Album",

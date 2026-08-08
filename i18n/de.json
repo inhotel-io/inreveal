@@ -2738,6 +2738,7 @@
   "space_albums_hidden": "Ausgeblendet",
   "space_albums_hidden_from_timeline": "Aus der Zeitleiste ausgeblendet",
   "space_albums_load_failed": "Alben konnten nicht geladen werden: {error}",
+  "space_albums_manage": "Verwalten ▸",
   "space_albums_no_match": "Keine Alben stimmen mit \"{query}\" überein",
   "space_albums_no_matching": "Keine Alben entsprechen deiner Suche",
   "space_albums_page_title": "Alben",
