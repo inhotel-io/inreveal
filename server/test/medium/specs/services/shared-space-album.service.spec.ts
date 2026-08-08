@@ -2019,17 +2019,23 @@ describe('album deletion cascades and sync tombstones', () => {
       .execute();
     expect(new Set(tombstones.map((r) => r.userId))).toEqual(new Set([owner.id, member.id]));
 
-    // FINDING: the audit trigger's own fan-out is NOT exactly one row per grant.
-    // shared_space_album_delete_audit's section 2 (per-shared_space_member join) and
-    // section 3 (space-creator query) are not mutually exclusive — a creator who is ALSO a
-    // shared_space_member (true for every real space; see SharedSpaceService#create, which always
-    // inserts an Owner membership row for the creator) is matched by BOTH branches and gets a
-    // SECOND, duplicate tombstone. Pinned exactly (not loosened to "contains") so this is a
-    // deliberate, visible test update if the trigger's overlap is ever fixed, rather than a silent
-    // behavior change. Harmless for sync correctness — SharedSpaceAlbumSync#getDeletes just tells
-    // the owner's client to drop the album twice — but it is real duplicate audit-row growth on
-    // every album delete, for every space, forever.
-    expect(tombstones.map((r) => r.userId).sort()).toEqual([member.id, owner.id, owner.id].sort());
+    // The audit trigger's fan-out is EXACTLY one row per user who lost access.
+    //
+    // It used to emit two for the space creator: shared_space_album_delete_audit had a per-member
+    // INSERT and a separate space-creator INSERT, and the two were not mutually exclusive — a
+    // creator who is ALSO a shared_space_member (true for every real space; see
+    // SharedSpaceService#create, which always inserts an Owner membership row for the creator) was
+    // matched by both and got a duplicate tombstone. Migration
+    // 1786100000000-DedupeSharedSpaceAlbumDeleteAudit merged them into ONE statement over a
+    // UNION-deduplicated set of members + creator, so the overlap collapses.
+    //
+    // The creator arm was NOT dropped, only merged: nothing in the schema binds
+    // shared_space.createdById to a shared_space_member row, so a creator without a membership row
+    // must still be revoked (pinned in sync/shared-space-album-delete-triggers.spec.ts).
+    //
+    // Still pinned exactly (not loosened to "contains") so any future change to the fan-out is a
+    // deliberate, visible test update rather than a silent behavior change.
+    expect(tombstones.map((r) => r.userId).sort()).toEqual([member.id, owner.id].sort());
 
     // AND shared_space_album_user is empty for the album, proving the FK cascade actually ran —
     // if this were nonempty the tombstone assertions above would be worthless (nothing was really

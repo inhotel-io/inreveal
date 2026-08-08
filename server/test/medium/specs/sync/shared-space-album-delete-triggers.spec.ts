@@ -241,10 +241,11 @@ describe('whole-space delete', () => {
     expect(viewerGrants1.some((g) => g.userId === viewer.id)).toBe(false); // revoked (no other path)
 
     // The BEFORE-row trigger is the SOLE writer of the gated grant-audit on this
-    // path: the cascade-fired shared_space_album_delete_audit section 2/3 must be
-    // suppressed by its EXISTS(shared_space) guard (the space row is already gone
-    // by the time the cascade runs). So there is EXACTLY ONE grant-audit row for
-    // the viewer — a regressed guard would produce a duplicate here.
+    // path: the cascade-fired shared_space_album_delete_audit's grant-revocation
+    // INSERT must be suppressed by its INNER JOIN shared_space guard (the space
+    // row is already gone by the time the cascade runs, so the join yields no
+    // rows). So there is EXACTLY ONE grant-audit row for the viewer — a regressed
+    // guard would produce a duplicate here.
     const grantAudit = await db
       .selectFrom('shared_space_album_user_audit')
       .selectAll()
