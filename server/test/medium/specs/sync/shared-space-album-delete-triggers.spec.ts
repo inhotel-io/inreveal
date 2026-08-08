@@ -295,10 +295,17 @@ describe('album hard-delete', () => {
 // ---------------------------------------------------------------------------
 // M2: the creator must receive exactly ONE grant-revocation tombstone.
 //
-// Steps 2 and 3 of shared_space_album_delete_audit insert independently — one
-// per member, one for the creator — and the creator is always a member in
-// production (SharedSpaceService.create adds them as Owner; they cannot leave
-// or be removed). The creator therefore got two rows per delete.
+// shared_space_album_delete_audit revokes grants for every member AND the
+// space creator via one deduplicated INSERT ... SELECT DISTINCT, whose
+// CROSS JOIN LATERAL unions the member set with the creator before the
+// user_has_album_path check. That merge replaced two independent INSERTs
+// (one per member, one for the creator); the creator is always also a
+// member in production (SharedSpaceService.create adds them as Owner; they
+// cannot leave or be removed), so the old two-INSERT form gave the creator
+// two rows per delete. The tests below pin the merged behaviour: exactly one
+// tombstone for a creator who is also a member, and — since nothing in the
+// schema binds createdById to a member row — still one tombstone for a
+// creator who isn't.
 // ---------------------------------------------------------------------------
 
 describe('shared_space_album_delete_audit — tombstone deduplication', () => {

@@ -24,7 +24,9 @@ const double _kTileRadius = 16.0;
 /// timeline. Three visibility cases (§10.3 B2 / mobile design §Surface 1):
 ///
 ///  1. [albums] not empty → cover tiles + (if [canEdit]) trailing Link tile.
-///  2. [albums] empty && [canEdit] → slim shelf with only the Link tile.
+///  2. [albums] empty && [canEdit] → slim shelf with the Link tile, plus a
+///     header entry (label switches from "See all" to "Manage ▸" once the
+///     count is zero; hidden entirely when [onSeeAll] is null — see below).
 ///  3. [albums] empty && !canEdit  → nothing ([SizedBox.shrink]).
 ///
 /// Cover tiles apply a ~60% dim + [Icons.visibility_off] badge when the album
@@ -55,8 +57,10 @@ class SpaceAlbumsShelf extends ConsumerWidget {
   final VoidCallback onLinkTap;
   final void Function(String albumId) onAlbumTap;
 
-  /// Called when the "See all ▸" header tap is fired. If null, the "See all"
-  /// text is non-tappable (visual only). B3 wires this to push [SpaceAlbumsRoute].
+  /// Called when the "See all ▸" / "Manage ▸" header entry is tapped. If
+  /// null, that header entry is not rendered at all (`showSeeAll &&
+  /// onSeeAll != null` in [_HeaderRow.build]) — not merely non-tappable.
+  /// B3 wires this to push [SpaceAlbumsRoute].
   final VoidCallback? onSeeAll;
 
   @override
