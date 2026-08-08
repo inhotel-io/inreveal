@@ -405,6 +405,7 @@ DELETE FROM "kysely_migrations"
    '1784800000000-RepairSharedSpaceAlbumGrantDrift',
    '1785000000000-AddSharedSpaceAlbumFolderTable',
    '1786000000000-SharedSpaceAlbumFolderAuditTable',
+   '1786100000000-DedupeSharedSpaceAlbumDeleteAudit',
 
    -- Build-time compatibility alias (server/bin/sync-gallery-migrations.mjs).
    -- Gallery's postbuild records ChangeDurationToInteger under BOTH its current

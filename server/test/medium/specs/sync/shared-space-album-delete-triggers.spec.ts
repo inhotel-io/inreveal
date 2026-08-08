@@ -12,6 +12,9 @@ beforeAll(async () => {
 const grantsFor = (albumId: string) =>
   db.selectFrom('shared_space_album_user').selectAll().where('albumId', '=', albumId).execute();
 
+const auditFor = (albumId: string) =>
+  db.selectFrom('shared_space_album_user_audit').selectAll().where('albumId', '=', albumId).execute();
+
 // ---------------------------------------------------------------------------
 // Task 1: Consumer trigger — shared_space_album_user_delete_after_audit
 // ---------------------------------------------------------------------------
@@ -285,5 +288,109 @@ describe('album hard-delete', () => {
       .where('albumId', '=', album.id)
       .execute();
     expect(linkAudit.length).toBeGreaterThanOrEqual(1); // section 1 fired during shared_space_album cascade
+  });
+});
+
+// ---------------------------------------------------------------------------
+// M2: the creator must receive exactly ONE grant-revocation tombstone.
+//
+// Steps 2 and 3 of shared_space_album_delete_audit insert independently — one
+// per member, one for the creator — and the creator is always a member in
+// production (SharedSpaceService.create adds them as Owner; they cannot leave
+// or be removed). The creator therefore got two rows per delete.
+// ---------------------------------------------------------------------------
+
+describe('shared_space_album_delete_audit — tombstone deduplication', () => {
+  it('writes exactly one tombstone for a creator who is also a member', async () => {
+    const ctx = new SyncTestContext(db);
+    const { user: creator } = await ctx.newUser();
+    const { user: albumOwner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    // Owned by someone else, so the creator genuinely loses access on unlink.
+    const { album } = await ctx.newAlbum({ ownerId: albumOwner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: creator.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: creator.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: member.id, role: SharedSpaceRole.Viewer });
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: creator.id })
+      .execute();
+
+    await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
+
+    const audit = await auditFor(album.id);
+    expect(audit.filter((r) => r.userId === creator.id)).toHaveLength(1);
+    expect(audit.filter((r) => r.userId === member.id)).toHaveLength(1);
+  });
+
+  it('still writes one tombstone for a creator who is NOT a member', async () => {
+    // Guards against a future "step 3 is redundant, delete it" simplification:
+    // the member/creator overlap is a SERVICE invariant, not a schema one.
+    const ctx = new SyncTestContext(db);
+    const { user: creator } = await ctx.newUser();
+    const { user: albumOwner } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: albumOwner.id });
+    const { space } = await ctx.newSharedSpace({ createdById: creator.id });
+    // Deliberately NO shared_space_member row for the creator.
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: creator.id })
+      .execute();
+
+    await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
+
+    const audit = await auditFor(album.id);
+    expect(audit.filter((r) => r.userId === creator.id)).toHaveLength(1);
+  });
+
+  it('writes no tombstone for a member who keeps access via an album_user role', async () => {
+    const ctx = new SyncTestContext(db);
+    const { user: creator } = await ctx.newUser();
+    const { user: albumOwner } = await ctx.newUser();
+    const { user: shared } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: albumOwner.id });
+    await db
+      .insertInto('album_user')
+      .values({ albumId: album.id, userId: shared.id, role: AlbumUserRole.Editor })
+      .execute();
+    const { space } = await ctx.newSharedSpace({ createdById: creator.id });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: creator.id, role: SharedSpaceRole.Owner });
+    await ctx.newSharedSpaceMember({ spaceId: space.id, userId: shared.id, role: SharedSpaceRole.Viewer });
+    await db
+      .insertInto('shared_space_album')
+      .values({ spaceId: space.id, albumId: album.id, addedById: creator.id })
+      .execute();
+
+    await db.deleteFrom('shared_space_album').where('spaceId', '=', space.id).where('albumId', '=', album.id).execute();
+
+    const audit = await auditFor(album.id);
+    expect(audit.filter((r) => r.userId === shared.id)).toHaveLength(0);
+  });
+
+  it('writes one tombstone per user when an album is unlinked from two spaces in one statement', async () => {
+    // The audit table has no spaceId column, so two deleted links produce two
+    // identical (albumId, userId) rows without a DISTINCT.
+    const ctx = new SyncTestContext(db);
+    const { user: creator } = await ctx.newUser();
+    const { user: albumOwner } = await ctx.newUser();
+    const { user: member } = await ctx.newUser();
+    const { album } = await ctx.newAlbum({ ownerId: albumOwner.id });
+    const { space: s1 } = await ctx.newSharedSpace({ createdById: creator.id });
+    const { space: s2 } = await ctx.newSharedSpace({ createdById: creator.id });
+    for (const s of [s1, s2]) {
+      await ctx.newSharedSpaceMember({ spaceId: s.id, userId: creator.id, role: SharedSpaceRole.Owner });
+      await ctx.newSharedSpaceMember({ spaceId: s.id, userId: member.id, role: SharedSpaceRole.Viewer });
+      await db
+        .insertInto('shared_space_album')
+        .values({ spaceId: s.id, albumId: album.id, addedById: creator.id })
+        .execute();
+    }
+
+    // ONE statement removing BOTH links → the statement-level trigger sees both in "old".
+    await db.deleteFrom('shared_space_album').where('albumId', '=', album.id).execute();
+
+    const audit = await auditFor(album.id);
+    expect(audit.filter((r) => r.userId === member.id)).toHaveLength(1);
+    expect(audit.filter((r) => r.userId === creator.id)).toHaveLength(1);
   });
 });

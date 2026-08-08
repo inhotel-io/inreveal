@@ -590,20 +590,31 @@ export const shared_space_album_delete_audit = registerFunction({
       INSERT INTO shared_space_album_audit ("spaceId", "albumId")
       SELECT "spaceId", "albumId" FROM "old";
 
-      -- 2. Gated grant revocation per member; skips during shared_space cascade (BEFORE-row handles it).
+      -- 2. Gated grant revocation for every member AND the space creator, as ONE
+      --    deduplicated set. They were two independent INSERTs, and the creator is
+      --    always also a member (SharedSpaceService.create adds them as Owner and
+      --    they cannot leave), so the creator received two tombstones per delete.
+      --
+      --    UNION (not UNION ALL) collapses creator-as-member. The creator arm is
+      --    KEPT, not dropped: nothing in the schema binds createdById to a member
+      --    row, so a creator without membership must still be revoked.
+      --
+      --    DISTINCT additionally collapses the same user arriving via two deleted
+      --    links in one statement — the audit table has no "spaceId" to separate them.
+      --
+      --    INNER JOIN shared_space preserves the cascade guard the previous two arms
+      --    had: during a shared_space delete the row is already gone, this yields
+      --    nothing, and the BEFORE-row trigger on shared_space does the fan-out.
       INSERT INTO shared_space_album_user_audit ("albumId", "userId")
-      SELECT o."albumId", ssm."userId"
-      FROM "old" o
-      INNER JOIN shared_space_member ssm ON ssm."spaceId" = o."spaceId"
-      WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o."spaceId")
-        AND NOT user_has_album_path(o."albumId", ssm."userId", o."spaceId");
-
-      -- 3. Gated grant revocation for the space creator.
-      INSERT INTO shared_space_album_user_audit ("albumId", "userId")
-      SELECT o."albumId", ss."createdById"
+      SELECT DISTINCT o."albumId", u."userId"
       FROM "old" o
       INNER JOIN shared_space ss ON ss."id" = o."spaceId"
-      WHERE NOT user_has_album_path(o."albumId", ss."createdById", o."spaceId");
+      CROSS JOIN LATERAL (
+        SELECT ssm."userId" FROM shared_space_member ssm WHERE ssm."spaceId" = o."spaceId"
+        UNION
+        SELECT ss."createdById"
+      ) u
+      WHERE NOT user_has_album_path(o."albumId", u."userId", o."spaceId");
 
       RETURN NULL;
     END`,
