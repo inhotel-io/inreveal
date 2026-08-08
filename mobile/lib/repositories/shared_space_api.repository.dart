@@ -210,6 +210,16 @@ class SharedSpaceApiRepository extends ApiRepository {
   Future<void> deleteAlbumFolder(String spaceId, String folderId) =>
       _api.deleteSharedSpaceAlbumFolder(folderId, spaceId);
 
+  /// Rename a space-linked album (PUT /shared-spaces/{id}/albums/{albumId}/name).
+  /// SDK arg order is (albumId, id) where id = spaceId, matching its siblings above.
+  Future<void> renameAlbum(String spaceId, String albumId, String name) =>
+      _api.renameSharedSpaceAlbum(albumId, spaceId, SharedSpaceAlbumRenameDto(name: name));
+
+  /// Bulk-delete albums linked to a space (POST /shared-spaces/{id}/albums/bulk-delete).
+  /// Deletes the ALBUMS, not just their links. Also serves single delete, with one id.
+  Future<List<BulkIdResponseDto>> bulkDeleteAlbums(String spaceId, Set<String> albumIds) =>
+      checkNull(_api.bulkDeleteAlbums(spaceId, SharedSpaceBulkAlbumIdsDto(ids: albumIds.toList())));
+
   /// Move a linked album into a folder, or to the space root when [folderId] is null
   /// (PUT /shared-spaces/{id}/albums/{albumId}/folder).
   Future<void> setAlbumFolder(String spaceId, String albumId, String? folderId) =>

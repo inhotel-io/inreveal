@@ -1,6 +1,7 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/utils/background_sync.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
 import 'package:immich_mobile/repositories/drift_album_api_repository.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:openapi/api.dart' show BulkIdResponseDto;
@@ -15,6 +16,8 @@ import 'package:openapi/api.dart' show BulkIdResponseDto;
 ///   - [moveFolder]       — PATCH  /shared-spaces/{id}/album-folders/{folderId}
 ///   - [deleteFolder]     — DELETE /shared-spaces/{id}/album-folders/{folderId}
 ///   - [moveAlbumToFolder] — PUT   /shared-spaces/{id}/albums/{albumId}/folder
+///   - [renameAlbum]       — PUT   /shared-spaces/{id}/albums/{albumId}/name
+///   - [bulkDeleteAlbums]  — POST  /shared-spaces/{id}/albums/bulk-delete
 ///
 /// Each operation calls the API repo, fires the sync-nudge
 /// (`BackgroundSyncManager.syncRemote()`), then returns.
@@ -25,11 +28,21 @@ import 'package:openapi/api.dart' show BulkIdResponseDto;
 /// album in a batch aborts the whole operation (fail-fast). The caller shows
 /// an error toast; the sync will catch up on the next regular cycle.
 class SpaceAlbumActions {
-  SpaceAlbumActions({required this._repo, required this._albumApiRepo, required this._syncManager});
+  SpaceAlbumActions({
+    required this._repo,
+    required this._albumApiRepo,
+    required this._syncManager,
+    required this._onOwnedAlbumsChanged,
+  });
 
   final SharedSpaceApiRepository _repo;
   final DriftAlbumApiRepository _albumApiRepo;
   final BackgroundSyncManager _syncManager;
+
+  /// Invoked after a mutation that changes the user's OWN albums, so the caller can refresh
+  /// RemoteAlbumNotifier — it holds a snapshot, not a Drift watch, so the sync nudge alone leaves
+  /// the Albums tab and every picker showing stale rows.
+  final Future<void> Function() _onOwnedAlbumsChanged;
 
   /// Link one or more albums to a space.
   ///
@@ -200,6 +213,29 @@ class SpaceAlbumActions {
       return folderIds;
     }
   }
+
+  /// Rename a space-linked album. Throws on failure, like the other single-item methods.
+  Future<void> renameAlbum(String spaceId, String albumId, String name) async {
+    await _repo.renameAlbum(spaceId, albumId, name);
+    await _syncManager.syncRemote();
+    await _onOwnedAlbumsChanged();
+  }
+
+  /// Bulk-delete [albumIds]. Returns the subset that failed. Same three-way failure contract as
+  /// the other bulk methods: a throw folds into "every id failed" here rather than propagating.
+  Future<Set<String>> bulkDeleteAlbums(String spaceId, Set<String> albumIds) async {
+    try {
+      final results = await _repo.bulkDeleteAlbums(spaceId, albumIds);
+      await _syncManager.syncRemote();
+      final failed = _bulkFailures(albumIds, results);
+      if (failed.length < albumIds.length) {
+        await _onOwnedAlbumsChanged();
+      }
+      return failed;
+    } catch (_) {
+      return albumIds;
+    }
+  }
 }
 
 /// Provider for [SpaceAlbumActions].
@@ -211,5 +247,6 @@ final spaceAlbumActionsProvider = Provider<SpaceAlbumActions>((ref) {
     repo: ref.watch(sharedSpaceApiRepositoryProvider),
     albumApiRepo: ref.watch(driftAlbumApiRepositoryProvider),
     syncManager: ref.watch(backgroundSyncProvider),
+    onOwnedAlbumsChanged: () => ref.read(remoteAlbumProvider.notifier).refresh(),
   );
 });

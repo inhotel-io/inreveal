@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/utils/background_sync.dart';
 import 'package:immich_mobile/providers/background_sync.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/remote_album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album_actions.dart';
 import 'package:immich_mobile/repositories/drift_album_api_repository.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
@@ -18,6 +20,18 @@ class MockBackgroundSyncManager extends Mock implements BackgroundSyncManager {}
 
 class MockDriftAlbumApiRepository extends Mock implements DriftAlbumApiRepository {}
 
+// A plain `extends Mock implements RemoteAlbumNotifier` cannot be installed via
+// `NotifierProvider.overrideWith`: riverpod's `NotifierProviderElement.create` calls the
+// notifier's private `_setElement`, which only a REAL `Notifier` subclass has — a pure `Mock`
+// throws `NoSuchMethodError: ... no instance method '_setElement'`. Extending the base
+// `Notifier<RemoteAlbumState>` (for the real `_setElement`/`ref` wiring) and mixing in `Mock`
+// (for `noSuchMethod`-backed stubbing of everything else) is the established fix already used
+// by `test/modules/map/map_mocks.dart`'s `MockMapStateNotifier`.
+class MockRemoteAlbumNotifier extends Notifier<RemoteAlbumState> with Mock implements RemoteAlbumNotifier {
+  @override
+  RemoteAlbumState build() => const RemoteAlbumState(albums: []);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -30,12 +44,21 @@ ProviderContainer _makeContainer({
   required MockSharedSpaceApiRepository repo,
   required MockBackgroundSyncManager syncMgr,
   required MockDriftAlbumApiRepository albumApiRepo,
+  MockRemoteAlbumNotifier? albums,
 }) {
+  final resolvedAlbums = albums ?? MockRemoteAlbumNotifier();
+  // Baseline no-op stub so tests that don't care about the refresh callback (most of them —
+  // only the scenario-56/57 tests below assert on it) don't have to stub it themselves; a test
+  // that passes its own [albums] and wants to `verify`/re-stub `refresh` still can — the later
+  // `when()` call in the test body simply registers on top of this one.
+  when(() => resolvedAlbums.refresh()).thenAnswer((_) async {});
+
   final c = ProviderContainer(
     overrides: [
       sharedSpaceApiRepositoryProvider.overrideWithValue(repo),
       backgroundSyncProvider.overrideWithValue(syncMgr),
       driftAlbumApiRepositoryProvider.overrideWithValue(albumApiRepo),
+      remoteAlbumProvider.overrideWith(() => resolvedAlbums),
     ],
   );
   addTearDown(c.dispose);
@@ -47,8 +70,14 @@ ProviderContainer _makeContainer({
 SpaceAlbumActions _makeActions({
   required MockSharedSpaceApiRepository repo,
   required MockBackgroundSyncManager syncMgr,
+  MockRemoteAlbumNotifier? albums,
 }) {
-  final container = _makeContainer(repo: repo, syncMgr: syncMgr, albumApiRepo: MockDriftAlbumApiRepository());
+  final container = _makeContainer(
+    repo: repo,
+    syncMgr: syncMgr,
+    albumApiRepo: MockDriftAlbumApiRepository(),
+    albums: albums,
+  );
   return container.read(spaceAlbumActionsProvider);
 }
 
@@ -334,6 +363,120 @@ void main() {
 
       final absent = SharedSpaceAlbumFolderUpdateDto();
       expect(absent.toJson().containsKey('parentId'), isFalse);
+    });
+  });
+
+  group('renameAlbum', () {
+    // Scenario 54
+    test('calls the repo and nudges sync on success', () async {
+      final repo = MockSharedSpaceApiRepository();
+      final syncMgr = MockBackgroundSyncManager();
+      when(() => repo.renameAlbum(_spaceId, _albumId, 'New')).thenAnswer((_) async {});
+      when(syncMgr.syncRemote).thenAnswer((_) async => true);
+
+      await _makeActions(repo: repo, syncMgr: syncMgr).renameAlbum(_spaceId, _albumId, 'New');
+
+      verify(() => repo.renameAlbum(_spaceId, _albumId, 'New')).called(1);
+      verify(syncMgr.syncRemote).called(1);
+    });
+
+    test('rethrows and does not nudge when the API throws', () async {
+      final repo = MockSharedSpaceApiRepository();
+      final syncMgr = MockBackgroundSyncManager();
+      when(() => repo.renameAlbum(any(), any(), any())).thenThrow(Exception('boom'));
+
+      await expectLater(
+        _makeActions(repo: repo, syncMgr: syncMgr).renameAlbum(_spaceId, _albumId, 'New'),
+        throwsA(isA<Exception>()),
+      );
+      verifyNever(syncMgr.syncRemote);
+    });
+
+    // Scenario 56 — RemoteAlbumNotifier holds a SNAPSHOT, not a Drift watch, so without this the
+    // Albums tab and every picker keep showing the old name until something calls refresh().
+    test('refreshes the remote album list on success but not on failure', () async {
+      final repo = MockSharedSpaceApiRepository();
+      final syncMgr = MockBackgroundSyncManager();
+      final albums = MockRemoteAlbumNotifier();
+      when(() => repo.renameAlbum(any(), any(), any())).thenAnswer((_) async {});
+      when(syncMgr.syncRemote).thenAnswer((_) async => true);
+      when(albums.refresh).thenAnswer((_) async {});
+
+      await _makeActions(repo: repo, syncMgr: syncMgr, albums: albums).renameAlbum(_spaceId, _albumId, 'New');
+      verify(albums.refresh).called(1);
+
+      final failing = MockRemoteAlbumNotifier();
+      final failingRepo = MockSharedSpaceApiRepository();
+      when(() => failingRepo.renameAlbum(any(), any(), any())).thenThrow(Exception('boom'));
+      await expectLater(
+        _makeActions(repo: failingRepo, syncMgr: syncMgr, albums: failing).renameAlbum(_spaceId, _albumId, 'New'),
+        throwsA(isA<Exception>()),
+      );
+      verifyNever(failing.refresh);
+    });
+  });
+
+  group('bulkDeleteAlbums', () {
+    // Scenario 55
+    test('returns the failed subset on a partial failure', () async {
+      final repo = MockSharedSpaceApiRepository();
+      final syncMgr = MockBackgroundSyncManager();
+      when(() => repo.bulkDeleteAlbums(_spaceId, {_albumId, _album2})).thenAnswer(
+        (_) async => [BulkIdResponseDto(id: _albumId, success: true), BulkIdResponseDto(id: _album2, success: false)],
+      );
+      when(syncMgr.syncRemote).thenAnswer((_) async => true);
+
+      final failed = await _makeActions(repo: repo, syncMgr: syncMgr).bulkDeleteAlbums(_spaceId, {_albumId, _album2});
+
+      expect(failed, {_album2});
+    });
+
+    test('returns every id when the request throws, and does not nudge', () async {
+      final repo = MockSharedSpaceApiRepository();
+      final syncMgr = MockBackgroundSyncManager();
+      when(() => repo.bulkDeleteAlbums(any(), any())).thenThrow(Exception('offline'));
+
+      final failed = await _makeActions(repo: repo, syncMgr: syncMgr).bulkDeleteAlbums(_spaceId, {_albumId, _album2});
+
+      expect(failed, {_albumId, _album2});
+      verifyNever(syncMgr.syncRemote);
+    });
+
+    test('still nudges on a 200 where every item failed', () async {
+      final repo = MockSharedSpaceApiRepository();
+      final syncMgr = MockBackgroundSyncManager();
+      when(
+        () => repo.bulkDeleteAlbums(any(), any()),
+      ).thenAnswer((_) async => [BulkIdResponseDto(id: _albumId, success: false)]);
+      when(syncMgr.syncRemote).thenAnswer((_) async => true);
+
+      final failed = await _makeActions(repo: repo, syncMgr: syncMgr).bulkDeleteAlbums(_spaceId, {_albumId});
+
+      expect(failed, {_albumId});
+      verify(syncMgr.syncRemote).called(1);
+    });
+
+    // Scenario 57
+    test('refreshes the remote album list only when at least one delete succeeded', () async {
+      final syncMgr = MockBackgroundSyncManager();
+      when(syncMgr.syncRemote).thenAnswer((_) async => true);
+
+      final okRepo = MockSharedSpaceApiRepository();
+      final okAlbums = MockRemoteAlbumNotifier();
+      when(
+        () => okRepo.bulkDeleteAlbums(any(), any()),
+      ).thenAnswer((_) async => [BulkIdResponseDto(id: _albumId, success: true)]);
+      when(okAlbums.refresh).thenAnswer((_) async {});
+      await _makeActions(repo: okRepo, syncMgr: syncMgr, albums: okAlbums).bulkDeleteAlbums(_spaceId, {_albumId});
+      verify(okAlbums.refresh).called(1);
+
+      final noneRepo = MockSharedSpaceApiRepository();
+      final noneAlbums = MockRemoteAlbumNotifier();
+      when(
+        () => noneRepo.bulkDeleteAlbums(any(), any()),
+      ).thenAnswer((_) async => [BulkIdResponseDto(id: _albumId, success: false)]);
+      await _makeActions(repo: noneRepo, syncMgr: syncMgr, albums: noneAlbums).bulkDeleteAlbums(_spaceId, {_albumId});
+      verifyNever(noneAlbums.refresh);
     });
   });
 }
