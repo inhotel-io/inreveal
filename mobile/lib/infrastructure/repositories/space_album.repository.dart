@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:immich_mobile/domain/models/album/album.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/domain/models/space_album_folder.model.dart';
@@ -37,11 +38,12 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
 
   /// Watches albums linked to [spaceId], joining metadata + link fields.
   /// Emits ordered by album name (ascending) and reacts to Drift row changes.
-  Stream<List<SpaceAlbum>> watchLinkedAlbums(String spaceId) {
+  Stream<List<SpaceAlbum>> watchLinkedAlbums(String spaceId, {String? currentUserId}) {
     final link = _db.sharedSpaceAlbumLinkEntity;
     final meta = _db.sharedSpaceAlbumEntity;
     final assetMembership = _db.sharedSpaceAlbumAssetEntity;
     final asset = _db.remoteAssetEntity;
+    final albumUser = _db.remoteAlbumUserEntity;
 
     // mobile-5: count only assets the detail view would show. LEFT JOIN
     // membership → remote_asset and apply the space-album detail predicate
@@ -63,10 +65,19 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
                       asset.visibility.equalsValue(AssetVisibility.archive)),
               useColumns: false,
             ),
+            // Ownership, resolved locally. currentUserId == null keeps the ON clause false, so
+            // every row reads as not-owned — the fail-closed case.
+            leftOuterJoin(
+              albumUser,
+              albumUser.albumId.equalsExp(link.albumId) &
+                  albumUser.userId.equals(currentUserId ?? '') &
+                  albumUser.role.equalsValue(AlbumUserRole.owner),
+              useColumns: false,
+            ),
           ])
           ..where(link.spaceId.equals(spaceId))
-          ..addColumns([assetCountExp])
-          ..groupBy([link.spaceId, link.albumId, meta.id])
+          ..addColumns([assetCountExp, albumUser.userId])
+          ..groupBy([link.spaceId, link.albumId, meta.id, albumUser.userId])
           ..orderBy([OrderingTerm.asc(meta.name)]);
 
     return query.watch().map(
@@ -82,6 +93,7 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
           assetCount: row.read(assetCountExp) ?? 0,
           linkedAt: l.createdAt,
           updatedAt: m.updatedAt,
+          isOwnedByMe: row.read(albumUser.userId) != null,
         );
       }).toList(),
     );

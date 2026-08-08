@@ -15,6 +15,17 @@ class SpaceAlbum {
   final DateTime linkedAt;
   final DateTime updatedAt;
 
+  /// Whether the CURRENT user owns this album.
+  ///
+  /// Not on the wire: SyncAlbumV2 (which SharedSpaceAlbumV1 maps to) carries no ownerId, and it is
+  /// an upstream-shared DTO, so adding a fork field there would break silently on rebase. Derived
+  /// instead from the local remote_album_user table, which already holds an owner row for every
+  /// album this user owns.
+  ///
+  /// Fail-closed: false when the current user id is unknown, or when the owner row has not synced
+  /// yet. The affordance is hidden rather than wrongly offered, and self-heals on the next sync.
+  final bool isOwnedByMe;
+
   const SpaceAlbum({
     required this.id,
     required this.name,
@@ -24,5 +35,6 @@ class SpaceAlbum {
     this.assetCount = 0,
     required this.linkedAt,
     required this.updatedAt,
+    this.isOwnedByMe = false,
   });
 }

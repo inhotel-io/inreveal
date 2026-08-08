@@ -1,5 +1,8 @@
+import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/domain/models/album/album.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
+import 'package:immich_mobile/infrastructure/entities/remote_album_user.entity.drift.dart';
 import 'package:immich_mobile/infrastructure/repositories/remote_album.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/space_album.repository.dart';
 
@@ -122,6 +125,85 @@ void main() {
 
       expect(albums.single.linkedAt, linked);
       expect(albums.single.updatedAt, updated);
+    });
+
+    group('isOwnedByMe', () {
+      // Scenario 49
+      test('is true when remote_album_user has an owner row for the current user', () async {
+        final user = await ctx.newUser();
+        final space = await ctx.newSharedSpace(createdById: user.id);
+        final album = await ctx.newSharedSpaceAlbum(name: 'Hawaii');
+        await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+        // Same id as the space-album metadata row — this is the local album the user owns.
+        await ctx.newRemoteAlbum(id: album.id, ownerId: user.id);
+
+        final albums = await repo.watchLinkedAlbums(space.id, currentUserId: user.id).first;
+
+        expect(albums.single.isOwnedByMe, isTrue);
+      });
+
+      // Scenario 50
+      test('is false when the owner row names a different user', () async {
+        final me = await ctx.newUser();
+        final other = await ctx.newUser();
+        final space = await ctx.newSharedSpace(createdById: me.id);
+        final album = await ctx.newSharedSpaceAlbum(name: 'Hawaii');
+        await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+        await ctx.newRemoteAlbum(id: album.id, ownerId: other.id);
+
+        final albums = await repo.watchLinkedAlbums(space.id, currentUserId: me.id).first;
+
+        expect(albums.single.isOwnedByMe, isFalse);
+      });
+
+      // Scenario 51 — the join must key on role == owner, not mere presence. Without this, every
+      // album shared WITH you would read as yours, handing you a Delete you must not have.
+      test('is false for an album-level editor row for the current user', () async {
+        final me = await ctx.newUser();
+        final other = await ctx.newUser();
+        final space = await ctx.newSharedSpace(createdById: me.id);
+        final album = await ctx.newSharedSpaceAlbum(name: 'Hawaii');
+        await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+        await ctx.newRemoteAlbum(id: album.id, ownerId: other.id);
+        await ctx.db
+            .into(ctx.db.remoteAlbumUserEntity)
+            .insert(
+              RemoteAlbumUserEntityCompanion(
+                albumId: Value(album.id),
+                userId: Value(me.id),
+                role: const Value(AlbumUserRole.editor),
+              ),
+            );
+
+        final albums = await repo.watchLinkedAlbums(space.id, currentUserId: me.id).first;
+
+        expect(albums.single.isOwnedByMe, isFalse);
+      });
+
+      // Scenario 52 — fail-closed. The owner row simply may not have synced yet.
+      test('is false when there is no remote_album_user row at all', () async {
+        final user = await ctx.newUser();
+        final space = await ctx.newSharedSpace(createdById: user.id);
+        final album = await ctx.newSharedSpaceAlbum(name: 'Hawaii');
+        await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+
+        final albums = await repo.watchLinkedAlbums(space.id, currentUserId: user.id).first;
+
+        expect(albums.single.isOwnedByMe, isFalse);
+      });
+
+      // Scenario 53
+      test('is false for every album and does not throw when currentUserId is null', () async {
+        final user = await ctx.newUser();
+        final space = await ctx.newSharedSpace(createdById: user.id);
+        final album = await ctx.newSharedSpaceAlbum(name: 'Hawaii');
+        await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+        await ctx.newRemoteAlbum(id: album.id, ownerId: user.id);
+
+        final albums = await repo.watchLinkedAlbums(space.id, currentUserId: null).first;
+
+        expect(albums.single.isOwnedByMe, isFalse);
+      });
     });
   });
 
