@@ -94,6 +94,22 @@ class _StubRemoteAlbumNotifier extends RemoteAlbumNotifier {
       _createAlbum(title);
 }
 
+/// Task 11 fixture — `SpaceAlbumActions.renameAlbum`/`bulkDeleteAlbums` (on a success, or a
+/// bulk request with at least one success) call `_onOwnedAlbumsChanged`, which is wired to
+/// `remoteAlbumProvider.notifier.refresh()`. Left unoverridden, the REAL `RemoteAlbumNotifier`
+/// resolves `remoteAlbumRepository` -> `driftProvider`, which this file never overrides (it
+/// throws `UnimplementedError` by design — see `db.provider.dart`) — so any test that reaches a
+/// successful rename/delete must override `remoteAlbumProvider` with this no-op stand-in. None of
+/// the Task 11 tests assert on the refresh call itself, so a plain override (not a `Mock`, unlike
+/// `space_album_actions_test.dart`'s own `MockRemoteAlbumNotifier`) is enough here.
+class _NoopRemoteAlbumNotifier extends RemoteAlbumNotifier {
+  @override
+  RemoteAlbumState build() => const RemoteAlbumState(albums: []);
+
+  @override
+  Future<void> refresh() async {}
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -109,6 +125,9 @@ SpaceAlbum _album({
   String? thumbnailAssetId,
   DateTime? linkedAt,
   DateTime? updatedAt,
+  // Task 11 — `false` matches `SpaceAlbum.isOwnedByMe`'s own fail-closed default, so every
+  // pre-existing call site (none of which pass this) is unaffected.
+  bool isOwnedByMe = false,
 }) => SpaceAlbum(
   id: id,
   name: name ?? 'Album $id',
@@ -118,6 +137,7 @@ SpaceAlbum _album({
   thumbnailAssetId: thumbnailAssetId,
   linkedAt: linkedAt ?? DateTime.utc(2026, 1, 1),
   updatedAt: updatedAt ?? DateTime.utc(2026, 1, 1),
+  isOwnedByMe: isOwnedByMe,
 );
 
 /// I-2 fixture — a resolvable remote asset for a folder-card cover tile.
@@ -2645,5 +2665,249 @@ void main() {
           tester.getSize(action).width - tester.getSize(find.descendant(of: action, matching: find.text(label))).width;
       expect(chrome, lessThanOrEqualTo(maxChromePerAction), reason: '$key wraps its label in ${chrome}dp of chrome');
     }
+  });
+
+  // ---------------------------------------------------------------------
+  // Task 11 — rename/delete space-linked albums, capability-gated per the task brief's table:
+  // rename is `canEdit || isOwnedByMe`, delete (single or bulk) is `isOwnedByMe` alone, editor or
+  // not. Mocks `SharedSpaceApiRepository` (never `spaceAlbumActionsProvider`) whenever a test
+  // actually needs the real action to fire, matching the Task 15 bulk-action tests above.
+  // ---------------------------------------------------------------------
+
+  group('capability-gated album card menu', () {
+    // Scenarios 58–61. 58 and 60 are the positive cases 59 and 61's negatives depend on.
+    testWidgets('editor + owner: offers Rename and Delete', (tester) async {
+      await pumpPage(
+        tester,
+        folders: const [],
+        albums: [_album(id: 'a1', name: 'Rome', isOwnedByMe: true)],
+        canEdit: true,
+      );
+
+      await tester.tap(find.byKey(const Key('space-album-card-menu-a1')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('space-album-card-rename-a1')), findsOneWidget);
+      expect(find.byKey(const Key('space-album-card-delete-a1')), findsOneWidget);
+      // Positive controls for test 60's "only" negatives below — same finders, same shape.
+      expect(find.text('Hide from timeline'), findsOneWidget);
+      expect(find.text('Unlink from space'), findsOneWidget);
+      expect(find.text('Move to folder…'), findsOneWidget);
+    });
+
+    testWidgets('editor + not owner: offers Rename only', (tester) async {
+      await pumpPage(
+        tester,
+        folders: const [],
+        albums: [_album(id: 'a1', name: 'Rome', isOwnedByMe: false)],
+        canEdit: true,
+      );
+
+      await tester.tap(find.byKey(const Key('space-album-card-menu-a1')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('space-album-card-rename-a1')), findsOneWidget);
+      // Negative — same finder as test 58's positive above.
+      expect(find.byKey(const Key('space-album-card-delete-a1')), findsNothing);
+    });
+
+    testWidgets('viewer + owner: offers Rename and Delete only', (tester) async {
+      await pumpPage(
+        tester,
+        folders: const [],
+        albums: [_album(id: 'a1', name: 'Rome', isOwnedByMe: true)],
+        canEdit: false,
+      );
+
+      await tester.tap(find.byKey(const Key('space-album-card-menu-a1')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('space-album-card-rename-a1')), findsOneWidget);
+      expect(find.byKey(const Key('space-album-card-delete-a1')), findsOneWidget);
+      // "only" — the three canEdit-gated items must not render for a viewer, even the owner. Same
+      // finders as test 58's positive controls above.
+      expect(find.text('Hide from timeline'), findsNothing);
+      expect(find.text('Unlink from space'), findsNothing);
+      expect(find.text('Move to folder…'), findsNothing);
+    });
+
+    testWidgets('viewer + not owner: renders no card menu', (tester) async {
+      await pumpPage(
+        tester,
+        folders: const [],
+        albums: [_album(id: 'a1', name: 'Rome', isOwnedByMe: false)],
+        canEdit: false,
+      );
+
+      // Positive counterpart is the very first test in this file ("editor + 2 albums…") plus
+      // tests 58/60 above, all of which find this same key.
+      expect(find.byKey(const Key('space-album-card-menu-a1')), findsNothing);
+    });
+  });
+
+  // Scenario 62
+  //
+  // Uses the router-backed `pumpSpaceAlbumsPage` harness (not the plain `pumpPage`): with no
+  // `onLongPress` wired for the not-owned card, `tester.longPress` still resolves as an ordinary
+  // tap (no competing LongPressGestureRecognizer is registered to win the gesture arena), which
+  // fires `onAlbumTap` -> `context.pushRoute(...)`. `pumpPage`'s harness has no `AutoRouter`
+  // ancestor, so that navigation crashes there; `pumpSpaceAlbumsPage` registers a real (recording,
+  // not crashing) detail route, matching how the pre-existing S-10 "long-press does nothing when
+  // canManage is false" test above already handles the identical quirk for a plain viewer.
+  testWidgets('a viewer can long-press an album they own, but not one they do not', (tester) async {
+    final openedAlbumIds = <String>[];
+    final router = await pumpSpaceAlbumsPage(
+      tester,
+      albums: [
+        _album(id: 'owned', name: 'Mine', isOwnedByMe: true),
+        _album(id: 'not-owned', name: 'Theirs', isOwnedByMe: false),
+      ],
+      canManage: false,
+      openedAlbumIds: openedAlbumIds,
+    );
+
+    // Negative first: long-pressing an album the viewer does not own does not enter selection —
+    // it falls through to a plain-tap navigation instead (see the harness note above).
+    await tester.longPress(find.byKey(const Key('space-album-card-not-owned')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsNothing);
+    expect(openedAlbumIds, ['not-owned']); // proves the gesture actually landed somewhere
+
+    // That navigation covers this page (making its cards offstage — unreachable to `find` by
+    // default), so return to it before the positive check below.
+    await router.maybePop();
+    await tester.pumpAndSettle();
+
+    // Positive, same finder as the selection-bar negative above — proves it wasn't vacuous (e.g.
+    // a typo'd key that could never match anything).
+    await tester.longPress(find.byKey(const Key('space-album-card-owned')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-bar')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-owned')), findsOneWidget);
+    expect(openedAlbumIds, ['not-owned']); // still just the one nav — this long-press selected instead
+  });
+
+  // Scenario 63
+  testWidgets('bulk Delete disappears once an unowned album joins the selection', (tester) async {
+    // Editor context: an editor can freely TAP-add any album to an existing selection regardless
+    // of ownership (`onAlbumTap`'s toggle path is `canEdit`-gated, unchanged by this task) — the
+    // only way to grow a selection past its first, long-press-entered member with an UNOWNED
+    // album. Bulk delete itself stays ownership-gated independent of `canEdit` (S-10's table:
+    // "owns every selected album", not an editor privilege).
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [
+        _album(id: 'owned', name: 'Mine', isOwnedByMe: true),
+        _album(id: 'not-owned', name: 'Theirs', isOwnedByMe: false),
+      ],
+      canEdit: true,
+    );
+
+    await tester.longPress(find.byKey(const Key('space-album-card-owned')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('space-album-selection-delete-albums')), findsOneWidget); // positive control
+
+    await tester.tap(find.byKey(const Key('space-album-card-not-owned')));
+    await tester.pumpAndSettle();
+
+    // Negative, same finder as the positive control above.
+    expect(find.byKey(const Key('space-album-selection-delete-albums')), findsNothing);
+  });
+
+  // Scenario 64
+  testWidgets('a partial bulk delete leaves exactly the failures selected', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.bulkDeleteAlbums(any(), any())).thenAnswer(
+      (_) async => [
+        BulkIdResponseDto(id: 'a', success: true),
+        BulkIdResponseDto(id: 'b', success: false, error: const Optional.present(BulkIdErrorReason.noPermission)),
+      ],
+    );
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [
+        _album(id: 'a', name: 'Album A', isOwnedByMe: true),
+        _album(id: 'b', name: 'Album B', isOwnedByMe: true),
+      ],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+        // A partial failure (one success) still calls `_onOwnedAlbumsChanged` — see the fixture's
+        // own doc above for why this must be overridden.
+        remoteAlbumProvider.overrideWith(() => _NoopRemoteAlbumNotifier()),
+      ],
+    );
+
+    await selectAlbums(tester, ['a', 'b']);
+    expect(find.text('2 selected'), findsOneWidget); // positive control
+
+    await tester.tap(find.byKey(const Key('space-album-selection-delete-albums')));
+    await tester.pumpAndSettle();
+    // One confirm dialog for the whole batch, naming the count — the bulk (not single-album) copy.
+    expect(find.text('Delete 2 albums'), findsOneWidget);
+    verifyNever(() => api.bulkDeleteAlbums(any(), any())); // not fired before confirming
+
+    await tester.tap(find.byKey(const Key('space-album-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    verify(() => api.bulkDeleteAlbums(spaceId, {'a', 'b'})).called(1);
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-b')), findsOneWidget);
+    expect(find.byKey(const Key('space-album-card-selected-a')), findsNothing);
+    expect(find.text('1 item could not be updated'), findsOneWidget);
+
+    await settleToast(tester);
+  });
+
+  // Scenario 65
+  testWidgets('cancelling the rename dialog fires no action call', (tester) async {
+    final api = MockSharedSpaceApiRepository();
+    final syncMgr = MockBackgroundSyncManager();
+    when(() => syncMgr.syncRemote()).thenAnswer((_) async => true);
+    when(() => api.renameAlbum(any(), any(), any())).thenAnswer((_) async {});
+
+    await pumpPage(
+      tester,
+      folders: const [],
+      albums: [_album(id: 'a1', name: 'Rome', isOwnedByMe: true)],
+      overrides: [
+        sharedSpaceApiRepositoryProvider.overrideWithValue(api),
+        backgroundSyncProvider.overrideWithValue(syncMgr),
+        driftAlbumApiRepositoryProvider.overrideWithValue(MockDriftAlbumApiRepository()),
+        remoteAlbumProvider.overrideWith(() => _NoopRemoteAlbumNotifier()),
+      ],
+    );
+
+    await tester.tap(find.byKey(const Key('space-album-card-menu-a1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-card-rename-a1')));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextFormField>(find.byKey(const Key('space-album-name-field')));
+    expect(field.controller!.text, 'Rome'); // positive control — the dialog IS showing, pre-filled
+
+    await tester.tap(find.byKey(const Key('space-album-name-cancel')));
+    await tester.pumpAndSettle();
+
+    verifyNever(() => api.renameAlbum(any(), any(), any()));
+
+    // Positive counterpart to the `verifyNever` above, using the SAME mocked call — proving it
+    // isn't vacuously true because the confirm path is dead too. Re-open the same dialog and
+    // confirm this time.
+    await tester.tap(find.byKey(const Key('space-album-card-menu-a1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('space-album-card-rename-a1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('space-album-name-field')), 'Roma');
+    await tester.tap(find.byKey(const Key('space-album-name-confirm')));
+    await tester.pumpAndSettle();
+
+    verify(() => api.renameAlbum(spaceId, 'a1', 'Roma')).called(1);
   });
 }

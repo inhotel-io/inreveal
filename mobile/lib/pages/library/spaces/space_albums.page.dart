@@ -62,7 +62,11 @@ const _appBarActionStyle = ButtonStyle(
 ///    folder…) — stub callbacks [onToggle]/[onUnlink] (real mutations land
 ///    in B6); "Move to folder…" is wired directly against
 ///    [spaceAlbumActionsProvider] since it doesn't need to be shared with
-///    the space-detail top sliver's own inline cards.
+///    the space-detail top sliver's own inline cards. The SAME card ⋮ also
+///    offers Rename (Task 11) to an editor OR the album's own owner, and
+///    Delete to the album's own owner alone — the only two per-album
+///    affordances NOT gated by [canEdit] alone; see `_AlbumCard`'s
+///    `canRename`/`canDelete`.
 ///  - Editor-only folder-card ⋮ overflow (Rename / Move to folder… / Delete)
 ///    and app-bar "New folder" action, all wired directly against
 ///    [spaceAlbumActionsProvider]'s `renameFolder`/`moveFolder`/`deleteFolder`/
@@ -79,7 +83,8 @@ const _appBarActionStyle = ButtonStyle(
 ///    search tree-wide (`flattenForSearch`): folders are hidden and every
 ///    matching album in the space is listed with its folder path.
 ///
-/// Role-gated: affordances only shown when [canEdit] is true.
+/// Role-gated: most affordances only show when [canEdit] is true — album Rename/Delete (Task 11,
+/// above) are the exception, gated on ownership instead/as well.
 @RoutePage()
 class SpaceAlbumsPage extends HookConsumerWidget {
   final String spaceId;
@@ -379,10 +384,12 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     // branch, rather than inside `data: (albums) {...}` below: none of these need the album list,
     // and "New folder" is an app-bar action rendered regardless of load/error/data state.
     Future<void> createFolder() async {
-      final name = await _promptFolderName(
+      final name = await _promptName(
         context,
         title: 'space_album_folder_new'.t(context: context),
         confirmLabel: 'create'.t(context: context),
+        label: 'space_album_folder_name_label'.t(context: context),
+        keyPrefix: 'space-album-folder-name',
       );
       if (name == null) return;
       if (!context.mounted) return;
@@ -414,10 +421,16 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     // its own `space_album_error_link_after_create` toast instead, which says what actually
     // happened: the album was created, but could not be added to this space.
     Future<void> createAlbum() async {
-      final name = await _promptFolderName(
+      // Reuses the folder-name-labelled prompt (byte-identical `keyPrefix`/label to `createFolder`
+      // below) — that's pre-existing behaviour from before Task 11 threaded `label`/`keyPrefix`
+      // through, kept as-is here since changing it would be an unrequested behaviour change and
+      // the "New album" tests already assert on these exact `space-album-folder-name-*` keys.
+      final name = await _promptName(
         context,
         title: 'space_album_new'.t(context: context),
         confirmLabel: 'create'.t(context: context),
+        label: 'space_album_folder_name_label'.t(context: context),
+        keyPrefix: 'space-album-folder-name',
       );
       if (name == null) return;
       if (!context.mounted) return;
@@ -455,10 +468,12 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     }
 
     Future<void> renameFolder(SpaceAlbumFolder folder) async {
-      final name = await _promptFolderName(
+      final name = await _promptName(
         context,
         title: 'space_album_folder_rename'.t(context: context),
         confirmLabel: 'save'.t(context: context),
+        label: 'space_album_folder_name_label'.t(context: context),
+        keyPrefix: 'space-album-folder-name',
         initialName: folder.name,
       );
       if (name == null) return;
@@ -615,11 +630,77 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       notifyBulkFailures(failedIds.length);
     }
 
-    // Task 14 (multi-select), S-10 — a selection can only ever be non-empty on a canEdit page (see
-    // the canEdit-gated long-press wiring above), but gating the BAR on `canEdit` too, not just
-    // `selection.isEmpty`, keeps a viewer page from ever rendering it even in the theoretical case
-    // of stale global-provider state left over from a different (editor) space.
-    final showSelectionBar = canEdit && !selection.isEmpty;
+    // Task 11 — rename/delete a space-linked album. Conceptually "beside" `renameFolder`/
+    // `deleteFolder` above, but declared here (after `notifyBulkFailures`) rather than there:
+    // `deleteAlbums` below calls `notifyBulkFailures`, and Dart does not allow a local function to
+    // forward-reference one declared later in the same scope.
+    Future<void> renameAlbum(SpaceAlbum album) async {
+      final name = await _promptName(
+        context,
+        title: 'space_album_rename'.t(context: context),
+        confirmLabel: 'save'.t(context: context),
+        label: 'space_album_name_label'.t(context: context),
+        initialName: album.name,
+        keyPrefix: 'space-album-name',
+      );
+      if (name == null || !context.mounted) return;
+      try {
+        await ref.read(spaceAlbumActionsProvider).renameAlbum(spaceId, album.id, name);
+      } catch (_) {
+        if (context.mounted) {
+          ImmichToast.show(
+            context: context,
+            msg: 'space_album_error_rename'.t(context: context),
+            toastType: ToastType.error,
+          );
+        }
+      }
+    }
+
+    // Single delete goes through the same bulk path as the selection bar — one endpoint, one
+    // failure contract, one set of tests. The COPY still branches on count: the bulk title
+    // interpolates {count}, so reusing it for one album would read "Delete 1 albums".
+    Future<void> deleteAlbums(Set<String> ids, {String? singleAlbumName}) async {
+      final single = ids.length == 1;
+      final confirmed = await _confirmBulkAction(
+        context,
+        title: single
+            ? 'space_album_delete'.t(context: context)
+            : 'space_album_bulk_delete_title'.t(context: context, args: {'count': ids.length.toString()}),
+        content: single
+            ? 'space_album_delete_confirm'.t(context: context, args: {'name': singleAlbumName ?? ''})
+            : 'space_album_bulk_delete_confirm'.t(context: context),
+        confirmLabel: 'delete'.t(context: context),
+        cancelKey: const Key('space-album-delete-cancel'),
+        confirmKey: const Key('space-album-delete-confirm'),
+        destructive: true,
+      );
+      if (!confirmed || !context.mounted) return;
+      final failedIds = await ref.read(spaceAlbumActionsProvider).bulkDeleteAlbums(spaceId, ids);
+      selectionNotifier.reconcile(failedIds);
+      notifyBulkFailures(failedIds.length);
+    }
+
+    // Task 11 — a viewer may select (and long-press into a selection) an album they own, even
+    // though `canEdit` is false; folder selections stay editor-only (unchanged below).
+    bool canSelectAlbum(SpaceAlbum album) => canEdit || album.isOwnedByMe;
+
+    // Task 11 widened: an album selection is legitimate for a viewer who owns what is selected, so
+    // the bar can no longer be gated on `canEdit` alone. Folder selections stay editor-only, so
+    // `selection.kind == folder` here can only ever be true on a canEdit page already (folder
+    // long-press stays canEdit-gated below) — this OR only actually widens the album case.
+    final showSelectionBar = !selection.isEmpty && (canEdit || selection.kind == SpaceAlbumSelectionKind.album);
+
+    // Task 11 — whether EVERY selected album is owned by the current user, gating the selection
+    // bar's bulk-delete action independently of `canManage`/`canEdit`: bulk delete is "owns every
+    // selected album", full stop, not an editor privilege (see the capability table in the task
+    // brief). Looks the id up in `currentAlbums` (the whole-space list) rather than trusting
+    // `selection` to carry ownership itself, mirroring `isAllInTimeline`/`allSelectedAlbumsOwned`'s
+    // sibling above.
+    final allSelectedAlbumsOwned =
+        selection.kind == SpaceAlbumSelectionKind.album &&
+        selection.ids.isNotEmpty &&
+        selection.ids.every((id) => currentAlbums?.firstWhereOrNull((a) => a.id == id)?.isOwnedByMe == true);
 
     return PopScope(
       // Task 14 (multi-select), S-16/S-16a/E-21 — inert (`canPop: true`) whenever there is no
@@ -648,6 +729,9 @@ class SpaceAlbumsPage extends HookConsumerWidget {
                 onMove: bulkMove,
                 onToggleTimeline: bulkToggleTimeline,
                 onDelete: bulkDeleteFolders,
+                canManage: canEdit,
+                canDeleteAlbums: allSelectedAlbumsOwned,
+                onDeleteAlbums: () => deleteAlbums(selection.ids),
               )
             : AppBar(
                 title: Text(_title(context, folders)),
@@ -730,13 +814,14 @@ class SpaceAlbumsPage extends HookConsumerWidget {
               context.pushRoute(SpaceAlbumDetailRoute(spaceId: spaceId, albumId: albumId, canEdit: canEdit));
             }
 
-            // Task 14 (multi-select), S-14/S-10 on mobile — `null` (not a canEdit-checking body)
-            // when `canEdit` is false, so the gesture itself is a structural no-op for a viewer
-            // rather than relying on a runtime check that could accidentally mutate the (global)
-            // selection provider from a page that must never be able to start a selection.
-            void Function(String albumId)? onAlbumLongPress = canEdit
-                ? (albumId) => selectionNotifier.toggle(SpaceAlbumSelectionKind.album, albumId)
-                : null;
+            // Task 14 (multi-select), S-14/S-10 on mobile — the raw toggle action, always defined.
+            // Task 11 moved the actual gate from here (a single canEdit check shared by every card)
+            // to `canSelectAlbum(album)`, evaluated PER ALBUM at each `_AlbumCard`'s own construction
+            // site in `_LevelGrid`/`_SearchResultsGrid` below — a viewer can now long-press an album
+            // they own, which a single page-wide `canEdit` gate could never express. A plain viewer
+            // (owns nothing) still gets the same structural no-op as before: `canSelectAlbum` is
+            // false for every album they see, so `onLongPress` is null on every one of their cards.
+            void onAlbumLongPress(String albumId) => selectionNotifier.toggle(SpaceAlbumSelectionKind.album, albumId);
 
             Future<void> onSortChanged(SpaceAlbumSortMode mode, bool isReverse) async {
               final settings = ref.read(settingsProvider);
@@ -800,6 +885,9 @@ class SpaceAlbumsPage extends HookConsumerWidget {
                             onTap: onAlbumTap,
                             selection: selection,
                             onLongPress: onAlbumLongPress,
+                            canSelectAlbum: canSelectAlbum,
+                            onRenameAlbum: renameAlbum,
+                            onDeleteAlbum: (album) => deleteAlbums({album.id}, singleAlbumName: album.name),
                           ),
                   ),
                 ],
@@ -881,6 +969,9 @@ class SpaceAlbumsPage extends HookConsumerWidget {
                     onMove: moveAlbumToFolder,
                     onAlbumTap: onAlbumTap,
                     onAlbumLongPress: onAlbumLongPress,
+                    canSelectAlbum: canSelectAlbum,
+                    onRenameAlbum: renameAlbum,
+                    onDeleteAlbum: (album) => deleteAlbums({album.id}, singleAlbumName: album.name),
                     onRenameFolder: renameFolder,
                     onMoveFolder: moveFolder,
                     onDeleteFolder: deleteFolder,
@@ -950,24 +1041,38 @@ String _folderErrorKey(Object error, String fallbackKey) {
   return fallbackKey;
 }
 
-/// Prompts for a folder name via a simple text dialog — shared by "New folder" and "Rename".
+/// Prompts for a name via a simple text dialog — shared by "New folder"/"Rename folder" and (Task
+/// 11) "New album"/"Rename album". [label] is the text-field's `InputDecoration.labelText` and
+/// [keyPrefix] is the base for the field/cancel/confirm widget keys (`$keyPrefix-field` /
+/// `-cancel` / `-confirm`) — both are threaded through to [_FolderNameDialog] rather than
+/// hardcoded there, so the album-rename path (Task 11) gets its OWN keys instead of colliding
+/// with the folder ones. Every existing call site keeps passing the folder
+/// label/`space-album-folder-name` prefix unchanged, so their keys stay byte-identical.
 /// Returns the trimmed name, or `null` if the user cancelled or left it blank — a blank name is
 /// treated as "nothing to do" rather than an error, so the caller never fires a doomed API call.
-Future<String?> _promptFolderName(
+Future<String?> _promptName(
   BuildContext context, {
   required String title,
   required String confirmLabel,
+  required String label,
+  required String keyPrefix,
   String initialName = '',
 }) async {
   final name = await showDialog<String>(
     context: context,
-    builder: (_) => _FolderNameDialog(title: title, confirmLabel: confirmLabel, initialName: initialName),
+    builder: (_) => _FolderNameDialog(
+      title: title,
+      confirmLabel: confirmLabel,
+      label: label,
+      keyPrefix: keyPrefix,
+      initialName: initialName,
+    ),
   );
   if (name == null || name.isEmpty) return null;
   return name;
 }
 
-/// The dialog body for [_promptFolderName], mirroring the shape of `NewAlbumNameModal`/
+/// The dialog body for [_promptName], mirroring the shape of `NewAlbumNameModal`/
 /// `DriftPersonNameEditForm` elsewhere in the app (AlertDialog + TextFormField, Cancel/confirm
 /// `TextButton`s), written with this file's `.t()` localisation convention rather than those
 /// widgets' older `.tr()` one.
@@ -979,10 +1084,25 @@ Future<String?> _promptFolderName(
 /// awaited `Future` completes. Disposing right there crashes with "A TextEditingController was
 /// used after being disposed."
 class _FolderNameDialog extends StatefulWidget {
-  const _FolderNameDialog({required this.title, required this.confirmLabel, this.initialName = ''});
+  const _FolderNameDialog({
+    required this.title,
+    required this.confirmLabel,
+    required this.label,
+    required this.keyPrefix,
+    this.initialName = '',
+  });
 
   final String title;
   final String confirmLabel;
+
+  /// The text field's label — e.g. "Folder name" or "Album name". Passed by the caller rather
+  /// than hardcoded, so this one dialog body serves both the folder and album name prompts.
+  final String label;
+
+  /// Base for this dialog's widget keys: `$keyPrefix-field` / `-cancel` / `-confirm`. Passed by
+  /// the caller (not hardcoded) so the album-rename path gets keys distinct from the folder
+  /// name/rename/create prompts that share this same dialog body.
+  final String keyPrefix;
   final String initialName;
 
   @override
@@ -1004,21 +1124,21 @@ class _FolderNameDialogState extends State<_FolderNameDialog> {
       title: Text(widget.title),
       content: SingleChildScrollView(
         child: TextFormField(
-          key: const Key('space-album-folder-name-field'),
+          key: Key('${widget.keyPrefix}-field'),
           controller: _controller,
           autofocus: true,
-          decoration: InputDecoration(labelText: 'space_album_folder_name_label'.t(context: context)),
+          decoration: InputDecoration(labelText: widget.label),
           onFieldSubmitted: (value) => Navigator.of(context).pop(value.trim()),
         ),
       ),
       actions: [
         TextButton(
-          key: const Key('space-album-folder-name-cancel'),
+          key: Key('${widget.keyPrefix}-cancel'),
           onPressed: () => Navigator.of(context).pop(null),
           child: Text('cancel'.t(context: context)),
         ),
         TextButton(
-          key: const Key('space-album-folder-name-confirm'),
+          key: Key('${widget.keyPrefix}-confirm'),
           onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
           child: Text(widget.confirmLabel),
         ),
@@ -1191,7 +1311,10 @@ class _LevelGrid extends StatelessWidget {
     required this.onUnlink,
     required this.onMove,
     required this.onAlbumTap,
-    this.onAlbumLongPress,
+    required this.onAlbumLongPress,
+    required this.canSelectAlbum,
+    required this.onRenameAlbum,
+    required this.onDeleteAlbum,
     required this.onRenameFolder,
     required this.onMoveFolder,
     required this.onDeleteFolder,
@@ -1219,7 +1342,18 @@ class _LevelGrid extends StatelessWidget {
   final void Function(String albumId) onUnlink;
   final void Function(SpaceAlbum album) onMove;
   final void Function(String albumId) onAlbumTap;
-  final void Function(String albumId)? onAlbumLongPress;
+
+  /// Task 14 (multi-select) — the raw toggle action. Always non-null now (Task 11): whether it is
+  /// actually WIRED to a given card is decided per-album via [canSelectAlbum] at the `_AlbumCard`
+  /// construction site below, not by nulling this out wholesale for a non-editor page.
+  final void Function(String albumId) onAlbumLongPress;
+
+  /// Task 11 — `canEdit || album.isOwnedByMe`. Gates whether [onAlbumLongPress] is actually wired
+  /// to a given card's `onLongPress`, so a viewer can long-press an album they own even though
+  /// `canEdit` is false, while folder long-press ([onFolderLongPress] above) stays canEdit-only.
+  final bool Function(SpaceAlbum album) canSelectAlbum;
+  final void Function(SpaceAlbum album) onRenameAlbum;
+  final void Function(SpaceAlbum album) onDeleteAlbum;
   final void Function(SpaceAlbumFolder folder) onRenameFolder;
   final void Function(SpaceAlbumFolder folder) onMoveFolder;
   final void Function(SpaceAlbumFolder folder) onDeleteFolder;
@@ -1262,12 +1396,16 @@ class _LevelGrid extends StatelessWidget {
                   key: Key('space-album-card-${album.id}'),
                   album: album,
                   canEdit: canEdit,
+                  canRename: canEdit || album.isOwnedByMe,
+                  canDelete: album.isOwnedByMe,
                   isSelected: selection.kind == SpaceAlbumSelectionKind.album && selection.ids.contains(album.id),
                   onToggle: onToggle,
                   onUnlink: onUnlink,
                   onMove: onMove,
                   onTap: onAlbumTap,
-                  onLongPress: onAlbumLongPress,
+                  onLongPress: canSelectAlbum(album) ? onAlbumLongPress : null,
+                  onRename: onRenameAlbum,
+                  onDelete: onDeleteAlbum,
                 );
               }, childCount: albums.length),
             ),
@@ -1290,7 +1428,10 @@ class _SearchResultsGrid extends StatelessWidget {
     required this.onMove,
     required this.onTap,
     required this.selection,
-    this.onLongPress,
+    required this.onLongPress,
+    required this.canSelectAlbum,
+    required this.onRenameAlbum,
+    required this.onDeleteAlbum,
   });
 
   final List<FolderSearchHit> hits;
@@ -1303,7 +1444,13 @@ class _SearchResultsGrid extends StatelessWidget {
   /// Task 14 (multi-select) — see the identical field on `_LevelGrid` above: read only to derive
   /// each card's `isSelected` badge.
   final SpaceAlbumSelection selection;
-  final void Function(String albumId)? onLongPress;
+
+  /// Task 14 (multi-select)/Task 11 — see the identical fields on `_LevelGrid` above: the raw
+  /// toggle action (always non-null) plus the per-album gate deciding whether it's actually wired.
+  final void Function(String albumId) onLongPress;
+  final bool Function(SpaceAlbum album) canSelectAlbum;
+  final void Function(SpaceAlbum album) onRenameAlbum;
+  final void Function(SpaceAlbum album) onDeleteAlbum;
 
   @override
   Widget build(BuildContext context) {
@@ -1321,12 +1468,16 @@ class _SearchResultsGrid extends StatelessWidget {
                 key: Key('space-album-card-${hit.album.id}'),
                 album: hit.album,
                 canEdit: canEdit,
+                canRename: canEdit || hit.album.isOwnedByMe,
+                canDelete: hit.album.isOwnedByMe,
                 isSelected: selection.kind == SpaceAlbumSelectionKind.album && selection.ids.contains(hit.album.id),
                 onToggle: onToggle,
                 onUnlink: onUnlink,
                 onMove: onMove,
                 onTap: onTap,
-                onLongPress: onLongPress,
+                onLongPress: canSelectAlbum(hit.album) ? onLongPress : null,
+                onRename: onRenameAlbum,
+                onDelete: onDeleteAlbum,
               ),
             ),
             if (hit.path.isNotEmpty)
@@ -1356,27 +1507,43 @@ class _AlbumCard extends ConsumerWidget {
     super.key,
     required this.album,
     required this.canEdit,
+    required this.canRename,
+    required this.canDelete,
     required this.onToggle,
     required this.onUnlink,
     required this.onMove,
     required this.onTap,
+    required this.onRename,
+    required this.onDelete,
     this.isSelected = false,
     this.onLongPress,
   });
 
   final SpaceAlbum album;
   final bool canEdit;
+
+  /// Task 11 — `canEdit || album.isOwnedByMe`: an editor can rename any linked album, and so can
+  /// the album's own owner even as a plain space viewer.
+  final bool canRename;
+
+  /// Task 11 — `album.isOwnedByMe`, full stop. Unlike every other card affordance, deleting is
+  /// never granted by `canEdit` alone — only the album's owner may delete it, editor or not.
+  final bool canDelete;
+
   final void Function(String albumId) onToggle;
   final void Function(String albumId) onUnlink;
   final void Function(SpaceAlbum album) onMove;
   final void Function(String albumId) onTap;
+  final void Function(SpaceAlbum album) onRename;
+  final void Function(SpaceAlbum album) onDelete;
 
   /// Task 14 (multi-select) — true while this album is part of the current selection. Purely
   /// visual: the card renders a check-circle badge and a tinted border.
   final bool isSelected;
 
   /// Task 14 (multi-select) — long-pressing enters selection mode with this album selected.
-  /// `null` when selection is unavailable (viewer / `canEdit: false`).
+  /// `null` when selection is unavailable for THIS album — a plain viewer (`canEdit: false` and
+  /// not the owner), or (Task 11) any card the caller's `canSelectAlbum` predicate rejects.
   final void Function(String albumId)? onLongPress;
 
   Widget _buildFallback(ColorScheme cs) {
@@ -1488,7 +1655,10 @@ class _AlbumCard extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (canEdit)
+              // Task 11 — the menu itself now renders whenever ANY of the three capabilities apply,
+              // not just `canEdit`: a viewer who owns this album gets a menu with Rename/Delete
+              // even though the three canEdit-only items below stay hidden for them.
+              if (canEdit || canRename || canDelete)
                 SizedBox(
                   width: 24,
                   height: 24,
@@ -1504,25 +1674,43 @@ class _AlbumCard extends ConsumerWidget {
                           onUnlink(album.id);
                         case _CardAction.move:
                           onMove(album);
+                        case _CardAction.rename:
+                          onRename(album);
+                        case _CardAction.delete:
+                          onDelete(album);
                       }
                     },
                     itemBuilder: (ctx) => [
-                      PopupMenuItem(
-                        value: _CardAction.toggle,
-                        child: Text(
-                          album.showInTimeline
-                              ? 'spaces_hide_from_timeline'.t(context: ctx)
-                              : 'spaces_linked_albums_show_in_timeline'.t(context: ctx),
+                      if (canEdit) ...[
+                        PopupMenuItem(
+                          value: _CardAction.toggle,
+                          child: Text(
+                            album.showInTimeline
+                                ? 'spaces_hide_from_timeline'.t(context: ctx)
+                                : 'spaces_linked_albums_show_in_timeline'.t(context: ctx),
+                          ),
                         ),
-                      ),
-                      PopupMenuItem(
-                        value: _CardAction.unlink,
-                        child: Text('space_album_unlink_from_space'.t(context: ctx)),
-                      ),
-                      PopupMenuItem(
-                        value: _CardAction.move,
-                        child: Text('space_album_folder_move'.t(context: ctx)),
-                      ),
+                        PopupMenuItem(
+                          value: _CardAction.unlink,
+                          child: Text('space_album_unlink_from_space'.t(context: ctx)),
+                        ),
+                        PopupMenuItem(
+                          value: _CardAction.move,
+                          child: Text('space_album_folder_move'.t(context: ctx)),
+                        ),
+                      ],
+                      if (canRename)
+                        PopupMenuItem(
+                          key: Key('space-album-card-rename-${album.id}'),
+                          value: _CardAction.rename,
+                          child: Text('space_album_rename'.t(context: ctx)),
+                        ),
+                      if (canDelete)
+                        PopupMenuItem(
+                          key: Key('space-album-card-delete-${album.id}'),
+                          value: _CardAction.delete,
+                          child: Text('space_album_delete'.t(context: ctx)),
+                        ),
                     ],
                   ),
                 ),
@@ -1534,7 +1722,7 @@ class _AlbumCard extends ConsumerWidget {
   }
 }
 
-enum _CardAction { toggle, unlink, move }
+enum _CardAction { toggle, unlink, move, rename, delete }
 
 // ---------------------------------------------------------------------------
 // Selection bar — Task 14 (multi-select) built the shape, Task 15 wired the
@@ -1555,6 +1743,9 @@ class _SelectionAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onMove,
     required this.onToggleTimeline,
     required this.onDelete,
+    required this.canManage,
+    required this.canDeleteAlbums,
+    required this.onDeleteAlbums,
   });
 
   final SpaceAlbumSelectionKind kind;
@@ -1574,6 +1765,16 @@ class _SelectionAppBar extends StatelessWidget implements PreferredSizeWidget {
   final void Function(bool showInTimeline) onToggleTimeline;
   final VoidCallback onDelete;
 
+  /// Task 11 — `canEdit`. Gates the three pre-existing album actions (unlink / move / toggle
+  /// timeline), which stay editor-only; bulk-deleting albums is gated separately, below.
+  final bool canManage;
+
+  /// Task 11 — whether EVERY selected album is owned by the current user. Bulk album delete is
+  /// "owns every selected album", full stop — not an editor privilege, so this is independent of
+  /// [canManage] and can be true (showing the action) even when [canManage] is false.
+  final bool canDeleteAlbums;
+  final VoidCallback onDeleteAlbums;
+
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
@@ -1589,26 +1790,35 @@ class _SelectionAppBar extends StatelessWidget implements PreferredSizeWidget {
       title: Text('space_album_selected_count'.t(context: context, args: {'count': count.toString()})),
       actions: [
         if (kind == SpaceAlbumSelectionKind.album) ...[
-          IconButton(
-            key: const Key('space-album-selection-unlink'),
-            icon: const Icon(Icons.link_off),
-            tooltip: 'space_album_unlink_from_space'.t(context: context),
-            onPressed: onUnlink,
-          ),
-          IconButton(
-            key: const Key('space-album-selection-move'),
-            icon: const Icon(Icons.drive_file_move_outline),
-            tooltip: 'space_album_folder_move'.t(context: context),
-            onPressed: onMove,
-          ),
-          IconButton(
-            key: const Key('space-album-selection-toggle-timeline'),
-            icon: Icon(isAllInTimeline ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-            tooltip: (isAllInTimeline ? 'space_album_bulk_remove_from_timeline' : 'space_album_bulk_add_to_timeline').t(
-              context: context,
+          if (canManage) ...[
+            IconButton(
+              key: const Key('space-album-selection-unlink'),
+              icon: const Icon(Icons.link_off),
+              tooltip: 'space_album_unlink_from_space'.t(context: context),
+              onPressed: onUnlink,
             ),
-            onPressed: () => onToggleTimeline(!isAllInTimeline),
-          ),
+            IconButton(
+              key: const Key('space-album-selection-move'),
+              icon: const Icon(Icons.drive_file_move_outline),
+              tooltip: 'space_album_folder_move'.t(context: context),
+              onPressed: onMove,
+            ),
+            IconButton(
+              key: const Key('space-album-selection-toggle-timeline'),
+              icon: Icon(isAllInTimeline ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+              tooltip: (isAllInTimeline ? 'space_album_bulk_remove_from_timeline' : 'space_album_bulk_add_to_timeline')
+                  .t(context: context),
+              onPressed: () => onToggleTimeline(!isAllInTimeline),
+            ),
+          ],
+          if (canDeleteAlbums)
+            IconButton(
+              key: const Key('space-album-selection-delete-albums'),
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'space_album_delete'.t(context: context),
+              color: Theme.of(context).colorScheme.error,
+              onPressed: onDeleteAlbums,
+            ),
         ] else if (kind == SpaceAlbumSelectionKind.folder) ...[
           IconButton(
             key: const Key('space-album-selection-move'),
