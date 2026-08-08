@@ -5,6 +5,7 @@ import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_bottom_sheet.widget.dart';
+import 'package:immich_mobile/presentation/widgets/spaces/space_album_dialogs.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_kebab.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
@@ -180,15 +181,21 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
   /// Task 12 — rename this space-linked album from the detail page. `canRename` (space Editor OR
   /// album owner) gates whether the kebab even offers this; the mutation itself has no separate
   /// server-side rename permission narrower than that. Reuses the same dialog shape/keys as
-  /// Task 11's album rename on the albums list page (`space_albums.page.dart`'s `_promptName`/
-  /// `_FolderNameDialog`) — duplicated rather than shared, since Dart's underscore-privacy is
-  /// per-library-file and that dialog is private to the list page.
+  /// Task 11's album rename on the albums list page via the shared [promptSpaceAlbumName]
+  /// (`space_album_dialogs.dart`).
   Future<void> _renameAlbum() async {
     final albumsAsync = ref.read(spaceAlbumsProvider(widget.spaceId));
     final album = albumsAsync.valueOrNull?.where((a) => a.id == widget.albumId).firstOrNull;
     if (album == null) return;
 
-    final name = await _promptAlbumName(context, album.name);
+    final name = await promptSpaceAlbumName(
+      context,
+      title: 'space_album_rename'.t(context: context),
+      confirmLabel: 'save'.t(context: context),
+      label: 'space_album_name_label'.t(context: context),
+      keyPrefix: 'space-album-name',
+      initialName: album.name,
+    );
     if (name == null || !context.mounted) return;
     try {
       await ref.read(spaceAlbumActionsProvider).renameAlbum(widget.spaceId, widget.albumId, name);
@@ -213,7 +220,15 @@ class _SpaceAlbumDetailPageState extends ConsumerState<SpaceAlbumDetailPage> {
     final album = albumsAsync.valueOrNull?.where((a) => a.id == widget.albumId).firstOrNull;
     if (album == null) return;
 
-    final confirmed = await _confirmDeleteAlbum(context, album);
+    final confirmed = await confirmSpaceAlbumAction(
+      context,
+      title: 'space_album_delete'.t(context: context),
+      content: 'space_album_delete_confirm'.t(context: context, args: {'name': album.name}),
+      confirmLabel: 'delete'.t(context: context),
+      cancelKey: const Key('space-album-delete-cancel'),
+      confirmKey: const Key('space-album-delete-confirm'),
+      destructive: true,
+    );
     if (!confirmed || !context.mounted) return;
 
     final failedIds = await ref.read(spaceAlbumActionsProvider).bulkDeleteAlbums(widget.spaceId, {widget.albumId});
@@ -370,102 +385,4 @@ class SpaceAlbumAppBar extends StatelessWidget {
       ],
     );
   }
-}
-
-/// Prompts for this album's new name — Task 12's detail-page counterpart to Task 11's album
-/// rename dialog on the albums list page (`space_albums.page.dart`'s `_promptName`/
-/// `_FolderNameDialog`, `space-album-name-*` keys). Duplicated rather than imported: Dart's
-/// underscore-privacy is per-library-file, and that dialog is private to the list page. Keeps the
-/// SAME key literals so both surfaces test/behave identically. Returns the trimmed name, or `null`
-/// if the user cancelled or left it blank.
-Future<String?> _promptAlbumName(BuildContext context, String initialName) async {
-  final name = await showDialog<String>(
-    context: context,
-    builder: (_) => _AlbumNameDialog(initialName: initialName),
-  );
-  if (name == null || name.isEmpty) return null;
-  return name;
-}
-
-/// The dialog body for [_promptAlbumName] — same AlertDialog + Cancel/confirm `TextButton` shape
-/// as Task 11's `_FolderNameDialog`. A **StatefulWidget**, not a bare function building a
-/// `TextEditingController` inline, for the same reason as that one: the controller must be
-/// disposed only once this widget is actually unmounted, not immediately after `showDialog`
-/// resolves — the dialog's pop is animated, so the `TextFormField` is still in the tree for a
-/// moment after the awaited `Future` completes.
-class _AlbumNameDialog extends StatefulWidget {
-  const _AlbumNameDialog({required this.initialName});
-
-  final String initialName;
-
-  @override
-  State<_AlbumNameDialog> createState() => _AlbumNameDialogState();
-}
-
-class _AlbumNameDialogState extends State<_AlbumNameDialog> {
-  late final TextEditingController _controller = TextEditingController(text: widget.initialName);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('space_album_rename'.t(context: context)),
-      content: SingleChildScrollView(
-        child: TextFormField(
-          key: const Key('space-album-name-field'),
-          controller: _controller,
-          autofocus: true,
-          decoration: InputDecoration(labelText: 'space_album_name_label'.t(context: context)),
-          onFieldSubmitted: (value) => Navigator.of(context).pop(value.trim()),
-        ),
-      ),
-      actions: [
-        TextButton(
-          key: const Key('space-album-name-cancel'),
-          onPressed: () => Navigator.of(context).pop(null),
-          child: Text('cancel'.t(context: context)),
-        ),
-        TextButton(
-          key: const Key('space-album-name-confirm'),
-          onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
-          child: Text('save'.t(context: context)),
-        ),
-      ],
-    );
-  }
-}
-
-/// Confirms deleting [album] — same AlertDialog + Cancel/error-coloured-delete `TextButton` shape
-/// and `space-album-delete-*` keys as Task 11's single-album delete confirm on the albums list
-/// page. [album.name] is threaded into `space_album_delete_confirm`'s `{name}` interpolation — the
-/// detail page always has the real album in hand (unlike the list page's Task-11-round-1 defect,
-/// where a missing `singleAlbumName` argument rendered `Delete ""?`), so there is no equivalent
-/// empty-name path to guard against here.
-Future<bool> _confirmDeleteAlbum(BuildContext context, SpaceAlbum album) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text('space_album_delete'.t(context: ctx)),
-      content: Text('space_album_delete_confirm'.t(context: ctx, args: {'name': album.name})),
-      actions: [
-        TextButton(
-          key: const Key('space-album-delete-cancel'),
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: Text('cancel'.t(context: ctx)),
-        ),
-        TextButton(
-          key: const Key('space-album-delete-confirm'),
-          onPressed: () => Navigator.of(ctx).pop(true),
-          style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
-          child: Text('delete'.t(context: ctx)),
-        ),
-      ],
-    ),
-  );
-  return confirmed == true;
 }

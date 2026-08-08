@@ -15,6 +15,7 @@ import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/pages/library/spaces/collection_sort.dart';
 import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
+import 'package:immich_mobile/presentation/widgets/spaces/space_album_dialogs.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_folder_card.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_album_folder_picker.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
@@ -384,7 +385,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     // branch, rather than inside `data: (albums) {...}` below: none of these need the album list,
     // and "New folder" is an app-bar action rendered regardless of load/error/data state.
     Future<void> createFolder() async {
-      final name = await _promptName(
+      final name = await promptSpaceAlbumName(
         context,
         title: 'space_album_folder_new'.t(context: context),
         confirmLabel: 'create'.t(context: context),
@@ -425,7 +426,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
       // "Folder name" — pre-existing from before Task 11 made `label`/`keyPrefix` parameters, and
       // trivially fixable now that they are. Same album label and `space-album-name` key prefix as
       // the rename dialog below.
-      final name = await _promptName(
+      final name = await promptSpaceAlbumName(
         context,
         title: 'space_album_new'.t(context: context),
         confirmLabel: 'create'.t(context: context),
@@ -468,7 +469,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     }
 
     Future<void> renameFolder(SpaceAlbumFolder folder) async {
-      final name = await _promptName(
+      final name = await promptSpaceAlbumName(
         context,
         title: 'space_album_folder_rename'.t(context: context),
         confirmLabel: 'save'.t(context: context),
@@ -567,7 +568,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
 
     Future<void> bulkUnlink() async {
       final ids = selection.ids;
-      final confirmed = await _confirmBulkAction(
+      final confirmed = await confirmSpaceAlbumAction(
         context,
         title: 'space_album_bulk_unlink_title'.t(context: context, args: {'count': ids.length.toString()}),
         content: 'space_album_bulk_unlink_confirm'.t(context: context),
@@ -615,7 +616,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
 
     Future<void> bulkDeleteFolders() async {
       final ids = selection.ids;
-      final confirmed = await _confirmBulkAction(
+      final confirmed = await confirmSpaceAlbumAction(
         context,
         title: 'space_album_bulk_folder_delete_title'.t(context: context, args: {'count': ids.length.toString()}),
         content: 'space_album_bulk_folder_delete_confirm'.t(context: context),
@@ -635,7 +636,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     // `deleteAlbums` below calls `notifyBulkFailures`, and Dart does not allow a local function to
     // forward-reference one declared later in the same scope.
     Future<void> renameAlbum(SpaceAlbum album) async {
-      final name = await _promptName(
+      final name = await promptSpaceAlbumName(
         context,
         title: 'space_album_rename'.t(context: context),
         confirmLabel: 'save'.t(context: context),
@@ -662,7 +663,7 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     // interpolates {count}, so reusing it for one album would read "Delete 1 albums".
     Future<void> deleteAlbums(Set<String> ids, {String? singleAlbumName}) async {
       final single = ids.length == 1;
-      final confirmed = await _confirmBulkAction(
+      final confirmed = await confirmSpaceAlbumAction(
         context,
         title: single
             ? 'space_album_delete'.t(context: context)
@@ -1069,113 +1070,6 @@ String _folderErrorKey(Object error, String fallbackKey) {
   return fallbackKey;
 }
 
-/// Prompts for a name via a simple text dialog — shared by "New folder"/"Rename folder" and (Task
-/// 11) "New album"/"Rename album". [label] is the text-field's `InputDecoration.labelText` and
-/// [keyPrefix] is the base for the field/cancel/confirm widget keys (`$keyPrefix-field` /
-/// `-cancel` / `-confirm`) — both are threaded through to [_FolderNameDialog] rather than
-/// hardcoded there, so the album paths get their OWN keys instead of colliding with the folder
-/// ones. The two ALBUM call sites ("New album", M-8, and "Rename album", Task 11) pass
-/// `space_album_name_label`/`space-album-name`; the three FOLDER ones keep
-/// `space_album_folder_name_label`/`space-album-folder-name`.
-/// Returns the trimmed name, or `null` if the user cancelled or left it blank — a blank name is
-/// treated as "nothing to do" rather than an error, so the caller never fires a doomed API call.
-Future<String?> _promptName(
-  BuildContext context, {
-  required String title,
-  required String confirmLabel,
-  required String label,
-  required String keyPrefix,
-  String initialName = '',
-}) async {
-  final name = await showDialog<String>(
-    context: context,
-    builder: (_) => _FolderNameDialog(
-      title: title,
-      confirmLabel: confirmLabel,
-      label: label,
-      keyPrefix: keyPrefix,
-      initialName: initialName,
-    ),
-  );
-  if (name == null || name.isEmpty) return null;
-  return name;
-}
-
-/// The dialog body for [_promptName], mirroring the shape of `NewAlbumNameModal`/
-/// `DriftPersonNameEditForm` elsewhere in the app (AlertDialog + TextFormField, Cancel/confirm
-/// `TextButton`s), written with this file's `.t()` localisation convention rather than those
-/// widgets' older `.tr()` one.
-///
-/// A **StatefulWidget**, not a bare function building a `TextEditingController` inline: the
-/// controller must be disposed only once this widget is actually unmounted (the framework calls
-/// `dispose()` for that), not immediately after `showDialog` resolves — the dialog's pop is
-/// animated, so the `TextFormField` is still in the tree, still rebuilding, for a moment after the
-/// awaited `Future` completes. Disposing right there crashes with "A TextEditingController was
-/// used after being disposed."
-class _FolderNameDialog extends StatefulWidget {
-  const _FolderNameDialog({
-    required this.title,
-    required this.confirmLabel,
-    required this.label,
-    required this.keyPrefix,
-    this.initialName = '',
-  });
-
-  final String title;
-  final String confirmLabel;
-
-  /// The text field's label — e.g. "Folder name" or "Album name". Passed by the caller rather
-  /// than hardcoded, so this one dialog body serves both the folder and album name prompts.
-  final String label;
-
-  /// Base for this dialog's widget keys: `$keyPrefix-field` / `-cancel` / `-confirm`. Passed by
-  /// the caller (not hardcoded) so the album-rename path gets keys distinct from the folder
-  /// name/rename/create prompts that share this same dialog body.
-  final String keyPrefix;
-  final String initialName;
-
-  @override
-  State<_FolderNameDialog> createState() => _FolderNameDialogState();
-}
-
-class _FolderNameDialogState extends State<_FolderNameDialog> {
-  late final TextEditingController _controller = TextEditingController(text: widget.initialName);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SingleChildScrollView(
-        child: TextFormField(
-          key: Key('${widget.keyPrefix}-field'),
-          controller: _controller,
-          autofocus: true,
-          decoration: InputDecoration(labelText: widget.label),
-          onFieldSubmitted: (value) => Navigator.of(context).pop(value.trim()),
-        ),
-      ),
-      actions: [
-        TextButton(
-          key: Key('${widget.keyPrefix}-cancel'),
-          onPressed: () => Navigator.of(context).pop(null),
-          child: Text('cancel'.t(context: context)),
-        ),
-        TextButton(
-          key: Key('${widget.keyPrefix}-confirm'),
-          onPressed: () => Navigator.of(context).pop(_controller.text.trim()),
-          child: Text(widget.confirmLabel),
-        ),
-      ],
-    );
-  }
-}
-
 /// Confirms folder deletion — mirrors `space_detail.page.dart`'s `_deleteSpace` shape exactly
 /// (same AlertDialog + Cancel/error-coloured-delete `TextButton` layout), the established pattern
 /// for a destructive action among the other space pages.
@@ -1196,42 +1090,6 @@ Future<bool> _confirmDeleteFolder(BuildContext context, SpaceAlbumFolder folder)
           onPressed: () => Navigator.of(ctx).pop(true),
           style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
           child: Text('delete'.t(context: ctx)),
-        ),
-      ],
-    ),
-  );
-  return confirmed == true;
-}
-
-/// Task 15 (bulk actions) — the shared "act on N items" confirm-dialog shape (bulk unlink / bulk
-/// folder delete), one dialog for the WHOLE batch naming the count. Mirrors [_confirmDeleteFolder]
-/// above exactly (Cancel + a labelled confirm `TextButton`, error-tinted only when [destructive]),
-/// just parameterised since the two callers use different keys/copy/tint.
-Future<bool> _confirmBulkAction(
-  BuildContext context, {
-  required String title,
-  required String content,
-  required String confirmLabel,
-  required Key cancelKey,
-  required Key confirmKey,
-  bool destructive = false,
-}) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(title),
-      content: Text(content),
-      actions: [
-        TextButton(
-          key: cancelKey,
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: Text('cancel'.t(context: ctx)),
-        ),
-        TextButton(
-          key: confirmKey,
-          onPressed: () => Navigator.of(ctx).pop(true),
-          style: destructive ? TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error) : null,
-          child: Text(confirmLabel),
         ),
       ],
     ),
