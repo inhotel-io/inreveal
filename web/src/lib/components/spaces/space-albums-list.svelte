@@ -402,16 +402,40 @@
     }
   };
 
-  // M-3: selection can only ever be ENTERED while canManage is true (the check circle is gated on
-  // it), but canManage can go FALSE mid-selection if the viewer's role is downgraded and a
-  // `invalidateAll()` elsewhere refreshes `members` (E-15). Without this, the bar disappears
-  // (also gated on canManage, see the template) yet the selection itself survives, and
-  // handleAlbumClick/handleFolderClick keep routing clicks to toggle — silently making every card
-  // unopenable, since `selection.selectionActive` is still true, until the user navigates away.
+  // M-3: canManage can go FALSE mid-selection if the viewer's role is downgraded and an
+  // `invalidateAll()` elsewhere refreshes `members` (E-15).
+  //
+  // m-1 (final review): this used to clear the WHOLE selection, on the reasoning that a selection
+  // could only ever be entered while canManage was true. That stopped being true when the check
+  // circle widened to `canManage || canRename || canDelete` — a viewer may now legitimately select
+  // albums they own, and a downgrade must not throw those away. So the two kinds are handled
+  // separately:
+  //
+  //   • FOLDER selections still clear outright. Folders have no owner concept, so nothing in one
+  //     survives a downgrade, and leaving it would reproduce the original M-3 bug exactly: the bar
+  //     is hidden for a folder kind without canManage (see the template), yet
+  //     `selection.selectionActive` stays true and handleFolderClick keeps routing clicks to
+  //     toggle — every card silently unopenable until the user navigates away.
+  //   • ALBUM selections narrow to the ids the viewer can still select, which is the same
+  //     `canSelectAlbum` predicate the check circle and handleAlbumClick use. The bar stays up for
+  //     an album kind regardless of canManage, so there is no invisible-selection hazard here.
+  //
+  // reconcile() is idempotent once narrowed (the surviving ids all pass the filter on the next
+  // run), so this settles rather than looping.
   $effect(() => {
-    if (!canManage) {
-      selection.clear();
+    if (canManage) {
+      return;
     }
+    if (selection.kind === 'folder') {
+      selection.clear();
+      return;
+    }
+    selection.reconcile(
+      selection.ids.filter((id) => {
+        const album = albums.find((a) => a.id === id);
+        return !!album && canSelectAlbum(album);
+      }),
+    );
   });
 
   const allSelectedAlbumsInTimeline = $derived(

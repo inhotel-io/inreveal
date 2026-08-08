@@ -1219,6 +1219,48 @@ describe('SpaceAlbumsList', () => {
           within(screen.getByTestId('space-album-select-bar')).queryByRole('button', { name: 'Delete album' }),
         ).not.toBeInTheDocument();
       });
+
+      // m-1 (final review). `canManage` can go false mid-selection when the viewer's role is
+      // downgraded and an `invalidateAll()` elsewhere refreshes `members` (E-15). The M-3 guard was
+      // written when selection required canManage, so it cleared everything; now that a viewer may
+      // legitimately select albums they OWN, an editor→viewer downgrade must narrow the selection
+      // to what they can still select rather than throwing all of it away.
+      it('narrows an album selection to the owned albums when canManage goes false', async () => {
+        const albums = [linkedAlbum('a', { ownerId: 'me' }), linkedAlbum('b', { ownerId: 'someone-else' })];
+        const { rerender } = renderList({ ...props, canManage: true, albums, folders: [] });
+
+        await fireEvent.click(screen.getByTestId('space-album-select-a'));
+        await fireEvent.click(screen.getByTestId('space-album-select-b'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('2'); // positive control
+
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, canManage: false, albums, folders: [] },
+        });
+
+        await waitFor(() => expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'));
+        expect(screen.getByTestId('space-album-card-a')).toHaveAttribute('data-selected', 'true');
+        expect(screen.getByTestId('space-album-card-b')).not.toHaveAttribute('data-selected', 'true');
+      });
+
+      // The counterpart that keeps the narrowing above from becoming "never clear anything":
+      // folders have no owner concept, so a downgraded editor's folder selection must still go
+      // away entirely — otherwise the bar (hidden for a folder kind without canManage) leaves an
+      // invisible selection behind that keeps swallowing every card click.
+      it('clears a folder selection entirely when canManage goes false', async () => {
+        const folders = [folderDto('f')];
+        const { rerender } = renderList({ ...props, canManage: true, albums: [], folders });
+
+        await fireEvent.click(screen.getByTestId('space-album-folder-select-f'));
+        expect(screen.getByTestId('space-album-select-bar')).toHaveTextContent('1'); // positive control
+
+        await rerender({
+          component: SpaceAlbumsList,
+          componentProps: { ...props, canManage: false, albums: [], folders },
+        });
+
+        await waitFor(() => expect(screen.queryByTestId('space-album-select-bar')).not.toBeInTheDocument());
+      });
     });
   });
 });
