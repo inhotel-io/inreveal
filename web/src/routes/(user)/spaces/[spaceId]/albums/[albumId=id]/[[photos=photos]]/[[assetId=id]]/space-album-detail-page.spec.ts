@@ -2,6 +2,7 @@ import {
   AlbumUserRole,
   AssetOrder,
   SharedSpaceRole,
+  bulkDeleteAlbums,
   getAlbumInfo,
   type AlbumResponseDto,
   type SharedSpaceMemberResponseDto,
@@ -129,8 +130,31 @@ vi.mock('@immich/sdk', async (importOriginal) => {
   return {
     ...actual,
     getAlbumInfo: vi.fn(),
+    renameSharedSpaceAlbum: vi.fn(),
+    bulkDeleteAlbums: vi.fn(),
   };
 });
+
+// Rename/delete (Scenarios 44-46) drive real confirm dialogs (modalManager.showDialog) and toasts
+// — mock the manager the same way space-albums-page.spec.ts / space-person-detail-page.spec.ts do,
+// keeping every other @immich/ui export (Icon, IconButton, Textarea, …) real so the rest of this
+// file's rendering assertions are unaffected.
+const { modalManagerMock } = vi.hoisted(() => ({
+  modalManagerMock: { show: vi.fn(), showDialog: vi.fn() },
+}));
+
+vi.mock('@immich/ui', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@immich/ui')>();
+  return {
+    ...original,
+    modalManager: modalManagerMock,
+    toastManager: { primary: vi.fn(), success: vi.fn(), warning: vi.fn(), danger: vi.fn() },
+  };
+});
+
+// Asserted directly (Scenario 46) rather than via the real toast, mirroring space-albums-page.spec.ts.
+const { handleErrorMock } = vi.hoisted(() => ({ handleErrorMock: vi.fn() }));
+vi.mock('$lib/utils/handle-error', () => ({ handleError: handleErrorMock }));
 
 vi.mock('$lib/services/album.service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('$lib/services/album.service')>();
@@ -1224,6 +1248,74 @@ describe('Space album detail page', () => {
       await rerender(rerenderWith(makeAlbum({ id: 'album-2' })));
 
       expect(screen.getByTestId('space-album-timeline')).toHaveAttribute('data-mode', 'browse');
+    });
+  });
+
+  // ── Rename / delete menu (Task 8: canManage||isOwner gates Rename, isOwner-only gates Delete) ──
+  describe('rename and delete', () => {
+    const openMenu = async () => fireEvent.click(screen.getByRole('button', { name: 'More' }));
+
+    // Scenario 44
+    it('offers Rename but not Delete to an editor who does not own the album', async () => {
+      renderPage({
+        members: [makeMember(SharedSpaceRole.Editor)],
+        album: makeAlbum({
+          albumUsers: [
+            {
+              user: { id: 'other-user-id', email: 'owner@example.com', name: 'Other User' } as never,
+              role: AlbumUserRole.Owner,
+            },
+          ],
+        }),
+      });
+
+      await openMenu();
+
+      expect(screen.getByRole('menuitem', { name: 'Rename album' })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: 'Delete album' })).not.toBeInTheDocument();
+    });
+
+    // Scenario 45
+    it('offers Delete to a viewer who owns the album and navigates to the album list on success', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      vi.mocked(bulkDeleteAlbums).mockResolvedValue([{ id: 'album-1', success: true }] as never);
+      renderPage({
+        members: [makeMember(SharedSpaceRole.Viewer)],
+        album: makeAlbum({ id: 'album-1' }), // default fixture owns it (albumUsers[0] === current-user-id)
+        folderId: 'folder-trips',
+      });
+
+      await openMenu();
+      expect(screen.getByRole('menuitem', { name: 'Delete album' })).toBeInTheDocument();
+
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Delete album' }));
+
+      await waitFor(() =>
+        expect(bulkDeleteAlbums).toHaveBeenCalledWith({
+          id: 'space-1',
+          sharedSpaceBulkAlbumIdsDto: { ids: ['album-1'] },
+        }),
+      );
+      // Same route helper the back button uses (preserves the album's folder), per the brief.
+      await waitFor(() => expect(goto).toHaveBeenCalledWith('/spaces/space-1/albums?folder=folder-trips'));
+    });
+
+    // Scenario 46
+    it('does not navigate and surfaces an error when delete fails', async () => {
+      modalManagerMock.showDialog.mockResolvedValue(true);
+      vi.mocked(bulkDeleteAlbums).mockResolvedValue([
+        { id: 'album-1', success: false, error: 'no_permission' },
+      ] as never);
+      renderPage({
+        members: [makeMember(SharedSpaceRole.Viewer)],
+        album: makeAlbum({ id: 'album-1' }),
+      });
+
+      await openMenu();
+      await fireEvent.click(screen.getByRole('menuitem', { name: 'Delete album' }));
+
+      await waitFor(() => expect(handleErrorMock).toHaveBeenCalledWith(undefined, 'Unable to delete album'));
+      expect(goto).not.toHaveBeenCalled();
     });
   });
 });

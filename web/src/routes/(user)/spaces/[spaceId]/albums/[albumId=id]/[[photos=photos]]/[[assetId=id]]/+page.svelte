@@ -16,6 +16,8 @@
   import FilterToggleButton from '$lib/components/filter-panel/filter-toggle-button.svelte';
   import ActiveFiltersBar from '$lib/components/filter-panel/active-filters-bar.svelte';
   import ControlAppBar from '$lib/components/shared-components/ControlAppBar.svelte';
+  import ButtonContextMenu from '$lib/components/shared-components/context-menu/ButtonContextMenu.svelte';
+  import MenuOption from '$lib/components/shared-components/context-menu/MenuOption.svelte';
   import SelectionToolbar from '$lib/components/timeline/SelectionToolbar.svelte';
   import Timeline from '$lib/components/timeline/Timeline.svelte';
   import TimelineGroupingControl from '$lib/components/timeline/TimelineGroupingControl.svelte';
@@ -24,7 +26,14 @@
   import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
   import { TimelineManager } from '$lib/managers/timeline-manager/timeline-manager.svelte';
   import type { TimelineAsset, TimelineGrouping, TimelineTemporalAnchor } from '$lib/managers/timeline-manager/types';
-  import { addAssetsToAlbumWithOutcome, getAlbumAssetsActions, handleDeleteAlbum } from '$lib/services/album.service';
+  import {
+    addAssetsToAlbumWithOutcome,
+    getAlbumAssetsActions,
+    // Renamed to avoid colliding with this file's own handleDeleteAlbum (the menu action that
+    // deletes the album via bulkDeleteAlbumsAction, Task 8) — this import is only the
+    // abandoned-empty-album cleanup on navigate-away, unchanged from before.
+    handleDeleteAlbum as deleteAbandonedAlbum,
+  } from '$lib/services/album.service';
   import {
     buildAlbumAssetPickerOptions,
     buildAlbumTimelineOptions,
@@ -35,7 +44,9 @@
   import { clearTimelineTemporalFilter } from '$lib/utils/timeline-temporal-filters';
   import { withNameCapture } from '$lib/utils/filter-name-capture';
   import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
+  import { bulkDeleteAlbumsAction } from '$lib/utils/space-album-bulk-actions';
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
+  import SpaceAlbumFolderNameModal from '$lib/modals/SpaceAlbumFolderNameModal.svelte';
   import { lang } from '$lib/stores/preferences.store';
   import { SvelteMap } from 'svelte/reactivity';
   import {
@@ -46,6 +57,7 @@
   import {
     AlbumUserRole,
     getAlbumInfo,
+    renameSharedSpaceAlbum,
     SharedSpaceRole,
     updateAlbumInfo,
     type AlbumResponseDto,
@@ -55,7 +67,7 @@
   import HeaderActionButton from '$lib/components/HeaderActionButton.svelte';
   import { Icon, IconButton, modalManager, toastManager } from '@immich/ui';
   import { handleError } from '$lib/utils/handle-error';
-  import { mdiArrowLeft, mdiImageOutline, mdiImagePlusOutline } from '@mdi/js';
+  import { mdiArrowLeft, mdiDotsVertical, mdiImageOutline, mdiImagePlusOutline, mdiRenameOutline } from '@mdi/js';
   import { t } from 'svelte-i18n';
   import type { PageData } from './$types';
 
@@ -107,7 +119,7 @@
   // link (FK cascade), so it won't linger as a nameless, empty card in the space.
   onNavigate(async ({ to }) => {
     if (!isSpaceAlbumRoute(to?.route.id) && album.assetCount === 0 && !album.albumName) {
-      await handleDeleteAlbum(album, { notify: false, prompt: false });
+      await deleteAbandonedAlbum(album, { notify: false, prompt: false });
     }
   });
 
@@ -190,6 +202,10 @@
     album = await getAlbumInfo({ id: album.id });
   };
 
+  // The back button's own destination — shared with the post-delete redirect below so the two
+  // never drift: both must return to the folder this album lives in, not the space root.
+  const goToAlbumList = () => goto(Route.viewSpaceAlbums({ id: space.id, folderId: data.folderId }));
+
   const handleRemoveAssets = (assetIds: string[]) => {
     // Prune the browse timeline immediately so removed photos don't linger.
     // RemoveFromAlbumAction already re-fetches the album via bind:album and clears the
@@ -242,6 +258,59 @@
       handleError(error, $t('errors.unable_to_update_album_cover'));
     }
   };
+
+  // Rename is canManage (space Editor) OR ownership — same gate and modal as the albums list's
+  // handleRenameAlbum (Task 7), just scoped to this page's single `album` instead of taking one
+  // as a parameter. Reuses SpaceAlbumFolderNameModal rather than a second near-identical modal.
+  async function handleRenameAlbum() {
+    const name = await modalManager.show(SpaceAlbumFolderNameModal, {
+      title: $t('space_album_rename'),
+      initialName: album.albumName,
+      icon: mdiRenameOutline,
+      label: $t('space_album_name_label'),
+    });
+    if (!name) {
+      return;
+    }
+    try {
+      // NOT handleUpdateAlbum ($lib/services/album.service.ts) — that issues PATCH /albums/{id},
+      // which 403s for a space editor who does not own the album. This route carries the editor
+      // arm renameSharedSpaceAlbum was added for.
+      await renameSharedSpaceAlbum({ id: space.id, albumId: album.id, sharedSpaceAlbumRenameDto: { name } });
+      await refreshAlbum();
+      // The [spaceId] layout separately caches linkedAlbums (the list page's own albumName), so a
+      // re-mount via tab/sidebar navigation would keep showing the pre-rename name without this.
+      await invalidateAll();
+    } catch (error) {
+      handleError(error, $t('space_album_error_rename'));
+    }
+  }
+
+  // Delete is ownership-only — never granted by canManage alone (mirrors the albums list's
+  // isOwner-gated canDelete). Goes through bulkDeleteAlbumsAction with a one-element array — the
+  // intended single-delete path (Task 8 brief) — rather than a separate endpoint. On success,
+  // navigates back to the album list via the SAME route helper the back button uses so the
+  // album's folder is preserved; on failure, stays put and surfaces the error.
+  async function handleDeleteAlbum() {
+    const confirmed = await modalManager.showDialog({
+      title: $t('space_album_delete'),
+      prompt: $t('space_album_delete_confirm', { values: { name: album.albumName } }),
+      confirmText: $t('delete'),
+      confirmColor: 'danger',
+    });
+    if (!confirmed) {
+      return;
+    }
+    const { failedCount } = await bulkDeleteAlbumsAction(space.id, [album.id]);
+    if (failedCount > 0) {
+      // bulkDeleteAlbumsAction never throws (it folds a thrown request into every-id-failed), so
+      // there is no underlying error object to forward here.
+      handleError(undefined, $t('space_album_error_delete'));
+      return;
+    }
+    await invalidateAll();
+    await goToAlbumList();
+  }
 
   function resetPicker() {
     pickerFilters = createFilterState();
@@ -317,7 +386,7 @@
       shape="round"
       color="secondary"
       aria-label={$t('back')}
-      onclick={() => void goto(Route.viewSpaceAlbums({ id: space.id, folderId: data.folderId }))}
+      onclick={() => void goToAlbumList()}
       icon={mdiArrowLeft}
     />
   {/snippet}
@@ -333,6 +402,26 @@
         onclick={enterAddMode}
         icon={mdiImagePlusOutline}
       />
+    {/if}
+    <!-- Rename is canManage OR ownership; delete is ownership only — same split as the albums
+         list's card menu (space-album-card.svelte), just against this page's single `album`
+         instead of one row in a list. -->
+    {#if (canManage || isOwned) && mode === 'browse'}
+      <ButtonContextMenu
+        icon={mdiDotsVertical}
+        title={$t('more')}
+        color="secondary"
+        variant="ghost"
+        align="top-right"
+        direction="left"
+      >
+        {#if canManage || isOwned}
+          <MenuOption text={$t('space_album_rename')} onClick={() => void handleRenameAlbum()} />
+        {/if}
+        {#if isOwned}
+          <MenuOption text={$t('space_album_delete')} onClick={() => void handleDeleteAlbum()} />
+        {/if}
+      </ButtonContextMenu>
     {/if}
   {/snippet}
 
