@@ -622,6 +622,26 @@ describe('/shared-spaces/:id/albums (T18)', () => {
         expect(linked?.albumName).toBe('Renamed by non-member owner');
       });
 
+      // I-2 — the CLASSIC ALBUM-EDITOR arm of the rename gate, which had zero coverage anywhere on
+      // server or client despite §3 justifying it at length. `viewer` is a space Viewer (so the
+      // space-Editor short-circuit cannot fire) and does not own the album; the only thing granting
+      // them Permission.AlbumUpdate is `album_user.role = editor`. The very next test is its exact
+      // negative counterpart: the SAME user, on an album they hold no album-level role on, 403s.
+      it('204s for a classic album editor who is only a space Viewer', async () => {
+        const album = await utils.createAlbum(owner.accessToken, {
+          albumName: 'Rename: album-editor-space-viewer',
+          albumUsers: [{ userId: viewer.userId, role: AlbumUserRole.Editor }],
+        });
+        await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);
+
+        const { status } = await renameAlbumRequest(viewer.accessToken, album.id, 'Renamed by album editor');
+        expect(status).toBe(204);
+
+        const { body } = await listAlbums(owner.accessToken);
+        const linked = (body as Array<{ id: string; albumName: string }>).find((a) => a.id === album.id);
+        expect(linked?.albumName).toBe('Renamed by album editor');
+      });
+
       it('403s for a space Viewer who does not own the album', async () => {
         const album = await utils.createAlbum(owner.accessToken, { albumName: 'Rename: viewer-forbidden' });
         await utils.linkSpaceAlbum(owner.accessToken, spaceId, album.id);

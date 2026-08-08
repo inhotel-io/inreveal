@@ -114,6 +114,16 @@
   }: Props = $props();
 
   // Ownership is a pure derivation — ownerId is already on SharedSpaceLinkedAlbumDto.
+  //
+  // I-2 (known, accepted divergence): the capability model's Rename arm is `canManage` OR
+  // `Permission.AlbumUpdate` — owner **or** classic album-level editor (`album_user.role =
+  // editor`). This list can only express `canManage || isOwner(album)`: SharedSpaceLinkedAlbumDto
+  // carries `ownerId` and nothing else about album membership (no `albumUsers`), so the
+  // album-editor arm is genuinely underivable here. A space viewer who is a classic album editor
+  // of a linked album therefore sees no ⋮ on this list but does find Rename on the album's own
+  // detail page, which has the full AlbumResponseDto and implements the whole rule
+  // (`…/[albumId=id]/…/+page.svelte`'s canManage/isOwned). Under-grants, never over-grants; the
+  // server's own editor arm is pinned by e2e instead of widening the DTO for it.
   const isOwner = (album: SharedSpaceLinkedAlbumDto) => album.ownerId === authManager.user.id;
   // §3 "Selectable predicate": a card is selectable iff canManage (space Editor) OR the viewer
   // owns it. Folders have no owner concept at all and stay canManage-only (see selectFolder).

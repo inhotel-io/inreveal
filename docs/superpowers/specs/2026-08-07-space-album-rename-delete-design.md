@@ -103,6 +103,16 @@ editor can already rename the album via `PATCH /albums/{id}`, so granting them r
 surface too gives nothing away, and restricting it to owner-only would make this route _stricter_ than
 the album's own page.
 
+**Known, accepted divergence — the albums LIST under-grants the classic-album-editor arm.** The server
+and the album **detail** page implement the full rule (`canManage || isOwned`, where `canManage =
+isSpaceEditor || isAlbumEditor`). The albums **list** — card, table, and the select bar built on them —
+can only implement `canManage || isOwner(album)`, because `SharedSpaceLinkedAlbumDto` carries just
+`ownerId` and no `albumUsers`, so there is nothing client-side to derive the album-editor arm from. A
+space viewer who is a classic album-level editor of a linked album therefore sees no ⋮ on the list,
+opens the album, and finds Rename on its detail page. This under-grants (never over-grants) and is not
+worth widening the DTO for; it is pinned by an e2e case (`shared-space-album.e2e-spec.ts`, "204s for a
+classic album-level editor who is only a space Viewer") so the server arm itself stays covered.
+
 Two derived rules keep the surfaces coherent:
 
 - **Selectable predicate.** An album card is selectable iff `canManage || isOwner(album)`. On mobile
