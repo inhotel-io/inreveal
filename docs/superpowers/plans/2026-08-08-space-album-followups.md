@@ -140,11 +140,20 @@ cd mobile && ~/.local/share/mise/installs/aqua-flutter-flutter/3.44.8/flutter/bi
   test/presentation/widgets/spaces/space_albums_shelf_test.dart
 ```
 
-Expected: FAIL. The first three new tests fail with
-`Expected: exactly one matching candidate / Actual: _TextWidgetFinder:<Found 0 widgets with text "Manage ▸": []>`.
-The `loading` and `onSeeAll omitted` tests should already PASS — they are guards, not drivers.
+Expected: FAIL — but only **two** of the five. Know which, or you cannot tell a good RED from a broken fixture:
 
-If the `count==0` test passes at this point, you edited the widget before the test. Revert and start again.
+| Test                                                                  | At RED   | Why                                                                                   |
+| --------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| `count==0 + canEdit=true: shows the Link tile AND a "Manage ▸" entry` | **FAIL** | `showSeeAll: albums.isNotEmpty` is false, so no entry renders                         |
+| `count==0 + canEdit=true: tapping "Manage ▸" invokes onSeeAll`        | **FAIL** | same — nothing to tap                                                                 |
+| `count>0 + canEdit=false: viewer still sees "See all ▸"`              | PASS     | populated shelf already renders the entry; this pins that the fix does not regress it |
+| `provider still loading: renders nothing`                             | PASS     | guard — the shelf already returns `SizedBox.shrink()` while loading                   |
+| `onSeeAll omitted: the entry is not rendered`                         | PASS     | guard — no entry renders at zero albums today for any reason                          |
+
+The two failures read:
+`Expected: exactly one matching candidate / Actual: _TextWidgetFinder:<Found 0 widgets with text "Manage ▸": []>`.
+
+If either `count==0` test passes here, you edited the widget before the test. Revert and start again.
 
 - [ ] **Step 3: Add the i18n key to all ten locales**
 
@@ -402,9 +411,18 @@ cd server && npx vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/sync/shared-space-album-delete-triggers.spec.ts
 ```
 
-Expected: the first test fails with `expected 2 to be 1` (creator), and the fourth fails the same way. The second and third must **PASS** already — they pin behaviour the fix must preserve.
+Expected: **two of the four fail**, with these exact counts:
 
-If the first test passes, the fixture is wrong. The most likely cause is that the album is owned by the creator, so `user_has_album_path` returns true and suppresses both inserts. Check `newAlbum({ ownerId: albumOwner.id })` uses a different user from `createdById`.
+| Test                                   | At RED                                                | Pre-fix row count                                                                                                          |
+| -------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| creator who is also a member           | **FAIL** `expected 2 to be 1`                         | step 2 emits the creator once (as a member), step 3 again                                                                  |
+| creator who is NOT a member            | PASS                                                  | no member rows at all, so only step 3 fires — already 1                                                                    |
+| member keeping access via `album_user` | PASS                                                  | `user_has_album_path` is true, so neither step fires — already 0                                                           |
+| two spaces unlinked in one statement   | **FAIL** `expected 2 to be 1` on the member assertion | two `old` rows × step 2 = 2 member rows; the creator is at **4** (2 × step 2 + 2 × step 3) and fails on the following line |
+
+The two passing tests are the guards. If either fails at RED, the fix is not the problem — re-read the fixture.
+
+If the first test **passes** at RED, the fixture is wrong. The likeliest cause is that the album is owned by the creator, so `user_has_album_path` returns true and suppresses both inserts. Confirm `newAlbum({ ownerId: albumOwner.id })` uses a different user from `createdById`.
 
 - [ ] **Step 3: Rewrite the function body**
 
@@ -451,7 +469,13 @@ In `server/src/schema/functions.ts`, replace the `body` of `shared_space_album_d
 
 Create `server/src/schema/migrations-gallery/1786100000000-DedupeSharedSpaceAlbumDeleteAudit.ts`.
 
+Two things drive the shape of this file.
+
 **`migration_overrides.name` is the PRIMARY KEY and a row named `function_shared_space_album_delete_audit` already exists** (inserted by `1779200000000-AddSharedSpaceAlbumDeleteSideTriggers.ts:88`). This migration must **UPDATE** it. An `INSERT` fails with a unique violation. The trigger definition is unchanged, so `trigger_shared_space_album_delete_audit` is left alone.
+
+**The executed SQL and the override's recorded SQL must be identical**, or CI's "SQL Schema Checks" regenerates a migration and fails the build. The eight sibling migrations write both by hand, with the second copy `\\n`-escaped inside a JSON blob — which is exactly how they drift. This migration instead declares each body **once** as a `const` and derives the override with `JSON.stringify`, so the two cannot disagree. `sql.raw` is already used by upstream migrations (`1744910873969-InitialMigration.ts` among others), and `${...}` in a Kysely `sql` template is a bound parameter, so the JSON needs no manual escaping.
+
+This is a deliberate deviation from the sibling migrations. It is worth it: hand-escaping is the single likeliest way to turn this task into a red CI job.
 
 ```ts
 import { Kysely, sql } from 'kysely';
@@ -461,8 +485,11 @@ import { Kysely, sql } from 'kysely';
 // creator is always also a member. Merge them into one UNION-deduplicated set. The creator arm is
 // preserved (no schema constraint binds createdById to a member row), and DISTINCT also collapses
 // the same user arriving via two links deleted in a single statement.
-export async function up(db: Kysely<any>): Promise<void> {
-  await sql`CREATE OR REPLACE FUNCTION shared_space_album_delete_audit()
+const OVERRIDE_NAME = 'function_shared_space_album_delete_audit';
+
+// The merged body. Declared ONCE and reused for both the DDL and the override
+// row, so the two can never disagree.
+const DEDUPED_SQL = `CREATE OR REPLACE FUNCTION shared_space_album_delete_audit()
   RETURNS TRIGGER
   LANGUAGE PLPGSQL
   AS $$
@@ -483,22 +510,19 @@ export async function up(db: Kysely<any>): Promise<void> {
 
       RETURN NULL;
     END
-  $$;`.execute(db);
+  $$;`;
 
-  await sql`UPDATE "migration_overrides"
-    SET "value" = '{"type":"function","name":"shared_space_album_delete_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_album_delete_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      INSERT INTO shared_space_album_audit (\\"spaceId\\", \\"albumId\\")\\n      SELECT \\"spaceId\\", \\"albumId\\" FROM \\"old\\";\\n\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT DISTINCT o.\\"albumId\\", u.\\"userId\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space ss ON ss.\\"id\\" = o.\\"spaceId\\"\\n      CROSS JOIN LATERAL (\\n        SELECT ssm.\\"userId\\" FROM shared_space_member ssm WHERE ssm.\\"spaceId\\" = o.\\"spaceId\\"\\n        UNION\\n        SELECT ss.\\"createdById\\"\\n      ) u\\n      WHERE NOT user_has_album_path(o.\\"albumId\\", u.\\"userId\\", o.\\"spaceId\\");\\n\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb
-    WHERE "name" = 'function_shared_space_album_delete_audit';`.execute(db);
-}
-
-export async function down(db: Kysely<any>): Promise<void> {
-  await sql`CREATE OR REPLACE FUNCTION shared_space_album_delete_audit()
+// The two-statement body this replaces, kept verbatim for down().
+const ORIGINAL_SQL = `CREATE OR REPLACE FUNCTION shared_space_album_delete_audit()
   RETURNS TRIGGER
   LANGUAGE PLPGSQL
   AS $$
     BEGIN
+      -- 1. Always record the (space, album) link delete (ungated) so clients drop the space-album.
       INSERT INTO shared_space_album_audit ("spaceId", "albumId")
       SELECT "spaceId", "albumId" FROM "old";
 
+      -- 2. Gated grant revocation per member; skips during shared_space cascade (BEFORE-row handles it).
       INSERT INTO shared_space_album_user_audit ("albumId", "userId")
       SELECT o."albumId", ssm."userId"
       FROM "old" o
@@ -506,6 +530,7 @@ export async function down(db: Kysely<any>): Promise<void> {
       WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o."spaceId")
         AND NOT user_has_album_path(o."albumId", ssm."userId", o."spaceId");
 
+      -- 3. Gated grant revocation for the space creator.
       INSERT INTO shared_space_album_user_audit ("albumId", "userId")
       SELECT o."albumId", ss."createdById"
       FROM "old" o
@@ -514,11 +539,20 @@ export async function down(db: Kysely<any>): Promise<void> {
 
       RETURN NULL;
     END
-  $$;`.execute(db);
+  $$;`;
 
-  await sql`UPDATE "migration_overrides"
-    SET "value" = '{"type":"function","name":"shared_space_album_delete_audit","sql":"CREATE OR REPLACE FUNCTION shared_space_album_delete_audit()\\n  RETURNS TRIGGER\\n  LANGUAGE PLPGSQL\\n  AS $$\\n    BEGIN\\n      -- 1. Always record the (space, album) link delete (ungated) so clients drop the space-album.\\n      INSERT INTO shared_space_album_audit (\\"spaceId\\", \\"albumId\\")\\n      SELECT \\"spaceId\\", \\"albumId\\" FROM \\"old\\";\\n\\n      -- 2. Gated grant revocation per member; skips during shared_space cascade (BEFORE-row handles it).\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT o.\\"albumId\\", ssm.\\"userId\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space_member ssm ON ssm.\\"spaceId\\" = o.\\"spaceId\\"\\n      WHERE EXISTS (SELECT 1 FROM shared_space ss WHERE ss.id = o.\\"spaceId\\")\\n        AND NOT user_has_album_path(o.\\"albumId\\", ssm.\\"userId\\", o.\\"spaceId\\");\\n\\n      -- 3. Gated grant revocation for the space creator.\\n      INSERT INTO shared_space_album_user_audit (\\"albumId\\", \\"userId\\")\\n      SELECT o.\\"albumId\\", ss.\\"createdById\\"\\n      FROM \\"old\\" o\\n      INNER JOIN shared_space ss ON ss.\\"id\\" = o.\\"spaceId\\"\\n      WHERE NOT user_has_album_path(o.\\"albumId\\", ss.\\"createdById\\", o.\\"spaceId\\");\\n\\n      RETURN NULL;\\n    END\\n  $$;"}'::jsonb
-    WHERE "name" = 'function_shared_space_album_delete_audit';`.execute(db);
+const applyFunction = async (db: Kysely<any>, functionSql: string) => {
+  await sql.raw(functionSql).execute(db);
+  const override = JSON.stringify({ type: 'function', name: 'shared_space_album_delete_audit', sql: functionSql });
+  await sql`UPDATE "migration_overrides" SET "value" = ${override}::jsonb WHERE "name" = ${OVERRIDE_NAME};`.execute(db);
+};
+
+export async function up(db: Kysely<any>): Promise<void> {
+  await applyFunction(db, DEDUPED_SQL);
+}
+
+export async function down(db: Kysely<any>): Promise<void> {
+  await applyFunction(db, ORIGINAL_SQL);
 }
 ```
 
@@ -541,14 +575,33 @@ cd server && npx vitest --config test/vitest.config.medium.mjs --run test/medium
 
 Expected: PASS, no test modified.
 
-- [ ] **Step 7: Verify the migration applies and the schema is not drifting**
+- [ ] **Step 7: Verify the migration applies, and that it will not trip the schema-drift gate**
+
+First, the migration itself still runs and rolls back in order:
 
 ```bash
 cd server && npx vitest --config test/vitest.config.medium.mjs --run \
   test/medium/specs/services/database-migration.service.spec.ts
 ```
 
-Expected: PASS. A failure here means the `migration_overrides` value does not match the `functions.ts` body — the two SQL strings must be identical modulo the JSON escaping. Re-copy the body rather than hand-editing the escapes.
+Expected: PASS. Note what this spec does and does **not** cover — it exercises running, ordering, interleaving and rollback of migrations. It does **not** compare `migration_overrides` against `functions.ts`.
+
+**The gate that does is CI's "SQL Schema Checks"** (`.github/workflows/test.yml:737`). It runs all migrations on a fresh database, then `migrations:generate src/TestMigration`, then fails the build if **any file under `server/src` changed**. In other words: after your migration applies, the declarative schema must already match the database, so that generating a migration produces nothing. If the `migration_overrides` SQL and the `functions.ts` body disagree, the diff emits a migration and CI goes red.
+
+Because Step 4 derives the override from `DEDUPED_SQL` rather than restating it, the executed SQL and the recorded SQL are the same string by construction — that half needs no checking.
+
+**One comparison remains:** `DEDUPED_SQL` in the migration versus the `body` of `shared_space_album_delete_audit` in `functions.ts`. Both are plain, unescaped SQL, so a direct visual diff is reliable. The statements between `BEGIN` and `END` must be identical; only the comments may differ.
+
+```bash
+cd /Users/pierre/dev/gallery/.claude/worktrees/space-album-rename-delete
+diff <(sed -n '/const DEDUPED_SQL/,/\$\$`;/p' \
+        server/src/schema/migrations-gallery/1786100000000-DedupeSharedSpaceAlbumDeleteAudit.ts \
+       | sed -n '/BEGIN/,/END/p' | sed 's/--.*//' | tr -s '[:space:]' ' ') \
+     <(sed -n "/name: 'shared_space_album_delete_audit'/,/^});/p" server/src/schema/functions.ts \
+       | sed -n '/BEGIN/,/END/p' | sed 's/--.*//' | tr -s '[:space:]' ' ')
+```
+
+Expected: no output. Any diff means the declarative schema and the migration disagree, which is a red "SQL Schema Checks" job — fix it now, not after a 20-minute CI round trip.
 
 - [ ] **Step 8: Lint and format**
 
@@ -578,8 +631,8 @@ git commit -m "fix(server): stop the album-delete audit double-tombstoning the s
 **Files:**
 
 - Create: `mobile/lib/presentation/widgets/spaces/space_album_dialogs.dart`
-- Modify: `mobile/lib/pages/library/spaces/space_albums.page.dart` (remove `_promptName` `:1082-1102`, `_FolderNameDialog` `:1115-1176`, `_confirmBulkAction` `:1209-1238`; fix the comment at `:1078`)
-- Modify: `mobile/lib/pages/library/spaces/space_album_detail.page.dart` (remove `_promptAlbumName` `:381-388`, `_AlbumNameDialog` `:396-441`, `_confirmDeleteAlbum` `:449-471`)
+- Modify: `mobile/lib/pages/library/spaces/space_albums.page.dart` — remove `_promptName` (`:1082`), `_FolderNameDialog` + `_FolderNameDialogState` (`:1115-1180`), `_confirmBulkAction` (`:1210-1244`); keep `_confirmDeleteFolder` (`:1182`); fix the comment at `:1078`
+- Modify: `mobile/lib/pages/library/spaces/space_album_detail.page.dart` — delete the whole tail of the file from the `/// Prompts for this album's new name` doc comment at `:375` to EOF at `:471` (`_promptAlbumName` `:381`, `_AlbumNameDialog` `:396`, `_AlbumNameDialogState` `:405`, `_confirmDeleteAlbum` `:449`)
 - Test: no test file may be modified
 
 **Interfaces:**
@@ -766,9 +819,15 @@ Future<bool> confirmSpaceAlbumAction(
 In `space_albums.page.dart`:
 
 1. Add the import: `import 'package:immich_mobile/presentation/widgets/spaces/space_album_dialogs.dart';`
-2. Delete `_promptName` (`:1082-1102`), `_FolderNameDialog` and `_FolderNameDialogState` (`:1115-1176`), and `_confirmBulkAction` (`:1209-1238`).
-3. Rename the call sites: `_promptName(` → `promptSpaceAlbumName(` (4 call sites, lines ~387, 428, 471, 638) and `_confirmBulkAction(` → `confirmSpaceAlbumAction(` (call sites including `deleteAlbums` at `:665`).
-4. Keep `_confirmDeleteFolder` where it is — it is not duplicated across files.
+2. Delete `_promptName` (from `:1082`), `_FolderNameDialog` and `_FolderNameDialogState` (`:1115` up to but **not** including `_confirmDeleteFolder` at `:1182`), and `_confirmBulkAction` (`:1210` up to but **not** including `_SearchAndSortBar` at `:1246`).
+3. Rename the call sites. Verify the counts first so you know when you are done:
+
+```bash
+cd mobile && grep -c '_promptName(' lib/pages/library/spaces/space_albums.page.dart        # 5 = 1 definition + 4 calls
+cd mobile && grep -c '_confirmBulkAction(' lib/pages/library/spaces/space_albums.page.dart # 4 = 1 definition + 3 calls
+```
+
+`_promptName(` → `promptSpaceAlbumName(` at **4 call sites** (the `keyPrefix:` arguments land at `:392`, `:433`, `:476`, `:644`). `_confirmBulkAction(` → `confirmSpaceAlbumAction(` at **3 call sites**, one of which is `deleteAlbums` at `:665`. After the renames both greps must return `0`. 4. Keep `_confirmDeleteFolder` where it is — it is not duplicated across files.
 
 Move the doc comment that sat above `_promptName` onto `promptSpaceAlbumName` in the new file, **with P2 corrected**. The counts are two and two, not two and three:
 
@@ -783,8 +842,8 @@ Move the doc comment that sat above `_promptName` onto `promptSpaceAlbumName` in
 In `space_album_detail.page.dart`:
 
 1. Add the import: `import 'package:immich_mobile/presentation/widgets/spaces/space_album_dialogs.dart';`
-2. Delete `_promptAlbumName` (`:381-388`), `_AlbumNameDialog` and `_AlbumNameDialogState` (`:396-441`), and `_confirmDeleteAlbum` (`:449-471`).
-3. Replace the `_promptAlbumName(context, album.name)` call with:
+2. Delete everything from the `/// Prompts for this album's new name` doc comment at `:375` to EOF at `:471`. That whole tail is the four private symbols and nothing else: `_promptAlbumName` (`:381`), `_AlbumNameDialog` (`:396`), `_AlbumNameDialogState` (`:405`), `_confirmDeleteAlbum` (`:449`). Deleting to EOF is safer than four separate ranges.
+3. Replace the `_promptAlbumName(context, album.name)` call at `:191` with:
 
 ```dart
     final name = await promptSpaceAlbumName(
