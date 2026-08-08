@@ -27,6 +27,12 @@ function makeAlbum(overrides: Partial<SharedSpaceLinkedAlbumDto> = {}): SharedSp
   };
 }
 
+/** How many `<td>`s the album row for `albumId` renders — the column grid every row must agree on
+ * (I-3). Anchors off the name cell's own link testid, then walks up to its `<tr>`. */
+function cellCount(albumId: string) {
+  return screen.getByTestId(`space-album-row-${albumId}`).closest('tr')!.querySelectorAll('td').length;
+}
+
 describe('SpaceAlbumsTable', () => {
   beforeAll(async () => {
     register('en-US', () => import('$i18n/en.json'));
@@ -318,6 +324,58 @@ describe('SpaceAlbumsTable', () => {
 
       expect(screen.getByTestId('space-album-row-menu-owned')).toBeInTheDocument();
       expect(screen.queryByTestId('space-album-row-menu-unowned')).not.toBeInTheDocument();
+
+      // I-3: the actions COLUMN is structural (table-wide, like the header <th> and the folder
+      // rows' filler <td>) even though its CONTENTS are per-row — otherwise the unowned row is a
+      // cell short and its album name renders shifted relative to the owned row's.
+      expect(cellCount('unowned')).toBe(cellCount('owned'));
+      // Anchored to a literal so "same" can't be satisfied by both rows losing the cell:
+      // select (absent — canSelectAlbum defaults to canManage) + name + count + modified +
+      // created + actions.
+      expect(cellCount('owned')).toBe(5);
+    });
+  });
+
+  // I-3 (final whole-branch review). The leading select cell was decided per row with no
+  // table-wide counterpart at all, so for a viewer who owns SOME of the rendered albums the owned
+  // rows grew a 32px `w-8 shrink-0` cell the unowned rows did not have, pushing their album names
+  // 32px apart. Before this branch both edge cells were gated on the uniform page-wide canManage,
+  // so every row agreed; this is what regressed.
+  describe('column grid stays uniform across rows', () => {
+    const folderFixture = {
+      id: 'f-1',
+      spaceId: 's-1',
+      parentId: null,
+      name: 'Trips',
+      createdById: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    it('renders the same cells on a selectable row, an unselectable row and a folder row', () => {
+      const owned = makeAlbum({ id: 'owned', albumName: 'Mine', ownerId: 'me' });
+      const unowned = makeAlbum({ id: 'unowned', albumName: 'Theirs', ownerId: 'someone-else' });
+      render(SpaceAlbumsTable, {
+        spaceId: 's-1',
+        albums: [owned, unowned],
+        folders: [folderFixture],
+        canManage: false,
+        canSelectAlbum: (album: SharedSpaceLinkedAlbumDto) => album.ownerId === 'me',
+      });
+
+      // The affordance itself stays per-row — this is the positive/negative pair proving the
+      // structural assertions below are not just "nobody can select anything".
+      expect(screen.getByTestId('space-album-select-owned')).toBeInTheDocument();
+      expect(screen.queryByTestId('space-album-select-unowned')).not.toBeInTheDocument();
+
+      expect(cellCount('unowned')).toBe(cellCount('owned'));
+      // select + name + count + modified + created (no actions column: canManage is false and
+      // canRename/canDelete both default to () => false).
+      expect(cellCount('owned')).toBe(5);
+      // Folder rows share the same grid: their leading cell is canManage-gated content inside the
+      // same structural cell, so a viewer's folder row keeps an empty one rather than dropping it.
+      expect(screen.getByTestId(`space-album-folder-row-${folderFixture.id}`).querySelectorAll('td')).toHaveLength(5);
+      expect(screen.queryByTestId(`space-album-folder-select-${folderFixture.id}`)).not.toBeInTheDocument();
     });
   });
 });

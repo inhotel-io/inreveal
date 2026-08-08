@@ -118,10 +118,22 @@
   // directly and does not read this. `albums` is already the full flat list the table renders even
   // when `grouped` — `groups` is derived from it, not a separate source — so this covers both.
   const anyAlbumEditable = $derived(canManage || albums.some((album) => canRename(album) || canDelete(album)));
+
+  // I-3 (final review): the leading select column's counterpart to `anyAlbumEditable`, and for the
+  // same reason. Both edge columns must be decided TABLE-WIDE and only their CONTENTS per row: a
+  // viewer who owns some of the rendered albums used to get a 32px `w-8 shrink-0` cell on their
+  // owned rows and none on the rest, so unowned rows' album names sat 32px left of owned rows'.
+  // Before this branch both cells were gated on the uniform page-wide `canManage`, so every row
+  // agreed by construction; per-row gating is what broke that. Folder rows share this column too
+  // (their own button stays `canManage`-only inside it), so a viewer's folder row keeps an empty
+  // cell rather than dropping it.
+  const anyAlbumSelectable = $derived(canManage || albums.some((album) => canSelectAlbum(album)));
 </script>
 
 {#snippet albumRow(album: SharedSpaceLinkedAlbumDto)}
   {@const selected = isAlbumSelected(album.id)}
+  {@const selectable = canSelectAlbum(album)}
+  {@const hasRowMenu = canManage || canRename(album) || canDelete(album)}
   <tr
     data-selected={selected ? 'true' : undefined}
     class={[
@@ -130,22 +142,25 @@
     ]}
     onclick={(event) => handleAlbumRowClick(event, album)}
   >
-    <!-- Independent predicate from canRename/canDelete below (selectability and rename/delete are
-         different capabilities that happen to often coincide, not the same thing under two names):
-         a viewer who owns THIS album must be able to enter selection even though canManage (space
-         Editor) is false for them, without also exposing the check circle on a row for an album
-         they do not own. -->
-    {#if canSelectAlbum(album)}
+    <!-- The CELL is structural (anyAlbumSelectable, table-wide) so every row keeps the same column
+         grid; only its CONTENTS are per-row. `canSelectAlbum` is an independent predicate from
+         canRename/canDelete below (selectability and rename/delete are different capabilities that
+         happen to often coincide, not the same thing under two names): a viewer who owns THIS album
+         must be able to enter selection even though canManage (space Editor) is false for them,
+         without also exposing the check circle on a row for an album they do not own. -->
+    {#if anyAlbumSelectable}
       <td class="w-8 shrink-0 text-center">
-        <button
-          type="button"
-          data-testid="space-album-select-{album.id}"
-          aria-pressed={selected}
-          aria-label={$t('select')}
-          onclick={(event) => handleSelectClick(event, (shiftKey) => onToggleSelectAlbum?.(album, shiftKey))}
-        >
-          <Icon icon={mdiCheckCircle} size="20" class={selected ? 'text-primary' : 'opacity-50'} />
-        </button>
+        {#if selectable}
+          <button
+            type="button"
+            data-testid="space-album-select-{album.id}"
+            aria-pressed={selected}
+            aria-label={$t('select')}
+            onclick={(event) => handleSelectClick(event, (shiftKey) => onToggleSelectAlbum?.(album, shiftKey))}
+          >
+            <Icon icon={mdiCheckCircle} size="20" class={selected ? 'text-primary' : 'opacity-50'} />
+          </button>
+        {/if}
       </td>
     {/if}
     <td class="text-md w-8/12 items-center text-start text-ellipsis sm:w-4/12 md:w-4/12 xl:w-[30%] 2xl:w-[40%]">
@@ -166,37 +181,47 @@
     <td class="text-md hidden w-3/12 text-center text-ellipsis sm:block xl:w-[15%] 2xl:w-[12%]">
       {dateLocaleString(album.createdAt)}
     </td>
-    {#if canManage || canRename(album) || canDelete(album)}
+    <!-- Same structural-cell/per-row-contents split as the leading select cell above. The testid
+         and the click-swallowing both stay tied to `hasRowMenu`, so a filler cell is indistinguishable
+         from the rest of the row: no phantom menu for a test to find, and clicking it still opens
+         the album like any other cell. -->
+    {#if anyAlbumEditable}
       <td
         class="text-md w-1/12 text-end"
-        data-testid="space-album-row-menu-{album.id}"
-        onclick={(event) => event.stopPropagation()}
+        data-testid={hasRowMenu ? `space-album-row-menu-${album.id}` : undefined}
+        onclick={(event) => {
+          if (hasRowMenu) {
+            event.stopPropagation();
+          }
+        }}
       >
-        <ButtonContextMenu
-          icon={mdiDotsVertical}
-          title={$t('more')}
-          color="secondary"
-          variant="ghost"
-          size="medium"
-          align="top-right"
-          direction="left"
-        >
-          {#if canManage}
-            <MenuOption
-              text={album.showInTimeline
-                ? $t('spaces_hide_from_timeline')
-                : $t('spaces_linked_albums_show_in_timeline')}
-              onClick={() => onToggleTimeline?.(album)}
-            />
-            <MenuOption text={$t('spaces_linked_albums_unlink')} onClick={() => onUnlink?.(album)} />
-          {/if}
-          {#if canRename(album)}
-            <MenuOption text={$t('space_album_rename')} onClick={() => onRename?.(album)} />
-          {/if}
-          {#if canDelete(album)}
-            <MenuOption text={$t('space_album_delete')} onClick={() => onDelete?.(album)} />
-          {/if}
-        </ButtonContextMenu>
+        {#if hasRowMenu}
+          <ButtonContextMenu
+            icon={mdiDotsVertical}
+            title={$t('more')}
+            color="secondary"
+            variant="ghost"
+            size="medium"
+            align="top-right"
+            direction="left"
+          >
+            {#if canManage}
+              <MenuOption
+                text={album.showInTimeline
+                  ? $t('spaces_hide_from_timeline')
+                  : $t('spaces_linked_albums_show_in_timeline')}
+                onClick={() => onToggleTimeline?.(album)}
+              />
+              <MenuOption text={$t('spaces_linked_albums_unlink')} onClick={() => onUnlink?.(album)} />
+            {/if}
+            {#if canRename(album)}
+              <MenuOption text={$t('space_album_rename')} onClick={() => onRename?.(album)} />
+            {/if}
+            {#if canDelete(album)}
+              <MenuOption text={$t('space_album_delete')} onClick={() => onDelete?.(album)} />
+            {/if}
+          </ButtonContextMenu>
+        {/if}
       </td>
     {/if}
   </tr>
@@ -213,17 +238,21 @@
     data-testid="space-album-folder-row-{folder.id}"
     onclick={(event) => onOpenFolder?.(folder, event.shiftKey)}
   >
-    {#if canManage}
+    <!-- Structural cell shared with the album rows (anyAlbumSelectable); the button itself stays
+         canManage-only, since folders have no owner concept and a viewer can never select one. -->
+    {#if anyAlbumSelectable}
       <td class="w-8 shrink-0 text-center">
-        <button
-          type="button"
-          data-testid="space-album-folder-select-{folder.id}"
-          aria-pressed={selected}
-          aria-label={$t('select')}
-          onclick={(event) => handleSelectClick(event, (shiftKey) => onToggleSelectFolder?.(folder, shiftKey))}
-        >
-          <Icon icon={mdiCheckCircle} size="20" class={selected ? 'text-primary' : 'opacity-50'} />
-        </button>
+        {#if canManage}
+          <button
+            type="button"
+            data-testid="space-album-folder-select-{folder.id}"
+            aria-pressed={selected}
+            aria-label={$t('select')}
+            onclick={(event) => handleSelectClick(event, (shiftKey) => onToggleSelectFolder?.(folder, shiftKey))}
+          >
+            <Icon icon={mdiCheckCircle} size="20" class={selected ? 'text-primary' : 'opacity-50'} />
+          </button>
+        {/if}
       </td>
     {/if}
     <td
