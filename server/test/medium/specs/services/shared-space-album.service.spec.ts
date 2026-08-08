@@ -2019,8 +2019,8 @@ describe('album deletion cascades and sync tombstones', () => {
       .execute();
     expect(new Set(tombstones.map((r) => r.userId))).toEqual(new Set([owner.id, member.id]));
 
-    // FINDING (see task-3-report.md): the audit trigger's own fan-out is NOT exactly one row per
-    // grant. shared_space_album_delete_audit's section 2 (per-shared_space_member join) and
+    // FINDING: the audit trigger's own fan-out is NOT exactly one row per grant.
+    // shared_space_album_delete_audit's section 2 (per-shared_space_member join) and
     // section 3 (space-creator query) are not mutually exclusive — a creator who is ALSO a
     // shared_space_member (true for every real space; see SharedSpaceService#create, which always
     // inserts an Owner membership row for the creator) is matched by BOTH branches and gets a

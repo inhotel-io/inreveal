@@ -1590,8 +1590,15 @@ void main() {
 
     await tester.tap(find.byKey(const Key('space-albums-new-album-action')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('space-album-folder-name-field')), 'Trips');
-    await tester.tap(find.byKey(const Key('space-album-folder-name-confirm')));
+
+    // M-8: "New album" reused the FOLDER prompt wholesale, so the dialog asked for a "Folder
+    // name". It now carries the album label and its own `space-album-name-*` keys, matching the
+    // rename dialog.
+    expect(find.text('Album name'), findsOneWidget);
+    expect(find.text('Folder name'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('space-album-name-field')), 'Trips');
+    await tester.tap(find.byKey(const Key('space-album-name-confirm')));
     await tester.pumpAndSettle();
 
     expect(find.text('Unable to create album'), findsOneWidget);
@@ -1624,8 +1631,8 @@ void main() {
 
       await tester.tap(find.byKey(const Key('space-albums-new-album-action')));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const Key('space-album-folder-name-field')), 'Trips');
-      await tester.tap(find.byKey(const Key('space-album-folder-name-confirm')));
+      await tester.enterText(find.byKey(const Key('space-album-name-field')), 'Trips');
+      await tester.tap(find.byKey(const Key('space-album-name-confirm')));
       await tester.pumpAndSettle();
 
       expect(find.text('Album created, but could not be linked to this space'), findsOneWidget);

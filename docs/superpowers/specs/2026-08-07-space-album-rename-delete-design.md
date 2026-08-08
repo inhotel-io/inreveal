@@ -359,8 +359,11 @@ Therefore `SpaceAlbumActions.renameAlbum` and `bulkDeleteAlbums` must, after a s
 refresh the remote-album list — read through `ref` at the call site rather than injecting the notifier
 into `SpaceAlbumActions`, which is deliberately repository-only. Scenarios 46a/46b pin it.
 
-This applies to owned albums only, which is exactly the set these two actions can touch: an album you
-do not own has no `remote_album` row to go stale.
+`bulkDeleteAlbums` only ever touches owned albums (the server refuses the rest), so its refresh always
+has something to refresh. `renameAlbum` does **not**: a space Editor may rename an album they do not
+own, and it still fires the refresh for them even though they hold no `remote_album` row that could
+have gone stale. That is deliberate — a cheap local re-read, rather than threading ownership down into
+`SpaceAlbumActions`, which is repository-only.
 
 ## 7. i18n
 

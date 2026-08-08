@@ -421,16 +421,16 @@ class SpaceAlbumsPage extends HookConsumerWidget {
     // its own `space_album_error_link_after_create` toast instead, which says what actually
     // happened: the album was created, but could not be added to this space.
     Future<void> createAlbum() async {
-      // Reuses the folder-name-labelled prompt (byte-identical `keyPrefix`/label to `createFolder`
-      // below) — that's pre-existing behaviour from before Task 11 threaded `label`/`keyPrefix`
-      // through, kept as-is here since changing it would be an unrequested behaviour change and
-      // the "New album" tests already assert on these exact `space-album-folder-name-*` keys.
+      // M-8: this used to reuse the FOLDER prompt wholesale, so "New album" asked the user for a
+      // "Folder name" — pre-existing from before Task 11 made `label`/`keyPrefix` parameters, and
+      // trivially fixable now that they are. Same album label and `space-album-name` key prefix as
+      // the rename dialog below.
       final name = await _promptName(
         context,
         title: 'space_album_new'.t(context: context),
         confirmLabel: 'create'.t(context: context),
-        label: 'space_album_folder_name_label'.t(context: context),
-        keyPrefix: 'space-album-folder-name',
+        label: 'space_album_name_label'.t(context: context),
+        keyPrefix: 'space-album-name',
       );
       if (name == null) return;
       if (!context.mounted) return;
@@ -1073,9 +1073,10 @@ String _folderErrorKey(Object error, String fallbackKey) {
 /// 11) "New album"/"Rename album". [label] is the text-field's `InputDecoration.labelText` and
 /// [keyPrefix] is the base for the field/cancel/confirm widget keys (`$keyPrefix-field` /
 /// `-cancel` / `-confirm`) — both are threaded through to [_FolderNameDialog] rather than
-/// hardcoded there, so the album-rename path (Task 11) gets its OWN keys instead of colliding
-/// with the folder ones. Every existing call site keeps passing the folder
-/// label/`space-album-folder-name` prefix unchanged, so their keys stay byte-identical.
+/// hardcoded there, so the album paths get their OWN keys instead of colliding with the folder
+/// ones. The two ALBUM call sites ("New album", M-8, and "Rename album", Task 11) pass
+/// `space_album_name_label`/`space-album-name`; the three FOLDER ones keep
+/// `space_album_folder_name_label`/`space-album-folder-name`.
 /// Returns the trimmed name, or `null` if the user cancelled or left it blank — a blank name is
 /// treated as "nothing to do" rather than an error, so the caller never fires a doomed API call.
 Future<String?> _promptName(

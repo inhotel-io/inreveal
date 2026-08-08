@@ -39,9 +39,16 @@ class SpaceAlbumActions {
   final DriftAlbumApiRepository _albumApiRepo;
   final BackgroundSyncManager _syncManager;
 
-  /// Invoked after a mutation that changes the user's OWN albums, so the caller can refresh
-  /// RemoteAlbumNotifier — it holds a snapshot, not a Drift watch, so the sync nudge alone leaves
-  /// the Albums tab and every picker showing stale rows.
+  /// Invoked after a mutation that MAY have changed the user's own albums, so the caller can
+  /// refresh RemoteAlbumNotifier — it holds a snapshot, not a Drift watch, so the sync nudge alone
+  /// leaves the Albums tab and every picker showing stale rows.
+  ///
+  /// m-3: [bulkDeleteAlbums] really is owner-only (the server refuses to delete an album you do
+  /// not own), but [renameAlbum] is NOT — a space Editor may rename someone else's album, and this
+  /// still fires for them even though they hold no `remote_album` row that could have gone stale.
+  /// Deliberately left unconditional rather than threading ownership down into this
+  /// repository-only class: the refresh is a cheap local re-read, and skipping it wrongly would
+  /// silently strand the Albums tab on the old name.
   final Future<void> Function() _onOwnedAlbumsChanged;
 
   /// Link one or more albums to a space.
@@ -215,6 +222,9 @@ class SpaceAlbumActions {
   }
 
   /// Rename a space-linked album. Throws on failure, like the other single-item methods.
+  ///
+  /// Fires [_onOwnedAlbumsChanged] unconditionally, including for a space Editor renaming an album
+  /// they do not own — see that field's own note (m-3).
   Future<void> renameAlbum(String spaceId, String albumId, String name) async {
     await _repo.renameAlbum(spaceId, albumId, name);
     await _syncManager.syncRemote();
