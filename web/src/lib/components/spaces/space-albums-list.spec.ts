@@ -7,6 +7,7 @@ import { authManager } from '$lib/managers/auth-manager.svelte';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
 import { toggleSpaceAlbumGroupCollapsing } from '$lib/utils/space-album-grouping';
+import { SpaceAlbumSortBy } from '$lib/utils/space-album-sort';
 import { userAdminFactory } from '@test-data/factories/user-factory';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), invalidateAll: vi.fn() }));
@@ -265,5 +266,45 @@ describe('SpaceAlbumsList', () => {
     const order = screen.getAllByTestId('space-album-card').map((card) => card.textContent);
     expect(order[0]).toContain('HasPhotos');
     expect(order[1]).toContain('Empty');
+  });
+
+  // Discriminates the list-level fix: upstream's sortAlbums has no entry for
+  // RecentlyLinked and silently falls back to DateModified (updatedAt)
+  // ordering. These two albums' linkedAt and updatedAt orders disagree, so a
+  // DateModified fallback would render them in the opposite order from what
+  // Recently linked descending requires.
+  it('sorts by Recently linked descending, even when it disagrees with Date modified order', async () => {
+    spaceAlbumViewSettings.update((s) => ({
+      ...s,
+      sortBy: SpaceAlbumSortBy.RecentlyLinked,
+      sortOrder: SortOrder.Desc,
+      groupBy: SpaceAlbumGroupBy.None,
+    }));
+    render(SpaceAlbumsList, {
+      props: {
+        spaceId: 'space-1',
+        canManage: false,
+        albums: [
+          makeAlbum({
+            id: 'recent-link',
+            albumName: 'RecentLink',
+            linkedAt: '2026-06-01T00:00:00.000Z',
+            updatedAt: '2020-01-01T00:00:00.000Z',
+          }),
+          makeAlbum({
+            id: 'old-link',
+            albumName: 'OldLink',
+            linkedAt: '2020-01-01T00:00:00.000Z',
+            updatedAt: '2026-06-01T00:00:00.000Z',
+          }),
+        ],
+        members: [] as SharedSpaceMemberResponseDto[],
+      },
+    });
+
+    await waitFor(() => expect(screen.getAllByTestId('space-album-card')).toHaveLength(2));
+    const order = screen.getAllByTestId('space-album-card').map((card) => card.textContent);
+    expect(order[0]).toContain('RecentLink');
+    expect(order[1]).toContain('OldLink');
   });
 });
