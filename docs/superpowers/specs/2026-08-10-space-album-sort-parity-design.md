@@ -217,9 +217,14 @@ oversights:
 
 ### Grouping (web only)
 
-- **S27 — Year grouping is disabled for Recently linked.** Year buckets albums by photo date
-  (`space-album-grouping.ts:154`), so pairing it with a link-date sort is as incoherent as with Date created or
-  Date modified, which are already disabled (`space-album-grouping.ts:40`).
+- **S27 — Year grouping stays ENABLED for Recently linked.** Revised during implementation. The original
+  reasoning was that Year buckets albums by photo date, so pairing it with a link-date sort is as incoherent as
+  with Date created or Date modified, which upstream already disables. That is defensible in isolation, but
+  Recently linked is now the _default_ sort, so disabling Year for it puts the most useful grouping out of reach
+  until the user changes sort — a discoverability regression for every new user. The `spaces-albums` e2e suite
+  caught it immediately: its Year-grouping test lands on the page with fresh storage and the option is disabled.
+  Year buckets by photo year and orders within each bucket by the active sort, which reads fine as "2024 albums,
+  most recently linked first". Only `DateCreated` and `DateModified` disable Year.
 - **S28 — Grouped lists sort within each group** using the same comparator, including Recently linked.
 - **S29 — No user gets stuck in a disabled combination.** `svelte-persisted-store` writes the whole settings
   object whenever any field changes, so anyone who had set `groupBy: Year` already has their `sortBy` persisted
@@ -352,35 +357,35 @@ Existing `SpaceAlbum` fixtures gain `createdAt`, so stubs under `mobile/test/` a
 
 Every scenario has a named home; no row may be left blank at review time.
 
-| Scenario                        | Web slice / file                             | Mobile slice / file                   |
-| ------------------------------- | -------------------------------------------- | ------------------------------------- |
-| S1 Title asc                    | W1 `space-album-sort.spec.ts`                | M2 `collection_sort_test.dart`        |
-| S2 Direction flips              | W3 `space-albums-controls.spec.ts`           | M3 `space_albums_page_test.dart`      |
-| S3 New option → default dir     | W3 `space-albums-controls.spec.ts`           | M3 `space_albums_page_test.dart`      |
-| S4 Number of items              | W1                                           | M2                                    |
-| S5 Date modified                | W1                                           | M2                                    |
-| S6 Date created ≠ linked        | W1                                           | M2                                    |
-| S7 Most recent photo            | W1                                           | M2                                    |
-| S8 Oldest photo                 | W1                                           | M2                                    |
-| S9 Recently linked              | W1                                           | M2                                    |
-| S10–S12 Empty albums last       | W1 + W4 `space-albums-list.spec.ts`          | M2                                    |
-| S13 Null `localDateTime`        | n/a (server-computed)                        | M1 `space_album_repository_test.dart` |
-| S14 All albums date-less        | W1                                           | M2                                    |
-| S15 Same-day albums tie         | n/a (server truncates)                       | M1 + M2                               |
-| S16 Mobile tiebreak             | n/a                                          | M2                                    |
-| S17 Identical `linkedAt`        | W1                                           | M2                                    |
-| S18 Empty list                  | W1                                           | M2                                    |
-| S19 Single album                | W1                                           | M2                                    |
-| S20 `linkedAt` per space        | n/a (endpoint is per-space)                  | M1                                    |
-| S21 Search before sort          | W4                                           | M2                                    |
-| S22 Fresh default               | W2 `space-album-view-settings.store.spec.ts` | M4 `app_config_test.dart`             |
-| S23 Stored beats default        | W2                                           | M4                                    |
-| S24 Pre-change stored value     | W2                                           | M4                                    |
-| S25 Unrecognised stored value   | n/a                                          | M0 `value_codec` test                 |
-| S26 Unknown `sortBy` consistent | W1 + W3                                      | n/a (enum-typed)                      |
-| S27 Year disabled               | W4 `space-album-grouping.spec.ts`            | n/a (web-only)                        |
-| S28 Sort within group           | W4                                           | n/a                                   |
-| S29 No stuck combination        | W4                                           | n/a                                   |
+| Scenario                            | Web slice / file                             | Mobile slice / file                   |
+| ----------------------------------- | -------------------------------------------- | ------------------------------------- |
+| S1 Title asc                        | W1 `space-album-sort.spec.ts`                | M2 `collection_sort_test.dart`        |
+| S2 Direction flips                  | W3 `space-albums-controls.spec.ts`           | M3 `space_albums_page_test.dart`      |
+| S3 New option → default dir         | W3 `space-albums-controls.spec.ts`           | M3 `space_albums_page_test.dart`      |
+| S4 Number of items                  | W1                                           | M2                                    |
+| S5 Date modified                    | W1                                           | M2                                    |
+| S6 Date created ≠ linked            | W1                                           | M2                                    |
+| S7 Most recent photo                | W1                                           | M2                                    |
+| S8 Oldest photo                     | W1                                           | M2                                    |
+| S9 Recently linked                  | W1                                           | M2                                    |
+| S10–S12 Empty albums last           | W1 + W4 `space-albums-list.spec.ts`          | M2                                    |
+| S13 Null `localDateTime`            | n/a (server-computed)                        | M1 `space_album_repository_test.dart` |
+| S14 All albums date-less            | W1                                           | M2                                    |
+| S15 Same-day albums tie             | n/a (server truncates)                       | M1 + M2                               |
+| S16 Mobile tiebreak                 | n/a                                          | M2                                    |
+| S17 Identical `linkedAt`            | W1                                           | M2                                    |
+| S18 Empty list                      | W1                                           | M2                                    |
+| S19 Single album                    | W1                                           | M2                                    |
+| S20 `linkedAt` per space            | n/a (endpoint is per-space)                  | M1                                    |
+| S21 Search before sort              | W4                                           | M2                                    |
+| S22 Fresh default                   | W2 `space-album-view-settings.store.spec.ts` | M4 `app_config_test.dart`             |
+| S23 Stored beats default            | W2                                           | M4                                    |
+| S24 Pre-change stored value         | W2                                           | M4                                    |
+| S25 Unrecognised stored value       | n/a                                          | M0 `value_codec` test                 |
+| S26 Unknown `sortBy` consistent     | W1 + W3                                      | n/a (enum-typed)                      |
+| S27 Year enabled for RecentlyLinked | W4 `space-album-grouping.spec.ts`            | n/a (web-only)                        |
+| S28 Sort within group               | W4                                           | n/a                                   |
+| S29 No stuck combination            | W4                                           | n/a                                   |
 
 ## Out of scope
 
@@ -392,10 +397,12 @@ Every scenario has a named home; no row may be left blank at review time.
 - Sorting the Spaces grid itself (`SpaceSortMode`), a different surface.
 - Removing the two orphaned i18n keys.
 - Title collation parity (see "Accepted divergences").
-- **E2E coverage.** `e2e/src/ui/specs` currently holds only `asset-viewer`, `memory`, `search`, `sidebar` and
-  `timeline` — there is no Playwright coverage of the Spaces surface at all. Establishing it for a sort-option
-  change is disproportionate; the web behaviour is covered by component tests via `@testing-library/svelte`.
-  Recorded so the absence is a decision, not an oversight.
+- **New E2E coverage.** An earlier draft of this spec claimed there was no Playwright coverage of the Spaces
+  surface at all. That was wrong — it looked at `e2e/src/ui/specs` when the web specs live in
+  `e2e/src/specs/web/`, where `spaces-albums.e2e-spec.ts` already covers the albums-tab controls including sort
+  and grouping. No new e2e is added here; the existing suite already exercises this surface, and it is what
+  caught the S27 problem (see S27). The correction is recorded rather than quietly edited out, because the
+  original claim was used to justify not looking further.
 
 ## Verification gates
 

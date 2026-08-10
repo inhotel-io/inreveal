@@ -145,9 +145,12 @@ it('collapse mutators write only the space store, keyed by groupBy', () => {
 describe('Year grouping availability', () => {
   const yearOption = () => spaceGroupOptionsMetadata.find(({ id }) => id === SpaceAlbumGroupBy.Year)!;
 
-  it('is disabled while sorting by Recently linked', () => {
+  // Recently linked is the default sort, so disabling Year for it would leave
+  // Year grouping unreachable out of the box — the e2e suite caught exactly
+  // that. It stays enabled even though it is an album-metadata date.
+  it('is enabled while sorting by Recently linked', () => {
     spaceAlbumViewSettings.update((s) => ({ ...s, sortBy: SpaceAlbumSortBy.RecentlyLinked }));
-    expect(yearOption().isDisabled()).toBe(true);
+    expect(yearOption().isDisabled()).toBe(false);
   });
 
   it('stays disabled for Date created and Date modified', () => {

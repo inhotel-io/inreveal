@@ -8,7 +8,7 @@ import {
   type SpaceAlbumViewSettings,
 } from '$lib/stores/space-album-view-settings.store';
 import { stringToSortOrder } from '$lib/utils/album-utils';
-import { sortSpaceAlbums, SpaceAlbumSortBy } from '$lib/utils/space-album-sort';
+import { sortSpaceAlbums } from '$lib/utils/space-album-sort';
 
 /**
  * ----------------------
@@ -38,11 +38,13 @@ export const spaceGroupOptionsMetadata: SpaceAlbumGroupOptionMetadata[] = [
     id: SpaceAlbumGroupBy.Year,
     defaultOrder: SortOrder.Desc,
     isDisabled() {
-      const disabledWithSortOptions: string[] = [
-        AlbumSortBy.DateCreated,
-        AlbumSortBy.DateModified,
-        SpaceAlbumSortBy.RecentlyLinked,
-      ];
+      // Recently linked is deliberately NOT here, even though it is an
+      // album-metadata date like the two that are. It is the default sort, so
+      // disabling Year for it would put the most useful grouping out of reach
+      // until the user changed sort. Year buckets by photo year and orders
+      // within each bucket by the active sort, which reads fine as "2024
+      // albums, most recently linked first".
+      const disabledWithSortOptions: string[] = [AlbumSortBy.DateCreated, AlbumSortBy.DateModified];
       return disabledWithSortOptions.includes(get(spaceAlbumViewSettings).sortBy);
     },
   },
