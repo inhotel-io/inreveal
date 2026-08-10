@@ -492,8 +492,16 @@ it('defaults sort to RecentlyLinked desc and group to None', () => {
   expect(s.collapsedGroups).toEqual({});
 });
 
-// S23 — a stored preference must survive the default change
-it('prefers a stored sortBy over the new default', () => {
+// S23 — a stored preference must survive the default change.
+//
+// `persisted()` reads localStorage once, when the module is evaluated. Writing
+// to localStorage afterwards and calling `.update()` does NOT re-read it — this
+// was verified empirically against this repo: the naive version leaves sortBy at
+// the default and fails. The store must be re-imported after seeding storage.
+//
+// Keep this test LAST in the file: vi.resetModules() means later tests would
+// otherwise get a different store instance than the one imported at the top.
+it('prefers a stored sortBy over the new default', async () => {
   localStorage.setItem(
     'space-album-view-settings',
     JSON.stringify({
@@ -505,8 +513,10 @@ it('prefers a stored sortBy over the new default', () => {
       collapsedGroups: {},
     }),
   );
-  spaceAlbumViewSettings.update((s) => ({ ...s }));
-  expect(get(spaceAlbumViewSettings).sortBy).toBe(AlbumSortBy.Title);
+  vi.resetModules();
+  const reloaded = await import('$lib/stores/space-album-view-settings.store');
+  expect(get(reloaded.spaceAlbumViewSettings).sortBy).toBe(AlbumSortBy.Title);
+  expect(get(reloaded.spaceAlbumViewSettings).sortOrder).toBe(SortOrder.Asc);
 });
 ```
 
@@ -730,9 +740,10 @@ Implements S21, S27, S28, S29, and S10–S12 at the list level.
 
 In `web/src/lib/utils/space-album-grouping.spec.ts`, add the import and these tests:
 
+Add `spaceGroupOptionsMetadata` to the file's **existing** `$lib/utils/space-album-grouping` import rather than adding a second import statement for the same module (ESLint's zero-warning policy flags duplicate imports), and add one new import:
+
 ```ts
 import { SpaceAlbumSortBy } from '$lib/utils/space-album-sort';
-import { spaceGroupOptionsMetadata } from '$lib/utils/space-album-grouping';
 ```
 
 ```ts
@@ -773,9 +784,13 @@ describe('grouped lists sort within each group by Recently linked', () => {
       A({ id: '1', albumName: 'OwnerA-Early', ownerId: 'a', linkedAt: '2026-01-01T00:00:00Z' }),
       A({ id: '2', albumName: 'OwnerA-Late', ownerId: 'a', linkedAt: '2026-06-01T00:00:00Z' }),
     ];
+    // buildSpaceAlbumGroups returns SpaceAlbumGroup[] = { id, name, albums }.
+    // Owner grouping keys the group by ownerId, so select it by id rather than
+    // by album count — a length-based lookup would silently pick the wrong
+    // group if grouping ever changed.
     const groups = buildSpaceAlbumGroups(albums, settings, CTX);
-    const ownerAGroup = groups.find((g) => g.albums.length === 2)!;
-    expect(ownerAGroup.albums.map((a) => a.albumName)).toEqual(['OwnerA-Late', 'OwnerA-Early']);
+    const ownerAGroup = groups.find((g) => g.id === 'a');
+    expect(ownerAGroup?.albums.map((a) => a.albumName)).toEqual(['OwnerA-Late', 'OwnerA-Early']);
   });
 });
 ```
@@ -783,7 +798,9 @@ describe('grouped lists sort within each group by Recently linked', () => {
 In `web/src/lib/components/spaces/space-albums-list.spec.ts`, add a list-level ordering test (place it beside the existing render tests, reusing that file's `makeAlbum` factory and its render harness):
 
 ```ts
-// S10 at list level — the empty album renders last even though the sort is descending
+// S10 at list level — the empty album renders last even though the sort is
+// descending. `canManage` is a REQUIRED prop on this component; omitting it
+// breaks the render.
 it('renders albums with no photos last when sorting by Most recent photo', async () => {
   spaceAlbumViewSettings.update((s) => ({
     ...s,
@@ -793,6 +810,8 @@ it('renders albums with no photos last when sorting by Most recent photo', async
   }));
   render(SpaceAlbumsList, {
     props: {
+      spaceId: 'space-1',
+      canManage: false,
       albums: [
         makeAlbum({ id: 'empty', albumName: 'Empty', startDate: undefined, endDate: undefined }),
         makeAlbum({
@@ -803,12 +822,15 @@ it('renders albums with no photos last when sorting by Most recent photo', async
         }),
       ],
       members: [] as SharedSpaceMemberResponseDto[],
-      spaceId: 'space-1',
     },
   });
-  await waitFor(() => expect(screen.getByText('HasPhotos')).toBeInTheDocument());
-  const rendered = screen.getAllByText(/Empty|HasPhotos/).map((el) => el.textContent);
-  expect(rendered).toEqual(['HasPhotos', 'Empty']);
+
+  // Assert DOM order via the card testid rather than a text regex, so the
+  // assertion cannot be satisfied by incidental matches elsewhere in the tree.
+  await waitFor(() => expect(screen.getAllByTestId('space-album-card')).toHaveLength(2));
+  const order = screen.getAllByTestId('space-album-card').map((card) => card.textContent);
+  expect(order[0]).toContain('HasPhotos');
+  expect(order[1]).toContain('Empty');
 });
 ```
 
@@ -1075,7 +1097,7 @@ Add to the `watchLinkedAlbums` group in `mobile/test/medium/repositories/space_a
     });
 ```
 
-If `insertSharedSpaceAlbumLink` does not already accept `createdAt`, add an optional `DateTime? createdAt` parameter to it in `mobile/test/medium/repository_context.dart`, defaulting to `TestUtils.date(createdAt)` the same way `newSharedSpaceAlbum` does.
+No helper changes are needed: `insertSharedSpaceAlbumLink` already accepts `createdAt` (`mobile/test/medium/repository_context.dart:484`), `newSharedSpaceAlbum` already accepts `createdAt` (`:460`), and `newRemoteAsset` sets `localDateTime` from the `createdAt` you pass (`:137`), so passing `createdAt:` is how you control an asset's photo date.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1172,6 +1194,8 @@ Run: `cd mobile && dart analyze lib test`
 ```
 
 For `mobile/test/pages/library/spaces/collection_sort_test.dart`, give the six `sample` entries distinct `createdAt` values so Task 7 can assert Date-created ordering, and add `createdAt` (plus optional `startDate`/`endDate`) parameters to its `_album` helper.
+
+For `mobile/test/presentation/pages/space_albums_page_test.dart`, add `createdAt` to its `_album` helper — Task 8 reuses that helper.
 
 Repeat `dart analyze lib test` until clean.
 
@@ -1487,30 +1511,36 @@ No production change — the menu is built from `SpaceAlbumSortMode.values` at `
 
 - [ ] **Step 1: Update the label assertions and add the new coverage**
 
-The suite asserts the literal `'Sort: Photo count'`; that label is now `'Sort: Number of items'`. Update it, then add:
+The existing `picking a different sort mode reorders the grid and persists the choice` test both taps `find.text('Photo count')` and asserts the literal `'Sort: Photo count'`. Both become `'Number of items'` / `'Sort: Number of items'`. Then add, using the same harness the file already uses (`tester.pumpConsumerWidget` + the file's `_overrides` and `_album` helpers):
 
 ```dart
-    testWidgets('offers all seven sort options in the menu', (tester) async {
-      await tester.pumpWidget(buildPage());
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('collection-sort-button-pill')));
-      await tester.pumpAndSettle();
+  testWidgets('offers all seven sort options in the menu', (tester) async {
+    await tester.pumpConsumerWidget(
+      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      overrides: _overrides(
+        spaceId: spaceId,
+        albums: [_album(id: 'a1', name: 'Alpha'), _album(id: 'a2', name: 'Bravo')],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('collection-sort-button-pill')));
+    await tester.pumpAndSettle();
 
-      for (final label in [
-        'Title',
-        'Number of items',
-        'Date modified',
-        'Date created',
-        'Most recent photo',
-        'Oldest photo',
-        'Recently linked',
-      ]) {
-        expect(find.text(label), findsWidgets, reason: 'missing sort option $label');
-      }
-    });
+    for (final label in [
+      'Title',
+      'Number of items',
+      'Date modified',
+      'Date created',
+      'Most recent photo',
+      'Oldest photo',
+      'Recently linked',
+    ]) {
+      expect(find.text(label), findsWidgets, reason: 'missing sort option $label');
+    }
+  });
 ```
 
-Use whatever page-building helper the file already defines in place of `buildPage()`.
+The menu needs at least one album to render — the page hides the search/sort chrome entirely when a space has zero linked albums (see the existing `a genuinely empty space still shows the empty state` test).
 
 - [ ] **Step 2: Run test to verify it fails, then passes**
 
