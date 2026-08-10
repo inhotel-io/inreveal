@@ -43,9 +43,14 @@
 </script>
 
 {#if visible}
+  <!-- `w-fit` keeps the card as wide as its content — at most five 56px crops and two small buttons — instead of
+       stretching the full timeline width and leaving a metre of empty panel beside "N faces found". The two caps
+       bound the one row that can actually grow, a long person name in the title: `max-w-full` keeps it inside a
+       narrow viewport (where the title's `min-w-0` + `truncate` then engage), and `sm:max-w-2xl` stops a very
+       long name from dragging the card across a wide desktop screen. -->
   <div
     data-testid="person-suggestion-banner"
-    class="mx-4 my-3 flex flex-col gap-3 rounded-2xl border border-gray-200 bg-light p-4 sm:mx-6 dark:border-gray-700"
+    class="mx-4 my-3 flex w-fit max-w-full flex-col gap-3 rounded-2xl border border-gray-200 bg-light p-4 sm:mx-6 sm:max-w-2xl dark:border-gray-700"
   >
     <div class="flex items-center justify-between gap-3">
       <div class="flex min-w-0 items-center gap-3">
