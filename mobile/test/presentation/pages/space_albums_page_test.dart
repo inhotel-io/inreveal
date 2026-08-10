@@ -272,7 +272,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('collection-sort-button-pill')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Photo count'));
+    await tester.tap(find.text('Number of items'));
     await tester.pumpAndSettle();
 
     // Now sorted by asset count desc -> r1 (50) sorts before r2 (5).
@@ -326,7 +326,7 @@ void main() {
     // (recentlyLinked) would instead put r2 first, so this proves the
     // persisted mode was actually read, not just the default applied.
     expect(_firstCardByPosition(tester, ['r1', 'r2']), 'r1');
-    expect(find.text('Sort: Photo count'), findsOneWidget);
+    expect(find.text('Sort: Number of items'), findsOneWidget);
   });
 
   // ---------------------------------------------------------------------

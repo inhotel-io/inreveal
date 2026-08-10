@@ -3,11 +3,23 @@ import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:openapi/api.dart';
 
 /// Sort modes for a space's linked-albums grid ([SpaceAlbumsPage]).
+///
+/// Declaration order IS menu order — [SpaceAlbumsPage] builds the menu from
+/// `values`. The set and order match the web sort dropdown (see the #966 design
+/// spec).
+///
+/// The identifiers are persisted verbatim by `EnumCodec` (`value.name`), so
+/// renaming one silently resets every user who had it selected. That is why
+/// `name` is labelled "Title" and `recentlyUpdated` is labelled "Date modified"
+/// rather than being renamed to match.
 enum SpaceAlbumSortMode {
-  name(0, 'name', SortOrder.asc),
-  photoCount(1, 'sort_photo_count', SortOrder.desc),
-  recentlyLinked(2, 'sort_recently_linked', SortOrder.desc),
-  recentlyUpdated(3, 'sort_recently_updated', SortOrder.desc);
+  name(0, 'sort_title', SortOrder.asc),
+  photoCount(1, 'sort_items', SortOrder.desc),
+  recentlyUpdated(3, 'sort_modified', SortOrder.desc),
+  dateCreated(4, 'sort_created', SortOrder.desc),
+  mostRecentPhoto(5, 'sort_recent', SortOrder.desc),
+  oldestPhoto(6, 'sort_oldest', SortOrder.desc),
+  recentlyLinked(2, 'sort_recently_linked', SortOrder.desc);
 
   const SpaceAlbumSortMode(this.storeIndex, this.label, this.defaultOrder);
 
@@ -44,6 +56,21 @@ bool _matches(String name, String query) {
 
 int _byName(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
 
+/// Albums with no photo dates sort last in BOTH directions, matching upstream
+/// web's `sortUnknownYearAlbums`. Returns null when neither side is missing, so
+/// the caller can fall through to the normal comparison.
+///
+/// Upstream checks `endDate` for both photo-date sorts, including the one that
+/// orders by `startDate`. This checks each mode's own field instead. The two
+/// are equivalent in practice — both dates come from the same aggregate, so an
+/// album has both or neither — so do not "fix" this to match upstream's quirk.
+int? _unknownDateLast(DateTime? a, DateTime? b) {
+  if (a == null && b == null) return null;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return null;
+}
+
 List<SpaceAlbum> filterAndSortSpaceAlbums(
   List<SpaceAlbum> items,
   String query,
@@ -53,11 +80,25 @@ List<SpaceAlbum> filterAndSortSpaceAlbums(
   final sign = mode.effectiveOrder(isReverse) == SortOrder.asc ? 1 : -1;
   final out = items.where((a) => _matches(a.name, query)).toList();
   out.sort((a, b) {
+    // Applied outside the sign so empty albums stay last in both directions.
+    final unknown = switch (mode) {
+      SpaceAlbumSortMode.mostRecentPhoto => _unknownDateLast(a.endDate, b.endDate),
+      SpaceAlbumSortMode.oldestPhoto => _unknownDateLast(a.startDate, b.startDate),
+      _ => null,
+    };
+    if (unknown != null) return unknown;
+
     final c = switch (mode) {
       SpaceAlbumSortMode.name => _byName(a.name, b.name),
       SpaceAlbumSortMode.photoCount => a.assetCount.compareTo(b.assetCount),
       SpaceAlbumSortMode.recentlyLinked => a.linkedAt.compareTo(b.linkedAt),
       SpaceAlbumSortMode.recentlyUpdated => a.updatedAt.compareTo(b.updatedAt),
+      SpaceAlbumSortMode.dateCreated => a.createdAt.compareTo(b.createdAt),
+      // _unknownDateLast has already returned for the case where exactly one
+      // side is null. Reaching here means both are null (tie — fall through to
+      // the name/id tie-break below) or both are present (real comparison).
+      SpaceAlbumSortMode.mostRecentPhoto => a.endDate == null ? 0 : a.endDate!.compareTo(b.endDate!),
+      SpaceAlbumSortMode.oldestPhoto => a.startDate == null ? 0 : a.startDate!.compareTo(b.startDate!),
     };
     if (c != 0) return sign * c;
     final n = _byName(a.name, b.name);

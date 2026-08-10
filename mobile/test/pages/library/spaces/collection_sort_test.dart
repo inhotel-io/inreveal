@@ -424,6 +424,161 @@ void main() {
     });
   });
 
+  group('space-album sort parity (#966)', () {
+    SpaceAlbum a({
+      required String id,
+      required String name,
+      DateTime? createdAt,
+      DateTime? linkedAt,
+      DateTime? startDate,
+      DateTime? endDate,
+      int assetCount = 0,
+    }) => SpaceAlbum(
+      id: id,
+      name: name,
+      showInTimeline: true,
+      assetCount: assetCount,
+      linkedAt: linkedAt ?? DateTime.utc(2026, 1, 1),
+      updatedAt: DateTime.utc(2026, 1, 1),
+      createdAt: createdAt ?? DateTime.utc(2026, 1, 1),
+      startDate: startDate,
+      endDate: endDate,
+    );
+
+    // The contract order from the design spec — the menu is built from
+    // SpaceAlbumSortMode.values, so declaration order IS menu order.
+    test('offers the seven contract options in order with the contract labels', () {
+      expect(SpaceAlbumSortMode.values.map((m) => m.name), [
+        'name',
+        'photoCount',
+        'recentlyUpdated',
+        'dateCreated',
+        'mostRecentPhoto',
+        'oldestPhoto',
+        'recentlyLinked',
+      ]);
+      expect(SpaceAlbumSortMode.values.map((m) => m.label), [
+        'sort_title',
+        'sort_items',
+        'sort_modified',
+        'sort_created',
+        'sort_recent',
+        'sort_oldest',
+        'sort_recently_linked',
+      ]);
+    });
+
+    test('defaults Title to ascending and every other option to descending', () {
+      expect(SpaceAlbumSortMode.name.defaultOrder, SortOrder.asc);
+      for (final mode in SpaceAlbumSortMode.values.where((m) => m != SpaceAlbumSortMode.name)) {
+        expect(mode.defaultOrder, SortOrder.desc, reason: '${mode.name} should default to descending');
+      }
+    });
+
+    // S6 / S9 — createdAt order is the reverse of linkedAt order here
+    test('Date created and Recently linked read different fields', () {
+      final items = [
+        a(id: 'old', name: 'Old', createdAt: DateTime.utc(2026, 1, 1), linkedAt: DateTime.utc(2026, 3, 1)),
+        a(id: 'new', name: 'New', createdAt: DateTime.utc(2026, 2, 1), linkedAt: DateTime.utc(2026, 2, 2)),
+      ];
+      expect(names(filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.dateCreated, false)), ['New', 'Old']);
+      expect(names(filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.recentlyLinked, false)), ['Old', 'New']);
+    });
+
+    // S7 / S8 — B has the newest photo but also the oldest, so the two modes
+    // must disagree at the same direction. Both default to descending:
+    //   mostRecentPhoto desc -> B (Jan 20) then A (Jan 10)
+    //   oldestPhoto     desc -> A (Jan 5)  then B (Jan 1)
+    // A comparator reading the wrong field therefore fails rather than passing
+    // by coincidence.
+    test('Most recent photo and Oldest photo read different fields', () {
+      final items = [
+        a(id: 'a', name: 'A', startDate: DateTime.utc(2026, 1, 5), endDate: DateTime.utc(2026, 1, 10)),
+        a(id: 'b', name: 'B', startDate: DateTime.utc(2026, 1, 1), endDate: DateTime.utc(2026, 1, 20)),
+      ];
+      expect(names(filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.mostRecentPhoto, false)), ['B', 'A']);
+      expect(names(filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.oldestPhoto, false)), ['A', 'B']);
+      // reversed
+      expect(names(filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.mostRecentPhoto, true)), ['A', 'B']);
+      expect(names(filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.oldestPhoto, true)), ['B', 'A']);
+    });
+
+    // S10 / S11 / S12 — matches upstream sortUnknownYearAlbums: last in BOTH directions
+    test('albums with no photo dates sort last regardless of direction', () {
+      final items = [
+        a(id: 'empty', name: 'Empty'),
+        a(id: 'full', name: 'HasPhotos', startDate: DateTime.utc(2026, 1, 1), endDate: DateTime.utc(2026, 1, 10)),
+      ];
+      for (final mode in [SpaceAlbumSortMode.mostRecentPhoto, SpaceAlbumSortMode.oldestPhoto]) {
+        for (final isReverse in [false, true]) {
+          expect(
+            names(filterAndSortSpaceAlbums(items, '', mode, isReverse)),
+            ['HasPhotos', 'Empty'],
+            reason: '$mode isReverse=$isReverse',
+          );
+        }
+      }
+    });
+
+    // S14
+    test('keeps every album when none has photo dates', () {
+      final items = [a(id: '1', name: 'One'), a(id: '2', name: 'Two'), a(id: '3', name: 'Three')];
+      final sorted = filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.mostRecentPhoto, false);
+      expect(sorted, hasLength(3));
+      expect(names(sorted).toSet(), {'One', 'Two', 'Three'});
+    });
+
+    // S15 — the repository truncates to a UTC day, so same-day albums arrive equal
+    // and must fall through to the name/id tie-break rather than to time of day.
+    test('same-day albums fall through to the tie-break', () {
+      final items = [
+        a(id: 'z', name: 'Zebra', endDate: DateTime.utc(2026, 1, 10)),
+        a(id: 'a', name: 'Antelope', endDate: DateTime.utc(2026, 1, 10)),
+      ];
+      expect(names(filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.mostRecentPhoto, false)), [
+        'Antelope',
+        'Zebra',
+      ]);
+    });
+
+    // S17
+    test('bulk-linked albums sharing a linkedAt tie-break by name then id', () {
+      final linked = DateTime.utc(2026, 4, 1);
+      final items = [
+        a(id: 'c', name: 'Charlie', linkedAt: linked),
+        a(id: 'a', name: 'Alpha', linkedAt: linked),
+        a(id: 'b', name: 'Bravo', linkedAt: linked),
+      ];
+      expect(names(filterAndSortSpaceAlbums(items, '', SpaceAlbumSortMode.recentlyLinked, false)), [
+        'Alpha',
+        'Bravo',
+        'Charlie',
+      ]);
+    });
+
+    // S18 / S19
+    test('handles empty and single-item lists for every mode and direction', () {
+      final one = [a(id: 'only', name: 'Only')];
+      for (final mode in SpaceAlbumSortMode.values) {
+        for (final isReverse in [false, true]) {
+          expect(filterAndSortSpaceAlbums(const [], '', mode, isReverse), isEmpty);
+          expect(names(filterAndSortSpaceAlbums(one, '', mode, isReverse)), ['Only']);
+        }
+      }
+    });
+
+    // S21 — filtering still runs before sorting, for the new modes too
+    test('filters by query before sorting', () {
+      final items = [
+        a(id: '1', name: 'Italy 2022', endDate: DateTime.utc(2026, 1, 20)),
+        a(id: '2', name: 'Alps Weekend', endDate: DateTime.utc(2026, 1, 10)),
+      ];
+      expect(names(filterAndSortSpaceAlbums(items, 'alps', SpaceAlbumSortMode.mostRecentPhoto, false)), [
+        'Alps Weekend',
+      ]);
+    });
+  });
+
   group('sort-mode enum shape', () {
     test('SpaceAlbumSortMode carries storeIndex/label/defaultOrder and effectiveOrder', () {
       expect(SpaceAlbumSortMode.name.storeIndex, 0);
@@ -431,9 +586,18 @@ void main() {
       expect(SpaceAlbumSortMode.name.effectiveOrder(false), SortOrder.asc);
       expect(SpaceAlbumSortMode.name.effectiveOrder(true), SortOrder.desc);
 
+      expect(SpaceAlbumSortMode.photoCount.storeIndex, 1);
       expect(SpaceAlbumSortMode.photoCount.defaultOrder, SortOrder.desc);
+      expect(SpaceAlbumSortMode.recentlyLinked.storeIndex, 2);
       expect(SpaceAlbumSortMode.recentlyLinked.defaultOrder, SortOrder.desc);
+      expect(SpaceAlbumSortMode.recentlyUpdated.storeIndex, 3);
       expect(SpaceAlbumSortMode.recentlyUpdated.defaultOrder, SortOrder.desc);
+      expect(SpaceAlbumSortMode.dateCreated.storeIndex, 4);
+      expect(SpaceAlbumSortMode.dateCreated.defaultOrder, SortOrder.desc);
+      expect(SpaceAlbumSortMode.mostRecentPhoto.storeIndex, 5);
+      expect(SpaceAlbumSortMode.mostRecentPhoto.defaultOrder, SortOrder.desc);
+      expect(SpaceAlbumSortMode.oldestPhoto.storeIndex, 6);
+      expect(SpaceAlbumSortMode.oldestPhoto.defaultOrder, SortOrder.desc);
 
       // storeIndex is stable/unique (persisted later — must not collide).
       final indices = SpaceAlbumSortMode.values.map((m) => m.storeIndex).toSet();
