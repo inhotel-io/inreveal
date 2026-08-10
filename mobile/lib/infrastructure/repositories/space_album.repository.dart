@@ -92,8 +92,17 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
 }
 
 /// Truncate to a UTC calendar day so the sort key matches the server's
-/// `::date` cast (see the #966 design spec). Truncating in Dart rather than SQL
-/// keeps this independent of how Drift stores `DateTime`.
+/// `MIN/MAX(("asset"."localDateTime" AT TIME ZONE 'UTC')::date)` — both
+/// platforms sort on the same day, not a timestamp.
+///
+/// `.toUtc()` is load-bearing, do not remove it: Drift hands back
+/// `localDateTime` with `isUtc == false` (the column is stored as ISO-8601
+/// text with an offset suffix — `storeDateTimeAsText: true`), so reading
+/// year/month/day straight off `value` would truncate to the *device's*
+/// local calendar day, which can be a day off from the UTC day the server
+/// computed. No test guards this call: mobile CI runs on ubuntu-latest with
+/// no TZ override, where local and UTC digits happen to coincide, so a
+/// dropped `.toUtc()` would pass CI and only misbehave on a non-UTC device.
 DateTime? _utcDay(DateTime? value) {
   if (value == null) {
     return null;
