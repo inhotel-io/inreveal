@@ -24,6 +24,7 @@ final sample = <SpaceAlbum>[
     showInTimeline: true,
     linkedAt: DateTime.utc(2026, 1, 5),
     updatedAt: DateTime.utc(2026, 1, 20),
+    createdAt: DateTime.utc(2025, 3, 10),
   ),
   SpaceAlbum(
     id: 'album-a-italy-summary',
@@ -32,6 +33,7 @@ final sample = <SpaceAlbum>[
     showInTimeline: true,
     linkedAt: DateTime.utc(2026, 1, 5),
     updatedAt: DateTime.utc(2026, 1, 25),
+    createdAt: DateTime.utc(2025, 5, 22),
   ),
   SpaceAlbum(
     id: 'album-sachsen',
@@ -40,6 +42,7 @@ final sample = <SpaceAlbum>[
     showInTimeline: true,
     linkedAt: DateTime.utc(2026, 2, 1),
     updatedAt: DateTime.utc(2026, 1, 10),
+    createdAt: DateTime.utc(2024, 11, 3),
   ),
   SpaceAlbum(
     id: 'album-alps',
@@ -48,6 +51,7 @@ final sample = <SpaceAlbum>[
     showInTimeline: true,
     linkedAt: DateTime.utc(2026, 1, 15),
     updatedAt: DateTime.utc(2026, 2, 10),
+    createdAt: DateTime.utc(2026, 1, 2),
   ),
   SpaceAlbum(
     id: 'dup-2',
@@ -56,6 +60,7 @@ final sample = <SpaceAlbum>[
     showInTimeline: true,
     linkedAt: DateTime.utc(2026, 1, 1),
     updatedAt: DateTime.utc(2026, 1, 1),
+    createdAt: DateTime.utc(2025, 8, 15),
   ),
   SpaceAlbum(
     id: 'dup-1',
@@ -64,6 +69,7 @@ final sample = <SpaceAlbum>[
     showInTimeline: true,
     linkedAt: DateTime.utc(2026, 1, 1),
     updatedAt: DateTime.utc(2026, 1, 1),
+    createdAt: DateTime.utc(2025, 12, 30),
   ),
 ];
 
@@ -73,6 +79,9 @@ SpaceAlbum _album({
   int assetCount = 0,
   DateTime? linkedAt,
   DateTime? updatedAt,
+  DateTime? createdAt,
+  DateTime? startDate,
+  DateTime? endDate,
 }) => SpaceAlbum(
   id: id,
   name: name,
@@ -80,6 +89,9 @@ SpaceAlbum _album({
   showInTimeline: true,
   linkedAt: linkedAt ?? DateTime.utc(2026, 1, 1),
   updatedAt: updatedAt ?? DateTime.utc(2026, 1, 1),
+  createdAt: createdAt ?? DateTime.utc(2026, 1, 1),
+  startDate: startDate,
+  endDate: endDate,
 );
 
 /// Space fixtures. `space-d` has `lastActivityAt`/`memberCount`/`assetCount`

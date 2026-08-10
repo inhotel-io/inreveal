@@ -35,6 +35,8 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
     // WHERE, so an album with zero visible assets still surfaces with count 0.
     // remote_asset.id.count() ignores the NULLs a LEFT JOIN produces.
     final assetCountExp = asset.id.count();
+    final minDateExp = asset.localDateTime.min();
+    final maxDateExp = asset.localDateTime.max();
 
     final query =
         _db.select(link).join([
@@ -50,7 +52,7 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
             ),
           ])
           ..where(link.spaceId.equals(spaceId))
-          ..addColumns([assetCountExp])
+          ..addColumns([assetCountExp, minDateExp, maxDateExp])
           ..groupBy([link.spaceId, link.albumId, meta.id])
           ..orderBy([OrderingTerm.asc(meta.name)]);
 
@@ -66,6 +68,9 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
           assetCount: row.read(assetCountExp) ?? 0,
           linkedAt: l.createdAt,
           updatedAt: m.updatedAt,
+          createdAt: m.createdAt,
+          startDate: _utcDay(row.read(minDateExp)),
+          endDate: _utcDay(row.read(maxDateExp)),
         );
       }).toList(),
     );
@@ -84,4 +89,15 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
       _db.sharedSpaceAlbumLinkEntity,
     )..where((t) => t.spaceId.equals(spaceId) & t.albumId.equals(albumId))).go();
   }
+}
+
+/// Truncate to a UTC calendar day so the sort key matches the server's
+/// `::date` cast (see the #966 design spec). Truncating in Dart rather than SQL
+/// keeps this independent of how Drift stores `DateTime`.
+DateTime? _utcDay(DateTime? value) {
+  if (value == null) {
+    return null;
+  }
+  final utc = value.toUtc();
+  return DateTime.utc(utc.year, utc.month, utc.day);
 }

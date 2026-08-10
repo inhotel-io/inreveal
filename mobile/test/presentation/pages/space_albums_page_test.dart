@@ -30,6 +30,7 @@ SpaceAlbum _album({
   bool showInTimeline = true,
   DateTime? linkedAt,
   DateTime? updatedAt,
+  DateTime? createdAt,
 }) => SpaceAlbum(
   id: id,
   name: name ?? 'Album $id',
@@ -37,6 +38,7 @@ SpaceAlbum _album({
   showInTimeline: showInTimeline,
   linkedAt: linkedAt ?? DateTime.utc(2026, 1, 1),
   updatedAt: updatedAt ?? DateTime.utc(2026, 1, 1),
+  createdAt: createdAt ?? DateTime.utc(2026, 1, 1),
 );
 
 /// Overrides [spaceAlbumsProvider] with a fixed list, for use with

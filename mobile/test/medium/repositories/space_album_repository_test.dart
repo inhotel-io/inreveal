@@ -123,6 +123,89 @@ void main() {
       expect(albums.single.linkedAt, linked);
       expect(albums.single.updatedAt, updated);
     });
+
+    test('projects the album createdAt from the metadata row', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum(name: 'Hawaii', createdAt: DateTime.utc(2025, 6, 1));
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      expect(albums.single.createdAt, album.createdAt);
+    });
+
+    test('derives startDate/endDate from the album assets, truncated to a UTC day', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum(name: 'Hawaii');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+
+      for (final at in [
+        DateTime.utc(2026, 1, 5, 9, 30),
+        DateTime.utc(2026, 1, 20, 17, 45),
+        DateTime.utc(2026, 1, 12, 3, 0),
+      ]) {
+        final asset = await ctx.newRemoteAsset(ownerId: user.id, createdAt: at);
+        await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: asset.id);
+      }
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      // S15 — day precision, matching the server's ::date cast. Times of day gone.
+      expect(albums.single.startDate, DateTime.utc(2026, 1, 5));
+      expect(albums.single.endDate, DateTime.utc(2026, 1, 20));
+    });
+
+    test('leaves startDate/endDate null for an album with no assets', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum(name: 'Empty');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      expect(albums.single.assetCount, 0);
+      expect(albums.single.startDate, isNull);
+      expect(albums.single.endDate, isNull);
+    });
+
+    test('excludes deleted and hidden assets from the date range', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum(name: 'Hawaii');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+
+      final visible = await ctx.newRemoteAsset(ownerId: user.id, createdAt: DateTime.utc(2026, 1, 10));
+      final deleted = await ctx.newRemoteAsset(
+        ownerId: user.id,
+        createdAt: DateTime.utc(2026, 5, 1),
+        deletedAt: DateTime.utc(2026, 5, 2),
+      );
+      final hidden = await ctx.newRemoteAsset(
+        ownerId: user.id,
+        createdAt: DateTime.utc(2026, 6, 1),
+        visibility: AssetVisibility.hidden,
+      );
+      for (final a in [visible, deleted, hidden]) {
+        await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: a.id);
+      }
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      expect(albums.single.assetCount, 1);
+      expect(albums.single.endDate, DateTime.utc(2026, 1, 10));
+    });
+
+    // S20
+    test('reports the per-space link date when an album is linked to two spaces', () async {
+      final user = await ctx.newUser();
+      final s1 = await ctx.newSharedSpace(createdById: user.id);
+      final s2 = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum(name: 'Shared');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: s1.id, albumId: album.id, createdAt: DateTime.utc(2026, 1, 1));
+      await ctx.insertSharedSpaceAlbumLink(spaceId: s2.id, albumId: album.id, createdAt: DateTime.utc(2026, 3, 1));
+
+      final inS1 = await repo.watchLinkedAlbums(s1.id).first;
+      final inS2 = await repo.watchLinkedAlbums(s2.id).first;
+      expect(inS1.single.linkedAt, isNot(inS2.single.linkedAt));
+    });
   });
 
   test('deleteAlbumMetadata removes metadata + membership but keeps remote_asset', () async {

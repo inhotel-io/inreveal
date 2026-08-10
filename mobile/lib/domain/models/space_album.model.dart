@@ -13,6 +13,14 @@ class SpaceAlbum {
   final int assetCount;
   final DateTime linkedAt;
   final DateTime updatedAt;
+  final DateTime createdAt;
+
+  /// Oldest / newest photo in the album, truncated to a UTC calendar day to
+  /// match the server's `MIN/MAX((localDateTime AT TIME ZONE 'UTC')::date)`.
+  /// Null when the album has no visible assets, or when none of them carries a
+  /// `localDateTime`.
+  final DateTime? startDate;
+  final DateTime? endDate;
 
   const SpaceAlbum({
     required this.id,
@@ -22,5 +30,8 @@ class SpaceAlbum {
     this.assetCount = 0,
     required this.linkedAt,
     required this.updatedAt,
+    required this.createdAt,
+    this.startDate,
+    this.endDate,
   });
 }
