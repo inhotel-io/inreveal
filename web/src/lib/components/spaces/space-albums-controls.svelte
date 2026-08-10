@@ -10,6 +10,7 @@
     type SpaceAlbumGroupOptionMetadata,
   } from '$lib/utils/space-album-grouping';
   import {
+    type SpaceAlbumSortByValue,
     type SpaceAlbumSortOptionMetadata,
     SpaceAlbumSortBy,
     findSpaceAlbumSortOptionMetadata,
@@ -88,7 +89,7 @@
   let selectedGroupOption = $derived(findSpaceGroupOptionMetadata($spaceAlbumViewSettings.groupBy));
   let isGrouped = $derived(getSelectedSpaceAlbumGroupOption($spaceAlbumViewSettings) !== SpaceAlbumGroupBy.None);
 
-  let albumSortByNames: Record<string, string> = $derived({
+  let albumSortByNames: Record<SpaceAlbumSortByValue, string> = $derived({
     [SpaceAlbumSortBy.Title]: $t('sort_title'),
     [SpaceAlbumSortBy.ItemCount]: $t('sort_items'),
     [SpaceAlbumSortBy.DateModified]: $t('sort_modified'),

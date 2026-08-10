@@ -16,8 +16,16 @@ export const SpaceAlbumSortBy = {
   RecentlyLinked: 'RecentlyLinked',
 } as const;
 
+/**
+ * The union of every value `SpaceAlbumSortBy` can hold. Used to key the
+ * label records that back the sort dropdown, so adding a new option to
+ * `SpaceAlbumSortBy` without adding its label is a compile error instead of
+ * a blank menu row (Svelte stringifies `undefined` to `''`).
+ */
+export type SpaceAlbumSortByValue = (typeof SpaceAlbumSortBy)[keyof typeof SpaceAlbumSortBy];
+
 export interface SpaceAlbumSortOptionMetadata {
-  id: string;
+  id: SpaceAlbumSortByValue;
   defaultOrder: SortOrder;
   columnStyle: string;
 }
