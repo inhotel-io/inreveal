@@ -329,6 +329,31 @@ void main() {
     expect(find.text('Sort: Number of items'), findsOneWidget);
   });
 
+  testWidgets('offers all seven sort options in the menu', (tester) async {
+    await tester.pumpConsumerWidget(
+      const SpaceAlbumsPage(spaceId: spaceId, canEdit: true),
+      overrides: _overrides(
+        spaceId: spaceId,
+        albums: [_album(id: 'a1', name: 'Alpha'), _album(id: 'a2', name: 'Bravo')],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('collection-sort-button-pill')));
+    await tester.pumpAndSettle();
+
+    for (final label in [
+      'Title',
+      'Number of items',
+      'Date modified',
+      'Date created',
+      'Most recent photo',
+      'Oldest photo',
+      'Recently linked',
+    ]) {
+      expect(find.text(label), findsWidgets, reason: 'missing sort option $label');
+    }
+  });
+
   // ---------------------------------------------------------------------
   // Regression: search + sort chrome doesn't affect role gating
   // ---------------------------------------------------------------------
