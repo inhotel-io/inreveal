@@ -19,6 +19,11 @@ describe('space-album-view-settings store', () => {
     expect(s.groupBy).toBe(SpaceAlbumGroupBy.None);
     expect(s.collapsedGroups).toEqual({});
   });
+  it('persists under a key distinct from album-view-settings', () => {
+    spaceAlbumViewSettings.update((s) => ({ ...s, view: AlbumViewMode.List }));
+    expect(localStorage.getItem('space-album-view-settings')).toContain('List');
+    expect(localStorage.getItem('album-view-settings')).toBeNull();
+  });
 
   // S23 — a stored preference must survive the default change.
   //
@@ -45,10 +50,5 @@ describe('space-album-view-settings store', () => {
     const reloaded = await import('$lib/stores/space-album-view-settings.store');
     expect(get(reloaded.spaceAlbumViewSettings).sortBy).toBe(AlbumSortBy.Title);
     expect(get(reloaded.spaceAlbumViewSettings).sortOrder).toBe(SortOrder.Asc);
-  });
-  it('persists under a key distinct from album-view-settings', () => {
-    spaceAlbumViewSettings.update((s) => ({ ...s, view: AlbumViewMode.List }));
-    expect(localStorage.getItem('space-album-view-settings')).toContain('List');
-    expect(localStorage.getItem('album-view-settings')).toBeNull();
   });
 });
