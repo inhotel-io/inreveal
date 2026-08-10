@@ -301,7 +301,8 @@ describe('CollectionPickerModal — expanding a space into its albums', () => {
     render(CollectionPickerModal, { assetCount: 3, onClose });
 
     await expandSpace('s1');
-    const albumRow = (await screen.findAllByTestId('row-album-sa1'))[0];
+    const albumRows = await screen.findAllByTestId('row-album-sa1');
+    const albumRow = albumRows[0];
     await fireEvent.mouseEnter(within(albumRow).getByRole('group'));
     await fireEvent.click(within(albumRow).getByRole('checkbox'));
     await fireEvent.click(await screen.findByTestId('add-collections-button'));
@@ -316,17 +317,14 @@ describe('CollectionPickerModal — expanding a space into its albums', () => {
     render(CollectionPickerModal, { assetCount: 3, onClose });
 
     await expandSpace('s1');
-    const poolRow = (await screen.findAllByTestId('space-pool-child-s1'))[0].closest('[role="group"]')!;
+    const poolChildren = await screen.findAllByTestId('space-pool-child-s1');
+    const poolRow = poolChildren[0].closest('[role="group"]') as HTMLElement;
     await fireEvent.mouseEnter(poolRow);
-    await fireEvent.click(within(poolRow as HTMLElement).getByRole('checkbox'));
+    await fireEvent.click(within(poolRow).getByRole('checkbox'));
 
     // The pool carries the space's own key, so the tick must be visible on the child too —
     // not merely computed in the row model.
-    expect(
-      within(poolRow as HTMLElement)
-        .getByRole('checkbox')
-        .getAttribute('aria-checked'),
-    ).toBe('true');
+    expect(within(poolRow).getByRole('checkbox').getAttribute('aria-checked')).toBe('true');
     await fireEvent.click(await screen.findByTestId('add-collections-button'));
     expect(onClose).toHaveBeenCalledWith([expect.objectContaining({ kind: 'space', id: 's1' })]);
   });

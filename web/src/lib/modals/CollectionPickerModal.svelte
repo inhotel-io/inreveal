@@ -34,6 +34,7 @@
   import { Button, Icon, Modal, ModalBody, ModalFooter, Text } from '@immich/ui';
   import { mdiImageMultipleOutline, mdiInformationOutline, mdiKeyboardReturn } from '@mdi/js';
   import { onMount } from 'svelte';
+  import { SvelteSet } from 'svelte/reactivity';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -76,8 +77,9 @@
   // costs exactly two requests however many spaces the user is in.
   let expandedSpaceId = $state<string | null>(null);
   let spaceAlbumCache = $state<Record<string, PickerCollection[]>>({});
-  // Plain Set, deliberately not $state: it guards duplicate requests, nothing renders from it.
-  const spaceAlbumsInFlight = new Set<string>();
+  // Guards duplicate requests; nothing renders from it. `SvelteSet` rather than a plain `Set`
+  // because svelte/prefer-svelte-reactivity forbids mutable built-in Sets in components.
+  const spaceAlbumsInFlight = new SvelteSet<string>();
   const expandedSpaceAlbums = $derived(expandedSpaceId === null ? undefined : spaceAlbumCache[expandedSpaceId]);
 
   const converter = new CollectionModalRowConverter();
