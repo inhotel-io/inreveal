@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/infrastructure/repositories/remote_album.repository.dart';
@@ -167,6 +168,26 @@ void main() {
       expect(albums.single.endDate, isNull);
     });
 
+    // S13 — remote_asset.localDateTime is nullable, so MIN/MAX can be null even
+    // for an album that has assets. Such an album must be treated exactly like
+    // an empty one for the date range, but its asset count is unaffected.
+    test('startDate/endDate stay null when every asset has a null localDateTime (S13)', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final album = await ctx.newSharedSpaceAlbum(name: 'NoDates');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: album.id);
+
+      final asset1 = await ctx.newRemoteAsset(ownerId: user.id, localDateTime: const Value(null));
+      final asset2 = await ctx.newRemoteAsset(ownerId: user.id, localDateTime: const Value(null));
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: asset1.id);
+      await ctx.insertSharedSpaceAlbumAsset(albumId: album.id, assetId: asset2.id);
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      expect(albums.single.assetCount, 2, reason: 'asset count must be unaffected by missing localDateTime');
+      expect(albums.single.startDate, isNull);
+      expect(albums.single.endDate, isNull);
+    });
+
     test('excludes deleted and hidden assets from the date range', () async {
       final user = await ctx.newUser();
       final space = await ctx.newSharedSpace(createdById: user.id);
@@ -204,7 +225,8 @@ void main() {
 
       final inS1 = await repo.watchLinkedAlbums(s1.id).first;
       final inS2 = await repo.watchLinkedAlbums(s2.id).first;
-      expect(inS1.single.linkedAt, isNot(inS2.single.linkedAt));
+      expect(inS1.single.linkedAt, DateTime.utc(2026, 1, 1));
+      expect(inS2.single.linkedAt, DateTime.utc(2026, 3, 1));
     });
   });
 
