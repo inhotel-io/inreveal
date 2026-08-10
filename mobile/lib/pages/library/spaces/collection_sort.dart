@@ -57,8 +57,10 @@ bool _matches(String name, String query) {
 int _byName(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
 
 /// Albums with no photo dates sort last in BOTH directions, matching upstream
-/// web's `sortUnknownYearAlbums`. Returns null when neither side is missing, so
-/// the caller can fall through to the normal comparison.
+/// web's `sortUnknownYearAlbums`. Returns null — deferring to the caller's
+/// normal comparison — in the two cases where "one side is missing" doesn't
+/// apply: both sides null (a tie; the caller falls through to the name/id
+/// tie-break) and both sides present (the caller does the real comparison).
 ///
 /// Upstream checks `endDate` for both photo-date sorts, including the one that
 /// orders by `startDate`. This checks each mode's own field instead. The two
