@@ -6,12 +6,13 @@ import SpaceAlbumsControls from '$lib/components/spaces/space-albums-controls.sv
 import SpaceAlbumsControlsWrapper from '$lib/components/spaces/space-albums-controls.test-wrapper.svelte';
 import { AlbumSortBy, AlbumViewMode, SortOrder, albumViewSettings } from '$lib/stores/preferences.store';
 import { SpaceAlbumGroupBy, spaceAlbumViewSettings } from '$lib/stores/space-album-view-settings.store';
+import { SpaceAlbumSortBy } from '$lib/utils/space-album-sort';
 
 // The persisted store's reset() re-uses its initial object by reference, and in-place field
 // writes (groupBy/collapsedGroups) can leak across tests. Set a fresh object each time.
 const freshSpaceSettings = () => ({
   view: AlbumViewMode.Cover,
-  sortBy: AlbumSortBy.MostRecentPhoto,
+  sortBy: SpaceAlbumSortBy.RecentlyLinked,
   sortOrder: SortOrder.Desc,
   groupBy: SpaceAlbumGroupBy.None,
   groupOrder: SortOrder.Desc,
@@ -71,7 +72,7 @@ describe('SpaceAlbumsControls sort dropdown', () => {
     expect(screen.getByTestId('space-albums-sort-btn')).toBeInTheDocument();
   });
 
-  it('renders all six sort option labels when dropdown is opened', async () => {
+  it('renders all seven sort option labels when dropdown is opened', async () => {
     render(SpaceAlbumsControls);
     await userEvent.click(screen.getByTestId('space-albums-sort-btn'));
     const menu = screen.getByTestId('space-albums-sort-menu');
@@ -81,6 +82,39 @@ describe('SpaceAlbumsControls sort dropdown', () => {
     expect(within(menu).getByText('Date created')).toBeInTheDocument();
     expect(within(menu).getByText('Most recent photo')).toBeInTheDocument();
     expect(within(menu).getByText('Oldest photo')).toBeInTheDocument();
+    expect(within(menu).getByText('Recently linked')).toBeInTheDocument();
+  });
+
+  it('writes RecentlyLinked to the space store when "Recently linked" is selected', async () => {
+    spaceAlbumViewSettings.set({ ...freshSpaceSettings(), sortBy: AlbumSortBy.Title, sortOrder: SortOrder.Asc });
+    render(SpaceAlbumsControls);
+    await userEvent.click(screen.getByTestId('space-albums-sort-btn'));
+    await userEvent.click(screen.getByTestId('space-albums-sort-option-RecentlyLinked'));
+    expect(get(spaceAlbumViewSettings).sortBy).toBe(SpaceAlbumSortBy.RecentlyLinked);
+    // S3 — a newly selected option applies its own default direction
+    expect(get(spaceAlbumViewSettings).sortOrder).toBe(SortOrder.Desc);
+  });
+
+  // The trigger previously resolved its label through upstream's
+  // findSortOptionMetadata, which falls back to MostRecentPhoto for any id it
+  // does not know — so RecentlyLinked rendered as "Most recent photo".
+  it('shows the Recently linked label on the trigger when that option is active', () => {
+    spaceAlbumViewSettings.set({ ...freshSpaceSettings(), sortBy: SpaceAlbumSortBy.RecentlyLinked });
+    render(SpaceAlbumsControls);
+    expect(screen.getByTestId('space-albums-sort-btn')).toHaveTextContent('Recently linked');
+  });
+
+  // S2
+  it('toggles sort order when Recently linked is re-selected', async () => {
+    spaceAlbumViewSettings.set({
+      ...freshSpaceSettings(),
+      sortBy: SpaceAlbumSortBy.RecentlyLinked,
+      sortOrder: SortOrder.Desc,
+    });
+    render(SpaceAlbumsControls);
+    await userEvent.click(screen.getByTestId('space-albums-sort-btn'));
+    await userEvent.click(screen.getByTestId('space-albums-sort-option-RecentlyLinked'));
+    expect(get(spaceAlbumViewSettings).sortOrder).toBe(SortOrder.Asc);
   });
 
   it('writes AlbumSortBy.Title to the space store when "Title" is selected', async () => {
