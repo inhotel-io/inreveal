@@ -159,6 +159,9 @@ describe('SpaceAlbumsControls group dropdown', () => {
   });
 
   it('writes the selected groupBy to the space store', async () => {
+    // Year is disabled under the default RecentlyLinked sort (S27); pin a
+    // Year-compatible sortBy so the option this test selects is clickable.
+    spaceAlbumViewSettings.update((s) => ({ ...s, sortBy: AlbumSortBy.MostRecentPhoto }));
     render(SpaceAlbumsControls);
     await userEvent.click(screen.getByTestId('space-albums-group-btn'));
     await userEvent.click(screen.getByTestId('space-albums-group-option-Year'));
@@ -187,14 +190,24 @@ describe('SpaceAlbumsControls group dropdown', () => {
   });
 
   it('shows expand/collapse-all buttons when a group is selected', () => {
-    spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+    // Year is disabled under the default RecentlyLinked sort (S27); pin a
+    // Year-compatible sortBy so getSelectedSpaceAlbumGroupOption doesn't fall back to None.
+    spaceAlbumViewSettings.update((s) => ({
+      ...s,
+      groupBy: SpaceAlbumGroupBy.Year,
+      sortBy: AlbumSortBy.MostRecentPhoto,
+    }));
     render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
     expect(screen.getByTestId('space-albums-expand-all')).toBeInTheDocument();
     expect(screen.getByTestId('space-albums-collapse-all')).toBeInTheDocument();
   });
 
   it('collapse-all collapses the provided group ids in the space store', async () => {
-    spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+    spaceAlbumViewSettings.update((s) => ({
+      ...s,
+      groupBy: SpaceAlbumGroupBy.Year,
+      sortBy: AlbumSortBy.MostRecentPhoto,
+    }));
     render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });
     await userEvent.click(screen.getByTestId('space-albums-collapse-all'));
     expect(get(spaceAlbumViewSettings).collapsedGroups.Year.sort()).toEqual(['2020', '2024']);
@@ -204,6 +217,7 @@ describe('SpaceAlbumsControls group dropdown', () => {
     spaceAlbumViewSettings.update((s) => ({
       ...s,
       groupBy: SpaceAlbumGroupBy.Year,
+      sortBy: AlbumSortBy.MostRecentPhoto,
       collapsedGroups: { Year: ['2024', '2020'] },
     }));
     render(SpaceAlbumsControls, { groupIds: ['2024', '2020'] });

@@ -207,7 +207,13 @@ describe('SpaceAlbumsList', () => {
         makeAlbum({ id: 'y2020', endDate: '2020-06-01T00:00:00.000Z' }),
         makeAlbum({ id: 'y2024', endDate: '2024-06-01T00:00:00.000Z' }),
       ];
-      spaceAlbumViewSettings.update((s) => ({ ...s, groupBy: SpaceAlbumGroupBy.Year }));
+      // Year is disabled for the default RecentlyLinked sort (S27), so this test
+      // pins a Year-compatible sortBy to exercise the grouping it's actually testing.
+      spaceAlbumViewSettings.update((s) => ({
+        ...s,
+        groupBy: SpaceAlbumGroupBy.Year,
+        sortBy: AlbumSortBy.MostRecentPhoto,
+      }));
       render(SpaceAlbumsList, { spaceId: 's-1', albums, canManage: false });
       expect(screen.getByTestId('space-album-group-2020')).toHaveAttribute('aria-expanded', 'true');
       toggleSpaceAlbumGroupCollapsing('2020');
@@ -224,5 +230,40 @@ describe('SpaceAlbumsList', () => {
       expect(screen.getByTestId('space-album-group-u1')).toHaveTextContent('Alice');
       expect(screen.getByTestId('space-album-group-Unassigned')).toHaveTextContent('Unassigned');
     });
+  });
+
+  // S10 at list level — the empty album renders last even though the sort is
+  // descending. `canManage` is a REQUIRED prop on this component; omitting it
+  // breaks the render.
+  it('renders albums with no photos last when sorting by Most recent photo', async () => {
+    spaceAlbumViewSettings.update((s) => ({
+      ...s,
+      sortBy: AlbumSortBy.MostRecentPhoto,
+      sortOrder: SortOrder.Desc,
+      groupBy: SpaceAlbumGroupBy.None,
+    }));
+    render(SpaceAlbumsList, {
+      props: {
+        spaceId: 'space-1',
+        canManage: false,
+        albums: [
+          makeAlbum({ id: 'empty', albumName: 'Empty', startDate: undefined, endDate: undefined }),
+          makeAlbum({
+            id: 'full',
+            albumName: 'HasPhotos',
+            startDate: '2026-01-01T00:00:00.000Z',
+            endDate: '2026-01-10T00:00:00.000Z',
+          }),
+        ],
+        members: [] as SharedSpaceMemberResponseDto[],
+      },
+    });
+
+    // Assert DOM order via the card testid rather than a text regex, so the
+    // assertion cannot be satisfied by incidental matches elsewhere in the tree.
+    await waitFor(() => expect(screen.getAllByTestId('space-album-card')).toHaveLength(2));
+    const order = screen.getAllByTestId('space-album-card').map((card) => card.textContent);
+    expect(order[0]).toContain('HasPhotos');
+    expect(order[1]).toContain('Empty');
   });
 });
