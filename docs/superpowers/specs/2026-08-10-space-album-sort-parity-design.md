@@ -33,7 +33,8 @@ The platforms also open on different defaults — web on _Most recent photo_, mo
 3. **No server change.** `GET /shared-spaces/{id}/albums` already returns every field required
    (`server/src/dtos/shared-space.dto.ts:167` — `AlbumResponseSchema` minus `albumUsers`, plus `ownerId`,
    `showInTimeline`, `addedById`, `linkedAt`).
-4. **No new i18n strings.** All seven label keys already exist in every locale.
+4. **No new i18n strings.** All seven label keys were verified present in each of the ten maintained locales
+   (`en`, `de`, `fr`, `it`, `nl`, `pl`, `es`, `ru`, `zh_Hans`, `zh_Hant`).
 5. **Upstream files stay byte-clean.** Web's new option lives in a fork-only layer, not in upstream's
    `AlbumSortBy` enum. See "Why not extend the upstream enum" below.
 6. **Mobile derives photo dates locally** from the Drift query that already runs, rather than switching the
@@ -43,15 +44,15 @@ The platforms also open on different defaults — web on _Most recent photo_, mo
 
 Seven options, identical order, identical labels, identical default direction on both platforms.
 
-| #   | Web id            | Dart identifier   | i18n key               | Default dir | Web field    | Mobile source                      |
-| --- | ----------------- | ----------------- | ---------------------- | ----------- | ------------ | ---------------------------------- |
-| 1   | `Title`           | `name`            | `sort_title`           | Asc         | `albumName`  | `meta.name`                        |
-| 2   | `ItemCount`       | `photoCount`      | `sort_items`           | Desc        | `assetCount` | `count(asset.id)`                  |
-| 3   | `DateModified`    | `recentlyUpdated` | `sort_modified`        | Desc        | `updatedAt`  | `meta.updatedAt`                   |
-| 4   | `DateCreated`     | `dateCreated`     | `sort_created`         | Desc        | `createdAt`  | `meta.createdAt` _(new)_           |
-| 5   | `MostRecentPhoto` | `mostRecentPhoto` | `sort_recent`          | Desc        | `endDate`    | `max(asset.localDateTime)` _(new)_ |
-| 6   | `OldestPhoto`     | `oldestPhoto`     | `sort_oldest`          | Desc        | `startDate`  | `min(asset.localDateTime)` _(new)_ |
-| 7   | `RecentlyLinked`  | `recentlyLinked`  | `sort_recently_linked` | Desc        | `linkedAt`   | `link.createdAt`                   |
+| #   | Web id            | Dart identifier   | i18n key               | Default dir | Web field    | Mobile source                          |
+| --- | ----------------- | ----------------- | ---------------------- | ----------- | ------------ | -------------------------------------- |
+| 1   | `Title`           | `name`            | `sort_title`           | Asc         | `albumName`  | `meta.name`                            |
+| 2   | `ItemCount`       | `photoCount`      | `sort_items`           | Desc        | `assetCount` | `count(asset.id)`                      |
+| 3   | `DateModified`    | `recentlyUpdated` | `sort_modified`        | Desc        | `updatedAt`  | `meta.updatedAt`                       |
+| 4   | `DateCreated`     | `dateCreated`     | `sort_created`         | Desc        | `createdAt`  | `meta.createdAt` _(new)_               |
+| 5   | `MostRecentPhoto` | `mostRecentPhoto` | `sort_recent`          | Desc        | `endDate`    | `max(localDateTime)` → UTC day _(new)_ |
+| 6   | `OldestPhoto`     | `oldestPhoto`     | `sort_oldest`          | Desc        | `startDate`  | `min(localDateTime)` → UTC day _(new)_ |
+| 7   | `RecentlyLinked`  | `recentlyLinked`  | `sort_recently_linked` | Desc        | `linkedAt`   | `link.createdAt`                       |
 
 **Default: `RecentlyLinked` / descending, both platforms.**
 
@@ -101,13 +102,21 @@ platform.
   inverts and the order reverses.
 - **S3 — Selecting a new option applies its default direction.** _Given_ sort is Title (asc); _when_ the user
   picks Number of items; _then_ direction becomes descending, not ascending.
-- **S4 — Number of items.** Orders by asset count.
-- **S5 — Date modified.** Orders by the album's `updatedAt`.
-- **S6 — Date created.** Orders by the album's `createdAt`, which is distinct from `linkedAt`.
-- **S7 — Most recent photo.** Orders by the newest photo in the album.
-- **S8 — Oldest photo.** Orders by the oldest photo in the album.
-- **S9 — Recently linked.** Orders by when the album was linked into _this_ space, which is distinct from the
-  album's own `createdAt`. An album created long ago but linked today sorts first descending.
+- **S4 — Number of items descending.** _Given_ albums Small (1 asset), Big (9), Mid (5); _when_ sorted by Number
+  of items descending; _then_ the order is Big, Mid, Small.
+- **S5 — Date modified descending.** _Given_ albums with `updatedAt` of Jan 3, Jan 1, Jan 2; _when_ sorted by
+  Date modified descending; _then_ the newest `updatedAt` is first.
+- **S6 — Date created is distinct from linked date.** _Given_ album Old (`createdAt` Jan 1, `linkedAt` Mar 1)
+  and album New (`createdAt` Feb 1, `linkedAt` Feb 2); _when_ sorted by Date created descending; _then_ New is
+  first — the opposite of the Recently linked order for the same two albums (see S9).
+- **S7 — Most recent photo descending.** _Given_ album A whose newest photo is Jan 10 and album B whose newest
+  is Jan 20 (B's oldest photo being Jan 1, earlier than A's); _when_ sorted by Most recent photo descending;
+  _then_ B is first. The fixture deliberately makes the oldest-photo order the reverse, so a comparator wired to
+  the wrong field fails.
+- **S8 — Oldest photo ascending.** Same fixture as S7; _when_ sorted by Oldest photo ascending; _then_ B is
+  first, because B's oldest photo (Jan 1) precedes A's.
+- **S9 — Recently linked.** _Given_ the S6 fixture; _when_ sorted by Recently linked descending; _then_ Old is
+  first. An album created long ago but linked today sorts first.
 
 ### Albums with no photo dates
 
@@ -123,14 +132,49 @@ fork layer delegates to it. Mobile must reproduce it.
 - **S13 — Null `localDateTime` counts as no date.** `remote_asset.localDateTime` is nullable
   (`remote_asset.entity.dart:39`), so `MIN`/`MAX` can be null even for an album that has assets. Such an album
   is treated exactly like an empty one for S10–S12, and its asset count is unaffected.
+- **S14 — Every album lacking photo dates.** _Given_ three albums, none with photo dates; _when_ sorted by Most
+  recent photo in either direction; _then_ no album is dropped or duplicated and the order is the platform's
+  tiebreak order (S16). This is the branch where the "unknown last" rule fires for every element.
+
+### Photo-date precision
+
+The server derives album photo dates as a **UTC calendar day**, not a timestamp
+(`server/src/repositories/album.repository.ts:236`):
+
+```sql
+MIN(("asset"."localDateTime" AT TIME ZONE 'UTC'::text)::date)
+```
+
+Mobile must truncate its `MIN`/`MAX` of `remote_asset.localDateTime` to the same UTC day, so both platforms sort
+on an identical key. Without this, two albums whose newest photos fall on the same UTC day compare **equal on
+web** but are **time-ordered on mobile** — a visible ordering difference on the very sorts being added for
+parity.
+
+- **S15 — Same-day albums tie.** _Given_ two albums whose newest photos are 09:00 and 17:00 on the same UTC day;
+  _when_ sorted by Most recent photo; _then_ they compare equal and the tiebreak (S16) decides. Mobile must not
+  order them by time of day.
 
 ### Tiebreaks
 
-- **S14 — Mobile tiebreak is deterministic.** Equal sort keys tie-break by name, then id. Preserved from the
+- **S16 — Mobile tiebreak is deterministic.** Equal sort keys tie-break by name, then id. Preserved from the
   current implementation.
-- Web's tiebreak is input (server) order, because lodash `orderBy` and `Array.sort` are stable. This difference
-  is accepted: the option sets and primary ordering match, which is what #966 asks for. Matching mobile would
-  require post-sorting the six delegated options and changing web behaviour for no user-visible benefit.
+- **S17 — Ties are common under the new default.** _Given_ several albums bulk-linked in one action, so their
+  `linkedAt` values are identical; _when_ sorted by Recently linked (the new default); _then_ the order is
+  stable and deterministic, not arbitrary.
+- Web's tiebreak is the server's ordering, which `getLinkedAlbums` pins explicitly as
+  `album.createdAt DESC, album.id ASC` (`server/src/repositories/shared-space.repository.ts:1018`); lodash
+  `orderBy` and `Array.sort` are stable, so that ordering survives. Mobile ties break by name then id. This
+  difference is accepted: both are deterministic, and the option sets and primary ordering match, which is what
+  #966 asks for. Matching them would mean post-sorting the six delegated options and changing web behaviour for
+  no user-visible benefit.
+
+### Boundary inputs
+
+- **S18 — Empty list.** Sorting zero albums returns zero albums, for every option and direction.
+- **S19 — Single album.** Sorting one album returns it unchanged, for every option and direction.
+- **S20 — `linkedAt` is per space.** _Given_ one album linked into space A on Jan 1 and space B on Mar 1; _when_
+  each space's list is sorted by Recently linked; _then_ each uses its own link date. Mobile's query filters on
+  `link.spaceId`; web's endpoint is already per-space.
 
 ### Accepted divergences
 
@@ -146,28 +190,38 @@ oversights:
   matches name only (`collection_sort.dart:42`). #966 is about sort options; this is filed separately rather
   than folded in.
 - **Photo-date corpus.** Web's `startDate`/`endDate` are server-computed over all album assets; mobile's are
-  derived from locally synced assets. See "Mobile design".
+  derived from locally synced assets. See "Mobile design". (The _precision_ half of this divergence is **not**
+  accepted — mobile truncates to match; see S15.)
 
 ### Filtering
 
-- **S15 — Search filters before sorting** and is case-insensitive, trimmed, literal-substring, with no
+- **S21 — Search filters before sorting** and is case-insensitive, trimmed, literal-substring, with no
   diacritic folding. Unchanged behaviour; asserted to prevent regression.
 
 ### Selection, persistence, defaults
 
-- **S16 — Fresh install opens on Recently linked, descending.**
-- **S17 — A stored preference wins over the new default.**
-- **S18 — A stored preference from before this change still loads.** A device with `recentlyUpdated` or
+- **S22 — Fresh install opens on Recently linked, descending.**
+- **S23 — A stored preference wins over the new default.**
+- **S24 — A stored preference from before this change still loads.** A device with `recentlyUpdated` or
   `photoCount` persisted must load without error and show the relabelled option.
-- **S19 — An unrecognised stored value falls back to the default instead of throwing** (slice M0).
+- **S25 — An unrecognised stored value falls back to the default instead of throwing** (slice M0).
+- **S26 — An unrecognised `sortBy` resolves consistently on web.** _Given_ `localStorage` holds a `sortBy` that
+  matches no option; _when_ the list renders; _then_ the pill label **and** the applied ordering are both
+  `RecentlyLinked`.
+
+  This needs stating because the two halves disagree by default: upstream's `sortAlbums` falls back to
+  `DateModified` (`album-utils.ts:261`) while upstream's `findSortOptionMetadata` falls back to
+  `MostRecentPhoto` (`album-utils.ts:94`) — so upstream shows one option's name while applying another's order.
+  `sortSpaceAlbums` must therefore resolve an unknown key to `RecentlyLinked` **itself**, before delegating,
+  rather than letting the delegate's own fallback apply.
 
 ### Grouping (web only)
 
-- **S20 — Year grouping is disabled for Recently linked.** Year buckets albums by photo date
+- **S27 — Year grouping is disabled for Recently linked.** Year buckets albums by photo date
   (`space-album-grouping.ts:154`), so pairing it with a link-date sort is as incoherent as with Date created or
   Date modified, which are already disabled (`space-album-grouping.ts:40`).
-- **S21 — Grouped lists sort within each group** using the same comparator, including Recently linked.
-- **S22 — No user gets stuck in a disabled combination.** `svelte-persisted-store` writes the whole settings
+- **S28 — Grouped lists sort within each group** using the same comparator, including Recently linked.
+- **S29 — No user gets stuck in a disabled combination.** `svelte-persisted-store` writes the whole settings
   object whenever any field changes, so anyone who had set `groupBy: Year` already has their `sortBy` persisted
   alongside it and keeps it. Only users who never touched any space-album view setting receive the new default,
   and those have `groupBy: None`.
@@ -191,10 +245,14 @@ second.
 - `spaceAlbumSortOptionsMetadata` — upstream's `sortOptionsMetadata` entries followed by a `RecentlyLinked`
   entry (`defaultOrder: Desc`), reusing upstream's `AlbumSortOptionMetadata` shape.
 - `findSpaceAlbumSortOptionMetadata(sortBy)` — like upstream's finder but defaulting to `RecentlyLinked`.
-- `sortSpaceAlbums(albums, { sortBy, orderBy })` — handles `RecentlyLinked` with lodash `orderBy` on
-  `new Date(linkedAt)` (the same shape upstream uses for `DateModified`), and delegates every other value to
+- `sortSpaceAlbums(albums, { sortBy, orderBy })` — resolves `sortBy` through
+  `findSpaceAlbumSortOptionMetadata` **first**, then handles `RecentlyLinked` with lodash `orderBy` on
+  `new Date(linkedAt)` (the same shape upstream uses for `DateModified`) and delegates every other value to
   upstream's `sortAlbums`. Delegation is possible without any upstream change because `sortAlbums` accepts
   `sortBy: string` and `sortOptions` is a plain string-keyed record (`album-utils.ts:260`).
+
+  Resolving before delegating is what makes S26 hold: passing an unknown key straight through would land on
+  upstream's `DateModified` fallback while the pill showed `RecentlyLinked`.
 
   It is typed to take and return `SharedSpaceLinkedAlbumDto[]`, absorbing the `AlbumResponseDto` cast that the
   delegation requires. That removes the existing double `as unknown as` cast at
@@ -237,46 +295,92 @@ reactive.
 | `mobile/lib/domain/models/value_codec.dart`                          | `EnumCodec.decode` falls back instead of throwing (slice M0)                                      |
 
 The asset join carries the existing visibility predicate (`deletedAt IS NULL AND visibility IN (timeline,
-archive)`), so the photo-date range covers exactly the assets the count already reflects and the detail view
-already shows.
+archive)`). This matches the server exactly — `withDefaultVisibility` is
+`visibility IN (Archive, Timeline)` (`server/src/utils/database.ts:159`) and `getMetadataForIds` adds
+`asset.deletedAt IS NULL` — so the photo-date range covers the same assets the count already reflects, on both
+platforms.
 
-**Known and accepted divergence:** web's `startDate`/`endDate` are computed server-side across all album
-assets; mobile's `MIN`/`MAX` cover locally synced assets only. On a partially synced device the two can
-disagree. Fixing this would mean moving the surface to REST and losing offline support — not worth it. The
-option sets and semantics match; only the underlying corpus can lag.
+**Truncate to a UTC day.** The server's aggregate is `MIN/MAX(("asset"."localDateTime" AT TIME ZONE 'UTC')::date)`
+(`album.repository.ts:236`), i.e. day precision. Mobile's `MIN`/`MAX` must be truncated the same way so both
+platforms sort on an identical key (S15). Both platforms read the same underlying column, `localDateTime`, so
+after truncation the keys agree.
+
+**Known and accepted divergence:** web's `startDate`/`endDate` are computed server-side across all album assets;
+mobile's cover locally synced assets only. On a partially synced device the two can disagree. Fixing this would
+mean moving the surface to REST and losing offline support — not worth it. The option sets, the sort key
+semantics and the precision all match; only the underlying corpus can lag.
 
 ## Implementation slices
 
 Each slice is test-first: write the failing test, watch it fail for the right reason, implement, confirm green.
 
-**W1 — Web sort module.** New `space-album-sort.spec.ts` → new `space-album-sort.ts`. Covers S1–S9 for
-`RecentlyLinked`, delegation for the other six, metadata order and default directions, and the unknown-key
-fallback.
+**W1 — Web sort module.** New `space-album-sort.spec.ts` → new `space-album-sort.ts`.
 
-**W2 — Web store default.** `space-album-view-settings.store.spec.ts` → store change. Covers S16, S17.
+**W2 — Web store default.** `space-album-view-settings.store.spec.ts` → store change. Note the existing test is
+named `defaults sort to MostRecentPhoto desc and group to None` (line 14) and must be renamed, not just
+re-asserted.
 
-**W3 — Web controls.** `space-albums-controls.spec.ts` → component change. Covers the menu rendering seven
-labels, the pill showing the correct label for `RecentlyLinked` (the `findSortOptionMetadata` bug), S2, S3.
+**W3 — Web controls.** `space-albums-controls.spec.ts` → component change. Includes the pill showing the correct
+label for `RecentlyLinked` (the `findSortOptionMetadata` bug). The existing test
+`renders all six sort option labels when dropdown is opened` (line 73) becomes seven.
 
 **W4 — Web list and grouping.** `space-albums-list.spec.ts` and `space-album-grouping.spec.ts` → call-site
-changes. Covers S10–S12 at the list level, S20, S21.
+changes.
 
 **M0 — Harden `EnumCodec`.** Test that decoding an unrecognised name yields the default rather than throwing,
-then add the fallback. Covers S19; protects S18 and the downgrade path.
+then add the fallback. Protects the downgrade path.
 
 **M1 — Mobile model and query.** `space_album_repository_test.dart` (medium, real DB) → model and repository
-changes. Covers `createdAt` projection, `MIN`/`MAX` over the visibility-filtered join, an album with no assets
-yielding nulls, and S13.
+changes: `createdAt` projection, truncated `MIN`/`MAX` over the visibility-filtered join, and an album with no
+assets yielding nulls.
 
-**M2 — Mobile sort modes.** `collection_sort_test.dart` → `collection_sort.dart`. Covers S1–S15 for all seven
-modes.
+**M2 — Mobile sort modes.** `collection_sort_test.dart` → `collection_sort.dart`. The existing
+`sort-mode enum shape` group (line 415) asserts per-mode `storeIndex`/`defaultOrder` and must grow to seven.
 
 **M3 — Mobile page assertions.** `space_albums_page_test.dart`. The menu is built from
 `SpaceAlbumSortMode.values` (`space_albums.page.dart:206`), so the three new options appear with no wiring
-change; this slice updates the label assertions (the suite asserts the literal `'Sort: Photo count'`, which
-becomes `'Sort: Number of items'`) and covers persistence round-tripping (S17, S18).
+change; this slice updates the label assertions — the suite asserts the literal `'Sort: Photo count'`, which
+becomes `'Sort: Number of items'`.
+
+**M4 — Mobile persistence.** `app_config_test.dart` already asserts the default
+(`c.spaceAlbums.sortMode == recentlyLinked`, line 10) and round-trips `SettingsKey.spaceAlbumsSortMode`
+(lines 14–18). Extend it to the new modes and to the pre-change stored values.
 
 Existing `SpaceAlbum` fixtures gain `createdAt`, so stubs under `mobile/test/` are updated with M1.
+
+### Scenario coverage map
+
+Every scenario has a named home; no row may be left blank at review time.
+
+| Scenario                        | Web slice / file                             | Mobile slice / file                   |
+| ------------------------------- | -------------------------------------------- | ------------------------------------- |
+| S1 Title asc                    | W1 `space-album-sort.spec.ts`                | M2 `collection_sort_test.dart`        |
+| S2 Direction flips              | W3 `space-albums-controls.spec.ts`           | M3 `space_albums_page_test.dart`      |
+| S3 New option → default dir     | W3 `space-albums-controls.spec.ts`           | M3 `space_albums_page_test.dart`      |
+| S4 Number of items              | W1                                           | M2                                    |
+| S5 Date modified                | W1                                           | M2                                    |
+| S6 Date created ≠ linked        | W1                                           | M2                                    |
+| S7 Most recent photo            | W1                                           | M2                                    |
+| S8 Oldest photo                 | W1                                           | M2                                    |
+| S9 Recently linked              | W1                                           | M2                                    |
+| S10–S12 Empty albums last       | W1 + W4 `space-albums-list.spec.ts`          | M2                                    |
+| S13 Null `localDateTime`        | n/a (server-computed)                        | M1 `space_album_repository_test.dart` |
+| S14 All albums date-less        | W1                                           | M2                                    |
+| S15 Same-day albums tie         | n/a (server truncates)                       | M1 + M2                               |
+| S16 Mobile tiebreak             | n/a                                          | M2                                    |
+| S17 Identical `linkedAt`        | W1                                           | M2                                    |
+| S18 Empty list                  | W1                                           | M2                                    |
+| S19 Single album                | W1                                           | M2                                    |
+| S20 `linkedAt` per space        | n/a (endpoint is per-space)                  | M1                                    |
+| S21 Search before sort          | W4                                           | M2                                    |
+| S22 Fresh default               | W2 `space-album-view-settings.store.spec.ts` | M4 `app_config_test.dart`             |
+| S23 Stored beats default        | W2                                           | M4                                    |
+| S24 Pre-change stored value     | W2                                           | M4                                    |
+| S25 Unrecognised stored value   | n/a                                          | M0 `value_codec` test                 |
+| S26 Unknown `sortBy` consistent | W1 + W3                                      | n/a (enum-typed)                      |
+| S27 Year disabled               | W4 `space-album-grouping.spec.ts`            | n/a (web-only)                        |
+| S28 Sort within group           | W4                                           | n/a                                   |
+| S29 No stuck combination        | W4                                           | n/a                                   |
 
 ## Out of scope
 
@@ -288,6 +392,10 @@ Existing `SpaceAlbum` fixtures gain `createdAt`, so stubs under `mobile/test/` a
 - Sorting the Spaces grid itself (`SpaceSortMode`), a different surface.
 - Removing the two orphaned i18n keys.
 - Title collation parity (see "Accepted divergences").
+- **E2E coverage.** `e2e/src/ui/specs` currently holds only `asset-viewer`, `memory`, `search`, `sidebar` and
+  `timeline` — there is no Playwright coverage of the Spaces surface at all. Establishing it for a sort-option
+  change is disproportionate; the web behaviour is covered by component tests via `@testing-library/svelte`.
+  Recorded so the absence is a decision, not an oversight.
 
 ## Verification gates
 
