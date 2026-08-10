@@ -229,6 +229,32 @@ describe('+page.svelte (face cleanup)', () => {
     });
   });
 
+  // An instance that has never scanned was told to "Re-scan", by a button in the opposite corner from the
+  // sentence saying so. `scan === null` is the first-run signal, so the action must name itself for what it
+  // is — and it reuses the chooser's own label, so the button an admin was just told to click is called the
+  // same thing on both pages.
+  it('calls the first-run action "run first scan", never "re-scan"', async () => {
+    vi.mocked(getLatestScan).mockResolvedValue(null as unknown as object);
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('first-scan-cta')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText('admin.face_cleanup_mode_run_first_scan').length).toBeGreaterThan(0);
+    expect(screen.queryByText('admin.face_cleanup_rescan')).not.toBeInTheDocument();
+  });
+
+  // Once a scan exists the label flips back — otherwise this would just be renaming the button outright.
+  it('still calls it "re-scan" once a scan exists', async () => {
+    vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([]) as unknown as object);
+    render(Page, { props: { data: makePageData() } });
+
+    await waitFor(() => {
+      expect(screen.getByText('admin.face_cleanup_rescan')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('first-scan-cta')).not.toBeInTheDocument();
+  });
+
   it('shows "nothing to clean up" when completed scan has 0 flagged persons', async () => {
     vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([]) as unknown as object);
     render(Page, { props: { data: makePageData() } });
@@ -600,8 +626,11 @@ describe('+page.svelte (face cleanup)', () => {
 
   // ---- re-scan ----
 
+  // Seeded with a COMPLETED scan, not null: "Re-scan" only exists once there is a scan to repeat. This test
+  // used to mock `getLatestScan` to null while asserting the re-scan label — the very state that made the
+  // button's wording wrong for a first-time admin.
   it('clicking Re-scan calls triggerScan and starts polling', async () => {
-    vi.mocked(getLatestScan).mockResolvedValue(null as unknown as object);
+    vi.mocked(getLatestScan).mockResolvedValue(makeCompletedScan([]) as unknown as object);
     vi.mocked(triggerScan).mockResolvedValue({ scanId: 'new-scan-id' });
 
     render(Page, { props: { data: makePageData() } });
@@ -612,6 +641,19 @@ describe('+page.svelte (face cleanup)', () => {
 
     const rescanBtn = screen.getByText('admin.face_cleanup_rescan');
     await fireEvent.click(rescanBtn);
+
+    await waitFor(() => {
+      expect(triggerScan).toHaveBeenCalled();
+    });
+  });
+
+  it('triggers the scan from the first-run empty state itself, not only the toolbar', async () => {
+    vi.mocked(getLatestScan).mockResolvedValue(null as unknown as object);
+    vi.mocked(triggerScan).mockResolvedValue({ scanId: 'new-scan-id' });
+
+    render(Page, { props: { data: makePageData() } });
+
+    await fireEvent.click(await screen.findByTestId('first-scan-cta'));
 
     await waitFor(() => {
       expect(triggerScan).toHaveBeenCalled();

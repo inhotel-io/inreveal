@@ -88,6 +88,18 @@ describe('face cleanup i18n coverage', () => {
     expect(messages.face_cleanup_review_bulk_lock).not.toContain('/');
   });
 
+  // I7 — the first-run empty state used to read "Click Re-scan to detect…", naming a button that (a) is
+  // wrong before any scan exists and (b) no longer carries that label on this branch. Every locale had
+  // translated the button name into its own body copy, so the stale wording was nine-deep, not English-only.
+  // Naming the control in the copy is what made it rot, so the guard is "no locale names it again" rather
+  // than a check against one particular phrase.
+  it.each(['en', ...TRANSLATED])('%s describes the first scan without naming the button', (code) => {
+    const sub = admin(code).face_cleanup_empty_no_scan_sub;
+    const rescanLabel = admin(code).face_cleanup_rescan;
+
+    expect(sub, `${code}.json still names the re-scan button in the first-run copy`).not.toContain(rescanLabel);
+  });
+
   // The ICU argument names must survive translation verbatim, or svelte-i18n prints literal braces.
   it.each(['en', ...TRANSLATED])('%s keeps the hint row’s ICU argument names untranslated', (code) => {
     const hint = admin(code).face_cleanup_review_bulk_hint_effect;

@@ -5,7 +5,7 @@
   import ConfidentLane from './ConfidentLane.svelte';
   import { declineFaceRepair, getFaceRepairPersonFaces, getLatestScan, resolveFaces, triggerScan } from '@immich/sdk';
   import { Button, ConfirmModal, Icon, modalManager, toastManager } from '@immich/ui';
-  import { mdiClose, mdiRefresh, mdiTune } from '@mdi/js';
+  import { mdiClose, mdiRadar, mdiRefresh, mdiTune } from '@mdi/js';
   import AdvancedScanModal, { type AdvancedScanParams } from './AdvancedScanModal.svelte';
   import ReviewFirstLane from './ReviewFirstLane.svelte';
   import { onDestroy, onMount } from 'svelte';
@@ -393,9 +393,12 @@
             {$t('admin.face_cleanup_view_resolutions')}
           </Button>
           <div class="mx-0.5 h-5 w-px bg-gray-200 dark:bg-gray-700" aria-hidden="true"></div>
+          <!-- Before the first scan the tuning knobs are recessed to `ghost`: the defaults are what run one
+               wants, and an admin who has never seen a scan's output has no basis for changing maxDistance or
+               minFaces. Recessed rather than hidden, so it stays reachable for anyone who does know. -->
           <Button
             color="secondary"
-            variant="outline"
+            variant={scan ? 'outline' : 'ghost'}
             size="small"
             disabled={scanning || (!!scan && isActive(scan.status))}
             onclick={handleAdvanced}
@@ -404,6 +407,10 @@
             <Icon icon={mdiTune} size="16" />
             {$t('admin.face_cleanup_advanced')}
           </Button>
+          <!-- `scan === null` is "this instance has never scanned" (loading and loadError are handled as
+               separate branches below), so the action must not call itself "Re-scan" or wear a refresh icon —
+               there is nothing to repeat. It reuses the chooser's own `face_cleanup_mode_run_first_scan`, so
+               the button an admin was just told to click is named the same on both pages. -->
           <Button
             color="primary"
             size="small"
@@ -411,8 +418,8 @@
             onclick={handleRescan}
             class="gap-2"
           >
-            <Icon icon={mdiRefresh} size="16" />
-            {$t('admin.face_cleanup_rescan')}
+            <Icon icon={scan ? mdiRefresh : mdiRadar} size="16" />
+            {scan ? $t('admin.face_cleanup_rescan') : $t('admin.face_cleanup_mode_run_first_scan')}
           </Button>
         </div>
       </div>
@@ -441,7 +448,24 @@
     {:else if !scan}
       <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
         <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_empty_no_scan')}</div>
-        <p class="mt-2 text-sm text-gray-400">{$t('admin.face_cleanup_empty_no_scan_sub')}</p>
+        <p class="mx-auto mt-2 max-w-xl text-sm/relaxed text-gray-400">
+          {$t('admin.face_cleanup_empty_no_scan_sub')}
+        </p>
+        <!-- The copy used to say "Click Re-scan", pointing at a small button in the opposite corner. The
+             instruction and the action are now the same object, so first run has one obvious thing to do. -->
+        <div class="mt-6 flex justify-center">
+          <Button
+            color="primary"
+            size="medium"
+            disabled={scanning}
+            onclick={handleRescan}
+            class="gap-2"
+            data-testid="first-scan-cta"
+          >
+            <Icon icon={mdiRadar} size="18" />
+            {$t('admin.face_cleanup_mode_run_first_scan')}
+          </Button>
+        </div>
       </div>
 
       <!-- Scan running / pending: show progress -->
