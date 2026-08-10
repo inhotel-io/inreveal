@@ -1,5 +1,6 @@
 <script lang="ts">
   import { initInput } from '$lib/actions/focus';
+  import { SCROLL_PROPERTIES } from '$lib/components/shared-components/album-selection/album-selection-utils';
   import AlbumListItem from '$lib/components/asset-viewer/AlbumListItem.svelte';
   import NewAlbumListItem from '$lib/components/shared-components/album-selection/NewAlbumListItem.svelte';
   import {
@@ -12,6 +13,7 @@
     isWritableSpace,
     pickRecent,
     spaceToCollection,
+    type CollectionModalRow,
     type PickerCollection,
   } from '$lib/components/shared-components/collection-selection/collection-selection-utils';
   import NewSpaceListItem from '$lib/components/shared-components/collection-selection/new-space-list-item.svelte';
@@ -30,8 +32,14 @@
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
   import { Button, Icon, Modal, ModalBody, ModalFooter, Text } from '@immich/ui';
-  import { mdiImageMultipleOutline, mdiInformationOutline, mdiKeyboardReturn } from '@mdi/js';
+  import {
+    mdiAccountMultipleOutline,
+    mdiImageMultipleOutline,
+    mdiInformationOutline,
+    mdiKeyboardReturn,
+  } from '@mdi/js';
   import { onMount } from 'svelte';
+  import type { Action } from 'svelte/action';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -69,6 +77,13 @@
 
   const recentCollections = $derived(pickRecent(allCollections, 3));
 
+  // #965: the linked albums of the one expanded space. Fetched lazily on expand and kept for
+  // the life of the modal, so re-opening a space costs nothing and opening the picker still
+  // costs exactly two requests however many spaces the user is in.
+  let expandedSpaceId = $state<string | null>(null);
+  let spaceAlbumCache = $state<Record<string, PickerCollection[]>>({});
+  const expandedSpaceAlbums = $derived(expandedSpaceId === null ? undefined : spaceAlbumCache[expandedSpaceId]);
+
   const converter = new CollectionModalRowConverter();
   const rows = $derived(
     converter.toModalRows(search, recentCollections, allCollections, selectedRowIndex, multiSelectedKeys, {
@@ -78,6 +93,8 @@
       // would name a collection type that was never on offer.
       emptyText: restricted ? $t('no_albums_in_space_yet') : undefined,
       noMatchText: restricted ? $t('no_albums_found') : undefined,
+      expandedSpaceId,
+      expandedSpaceAlbums,
     }),
   );
   const selectableRowCount = $derived(rows.filter((row) => isSelectableRowType(row.type)).length);
@@ -111,9 +128,45 @@
 
   // `SharedSpaceLinkedAlbumDto` is `AlbumResponseDto` minus `albumUsers` (plus link metadata),
   // so shim the missing field back in for AlbumListItem. The membership list is unused here.
-  const loadSpaceAlbums = async (spaceId: string) => {
+  const fetchSpaceAlbums = async (spaceId: string): Promise<AlbumResponseDto[]> => {
     const linked = await getSharedSpaceAlbums({ id: spaceId });
-    albums = linked.map((album) => ({ ...album, albumUsers: [] }) as AlbumResponseDto);
+    return linked.map((album) => ({ ...album, albumUsers: [] }) as AlbumResponseDto);
+  };
+
+  const loadSpaceAlbums = async (spaceId: string) => {
+    albums = await fetchSpaceAlbums(spaceId);
+  };
+
+  /**
+   * Open a space's linked albums, or close them again.
+   *
+   * Accordion, like mobile: at most one space is open, so the row list stays short and only
+   * one space's albums are ever in memory. A failed fetch collapses the row rather than
+   * leaving it stuck open on a spinner that will never resolve.
+   */
+  const toggleSpaceExpansion = async (collection: PickerCollection) => {
+    if (collection.kind !== 'space') {
+      return;
+    }
+    if (expandedSpaceId === collection.id) {
+      expandedSpaceId = null;
+      return;
+    }
+    expandedSpaceId = collection.id;
+    // Arrow-key position is an index into a row list that just changed shape underneath it.
+    selectedRowIndex = -1;
+    if (Object.hasOwn(spaceAlbumCache, collection.id)) {
+      return; // already fetched once this modal was opened
+    }
+    try {
+      const linked = await fetchSpaceAlbums(collection.id);
+      spaceAlbumCache[collection.id] = linked.map((album) => albumToCollection(album));
+    } catch (error) {
+      handleError(error, $t('errors.unable_to_load_albums'));
+      if (expandedSpaceId === collection.id) {
+        expandedSpaceId = null;
+      }
+    }
   };
 
   const loadSpaces = async () => {
@@ -142,6 +195,26 @@
       return;
     }
     onClose([collection]);
+  };
+
+  /**
+   * What clicking a space row's body does. An expandable one opens instead of picking — its
+   * pool stays reachable as the "Add to space" child, and via the row's own checkbox.
+   */
+  const handleSpaceClick = (row: CollectionModalRow, collection: PickerCollection) =>
+    row.expandable ? void toggleSpaceExpansion(collection) : handleCollectionClick(collection);
+
+  // The album and space rows scroll themselves into view when the caret reaches them; the pool
+  // child is a plain button in this file, so it needs the same treatment or arrowing down a long
+  // list walks onto a row nobody can see.
+  const scrollIntoViewIfSelected: Action<HTMLElement, boolean | undefined> = (node, selected) => {
+    const apply = (isSelected: boolean | undefined) => {
+      if (isSelected) {
+        node.scrollIntoView(SCROLL_PROPERTIES);
+      }
+    };
+    apply(selected);
+    return { update: apply };
   };
 
   const submitMulti = () => {
@@ -190,7 +263,12 @@
         }
         break;
       }
-      case CollectionModalRowType.COLLECTION_ITEM: {
+      case CollectionModalRowType.COLLECTION_ITEM:
+      case CollectionModalRowType.SPACE_POOL_CHILD: {
+        if (item.expandable) {
+          await toggleSpaceExpansion(item.collection!);
+          return; // keep the caret where it is; toggling already reset it
+        }
         if (multiSelectActive) {
           submitMulti();
         } else if (item.collection) {
@@ -286,10 +364,25 @@
             {:else if row.type === CollectionModalRowType.SECTION}
               <p class="px-5 py-3 text-xs">{row.text}</p>
             {:else if row.type === CollectionModalRowType.MESSAGE}
-              <p class="px-5 py-1 text-sm">{row.text}</p>
+              <p class={['py-1 text-sm', row.indented ? 'ps-14 pe-5' : 'px-5']}>{row.text}</p>
+            {:else if row.type === CollectionModalRowType.SPACE_POOL_CHILD && row.collection}
+              {@const collection = row.collection}
+              <button
+                type="button"
+                class={[
+                  'flex w-full items-center gap-3 rounded-xl py-3 ps-14 pe-5 text-start transition-colors hover:cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700',
+                  { 'bg-gray-200 dark:bg-gray-700': row.selected },
+                ]}
+                data-testid={`space-pool-child-${collection.id}`}
+                onclick={() => handleCollectionClick(collection)}
+                use:scrollIntoViewIfSelected={row.selected}
+              >
+                <Icon icon={mdiAccountMultipleOutline} size="1.25rem" />
+                <span>{$t('add_to_space')}</span>
+              </button>
             {:else if row.type === CollectionModalRowType.COLLECTION_ITEM && row.collection}
               {@const collection = row.collection}
-              <div data-testid={`row-${collection.kind}-${collection.id}`}>
+              <div data-testid={`row-${collection.kind}-${collection.id}`} class={{ 'ps-9': row.indented }}>
                 {#if collection.kind === 'album'}
                   <AlbumListItem
                     album={collection.album}
@@ -305,8 +398,10 @@
                     space={collection.space}
                     selected={row.selected || false}
                     multiSelected={row.multiSelected}
+                    expandable={row.expandable}
+                    expanded={row.expanded}
                     searchQuery={search}
-                    onSpaceClick={() => handleCollectionClick(collection)}
+                    onSpaceClick={() => handleSpaceClick(row, collection)}
                     onMultiSelect={() => toggleMultiSelect(collection)}
                   />
                 {/if}

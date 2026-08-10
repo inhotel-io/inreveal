@@ -89,6 +89,7 @@ void main() {
     required List<SharedSpaceResponseDto> spaces,
     Map<String, List<SpaceAlbum>> albums = const {},
     List<RemoteAsset>? selection,
+    List<RemoteAsset>? assets,
     String? excludeSpaceId,
     String? userId = 'user-1',
     String searchQuery = '',
@@ -115,6 +116,7 @@ void main() {
       onTargetSelected: targets.add,
       excludeSpaceId: excludeSpaceId,
       searchQuery: searchQuery,
+      assets: assets,
     );
     if (raw) {
       await tester.pumpConsumerWidgetRaw(widget, overrides: overrides);
@@ -307,6 +309,35 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('space-row-s1')), findsNothing);
+  });
+
+  // #965: the asset viewer has no multiselect, so it hands the section the one asset the
+  // viewer is on. Falling back to the (empty) multiselect there would read as "nothing
+  // non-owned" and offer space targets for a photo that can never reach one.
+  testWidgets('an explicit asset list is used instead of the multiselect', (tester) async {
+    await pump(
+      tester,
+      spaces: [space('s1')],
+      selection: [asset('a')], // owned — on its own this would show the rows
+      assets: [asset('b', ownerId: 'other')],
+    );
+
+    expect(
+      find.text("Your selection includes photos owned by other members, so it can't be added to a space."),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('space-row-s1')), findsNothing);
+  });
+
+  testWidgets('an explicit owned asset list still offers the rows', (tester) async {
+    await pump(
+      tester,
+      spaces: [space('s1')],
+      selection: [asset('a', ownerId: 'other')], // ignored
+      assets: [asset('b')],
+    );
+
+    expect(find.byKey(const Key('space-row-s1')), findsOneWidget);
   });
 
   testWidgets('an unknown current user hides the rows (fail closed)', (tester) async {
