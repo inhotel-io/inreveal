@@ -5,6 +5,7 @@ import 'package:immich_mobile/constants/enums.dart';
 import 'package:immich_mobile/domain/models/album/album.model.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/config/app_config.dart';
+import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/domain/models/user.model.dart';
 import 'package:immich_mobile/domain/services/user.service.dart';
 import 'package:immich_mobile/models/albums/album_search.model.dart';
@@ -15,6 +16,7 @@ import 'package:immich_mobile/providers/infrastructure/action.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/remote_album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
+import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:immich_mobile/providers/shared_space.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
@@ -66,6 +68,7 @@ class _RecordingActionNotifier extends ActionNotifier {
   final bool succeeds;
   final List<ActionSource> albumSources = [];
   final List<ActionSource> spaceSources = [];
+  final List<(ActionSource, String, String)> spaceAlbumDispatches = [];
 
   @override
   void build() {}
@@ -81,6 +84,12 @@ class _RecordingActionNotifier extends ActionNotifier {
     spaceSources.add(source);
     return ActionResult(count: succeeds ? 1 : 0, success: succeeds);
   }
+
+  @override
+  Future<ActionResult> addToSpaceAlbum(ActionSource source, String spaceId, SpaceAlbum album) async {
+    spaceAlbumDispatches.add((source, spaceId, album.id));
+    return ActionResult(count: succeeds ? 1 : 0, success: succeeds);
+  }
 }
 
 void main() {
@@ -94,14 +103,23 @@ void main() {
     showInTimeline: true,
   );
 
-  SharedSpaceResponseDto space(String id, String name) => SharedSpaceResponseDto(
+  SharedSpaceResponseDto space(String id, String name, {int albums = 0}) => SharedSpaceResponseDto(
     id: id,
     name: name,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     createdById: 'someone-else',
     members: Optional.present([member('user-1', SharedSpaceRole.owner)]),
-    albumCount: const Optional.present(0),
+    albumCount: Optional.present(albums),
+  );
+
+  SpaceAlbum spaceAlbum(String id, String name) => SpaceAlbum(
+    id: id,
+    name: name,
+    showInTimeline: true,
+    linkedAt: DateTime(2026, 1, 1),
+    updatedAt: DateTime(2026, 1, 1),
+    createdAt: DateTime(2026, 1, 1),
   );
 
   testWidgets('composes the header, the album selector and the spaces section, in that order', (tester) async {
@@ -192,10 +210,25 @@ void main() {
       isEdited: false,
     );
 
+    RemoteAlbum personalAlbum() => RemoteAlbum(
+      id: 'pa1',
+      name: 'Personal',
+      ownerId: 'user-1',
+      ownerName: 'user-1',
+      description: '',
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      isActivityEnabled: false,
+      order: AlbumAssetOrder.desc,
+      assetCount: 0,
+      isShared: false,
+    );
+
     Future<void> pumpPicker(
       WidgetTester tester, {
       required Widget picker,
       List<SharedSpaceResponseDto> spaces = const [],
+      Map<String, List<SpaceAlbum>> spaceAlbums = const {},
       List<Override> extraOverrides = const [],
     }) async {
       final userService = _MockUserService();
@@ -213,6 +246,8 @@ void main() {
           multiSelectProvider.overrideWith(
             () => MultiSelectNotifier(const MultiSelectState(selectedAssets: {}, lockedSelectionAssets: {})),
           ),
+          for (final entry in spaceAlbums.entries)
+            spaceAlbumsProvider(entry.key).overrideWith((ref) => Stream.value(entry.value)),
           ...extraOverrides,
         ],
       );
@@ -280,6 +315,54 @@ void main() {
 
       await tapSpaceRow(tester, 's1');
 
+      expect(completions, 1);
+    });
+
+    // The literal subject of #965: reaching an album *inside* a space. Nothing else in this
+    // suite exercises `addToSpaceAlbum`, so without this the dispatch could break unnoticed.
+    testWidgets('dispatches a space album with its source, owning space and album id', (tester) async {
+      final notifier = _RecordingActionNotifier();
+      await pumpPicker(
+        tester,
+        picker: CollectionPicker(source: ActionSource.viewer, assets: [asset('a')]),
+        spaces: [space('s1', 'Family', albums: 1)],
+        spaceAlbums: {
+          's1': [spaceAlbum('sa1', 'Holiday')],
+        },
+        extraOverrides: [actionProvider.overrideWith(() => notifier)],
+      );
+
+      await tester.tap(find.byKey(const Key('space-row-s1'))); // expands, does not dispatch
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('space-album-child-sa1')));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+
+      expect(notifier.spaceAlbumDispatches, [(ActionSource.viewer, 's1', 'sa1')]);
+      expect(notifier.spaceSources, isEmpty, reason: 'an album child must not hit the space pool');
+    });
+
+    // `_addToAlbum` is reached through `AlbumSelector`'s callback. Driving it at that seam keeps
+    // the test off upstream's list rendering while still running the fork's own dispatch: a
+    // regression to a hard-coded `timeline` source here would make the asset viewer a silent
+    // no-op, because the sheet's multiselect is empty.
+    testWidgets('dispatches a personal album against the source it was given', (tester) async {
+      final notifier = _RecordingActionNotifier();
+      var completions = 0;
+      await pumpPicker(
+        tester,
+        picker: CollectionPicker(source: ActionSource.viewer, assets: [asset('a')], onCompleted: () => completions++),
+        extraOverrides: [actionProvider.overrideWith(() => notifier)],
+      );
+
+      // The callback is void-returning (fire-and-forget), so pump for the dispatch instead.
+      tester.widget<AlbumSelector>(find.byType(AlbumSelector)).onAlbumSelected(personalAlbum());
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+
+      expect(notifier.albumSources, [ActionSource.viewer]);
       expect(completions, 1);
     });
 

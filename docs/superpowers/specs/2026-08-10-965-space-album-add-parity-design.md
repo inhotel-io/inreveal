@@ -124,15 +124,15 @@ endpoint that carries the space-linked permission arm.
 
 Replace the bare `AlbumSelector` with `CollectionPicker` on every add-to-collection surface:
 
-| File                                          | Surface                   |
-| --------------------------------------------- | ------------------------- |
-| `bottom_sheet/remote_album_bottom_sheet.dart` | selection inside an album |
-| `bottom_sheet/favorite_bottom_sheet.dart`     | favorites                 |
-| `bottom_sheet/archive_bottom_sheet.dart`      | archive                   |
-| `bottom_sheet/local_album_bottom_sheet.dart`  | on-device album           |
-| `action_buttons/add_action_button.dart`       | asset viewer `+` → Album  |
+| File                                                 | Surface                   |
+| ---------------------------------------------------- | ------------------------- |
+| `bottom_sheet/remote_album_bottom_sheet.widget.dart` | selection inside an album |
+| `bottom_sheet/favorite_bottom_sheet.widget.dart`     | favorites                 |
+| `bottom_sheet/archive_bottom_sheet.widget.dart`      | archive                   |
+| `bottom_sheet/local_album_bottom_sheet.widget.dart`  | on-device album           |
+| `action_buttons/add_action_button.widget.dart`       | asset viewer `+` → Album  |
 
-To make that possible `CollectionPicker` gains two things:
+To make that possible `CollectionPicker` gains three things:
 
 - **`source` (`ActionSource`, default `timeline`)** — the asset viewer dispatches against
   `ActionSource.viewer`, and `_addToAlbum` / `_addToTarget` must pass it through instead of
@@ -146,15 +146,46 @@ To make that possible `CollectionPicker` gains two things:
 - **`onCompleted`** (optional) — the asset viewer needs its existing post-add behaviour preserved:
   invalidate `albumsContainingAssetProvider` (the info panel's "Appears in" list) and pop the sheet.
 
-**Deliberately excluded: `partner_detail_bottom_sheet`.** A partner's asset can never reach any space
-target — the pool rejects the whole request (`AssetShare`), and the #764 contribution arm needs the
-asset to be visible _through_ a space the caller edits, which a partner asset is not. Mounting the
-picker there would add a permanently-empty Spaces section with a "hidden because the selection is not
-yours" notice on every selection. Web agrees: `getSelectionCapabilities` returns
-`canAddToAlbum: false` on a partner surface, so web hides the `+` entirely there. Left as-is.
+**Deliberately excluded: `partner_detail_bottom_sheet`** — but not for the reason first given here.
+
+An earlier draft of this spec claimed a partner's asset "can never reach any space target" and that
+"web hides the `+` entirely there". Both were wrong, and checking the code settled it:
+
+- `Permission.AssetShare` is owner **∪ partner**, not owner-only — `access.ts:127-131` unions
+  `checkPartnerAccess`. So `POST /shared-spaces/:id/assets` accepts a partner's assets.
+- Web's partner route does not consult `getSelectionCapabilities` at all; it renders
+  `<ActionButton action={Actions.AddToAlbum} />` unconditionally
+  (`routes/(user)/partners/[userId]/…/+page.svelte:99`).
+
+The real reason to leave the sheet alone is mobile-side and pre-existing: `selectionHasNonOwned`
+(`utils/selection_targets.dart`) treats any asset whose `ownerId` differs from the current user as
+unreachable, so mounting the picker on a partner surface would render a Spaces section that is
+always collapsed behind a notice — and that notice is itself **stricter than the server**. Relaxing
+the rule needs mobile to know which owners are partners, which is a behaviour change to every
+surface the rule already governs, not an entry-point fix. Tracked as follow-up; out of scope here.
+
+Note the same rule now reaches one new surface as a side effect of this change: viewing a partner's
+photo in the asset viewer shows the notice where previously there was no Spaces section at all. That
+is consistent with the timeline's existing behaviour rather than a new class of bug, but it is the
+clearest remaining web/mobile divergence.
 
 `drift_album.page.dart` also mounts `AlbumSelector`, but as an album **browser** (tap navigates to the
 album), not a picker. Out of scope.
+
+## Known remaining divergences
+
+Found by reviewing the finished change against the goal of parity. None block #965; all are
+pre-existing shapes this change did not create.
+
+|                                   | Web                                                         | Mobile                                       |
+| --------------------------------- | ----------------------------------------------------------- | -------------------------------------------- |
+| Partner surface                   | offers spaces and space albums, and the server accepts them | album-only (see above)                       |
+| Space-album page                  | add-to-collection available                                 | `space_album_bottom_sheet` passes no slivers |
+| Album you can edit but do not own | add-to-collection available                                 | gated on `ownsAlbum`                         |
+| Current space as a target         | offered, so its own albums are reachable from inside it     | filtered out via `excludeSpaceId`            |
+| Child-album source                | live `GET /shared-spaces/:id/albums`                        | local Drift, so sync-gated                   |
+| Child ordering                    | server order (`album.createdAt DESC`)                       | album name ascending                         |
+| Searching a space album by name   | no match — children are not searchable                      | same                                         |
 
 ## Out of scope
 

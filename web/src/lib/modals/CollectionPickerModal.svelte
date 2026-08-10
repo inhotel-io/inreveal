@@ -1,6 +1,5 @@
 <script lang="ts">
   import { initInput } from '$lib/actions/focus';
-  import { SCROLL_PROPERTIES } from '$lib/components/shared-components/album-selection/album-selection-utils';
   import AlbumListItem from '$lib/components/asset-viewer/AlbumListItem.svelte';
   import NewAlbumListItem from '$lib/components/shared-components/album-selection/NewAlbumListItem.svelte';
   import {
@@ -18,6 +17,7 @@
   } from '$lib/components/shared-components/collection-selection/collection-selection-utils';
   import NewSpaceListItem from '$lib/components/shared-components/collection-selection/new-space-list-item.svelte';
   import SpaceListItem from '$lib/components/shared-components/collection-selection/space-list-item.svelte';
+  import SpacePoolListItem from '$lib/components/shared-components/collection-selection/space-pool-list-item.svelte';
   import { MAX_SPACE_ASSETS_PER_REQUEST } from '$lib/constants';
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { eventManager } from '$lib/managers/event-manager.svelte';
@@ -32,14 +32,8 @@
     type SharedSpaceResponseDto,
   } from '@immich/sdk';
   import { Button, Icon, Modal, ModalBody, ModalFooter, Text } from '@immich/ui';
-  import {
-    mdiAccountMultipleOutline,
-    mdiImageMultipleOutline,
-    mdiInformationOutline,
-    mdiKeyboardReturn,
-  } from '@mdi/js';
+  import { mdiImageMultipleOutline, mdiInformationOutline, mdiKeyboardReturn } from '@mdi/js';
   import { onMount } from 'svelte';
-  import type { Action } from 'svelte/action';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -82,6 +76,8 @@
   // costs exactly two requests however many spaces the user is in.
   let expandedSpaceId = $state<string | null>(null);
   let spaceAlbumCache = $state<Record<string, PickerCollection[]>>({});
+  // Plain Set, deliberately not $state: it guards duplicate requests, nothing renders from it.
+  const spaceAlbumsInFlight = new Set<string>();
   const expandedSpaceAlbums = $derived(expandedSpaceId === null ? undefined : spaceAlbumCache[expandedSpaceId]);
 
   const converter = new CollectionModalRowConverter();
@@ -148,16 +144,19 @@
     if (collection.kind !== 'space') {
       return;
     }
-    if (expandedSpaceId === collection.id) {
-      expandedSpaceId = null;
-      return;
+    expandedSpaceId = expandedSpaceId === collection.id ? null : collection.id;
+    // Toggling inserts or removes rows, so every index after this space shifts. Re-anchor the
+    // caret on the space row itself — leaving it where it was would point at a different row,
+    // and clearing it would strand a keyboard user who has to walk the list again to reach the
+    // children they just revealed.
+    reanchorCaretOnSpace(collection.id);
+    if (expandedSpaceId !== collection.id || Object.hasOwn(spaceAlbumCache, collection.id)) {
+      return; // collapsed, or already fetched once this modal was opened
     }
-    expandedSpaceId = collection.id;
-    // Arrow-key position is an index into a row list that just changed shape underneath it.
-    selectedRowIndex = -1;
-    if (Object.hasOwn(spaceAlbumCache, collection.id)) {
-      return; // already fetched once this modal was opened
+    if (spaceAlbumsInFlight.has(collection.id)) {
+      return; // a collapse/re-expand while the first request is still out
     }
+    spaceAlbumsInFlight.add(collection.id);
     try {
       const linked = await fetchSpaceAlbums(collection.id);
       spaceAlbumCache[collection.id] = linked.map((album) => albumToCollection(album));
@@ -166,14 +165,52 @@
       if (expandedSpaceId === collection.id) {
         expandedSpaceId = null;
       }
+    } finally {
+      spaceAlbumsInFlight.delete(collection.id);
     }
+  };
+
+  /**
+   * Put the arrow-key caret back on a space row after its children appeared or disappeared.
+   *
+   * Only when the caret was already in use — a mouse user who clicks a row should not suddenly
+   * acquire a keyboard selection highlight. `rows` is `$derived`, so reading it here sees the
+   * post-toggle list.
+   */
+  const reanchorCaretOnSpace = (spaceId: string) => {
+    if (selectedRowIndex === -1) {
+      return;
+    }
+    let index = -1;
+    for (const row of rows) {
+      if (!isSelectableRowType(row.type)) {
+        continue;
+      }
+      index++;
+      if (row.type === CollectionModalRowType.COLLECTION_ITEM && row.collection?.id === spaceId) {
+        selectedRowIndex = index;
+        return;
+      }
+    }
+    selectedRowIndex = -1;
   };
 
   const loadSpaces = async () => {
     spaces = await getAllSpaces();
   };
 
-  const findByKey = (key: string) => allCollections.find((collection) => collectionKey(collection) === key);
+  /**
+   * Resolve a multi-select key back to its collection.
+   *
+   * Must search the fetched space albums too, not just `allCollections`: a space-linked album
+   * owned by another member has no `album_user` row for the caller, so `getAllAlbums` never
+   * returns it — which is precisely the #965 case. Missing it here made `submitMulti` resolve
+   * the key to `undefined`, drop it, and close the modal as if the user had cancelled.
+   */
+  const findByKey = (key: string) =>
+    [...allCollections, ...Object.values(spaceAlbumCache).flat()].find(
+      (collection) => collectionKey(collection) === key,
+    );
 
   const toggleMultiSelect = (collection?: PickerCollection) => {
     const target = collection ?? rows.find((row) => row.selected)?.collection;
@@ -203,19 +240,6 @@
    */
   const handleSpaceClick = (row: CollectionModalRow, collection: PickerCollection) =>
     row.expandable ? void toggleSpaceExpansion(collection) : handleCollectionClick(collection);
-
-  // The album and space rows scroll themselves into view when the caret reaches them; the pool
-  // child is a plain button in this file, so it needs the same treatment or arrowing down a long
-  // list walks onto a row nobody can see.
-  const scrollIntoViewIfSelected: Action<HTMLElement, boolean | undefined> = (node, selected) => {
-    const apply = (isSelected: boolean | undefined) => {
-      if (isSelected) {
-        node.scrollIntoView(SCROLL_PROPERTIES);
-      }
-    };
-    apply(selected);
-    return { update: apply };
-  };
 
   const submitMulti = () => {
     const selected = multiSelectedKeys
@@ -265,9 +289,9 @@
       }
       case CollectionModalRowType.COLLECTION_ITEM:
       case CollectionModalRowType.SPACE_POOL_CHILD: {
-        if (item.expandable) {
-          await toggleSpaceExpansion(item.collection!);
-          return; // keep the caret where it is; toggling already reset it
+        if (item.expandable && item.collection) {
+          await toggleSpaceExpansion(item.collection);
+          return; // toggling re-anchored the caret on the space row; don't clear it below
         }
         if (multiSelectActive) {
           submitMulti();
@@ -364,22 +388,17 @@
             {:else if row.type === CollectionModalRowType.SECTION}
               <p class="px-5 py-3 text-xs">{row.text}</p>
             {:else if row.type === CollectionModalRowType.MESSAGE}
-              <p class={['py-1 text-sm', row.indented ? 'ps-14 pe-5' : 'px-5']}>{row.text}</p>
+              <!-- ps-11 lines the child up with the album children's thumbnails (ps-9 wrapper + p-2). -->
+              <p class={['py-1 text-sm', row.indented ? 'ps-11 pe-5' : 'px-5']}>{row.text}</p>
             {:else if row.type === CollectionModalRowType.SPACE_POOL_CHILD && row.collection}
               {@const collection = row.collection}
-              <button
-                type="button"
-                class={[
-                  'flex w-full items-center gap-3 rounded-xl py-3 ps-14 pe-5 text-start transition-colors hover:cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700',
-                  { 'bg-gray-200 dark:bg-gray-700': row.selected },
-                ]}
-                data-testid={`space-pool-child-${collection.id}`}
-                onclick={() => handleCollectionClick(collection)}
-                use:scrollIntoViewIfSelected={row.selected}
-              >
-                <Icon icon={mdiAccountMultipleOutline} size="1.25rem" />
-                <span>{$t('add_to_space')}</span>
-              </button>
+              <SpacePoolListItem
+                spaceId={collection.id}
+                selected={row.selected || false}
+                multiSelected={row.multiSelected}
+                onClick={() => handleCollectionClick(collection)}
+                onMultiSelect={() => toggleMultiSelect(collection)}
+              />
             {:else if row.type === CollectionModalRowType.COLLECTION_ITEM && row.collection}
               {@const collection = row.collection}
               <div data-testid={`row-${collection.kind}-${collection.id}`} class={{ 'ps-9': row.indented }}>

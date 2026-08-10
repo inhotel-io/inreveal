@@ -17,7 +17,6 @@ import 'package:immich_mobile/constants/enums.dart';
 import 'package:immich_mobile/models/albums/album_search.model.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/add_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/base_action_button.widget.dart';
-import 'package:immich_mobile/presentation/widgets/album/album_selector.widget.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/archive_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/base_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/favorite_bottom_sheet.widget.dart';
@@ -116,35 +115,38 @@ void main() {
     await tester.pump();
   }
 
-  /// These sheets open at 0.22–0.4 of the screen, so the add-to-collection slivers sit below
-  /// the viewport and a lazy sliver list never builds them — `find.byType` would report
-  /// nothing whichever picker is wired up. Assert on what the sheet was handed instead;
-  /// what the picker then renders is covered by the picker's own tests.
-  void expectPickerNotBareSelector(WidgetTester tester) {
+  /// Assert on the sliver list the sheet was handed, not on the rendered tree.
+  ///
+  /// These sheets open at 0.22–0.4 of the screen. Measured: `find.byType(CollectionPicker)`
+  /// finds it in the favorites sheet (0.4) but reports nothing for the remote-album (0.22) and
+  /// archive (0.25) sheets, because the picker sits below the viewport and its sliver is never
+  /// built. That makes a rendered-tree assertion pass or fail on sheet height rather than on
+  /// wiring. What the picker renders once built is covered by the picker's own tests.
+  void expectPickerMounted(WidgetTester tester) {
     final slivers = tester.widget<BaseBottomSheet>(find.byType(BaseBottomSheet)).slivers ?? const <Widget>[];
+    // Reverting a surface to `[AddToAlbumHeader(), AlbumSelector(...)]` — upstream's album-only
+    // picker, which is the bug — empties this.
     expect(slivers.whereType<CollectionPicker>(), hasLength(1));
-    // The bare selector is upstream's album-only picker: mounting it directly is the bug.
-    expect(slivers.whereType<AlbumSelector>(), isEmpty);
   }
 
   testWidgets('a selection inside an owned album offers spaces', (tester) async {
     await pumpSheet(tester, RemoteAlbumBottomSheet(album: ownedAlbum()));
-    expectPickerNotBareSelector(tester);
+    expectPickerMounted(tester);
   });
 
   testWidgets('a selection in favorites offers spaces', (tester) async {
     await pumpSheet(tester, const FavoriteBottomSheet());
-    expectPickerNotBareSelector(tester);
+    expectPickerMounted(tester);
   });
 
   testWidgets('a selection in the archive offers spaces', (tester) async {
     await pumpSheet(tester, const ArchiveBottomSheet());
-    expectPickerNotBareSelector(tester);
+    expectPickerMounted(tester);
   });
 
   testWidgets('a selection in an on-device album offers spaces', (tester) async {
     await pumpSheet(tester, const LocalAlbumBottomSheet());
-    expectPickerNotBareSelector(tester);
+    expectPickerMounted(tester);
   });
 
   testWidgets('the asset viewer + button offers spaces, judged against the viewed asset', (tester) async {

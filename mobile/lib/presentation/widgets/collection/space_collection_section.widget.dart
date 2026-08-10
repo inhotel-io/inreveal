@@ -3,7 +3,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/constants/collection.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/collection_target.dart';
-import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
@@ -175,7 +174,10 @@ class _SpaceCollectionSectionState extends ConsumerState<SpaceCollectionSection>
 
   List<Widget> _childrenFor(SharedSpaceResponseDto space) {
     final albumsAsync = ref.watch(spaceAlbumsProvider(space.id));
-    final albums = albumsAsync.valueOrNull ?? const <SpaceAlbum>[];
+    // `null` means the watch has not produced a value yet, which is NOT the same as "this space
+    // has no albums" — conflating them flashed "no albums yet" on every expand. Web draws the
+    // same distinction (`expandedSpaceAlbums === undefined`).
+    final albums = albumsAsync.valueOrNull;
 
     return [
       ListTile(
@@ -186,7 +188,9 @@ class _SpaceCollectionSectionState extends ConsumerState<SpaceCollectionSection>
         enabled: !widget.isBusy,
         onTap: widget.isBusy ? null : () => _emit(SpacePoolTarget(space)),
       ),
-      if (albums.isEmpty)
+      if (albums == null)
+        const SizedBox.shrink() // still loading — say nothing rather than something wrong
+      else if (albums.isEmpty)
         Padding(
           key: Key('space-albums-empty-${space.id}'),
           padding: const EdgeInsets.only(left: 48, right: 16, bottom: 8),

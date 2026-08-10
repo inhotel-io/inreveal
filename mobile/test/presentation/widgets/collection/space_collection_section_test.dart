@@ -94,6 +94,7 @@ void main() {
     String? userId = 'user-1',
     String searchQuery = '',
     bool raw = false,
+    Set<String> pendingAlbumSpaceIds = const {},
   }) async {
     final targets = <CollectionTarget>[];
     final overrides = <Override>[
@@ -110,7 +111,11 @@ void main() {
         ),
       ),
       for (final entry in albums.entries)
-        spaceAlbumsProvider(entry.key).overrideWith((ref) => Stream.value(entry.value)),
+        if (!pendingAlbumSpaceIds.contains(entry.key))
+          spaceAlbumsProvider(entry.key).overrideWith((ref) => Stream.value(entry.value)),
+      // A stream that never emits — the provider stays in its loading state.
+      for (final spaceId in pendingAlbumSpaceIds)
+        spaceAlbumsProvider(spaceId).overrideWith((ref) => const Stream<List<SpaceAlbum>>.empty()),
     ];
     final widget = SpaceCollectionSection(
       onTargetSelected: targets.add,
@@ -247,6 +252,23 @@ void main() {
     await tester.tap(find.byKey(const Key('space-pool-child-s1')));
     await tester.pumpAndSettle();
     expect(targets, hasLength(1));
+  });
+
+  // "This space has no albums yet" must not flash before the Drift watch has answered — it is
+  // a claim about the space, and while loading we do not know it. Web draws the same line.
+  testWidgets('an expanded space says nothing about its albums until the watch answers', (tester) async {
+    await pump(
+      tester,
+      spaces: [space('s1', albums: 2)],
+      albums: {'s1': const []}, // no stream value pumped for s1 below
+      pendingAlbumSpaceIds: {'s1'},
+    );
+
+    await tester.tap(find.byKey(const Key('space-row-s1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('space-pool-child-s1')), findsOneWidget, reason: 'the pool is always reachable');
+    expect(find.byKey(const Key('space-albums-empty-s1')), findsNothing);
   });
 
   testWidgets('a double-tap on a plain row emits exactly one target', (tester) async {

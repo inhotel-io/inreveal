@@ -146,13 +146,14 @@ class _AddActionButtonState extends ConsumerState<AddActionButton> {
   /// The picker owns the dispatch and the toasts; the viewer only has to refresh what it
   /// shows and get out of the way.
   void _onAddCompleted(BaseAsset asset) {
+    // Guard before touching `ref`: invalidating from a disposed ConsumerState throws.
+    if (!context.mounted) {
+      return;
+    }
     final remoteId = asset.remoteId;
     if (remoteId != null) {
       // Refresh the "Appears in" list on the asset's info panel.
       ref.invalidate(albumsContainingAssetProvider(remoteId));
-    }
-    if (!context.mounted) {
-      return;
     }
     unawaited(Navigator.of(context).maybePop());
   }

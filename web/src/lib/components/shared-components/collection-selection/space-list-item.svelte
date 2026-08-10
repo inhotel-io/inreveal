@@ -117,7 +117,9 @@
       </span>
     </span>
     {#if expandable}
-      <span class="ms-auto flex items-center pe-8" data-testid="space-row-chevron">
+      <!-- pe-12 clears the multi-select checkbox, which is positioned over the row's last 3rem
+           and paints on top of this on hover — exactly when the chevron matters most. -->
+      <span class="ms-auto flex items-center pe-12" data-testid="space-row-chevron">
         <Icon icon={expanded ? mdiChevronUp : mdiChevronDown} size="1.25rem" />
       </span>
     {/if}
