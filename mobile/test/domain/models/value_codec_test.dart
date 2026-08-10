@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/value_codec.dart';
 import 'package:immich_mobile/pages/library/spaces/collection_sort.dart';
 
@@ -22,6 +23,14 @@ void main() {
     test('falls back to the first value when no fallback is declared', () {
       const codec = EnumCodec(SpaceAlbumSortMode.values);
       expect(codec.decode('nope'), SpaceAlbumSortMode.values.first);
+    });
+
+    // S25, asserted on the actual wired key rather than a local EnumCodec —
+    // deleting the `fallback:` argument from
+    // SettingsKey.spaceAlbumsSortMode's declaration must fail this test.
+    test('SettingsKey.spaceAlbumsSortMode falls back to recentlyLinked for an unrecognised name', () {
+      expect(SettingsKey.spaceAlbumsSortMode.decode('aModeFromTheFuture'), SpaceAlbumSortMode.recentlyLinked);
+      expect(SettingsKey.spaceAlbumsSortMode.decode('recentlyUpdated'), SpaceAlbumSortMode.recentlyUpdated);
     });
   });
 }
