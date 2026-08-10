@@ -49,9 +49,17 @@ enum SpaceSortMode {
 
 /// Case-insensitive, trimmed, literal-substring match — no regex, no
 /// diacritic folding (intentional; see the design spec).
-bool _matches(String name, String query) {
+///
+/// [fields] are OR-ed: a row matches when *any* of them contains the query.
+/// Nulls are skipped, so an absent field can never match. Which fields get
+/// passed is the per-collection decision — albums search name + description to
+/// match web (#973), spaces search the name only.
+bool _matches(Iterable<String?> fields, String query) {
   final q = query.trim().toLowerCase();
-  return q.isEmpty || name.toLowerCase().contains(q);
+  if (q.isEmpty) {
+    return true;
+  }
+  return fields.any((field) => field != null && field.toLowerCase().contains(q));
 }
 
 int _byName(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
@@ -80,7 +88,8 @@ List<SpaceAlbum> filterAndSortSpaceAlbums(
   bool isReverse,
 ) {
   final sign = mode.effectiveOrder(isReverse) == SortOrder.asc ? 1 : -1;
-  final out = items.where((a) => _matches(a.name, query)).toList();
+  // Name OR description, matching web's `space-albums-list.svelte` filter.
+  final out = items.where((a) => _matches([a.name, a.description], query)).toList();
   out.sort((a, b) {
     // Applied outside the sign so empty albums stay last in both directions.
     final unknown = switch (mode) {
@@ -132,7 +141,7 @@ List<SharedSpaceResponseDto> filterAndSortSpaces(
   bool isReverse,
 ) {
   final sign = mode.effectiveOrder(isReverse) == SortOrder.asc ? 1 : -1;
-  final out = items.where((s) => _matches(s.name, query)).toList();
+  final out = items.where((s) => _matches([s.name], query)).toList();
   out.sort((a, b) {
     final c = switch (mode) {
       SpaceSortMode.name => _byName(a.name, b.name),

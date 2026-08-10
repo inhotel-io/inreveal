@@ -135,6 +135,21 @@ void main() {
       expect(albums.single.createdAt, album.createdAt);
     });
 
+    // #973 — the album search box matches the description, so the join has to
+    // carry it. It is only ever read for search, hence no other coverage.
+    test('projects the album description from the metadata row, null when unset', () async {
+      final user = await ctx.newUser();
+      final space = await ctx.newSharedSpace(createdById: user.id);
+      final described = await ctx.newSharedSpaceAlbum(name: 'Hawaii', description: 'Reef dives, 2025');
+      final bare = await ctx.newSharedSpaceAlbum(name: 'Reef');
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: described.id);
+      await ctx.insertSharedSpaceAlbumLink(spaceId: space.id, albumId: bare.id);
+
+      final albums = await repo.watchLinkedAlbums(space.id).first;
+      expect(albums.firstWhere((a) => a.id == described.id).description, 'Reef dives, 2025');
+      expect(albums.firstWhere((a) => a.id == bare.id).description, isNull);
+    });
+
     test('derives startDate/endDate from the album assets, truncated to a UTC day', () async {
       final user = await ctx.newUser();
       final space = await ctx.newSharedSpace(createdById: user.id);

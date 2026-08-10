@@ -63,6 +63,7 @@ class SpaceAlbumRepository extends DriftDatabaseRepository {
         return SpaceAlbum(
           id: m.id,
           name: m.name,
+          description: m.description,
           thumbnailAssetId: m.thumbnailAssetId,
           showInTimeline: l.showInTimeline,
           assetCount: row.read(assetCountExp) ?? 0,

@@ -76,6 +76,7 @@ final sample = <SpaceAlbum>[
 SpaceAlbum _album({
   required String id,
   required String name,
+  String? description,
   int assetCount = 0,
   DateTime? linkedAt,
   DateTime? updatedAt,
@@ -85,6 +86,7 @@ SpaceAlbum _album({
 }) => SpaceAlbum(
   id: id,
   name: name,
+  description: description,
   assetCount: assetCount,
   showInTimeline: true,
   linkedAt: linkedAt ?? DateTime.utc(2026, 1, 1),
@@ -198,6 +200,53 @@ void main() {
         );
       }
       expect(filterAndSortSpaceAlbums(sample, '.*', SpaceAlbumSortMode.name, false), isEmpty);
+    });
+  });
+
+  // #973 — web's album search box matches name OR description
+  // (`space-albums-list.svelte`). Mobile matched the name only, so a query that
+  // hit only a description found the album on web and nothing here.
+  //
+  // Kept on its own fixtures: the shared `sample` list has null descriptions
+  // throughout, which is what keeps the group above honest about names.
+  group('filterAndSortSpaceAlbums — description search', () {
+    // 'chamonix' deliberately appears in one row's description and another's
+    // name; 'City Break' carries no description at all.
+    final described = <SpaceAlbum>[
+      _album(id: 'd-alps', name: 'Alps Weekend', description: 'Hiking above Chamonix'),
+      _album(id: 'd-city', name: 'City Break'),
+      _album(id: 'd-market', name: 'Chamonix Market', description: 'Sunday stalls'),
+    ];
+
+    test('matches a description when the name does not', () {
+      expect(names(filterAndSortSpaceAlbums(described, 'hiking', SpaceAlbumSortMode.name, false)), ['Alps Weekend']);
+    });
+
+    test('description matching is case-insensitive and trimmed, like the name', () {
+      expect(names(filterAndSortSpaceAlbums(described, '  SUNDAY  ', SpaceAlbumSortMode.name, false)), [
+        'Chamonix Market',
+      ]);
+    });
+
+    test('name and description hits union without duplicating a row', () {
+      expect(names(filterAndSortSpaceAlbums(described, 'chamonix', SpaceAlbumSortMode.name, false)), [
+        'Alps Weekend',
+        'Chamonix Market',
+      ]);
+    });
+
+    test('a null description is skipped, not matched or thrown on', () {
+      // The null-description row is still reachable by name...
+      expect(names(filterAndSortSpaceAlbums(described, 'city', SpaceAlbumSortMode.name, false)), ['City Break']);
+      // ...and a query that matches nothing anywhere stays empty rather than
+      // matching the null row or blowing up on it.
+      expect(filterAndSortSpaceAlbums(described, 'zzz-no-such-text', SpaceAlbumSortMode.name, false), isEmpty);
+    });
+
+    test('descriptions are not diacritic-folded either', () {
+      final accented = [_album(id: 'd-a', name: 'Trip', description: 'Sächsische Schweiz')];
+      expect(filterAndSortSpaceAlbums(accented, 'sächsische', SpaceAlbumSortMode.name, false), isNotEmpty);
+      expect(filterAndSortSpaceAlbums(accented, 'sachsische', SpaceAlbumSortMode.name, false), isEmpty);
     });
   });
 
@@ -411,10 +460,10 @@ void main() {
 
       // members desc by default: present-but-null memberCount treated as 0,
       // sorting after the space with 3 members.
-      expect(
-        filterAndSortSpaces(items, '', SpaceSortMode.members, false).map((s) => s.id).toList(),
-        ['has-members', 'present-null'],
-      );
+      expect(filterAndSortSpaces(items, '', SpaceSortMode.members, false).map((s) => s.id).toList(), [
+        'has-members',
+        'present-null',
+      ]);
 
       // recentActivity: present-but-null lastActivityAt falls back to
       // updatedAt (not a crash on a null `.value`); hasMembers' real
@@ -511,11 +560,10 @@ void main() {
       ];
       for (final mode in [SpaceAlbumSortMode.mostRecentPhoto, SpaceAlbumSortMode.oldestPhoto]) {
         for (final isReverse in [false, true]) {
-          expect(
-            names(filterAndSortSpaceAlbums(items, '', mode, isReverse)),
-            ['HasPhotos', 'Empty'],
-            reason: '$mode isReverse=$isReverse',
-          );
+          expect(names(filterAndSortSpaceAlbums(items, '', mode, isReverse)), [
+            'HasPhotos',
+            'Empty',
+          ], reason: '$mode isReverse=$isReverse');
         }
       }
     });

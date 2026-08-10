@@ -458,6 +458,7 @@ class MediumRepositoryContext {
   Future<SharedSpaceAlbumEntityData> newSharedSpaceAlbum({
     String? id,
     String? name,
+    String? description,
     String? thumbnailAssetId,
     bool? isActivityEnabled,
     int? order,
@@ -471,6 +472,9 @@ class MediumRepositoryContext {
           SharedSpaceAlbumEntityCompanion(
             id: .new(id),
             name: .new(name ?? 'space_album_$id'),
+            // Left NULL by default — the column is nullable and a SyncAlbumV2
+            // with no description stores NULL, so that is the realistic default.
+            description: .new(description),
             thumbnailAssetId: .new(thumbnailAssetId),
             isActivityEnabled: .new(isActivityEnabled ?? true),
             order: .new(order ?? 0),

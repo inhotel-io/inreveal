@@ -8,6 +8,12 @@
 class SpaceAlbum {
   final String id;
   final String name;
+
+  /// Album description. Nullable because the Drift column is — a row synced
+  /// from a `SyncAlbumV2` with no description stores NULL. Carried purely so
+  /// the album search box can match it, which is what web does
+  /// (`space-albums-list.svelte` filters on name OR description, #973).
+  final String? description;
   final String? thumbnailAssetId;
   final bool showInTimeline;
   final int assetCount;
@@ -25,6 +31,7 @@ class SpaceAlbum {
   const SpaceAlbum({
     required this.id,
     required this.name,
+    this.description,
     this.thumbnailAssetId,
     required this.showInTimeline,
     this.assetCount = 0,
