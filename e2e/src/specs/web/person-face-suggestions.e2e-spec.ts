@@ -58,13 +58,24 @@ test.describe('Person face suggestions (web)', () => {
     await page.locator('[data-testid="suggestion-review-btn"]').click();
     await expect(page.locator('[data-testid="suggestion-progress"]')).toBeVisible();
 
+    // `act('confirm')` fires one POST per click and the click does not await it. Nothing below used to wait for
+    // it: `suggestion-progress` was ALREADY visible before the click, so asserting its visibility passes
+    // instantly and synchronises nothing, letting the API read below race the write and read a still-pending 3.
+    // Arm the response wait before the click (album.e2e-spec.ts's idiom) so the assertion measures a confirm the
+    // server has committed — the drain shares the confirm's transaction, so the response is a sufficient gate.
+    const confirmed = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' && /\/face-suggestions\/[^/]+\/confirm$/.test(response.url()),
+    );
     await page.locator('[data-testid="suggestion-same-btn"]').click(); // confirm face 1
+    await confirmed;
+
     // queue advances; progress still visible for remaining items
     await expect(page.locator('[data-testid="suggestion-progress"]')).toBeVisible();
 
     // server-side proof: one fewer pending suggestion — use the API directly
     const res = await page.request.get(`/api/people/${personId}/face-suggestions`);
-    const body = await res.json();
+    const body = (await res.json()) as { total: number };
     expect(body.total).toBeLessThan(3);
   });
 

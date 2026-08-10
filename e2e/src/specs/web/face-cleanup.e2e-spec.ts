@@ -12,7 +12,8 @@
  * of the review → resolve → drain flow.
  *
  * What this file covers:
- *   1. Dashboard page renders and Re-scan button is present.
+ *   1. Dashboard page renders and, since this stack has never scanned, offers the first-run action
+ *      ("Run first scan") rather than "Re-scan".
  *   2. Review page (/admin/face-cleanup/[personId]) renders for a valid person; empty state is
  *      shown since there are no flagged faces (no scan has run yet).
  *   3. Resolutions page (/admin/face-cleanup/resolutions) renders the empty state.
@@ -261,8 +262,14 @@ test.describe.serial('Face Cleanup', () => {
     // AdminPageLayout → BreadcrumbActionPage landmark — confirms the page mounted without error.
     await expect(page.locator('[data-testid="admin-page-header"]').first()).toBeVisible({ timeout: 15_000 });
 
-    // Page-specific control: the Re-scan button (text from admin.face_cleanup_rescan = "Re-scan").
-    await expect(page.getByRole('button', { name: 'Re-scan' }).first()).toBeVisible({ timeout: 15_000 });
+    // Page-specific control. This stack has never run a scan, so the action is the FIRST-RUN one
+    // (admin.face_cleanup_mode_run_first_scan = "Run first scan"), not "Re-scan" — an instance with nothing to
+    // repeat must not be told to repeat it. Asserting "Re-scan" here was asserting the bug.
+    await expect(page.getByRole('button', { name: 'Run first scan' }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: 'Re-scan' })).toHaveCount(0);
+
+    // ...and the first-run CTA lives in the empty state itself, so the instruction and the action are one object.
+    await expect(page.getByTestId('first-scan-cta')).toBeVisible();
   });
 
   /**
