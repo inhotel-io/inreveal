@@ -86,7 +86,15 @@
   let selectedSortOption = $derived(findSpaceAlbumSortOptionMetadata($spaceAlbumViewSettings.sortBy));
   let sortIcon = $derived($spaceAlbumViewSettings.sortOrder === SortOrder.Desc ? mdiArrowDownThin : mdiArrowUpThin);
 
-  let selectedGroupOption = $derived(findSpaceGroupOptionMetadata($spaceAlbumViewSettings.groupBy));
+  // Resolve the *effective* grouping, not the raw stored one. A stored groupBy
+  // survives a sort change that disables it — the menu greys the option out and
+  // the list falls back to flat, so a trigger reading the stored value would
+  // claim "Group by year" over an ungrouped list (#974). Upstream's
+  // AlbumsControls has the same defect; fixing it there would dirty a file we
+  // keep byte-clean for rebases, so the fork only fixes its own copy.
+  let selectedGroupOption = $derived(
+    findSpaceGroupOptionMetadata(getSelectedSpaceAlbumGroupOption($spaceAlbumViewSettings)),
+  );
   let isGrouped = $derived(getSelectedSpaceAlbumGroupOption($spaceAlbumViewSettings) !== SpaceAlbumGroupBy.None);
 
   let albumSortByNames: Record<SpaceAlbumSortByValue, string> = $derived({

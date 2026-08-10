@@ -183,6 +183,31 @@ describe('SpaceAlbumsControls group dropdown', () => {
     expect(screen.getByTestId('space-albums-group-option-Year')).toBeDisabled();
   });
 
+  // #974 — the stored groupBy survives a sort change that disables it, so the
+  // trigger must report the *effective* grouping. Resolving the raw stored
+  // groupBy made the button claim "Group by year" over a flat list.
+  it('shows the effective grouping on the trigger when the stored one is disabled by the sort', () => {
+    spaceAlbumViewSettings.update((s) => ({
+      ...s,
+      groupBy: SpaceAlbumGroupBy.Year,
+      sortBy: AlbumSortBy.DateCreated,
+    }));
+    render(SpaceAlbumsControls);
+    const trigger = screen.getByTestId('space-albums-group-btn');
+    expect(trigger).toHaveTextContent('No grouping');
+    expect(trigger).not.toHaveTextContent('Group by year');
+  });
+
+  it('keeps the stored grouping on the trigger while the sort still allows it', () => {
+    spaceAlbumViewSettings.update((s) => ({
+      ...s,
+      groupBy: SpaceAlbumGroupBy.Year,
+      sortBy: AlbumSortBy.MostRecentPhoto,
+    }));
+    render(SpaceAlbumsControls);
+    expect(screen.getByTestId('space-albums-group-btn')).toHaveTextContent('Group by year');
+  });
+
   it('hides expand/collapse-all buttons when groupBy is None', () => {
     render(SpaceAlbumsControls);
     expect(screen.queryByTestId('space-albums-expand-all')).not.toBeInTheDocument();
