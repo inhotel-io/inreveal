@@ -2339,32 +2339,51 @@ export class FaceIdentityRepository {
   // that a human placed a face on a person — written by every human reassignment, keyed by identity so it
   // survives merges, and replaced (never accumulated) by the next human reassignment. Both face engines
   // exclude these faces from their queues.
+  // H6: face-verdict.service.ts calls this for every flagged face in a scan. minFaces is admin-settable, so
+  // a full-library scan can pass every flagged face in the instance — chunked at 1000, matching every
+  // sibling bulk face path in this file (replaceFaceIdentities, demoteManualFaceLinks): one id is one bind
+  // parameter, so an unchunked IN-list breaks at Postgres's 65 535-parameter ceiling.
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async getManualLinkedFaceIds(assetFaceIds: string[]): Promise<Set<string>> {
+    const linked = new Set<string>();
     if (assetFaceIds.length === 0) {
-      return new Set();
+      return linked;
     }
-    const rows = await this.db
-      .selectFrom('face_identity_face')
-      .select('assetFaceId')
-      .where('assetFaceId', 'in', assetFaceIds)
-      .where('source', '=', 'manual')
-      .execute();
-    return new Set(rows.map((row) => row.assetFaceId));
+    for (let index = 0; index < assetFaceIds.length; index += 1000) {
+      const rows = await this.db
+        .selectFrom('face_identity_face')
+        .select('assetFaceId')
+        .where('assetFaceId', 'in', assetFaceIds.slice(index, index + 1000))
+        .where('source', '=', 'manual')
+        .execute();
+      for (const row of rows) {
+        linked.add(row.assetFaceId);
+      }
+    }
+    return linked;
   }
 
   // personId -> the verdict tokens that person answers to. A negative verdict recorded against the person's
   // IDENTITY has to match a suspicion aimed at the person itself, which is what the identity token provides;
   // the person token remains so verdicts written before the person had an identity keep matching.
+  //
+  // H6: chunked at 1000 for the same reason as getManualLinkedFaceIds above — face-verdict.service.ts calls
+  // this for every suspected owner in a scan, and minFaces is admin-settable.
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async getPersonVerdictTokens(personIds: string[]): Promise<Map<string, string[]>> {
     const map = new Map<string, string[]>();
     if (personIds.length === 0) {
       return map;
     }
-    const rows = await this.db.selectFrom('person').select(['id', 'identityId']).where('id', 'in', personIds).execute();
-    for (const row of rows) {
-      map.set(row.id, targetTokens({ personId: row.id, identityId: row.identityId }));
+    for (let index = 0; index < personIds.length; index += 1000) {
+      const rows = await this.db
+        .selectFrom('person')
+        .select(['id', 'identityId'])
+        .where('id', 'in', personIds.slice(index, index + 1000))
+        .execute();
+      for (const row of rows) {
+        map.set(row.id, targetTokens({ personId: row.id, identityId: row.identityId }));
+      }
     }
     return map;
   }

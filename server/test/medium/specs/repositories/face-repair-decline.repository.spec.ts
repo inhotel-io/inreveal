@@ -144,6 +144,25 @@ describe(FaceRepairDeclineRepository.name, () => {
     expect(remaining.map((r) => r.id)).toEqual([rowOther.id]); // positive control: untouched
   });
 
+  // H6: face-verdict.service.ts calls this for every suspected owner in a scan, unchunked. minFaces is
+  // admin-settable, so a full-library scan can pass every flagged face's suspected-owner person id — far
+  // larger than Postgres's 65 535 bind-parameter ceiling (one id is one bind parameter). Mirrors the
+  // removeClusterMutes (F20) chunking test above.
+  it('finds a cluster mute among a personId list far larger than the bind-parameter ceiling', async () => {
+    const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
+    const other = await seedFaceAndPersons(db);
+    await sut.createClusterMutes({
+      persons: [{ personId: personP, suspectedOwnerIds: [personQ] }],
+      declinedBy,
+    });
+
+    const filler = Array.from({ length: 70_000 }, () => randomUUID());
+    const mutes = await sut.getClusterMuteMap([personP, other.personP, ...filler]);
+
+    expect(mutes.get(personP)).toEqual(new Set([personQ]));
+    expect(mutes.has(other.personP)).toBe(false); // positive control: no mute recorded for this person
+  });
+
   it('cascades: deleting the person removes its cluster mute', async () => {
     const { personP, personQ, declinedBy } = await seedFaceAndPersons(db);
     await sut.createClusterMutes({ persons: [{ personId: personP, suspectedOwnerIds: [personQ] }], declinedBy });

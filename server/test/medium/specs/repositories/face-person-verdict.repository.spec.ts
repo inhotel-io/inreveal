@@ -2144,6 +2144,30 @@ describe('FacePersonVerdictRepository', () => {
     });
   });
 
+  // H6: face-verdict.service.ts calls this for every flagged face in a scan, unchunked. minFaces is
+  // admin-settable, so a full-library scan can pass every flagged face in the instance — far larger than
+  // Postgres's 65 535 bind-parameter ceiling (one id is one bind parameter). Mirrors the removeVerdicts
+  // (F20) / clearNegativeForTarget (F15) chunking tests below.
+  describe('getNegativeVerdictTokens (H6)', () => {
+    it('resolves negative-verdict tokens for a face among an assetFaceId list far larger than the bind-parameter ceiling', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const { asset: rejectedAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: rejectedFace } = await ctx.newAssetFace({ assetId: rejectedAsset.id, personId: null });
+      const { asset: untouchedAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: untouchedFace } = await ctx.newAssetFace({ assetId: untouchedAsset.id, personId: null });
+
+      await sut.markRejected(person.id, rejectedFace.id);
+
+      const filler = Array.from({ length: 70_000 }, () => randomUUID());
+      const tokens = await sut.getNegativeVerdictTokens([rejectedFace.id, untouchedFace.id, ...filler]);
+
+      expect(tokens.get(rejectedFace.id)).toEqual(new Set([`person:${person.id}`]));
+      expect(tokens.has(untouchedFace.id)).toBe(false); // positive control: no verdict recorded for this face
+    });
+  });
+
   // S10.3 (F20): the resolutions-remove DTO's verdictIds now goes up to MAX_RESOLVE_FACES (25 000), and
   // removeVerdicts was completely unchunked. The filler below is far larger than Postgres's 65 535
   // bind-parameter ceiling (non-existent ids — the bind count is a function of list length, not of whether

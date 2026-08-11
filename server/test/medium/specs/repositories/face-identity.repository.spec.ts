@@ -5503,4 +5503,50 @@ describe(FaceIdentityRepository.name, () => {
       expect(sourceOf[untouchedManualFace.id]).toBe('manual'); // positive control: untouched
     });
   });
+
+  // H6: face-verdict.service.ts calls this for every flagged face in a scan, unchunked. minFaces is
+  // admin-settable, so a full-library scan can pass every flagged face in the instance — far larger than
+  // Postgres's 65 535 bind-parameter ceiling (one id is one bind parameter). Mirrors the
+  // demoteManualFaceLinks (F20) test above.
+  describe('getManualLinkedFaceIds (H6)', () => {
+    it('finds a manually-linked face among an id list far larger than the bind-parameter ceiling', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const identity = await sut.ensurePersonIdentity(person.id);
+      const { asset: manualAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: manualFace } = await ctx.newAssetFace({ assetId: manualAsset.id, personId: person.id });
+      await sut.linkFace({ assetFaceId: manualFace.id, identityId: identity.id, source: 'manual' });
+
+      const { asset: mlAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: mlFace } = await ctx.newAssetFace({ assetId: mlAsset.id, personId: person.id });
+      await sut.linkFace({ assetFaceId: mlFace.id, identityId: identity.id, source: 'ml' });
+
+      const filler = Array.from({ length: 70_000 }, () => randomUUID());
+      const linked = await sut.getManualLinkedFaceIds([manualFace.id, mlFace.id, ...filler]);
+
+      expect(linked.has(manualFace.id)).toBe(true);
+      expect(linked.has(mlFace.id)).toBe(false); // positive control: an ml-sourced link is not "manual"
+    });
+  });
+
+  // H6: face-verdict.service.ts calls this for every owner among a scan's suspected owners, unchunked.
+  // Same bind-parameter ceiling concern as getManualLinkedFaceIds above.
+  describe('getPersonVerdictTokens (H6)', () => {
+    it('resolves tokens for a person among a personId list far larger than the bind-parameter ceiling', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const identity = await sut.ensurePersonIdentity(person.id);
+      // Positive control: a person with no identity yet must still resolve to its bare person token,
+      // proving the chunk isn't merely returning the FIRST id it sees.
+      const { person: personWithoutIdentity } = await ctx.newPerson({ ownerId: user.id });
+
+      const filler = Array.from({ length: 70_000 }, () => randomUUID());
+      const tokens = await sut.getPersonVerdictTokens([person.id, personWithoutIdentity.id, ...filler]);
+
+      expect(tokens.get(person.id)).toEqual([`identity:${identity.id}`, `person:${person.id}`]);
+      expect(tokens.get(personWithoutIdentity.id)).toEqual([`person:${personWithoutIdentity.id}`]);
+    });
+  });
 });

@@ -596,31 +596,37 @@ export class FacePersonVerdictRepository {
     return removed;
   }
 
+  // H6: chunked at BULK_CHUNK_SIZE, matching every other bulk face path in this file. face-verdict.service.ts
+  // calls this for every flagged face in a scan; minFaces is admin-settable, so a full-library scan can pass
+  // every flagged face in the instance — one id is one bind parameter, so an unchunked IN-list breaks at
+  // Postgres's 65 535-parameter ceiling.
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async getNegativeVerdictTokens(assetFaceIds: string[]): Promise<Map<string, Set<string>>> {
     const map = new Map<string, Set<string>>();
     if (assetFaceIds.length === 0) {
       return map;
     }
-    const rows = await this.db
-      .selectFrom('face_person_verdict')
-      .select(['assetFaceId', 'personId', 'spacePersonId', 'identityId'])
-      .where('assetFaceId', 'in', assetFaceIds)
-      .where('status', 'in', ['rejected', 'ignored'])
-      .execute();
+    for (let index = 0; index < assetFaceIds.length; index += BULK_CHUNK_SIZE) {
+      const rows = await this.db
+        .selectFrom('face_person_verdict')
+        .select(['assetFaceId', 'personId', 'spacePersonId', 'identityId'])
+        .where('assetFaceId', 'in', assetFaceIds.slice(index, index + BULK_CHUNK_SIZE))
+        .where('status', 'in', ['rejected', 'ignored'])
+        .execute();
 
-    for (const row of rows) {
-      const tokens = map.get(row.assetFaceId) ?? new Set<string>();
-      if (row.identityId) {
-        tokens.add(`identity:${row.identityId}`);
+      for (const row of rows) {
+        const tokens = map.get(row.assetFaceId) ?? new Set<string>();
+        if (row.identityId) {
+          tokens.add(`identity:${row.identityId}`);
+        }
+        if (row.personId) {
+          tokens.add(`person:${row.personId}`);
+        }
+        if (row.spacePersonId) {
+          tokens.add(`space-person:${row.spacePersonId}`);
+        }
+        map.set(row.assetFaceId, tokens);
       }
-      if (row.personId) {
-        tokens.add(`person:${row.personId}`);
-      }
-      if (row.spacePersonId) {
-        tokens.add(`space-person:${row.spacePersonId}`);
-      }
-      map.set(row.assetFaceId, tokens);
     }
     return map;
   }
