@@ -123,6 +123,15 @@ export class MediumTestContext<S extends BaseService = BaseService> {
     this.database = options.database;
   }
 
+  // Slice 13 (fork isolation): the suggestion engine now lives in FaceSuggestionService, a sibling of
+  // PersonService rather than a member of it. Cross-flow medium tests that exercise both a
+  // PersonService/FaceSuggestionService call and its consequence on the other need a second service
+  // sharing the EXACT SAME dependency instances as `sut` — same mocked JobRepository/SystemMetadataRepository
+  // config, same real repositories backed by the same DB — not a second, independently-configured context.
+  getService<T extends BaseService>(Service: ClassConstructor<T>): T {
+    return new Service(...this.sutDeps);
+  }
+
   private makeDeps(options: MediumTestOptions) {
     const deps = BASE_SERVICE_DEPENDENCIES;
 
