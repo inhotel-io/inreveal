@@ -162,8 +162,12 @@ pre-filled with the instance's effective defaults:
 
 - **Match sensitivity** (0.1–1, default = the facial-recognition _maximum distance_ setting, typically 0.5) — how
   close two faces must look to be treated as the same person. Lower = stricter (fewer matches), higher = looser.
-- **Minimum faces per person** (≥ 1, default = the facial-recognition _minimum faces_ setting, typically 3) — skip
-  people with fewer faces than this.
+- **Matching faces required** (≥ 1, default = the facial-recognition _minimum faces_ setting, typically 3) — how many
+  of a face's lookalikes a person must already own before the scan treats them as its likely owner. The same number
+  also decides when a person is too small to be credited with its own faces: a face whose current person holds fewer
+  than this is flagged as soon as a credible alternative owner exists, without having to beat it on votes. People
+  below the threshold are therefore checked **more** closely, not skipped — raising this value flags more small
+  clusters, not fewer.
 - **Contamination cap** (0–1, default 0.5) — if more than this share of a person's faces look wrong, the whole
   cluster goes to review-only instead of auto-repairing. Higher = more aggressive auto-repair.
 

@@ -196,6 +196,34 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(screen.queryByTestId('locks-section')).not.toBeInTheDocument();
   });
 
+  // The page lists NEGATIVE verdicts only, and that scope used to live solely in a source comment. An admin
+  // who cleans up a person by moving/confirming faces writes no negative verdict at all (only "keep here"
+  // does — face-repair.service.ts, the sole `source: 'cleanup'` writer), so they arrive here to a list that
+  // looks like it lost their work. The subtitle is the only thing on the page that explains that, so it must
+  // render whether or not there are rows — the empty states are exactly when it is needed most.
+  it('states the page scope in a subtitle, alongside rows', async () => {
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(2));
+
+    const subtitle = screen.getByTestId('resolutions-subtitle');
+    expect(subtitle).toHaveTextContent('Only "not this person" decisions appear here');
+    expect(subtitle).toHaveTextContent("undone on that person's review page");
+  });
+
+  it('keeps the scope subtitle in the empty state, where it explains the emptiness', async () => {
+    vi.mocked(getFaceRepairResolutions).mockResolvedValue({ total: 0, resolutions: [] } as unknown as Awaited<
+      ReturnType<typeof getFaceRepairResolutions>
+    >);
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+
+    await waitFor(() => expect(screen.getByText('No decisions recorded yet')).toBeInTheDocument());
+    expect(screen.getByTestId('resolutions-subtitle')).toHaveTextContent(
+      'Only "not this person" decisions appear here',
+    );
+  });
+
   it('renders a space-person verdict with its space named, and a fully-orphaned verdict as a deleted target', async () => {
     vi.mocked(getFaceRepairResolutions).mockResolvedValue({
       total: 2,

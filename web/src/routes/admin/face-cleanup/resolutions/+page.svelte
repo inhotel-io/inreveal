@@ -154,8 +154,18 @@
 <AdminPageLayout breadcrumbs={faceCleanupBreadcrumbs($t, { title: $t('admin.face_cleanup_resolutions_title') })}>
   <div class="mx-auto max-w-screen-xl p-6">
     <!-- Header -->
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-      <h1 class="text-2xl font-semibold tracking-tight">{$t('admin.face_cleanup_resolutions_title')}</h1>
+    <div class="mb-6 flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0">
+        <h1 class="text-2xl font-semibold tracking-tight">{$t('admin.face_cleanup_resolutions_title')}</h1>
+        <!-- The list's scope, stated on the page rather than only in the comment above. An admin who cleans up
+             a person by MOVING or CONFIRMING faces records no negative verdict at all (the only writer of a
+             cleanup-sourced one is the "keep here" bucket), so without this line an empty list reads as lost
+             work. Sits outside the loading/empty/error branches below because the empty states are exactly
+             when the explanation is needed. -->
+        <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400" data-testid="resolutions-subtitle">
+          {$t('admin.face_cleanup_resolutions_subtitle')}
+        </p>
+      </div>
 
       <!-- Source filter -->
       <div class="flex gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800" data-testid="source-filter">

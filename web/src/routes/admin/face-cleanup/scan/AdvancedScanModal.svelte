@@ -72,7 +72,12 @@
       <p class="mt-1.5 text-xs text-gray-400">{$t('admin.face_cleanup_advanced_sensitivity_help')}</p>
     </div>
 
-    <!-- Minimum faces per person -->
+    <!-- `minFaces`. NOT a "skip people smaller than this" filter, which is what this control's label and help
+         text used to claim: no per-person face-count filter exists anywhere in the scan pipeline
+         (getEligibleFacePage filters on visibility/source only, and findReattributionCandidates is never passed
+         minFaces). decideReattribution uses it for two things — the suspected owner must hold >= minFaces of the
+         face's near neighbours, AND a face whose own person holds < minFaces is flagged without needing to lose
+         the vote. So raising it flags MORE small clusters, not fewer. -->
     <div>
       <label for="adv-min-faces" class="text-sm font-medium text-gray-900 dark:text-gray-100">
         {$t('admin.face_cleanup_advanced_min_faces')}
