@@ -654,6 +654,38 @@ git commit -m "fix(face-cleanup): pass raw counts to ICU plurals so large cluste
 
 ## Slice 4: Close the cross-owner write asymmetry (B4)
 
+> **STATUS: REVERTED — needs a product decision before re-attempting.**
+>
+> The fix below (port the personal path's `Permission.PersonCreate` face check to the space path) was
+> implemented, reviewed, and reverted in `ac44adb1bfe`. It is **wrong as specified**, for a reason the
+> original review missed: `checkFaceOwnerAccess` is strict `asset.ownerId = userId`, but shared-space
+> face suggestions are **cross-owner by design**. The canonical fixture
+> (`shared-space-face-suggestions.service.spec.ts:54`) has three distinct users — a space owner, an
+> Editor who acts, and a third user who owns the asset — and `getPendingForSpacePerson` deliberately
+> spans "all three space access paths, including cross-owner contributions". An Editor curating people
+> across everyone's contributed photos IS the feature. The guard denied every action on every face the
+> Editor did not personally own, and shipped 15 red medium tests (the specs' `newMediumService` calls
+> do not register `AccessRepository`, so the guard threw a TypeError rather than returning a denial).
+>
+> The underlying hazard is still real: a space Editor who owns nothing can write a verdict stamped with
+> a **cross-owner** `identityId`, and `getPendingForPerson`'s anti-join matches on `identityId` with no
+> ownership filter — so it suppresses the asset owner's _personal_ suggestion queue for their own face.
+> A confirm additionally runs `clearNegativeForTarget`, whose identity arm can delete a rejection that
+> owner recorded.
+>
+> Three candidate fixes, none of which should be chosen without a product call:
+>
+> 1. **Stop stamping the cross-owner identity on space verdicts** (write `spacePersonId` only). Closes
+>    the leak at the source, but weakens the D3 self-heal that intentionally propagates a rejection
+>    across scopes sharing an identity.
+> 2. **Owner-scope the identity arm of `getPendingForPerson`** — honour an identity-matched negative
+>    only when it was recorded by (or against a face owned by) that person's owner. Preserves the space
+>    feature and same-owner cross-scope propagation; changes a deliberate read-path design.
+> 3. **Guard only `clearNegativeForTarget`'s identity arm**, leaving suppression alone. Smallest change,
+>    but fixes only the destructive half.
+>
+> Everything below this line is the original, superseded plan text.
+
 `person.service.ts:584-599` requires the caller to own **both** the person and the face, with a comment explaining that `face_identity.id` is a cross-owner key and `getPendingForPerson`'s anti-join matches on `identityId` with no owner filter — so a verdict written against someone else's face suppresses _their_ queue. Its space twin, `resolveSpacePersonFaceSuggestion`, checks only Editor role and reachability. A space Editor who owns nothing can therefore suppress the asset owner's personal suggestions, and (via `clearNegativeForTarget`'s identity arm) destroy a rejection the owner recorded.
 
 **Files:**
