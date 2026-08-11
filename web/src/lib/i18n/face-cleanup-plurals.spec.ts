@@ -1,13 +1,24 @@
-import { init, register, waitLocale, _, type Translations } from 'svelte-i18n';
+import { IntlMessageFormat } from 'intl-messageformat';
+import { init, locale, register, waitLocale, _, type Translations } from 'svelte-i18n';
 import { get } from 'svelte/store';
 import { beforeAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { FORK_LOCALES } from '$lib/i18n/fork-locales';
+import { convertBCP47 } from '$lib/utils/i18n';
 
 // S12.9/F31: 17 count-bearing `admin.face_cleanup_*` keys used bare `{count}` with no ICU plural clause, so
 // they rendered "1 clusters" / "1 faces" for an admin whose review queue happened to be down to one.
 beforeAll(async () => {
   register('en', () => import('$i18n/en.json'));
+  for (const code of FORK_LOCALES) {
+    // H9: zh_Hans / zh_Hant are not valid BCP47 tags. IntlMessageFormat throws when constructed under the
+    // underscore code, and svelte-i18n silently swallows that and falls back to the RAW, unparsed message —
+    // so a render assertion registered under 'zh_Hans' would pass no matter what the translated content is.
+    // Register under the same hyphenated form the app itself uses (initLanguage in $lib/utils.ts →
+    // convertBCP47) while still reading the underscore-named source file; see the non-inertness proof below.
+    register(convertBCP47(code), () => import(`$i18n/${code}.json`));
+  }
   await init({ fallbackLocale: 'en', initialLocale: 'en' });
   await waitLocale('en');
 });
@@ -140,7 +151,7 @@ describe('count arguments must be raw numbers, not formatted strings', () => {
   ];
 
   it.each(COUNT_KEYS)('%s renders a four-digit count without NaN', (key) => {
-    const rendered = get(_)(`admin.${key}`, { values: { count: 2952, name: 'Anna', owner: 'Anna' } });
+    const rendered = get(_)(`admin.${key}` as Translations, { values: { count: 2952, name: 'Anna', owner: 'Anna' } });
     expect(rendered).not.toContain('NaN');
     expect(rendered).toContain('2,952');
   });
@@ -177,5 +188,100 @@ describe('count arguments must be raw numbers, not formatted strings', () => {
     };
     walk(path.resolve(process.cwd(), 'src/routes/admin/face-cleanup'));
     expect(offenders).toEqual([]);
+  });
+});
+
+// H9: the guard above (S12.9) only ever checked `en.json`. The bug it exists to catch — a count-bearing
+// key flattened to bare `{count}` with no ICU plural clause — shipped in all NINE fork-maintained
+// translations (de/fr/it/nl/pl/es/ru/zh_Hans/zh_Hant) while that guard stayed green, because it never read
+// a translated file at all. This block reads them.
+const readAdmin = (code: string): Record<string, string> =>
+  (JSON.parse(fs.readFileSync(path.join(I18N_DIR, `${code}.json`), 'utf8')) as { admin: Record<string, string> }).admin;
+
+// Derived from en.json rather than hardcoded: a hardcoded list silently stops covering every key added
+// after it was written. Any admin.face_cleanup_* whose English value carries an ICU plural clause is in
+// scope; every fork locale's translation of it must carry one too.
+const PLURAL_KEYS = Object.entries(en.admin)
+  .filter(([key, value]) => key.startsWith('face_cleanup_') && /\{count,\s*plural/.test(value))
+  .map(([key]) => key);
+
+describe('the nine fork locales keep an ICU plural clause on every count-bearing face_cleanup key', () => {
+  // Positive control: if this list were ever empty (a renamed prefix, a moved i18n directory), every
+  // assertion below would pass vacuously over zero cases.
+  it('finds at least one plural-bearing key to check across the nine locales (control)', () => {
+    expect(PLURAL_KEYS.length).toBeGreaterThan(0);
+  });
+
+  describe.each(FORK_LOCALES)('%s', (code) => {
+    const translated = readAdmin(code);
+
+    it.each(PLURAL_KEYS)('%s keeps an ICU plural clause', (key) => {
+      const value = translated[key];
+      if (value === undefined) {
+        // Missing entirely falls back to English (renders correctly, just untranslated) — that is
+        // fork-string-parity.spec.ts's concern, not this guard's.
+        return;
+      }
+      expect(value).toMatch(/\{count,\s*plural/);
+    });
+  });
+});
+
+// H9 / CRITICAL: zh_Hans and zh_Hant are not valid BCP47 language tags. `new IntlMessageFormat(msg,
+// 'zh_Hans')` throws, and svelte-i18n silently swallows that internally and falls back to returning the
+// message TEMPLATE completely unparsed — same text no matter what `count` value is passed in. A render
+// assertion registered under the underscore code would therefore pass on totally broken content: it is
+// inert, not passing because the translation is correct. The app itself never hits this because
+// `initLanguage` (`$lib/utils.ts`) always registers through `convertBCP47`, which this file's `beforeAll`
+// now mirrors. These tests prove that choice is load-bearing, not decorative.
+describe('zh_Hans / zh_Hant stay evaluated, not inert, once registered under their hyphenated BCP47 form', () => {
+  it('IntlMessageFormat throws under the underscore code and does not under the hyphenated one', () => {
+    const message = readAdmin('zh_Hans').face_cleanup_confident_count;
+    expect(() => new IntlMessageFormat(message, 'zh_Hans')).toThrow();
+    expect(() => new IntlMessageFormat(message, 'zh-Hans')).not.toThrow();
+  });
+
+  it.each(['zh_Hans', 'zh_Hant'] as const)(
+    '%s renders through svelte-i18n with the count actually substituted, not the raw ICU source',
+    async (code) => {
+      const hyphenated = convertBCP47(code);
+      await locale.set(hyphenated);
+      await waitLocale(hyphenated);
+      const $t = get(_);
+
+      const atOne = $t('admin.face_cleanup_confident_count' as Translations, { values: { count: 1 } });
+      const atFive = $t('admin.face_cleanup_confident_count' as Translations, { values: { count: 5 } });
+
+      // An inert fallback prints the SAME unparsed template regardless of the count passed in — the values
+      // argument is never consulted because IntlMessageFormat never got constructed. A real evaluation
+      // substitutes `#`, so the two renders differ and each contains its own digit.
+      expect(atOne).not.toBe(atFive);
+      expect(atOne).toContain('1');
+      expect(atFive).toContain('5');
+      expect(atFive).not.toMatch(/\{count,\s*plural/);
+    },
+  );
+});
+
+// H9: `i18n/nl.json`'s face_cleanup_review_picker_create wraps its placeholder in plain apostrophes —
+// `'{query}'` — which in ICU MessageFormat is not a quote mark at all: a bare `'` opens a quoted-literal
+// section that runs to the next `'`, so `{query}` prints as literal text instead of being substituted.
+// Every other locale uses a quote style ICU does not treat specially (guillemets, curly quotes, or in this
+// fix's case a plain double quote, matching English's own `"{query}"`).
+describe('nl face_cleanup_review_picker_create no longer opens an ICU literal on the query placeholder', () => {
+  it('substitutes {query} instead of printing it literally', () => {
+    const message = readAdmin('nl').face_cleanup_review_picker_create;
+    const rendered = new IntlMessageFormat(message, 'nl').format({ query: 'Anna' });
+    expect(rendered).toContain('Anna');
+    expect(rendered).not.toContain('{query}');
+  });
+
+  // Positive control: proves the assertion above is discriminating — the OLD apostrophe-quoted shape
+  // really does leak the placeholder literally, rather than the assertion passing regardless of content.
+  it('is discriminating: the old apostrophe-quoted shape really does leak the placeholder literally (control)', () => {
+    const broken = "Nieuwe persoon '{query}' aanmaken";
+    const rendered = new IntlMessageFormat(broken, 'nl').format({ query: 'Anna' });
+    expect(rendered).not.toContain('Anna');
+    expect(rendered).toContain('{query}');
   });
 });
