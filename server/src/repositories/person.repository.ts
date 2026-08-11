@@ -10,6 +10,7 @@ import { AssetFaceTable } from 'src/schema/tables/asset-face.table';
 import { FaceSearchTable } from 'src/schema/tables/face-search.table';
 import { PersonTable } from 'src/schema/tables/person.table';
 import { dummy, removeUndefinedKeys, withFilePath } from 'src/utils/database';
+import { retargetDeclinePersonId } from 'src/utils/face-decline-merge';
 import { reviewableAssetVisibility } from 'src/utils/face-review';
 import { retargetVerdictPersonId } from 'src/utils/face-verdict-merge';
 import { paginationHelper, PaginationOptions } from 'src/utils/pagination';
@@ -224,6 +225,11 @@ export class PersonRepository {
     // D1: move this person's verdicts to the survivor before deleting the source person (personId FK is
     // SET NULL — a bare delete would orphan them). Survivor-wins on the (personId, assetFaceId) collision.
     await retargetVerdictPersonId(db, input.sourcePersonId, input.targetPersonId);
+
+    // H10: face_repair_decline.personId is ON DELETE CASCADE (unlike the verdict FK above), so the source
+    // person's cluster mute must be moved onto the survivor before deletion too, or it is silently
+    // destroyed and the cluster resurfaces on the next scan.
+    await retargetDeclinePersonId(db, input.sourcePersonId, input.targetPersonId);
 
     const targetNeedsFeatureFaceRepair =
       !target.faceAssetId || !(await this.isFeatureFaceValid(input.targetPersonId, target.faceAssetId, db));
