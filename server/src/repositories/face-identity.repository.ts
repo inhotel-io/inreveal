@@ -2429,25 +2429,48 @@ export class FaceIdentityRepository {
       .executeTakeFirstOrThrow();
   }
 
+  /**
+   * Returns the asset-face ids actually written. With `requirePersonId` set, only faces still assigned to
+   * that person are written (H5): the caller's eligibility read happens outside the transaction, so a
+   * concurrent reassign would otherwise leave the face on one person while this re-points its identity to
+   * another — the torn state `reattributeFaces` and `detachFaces` both guard against at write time, and
+   * which a later FaceIdentityBackfill resolves in the wrong direction.
+   */
   async replaceFaceIdentities(
     input: {
       assetFaceIds: string[];
       identityId: string;
       source: FaceIdentityFaceSource;
       confidence?: number | null;
+      requirePersonId?: string;
     },
     db: Kysely<DB> | Transaction<DB> = this.db,
-  ): Promise<void> {
+  ): Promise<string[]> {
     if (input.assetFaceIds.length === 0) {
-      return;
+      return [];
     }
     // F13: de-duplicate before chunking, mirroring markRejectedMany's guard. A client repeating an id
     // (e.g. a duplicate in the cleanup console's `lock` bucket) would otherwise land twice in the same
     // chunk's INSERT, and Postgres refuses an ON CONFLICT DO UPDATE that touches the same row twice in
     // one statement ("cannot affect row a second time", 21000).
     const assetFaceIds = [...new Set(input.assetFaceIds)];
+    const written: string[] = [];
     for (let index = 0; index < assetFaceIds.length; index += 1000) {
-      const chunk = assetFaceIds.slice(index, index + 1000);
+      let chunk = assetFaceIds.slice(index, index + 1000);
+      if (input.requirePersonId) {
+        // Re-check inside the caller's transaction, exactly as reattributeFaces/detachFaces do. Scoped per
+        // chunk so the guard runs against the same snapshot as the write it protects.
+        const stillOnPerson = await db
+          .selectFrom('asset_face')
+          .select('id')
+          .where('id', 'in', chunk)
+          .where('personId', '=', input.requirePersonId)
+          .execute();
+        chunk = stillOnPerson.map((row) => row.id);
+        if (chunk.length === 0) {
+          continue;
+        }
+      }
       await db
         .insertInto('face_identity_face')
         .values(
@@ -2466,7 +2489,9 @@ export class FaceIdentityRepository {
           }),
         )
         .execute();
+      written.push(...chunk);
     }
+    return written;
   }
 
   @GenerateSql({ params: [{ personId: DummyValue.UUID, identityId: DummyValue.UUID, source: 'manual' }] })

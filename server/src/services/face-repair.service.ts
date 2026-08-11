@@ -1081,22 +1081,35 @@ export class FaceRepairService extends BaseService {
     // per-route transaction and `detach` below.
     let locked = moveLocked;
     if (lock.length > 0) {
-      await this.databaseRepository.transaction(async (trx) => {
+      const lockedIds = await this.databaseRepository.transaction(async (trx) => {
         const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId, trx);
-        await this.faceIdentityRepository.replaceFaceIdentities(
+        // H5: `requirePersonId` re-checks placement INSIDE this transaction. getEligibleFaceIdsForPerson
+        // ran outside it and calls itself advisory; without a write-time guard a concurrent reassign left
+        // the face on the other person while its identity was re-pointed here — the exact torn state the
+        // move and detach paths transact against.
+        const writtenIds = await this.faceIdentityRepository.replaceFaceIdentities(
           {
             assetFaceIds: lock,
             identityId: identity.id,
             source: 'manual',
+            requirePersonId: personId,
           },
           trx,
         );
-        await this.facePersonVerdictRepository.drainPendingForFaces(lock, trx);
+        // Scoped to what was actually written: a face that raced away must not have its queue drained or
+        // its negatives cleared for a lock that never happened.
+        await this.facePersonVerdictRepository.drainPendingForFaces(writtenIds, trx);
         // Slice 8 (F15): the lock just re-affirmed a fact ("these faces ARE this reviewed person") that
         // contradicts any durable rejected/ignored row for this SAME person — see clearNegativeForTarget.
-        await this.facePersonVerdictRepository.clearNegativeForTarget({ personId, identityId: identity.id }, lock, trx);
+        await this.facePersonVerdictRepository.clearNegativeForTarget(
+          { personId, identityId: identity.id },
+          writtenIds,
+          trx,
+        );
+        return writtenIds;
       });
-      locked += lock.length;
+      // Count rows actually written, not ids requested — a duplicate id or a raced face used to inflate this.
+      locked += lockedIds.length;
     }
 
     // Detach (Slice 5, state 5, "Not a face"): unassign each detached face from this person AND strip its

@@ -3077,9 +3077,9 @@ describe('FaceRepairService.resolveFaces: duplicate id within a single lock buck
       user.id,
     );
 
-    // `locked` counts the requested lock bucket length (unchanged, pre-existing behaviour, not part of this
-    // fix) — what this fix guarantees is that exactly one row is actually written and no 21000 is raised.
-    expect(result.locked).toBe(2);
+    // H5: `locked` counts rows actually written (deduped, same as `moved`), not the raw requested-bucket
+    // length — a duplicate id in the request still writes and is counted as exactly one lock.
+    expect(result.locked).toBe(1);
     expect(result.moved).toBe(0);
     const rows = await manualLinkFor(f1);
     expect(rows).toHaveLength(1);
@@ -3117,7 +3117,9 @@ describe('FaceRepairService.resolveFaces: combined move + stay + duplicated lock
 
     expect(result.moved).toBe(1);
     expect(result.declined).toBe(1);
-    expect(result.locked).toBe(2);
+    // H5: `locked` counts rows actually written (deduped), not the raw requested-bucket length — the
+    // duplicated fLock id still writes and is counted as exactly one lock.
+    expect(result.locked).toBe(1);
 
     const byId = await personIdsOf([fMove, fStay, fLock]);
     expect(byId[fMove]).toBe(moveDest.id);

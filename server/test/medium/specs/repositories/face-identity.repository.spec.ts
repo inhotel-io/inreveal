@@ -5341,6 +5341,126 @@ describe(FaceIdentityRepository.name, () => {
       // own row — proving the fix only merges the DUPLICATE, not the whole batch.
       expect(rows.map((r) => r.assetFaceId).sort()).toEqual([faceA.id, faceB.id].sort());
     });
+
+    // H5: getEligibleFaceIdsForPerson (the lock bucket's eligibility read) runs OUTSIDE the caller's
+    // transaction and calls itself "advisory only". Without a write-time re-check here, a concurrent
+    // reassign landing between that read and this write leaves asset_face.personId pointing at the new
+    // person while this call still re-points the OLD person's identity onto the face — the same torn
+    // state reattributeFaces/detachFaces already guard against at write time.
+    it('excludes and does not write a face that moved off the required person between read and write', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person: personP } = await ctx.newPerson({ ownerId: user.id });
+      const { person: personQ } = await ctx.newPerson({ ownerId: user.id });
+      const identityP = await sut.ensurePersonIdentity(personP.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      // GIVEN: an eligibility read taken before this call (e.g. getEligibleFaceIdsForPerson) observed this
+      // face on personP — the face is created on P to model that stale snapshot.
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: personP.id });
+      // GIVEN: a concurrent reassignment lands between that read and this write, moving the face onto
+      // personQ before replaceFaceIdentities runs — the exact race the requirePersonId guard exists to catch.
+      await ctx.database
+        .updateTable('asset_face')
+        .set({ personId: personQ.id })
+        .where('id', '=', assetFace.id)
+        .execute();
+
+      // WHEN: the stale plan is written with requirePersonId still pinned to the person the read saw.
+      const written = await sut.replaceFaceIdentities({
+        assetFaceIds: [assetFace.id],
+        identityId: identityP.id,
+        source: 'manual',
+        requirePersonId: personP.id,
+      });
+
+      // THEN: the raced face is neither returned nor linked to P's identity.
+      expect(written).toEqual([]);
+      const rows = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('assetFaceId')
+        .where('assetFaceId', '=', assetFace.id)
+        .execute();
+      expect(rows).toEqual([]);
+    });
+
+    // Positive control for the race test above: same call shape, but no concurrent reassignment occurs, so
+    // the write must still go through — proves the guard filters on a genuine mismatch, not on
+    // requirePersonId being set at all.
+    it('writes normally when the face is still on the required person', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const identity = await sut.ensurePersonIdentity(person.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      // GIVEN: the face is still on `person` — no race occurred.
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: person.id });
+
+      // WHEN
+      const written = await sut.replaceFaceIdentities({
+        assetFaceIds: [assetFace.id],
+        identityId: identity.id,
+        source: 'manual',
+        requirePersonId: person.id,
+      });
+
+      // THEN
+      expect(written).toEqual([assetFace.id]);
+      const row = await ctx.database
+        .selectFrom('face_identity_face')
+        .select(['assetFaceId', 'identityId', 'source'])
+        .where('assetFaceId', '=', assetFace.id)
+        .executeTakeFirstOrThrow();
+      expect(row).toEqual({ assetFaceId: assetFace.id, identityId: identity.id, source: 'manual' });
+    });
+
+    // The move path (executeRepair) calls replaceFaceIdentities WITHOUT requirePersonId, because
+    // reattributeFaces has already re-pointed asset_face.personId onto the destination person inside the
+    // SAME transaction by the time this runs — there is nothing stale left to re-check. Omitting the guard
+    // must keep writing unconditionally, or the move path itself would silently stop relinking identities.
+    it('writes unconditionally when requirePersonId is omitted, even for a face already reassigned elsewhere', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person: originalPerson } = await ctx.newPerson({ ownerId: user.id });
+      const { person: destinationPerson } = await ctx.newPerson({ ownerId: user.id });
+      const destinationIdentity = await sut.ensurePersonIdentity(destinationPerson.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: originalPerson.id });
+      // GIVEN: mirrors the move path — the face's personId has already moved to the destination by the
+      // time replaceFaceIdentities runs.
+      await ctx.database
+        .updateTable('asset_face')
+        .set({ personId: destinationPerson.id })
+        .where('id', '=', assetFace.id)
+        .execute();
+
+      // WHEN: requirePersonId is omitted, exactly as the move path calls it.
+      const written = await sut.replaceFaceIdentities({
+        assetFaceIds: [assetFace.id],
+        identityId: destinationIdentity.id,
+        source: 'manual',
+      });
+
+      // THEN: the write happens regardless of asset_face.personId — no eligibility re-check runs.
+      expect(written).toEqual([assetFace.id]);
+      const row = await ctx.database
+        .selectFrom('face_identity_face')
+        .select('identityId')
+        .where('assetFaceId', '=', assetFace.id)
+        .executeTakeFirstOrThrow();
+      expect(row.identityId).toBe(destinationIdentity.id);
+    });
+
+    it('returns [] for an empty assetFaceIds input without touching the database', async () => {
+      const { sut } = setup();
+
+      const written = await sut.replaceFaceIdentities({
+        assetFaceIds: [],
+        identityId: randomUUID(),
+        source: 'manual',
+      });
+
+      expect(written).toEqual([]);
+    });
   });
 
   // S10.3 (F20): the unconfirm DTO's assetFaceIds now goes up to MAX_RESOLVE_FACES (25 000), so this write
