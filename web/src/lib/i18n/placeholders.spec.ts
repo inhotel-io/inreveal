@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { FORK_LOCALES } from '$lib/i18n/fork-locales';
 
 // Why this exists: the Face Cleanup console shipped a German banner that rendered, literally,
 // "{moving} von {name}s {faceCount} Gesichtern…" — a translation of a REWRITTEN English string whose old
@@ -10,6 +11,12 @@ import path from 'node:path';
 //
 // Nothing caught any of it: CI's "Test i18n" job only runs prettier, and a stale-but-present translation is
 // invisible to a formatter, to TypeScript, and to every component test (they render `en`). This is the guard.
+//
+// Scope: FORK_LOCALES only (plus en.json as the reference). The remaining ~80 locale files are
+// translator-owned (Weblate); this suite must never fail on content the fork does not maintain, or a
+// future rebase goes red for a stale translation nobody here can fix. Slice 15b: this used to iterate
+// every file in I18N_DIR regardless of ownership, which is why mr.json and ms.json were hand-patched to
+// keep the suite green — those patches are reverted now that the scope is correct.
 
 const I18N_DIR = path.resolve(process.cwd(), '../i18n');
 
@@ -110,10 +117,7 @@ const read = (file: string): Messages =>
   flatten(JSON.parse(fs.readFileSync(path.join(I18N_DIR, file), 'utf8')) as Record<string, unknown>);
 
 const en = read('en.json');
-const locales = fs
-  .readdirSync(I18N_DIR)
-  .filter((file) => file.endsWith('.json') && file !== 'en.json')
-  .sort();
+const locales = FORK_LOCALES.map((locale) => `${locale}.json`).sort();
 
 describe('i18n placeholders', () => {
   it('parses ICU arguments without mistaking plural branches for placeholders', () => {

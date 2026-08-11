@@ -559,12 +559,12 @@ const newRealRepository = <T>(key: ClassConstructor<T>, db: Kysely<DB>): T => {
     case FaceRepairDeclineRepository:
     case FaceRepairRepository:
     case FaceRepairScanRepository:
+    case FacePersonVerdictRepository:
     case IntegrityRepository:
     case MemoryRepository:
     case NotificationRepository:
     case OcrRepository:
     case PartnerRepository:
-    case FacePersonVerdictRepository:
     case PersonRepository:
     case SearchRepository:
     case SessionRepository:
@@ -637,12 +637,12 @@ const newMockRepository = <T>(key: ClassConstructor<T>) => {
     case ConfigRepository:
     case CryptoRepository:
     case FaceIdentityRepository:
+    case FacePersonVerdictRepository:
     case MemoryRepository:
     case IntegrityRepository:
     case NotificationRepository:
     case OcrRepository:
     case PartnerRepository:
-    case FacePersonVerdictRepository:
     case PersonRepository:
     case SessionRepository:
     case SyncRepository:
