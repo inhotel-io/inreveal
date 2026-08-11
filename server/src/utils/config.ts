@@ -129,7 +129,11 @@ const SUGGESTION_BAND_HEADROOM = 0.2;
  * Only ever adjusts a band the admin did NOT set. An explicitly configured inverted band is a real
  * misconfiguration and must still surface, or the admin never learns their setting does nothing.
  */
-export const deriveSuggestionBand = (partial: unknown, merged: SystemConfig): SystemConfig => {
+export const deriveSuggestionBand = (
+  partial: unknown,
+  merged: SystemConfig,
+  logger?: { warn: (message: string) => void },
+): SystemConfig => {
   if (_.get(partial, SUGGESTIONS_MAX_DISTANCE_PATH) !== undefined) {
     return merged;
   }
@@ -139,13 +143,22 @@ export const deriveSuggestionBand = (partial: unknown, merged: SystemConfig): Sy
     return merged;
   }
 
-  const derived = Math.min(maxDistance + SUGGESTION_BAND_HEADROOM, SUGGESTION_MAX_DISTANCE_CEILING);
+  // Rounded to two decimals: 0.7 + 0.2 is 0.8999999999999999 in IEEE-754, and this value is persisted by
+  // updateConfig and rendered into the admin number input, so an unrounded float leaks into both.
+  const derived = Math.min(
+    Math.round((maxDistance + SUGGESTION_BAND_HEADROOM) * 100) / 100,
+    SUGGESTION_MAX_DISTANCE_CEILING,
+  );
   const config = _.cloneDeep(merged);
   config.machineLearning.facialRecognition.suggestions.maxDistance = derived;
   // At the schema ceiling no valid band exists at all. Disable rather than ship a config that fails its
-  // own invariant on every save.
+  // own invariant on every save — and say so, because the invariant check below is gated on `enabled`
+  // and therefore cannot fire once we switch it off, leaving the admin with no diagnostic at all.
   if (derived <= maxDistance) {
     config.machineLearning.facialRecognition.suggestions.enabled = false;
+    logger?.warn(
+      `Face suggestions disabled: machineLearning.facialRecognition.maxDistance (${maxDistance}) leaves no room for a suggestion band below the maximum of ${SUGGESTION_MAX_DISTANCE_CEILING}.`,
+    );
   }
   return config;
 };
@@ -193,7 +206,7 @@ const buildConfig = async (repos: RepoDeps) => {
     logger.error('Validation error', messages);
   }
 
-  const config = deriveSuggestionBand(partial, (result.success ? result.data : rawConfig) as SystemConfig);
+  const config = deriveSuggestionBand(partial, (result.success ? result.data : rawConfig) as SystemConfig, logger);
 
   // The suggestion-band cross-field invariant (F35). `ConfigValidate` (person.service.ts) enforces the same rule
   // on the database-config path, but that event only fires from `updateSystemConfig`, which config-file mode

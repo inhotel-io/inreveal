@@ -168,7 +168,9 @@ describe('count arguments must be raw numbers, not formatted strings', () => {
         if (!entry.name.endsWith('.svelte') && !entry.name.endsWith('.ts')) {
           continue;
         }
-        if (/count:\s*[^,}]*toLocaleString\(\)/.test(fs.readFileSync(full, 'utf8'))) {
+        // Match `toLocaleString(` not `toLocaleString()` — a locale-aware call such as
+        // toLocaleString('de-DE') also inserts separators and would evade the narrower pattern.
+        if (/count:\s*[^,}]*toLocaleString\(/.test(fs.readFileSync(full, 'utf8'))) {
           offenders.push(path.relative(process.cwd(), full));
         }
       }

@@ -293,6 +293,50 @@ describe('deriveSuggestionBand', () => {
     expect(result.machineLearning.facialRecognition.suggestions.enabled).toBe(false);
   });
 
+  // The equality boundary, and the single most common upgrade shape: an install sitting exactly at the
+  // 0.7 default band. Mutating the guard from `>` to `>=` left the whole file green without this case,
+  // while reintroducing the crash for precisely these users.
+  it('derives when the recognition distance EQUALS the default band', () => {
+    const result = deriveSuggestionBand(
+      { machineLearning: { facialRecognition: { maxDistance: 0.7 } } },
+      merged(0.7, { enabled: true, maxDistance: 0.7 }),
+    );
+    expect(result.machineLearning.facialRecognition.suggestions.maxDistance).toBe(0.9);
+  });
+
+  // The derived value is persisted by updateConfig and rendered into the admin number input, so an
+  // IEEE-754 artefact (0.7 + 0.2 === 0.8999999999999999) would leak into both.
+  it('rounds the derived value to two decimals', () => {
+    const result = deriveSuggestionBand(
+      { machineLearning: { facialRecognition: { maxDistance: 0.7 } } },
+      merged(0.7, { enabled: true, maxDistance: 0.7 }),
+    );
+    expect(result.machineLearning.facialRecognition.suggestions.maxDistance).toBe(0.9);
+    expect(String(result.machineLearning.facialRecognition.suggestions.maxDistance)).toBe('0.9');
+  });
+
+  // At the ceiling the feature switches itself off, and the invariant check in buildConfig is gated on
+  // `enabled` — so it cannot fire afterwards. Without a warning the admin gets no diagnostic at all.
+  it('warns when it disables the feature at the ceiling', () => {
+    const logger = { warn: vi.fn() };
+    deriveSuggestionBand(
+      { machineLearning: { facialRecognition: { maxDistance: 2 } } },
+      merged(2, { enabled: true, maxDistance: 0.7 }),
+      logger,
+    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Face suggestions disabled'));
+  });
+
+  it('does not warn when it derives a valid band (control)', () => {
+    const logger = { warn: vi.fn() };
+    deriveSuggestionBand(
+      { machineLearning: { facialRecognition: { maxDistance: 0.8 } } },
+      merged(0.8, { enabled: true, maxDistance: 0.7 }),
+      logger,
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it('leaves an already-valid band alone', () => {
     const result = deriveSuggestionBand(
       { machineLearning: { facialRecognition: { maxDistance: 0.5 } } },

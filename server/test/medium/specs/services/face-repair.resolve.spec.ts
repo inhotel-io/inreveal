@@ -446,7 +446,8 @@ describe('FaceRepairService.resolveFaces: partial move leaves the surviving sour
     const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
     expect(sourceRow?.id).toBe(source.id);
 
-    // Picked faces have manual identities.
+    // Picked faces are relinked to the destination. B2: this request sent lock:false, so the link is an
+    // ordinary placement rather than the durable `manual` lock.
     const idRows = await db
       .selectFrom('face_identity_face')
       .select(['source'])

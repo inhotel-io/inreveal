@@ -1001,10 +1001,11 @@ export class FaceRepairService extends BaseService {
       perPerson: [],
     });
 
-    // Move-and-lock: nothing extra to persist. `reattributeFaces` already writes the moved faces'
-    // `face_identity_face` link with `source='manual'`, and that link IS the lock — owner-agnostic, keyed by
-    // identity so it survives a merge, and replaced (never duplicated) if a human moves the face again. The
-    // dedicated lock table this used to write was a second, weaker record of the same fact.
+    // Move-and-lock: nothing extra to persist. For a group that asked to lock, executeRepair already wrote
+    // the moved faces' `face_identity_face` link with `source='manual'`, and that link IS the lock —
+    // owner-agnostic, keyed by identity so it survives a merge, and replaced (never duplicated) if a human
+    // moves the face again. B2: a group with `lock: false` gets `source='owner-person'` instead and is
+    // deliberately NOT counted here, so this tally reflects durable locks only.
     const movedSet = new Set(result.movedFaceIds);
     const moveLocked = moveToPerson
       .filter((group) => group.lock)

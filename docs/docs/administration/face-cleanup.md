@@ -199,6 +199,22 @@ Moves are not listed here — Resolutions records negative decisions ("not this 
 move, open the affected people on the People page and reassign the faces.
 :::
 
+## The face-suggestion distance
+
+Face suggestions use their own distance, which must be **greater** than the facial-recognition _maximum
+distance_ — a suggestion is by definition a face that recognition was not confident enough to assign, so an
+equal or lower value can never surface anything.
+
+When you have not set the suggestion distance yourself, it defaults to **0.7, or the recognition distance plus
+0.2 if that is higher**. This matters on upgrade: an instance that had already raised its recognition distance
+to 0.7 or beyond gets a suggestion distance derived from it, rather than an inverted band that would refuse to
+start (config-file installs) or reject every settings save (database installs).
+
+Once you set the value explicitly it is yours, and is never adjusted again. If you later raise the recognition
+distance above it, saving is rejected with a message naming both numbers — raise the suggestion distance to
+match. At the schema maximum of 2 no valid band exists, so suggestions are switched off and a warning is
+logged.
+
 ## Safety
 
 - The scan and the apply step both **refuse to run while facial recognition is active**. If you see a 409 conflict
