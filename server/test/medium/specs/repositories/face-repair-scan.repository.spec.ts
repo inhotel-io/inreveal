@@ -144,6 +144,61 @@ describe(FaceRepairScanRepository.name, () => {
     await expect(sut.createScan({ requestedBy: null, params: PARAMS })).rejects.toBeInstanceOf(ScanInProgressError);
   });
 
+  // H7: `UNIQUE (status) WHERE status IN ('pending','running')` is unique on the VALUE of status, so one
+  // 'pending' row and one 'running' row could coexist — two admins crossing the pending -> running
+  // transition at the same time both succeed. createScan's own SELECT-then-INSERT check is advisory; the
+  // index is the backstop, so this bypasses the repository and inserts directly to prove the DB constraint
+  // itself, not the application-level check above, closes the race.
+  describe('in-flight index (H7)', () => {
+    // GIVEN a scan that has already moved from `pending` to `running`
+    // WHEN a second scan row is inserted directly, bypassing createScan's advisory SELECT
+    // THEN the unique index itself must reject it — the SELECT is advisory, the index is the backstop.
+    it('refuses a second in-flight scan across the pending -> running transition', async () => {
+      const first = await sut.createScan({ requestedBy: null, params: PARAMS });
+      await sut.updateScanProgress(first.id, { status: 'running' });
+
+      await expect(db.insertInto('face_repair_scan').values({ status: 'pending' }).execute()).rejects.toThrow(
+        /face_repair_scan_in_flight_uq/,
+      );
+    });
+
+    // Positive control: without this, an index that rejected EVERY insert would also pass the test above.
+    it('still allows a new scan once the previous one completed', async () => {
+      const first = await sut.createScan({ requestedBy: null, params: PARAMS });
+      await sut.completeScan(first.id, { totals: zeroTotals(), persons: [] });
+      await expect(sut.createScan({ requestedBy: null, params: PARAMS })).resolves.toBeDefined();
+    });
+
+    // The naive `CREATE UNIQUE INDEX ... WHERE status IN (...)` fails outright if the instance already
+    // holds more than one in-flight row (exactly the state H7 describes) — the migration must demote every
+    // in-flight row but the newest to 'failed' BEFORE creating the index, or upgrading a raced instance
+    // would crash-loop on boot. Reproduces that starting state by inserting two in-flight rows directly
+    // (bypassing the now-active index the same way the test above does) is not possible without dropping
+    // the index first, so this asserts the migration source actually performs the demote-before-create
+    // ordering rather than re-deriving Postgres's index-creation failure mode via execution.
+    it("the migration demotes every in-flight scan but the newest to 'failed' before recreating the index", async () => {
+      const { readFileSync } = await import('node:fs');
+      const { resolve } = await import('node:path');
+      // eslint-disable-next-line unicorn/prefer-module
+      const thisDir = __dirname;
+      const migrationPath = resolve(
+        thisDir,
+        '../../../../src/schema/migrations-gallery/1790000000000-FixFaceRepairScanInFlightIndex.ts',
+      );
+      const source = readFileSync(migrationPath, 'utf8');
+
+      const demoteIndex = source.indexOf('SET "status" = \'failed\'');
+      const createIndexIndex = source.indexOf('CREATE UNIQUE INDEX "face_repair_scan_in_flight_uq"');
+      expect(demoteIndex).toBeGreaterThan(-1);
+      expect(createIndexIndex).toBeGreaterThan(-1);
+      // The demotion must run BEFORE the index is (re-)created, or an instance already holding more than
+      // one in-flight row would fail index creation on boot instead of self-healing.
+      expect(demoteIndex).toBeLessThan(createIndexIndex);
+      // Keeps exactly the newest in-flight row — every OTHER in-flight row is demoted.
+      expect(source).toContain('ORDER BY "createdAt" DESC LIMIT 1');
+    });
+  });
+
   it('advances progress, then completes with totals + persons and finishedAt', async () => {
     const scan = await sut.createScan({ requestedBy: null, params: PARAMS });
 
