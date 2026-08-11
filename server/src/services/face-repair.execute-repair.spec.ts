@@ -2,7 +2,7 @@ import { JobName } from 'src/enum';
 import { FaceRepairService } from 'src/services/face-repair.service';
 import { newTestService, ServiceMocks } from 'test/utils';
 
-const plan = (toRepair: { assetFaceId: string; currentPersonId: string; suspectedOwnerId: string }[]) =>
+const plan = (toRepair: { assetFaceId: string; currentPersonId: string; suspectedOwnerId: string; lock?: boolean }[]) =>
   ({
     toRepair,
     reviewOnlyFaces: [],
@@ -10,6 +10,13 @@ const plan = (toRepair: { assetFaceId: string; currentPersonId: string; suspecte
     unAttributableFaces: [],
     perPerson: [],
   }) as any;
+
+// Both people share owner u1, so executeRepair's cross-owner guard (C6) never fires and the move proceeds.
+function arrangeSameOwnerMove(mocks: ServiceMocks) {
+  mocks.person.getById.mockImplementation((id: string) => Promise.resolve({ id, ownerId: 'u1' } as any));
+  mocks.faceRepair.reconcileRepresentativeFaces.mockResolvedValue([]);
+  mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
+}
 
 describe(FaceRepairService.name, () => {
   let sut: FaceRepairService;
@@ -89,6 +96,97 @@ describe(FaceRepairService.name, () => {
 
       // Without this the source person's card keeps showing the crop of the face that just moved away.
       expect(mocks.job.queueAll).toHaveBeenCalledWith([{ name: JobName.PersonGenerateThumbnail, data: { id: 'p1' } }]);
+    });
+  });
+
+  // B2: `source='manual'` is the strongest verdict in the system — getManualLinkedFaceIds and the
+  // pending-eligibility anti-join both exclude such a face from every scan and every suggestion queue,
+  // permanently. executeRepair used to write it for EVERY move, so `lock: false` (the MoveGroup default,
+  // and what the web client sends for a suggested-owner move) silently made the face unreviewable while
+  // the response reported `locked: 0`.
+  describe('executeRepair lock durability', () => {
+    // GIVEN an admin confirms a move and asks for it to stick
+    // WHEN the move is written
+    // THEN the identity link is `manual`, so no future scan can question the face again.
+    it('writes a manual link for a locked move', async () => {
+      arrangeSameOwnerMove(mocks);
+      mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
+
+      await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q', lock: true }]));
+
+      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith(
+        { assetFaceIds: ['f1'], identityId: 'identQ', source: 'manual' },
+        expect.anything(),
+      );
+    });
+
+    // GIVEN a plain move, which the DTO documents as "undurable unless the caller opts in"
+    // WHEN the move is written
+    // THEN the identity link is re-pointed but NOT manual, so the face stays reviewable.
+    it('writes an owner-person link for an unlocked move', async () => {
+      arrangeSameOwnerMove(mocks);
+      mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
+
+      await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q', lock: false }]));
+
+      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith(
+        { assetFaceIds: ['f1'], identityId: 'identQ', source: 'owner-person' },
+        expect.anything(),
+      );
+    });
+
+    // An unlocked move must still RE-POINT the identity. Skipping the relink would leave the face on the
+    // destination while still carrying the source person's identity — the torn state FaceIdentityBackfill
+    // resolves back to the source, silently reverting the move.
+    it('still re-points the identity to the destination on an unlocked move', async () => {
+      arrangeSameOwnerMove(mocks);
+      mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
+
+      await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q', lock: false }]));
+
+      expect(mocks.faceIdentity.ensurePersonIdentity).toHaveBeenCalledWith('q', expect.anything());
+      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith(
+        expect.objectContaining({ identityId: 'identQ' }),
+        expect.anything(),
+      );
+    });
+
+    // The scan's own auto-repair path builds FlaggedFace without a lock field and has always been durable.
+    it('defaults an omitted lock flag to durable', async () => {
+      arrangeSameOwnerMove(mocks);
+      mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
+
+      await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q' }]));
+
+      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith(
+        expect.objectContaining({ source: 'manual' }),
+        expect.anything(),
+      );
+    });
+
+    // Routes are keyed by (from, to). Without the lock in the key, a mixed batch collapses into one write
+    // and one bucket silently inherits the other's durability.
+    it('does not collapse locked and unlocked faces on the same route into one write', async () => {
+      arrangeSameOwnerMove(mocks);
+      mocks.faceRepair.reattributeFaces.mockImplementation((_from: string, _to: string, ids: string[]) =>
+        Promise.resolve(ids),
+      );
+
+      await sut.executeRepair(
+        plan([
+          { assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q', lock: true },
+          { assetFaceId: 'f2', currentPersonId: 'p1', suspectedOwnerId: 'q', lock: false },
+        ]),
+      );
+
+      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith(
+        { assetFaceIds: ['f1'], identityId: 'identQ', source: 'manual' },
+        expect.anything(),
+      );
+      expect(mocks.faceIdentity.replaceFaceIdentities).toHaveBeenCalledWith(
+        { assetFaceIds: ['f2'], identityId: 'identQ', source: 'owner-person' },
+        expect.anything(),
+      );
     });
   });
 });
