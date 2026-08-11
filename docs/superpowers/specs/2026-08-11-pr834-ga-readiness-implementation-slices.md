@@ -1,6 +1,6 @@
 # PR #834 GA-Readiness Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** This spec is written for `/impl-loop`. It is organised into numbered slices (`## Slice 1` … `## Slice 15`); each slice is independently plannable, testable and committable. `/impl-loop` will produce one plan per slice under `docs/superpowers/plans/2026-08-11-pr834-ga-readiness-slice-<n>.md` and execute it with superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax for tracking. Slices may be started at any point; the only ordering constraints are recorded under "Ordering constraints between slices" below.
 
 **Goal:** Close the four blockers, six high-severity defects, mutation-verified test gaps, and the worst of the upstream-conflict surface found in the #834 correctness review, so the unified face-verdict layer can ship to GA.
 
@@ -20,6 +20,28 @@
 - **New tables/indexes/migrations must be added to `scripts/revert-to-immich.sql`.** This plan adds no new tables; slice 7 adds one index and one migration name, which must be appended there.
 - **Every slice ends green on its own gates.** A slice is not done until its own tests pass _and_ `pnpm exec eslint <changed files> --max-warnings 0` and `pnpm exec prettier --check <changed files>` are clean.
 - **Do not "fix" `lock`-related behaviour beyond slice 2.** The decision recorded there (unlocked moves write `owner-person`) is deliberate and other slices depend on it.
+
+## Ordering constraints between slices
+
+Everything else is independent and may be done in any order, or in parallel.
+
+- **Slice 5 after slice 2** — both edit `executeRepair`'s transaction body. Re-run `face-repair.resolve.spec.ts` after each.
+- **Slice 9 step 0 before slice 9 steps 1-4** — the shared `FORK_LOCALES` module must exist before either i18n spec imports it.
+- **Slice 13 after slices 1-12** — the extraction moves ~1,700 spec lines; doing it first would force every earlier slice to be written against files that are about to move.
+- **Phase 1 (slices 1-4) is independently shippable.** If GA timing gets tight, it alone removes every user-visible data hazard.
+
+## Test conventions — TDD and BDD
+
+**TDD is mandatory and literal.** Every slice writes the test first, runs it to observe a _specific_ named failure, implements the minimum to pass, and re-runs. A test that passes on its first run is a red flag: it means the test does not exercise the defect, and it must be fixed before the implementation is written. Phase 3 inverts this — the "red" step is applying a mutation and confirming the suite is green — but the discipline is the same: never write an assertion you have not watched fail.
+
+**BDD is expressed in the idiom this codebase already uses**, not in Gherkin. The repo has no Cucumber runner, and introducing one for fifteen slices would conflict with the "consistent with the codebase" requirement. Instead, every test in this spec follows:
+
+- `describe(...)` names the **context** — the unit and the state it is in.
+- `it(...)` states an **observable behaviour in plain language**, phrased as what the system does, never as what the code contains. `it('refuses a space reject on a face the caller does not own')`, not `it('calls requireAccess')`.
+- Where the behaviour is not obvious from the name, a **GIVEN / WHEN / THEN comment** sits directly above the test, as in slices 1, 7, 8 and 10. Use it whenever the scenario has preconditions a reader cannot infer.
+- The body follows **arrange / act / assert** in that order, with no assertions interleaved into setup.
+
+**Every behavioural test needs a positive control.** An assertion that something is absent, excluded, skipped or rejected proves nothing on its own — a broken fixture, a typo'd testid or a query that returns nothing produces the same green. Pair it with the case that _should_ be present. This is not a stylistic preference: the review that produced this spec found three assertions targeting testids that exist in no component, and a medium test whose act was a proven no-op. Both classes were green.
 
 ## Verification Commands (use these exact forms)
 
@@ -126,15 +148,25 @@ describe('deriveSuggestionBand', () => {
 });
 
 describe('buildConfig (B1 upgrade path)', () => {
+  // GIVEN a config-file install that raised the recognition distance before `suggestions` existed
+  // WHEN the server boots on the new image
+  // THEN it must start, rather than throwing the band-inversion error and crash-looping.
   it('boots a config-file install whose recognition distance exceeds the suggestion default', async () => {
-    // Regression: this threw "must be greater than" and crash-looped the server.
-    const repos = configRepos({ configFile: 'immich.yaml', maxDistance: 0.8 });
-    await expect(getConfig(repos, { withCache: false })).resolves.toBeDefined();
+    const configMock = newConfigRepositoryMock();
+    configMock.getEnv.mockReturnValue(mockEnvData({ configFile: 'immich.yaml' }));
+    const metadataMock = newSystemMetadataRepositoryMock();
+    vi.spyOn(fs.promises, 'readFile').mockResolvedValue(
+      'machineLearning:\n  facialRecognition:\n    maxDistance: 0.8\n',
+    );
+
+    await expect(
+      getConfig({ configRepo: configMock, metadataRepo: metadataMock, logger: newLoggerMock() }, { withCache: false }),
+    ).resolves.toBeDefined();
   });
 });
 ```
 
-Use the existing `partialFor` / config-file harness at `server/src/utils/config.spec.ts:107-130` as the model for `configRepos`; mirror its `loadFromFile` mock exactly rather than inventing a new one.
+Build the repos from the mocks this file already imports — `newConfigRepositoryMock`, `newSystemMetadataRepositoryMock` and `mockEnvData` (`server/src/utils/config.spec.ts:1-7`). Do **not** invent a new harness. `getConfig(repos, { withCache })` is the real signature (`utils/config.ts:28`); pass `withCache: false` or the module-level cache leaks between tests.
 
 - [ ] **Step 2: Run to verify they fail**
 
@@ -836,7 +868,7 @@ cd server && pnpm exec vitest run --config test/vitest.config.medium.mjs test/me
 cd server && pnpm test
 ```
 
-Expected: PASS. `replaceFaceIdentities` has other callers (people-merge, backfill) that omit `requirePersonId` — the whole-suite run is what proves they are unaffected.
+Expected: PASS. `replaceFaceIdentities` has exactly **two** callers, both in `face-repair.service.ts` (`:299` the move path, `:1065` the lock path) — verified with `grep -rn "replaceFaceIdentities(" server/src --include="*.ts"`. Only the lock path passes `requirePersonId`; the move path already re-checks placement inside `reattributeFaces`, so it must keep passing nothing. The narrow blast radius is why this change is safe; the whole-suite run is a backstop, not the argument.
 
 - [ ] **Step 5: Commit**
 
@@ -929,22 +961,39 @@ git commit -m "fix(face-cleanup): chunk the four library-sized verdict reads"
 - [ ] **Step 1: Write the failing test**
 
 ```ts
+// RepairScanParams (face-repair-scan.repository.ts:14-23) requires all seven fields — `params: {}`
+// does not typecheck. Reuse the instance defaults so the fixture cannot drift from the real shape.
+const SCAN_PARAMS: RepairScanParams = {
+  maxDistance: 0.5,
+  minFaces: 3,
+  voteWindow: 200,
+  voteMargin: 2,
+  maxAttributionDistance: 0.35,
+  maxFlaggedFraction: 0.5,
+  largeClusterThreshold: 50,
+};
+
+// GIVEN a scan that has already moved from `pending` to `running`
+// WHEN a second scan row is inserted directly, bypassing createScan's advisory SELECT
+// THEN the unique index itself must reject it — the SELECT is advisory, the index is the backstop.
 it('refuses a second in-flight scan across the pending -> running transition', async () => {
-  const first = await sut.createScan({ requestedBy: null, params: {} });
+  const first = await sut.createScan({ requestedBy: null, params: SCAN_PARAMS });
   await sut.updateScanProgress(first.id, { status: 'running', scanned: 0 });
 
-  // Insert directly, bypassing createScan's advisory SELECT, so the INDEX is what is under test.
   await expect(
     ctx.database.insertInto('face_repair_scan').values({ status: 'pending', persons: '[]' }).execute(),
   ).rejects.toThrow(/face_repair_scan_in_flight_uq/);
 });
 
-it('still allows a new scan once the previous one completed (positive control)', async () => {
-  const first = await sut.createScan({ requestedBy: null, params: {} });
-  await sut.completeScan(first.id, { persons: [], totals: {} });
-  await expect(sut.createScan({ requestedBy: null, params: {} })).resolves.toBeDefined();
+// Positive control: without this, an index that rejected EVERY insert would also pass the test above.
+it('still allows a new scan once the previous one completed', async () => {
+  const first = await sut.createScan({ requestedBy: null, params: SCAN_PARAMS });
+  await sut.completeScan(first.id, { totals: EMPTY_TOTALS, persons: [] });
+  await expect(sut.createScan({ requestedBy: null, params: SCAN_PARAMS })).resolves.toBeDefined();
 });
 ```
+
+`completeScan(id, { totals, persons })` is the real signature (`face-repair-scan.repository.ts:136`); build `EMPTY_TOTALS` from the `RepairScanTotals` shape the file already uses in its existing tests rather than passing `{}`.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -1024,14 +1073,24 @@ git commit -m "fix(face-cleanup): make the in-flight scan index enforce a single
 
 - [ ] **Step 1: Write the failing test**
 
+`getJobOptions` is **private** (`job.repository.ts:551`), so it cannot be called directly. Assert through `queue.add`, which is exactly how the existing job-options tests in this file work (`job.repository.spec.ts:457-470`):
+
 ```ts
+// GIVEN a per-person suggestion scan is enqueued
+// WHEN BullMQ receives it
+// THEN it must carry removeOnFail, or a single failure occupies the stable dedup jobId forever and
+// every later enqueue for that person is silently dropped.
 it.each([
-  [JobName.PersonSuggestionScan, 'person-suggestion-scan/'],
-  [JobName.SpacePersonSuggestionScan, 'space-person-suggestion-scan/'],
-])('%s sets removeOnFail so a failure cannot occupy its dedup jobId forever', (name, prefix) => {
-  const options = sut.getJobOptions({ name, data: { id: 'person-1' } } as never);
-  expect(options?.jobId).toBe(`${prefix}person-1`);
-  expect(options?.removeOnFail).toBe(true);
+  [JobName.PersonSuggestionScan, 'person-suggestion-scan/person-1'],
+  [JobName.SpacePersonSuggestionScan, 'space-person-suggestion-scan/person-1'],
+])('%s is enqueued with removeOnFail', async (name, expectedJobId) => {
+  await sut.queue({ name, data: { id: 'person-1' } } as never);
+
+  expect(queue.add).toHaveBeenCalledWith(
+    name,
+    { id: 'person-1' },
+    expect.objectContaining({ jobId: expectedJobId, removeOnFail: true }),
+  );
 });
 ```
 
@@ -1082,23 +1141,39 @@ Also in scope: `i18n/nl.json` `"Nieuwe persoon '{query}' aanmaken"` — the apos
 
 **Files:**
 
+- Create: `web/src/lib/i18n/fork-locales.ts`
 - Modify: `web/src/lib/i18n/face-cleanup-plurals.spec.ts` (iterate the fork's nine locales)
+- Modify: `web/src/lib/i18n/fork-string-parity.spec.ts` (import the shared list instead of its own copy)
 - Modify: `i18n/{de,fr,it,nl,pl,es,ru,zh_Hans,zh_Hant}.json`
 - Test: the same spec
 
-- [ ] **Step 1: Fix the guard first, so it fails**
+- [ ] **Step 0: Extract the locale list so two specs cannot disagree**
+
+`fork-string-parity.spec.ts:19` declares `const TRANSLATED = [...]` — module-private and **not exported**, so it cannot be imported. Rather than copy the list (it will drift), lift it into a real module:
 
 ```ts
-// The nine locales the fork maintains. Reuse the constant rather than re-listing it — the sibling
-// fork-string-parity.spec.ts already defines exactly this set, and a second copy will drift.
-import { TRANSLATED } from './fork-string-parity.spec';
+// web/src/lib/i18n/fork-locales.ts
+/**
+ * The nine locales the fork maintains by hand. Every fork-added string must exist in all of them.
+ * The remaining ~80 locale files belong to translators and must never be hand-edited — see
+ * placeholders.spec.ts, which is scoped to this list for exactly that reason.
+ */
+export const FORK_LOCALES = ['de', 'es', 'fr', 'it', 'nl', 'pl', 'ru', 'zh_Hans', 'zh_Hant'] as const;
+```
+
+Then replace the `const TRANSLATED` declaration in `fork-string-parity.spec.ts` with an import of `FORK_LOCALES`, leaving its own assertions untouched. Run `pnpm exec vitest run src/lib/i18n/` and confirm it is still green before changing anything else — this step must be behaviour-neutral.
+
+- [ ] **Step 1: Fix the guard so it fails**
+
+```ts
+import { FORK_LOCALES } from '$lib/i18n/fork-locales';
 
 beforeAll(async () => {
-  for (const locale of ['en', ...TRANSLATED]) {
+  for (const locale of ['en', ...FORK_LOCALES]) {
     register(locale, () => import(`$i18n/${locale}.json`));
   }
   await init({ fallbackLocale: 'en', initialLocale: 'en' });
-  await Promise.all(['en', ...TRANSLATED].map((l) => waitLocale(l)));
+  await Promise.all(['en', ...FORK_LOCALES].map((l) => waitLocale(l)));
 });
 
 // Derive the key list from en.json instead of hardcoding 17 — a hardcoded list silently stops
@@ -1107,7 +1182,7 @@ const PLURAL_KEYS = Object.entries(en.admin)
   .filter(([key, value]) => key.startsWith('face_cleanup_') && /\{count,\s*plural/.test(value))
   .map(([key]) => key);
 
-describe.each(TRANSLATED)('%s', (locale) => {
+describe.each(FORK_LOCALES)('%s', (locale) => {
   it.each(PLURAL_KEYS)('%s keeps an ICU plural clause', (key) => {
     const translated = read(`${locale}.json`)[`admin.${key}`];
     if (translated === undefined) {
@@ -1124,7 +1199,7 @@ describe.each(TRANSLATED)('%s', (locale) => {
 });
 
 it('no locale opens an ICU literal with an apostrophe before a placeholder', () => {
-  for (const locale of TRANSLATED) {
+  for (const locale of FORK_LOCALES) {
     for (const [key, value] of Object.entries(read(`${locale}.json`))) {
       expect(`${locale}:${key}:${value}`).not.toMatch(/'\{/);
     }
@@ -1193,25 +1268,70 @@ git commit -m "fix(i18n): restore ICU plurals in nine locales and make the guard
 
 - [ ] **Step 1: Write the failing test**
 
+A cluster mute is one `type='person'` row per person, keyed by `personId`, carrying `suspectedOwnerIds: string[]` in jsonb — there is **no** fingerprint column. `createClusterMutes({ persons, declinedBy })` is last-write-wins: it deletes the person's existing row and inserts a fresh one, so a person has at most one. `getClusterMuteMap(personIds)` returns `Map<personId, Set<suspectedOwnerId>>`.
+
 ```ts
+// GIVEN an admin muted a cluster on the person that is about to be merged away
+// WHEN that person is merged into a survivor
+// THEN the mute must move with it — CASCADE on personId otherwise deletes it silently.
 it('carries a cluster mute onto the survivor when its person is merged away', async () => {
-  const { source, survivor } = await seedTwoPeople();
-  await declineRepository.createClusterMutes([{ personId: source.id, fingerprint: 'fp-1' }], admin.id);
-  expect(await declineRepository.getClusterMuteMap([source.id])).not.toEqual(new Map()); // positive control
+  const { source, survivor, ownerA } = await seedTwoPeople();
+  await declineRepository.createClusterMutes({
+    persons: [{ personId: source.id, suspectedOwnerIds: [ownerA.id] }],
+    declinedBy: admin.id,
+  });
+  // Positive control: without this, a broken seed produces the same green as a broken merge.
+  expect((await declineRepository.getClusterMuteMap([source.id])).get(source.id)).toEqual(new Set([ownerA.id]));
 
   await personRepository.mergePersonProfile(survivor.id, source.id);
 
-  const muted = await declineRepository.getClusterMuteMap([survivor.id]);
-  expect(muted.get(survivor.id)).toEqual(['fp-1']);
+  expect((await declineRepository.getClusterMuteMap([survivor.id])).get(survivor.id)).toEqual(new Set([ownerA.id]));
 });
 
-it('drops a duplicate mute rather than violating uniqueness when both people muted the same cluster', async () => {
-  const { source, survivor } = await seedTwoPeople();
-  await declineRepository.createClusterMutes([{ personId: source.id, fingerprint: 'fp-1' }], admin.id);
-  await declineRepository.createClusterMutes([{ personId: survivor.id, fingerprint: 'fp-1' }], admin.id);
+// GIVEN BOTH people carry a mute, each naming a different suspected owner
+// WHEN they merge
+// THEN the survivor keeps ONE row whose suspected owners are the union — the merged cluster contains
+// both sets of faces, so both mutes still apply. Two rows would make getClusterMuteMap's `set()`
+// nondeterministic (last row read wins) and an Undo would clear only half the mute.
+it('unions the suspected owners when both people muted their clusters', async () => {
+  const { source, survivor, ownerA, ownerB } = await seedTwoPeople();
+  await declineRepository.createClusterMutes({
+    persons: [{ personId: source.id, suspectedOwnerIds: [ownerA.id] }],
+    declinedBy: admin.id,
+  });
+  await declineRepository.createClusterMutes({
+    persons: [{ personId: survivor.id, suspectedOwnerIds: [ownerB.id] }],
+    declinedBy: admin.id,
+  });
 
+  await personRepository.mergePersonProfile(survivor.id, source.id);
+
+  const rows = await ctx.database
+    .selectFrom('face_repair_decline')
+    .selectAll()
+    .where('type', '=', 'person')
+    .where('personId', '=', survivor.id)
+    .execute();
+  expect(rows).toHaveLength(1);
+  expect(new Set(rows[0].suspectedOwnerIds as unknown as string[])).toEqual(new Set([ownerA.id, ownerB.id]));
+});
+
+it('leaves the survivor untouched when only the survivor had a mute', async () => {
+  const { source, survivor, ownerB } = await seedTwoPeople();
+  await declineRepository.createClusterMutes({
+    persons: [{ personId: survivor.id, suspectedOwnerIds: [ownerB.id] }],
+    declinedBy: admin.id,
+  });
+
+  await personRepository.mergePersonProfile(survivor.id, source.id);
+
+  expect((await declineRepository.getClusterMuteMap([survivor.id])).get(survivor.id)).toEqual(new Set([ownerB.id]));
+});
+
+it('is a no-op when neither person had a mute', async () => {
+  const { source, survivor } = await seedTwoPeople();
   await expect(personRepository.mergePersonProfile(survivor.id, source.id)).resolves.not.toThrow();
-  expect(await declineRepository.getClusterMuteMap([survivor.id])).toEqual(new Map([[survivor.id, ['fp-1']]]));
+  expect((await declineRepository.getClusterMuteMap([survivor.id])).size).toBe(0);
 });
 ```
 
@@ -1229,29 +1349,52 @@ Expected: FAIL — the mute is gone after the merge.
 
 ```ts
 /**
- * Re-keys the source person's cluster mutes onto the survivor before the merge deletes it.
- * `face_repair_decline.personId` is ON DELETE CASCADE, so without this a merge silently destroys the
- * admin's "stop showing me this cluster" decision. Collisions are deleted first: the survivor's own
- * mute for the same fingerprint is equally valid and already exists.
+ * Re-keys the source person's cluster mute onto the survivor before the merge deletes that person.
+ * `face_repair_decline.personId` is ON DELETE CASCADE (verified against a live database), so without
+ * this a merge silently destroys the admin's "stop showing me this cluster" decision and the cluster
+ * resurfaces on the next scan.
+ *
+ * A person has at most ONE `type='person'` row — createClusterMutes deletes and re-inserts rather than
+ * appending — so this reduces to three cases. When both people have one, the survivor's row absorbs the
+ * union of the suspected owners: the merged cluster contains both sets of faces, so both mutes still
+ * apply. Leaving two rows instead would be worse than the bug, since getClusterMuteMap does a plain
+ * `set()` per row and would keep whichever the scan happened to read last.
  */
 export const retargetDeclinePersonId = async (trx: Transaction<DB>, sourceId: string, survivorId: string) => {
-  await trx
-    .deleteFrom('face_repair_decline as src')
-    .where('src.personId', '=', sourceId)
-    .whereExists((eb) =>
-      eb
-        .selectFrom('face_repair_decline as survivor')
-        .select('survivor.id')
-        .whereRef('survivor.fingerprint', '=', 'src.fingerprint')
-        .where('survivor.personId', '=', survivorId),
-    )
+  const rows = await trx
+    .selectFrom('face_repair_decline')
+    .select(['id', 'personId', 'suspectedOwnerIds'])
+    .where('type', '=', 'person')
+    .where('personId', 'in', [sourceId, survivorId])
     .execute();
 
-  await trx.updateTable('face_repair_decline').set({ personId: survivorId }).where('personId', '=', sourceId).execute();
+  const source = rows.find((row) => row.personId === sourceId);
+  if (!source) {
+    return;
+  }
+
+  const survivor = rows.find((row) => row.personId === survivorId);
+  if (!survivor) {
+    await trx.updateTable('face_repair_decline').set({ personId: survivorId }).where('id', '=', source.id).execute();
+    return;
+  }
+
+  const union = [
+    ...new Set([
+      ...((survivor.suspectedOwnerIds ?? []) as unknown as string[]),
+      ...((source.suspectedOwnerIds ?? []) as unknown as string[]),
+    ]),
+  ];
+  await trx
+    .updateTable('face_repair_decline')
+    .set({ suspectedOwnerIds: union as unknown as Insertable<FaceRepairDeclineTable>['suspectedOwnerIds'] })
+    .where('id', '=', survivor.id)
+    .execute();
+  await trx.deleteFrom('face_repair_decline').where('id', '=', source.id).execute();
 };
 ```
 
-Call it inside the merge transaction, immediately after `retargetVerdictPersonId`.
+Call it inside the merge transaction, immediately after `retargetVerdictPersonId`, so the retarget and the merge commit or roll back together. Match the `suspectedOwnerIds` jsonb cast that `createClusterMutes` already uses (`face-repair-decline.repository.ts:37`) rather than inventing a different one.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -1408,7 +1551,7 @@ Upstream's `getJobCounts` is a pure delegate. The fork made it `async` and prepe
 ## Slice 15: Three ten-minute isolation fixes
 
 - [ ] **Step 1: Move `FacePersonVerdictRepository` to the fork block.** It sits at `base.service.ts:136` between `PartnerRepository` and `PersonRepository`, inside upstream's alphabetized region, while its three siblings are correctly parked at `:122`. The list is **positional** — an upstream insertion there conflicts, and a careless resolve silently injects the wrong repositories into every service. Move it in all six lists (`repositories/index.ts` ×2, `base.service.ts` ×3, `test/utils.ts`, `test/medium.factory.ts` ×2) and run `pnpm test` to confirm the positional lists still agree.
-- [ ] **Step 2: Scope `placeholders.spec.ts` to the fork's locales.** It currently runs `readdirSync(I18N_DIR)` over all ~90 translator-owned files, which is why this PR had to hand-patch `mr.json` and `ms.json`. Weblate will reintroduce those patterns and the web suite will go red on a future rebase for content the fork does not own. Scope it to `en` + `TRANSLATED`, then revert the `mr.json`/`ms.json` edits.
+- [ ] **Step 2: Scope `placeholders.spec.ts` to the fork's locales.** It currently runs `readdirSync(I18N_DIR)` over all ~90 translator-owned files, which is why this PR had to hand-patch `mr.json` and `ms.json`. Weblate will reintroduce those patterns and the web suite will go red on a future rebase for content the fork does not own. Scope it to `en` + `FORK_LOCALES`, then revert the `mr.json`/`ms.json` edits.
 - [ ] **Step 3: Revert the upstream e2e edits.** `e2e/src/specs/server/api/asset.e2e-spec.ts` is an upstream test edited to load a fork fixture across directories, and `e2e/src/utils.ts`'s `isQueueEmpty` change alters semantics for every upstream e2e. Restore both to upstream, and add a fork-owned `isQueueEmptyIgnoringPaused` used only by fork specs. If the real-video fixture is genuinely required, cover it in a fork-owned spec.
 - [ ] **Step 4:** `cd e2e && pnpm test` (or the API subset), then commit.
 
