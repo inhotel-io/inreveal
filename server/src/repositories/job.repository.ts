@@ -595,10 +595,15 @@ export class JobRepository {
         // S9.8: a per-id jobId so a re-entrant QueueAll sweep (F18 — FaceIdentityBackfill re-queues
         // both QueueAll jobs on every drain) coalesces onto the in-flight job for the same person
         // instead of stacking a duplicate on the concurrency-1 PeopleBackfill queue.
-        return { jobId: `person-suggestion-scan/${item.data.id}`, removeOnComplete: true };
+        //
+        // H8: removeOnFail, unlike before — without it a failed run permanently occupies this stable
+        // dedup jobId (see removeFailedJobsByJobIdPrefix's doc comment above) and every later add() for
+        // that person is silently dropped, so their suggestion queue never refills.
+        return { jobId: `person-suggestion-scan/${item.data.id}`, removeOnComplete: true, removeOnFail: true };
       }
       case JobName.SpacePersonSuggestionScan: {
-        return { jobId: `space-person-suggestion-scan/${item.data.id}`, removeOnComplete: true };
+        // H8: see PersonSuggestionScan above — same stuck-dedup-jobId hazard, same fix.
+        return { jobId: `space-person-suggestion-scan/${item.data.id}`, removeOnComplete: true, removeOnFail: true };
       }
       case JobName.VersionCheck: {
         return { deduplication: { id: JobName.VersionCheck } };

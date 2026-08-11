@@ -1815,6 +1815,16 @@ export class SharedSpaceService extends BaseService {
   // (removals are idempotent), and only a non-zero cleanup kicks identity maintenance.
   @OnEvent({ name: 'AppBootstrap', workers: [ImmichWorker.Microservices] })
   async onBootstrap(): Promise<void> {
+    // Two independent one-time sweeps, each gated by its OWN state key. They must not share a gate: an
+    // instance that already ran the shared-space sweep below has SharedSpaceFaceJobCleanupState.cleanedAt
+    // set forever, so folding the H8 prefixes into that gate would make the H8 sweep a permanent no-op on
+    // every instance that boots after this fix — exactly the instances carrying the stuck jobIds it exists
+    // to clear.
+    await this.cleanupBlockedSharedSpaceFaceJobs();
+    await this.cleanupBlockedPersonSuggestionScanJobs();
+  }
+
+  private async cleanupBlockedSharedSpaceFaceJobs(): Promise<void> {
     const state = await this.systemMetadataRepository.get(SystemMetadataKey.SharedSpaceFaceJobCleanupState);
     if (state?.cleanedAt) {
       return;
@@ -1833,6 +1843,31 @@ export class SharedSpaceService extends BaseService {
     }
 
     await this.systemMetadataRepository.set(SystemMetadataKey.SharedSpaceFaceJobCleanupState, {
+      cleanedAt: new Date().toISOString(),
+    });
+  }
+
+  // H8: one-time recovery for PersonSuggestionScan/SpacePersonSuggestionScan jobs that failed before
+  // job.repository.ts set removeOnFail on those two job options. Those failures permanently occupy their
+  // stable per-person dedup jobId — BullMQ silently ignores any later add() with the same id, so that
+  // person's suggestion queue never refills, with no log and no admin-visible symptom. removeOnFail now
+  // protects every NEW failure; this sweep clears the ones that got stuck before that fix shipped. Both
+  // job types run only on QueueName.PeopleBackfill (person.service.ts), so there is no FacialRecognition
+  // arm to sweep here, unlike cleanupBlockedSharedSpaceFaceJobs above.
+  private async cleanupBlockedPersonSuggestionScanJobs(): Promise<void> {
+    const state = await this.systemMetadataRepository.get(SystemMetadataKey.PersonSuggestionScanJobCleanupState);
+    if (state?.cleanedAt) {
+      return;
+    }
+
+    const prefixes = ['person-suggestion-scan/', 'space-person-suggestion-scan/'];
+    const removed = await this.jobRepository.removeFailedJobsByJobIdPrefix(QueueName.PeopleBackfill, prefixes);
+
+    if (removed > 0) {
+      this.logger.log(`Removed ${removed} failed person-suggestion-scan job(s) that were blocking their dedup jobIds`);
+    }
+
+    await this.systemMetadataRepository.set(SystemMetadataKey.PersonSuggestionScanJobCleanupState, {
       cleanedAt: new Date().toISOString(),
     });
   }
