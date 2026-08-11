@@ -127,3 +127,53 @@ describe('admin.face_cleanup_* count plurals render the correct noun form (S12.9
     expect($t('admin.face_cleanup_apply_success', { values: { count: 2 } })).toMatch(/2 people\b/);
   });
 });
+
+// B3: ICU computes `#` as `value - offset`, so a pre-formatted "2,952" from toLocaleString() yields NaN.
+// Below the thousands separator it renders fine, so the bug only appears on large clusters — which are
+// exactly the ones whose whole-cluster move is hardest to undo.
+describe('count arguments must be raw numbers, not formatted strings', () => {
+  const COUNT_KEYS = [
+    'face_cleanup_review_rest_title',
+    'face_cleanup_review_move_entire_confirm_body',
+    'face_cleanup_review_move_entire_confirm_cta',
+    'face_cleanup_manual_review_move_entire_confirm_body',
+  ];
+
+  it.each(COUNT_KEYS)('%s renders a four-digit count without NaN', (key) => {
+    const rendered = get(_)(`admin.${key}`, { values: { count: 2952, name: 'Anna', owner: 'Anna' } });
+    expect(rendered).not.toContain('NaN');
+    expect(rendered).toContain('2,952');
+  });
+
+  // Proves the assertion above is discriminating: the formatted string DOES produce NaN, so the tests
+  // pass because the call sites were fixed, not because the keys happen to be NaN-proof.
+  it('is discriminating: a pre-formatted count still produces NaN', () => {
+    const rendered = get(_)('admin.face_cleanup_review_move_entire_confirm_cta', {
+      values: { count: '2,952' as unknown as number },
+    });
+    expect(rendered).toContain('NaN');
+  });
+
+  // Source-level guard: catches a NEW call site that reintroduces the pattern, which the render tests
+  // above cannot see because they call $t directly rather than going through the component.
+  it('no face-cleanup route passes toLocaleString() into a translation count', () => {
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!entry.name.endsWith('.svelte') && !entry.name.endsWith('.ts')) {
+          continue;
+        }
+        if (/count:\s*[^,}]*toLocaleString\(\)/.test(fs.readFileSync(full, 'utf8'))) {
+          offenders.push(path.relative(process.cwd(), full));
+        }
+      }
+    };
+    walk(path.resolve(process.cwd(), 'src/routes/admin/face-cleanup'));
+    expect(offenders).toEqual([]);
+  });
+});

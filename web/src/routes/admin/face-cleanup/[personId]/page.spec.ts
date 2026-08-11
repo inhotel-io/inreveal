@@ -1199,7 +1199,9 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() =>
         expect(
           translations.some(
-            (t) => t.key === 'admin.face_cleanup_review_move_entire_confirm_body' && t.values?.count === '5',
+            // B3: a NUMBER, not '5'. The count used to be pre-formatted with toLocaleString(), which made
+            // ICU compute `#` as `"2,952" - 0` = NaN on any cluster past a thousand faces.
+            (t) => t.key === 'admin.face_cleanup_review_move_entire_confirm_body' && t.values?.count === 5,
           ),
         ).toBe(true),
       );

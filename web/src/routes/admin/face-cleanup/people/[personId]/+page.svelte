@@ -293,10 +293,10 @@
     const confirmed = await modalManager.show(ConfirmModal, {
       title: $t('admin.face_cleanup_review_move_entire_confirm_title'),
       prompt: $t('admin.face_cleanup_manual_review_move_entire_confirm_body', {
-        values: { count: vm.total.toLocaleString(), name: destination.name },
+        values: { count: vm.total, name: destination.name },
       }),
       confirmText: $t('admin.face_cleanup_review_move_entire_confirm_cta', {
-        values: { count: vm.total.toLocaleString() },
+        values: { count: vm.total },
       }),
     });
     entireClusterDestination = null;

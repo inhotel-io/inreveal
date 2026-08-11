@@ -345,10 +345,10 @@
     const confirmed = await modalManager.show(ConfirmModal, {
       title: $t('admin.face_cleanup_review_move_entire_confirm_title'),
       prompt: $t('admin.face_cleanup_review_move_entire_confirm_body', {
-        values: { count: clusterTotal.toLocaleString(), owner: destinationName },
+        values: { count: clusterTotal, owner: destinationName },
       }),
       confirmText: $t('admin.face_cleanup_review_move_entire_confirm_cta', {
-        values: { count: clusterTotal.toLocaleString() },
+        values: { count: clusterTotal },
       }),
     });
     if (!confirmed || !canMoveEntireCluster || !destinationId) {
@@ -732,7 +732,7 @@
       >
         <div class="flex flex-wrap items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700">
           <h3 class="text-sm font-semibold">
-            {$t('admin.face_cleanup_review_rest_title', { values: { count: restTotal.toLocaleString() } })}
+            {$t('admin.face_cleanup_review_rest_title', { values: { count: restTotal } })}
             {#if canBulkMove}
               <!-- Only shown once there IS a destination to name — an orphan cluster or a self-move used to
                    read "add any that belong to Unnamed cluster"/the reviewed person's own name, naming a
