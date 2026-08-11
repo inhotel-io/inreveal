@@ -1319,10 +1319,6 @@ export class SharedSpaceService extends BaseService {
   ): Promise<boolean> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     const person = await this.requireSpacePersonInSpace(spaceId, personId);
-    // B4: same owner-only face gate as the reject/ignore twin. A confirm also calls clearNegativeForTarget,
-    // whose identityId arm is cross-owner — so confirming another user's face can DELETE a rejection they
-    // recorded, with no record that it ever existed.
-    await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
 
     if (!(await this.areSpacePersonSuggestionsEnabled({ withCache: true }))) {
       return false;
@@ -1401,13 +1397,6 @@ export class SharedSpaceService extends BaseService {
   ): Promise<boolean> {
     await this.requireRole(auth, spaceId, SharedSpaceRole.Editor);
     const person = await this.requireSpacePersonInSpace(spaceId, personId);
-    // B4: the same owner-only face gate the personal twin applies (person.service.ts rejectFaceSuggestion).
-    // Every verdict row is stamped with the target's identity, and `face_identity.id` is a CROSS-OWNER key
-    // whose anti-join in getPendingForPerson has no ownership filter — so a row written against a face the
-    // caller does not own suppresses the ASSET OWNER's personal suggestion queue for their own face. Space
-    // membership grants rights inside the space; it does not grant the right to record a durable verdict
-    // about another user's face.
-    await this.requireAccess({ auth, permission: Permission.PersonCreate, ids: [assetFaceId] });
     const reachable = await this.facePersonVerdictRepository.isFaceReachableInSpace(spaceId, assetFaceId);
     if (!reachable) {
       return false;

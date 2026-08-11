@@ -7333,8 +7333,6 @@ describe(SharedSpaceService.name, () => {
       );
       mocks.facePersonVerdict.hasPendingForSpacePerson.mockResolvedValue(true);
       mocks.faceIdentity.ensureSpacePersonIdentity.mockResolvedValue({ id: 'space-identity-1' } as any);
-      // B4: the caller owns the face by default; the denial test below overrides this with an empty set.
-      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
     });
 
     it('denies viewers with no state change', async () => {
@@ -7518,8 +7516,6 @@ describe(SharedSpaceService.name, () => {
       );
       mocks.facePersonVerdict.isFaceReachableInSpace.mockResolvedValue(true);
       mocks.faceIdentity.ensureSpacePersonIdentity.mockResolvedValue({ id: 'space-identity-1' } as any);
-      // B4: the caller owns the face by default. The denial tests below override this with an empty set.
-      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
     });
 
     it('denies viewers with no state change', async () => {
@@ -7549,71 +7545,6 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
       expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
       expect(mocks.facePersonVerdict.resolveAssignedFace).not.toHaveBeenCalled();
-    });
-
-    // B4: every verdict row is stamped with the target's identity, and `face_identity.id` is a CROSS-OWNER
-    // key whose anti-join in getPendingForPerson carries no ownership filter. So a row written against a
-    // face the caller does not own suppresses the ASSET OWNER's personal suggestion queue. The personal
-    // twin (person.service.ts rejectFaceSuggestion) has required face ownership since S11 for exactly this
-    // reason; the space path checked only Editor role and reachability.
-    it('denies a space reject on a face the editor does not own', async () => {
-      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set());
-
-      await expect(
-        sut.rejectSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(mocks.facePersonVerdict.markRejectedForSpacePerson).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
-    });
-
-    it('denies a space ignore on a face the editor does not own', async () => {
-      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set());
-
-      await expect(
-        sut.ignoreSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(mocks.facePersonVerdict.markIgnoredForSpacePerson).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.ensureSpacePersonIdentity).not.toHaveBeenCalled();
-    });
-
-    // Positive control for both denials above: the identical call succeeds once the caller owns the face,
-    // which is what proves the guard is the reason and not some unrelated arrange failure.
-    it('allows the same reject when the editor owns the face', async () => {
-      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set(['face-1']));
-      mocks.facePersonVerdict.markRejectedForSpacePerson.mockResolvedValue(1);
-
-      await expect(
-        sut.rejectSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
-      ).resolves.toBe(true);
-      expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalled();
-    });
-
-    // dismiss delegates to reject, so it inherits the guard. Pinned because that delegation is easy to
-    // refactor away, and the guard would leave with it silently.
-    it('denies a space dismiss on a face the editor does not own', async () => {
-      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set());
-
-      await expect(
-        sut.dismissSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(mocks.facePersonVerdict.markRejectedForSpacePerson).not.toHaveBeenCalled();
-    });
-
-    // The confirm twin matters most: it also calls clearNegativeForTarget, whose identityId arm is
-    // cross-owner, so an unowned confirm can DELETE a rejection another user recorded.
-    it('denies a space confirm on a face the editor does not own', async () => {
-      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
-      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set());
-
-      await expect(
-        sut.confirmSpacePersonFaceSuggestion(factory.auth(), 'space-1', 'space-person-1', 'face-1'),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(mocks.facePersonVerdict.clearNegativeForTarget).not.toHaveBeenCalled();
-      expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
     });
 
     it('rejects a person from another space before mutation', async () => {
