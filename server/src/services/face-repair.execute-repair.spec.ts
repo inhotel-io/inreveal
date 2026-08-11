@@ -18,6 +18,17 @@ function arrangeSameOwnerMove(mocks: ServiceMocks) {
   mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
 }
 
+// S11 (slice 11e): `p1` and `q` resolve to DIFFERENT owners, so the C6 guard must fire and skip the route.
+// Every existing test in this file uses arrangeSameOwnerMove (or an equivalent single-value mock), which
+// makes fromOwner === toOwner unconditionally — the guard can never fire under any of them.
+function arrangeDifferentOwnerMove(mocks: ServiceMocks) {
+  mocks.person.getById.mockImplementation((id: string) =>
+    Promise.resolve({ id, ownerId: id === 'p1' ? 'u1' : 'u2' } as any),
+  );
+  mocks.faceRepair.reconcileRepresentativeFaces.mockResolvedValue([]);
+  mocks.faceIdentity.ensurePersonIdentity.mockResolvedValue({ id: 'identQ' } as any);
+}
+
 describe(FaceRepairService.name, () => {
   let sut: FaceRepairService;
   let mocks: ServiceMocks;
@@ -59,6 +70,13 @@ describe(FaceRepairService.name, () => {
       // (queueAll is only used for thumbnail regen, and only when a representative face was repointed.)
       expect(mocks.job.queueAll).not.toHaveBeenCalled();
       expect(r).toEqual({ moved: 2, skipped: 0, movedFaceIds: ['f1', 'f2'] });
+      // S11 (slice 11d): the move just stated a fact that contradicts any durable rejected/ignored row for
+      // this SAME destination — clear it, scoped to `to`'s identity only.
+      expect(mocks.facePersonVerdict.clearNegativeForTarget).toHaveBeenCalledWith(
+        { personId: 'q', identityId: 'identQ' },
+        ['f1', 'f2'],
+        expect.anything(),
+      );
     });
 
     it('skips faces whose suspected owner no longer exists (deleted/merged since the scan)', async () => {
@@ -96,6 +114,23 @@ describe(FaceRepairService.name, () => {
 
       // Without this the source person's card keeps showing the crop of the face that just moved away.
       expect(mocks.job.queueAll).toHaveBeenCalledWith([{ name: JobName.PersonGenerateThumbnail, data: { id: 'p1' } }]);
+    });
+
+    // S11 (slice 11e): C6 (defense-in-depth) — a route whose source and destination resolve to DIFFERENT
+    // owners must be skipped and nothing written, even though resolveFaces already guards every interactive
+    // destination up-front. No prior test in this file could ever exercise this: they all resolve every
+    // person to the SAME owner, so the comparison is always true and the guard trivially never fires.
+    it('skips a route whose destination resolves to a DIFFERENT owner than the source, writing nothing', async () => {
+      arrangeDifferentOwnerMove(mocks);
+      mocks.faceRepair.reattributeFaces.mockResolvedValue(['f1']);
+
+      const r = await sut.executeRepair(plan([{ assetFaceId: 'f1', currentPersonId: 'p1', suspectedOwnerId: 'q' }]));
+
+      expect(mocks.faceRepair.reattributeFaces).not.toHaveBeenCalled();
+      expect(mocks.faceIdentity.replaceFaceIdentities).not.toHaveBeenCalled();
+      expect(mocks.facePersonVerdict.clearNegativeForTarget).not.toHaveBeenCalled();
+      expect(mocks.job.queueAll).not.toHaveBeenCalled();
+      expect(r).toEqual({ moved: 0, skipped: 1, movedFaceIds: [] });
     });
   });
 

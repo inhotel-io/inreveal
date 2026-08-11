@@ -25,6 +25,7 @@ import { StorageService } from 'src/services/storage.service';
 import { clearConfigCache } from 'src/utils/config';
 import { ImmichFileResponse, ImmichStreamResponse } from 'src/utils/file';
 import { CROSS_OWNER_MERGE_ERROR_CODE } from 'src/utils/merge-policy';
+import { spaceVisibleAssetVisibilities } from 'src/utils/shared-space-album-scope';
 import { AssetFaceFactory } from 'test/factories/asset-face.factory';
 import { AssetFactory } from 'test/factories/asset.factory';
 import { AuthFactory } from 'test/factories/auth.factory';
@@ -1659,6 +1660,12 @@ describe(PersonService.name, () => {
         identityId: 'identity-1',
         source: 'manual',
       });
+      // S11 (slice 11d): the owner just stated a fact that contradicts any durable rejected/ignored row for
+      // this same target — clear it, scoped to this person's identity only.
+      expect(mocks.facePersonVerdict.clearNegativeForTarget).toHaveBeenCalledWith(
+        { personId: person.id, identityId: 'identity-1' },
+        [face.id],
+      );
     });
   });
 
@@ -2010,6 +2017,11 @@ describe(PersonService.name, () => {
         identityId: 'identity-1',
         source: 'manual',
       });
+      // S11 (slice 11d): same clearing as reassignFaces — scoped to this person's identity only.
+      expect(mocks.facePersonVerdict.clearNegativeForTarget).toHaveBeenCalledWith(
+        { personId: person.id, identityId: 'identity-1' },
+        [face.id],
+      );
     });
 
     it('should fail if user has not the correct permissions on the asset', async () => {
@@ -4371,8 +4383,16 @@ describe(PersonService.name, () => {
       await expect(sut.handlePersonSuggestionScan({ id: 'p' })).resolves.toBe(JobStatus.Success);
 
       expect(mocks.search.searchFaces).toHaveBeenCalledTimes(2);
+      // S11 (slice 11b): the owner-scoped branch applies NO unconditional visibility gate of its own
+      // (search.repository.ts F2 comment) — this arg is the only thing keeping Locked/Hidden assets out of
+      // the suggestion pool for a personal person. Pin it so removing it cannot silently pass.
       expect(mocks.search.searchFaces).toHaveBeenCalledWith(
-        expect.objectContaining({ userIds: ['u'], hasPerson: false, maxDistance: 0.8 }),
+        expect.objectContaining({
+          userIds: ['u'],
+          hasPerson: false,
+          maxDistance: 0.8,
+          visibility: spaceVisibleAssetVisibilities,
+        }),
       );
       const rows = mocks.facePersonVerdict.upsertPending.mock.calls[0][0];
       expect(rows).toEqual(
@@ -7092,6 +7112,28 @@ describe(PersonService.name, () => {
       expect(mocks.person.reassignFace).not.toHaveBeenCalled();
     });
 
+    // S11 (slice 11a): confirm applies the identical owner-BOTH gate reject/ignore apply — owning the person
+    // is not enough, the caller must also own the face (face_identity.id is a cross-owner key). Mirrors the
+    // S4.1/S4.2 denial tests for rejectFaceSuggestion/ignoreFaceSuggestion below. Person and face are mocked
+    // to otherwise valid, resolvable state so that a removed guard would let the write chain run to
+    // completion (resolving `true`) instead of coincidentally rejecting for an unrelated reason (e.g. a
+    // missing `findOrFail` mock) — the same discipline the S4.3 owner-path test below applies positively.
+    it('denies a face the caller does not own, even though the person is owned, with NO state change', async () => {
+      const face = AssetFaceFactory.create();
+      const person = PersonFactory.create();
+      mocks.access.person.checkOwnerAccess.mockResolvedValue(new Set([person.id])); // person ownership OK
+      mocks.access.person.checkFaceOwnerAccess.mockResolvedValue(new Set()); // face NOT owned by the caller
+      mocks.person.getById.mockResolvedValue(person);
+      mocks.person.getFaceById.mockResolvedValue(getForAssetFace(face));
+      mocks.facePersonVerdict.claimPending.mockResolvedValue(1);
+
+      await expect(sut.confirmFaceSuggestion(AuthFactory.create(), person.id, face.id)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(mocks.facePersonVerdict.claimPending).not.toHaveBeenCalled();
+      expect(mocks.person.reassignFace).not.toHaveBeenCalled();
+    });
+
     it('flips the row to confirmed then delegates to reassignFacesById (assign + manual identity + feature photo)', async () => {
       const face = AssetFaceFactory.create();
       const person = PersonFactory.create();
@@ -7131,6 +7173,12 @@ describe(PersonService.name, () => {
         expect.objectContaining({ id: person.id, faceAssetId: face.id }),
       );
       expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith(face.id, mocks.database);
+      // S11 (slice 11d): defense-in-depth clear, scoped to this target's identity, inside the same trx.
+      expect(mocks.facePersonVerdict.clearNegativeForTarget).toHaveBeenCalledWith(
+        { personId: person.id, identityId: 'identity-1' },
+        [face.id],
+        mocks.database,
+      );
     });
 
     it('is idempotent when the row is already confirmed/rejected/ignored but person+face still exist → 204 (false), no reassign', async () => {
@@ -7255,7 +7303,7 @@ describe(PersonService.name, () => {
       expect(mocks.access.person.checkOwnerAccess).toHaveBeenCalledWith(authUser.user.id, new Set(['person-1']));
       expect(mocks.access.person.checkFaceOwnerAccess).toHaveBeenCalledWith(authUser.user.id, new Set(['face-1']));
       expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
@@ -7270,7 +7318,7 @@ describe(PersonService.name, () => {
       await expect(sut.rejectFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(true);
 
       expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
@@ -7288,7 +7336,7 @@ describe(PersonService.name, () => {
       await expect(sut.ignoreFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(true);
 
       expect(mocks.facePersonVerdict.markIgnored).toHaveBeenCalledWith('person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
@@ -7310,12 +7358,12 @@ describe(PersonService.name, () => {
       await expect(sut.ignoreFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(false);
 
       expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
       expect(mocks.facePersonVerdict.markIgnored).toHaveBeenCalledWith('person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
@@ -7332,7 +7380,7 @@ describe(PersonService.name, () => {
       await expect(sut.dismissFaceSuggestion(authUser, 'person-1', 'face-1')).resolves.toBe(true);
 
       expect(mocks.facePersonVerdict.markRejected).toHaveBeenCalledWith('person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });

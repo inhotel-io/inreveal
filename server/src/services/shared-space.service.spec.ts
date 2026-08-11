@@ -7488,6 +7488,13 @@ describe(SharedSpaceService.name, () => {
         mocks.database,
       );
       expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith('face-1', mocks.database);
+      // S11 (slice 11d): the editor just stated a fact that contradicts any durable rejected/ignored row for
+      // this same target — clear it. Target shape is spacePersonId, NOT personId — this is the space twin.
+      expect(mocks.facePersonVerdict.clearNegativeForTarget).toHaveBeenCalledWith(
+        { spacePersonId: 'space-person-1', identityId: 'space-identity-1' },
+        ['face-1'],
+        mocks.database,
+      );
       // Slice 3 (D3): confirm writes the space projection row so the same space's next scan excludes the face.
       expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith(
         [{ personId: 'space-person-1', assetFaceId: 'face-1' }],
@@ -7672,8 +7679,12 @@ describe(SharedSpaceService.name, () => {
       await expect(sut.rejectSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
         true,
       );
+      // S11 (slice 11c): identityId alone doesn't prove ensureSpacePersonIdentity was called with the RIGHT
+      // person — the mock resolves the same value regardless of its argument. Pin the argument too, or a
+      // caller that resolves the space's own identity instead of the space-PERSON's identity slips through.
+      expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
       expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'space-identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
@@ -7690,8 +7701,10 @@ describe(SharedSpaceService.name, () => {
       await expect(sut.ignoreSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
         true,
       );
+      // S11 (slice 11c): same argument pin as reject — see the comment there.
+      expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
       expect(mocks.facePersonVerdict.markIgnoredForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'space-identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
@@ -7709,7 +7722,7 @@ describe(SharedSpaceService.name, () => {
         true,
       );
       expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'space-identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });

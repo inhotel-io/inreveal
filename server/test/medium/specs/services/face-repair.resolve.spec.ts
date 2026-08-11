@@ -1430,6 +1430,36 @@ describe('FaceRepairService.resolveFaces: confirm/lock (M5, E2)', () => {
     const rows = await manualLinkFor(f1);
     expect(rows).toHaveLength(1);
   });
+
+  // S11 (slice 11d): the lock write clears a durable rejected verdict for this SAME (person, face) target —
+  // see clearNegativeForTarget. Without it, a stale "not this person" verdict would keep suppressing this
+  // person's suggestion queue for f1 even after a human just locked it there.
+  it('clears a durable rejected verdict for the SAME (person, face) target when the face is locked', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    // A durable rejected verdict against `source` for `f1` — e.g. from an earlier "not this person" call
+    // that a later scan re-flagged the same face toward `source` for a different reason.
+    await ctx.get(FacePersonVerdictRepository).markRejected(source.id, f1, { actorId: user.id });
+    // Positive control: an unrelated rejection against a DIFFERENT person for the same face must survive —
+    // clearNegativeForTarget is scoped to `source` only, not a blanket clear for the face.
+    await ctx.get(FacePersonVerdictRepository).markRejected(ownerA.id, f1, { actorId: user.id });
+    expect(await declineRowsFor(f1, source.id)).toHaveLength(1);
+    expect(await declineRowsFor(f1, ownerA.id)).toHaveLength(1);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+      user.id,
+    );
+
+    expect(result.locked).toBe(1);
+    expect(await declineRowsFor(f1, source.id)).toHaveLength(0);
+    expect(await declineRowsFor(f1, ownerA.id)).toHaveLength(1); // untouched — different target
+  });
 });
 
 describe('FaceRepairService.resolveFaces: lock eligibility (manual review, E15 relaxed)', () => {

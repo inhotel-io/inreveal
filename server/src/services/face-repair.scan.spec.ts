@@ -1,5 +1,5 @@
 import { ConflictException } from '@nestjs/common';
-import { JobName, QueueName } from 'src/enum';
+import { JobName } from 'src/enum';
 import { ScanInProgressError } from 'src/repositories/face-repair-scan.repository';
 import { EligibleFaceRow } from 'src/repositories/face-repair.repository';
 import { FaceRepairService, RepairPlan } from 'src/services/face-repair.service';
@@ -180,11 +180,42 @@ describe(FaceRepairService.name, () => {
       );
     });
 
-    it('admin guard: both scan endpoints are decorated with @Authenticated({ admin: true }) in the controller', () => {
-      // The @Authenticated({ admin: true }) decorator on both controller routes is the enforcement mechanism.
-      // No additional unit test is needed — the decorator is the guarantee.
-      // Verify it exists by asserting the controller source references it (covered by compile + e2e auth tests).
-      expect(QueueName.FacialRecognition).toBeDefined(); // keeps the import used
+    // S11 (slice 11f): every override the Advanced Scan modal can send must actually reach createScan — a
+    // merge that silently falls back to defaults would make the whole modal decorative. All seven values
+    // are chosen NON-default so a hardcoded-defaults implementation cannot satisfy this by accident.
+    it('passes every scan-override field through to createScan, not the config/constant defaults', async () => {
+      mocks.job.isActive.mockResolvedValue(false);
+      mocks.faceRepairScan.createScan.mockResolvedValue({ id: 'scan-99' } as any);
+
+      await sut.triggerScan('user-1', {
+        maxDistance: 0.42,
+        minFaces: 7,
+        voteMargin: 3,
+        voteWindow: 150,
+        maxFlaggedFraction: 0.25,
+        largeClusterThreshold: 20,
+        maxAttributionDistance: 0.3,
+      });
+
+      expect(mocks.faceRepairScan.createScan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          params: {
+            maxDistance: 0.42,
+            minFaces: 7,
+            voteMargin: 3,
+            voteWindow: 150,
+            maxFlaggedFraction: 0.25,
+            largeClusterThreshold: 20,
+            maxAttributionDistance: 0.3,
+          },
+        }),
+      );
     });
+
+    // S11 (slice 11g): the "admin guard" test previously here asserted only
+    // `expect(QueueName.FacialRecognition).toBeDefined()` — a constant, always true, discriminating nothing.
+    // The real admin guard is proven by face-repair-admin.controller.spec.ts's "should be an authenticated
+    // route" tests for both `POST /admin/face-repair/scan` and `GET /admin/face-repair/scan/defaults`, which
+    // assert `ctx.authenticate` was called with `adminRoute: true` metadata — deleted here, not duplicated.
   });
 });
