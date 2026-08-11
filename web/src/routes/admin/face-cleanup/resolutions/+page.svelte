@@ -212,8 +212,50 @@
         </div>
       </div>
     {:else if filtered.length === 0}
+      <!-- The filter hid everything. Say WHICH source is empty and how much is being hidden, so this reads as
+           "your history is intact, you're just looking through a chip" rather than as lost work — that
+           mistaken reading is what sent an admin hunting for cleanup decisions that were never recorded.
+           The precise wording is gated on `!hasMore`: `filtered` derives from `resolutions`, which holds only
+           the pages fetched so far, so "no cleanup decisions yet" is a claim about the WHOLE list that only
+           the fully-loaded case can support — with pages outstanding a match may simply not be fetched yet,
+           and the neutral wording (plus a Load more, which otherwise lives in the rows branch and would be
+           unreachable here) is the honest answer. -->
       <div class="rounded-2xl border border-dashed border-gray-200 py-20 text-center dark:border-gray-700">
-        <div class="text-lg font-medium text-gray-500">{$t('admin.face_cleanup_resolutions_empty_filtered')}</div>
+        <div class="text-lg font-medium text-gray-500">
+          {#if hasMore}
+            {$t('admin.face_cleanup_resolutions_empty_filtered')}
+          {:else if sourceFilter === 'cleanup'}
+            {$t('admin.face_cleanup_resolutions_empty_filtered_cleanup')}
+          {:else}
+            {$t('admin.face_cleanup_resolutions_empty_filtered_suggestion')}
+          {/if}
+        </div>
+        <div class="mt-1 text-sm text-gray-400" data-testid="empty-filtered-hidden">
+          {$t('admin.face_cleanup_resolutions_empty_filtered_hidden', { values: { count: resolutions.length } })}
+        </div>
+        <div class="mt-4 flex justify-center gap-2">
+          <Button
+            color="secondary"
+            size="small"
+            data-testid="empty-filtered-show-all"
+            onclick={() => (sourceFilter = 'all')}
+          >
+            {$t('admin.face_cleanup_resolutions_empty_filtered_show_all')}
+          </Button>
+          {#if hasMore}
+            <Button
+              color="secondary"
+              size="small"
+              disabled={loadingMore}
+              onclick={handleLoadMore}
+              data-testid="resolutions-load-more"
+            >
+              {loadingMore
+                ? $t('loading')
+                : $t('admin.face_cleanup_resolutions_load_more', { values: { count: total - resolutions.length } })}
+            </Button>
+          {/if}
+        </div>
       </div>
     {:else}
       <div class="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700" data-testid="verdicts-list">

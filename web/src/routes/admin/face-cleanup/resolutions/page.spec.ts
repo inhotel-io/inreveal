@@ -436,10 +436,60 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument();
-      // The never-recorded message must NOT appear here — the row IS there, just filtered out.
+      // The never-recorded message must NOT appear here — the row IS there, just filtered out. The whole list
+      // is loaded (total === 1), so the state names the empty source rather than the neutral wording.
       expect(screen.queryByText('No decisions recorded yet')).not.toBeInTheDocument();
-      expect(screen.getByText('No decisions match this filter')).toBeInTheDocument();
+      expect(screen.getByText('No user review decisions yet')).toBeInTheDocument();
     });
+  });
+
+  // The filtered-empty state has to answer the question the admin actually has ("where did my work go?"),
+  // so when the whole list is loaded it names the empty source, counts what the filter is hiding, and offers
+  // one click back. "Loaded" is the load-bearing qualifier: `filtered` derives from `resolutions`, which holds
+  // only the pages fetched so far, so this precise claim is only sound when there is nothing left to fetch.
+  it('names the empty source and counts the hidden rows once the whole list is loaded', async () => {
+    vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      total: 1,
+      resolutions: [SUGGESTION_ROW],
+    } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(1));
+
+    const cleanupFilter = screen.getAllByTestId('source-filter-option').find((el) => el.dataset.value === 'cleanup')!;
+    await fireEvent.click(cleanupFilter);
+
+    await waitFor(() => expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument());
+    expect(screen.getByText('No admin cleanup decisions yet')).toBeInTheDocument();
+    expect(screen.getByText('1 decision from the other source is hidden by this filter')).toBeInTheDocument();
+    // Never the never-recorded message: the rows ARE there.
+    expect(screen.queryByText('No decisions recorded yet')).not.toBeInTheDocument();
+
+    // One click back to the full list.
+    await fireEvent.click(screen.getByTestId('empty-filtered-show-all'));
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(1));
+  });
+
+  // The inverse, and the reason the precise copy is conditional: with pages still unfetched, a source with no
+  // match among the LOADED rows may still have matches further down, so claiming "none yet" would be a lie of
+  // exactly the kind this page keeps producing. Falls back to the neutral wording, and — since the rows branch
+  // owns the Load more button — must surface its own, or the filter is a dead end with no way to fetch on.
+  it('does not claim a source is empty while pages are still unloaded, and still offers Load more', async () => {
+    vi.mocked(getFaceRepairResolutions).mockResolvedValue({
+      total: 5,
+      resolutions: [SUGGESTION_ROW],
+    } as unknown as Awaited<ReturnType<typeof getFaceRepairResolutions>>);
+
+    render(Page, { props: { data: { meta: { title: 'Resolutions' } } } });
+    await waitFor(() => expect(screen.getAllByTestId('resolution-row')).toHaveLength(1));
+
+    const cleanupFilter = screen.getAllByTestId('source-filter-option').find((el) => el.dataset.value === 'cleanup')!;
+    await fireEvent.click(cleanupFilter);
+
+    await waitFor(() => expect(screen.queryByTestId('resolution-row')).not.toBeInTheDocument());
+    expect(screen.queryByText('No admin cleanup decisions yet')).not.toBeInTheDocument();
+    expect(screen.getByText('No decisions match this filter')).toBeInTheDocument();
+    expect(screen.getByTestId('resolutions-load-more')).toBeInTheDocument();
   });
 
   // ---- D17: a failed INITIAL load must not render as the reassuring "no verdicts" empty state ----
