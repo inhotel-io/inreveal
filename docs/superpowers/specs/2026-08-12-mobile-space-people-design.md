@@ -90,8 +90,16 @@ table for non-owned people, which is far beyond this feature.
 ### 5.1 `SharedSpaceApiRepository.getSpacePeople`
 
 ```dart
-Future<List<DriftPerson>> getSpacePeople(String spaceId, {required PeopleSortBy sortBy})
+Future<List<DriftPerson>> getSpacePeople(
+  String spaceId, {
+  required PeopleSortBy sortBy,
+  int pageSize = 1000, // test seam
+  int maxPages = 100,  // test seam
+})
 ```
+
+`pageSize` / `maxPages` are defaulted test seams, not production knobs: without them B5's
+runaway guard is only reachable by allocating 100 000 DTOs in a unit test.
 
 **Does:** returns every non-hidden person in the space, mapped to `DriftPerson` and sorted for
 the requested mode.

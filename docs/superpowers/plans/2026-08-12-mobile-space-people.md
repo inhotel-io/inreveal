@@ -393,13 +393,21 @@ Add the method after `getSpacePersonAssets`:
   ///
   /// The server applies `minimumFaceCount` from the global ML config and excludes pets unless
   /// the space enables them, so there is deliberately no client-side filtering here.
-  Future<List<DriftPerson>> getSpacePeople(String spaceId, {required PeopleSortBy sortBy}) async {
-    const pageSize = 1000;
+  ///
+  /// [pageSize] and [maxPages] exist as test seams and are not meant to be passed in
+  /// production — the runaway guard is otherwise only reachable by allocating 100 000 DTOs in
+  /// a unit test. They are deliberately NOT annotated `@visibleForTesting`: that annotation
+  /// targets declarations, not parameters, and an `invalid_annotation_target` info would fail
+  /// `dart analyze --fatal-infos`.
+  Future<List<DriftPerson>> getSpacePeople(
+    String spaceId, {
+    required PeopleSortBy sortBy,
+    int pageSize = 1000,
+    int maxPages = 100,
+  }) async {
     // The endpoint returns a bare array with no hasNextPage envelope, so a short page is the
     // only end-of-list signal. maxPages is a runaway guard against a server that never returns
     // one; hitting it returns what we have rather than throwing.
-    const maxPages = 100;
-
     final dtos = <SharedSpacePersonResponseDto>[];
     for (var page = 0; page < maxPages; page++) {
       final batch = await checkNull(
@@ -503,13 +511,19 @@ Add this group to the same test file:
       var calls = 0;
       stubGetSpacePeople((_) async {
         calls++;
-        return List.generate(1000, (i) => spacePerson('p$calls-$i'));
+        // Never returns a short page — without the guard this loops forever.
+        return List.generate(2, (i) => spacePerson('p$calls-$i'));
       });
 
-      final result = await repository.getSpacePeople('space-1', sortBy: PeopleSortBy.name);
+      final result = await repository.getSpacePeople(
+        'space-1',
+        sortBy: PeopleSortBy.name,
+        pageSize: 2,
+        maxPages: 3,
+      );
 
-      expect(calls, 100);
-      expect(result, hasLength(100 * 1000));
+      expect(calls, 3);
+      expect(result, hasLength(6));
     });
 
     test('always requests withHidden: false', () async {
@@ -729,6 +743,7 @@ import 'package:immich_mobile/domain/services/store.service.dart';
 import 'package:immich_mobile/entities/store.entity.dart';
 import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
+import 'package:immich_mobile/presentation/widgets/images/remote_image_provider.dart';
 import 'package:immich_mobile/presentation/widgets/people/people_grid.widget.dart';
 
 import '../../../test_utils.dart';
@@ -837,11 +852,30 @@ void main() {
       onTap: (person) => tapped = person,
     );
 
-    await tester.tap(find.byKey(const Key('person-avatar-sp1')));
+    // The avatar keeps ValueKey(person.id) (see the widget), which the tile Column also
+    // carries — resolve the CircleAvatar specifically, the same way
+    // drift_people_collection_test.dart does.
+    await tester.tap(find.byWidgetPredicate((w) => w is CircleAvatar && w.key == const ValueKey('sp1')));
     await tester.pumpAndSettle();
 
     expect(tapped?.id, 'sp1');
     expect(tapped?.spaceId, 'space-1');
+  });
+
+  testWidgets('builds a space person avatar from the space thumbnail endpoint', (tester) async {
+    await pumpGrid(tester, [_p('sp1', 'Mia', spaceId: 'space-1')], policy: const FixedEditability(true));
+
+    final avatar = tester.widget<CircleAvatar>(
+      find.byWidgetPredicate((w) => w is CircleAvatar && w.key == const ValueKey('sp1')),
+    );
+    final provider = avatar.backgroundImage;
+
+    // A space person's id has no row in the owner-only person table, so /people/{id}/thumbnail
+    // would 404 — it must route to the membership-gated space endpoint.
+    expect(
+      provider is RemoteImageProvider ? provider.url : null,
+      'http://localhost:0/shared-spaces/space-1/people/sp1/thumbnail',
+    );
   });
 }
 ```
@@ -934,7 +968,11 @@ class PeopleGrid extends StatelessWidget {
                     shape: const CircleBorder(side: BorderSide.none),
                     elevation: 3,
                     child: CircleAvatar(
-                      key: Key('person-avatar-${person.id}'),
+                      // MUST stay ValueKey(person.id), not a descriptive key:
+                      // drift_people_collection_test.dart:168 resolves the avatar via
+                      // `w is CircleAvatar && w.key == ValueKey(personId)` to assert the
+                      // space-thumbnail URL. Renaming it fails that test.
+                      key: ValueKey(person.id),
                       maxRadius: isTablet ? 100 / 2 : 96 / 2,
                       backgroundImage: RemoteImageProvider(
                         url: getPersonThumbnailUrl(person.id, spaceId: person.spaceId),
@@ -1015,7 +1053,7 @@ class _PersonName extends ConsumerWidget {
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd mobile && flutter test test/presentation/widgets/people/people_grid_test.dart`
-Expected: PASS (7 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: Rewrite the global People page to use it**
 
@@ -1105,7 +1143,16 @@ class _DriftPeopleCollectionPageState extends ConsumerState<DriftPeopleCollectio
 }
 ```
 
-Note the `LayoutBuilder` that used to wrap the whole `Scaffold` now lives inside `PeopleGrid`, which is where the width actually matters.
+**One intentional, non-verbatim change:** the `LayoutBuilder` that used to wrap the whole
+`Scaffold` (`drift_people_collection.page.dart:40`) now lives inside `PeopleGrid`. It has to —
+the grid is what needs the width, and the space page must get the same breakpoint without
+duplicating the wrapper. The measured width therefore changes from full screen width to the
+body width inside `SafeArea`, i.e. it differs by the horizontal safe-area insets. Those are
+zero in widget tests and on virtually every portrait device; the only case that could shift the
+600 px tablet breakpoint is a landscape device with a notch or rounded corners eating >0 px on
+the left/right. Accepted deliberately rather than silently — if you would rather keep it exact,
+the alternative is passing `isTablet`/`isPortrait` into `PeopleGrid` from each page, at the cost
+of duplicating the `LayoutBuilder` in both.
 
 - [ ] **Step 6: Run the existing page test unmodified**
 
@@ -1280,6 +1327,37 @@ void main() {
     // Deliberate divergence from the global People page, which shows a bare empty grid.
     expect(find.byKey(const Key('space-people-no-match')), findsOneWidget);
     expect(find.text('No people found'), findsNothing);
+  });
+
+  testWidgets('re-queries and re-orders when the sort setting changes', (tester) async {
+    // The sort mode is part of the provider's family key, so changing it must issue a new
+    // fetch and render the new order. Mirrors the equivalent assertion on the global People
+    // page (drift_people_collection_test.dart:70).
+    await tester.pumpConsumerWidget(
+      const SpacePeoplePage(spaceId: 'space-1', canEdit: true),
+      overrides: [
+        driftSpacePeopleProvider.overrideWith(
+          (ref, key) async => key.sortBy == PeopleSortBy.photoCount
+              ? [_p('zoe', 'Zoe'), _p('alice', 'Alice')]
+              : [_p('alice', 'Alice'), _p('zoe', 'Zoe')],
+        ),
+      ],
+    );
+
+    double topOf(String name) => tester.getTopLeft(find.text(name)).dy;
+    double leftOf(String name) => tester.getTopLeft(find.text(name)).dx;
+    bool isBefore(String a, String b) =>
+        topOf(a) != topOf(b) ? topOf(a) < topOf(b) : leftOf(a) < leftOf(b);
+
+    // Default sort is photoCount → Zoe first.
+    expect(isBefore('Zoe', 'Alice'), isTrue);
+
+    await tester.tap(find.byKey(const Key('people-sort-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('people-sort-name')));
+    await tester.pumpAndSettle();
+
+    expect(isBefore('Alice', 'Zoe'), isTrue);
   });
 
   testWidgets('keeps the filter applied when the sort mode changes', (tester) async {
@@ -1523,7 +1601,7 @@ dart format lib/routing/router.gr.dart
 - [ ] **Step 5: Run to verify it passes**
 
 Run: `cd mobile && flutter test test/presentation/pages/space_people_page_test.dart`
-Expected: PASS (7 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 6: Commit**
 
