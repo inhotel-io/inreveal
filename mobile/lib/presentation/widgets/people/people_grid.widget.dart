@@ -36,12 +36,7 @@ class FixedEditability extends PeopleEditPolicy {
 /// Hidden people are filtered out here as a defence in depth — both callers already request
 /// `withHidden: false` server-side.
 class PeopleGrid extends StatelessWidget {
-  const PeopleGrid({
-    super.key,
-    required this.people,
-    required this.editPolicy,
-    required this.onPersonTap,
-  });
+  const PeopleGrid({super.key, required this.people, required this.editPolicy, required this.onPersonTap});
 
   final List<DriftPerson> people;
   final PeopleEditPolicy editPolicy;
@@ -77,9 +72,9 @@ class PeopleGrid extends StatelessWidget {
                     elevation: 3,
                     child: CircleAvatar(
                       // MUST stay ValueKey(person.id), not a descriptive key:
-                      // drift_people_collection_test.dart:168 resolves the avatar via
-                      // `w is CircleAvatar && w.key == ValueKey(personId)` to assert the
-                      // space-thumbnail URL. Renaming it fails that test.
+                      // drift_people_collection_test.dart's `avatarUrl` helper resolves the
+                      // avatar via `w is CircleAvatar && w.key == ValueKey(personId)` to assert
+                      // the space-thumbnail URL. Renaming it fails that test.
                       key: ValueKey(person.id),
                       maxRadius: isTablet ? 100 / 2 : 96 / 2,
                       backgroundImage: RemoteImageProvider(

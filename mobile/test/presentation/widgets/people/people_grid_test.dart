@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
 import 'package:immich_mobile/domain/services/store.service.dart';
@@ -10,6 +11,7 @@ import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/presentation/widgets/images/remote_image_provider.dart';
 import 'package:immich_mobile/presentation/widgets/people/people_grid.widget.dart';
+import 'package:immich_mobile/providers/infrastructure/people.provider.dart';
 
 import '../../../test_utils.dart';
 import '../../../widget_tester_extensions.dart';
@@ -54,8 +56,10 @@ void main() {
     List<DriftPerson> people, {
     required PeopleEditPolicy policy,
     void Function(DriftPerson)? onTap,
+    List<Override> overrides = const [],
   }) => tester.pumpConsumerWidget(
     PeopleGrid(people: people, editPolicy: policy, onPersonTap: onTap ?? (_) {}),
+    overrides: overrides,
   );
 
   group('PeopleGrid with FixedEditability(true)', () {
@@ -85,18 +89,45 @@ void main() {
       await pumpGrid(tester, [_p('sp1', '', spaceId: 'space-1')], policy: const FixedEditability(false));
 
       expect(find.text('Add a name'), findsNothing);
+      // Positive anchor: the tile itself renders — "Add a name" is absent because the
+      // affordance is gated, not because nothing rendered at all.
+      expect(find.byKey(const ValueKey('sp1')), findsWidgets);
+    });
+  });
+
+  group('PeopleGrid with PerPersonSpaceRole', () {
+    // This is the reactive path the sealed-class design exists for: the global People page
+    // resolves editability per person from driftSpaceEditableProvider, not from a fixed flag.
+    testWidgets('renders a plain, non-tappable name when the space resolves as read-only', (tester) async {
+      await pumpGrid(
+        tester,
+        [_p('sp1', 'Mia', spaceId: 'space-1')],
+        policy: const PerPersonSpaceRole(),
+        overrides: [driftSpaceEditableProvider.overrideWith((ref, spaceId) async => false)],
+      );
+
+      expect(find.text('Mia'), findsOneWidget);
+      expect(find.byKey(const Key('person-name-editable-sp1')), findsNothing);
+    });
+
+    testWidgets('a personal person (null spaceId) is always editable, without any provider override', (tester) async {
+      await pumpGrid(tester, [_p('me', 'Personal Pat')], policy: const PerPersonSpaceRole());
+
+      expect(find.text('Personal Pat'), findsOneWidget);
+      expect(find.byKey(const Key('person-name-editable-me')), findsOneWidget);
     });
   });
 
   testWidgets('does not render a hidden person', (tester) async {
-    await pumpGrid(
-      tester,
-      [_p('visible', 'Mia', spaceId: 'space-1'), _p('hidden', 'Ghost', spaceId: 'space-1', isHidden: true)],
-      policy: const FixedEditability(true),
-    );
+    await pumpGrid(tester, [
+      _p('visible', 'Mia', spaceId: 'space-1'),
+      _p('hidden', 'Ghost', spaceId: 'space-1', isHidden: true),
+    ], policy: const FixedEditability(true));
 
     expect(find.text('Mia'), findsOneWidget);
     expect(find.text('Ghost'), findsNothing);
+    // Positive anchor: prove the hidden person's whole tile is gone, not just its name label.
+    expect(find.byWidgetPredicate((w) => w is CircleAvatar && w.key == const ValueKey('hidden')), findsNothing);
   });
 
   testWidgets('renders a whitespace-only name as a blank label, not "Add a name"', (tester) async {
