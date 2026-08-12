@@ -165,6 +165,7 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: SpacesRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SpaceDetailRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SpaceMembersRoute.page, guards: [_authGuard, _duplicateGuard]),
+    AutoRoute(page: SpacePeopleRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SpaceAlbumsRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SpaceAlbumDetailRoute.page, guards: [_authGuard, _duplicateGuard]),
     CustomRoute(

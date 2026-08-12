@@ -8,6 +8,7 @@ import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/space_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_detail_kebab.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_edit_sheet.widget.dart';
+import 'package:immich_mobile/presentation/widgets/spaces/space_people_action.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_top_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
@@ -388,6 +389,10 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
     });
   }
 
+  void _navigateToSpacePeople() {
+    context.pushRoute(SpacePeopleRoute(spaceId: widget.spaceId, canEdit: _canEdit));
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -475,6 +480,7 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
                 onPressed: _addPhotos,
                 tooltip: 'Add Photos',
               ),
+            SpacePeopleAction(space: _space!, onTap: _navigateToSpacePeople),
             IconButton(icon: const Icon(Icons.people_outline), onPressed: _navigateToMembers, tooltip: 'Members'),
             SpaceDetailKebab(canEdit: _canEdit, canDelete: _isOwner, onEdit: _editSpace, onDelete: _deleteSpace),
           ],
