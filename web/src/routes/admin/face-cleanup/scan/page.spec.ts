@@ -314,13 +314,22 @@ describe('+page.svelte (face cleanup)', () => {
       expect(screen.getByText('admin.face_cleanup_scan_running')).toBeInTheDocument();
     });
 
-    // Advance timer to trigger polls
+    // Advance timer to trigger polls. First poll fires at +2000ms (POLL_MIN_MS) and still reports running,
+    // which grows the backoff to round(2000*1.5) = 3000ms — so the SECOND poll (the one that finally sees
+    // the completed scan) fires at +5000ms total, not +4000ms.
     await vi.advanceTimersByTimeAsync(2000);
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(3000);
 
-    await waitFor(() => {
-      expect(vi.mocked(getLatestScan).mock.calls.length).toBeGreaterThanOrEqual(2);
-    });
+    // Positive control: polling DID run (initial load + two polls, the second of which returned the
+    // completed scan) before it stopped.
+    const callsAtCompletion = vi.mocked(getLatestScan).mock.calls.length;
+    expect(callsAtCompletion).toBe(3);
+
+    // The real assertion: once the scan is no longer active, the self-rescheduling poll must not schedule
+    // itself again. Advance well past POLL_MAX_MS (15000ms) — if stopPolling() were skipped on this branch,
+    // the backoff-capped loop would still be firing and this would pick up more calls.
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(vi.mocked(getLatestScan).mock.calls.length).toBe(callsAtCompletion);
   });
 
   // S11.13/F27: stopPolling() only clears the pending setTimeout — a fetchLatestScan() call that had ALREADY

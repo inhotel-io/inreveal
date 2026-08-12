@@ -16,6 +16,7 @@ import { SharedSpaceRepository } from 'src/repositories/shared-space.repository'
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
 import { FaceRepairService } from 'src/services/face-repair.service';
+import { FaceSuggestionService } from 'src/services/face-suggestion.service';
 import { PersonService } from 'src/services/person.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { IFacialRecognitionJob } from 'src/types';
@@ -111,23 +112,28 @@ const setupPerson = () => {
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
   jobs.queue.mockResolvedValue();
   jobs.queueAll.mockResolvedValue();
-  return { sut, ctx };
+  // Slice 13: the suggestion engine (confirm/reject/ignore/dismiss, the four suggestion-scan job handlers)
+  // moved to FaceSuggestionService. This shares `ctx`'s exact dependency instances — same mocked
+  // JobRepository/SystemMetadataRepository config, same real repos over the same DB — so a test can seed
+  // through `sut` (PersonService) and observe the consequence through `faceSuggestion`, or vice versa.
+  const faceSuggestion = ctx.getService(FaceSuggestionService);
+  return { sut, ctx, faceSuggestion };
 };
 
-// D3 (defect 5) — the suggestion side of the cross-flow: PersonService's suggestion-scan handlers read
-// `machineLearning.facialRecognition.{maxDistance,suggestions.maxDistance}` via cached getConfig(), which
-// setupPerson's mock doesn't provide (it only stubs minFaces, for reassign/confirm's preference lookup).
-// Wraps setupPerson unmodified with a full suggestion-band config and a cleared module-level config cache
-// so it can't pick up a stale value from a preceding test's mock/DB config.
+// D3 (defect 5) — the suggestion side of the cross-flow: FaceSuggestionService's suggestion-scan handlers
+// read `machineLearning.facialRecognition.{maxDistance,suggestions.maxDistance}` via cached getConfig(),
+// which setupPerson's mock doesn't provide (it only stubs minFaces, for reassign/confirm's preference
+// lookup). Wraps setupPerson unmodified with a full suggestion-band config and a cleared module-level
+// config cache so it can't pick up a stale value from a preceding test's mock/DB config.
 const SUGGESTION_BAND = { maxDistance: 0.5, minFaces: 1, suggestions: { enabled: true, maxDistance: 0.8 } };
 
 const setupSuggestionPerson = () => {
   clearConfigCache();
-  const { sut, ctx } = setupPerson();
+  const { sut, ctx, faceSuggestion } = setupPerson();
   ctx
     .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
     .get.mockResolvedValue({ machineLearning: { facialRecognition: SUGGESTION_BAND } } as any);
-  return { sut, ctx };
+  return { sut, ctx, faceSuggestion };
 };
 
 const setupSpace = () =>
@@ -531,7 +537,7 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
   });
 
   it('leak 1b — a suggestion confirm writes the human placement and drains the queue', async () => {
-    const { sut: person, ctx } = setupSuggestionPerson();
+    const { ctx, faceSuggestion } = setupSuggestionPerson();
     const { user } = await ctx.newUser();
     const auth = factory.auth({ user });
     const verdictRepo = ctx.get(FacePersonVerdictRepository);
@@ -548,7 +554,7 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(true);
 
     // Nothing but the real confirm path.
-    await person.confirmFaceSuggestion(auth, anna.id, face.id);
+    await faceSuggestion.confirmFaceSuggestion(auth, anna.id, face.id);
 
     // All three post-conditions of a real confirm: the face is reassigned, a manual identity link exists for
     // it, and the pending suggestion row is drained.
@@ -569,7 +575,7 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
 
   it("leak 4/5 — a user's rejection suppresses a later cleanup flag toward that same person", async () => {
     const { sut: repair, ctx } = setupRepair();
-    const { sut: person } = setupPerson();
+    const { faceSuggestion } = setupPerson();
     const { user } = await ctx.newUser();
     const auth = factory.auth({ user });
 
@@ -584,7 +590,7 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
 
     // The user, reviewing Bob's suggestions, says "no, that face is NOT Bob". Recorded as a shared negative
     // verdict against Bob (with his identity).
-    await person.rejectFaceSuggestion(auth, bob.id, face);
+    await faceSuggestion.rejectFaceSuggestion(auth, bob.id, face);
 
     // Re-scan: cleanup no longer flags the face toward Bob — the two engines now agree it is not his.
     const flaggedAfter = await flaggedFaceIds(repair, user.id);
@@ -688,7 +694,7 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
   // D3 (defect 5) — the suggestion engine's two scopes (personal, space) share ONE verdict layer: a
   // rejection recorded in either scope must be honoured by the other, in both directions, without a re-scan.
   it('one rejection answers personal and space scope (defect 5)', async () => {
-    const { sut: person, ctx } = setupSuggestionPerson();
+    const { ctx, faceSuggestion } = setupSuggestionPerson();
     const { sut: space, ctx: spaceCtx } = setupSpace();
     await enableSpaceSuggestionBand(spaceCtx);
     const { user } = await ctx.newUser();
@@ -712,8 +718,8 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceOne.assetId, addedById: user.id });
     const { assetFace: faceOneControl } = await newSuggestionCandidateFace(ctx, user.id);
     await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceOneControl.assetId, addedById: user.id });
-    await person.rejectFaceSuggestion(auth, anna.id, faceOne.id);
-    await expect(person.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
+    await faceSuggestion.rejectFaceSuggestion(auth, anna.id, faceOne.id);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, faceOne.id)).toBe(false);
     expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, faceOneControl.id)).toBe(true);
 
@@ -723,14 +729,14 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     const { assetFace: faceTwoControl } = await newSuggestionCandidateFace(ctx, user.id);
     await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: faceTwoControl.assetId, addedById: user.id });
     await space.rejectSpacePersonFaceSuggestion(auth, s.id, spaceAnna.id, faceTwo.id);
-    await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'personId', anna.id, faceTwo.id)).toBe(false);
     expect(await pendingFor(ctx, 'personId', anna.id, faceTwoControl.id)).toBe(true);
   });
 
   it('keep-here suppresses a later suggestion', async () => {
     const { sut: repair, ctx } = setupRepair();
-    const { sut: person } = setupSuggestionPerson();
+    const { faceSuggestion } = setupSuggestionPerson();
     const { user } = await ctx.newUser();
 
     const o = await newSuggestionAnchoredPerson(ctx, user.id, 'O');
@@ -828,14 +834,14 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     });
     await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: control.assetId, addedById: user.id });
 
-    await expect(person.handlePersonSuggestionScan({ id: o.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: o.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'personId', o.id, face.id)).toBe(false);
     expect(await pendingFor(ctx, 'personId', o.id, control.id)).toBe(true);
 
     // The same keep-here decision, honoured in a DIFFERENT scope that shares O's identity — a space person
     // is a distinct (spacePersonId, assetFaceId) row from O's own, so this is not covered by the
     // same-target "never resurrect" upsert guard the personal assertion above could already pass on alone.
-    await expect(person.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'spacePersonId', spaceO.id, face.id)).toBe(false);
     expect(await pendingFor(ctx, 'spacePersonId', spaceO.id, control.id)).toBe(true);
   });
@@ -1047,7 +1053,7 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
     });
 
     it('S8.6 — after Q is deleted and re-created sharing the same identity, a later scan offers F again', async () => {
-      const { sut: person, ctx } = setupSuggestionPerson();
+      const { sut: person, ctx, faceSuggestion } = setupSuggestionPerson();
       const verdictRepo = ctx.get(FacePersonVerdictRepository);
       const faceIdentityRepo = ctx.get(FaceIdentityRepository);
       const { user } = await ctx.newUser();
@@ -1089,7 +1095,7 @@ describe('face review cross-flow: a decision in one engine is honoured by the ot
       await ctx.database.updateTable('person').set({ identityId: q1Identity.id }).where('id', '=', q2.id).execute();
 
       // Then: a suggestion scan offers F again — it was permanently suppressed before this slice.
-      await expect(person.handlePersonSuggestionScan({ id: q2.id })).resolves.toBe(JobStatus.Success);
+      await expect(faceSuggestion.handlePersonSuggestionScan({ id: q2.id })).resolves.toBe(JobStatus.Success);
       expect(await pendingFor(ctx, 'personId', q2.id, face.id)).toBe(true);
     });
 

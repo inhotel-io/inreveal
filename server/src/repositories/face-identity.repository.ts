@@ -2339,32 +2339,51 @@ export class FaceIdentityRepository {
   // that a human placed a face on a person — written by every human reassignment, keyed by identity so it
   // survives merges, and replaced (never accumulated) by the next human reassignment. Both face engines
   // exclude these faces from their queues.
+  // H6: face-verdict.service.ts calls this for every flagged face in a scan. minFaces is admin-settable, so
+  // a full-library scan can pass every flagged face in the instance — chunked at 1000, matching every
+  // sibling bulk face path in this file (replaceFaceIdentities, demoteManualFaceLinks): one id is one bind
+  // parameter, so an unchunked IN-list breaks at Postgres's 65 535-parameter ceiling.
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async getManualLinkedFaceIds(assetFaceIds: string[]): Promise<Set<string>> {
+    const linked = new Set<string>();
     if (assetFaceIds.length === 0) {
-      return new Set();
+      return linked;
     }
-    const rows = await this.db
-      .selectFrom('face_identity_face')
-      .select('assetFaceId')
-      .where('assetFaceId', 'in', assetFaceIds)
-      .where('source', '=', 'manual')
-      .execute();
-    return new Set(rows.map((row) => row.assetFaceId));
+    for (let index = 0; index < assetFaceIds.length; index += 1000) {
+      const rows = await this.db
+        .selectFrom('face_identity_face')
+        .select('assetFaceId')
+        .where('assetFaceId', 'in', assetFaceIds.slice(index, index + 1000))
+        .where('source', '=', 'manual')
+        .execute();
+      for (const row of rows) {
+        linked.add(row.assetFaceId);
+      }
+    }
+    return linked;
   }
 
   // personId -> the verdict tokens that person answers to. A negative verdict recorded against the person's
   // IDENTITY has to match a suspicion aimed at the person itself, which is what the identity token provides;
   // the person token remains so verdicts written before the person had an identity keep matching.
+  //
+  // H6: chunked at 1000 for the same reason as getManualLinkedFaceIds above — face-verdict.service.ts calls
+  // this for every suspected owner in a scan, and minFaces is admin-settable.
   @GenerateSql({ params: [[DummyValue.UUID]] })
   async getPersonVerdictTokens(personIds: string[]): Promise<Map<string, string[]>> {
     const map = new Map<string, string[]>();
     if (personIds.length === 0) {
       return map;
     }
-    const rows = await this.db.selectFrom('person').select(['id', 'identityId']).where('id', 'in', personIds).execute();
-    for (const row of rows) {
-      map.set(row.id, targetTokens({ personId: row.id, identityId: row.identityId }));
+    for (let index = 0; index < personIds.length; index += 1000) {
+      const rows = await this.db
+        .selectFrom('person')
+        .select(['id', 'identityId'])
+        .where('id', 'in', personIds.slice(index, index + 1000))
+        .execute();
+      for (const row of rows) {
+        map.set(row.id, targetTokens({ personId: row.id, identityId: row.identityId }));
+      }
     }
     return map;
   }
@@ -2429,25 +2448,48 @@ export class FaceIdentityRepository {
       .executeTakeFirstOrThrow();
   }
 
+  /**
+   * Returns the asset-face ids actually written. With `requirePersonId` set, only faces still assigned to
+   * that person are written (H5): the caller's eligibility read happens outside the transaction, so a
+   * concurrent reassign would otherwise leave the face on one person while this re-points its identity to
+   * another — the torn state `reattributeFaces` and `detachFaces` both guard against at write time, and
+   * which a later FaceIdentityBackfill resolves in the wrong direction.
+   */
   async replaceFaceIdentities(
     input: {
       assetFaceIds: string[];
       identityId: string;
       source: FaceIdentityFaceSource;
       confidence?: number | null;
+      requirePersonId?: string;
     },
     db: Kysely<DB> | Transaction<DB> = this.db,
-  ): Promise<void> {
+  ): Promise<string[]> {
     if (input.assetFaceIds.length === 0) {
-      return;
+      return [];
     }
     // F13: de-duplicate before chunking, mirroring markRejectedMany's guard. A client repeating an id
     // (e.g. a duplicate in the cleanup console's `lock` bucket) would otherwise land twice in the same
     // chunk's INSERT, and Postgres refuses an ON CONFLICT DO UPDATE that touches the same row twice in
     // one statement ("cannot affect row a second time", 21000).
     const assetFaceIds = [...new Set(input.assetFaceIds)];
+    const written: string[] = [];
     for (let index = 0; index < assetFaceIds.length; index += 1000) {
-      const chunk = assetFaceIds.slice(index, index + 1000);
+      let chunk = assetFaceIds.slice(index, index + 1000);
+      if (input.requirePersonId) {
+        // Re-check inside the caller's transaction, exactly as reattributeFaces/detachFaces do. Scoped per
+        // chunk so the guard runs against the same snapshot as the write it protects.
+        const stillOnPerson = await db
+          .selectFrom('asset_face')
+          .select('id')
+          .where('id', 'in', chunk)
+          .where('personId', '=', input.requirePersonId)
+          .execute();
+        chunk = stillOnPerson.map((row) => row.id);
+        if (chunk.length === 0) {
+          continue;
+        }
+      }
       await db
         .insertInto('face_identity_face')
         .values(
@@ -2466,7 +2508,9 @@ export class FaceIdentityRepository {
           }),
         )
         .execute();
+      written.push(...chunk);
     }
+    return written;
   }
 
   @GenerateSql({ params: [{ personId: DummyValue.UUID, identityId: DummyValue.UUID, source: 'manual' }] })

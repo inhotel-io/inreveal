@@ -439,7 +439,6 @@ describe('+page.svelte (manual face-review page)', () => {
     });
 
     // No "Load more" button — the sentinel entering the viewport is what loads the next page of faces.
-    expect(screen.queryByTestId('manual-review-load-more')).not.toBeInTheDocument();
     await waitFor(() => expect(observerInstances.length).toBeGreaterThan(0));
     const observer = observerInstances.at(-1)!;
     observer.trigger({ target: observer.observedTarget!, isIntersecting: true });

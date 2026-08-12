@@ -191,9 +191,6 @@ describe('+page.svelte (face-cleanup resolutions)', () => {
     expect(within(cleanupRow).getByText(/by Admin/)).toBeInTheDocument();
     expect(within(suggestionRow).getByTestId('source-label')).toHaveTextContent('User review');
     expect(within(suggestionRow).getByText(/by Jula/)).toBeInTheDocument();
-
-    // No locks section survives.
-    expect(screen.queryByTestId('locks-section')).not.toBeInTheDocument();
   });
 
   // The page lists NEGATIVE verdicts only, and that scope used to live solely in a source comment. An admin

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { FORK_LOCALES } from '$lib/i18n/fork-locales';
 
 // Why this exists: during the v3.1.0 rebase, a conflict in zh_Hant.json was resolved by a merge that compared
 // only TOP-LEVEL keys. main had added keys under the nested `admin` object, so main's whole `admin` subtree
@@ -13,10 +14,6 @@ import path from 'node:path';
 // disappearing from a locale that previously had it.
 
 const I18N_DIR = path.resolve(process.cwd(), '../i18n');
-
-// The locales the fork itself maintains — the ones `launch-new-feature` / the i18n coverage work fill in for
-// every fork feature. Upstream Weblate populates the other ~80 and never sees a fork string.
-const TRANSLATED = ['de', 'es', 'fr', 'it', 'nl', 'pl', 'ru', 'zh_Hans', 'zh_Hant'];
 
 type Messages = Record<string, string>;
 
@@ -36,11 +33,11 @@ const read = (file: string): Messages =>
   flatten(JSON.parse(fs.readFileSync(path.join(I18N_DIR, file), 'utf8')) as Record<string, unknown>);
 
 const en = read('en.json');
-const translated = new Map(TRANSLATED.map((code) => [code, read(`${code}.json`)]));
+const translated = new Map(FORK_LOCALES.map((code) => [code, read(`${code}.json`)]));
 const upstreamOnly = fs
   .readdirSync(I18N_DIR)
   .filter((file) => file.endsWith('.json') && file !== 'en.json' && file !== 'package.json')
-  .filter((file) => !TRANSLATED.includes(file.replace('.json', '')))
+  .filter((file) => !FORK_LOCALES.includes(file.replace('.json', '')))
   .map((file) => read(file));
 
 /**
@@ -81,7 +78,7 @@ describe('i18n fork-string parity', () => {
     expect(forkStrings.some((key) => key.startsWith('face_suggestion'))).toBe(true);
   });
 
-  it.each(TRANSLATED)('%s carries every fork string', (code) => {
+  it.each(FORK_LOCALES)('%s carries every fork string', (code) => {
     const messages = translated.get(code)!;
     const missing = forkStrings.filter((key) => !Object.hasOwn(messages, key));
 

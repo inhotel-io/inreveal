@@ -13,6 +13,7 @@ import { SearchRepository } from 'src/repositories/search.repository';
 import { SharedSpaceRepository } from 'src/repositories/shared-space.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
+import { FaceSuggestionService } from 'src/services/face-suggestion.service';
 import { PersonService } from 'src/services/person.service';
 import { SharedSpaceService } from 'src/services/shared-space.service';
 import { clearConfigCache } from 'src/utils/config';
@@ -83,7 +84,12 @@ const setupPerson = () => {
   const jobs = ctx.getMock<JobRepository, Mocked<JobRepository>>(JobRepository);
   jobs.queue.mockResolvedValue();
   jobs.queueAll.mockResolvedValue();
-  return { sut, ctx };
+  // Slice 13: the suggestion-scan handlers and the confirm/reject/ignore/dismiss endpoints moved to
+  // FaceSuggestionService. Shares `ctx`'s exact dependency instances (same mocked JobRepository/
+  // SystemMetadataRepository config, same real repos over the same DB) as `sut` (PersonService), which
+  // this file still needs for mergeScopedPeople (S4.4).
+  const faceSuggestion = ctx.getService(FaceSuggestionService);
+  return { sut, ctx, faceSuggestion };
 };
 
 const setupSpace = () =>
@@ -183,7 +189,7 @@ const pendingFor = async (
 
 describe('face suggestion engine reads the shared verdict layer (D3)', () => {
   it('a manual-linked face is proposed to no one, in personal scope or any space scope', async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { user } = await ctx.newUser();
     const anna = await newAnchoredPerson(ctx, user.id, 'Anna');
 
@@ -209,9 +215,11 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
       .get(FaceIdentityRepository)
       .replaceFaceIdentity({ assetFaceId: face.id, identityId: zedIdentity.id, source: 'manual' });
 
-    await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
-    await expect(person.handleSpacePersonSuggestionScan({ id: spaceAlice.id })).resolves.toBe(JobStatus.Success);
-    await expect(person.handleSpacePersonSuggestionScan({ id: spaceCarl.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: spaceAlice.id })).resolves.toBe(
+      JobStatus.Success,
+    );
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: spaceCarl.id })).resolves.toBe(JobStatus.Success);
 
     expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(false);
     expect(await pendingFor(ctx, 'spacePersonId', spaceAlice.id, face.id)).toBe(false);
@@ -219,7 +227,7 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
   });
 
   it('a negative verdict toward I(Anna) is honoured in every scope sharing that identity', async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { user } = await ctx.newUser();
     const auth = authFor(user);
     const anna = await newAnchoredPerson(ctx, user.id, 'Anna');
@@ -239,11 +247,11 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
     const { assetFace: face } = await newCandidateFace(ctx, user.id);
     await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: face.assetId, addedById: user.id });
 
-    await person.rejectFaceSuggestion(auth, anna.id, face.id);
+    await faceSuggestion.rejectFaceSuggestion(auth, anna.id, face.id);
 
-    await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
-    await expect(person.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
-    await expect(person.handlePersonSuggestionScan({ id: q.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: q.id })).resolves.toBe(JobStatus.Success);
 
     expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(false);
     expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, face.id)).toBe(false);
@@ -251,7 +259,7 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
   });
 
   it('an admin keep-here suppresses a later suggestion, even after the face is unassigned', async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { user } = await ctx.newUser();
     const o = await newAnchoredPerson(ctx, user.id, 'O');
     const oIdentity = await ctx.get(FaceIdentityRepository).ensurePersonIdentity(o.id);
@@ -277,15 +285,15 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
       actorId: user.id,
     });
 
-    await expect(person.handlePersonSuggestionScan({ id: o.id })).resolves.toBe(JobStatus.Success);
-    await expect(person.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: o.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
 
     expect(await pendingFor(ctx, 'personId', o.id, face.id)).toBe(false);
     expect(await pendingFor(ctx, 'spacePersonId', spaceO.id, face.id)).toBe(false);
   });
 
   it("space confirm makes the same space's next scan skip the face for every space person", async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { sut: space, ctx: spaceCtx } = setupSpace();
     await enableSpaceBand(spaceCtx);
     const { user } = await ctx.newUser();
@@ -299,7 +307,7 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
     await ctx.newSharedSpaceAsset({ spaceId: s.id, assetId: face.assetId, addedById: user.id });
 
     // Alice's scan proposes F.
-    await expect(person.handleSpacePersonSuggestionScan({ id: alice.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: alice.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'spacePersonId', alice.id, face.id)).toBe(true);
 
     // A reviewer confirms F for Alice.
@@ -314,12 +322,12 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
     expect(projection).toBeDefined();
 
     // Bob's re-scan must skip F now — the space-wide assigned-face exclusion the confirm's projection feeds.
-    await expect(person.handleSpacePersonSuggestionScan({ id: bob.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: bob.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'spacePersonId', bob.id, face.id)).toBe(false);
   });
 
   it('a face settled after the scan leaves both pending reads, without a re-scan', async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { user } = await ctx.newUser();
     const o = await newAnchoredPerson(ctx, user.id, 'O');
 
@@ -329,8 +337,8 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
     const { assetFace: face } = await newCandidateFace(ctx, user.id);
     await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: face.assetId, addedById: user.id });
 
-    await expect(person.handlePersonSuggestionScan({ id: o.id })).resolves.toBe(JobStatus.Success);
-    await expect(person.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: o.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: spaceO.id })).resolves.toBe(JobStatus.Success);
 
     const verdictRepo = ctx.get(FacePersonVerdictRepository);
     const before = await verdictRepo.getPendingForPerson(o.id, bandOpts);
@@ -363,7 +371,7 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
 
   // Slice 1 (F2): the suggestion scans must not propose faces on Locked/Hidden assets. S1.4 and S1.5.
   it('S1.4: handlePersonSuggestionScan proposes only the timeline candidate, not the one on a locked asset', async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { user } = await ctx.newUser();
     const anna = await newAnchoredPerson(ctx, user.id, 'Anna');
 
@@ -374,14 +382,14 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
     });
     const { assetFace: timelineFace } = await seedFace(ctx, { ownerId: user.id, embedding: CANDIDATE });
 
-    await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
 
     expect(await pendingFor(ctx, 'personId', anna.id, timelineFace.id)).toBe(true); // positive control
     expect(await pendingFor(ctx, 'personId', anna.id, lockedFace.id)).toBe(false);
   });
 
   it('S1.5: handleSpacePersonSuggestionScan proposes only the timeline candidate, not the one on a locked asset', async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { user } = await ctx.newUser();
 
     const space = await newSpace(ctx, user.id);
@@ -396,7 +404,7 @@ describe('face suggestion engine reads the shared verdict layer (D3)', () => {
     const { assetFace: timelineFace } = await seedFace(ctx, { ownerId: user.id, embedding: CANDIDATE });
     await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: timelineFace.assetId, addedById: user.id });
 
-    await expect(person.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handleSpacePersonSuggestionScan({ id: spaceAnna.id })).resolves.toBe(JobStatus.Success);
 
     expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, timelineFace.id)).toBe(true); // positive control
     expect(await pendingFor(ctx, 'spacePersonId', spaceAnna.id, lockedFace.id)).toBe(false);
@@ -413,7 +421,7 @@ describe('reject/ignore face-level authorization (F8)', () => {
     "S4.4: A cannot reject a face in B's library even when a cross-owner merge has put A's and B's " +
       '"Anna" on one identity',
     async () => {
-      const { sut: person, ctx } = setupPerson();
+      const { sut: person, ctx, faceSuggestion } = setupPerson();
       const { user: userA } = await ctx.newUser();
       const { user: userB } = await ctx.newUser();
       const authA = authFor(userA);
@@ -465,19 +473,21 @@ describe('reject/ignore face-level authorization (F8)', () => {
 
       // F lives in B's library, unassigned, with a pending suggestion for B's Anna.
       const { assetFace: face } = await newCandidateFace(ctx, userB.id);
-      await expect(person.handlePersonSuggestionScan({ id: annaB.id })).resolves.toBe(JobStatus.Success);
-      const before = await person.getFaceSuggestions(authB, annaB.id, { page: 1, size: 50 });
+      await expect(faceSuggestion.handlePersonSuggestionScan({ id: annaB.id })).resolves.toBe(JobStatus.Success);
+      const before = await faceSuggestion.getFaceSuggestions(authB, annaB.id, { page: 1, size: 50 });
       expect(before.items.map((item) => item.assetFaceId)).toContain(face.id); // positive control
 
-      await expect(person.rejectFaceSuggestion(authA, annaA.id, face.id)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(faceSuggestion.rejectFaceSuggestion(authA, annaA.id, face.id)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
 
-      const after = await person.getFaceSuggestions(authB, annaB.id, { page: 1, size: 50 });
+      const after = await faceSuggestion.getFaceSuggestions(authB, annaB.id, { page: 1, size: 50 });
       expect(after.items.map((item) => item.assetFaceId)).toContain(face.id);
     },
   );
 
   it('S4.6: an owner can reject a face in their own library even though it is also space-shared with another user', async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { user: owner } = await ctx.newUser();
     const { user: viewer } = await ctx.newUser();
     const authOwner = authFor(owner);
@@ -489,16 +499,16 @@ describe('reject/ignore face-level authorization (F8)', () => {
     const { assetFace: face } = await newCandidateFace(ctx, owner.id);
     await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: face.assetId, addedById: owner.id });
 
-    await expect(person.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
+    await expect(faceSuggestion.handlePersonSuggestionScan({ id: anna.id })).resolves.toBe(JobStatus.Success);
     expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(true); // positive control: scan proposed it
 
-    await expect(person.rejectFaceSuggestion(authOwner, anna.id, face.id)).resolves.toBe(true);
+    await expect(faceSuggestion.rejectFaceSuggestion(authOwner, anna.id, face.id)).resolves.toBe(true);
 
     expect(await pendingFor(ctx, 'personId', anna.id, face.id)).toBe(false);
   });
 
   it('S4.7: rejecting a face whose asset is in the trash 400s and writes no row', async () => {
-    const { sut: person, ctx } = setupPerson();
+    const { ctx, faceSuggestion } = setupPerson();
     const { user } = await ctx.newUser();
     const auth = authFor(user);
     const anna = await newAnchoredPerson(ctx, user.id, 'Anna');
@@ -510,7 +520,7 @@ describe('reject/ignore face-level authorization (F8)', () => {
       sourceType: SourceType.MachineLearning,
     });
 
-    await expect(person.rejectFaceSuggestion(auth, anna.id, trashedFace.id)).rejects.toBeInstanceOf(
+    await expect(faceSuggestion.rejectFaceSuggestion(auth, anna.id, trashedFace.id)).rejects.toBeInstanceOf(
       BadRequestException,
     );
     const rows = await ctx.database
@@ -528,7 +538,7 @@ describe('reject/ignore face-level authorization (F8)', () => {
       personId: null,
       sourceType: SourceType.MachineLearning,
     });
-    await expect(person.rejectFaceSuggestion(auth, anna.id, liveFace.id)).resolves.toBe(true);
+    await expect(faceSuggestion.rejectFaceSuggestion(auth, anna.id, liveFace.id)).resolves.toBe(true);
     const liveRows = await ctx.database
       .selectFrom('face_person_verdict')
       .select('id')

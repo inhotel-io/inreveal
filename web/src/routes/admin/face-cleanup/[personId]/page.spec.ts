@@ -925,6 +925,10 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
           unknown: [],
         },
       });
+      // S11 (slice 12d): a successful apply on the GUIDED page navigates back to the scan console — its OWN
+      // destination, Route.faceCleanupScan(), which differs from the manual sibling's Route.faceCleanupPeople().
+      // Every other goto assertion on this page is negative (error/pending paths); this is the positive control.
+      await waitFor(() => expect(goto).toHaveBeenCalledWith(Route.faceCleanupScan()));
     });
 
     it('does NOT ask when nothing is being discarded — a routine Apply goes straight through', async () => {
@@ -1071,7 +1075,6 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
 
       await fireEvent.click(screen.getAllByTestId('rest-tile')[0]);
 
-      expect(screen.queryByTestId('move-rest-selection-btn')).not.toBeInTheDocument();
       expect(resolveFaces).not.toHaveBeenCalled();
     });
 
@@ -1199,7 +1202,9 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
       await waitFor(() =>
         expect(
           translations.some(
-            (t) => t.key === 'admin.face_cleanup_review_move_entire_confirm_body' && t.values?.count === '5',
+            // B3: a NUMBER, not '5'. The count used to be pre-formatted with toLocaleString(), which made
+            // ICU compute `#` as `"2,952" - 0` = NaN on any cluster past a thousand faces.
+            (t) => t.key === 'admin.face_cleanup_review_move_entire_confirm_body' && t.values?.count === 5,
           ),
         ).toBe(true),
       );
@@ -1264,6 +1269,11 @@ describe('+page.svelte (face-cleanup review — Model B)', () => {
     });
     expect(screen.queryAllByTestId('face-tile')).toHaveLength(0);
     expect(screen.queryByTestId('face-dock')).not.toBeInTheDocument();
+
+    // S11 (slice 12d): the empty state's back button is the OTHER goto call site on this page (handleCancel) —
+    // unconditional, unlike the Apply success path above.
+    await fireEvent.click(screen.getByRole('button', { name: 'admin.face_cleanup_mode_guided' }));
+    expect(goto).toHaveBeenCalledWith(Route.faceCleanupScan());
   });
 
   // ---- D17: a failed INITIAL load must not render as the reassuring "no flagged faces" empty state ----

@@ -31,6 +31,12 @@ export interface FlaggedFace {
   assetFaceId: string;
   currentPersonId: string;
   suspectedOwnerId: string;
+  // B2: whether this move writes the durable `manual` identity link. OMITTED MEANS TRUE — the scan's own
+  // auto-repair path builds FlaggedFace without it and has always been durable. The interactive resolve
+  // path threads the caller's MoveGroup.lock, which defaults to false. A `manual` link is the strongest
+  // verdict in the system (both engines exclude such a face permanently), so writing it unconditionally
+  // made every move a one-way door while the response reported `locked: 0`.
+  lock?: boolean;
 }
 
 export type ReviewOnlyReason = 'over-cap' | 'bad-target';
@@ -247,10 +253,13 @@ export class FaceRepairService extends BaseService {
   // skipped (never written), so a stale destination can never corrupt the apply.
   async executeRepair(plan: RepairPlan): Promise<RepairExecution> {
     // Group by (source person → destination owner) so the write-time re-check (still-on-source) holds per route.
-    const routes = new Map<string, { from: string; to: string; faceIds: string[] }>();
+    // The lock flag is part of the route key: a batch mixing locked and unlocked faces on the same
+    // (from, to) pair must produce two writes, or one bucket silently inherits the other's durability.
+    const routes = new Map<string, { from: string; to: string; lock: boolean; faceIds: string[] }>();
     for (const face of plan.toRepair) {
-      const key = `${face.currentPersonId}|${face.suspectedOwnerId}`;
-      const route = routes.get(key) ?? { from: face.currentPersonId, to: face.suspectedOwnerId, faceIds: [] };
+      const lock = face.lock ?? true;
+      const key = `${face.currentPersonId}|${face.suspectedOwnerId}|${lock}`;
+      const route = routes.get(key) ?? { from: face.currentPersonId, to: face.suspectedOwnerId, lock, faceIds: [] };
       route.faceIds.push(face.assetFaceId);
       routes.set(key, route);
     }
@@ -270,7 +279,7 @@ export class FaceRepairService extends BaseService {
       return ownerOf.get(id);
     };
 
-    for (const { from, to, faceIds } of routes.values()) {
+    for (const { from, to, lock, faceIds } of routes.values()) {
       const toOwner = await resolveOwner(to);
       if (toOwner === undefined) {
         skipped += faceIds.length; // destination person deleted/merged since the plan was built
@@ -297,7 +306,11 @@ export class FaceRepairService extends BaseService {
         if (ids.length > 0) {
           const identity = await this.faceIdentityRepository.ensurePersonIdentity(to, trx);
           await this.faceIdentityRepository.replaceFaceIdentities(
-            { assetFaceIds: ids, identityId: identity.id, source: 'manual' },
+            // B2: the relink always happens — leaving the face on `to` while it still carries `from`'s
+            // identity is the torn state FaceIdentityBackfill resolves back to `from`. Only the STRENGTH
+            // is conditional: `manual` is the durable lock, `owner-person` is an ordinary placement that a
+            // later scan may still question.
+            { assetFaceIds: ids, identityId: identity.id, source: lock ? 'manual' : 'owner-person' },
             trx,
           );
           await this.facePersonVerdictRepository.drainPendingForFaces(ids, trx);
@@ -956,7 +969,12 @@ export class FaceRepairService extends BaseService {
           // Either an actionable flagged face, or a non-flagged rest-of-cluster face (§5.3: moveToPerson
           // accepts any eligible face currently on personId). executeRepair's still-on-source re-check at
           // write time skips anything not actually on personId, so no separate eligibility check is needed here.
-          toRepair.push({ assetFaceId, currentPersonId: personId, suspectedOwnerId: group.destinationPersonId });
+          toRepair.push({
+            assetFaceId,
+            currentPersonId: personId,
+            suspectedOwnerId: group.destinationPersonId,
+            lock: group.lock,
+          });
         }
       }
     }
@@ -968,6 +986,9 @@ export class FaceRepairService extends BaseService {
     if (entireCluster) {
       const clusterFaceIds = await this.collectClusterFaceIds(personId);
       for (const assetFaceId of clusterFaceIds) {
+        // `entireCluster` carries no lock field by design — PersonPicker hides the toggle for a whole-cluster
+        // move "rather than showing a toggle its request cannot carry". Omitting `lock` falls through to the
+        // durable default, preserving today's behaviour; only buckets whose caller expressed a preference change.
         toRepair.push({ assetFaceId, currentPersonId: personId, suspectedOwnerId: entireCluster.destinationPersonId });
       }
     }
@@ -980,10 +1001,11 @@ export class FaceRepairService extends BaseService {
       perPerson: [],
     });
 
-    // Move-and-lock: nothing extra to persist. `reattributeFaces` already writes the moved faces'
-    // `face_identity_face` link with `source='manual'`, and that link IS the lock — owner-agnostic, keyed by
-    // identity so it survives a merge, and replaced (never duplicated) if a human moves the face again. The
-    // dedicated lock table this used to write was a second, weaker record of the same fact.
+    // Move-and-lock: nothing extra to persist. For a group that asked to lock, executeRepair already wrote
+    // the moved faces' `face_identity_face` link with `source='manual'`, and that link IS the lock —
+    // owner-agnostic, keyed by identity so it survives a merge, and replaced (never duplicated) if a human
+    // moves the face again. B2: a group with `lock: false` gets `source='owner-person'` instead and is
+    // deliberately NOT counted here, so this tally reflects durable locks only.
     const movedSet = new Set(result.movedFaceIds);
     const moveLocked = moveToPerson
       .filter((group) => group.lock)
@@ -1060,22 +1082,35 @@ export class FaceRepairService extends BaseService {
     // per-route transaction and `detach` below.
     let locked = moveLocked;
     if (lock.length > 0) {
-      await this.databaseRepository.transaction(async (trx) => {
+      const lockedIds = await this.databaseRepository.transaction(async (trx) => {
         const identity = await this.faceIdentityRepository.ensurePersonIdentity(personId, trx);
-        await this.faceIdentityRepository.replaceFaceIdentities(
+        // H5: `requirePersonId` re-checks placement INSIDE this transaction. getEligibleFaceIdsForPerson
+        // ran outside it and calls itself advisory; without a write-time guard a concurrent reassign left
+        // the face on the other person while its identity was re-pointed here — the exact torn state the
+        // move and detach paths transact against.
+        const writtenIds = await this.faceIdentityRepository.replaceFaceIdentities(
           {
             assetFaceIds: lock,
             identityId: identity.id,
             source: 'manual',
+            requirePersonId: personId,
           },
           trx,
         );
-        await this.facePersonVerdictRepository.drainPendingForFaces(lock, trx);
+        // Scoped to what was actually written: a face that raced away must not have its queue drained or
+        // its negatives cleared for a lock that never happened.
+        await this.facePersonVerdictRepository.drainPendingForFaces(writtenIds, trx);
         // Slice 8 (F15): the lock just re-affirmed a fact ("these faces ARE this reviewed person") that
         // contradicts any durable rejected/ignored row for this SAME person — see clearNegativeForTarget.
-        await this.facePersonVerdictRepository.clearNegativeForTarget({ personId, identityId: identity.id }, lock, trx);
+        await this.facePersonVerdictRepository.clearNegativeForTarget(
+          { personId, identityId: identity.id },
+          writtenIds,
+          trx,
+        );
+        return writtenIds;
       });
-      locked += lock.length;
+      // Count rows actually written, not ids requested — a duplicate id or a raced face used to inflate this.
+      locked += lockedIds.length;
     }
 
     // Detach (Slice 5, state 5, "Not a face"): unassign each detached face from this person AND strip its

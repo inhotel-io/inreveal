@@ -204,7 +204,9 @@ describe('FaceRepairService.resolveFaces: move-to-owner (M1, M3, E14)', () => {
     expect(byId[f2]).toBe(ownerA.id);
     expect(byId[f3]).toBe(ownerB.id);
 
-    // Identities are relinked manually (reuses executeRepair's transaction).
+    // Identities are relinked to the destination (reuses executeRepair's transaction). B2: every group here
+    // sent lock:false, so the link is an ordinary placement, NOT the durable `manual` lock — the face stays
+    // reviewable by a future scan.
     const idRows = await db
       .selectFrom('face_identity_face')
       .select(['assetFaceId', 'source'])
@@ -212,7 +214,7 @@ describe('FaceRepairService.resolveFaces: move-to-owner (M1, M3, E14)', () => {
       .execute();
     expect(idRows).toHaveLength(3);
     for (const row of idRows) {
-      expect(row.source).toBe('manual');
+      expect(row.source).toBe('owner-person');
     }
 
     // The source person drains from the latest scan snapshot (drop-on-any-resolution).
@@ -444,7 +446,8 @@ describe('FaceRepairService.resolveFaces: partial move leaves the surviving sour
     const sourceRow = await db.selectFrom('person').select('id').where('id', '=', source.id).executeTakeFirst();
     expect(sourceRow?.id).toBe(source.id);
 
-    // Picked faces have manual identities.
+    // Picked faces are relinked to the destination. B2: this request sent lock:false, so the link is an
+    // ordinary placement rather than the durable `manual` lock.
     const idRows = await db
       .selectFrom('face_identity_face')
       .select(['source'])
@@ -452,7 +455,8 @@ describe('FaceRepairService.resolveFaces: partial move leaves the surviving sour
       .execute();
     expect(idRows).toHaveLength(2);
     for (const row of idRows) {
-      expect(row.source).toBe('manual');
+      // B2: this request sent lock:false, so the relink is an ordinary placement, not a durable lock.
+      expect(row.source).toBe('owner-person');
     }
   });
 });
@@ -1426,6 +1430,36 @@ describe('FaceRepairService.resolveFaces: confirm/lock (M5, E2)', () => {
     const rows = await manualLinkFor(f1);
     expect(rows).toHaveLength(1);
   });
+
+  // S11 (slice 11d): the lock write clears a durable rejected verdict for this SAME (person, face) target —
+  // see clearNegativeForTarget. Without it, a stale "not this person" verdict would keep suppressing this
+  // person's suggestion queue for f1 even after a human just locked it there.
+  it('clears a durable rejected verdict for the SAME (person, face) target when the face is locked', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: ownerA } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: ownerA.id }]);
+
+    // A durable rejected verdict against `source` for `f1` — e.g. from an earlier "not this person" call
+    // that a later scan re-flagged the same face toward `source` for a different reason.
+    await ctx.get(FacePersonVerdictRepository).markRejected(source.id, f1, { actorId: user.id });
+    // Positive control: an unrelated rejection against a DIFFERENT person for the same face must survive —
+    // clearNegativeForTarget is scoped to `source` only, not a blanket clear for the face.
+    await ctx.get(FacePersonVerdictRepository).markRejected(ownerA.id, f1, { actorId: user.id });
+    expect(await declineRowsFor(f1, source.id)).toHaveLength(1);
+    expect(await declineRowsFor(f1, ownerA.id)).toHaveLength(1);
+
+    const result = await sut.resolveFaces(
+      { personId: source.id, moveToPerson: [], stay: [], lock: [f1], detach: [], unknown: [] },
+      user.id,
+    );
+
+    expect(result.locked).toBe(1);
+    expect(await declineRowsFor(f1, source.id)).toHaveLength(0);
+    expect(await declineRowsFor(f1, ownerA.id)).toHaveLength(1); // untouched — different target
+  });
 });
 
 describe('FaceRepairService.resolveFaces: lock eligibility (manual review, E15 relaxed)', () => {
@@ -1946,8 +1980,8 @@ describe('FaceRepairService.resolveFaces: move-and-lock (M5, E13)', () => {
   });
 });
 
-describe('FaceRepairService.resolveFaces: move without lock writes no lock row (M6, E6)', () => {
-  it('records a human placement for a moved face even when lock: false', async () => {
+describe('FaceRepairService.resolveFaces: lock:false leaves a move reviewable (B2)', () => {
+  it('does not write a manual link for an unlocked move, but does for a locked one', async () => {
     const { sut, ctx, scanRepo } = setup();
     const { user } = await ctx.newUser();
     const { person: dest } = await ctx.newPerson({ ownerId: user.id, name: 'Dest' });
@@ -1975,12 +2009,50 @@ describe('FaceRepairService.resolveFaces: move without lock writes no lock row (
     const byId = await personIdsOf([f1]);
     expect(byId[f1]).toBe(dest.id);
 
-    // ...but the move itself is a human placement, so the face is settled regardless of the `lock` flag: an
-    // admin deliberately put it here, and no future scan should ask anyone to undo that. This is the same
-    // record a user's confirmed suggestion writes, and it is what stops the two engines fighting over a
-    // face. The per-group `lock` flag therefore no longer changes durability — only the reported count.
+    // B2: the `lock` flag now governs DURABILITY, not just the reported count. A `manual` link is the
+    // strongest verdict in the system — both engines exclude such a face permanently — so writing one for
+    // every move made `lock: false` a silent one-way door while the response reported `locked: 0`. The DTO
+    // has always documented the opposite ("plain moves stay undurable unless the caller opts in"), and the
+    // picker exposes a lock checkbox; this test previously encoded the contradiction as correct.
     const rows = await manualLinkFor(f1);
-    expect(rows).toHaveLength(1);
+    expect(rows).toHaveLength(0);
+
+    // The identity is still RE-POINTED, just not as a human placement — otherwise the face would sit on
+    // `dest` carrying `source`'s identity, which FaceIdentityBackfill resolves back and silently reverts.
+    const links = await db
+      .selectFrom('face_identity_face')
+      .select(['assetFaceId', 'source'])
+      .where('assetFaceId', '=', f1)
+      .execute();
+    expect(links).toHaveLength(1);
+    expect(links[0].source).toBe('owner-person');
+  });
+
+  // Positive control for the assertion above: the identical move WITH lock:true does write the manual link,
+  // which is what proves the absence above is caused by the flag and not by a broken fixture.
+  it('writes the manual link when the same move opts in', async () => {
+    const { sut, ctx, scanRepo } = setup();
+    const { user } = await ctx.newUser();
+    const { person: dest } = await ctx.newPerson({ ownerId: user.id, name: 'Dest' });
+    const { person: source } = await ctx.newPerson({ ownerId: user.id, name: '' });
+    const f1 = await seedFace(ctx, user.id, source.id);
+
+    await seedFlaggedSnapshot(scanRepo, user.id, source.id, [{ assetFaceId: f1, suspectedOwnerId: dest.id }]);
+
+    const result = await sut.resolveFaces(
+      {
+        personId: source.id,
+        moveToPerson: [{ destinationPersonId: dest.id, faceIds: [f1], lock: true }],
+        stay: [],
+        lock: [],
+        detach: [],
+        unknown: [],
+      },
+      user.id,
+    );
+
+    expect(result.moved).toBe(1);
+    expect(await manualLinkFor(f1)).toHaveLength(1);
   });
 });
 
@@ -2530,11 +2602,11 @@ describe('FaceRepairService.resolveFaces: unknown combined with a move in one re
     expect(byId[fUnknown]).not.toBe(ownerA.id);
     expect(byId[fUnknown]).not.toBe(source.id);
 
-    // The parked face is locked to its new cluster; the plainly-moved one is NOT locked (lock: false).
-    // Both routes are human placements: the unknown-park moved its face onto a brand-new cluster, and the
-    // move put its face on the chosen destination. Neither should ever be re-proposed.
+    // The parked face IS locked to its new cluster — `unknown` deliberately writes a durable link so
+    // recognition cannot pull the face straight back out. The plainly-moved face sent lock:false, so after
+    // B2 it carries an ordinary placement instead and a later scan may still question it.
     expect(await manualLinkFor(fUnknown)).toHaveLength(1);
-    expect(await manualLinkFor(fMove)).toHaveLength(1);
+    expect(await manualLinkFor(fMove)).toHaveLength(0);
   });
 });
 
@@ -3036,9 +3108,9 @@ describe('FaceRepairService.resolveFaces: duplicate id within a single lock buck
       user.id,
     );
 
-    // `locked` counts the requested lock bucket length (unchanged, pre-existing behaviour, not part of this
-    // fix) — what this fix guarantees is that exactly one row is actually written and no 21000 is raised.
-    expect(result.locked).toBe(2);
+    // H5: `locked` counts rows actually written (deduped, same as `moved`), not the raw requested-bucket
+    // length — a duplicate id in the request still writes and is counted as exactly one lock.
+    expect(result.locked).toBe(1);
     expect(result.moved).toBe(0);
     const rows = await manualLinkFor(f1);
     expect(rows).toHaveLength(1);
@@ -3076,7 +3148,9 @@ describe('FaceRepairService.resolveFaces: combined move + stay + duplicated lock
 
     expect(result.moved).toBe(1);
     expect(result.declined).toBe(1);
-    expect(result.locked).toBe(2);
+    // H5: `locked` counts rows actually written (deduped), not the raw requested-bucket length — the
+    // duplicated fLock id still writes and is counted as exactly one lock.
+    expect(result.locked).toBe(1);
 
     const byId = await personIdsOf([fMove, fStay, fLock]);
     expect(byId[fMove]).toBe(moveDest.id);

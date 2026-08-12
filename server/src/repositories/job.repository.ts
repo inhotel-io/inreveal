@@ -291,8 +291,7 @@ export class JobRepository {
     return matches.length;
   }
 
-  async getJobCounts(name: QueueName): Promise<JobCounts> {
-    await this.removeDanglingActiveJobs(name);
+  getJobCounts(name: QueueName): Promise<JobCounts> {
     return this.getQueue(name).getJobCounts(
       'active',
       'completed',
@@ -301,6 +300,26 @@ export class JobRepository {
       'waiting',
       'paused',
     ) as unknown as Promise<JobCounts>;
+  }
+
+  /**
+   * Slice 14 (fork isolation): `getJobCounts` is a pure delegate upstream — every read-only caller
+   * (the admin queue poll in queue.service.ts, media.service.ts, person.service.ts's recognition-queue
+   * checks, storage-migration.service.ts, and this repository's own getTelemetryMetrics) expects a read
+   * that never mutates Redis. `removeDanglingActiveJobs` used to run unconditionally inside
+   * `getJobCounts`, so those upstream call paths silently wrote to Redis on every poll.
+   *
+   * This variant carries that repair. `waitForQueueCompletion` is the one caller that genuinely needs
+   * it: it blocks in a loop deciding whether a queue (including the fork's PeopleBackfill, where the
+   * dangling-active-entry bug this repair fixes was originally found — see the "fix(server): clean
+   * dangling active queue entries" commit) has actually drained, and a dangling active entry with no
+   * backing job hash would otherwise read as perpetually "still active." A blocking wait loop paying for
+   * an extra bounded Redis scan per poll is a reasonable trade against a passive per-request read paying
+   * the same cost for no benefit.
+   */
+  async getJobCountsWithRepair(name: QueueName): Promise<JobCounts> {
+    await this.removeDanglingActiveJobs(name);
+    return this.getJobCounts(name);
   }
 
   /**
@@ -498,7 +517,10 @@ export class JobRepository {
     const getPending = async () => {
       const results = await Promise.all(
         queues.map(async (name) => {
-          const [counts, paused] = await Promise.all([this.getJobCounts(name), this.isPaused(name)]);
+          // Slice 14: the repairing variant. This loop decides whether a queue has actually drained, and
+          // a dangling active entry with no backing job hash (the bug getJobCountsWithRepair fixes) would
+          // otherwise read as perpetually "still active" — see the comment on getJobCountsWithRepair.
+          const [counts, paused] = await Promise.all([this.getJobCountsWithRepair(name), this.isPaused(name)]);
           const pending = counts.active + counts.waiting + counts.delayed + counts.paused;
           return { counts, name, paused, pending };
         }),
@@ -595,10 +617,15 @@ export class JobRepository {
         // S9.8: a per-id jobId so a re-entrant QueueAll sweep (F18 — FaceIdentityBackfill re-queues
         // both QueueAll jobs on every drain) coalesces onto the in-flight job for the same person
         // instead of stacking a duplicate on the concurrency-1 PeopleBackfill queue.
-        return { jobId: `person-suggestion-scan/${item.data.id}`, removeOnComplete: true };
+        //
+        // H8: removeOnFail, unlike before — without it a failed run permanently occupies this stable
+        // dedup jobId (see removeFailedJobsByJobIdPrefix's doc comment above) and every later add() for
+        // that person is silently dropped, so their suggestion queue never refills.
+        return { jobId: `person-suggestion-scan/${item.data.id}`, removeOnComplete: true, removeOnFail: true };
       }
       case JobName.SpacePersonSuggestionScan: {
-        return { jobId: `space-person-suggestion-scan/${item.data.id}`, removeOnComplete: true };
+        // H8: see PersonSuggestionScan above — same stuck-dedup-jobId hazard, same fix.
+        return { jobId: `space-person-suggestion-scan/${item.data.id}`, removeOnComplete: true, removeOnFail: true };
       }
       case JobName.VersionCheck: {
         return { deduplication: { id: JobName.VersionCheck } };

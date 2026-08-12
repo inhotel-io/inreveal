@@ -29,6 +29,7 @@ import { SharedSpaceRepository } from 'src/repositories/shared-space.repository'
 import { StorageRepository } from 'src/repositories/storage.repository';
 import { SystemMetadataRepository } from 'src/repositories/system-metadata.repository';
 import { DB } from 'src/schema';
+import { FaceSuggestionService } from 'src/services/face-suggestion.service';
 import { PersonService } from 'src/services/person.service';
 import { clearConfigCache } from 'src/utils/config';
 import { newMediumService } from 'test/medium.factory';
@@ -1976,7 +1977,11 @@ describe(PersonService.name, () => {
     };
 
     it('rolls back the reassign when the identity relink fails (no torn write)', async () => {
-      const { sut, ctx } = setup();
+      const { ctx } = setup();
+      // Slice 13: confirmFaceSuggestion moved to FaceSuggestionService. Sharing `ctx`'s exact dependency
+      // instances means the spy below (on the real faceIdentityRepo) is observed by this sut exactly the
+      // same as it would have been on PersonService before the move.
+      const faceSuggestion = ctx.getService(FaceSuggestionService);
       ctx
         .getMock<SystemMetadataRepository, Mocked<SystemMetadataRepository>>(SystemMetadataRepository)
         .get.mockResolvedValue(enabled as any);
@@ -2005,7 +2010,7 @@ describe(PersonService.name, () => {
       // The LAST write in the chain fails.
       vi.spyOn(faceIdentityRepo, 'replaceFaceIdentity').mockRejectedValueOnce(new Error('relink failed'));
 
-      await expect(sut.confirmFaceSuggestion(auth, p.id, face.id)).rejects.toThrow('relink failed');
+      await expect(faceSuggestion.confirmFaceSuggestion(auth, p.id, face.id)).rejects.toThrow('relink failed');
 
       // The reassign must have rolled back — the face is still unassigned.
       const reloadedFace = await ctx.database

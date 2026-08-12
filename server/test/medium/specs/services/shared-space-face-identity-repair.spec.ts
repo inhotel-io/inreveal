@@ -1,5 +1,5 @@
 import { Kysely } from 'kysely';
-import { AssetVisibility, JobName, JobStatus, SharedSpaceRole, SourceType } from 'src/enum';
+import { AssetVisibility, JobName, JobStatus, QueueName, SharedSpaceRole, SourceType } from 'src/enum';
 import { AssetRepository } from 'src/repositories/asset.repository';
 import { ConfigRepository } from 'src/repositories/config.repository';
 import { DatabaseRepository } from 'src/repositories/database.repository';
@@ -891,7 +891,14 @@ describe('SharedSpaceService linked-library face identity repair', () => {
 
     await firstBoot.sut.onBootstrap();
 
-    expect(firstBoot.jobs.removeFailedJobsByJobIdPrefix).toHaveBeenCalledTimes(2);
+    // Three sweeps on a first boot: the shared-space cleanup covers PeopleBackfill and FacialRecognition
+    // (2), and H8 added an independent person-suggestion-scan cleanup on PeopleBackfill (1). The latter
+    // needs its own state key precisely because this one is already marked done on every booted instance.
+    expect(firstBoot.jobs.removeFailedJobsByJobIdPrefix).toHaveBeenCalledTimes(3);
+    expect(firstBoot.jobs.removeFailedJobsByJobIdPrefix).toHaveBeenCalledWith(QueueName.PeopleBackfill, [
+      'person-suggestion-scan/',
+      'space-person-suggestion-scan/',
+    ]);
     expect(firstBoot.jobs.queue).toHaveBeenCalledWith({ name: JobName.FaceIdentityBackfill, data: {} });
 
     const secondBoot = setup();

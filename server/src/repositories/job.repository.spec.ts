@@ -308,12 +308,31 @@ describe(JobRepository.name, () => {
     expect(queue.clean).not.toHaveBeenCalled();
   });
 
-  it('removes active queue ids whose job hash and lock are both gone before counting jobs', async () => {
-    const { sut, client, queue, logger } = setup([emptyCounts()]);
+  // Slice 14 (fork isolation): getJobCounts is upstream's pure delegate — every read-only caller (the
+  // admin queue poll, media.service.ts, person.service.ts's recognition-queue checks,
+  // storage-migration.service.ts, and this repository's own getTelemetryMetrics) must never see a read
+  // mutate Redis. The dangling-active repair moved to getJobCountsWithRepair, whose only caller is
+  // waitForQueueCompletion.
+  it('getJobCounts performs no Redis writes, even with a dangling active entry present', async () => {
+    const { sut, client, queue } = setup([emptyCounts()]);
     client.lrange.mockResolvedValue(['face-identity-backfill/space-person/orphan']);
     client.lrem.mockResolvedValue(1);
 
     await sut.getJobCounts(QueueName.PeopleBackfill);
+
+    expect(client.lrange).not.toHaveBeenCalled();
+    expect(client.exists).not.toHaveBeenCalled();
+    expect(client.lrem).not.toHaveBeenCalled();
+    expect(client.srem).not.toHaveBeenCalled();
+    expect(queue.getJobCounts).toHaveBeenCalledWith('active', 'completed', 'failed', 'delayed', 'waiting', 'paused');
+  });
+
+  it('getJobCountsWithRepair removes active queue ids whose job hash and lock are both gone before counting jobs', async () => {
+    const { sut, client, queue, logger } = setup([emptyCounts()]);
+    client.lrange.mockResolvedValue(['face-identity-backfill/space-person/orphan']);
+    client.lrem.mockResolvedValue(1);
+
+    await sut.getJobCountsWithRepair(QueueName.PeopleBackfill);
 
     expect(client.lrange).toHaveBeenCalledWith('queue:active', 0, -1);
     expect(client.exists).toHaveBeenCalledWith('queue:face-identity-backfill/space-person/orphan');
@@ -643,22 +662,22 @@ describe(JobRepository.name, () => {
     expect(queue.add).toHaveBeenCalledWith(
       JobName.PersonSuggestionScan,
       { id: 'person-1' },
-      { jobId: 'person-suggestion-scan/person-1', removeOnComplete: true },
+      { jobId: 'person-suggestion-scan/person-1', removeOnComplete: true, removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.PersonSuggestionScan,
       { id: 'person-2' },
-      { jobId: 'person-suggestion-scan/person-2', removeOnComplete: true },
+      { jobId: 'person-suggestion-scan/person-2', removeOnComplete: true, removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.SpacePersonSuggestionScan,
       { id: 'space-person-1' },
-      { jobId: 'space-person-suggestion-scan/space-person-1', removeOnComplete: true },
+      { jobId: 'space-person-suggestion-scan/space-person-1', removeOnComplete: true, removeOnFail: true },
     );
     expect(queue.add).toHaveBeenCalledWith(
       JobName.SpacePersonSuggestionScan,
       { id: 'space-person-2' },
-      { jobId: 'space-person-suggestion-scan/space-person-2', removeOnComplete: true },
+      { jobId: 'space-person-suggestion-scan/space-person-2', removeOnComplete: true, removeOnFail: true },
     );
 
     const personJobIds = queue.add.mock.calls
@@ -667,6 +686,31 @@ describe(JobRepository.name, () => {
     // two calls for person-1 produced the identical jobId (the coalescing contract); person-2's differs
     expect(personJobIds.filter((jobId) => jobId === 'person-suggestion-scan/person-1')).toHaveLength(2);
     expect(new Set(personJobIds).size).toBe(2);
+  });
+
+  // H8: PersonSuggestionScan and SpacePersonSuggestionScan set removeOnComplete but not removeOnFail, unlike
+  // every sibling job option in this switch. A job that fails while removeOnFail is unset permanently
+  // occupies its stable dedup jobId (see removeFailedJobsByJobIdPrefix's doc comment above) — BullMQ
+  // silently ignores every later add() with the same id, so that person's suggestion queue never refills,
+  // with no log and no admin-visible symptom.
+  //
+  // GIVEN a per-person suggestion scan is enqueued
+  // WHEN BullMQ receives it
+  // THEN it must carry removeOnFail, or a single failure occupies the stable dedup jobId forever.
+  it.each([
+    [JobName.PersonSuggestionScan, 'person-suggestion-scan/person-1'],
+    [JobName.SpacePersonSuggestionScan, 'space-person-suggestion-scan/person-1'],
+  ])('%s is enqueued with removeOnFail', async (name, expectedJobId) => {
+    const { sut, queue } = setup();
+    setHandlers(sut, [name]);
+
+    await sut.queue({ name, data: { id: 'person-1' } } as never);
+
+    expect(queue.add).toHaveBeenCalledWith(
+      name,
+      { id: 'person-1' },
+      expect.objectContaining({ jobId: expectedJobId, removeOnFail: true }),
+    );
   });
 
   it('removes a failed stable facial-recognition coordinator before requeueing it', async () => {

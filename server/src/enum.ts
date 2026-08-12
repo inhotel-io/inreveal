@@ -408,6 +408,7 @@ export enum SystemMetadataKey {
   ClassificationConfigState = 'classification-config-state',
   SharedSpaceFaceJobCleanupState = 'shared-space-face-job-cleanup-state',
   FaceSuggestionDefaultOnState = 'face-suggestion-default-on-state',
+  PersonSuggestionScanJobCleanupState = 'person-suggestion-scan-job-cleanup-state',
 }
 
 export enum UserMetadataKey {

@@ -741,6 +741,7 @@ export interface SystemMetadata extends Record<SystemMetadataKey, Record<string,
   [SystemMetadataKey.License]: { licenseKey: string; activationKey: string; activatedAt: Date };
   [SystemMetadataKey.MaintenanceMode]: MaintenanceModeState;
   [SystemMetadataKey.MediaLocation]: MediaLocation;
+  [SystemMetadataKey.PersonSuggestionScanJobCleanupState]: { cleanedAt?: string };
   [SystemMetadataKey.ReverseGeocodingState]: { lastUpdate?: string; lastImportFileName?: string };
   [SystemMetadataKey.SharedSpaceFaceJobCleanupState]: { cleanedAt?: string };
   [SystemMetadataKey.SystemConfig]: DeepPartial<SystemConfig>;

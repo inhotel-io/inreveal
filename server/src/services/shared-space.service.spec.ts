@@ -5339,6 +5339,54 @@ describe(SharedSpaceService.name, () => {
       expect(mocks.job.queue).not.toHaveBeenCalled();
       expect(mocks.systemMetadata.set).not.toHaveBeenCalled();
     });
+
+    // H8: PersonSuggestionScan/SpacePersonSuggestionScan jobs that failed before removeOnFail was set
+    // permanently occupy their stable per-person dedup jobId — BullMQ silently drops every later add() for
+    // that person, so their suggestion queue never refills. removeFailedJobsByJobIdPrefix's ONLY production
+    // caller is this method, gated above by SharedSpaceFaceJobCleanupState — which is already true on every
+    // instance that booted before this fix, making a naive "add the new prefixes to that sweep" a permanent
+    // no-op exactly where it is needed. This sweep runs under its OWN state key so it actually executes.
+    describe('person-suggestion-scan job cleanup (H8)', () => {
+      // GIVEN the shared-space sweep above has already run (its flag is set) but this one has not
+      // WHEN the server boots
+      // THEN the person-suggestion-scan prefixes are still swept — a separate flag, not folded into the
+      // already-completed shared-space gate.
+      it('clears blocked person-suggestion-scan jobs even on an instance that already ran the shared-space sweep', async () => {
+        mocks.systemMetadata.get.mockImplementation((key: SystemMetadataKey) =>
+          Promise.resolve(
+            key === SystemMetadataKey.SharedSpaceFaceJobCleanupState ? { cleanedAt: '2026-07-25T00:00:00.000Z' } : null,
+          ),
+        );
+        mocks.job.removeFailedJobsByJobIdPrefix.mockResolvedValue(2);
+
+        await sut.onBootstrap();
+
+        expect(mocks.job.removeFailedJobsByJobIdPrefix).toHaveBeenCalledWith(QueueName.PeopleBackfill, [
+          'person-suggestion-scan/',
+          'space-person-suggestion-scan/',
+        ]);
+        expect(mocks.systemMetadata.set).toHaveBeenCalledWith(SystemMetadataKey.PersonSuggestionScanJobCleanupState, {
+          cleanedAt: expect.any(String),
+        });
+      });
+
+      // Positive control: without this, a sweep that ALWAYS skips (e.g. a typo'd key that never reads
+      // truthy) would also make the test above pass by accident, since it asserts on a totally separate call.
+      it('skips the person-suggestion-scan sweep once it has already run', async () => {
+        mocks.systemMetadata.get.mockResolvedValue({ cleanedAt: '2026-07-25T00:00:00.000Z' });
+
+        await sut.onBootstrap();
+
+        expect(mocks.job.removeFailedJobsByJobIdPrefix).not.toHaveBeenCalledWith(QueueName.PeopleBackfill, [
+          'person-suggestion-scan/',
+          'space-person-suggestion-scan/',
+        ]);
+        expect(mocks.systemMetadata.set).not.toHaveBeenCalledWith(
+          SystemMetadataKey.PersonSuggestionScanJobCleanupState,
+          expect.anything(),
+        );
+      });
+    });
   });
 
   describe('handleSharedSpaceFaceMatchPage', () => {
@@ -7440,6 +7488,13 @@ describe(SharedSpaceService.name, () => {
         mocks.database,
       );
       expect(mocks.facePersonVerdict.resolveAssignedFace).toHaveBeenCalledWith('face-1', mocks.database);
+      // S11 (slice 11d): the editor just stated a fact that contradicts any durable rejected/ignored row for
+      // this same target — clear it. Target shape is spacePersonId, NOT personId — this is the space twin.
+      expect(mocks.facePersonVerdict.clearNegativeForTarget).toHaveBeenCalledWith(
+        { spacePersonId: 'space-person-1', identityId: 'space-identity-1' },
+        ['face-1'],
+        mocks.database,
+      );
       // Slice 3 (D3): confirm writes the space projection row so the same space's next scan excludes the face.
       expect(mocks.sharedSpace.addPersonFaces).toHaveBeenCalledWith(
         [{ personId: 'space-person-1', assetFaceId: 'face-1' }],
@@ -7624,8 +7679,12 @@ describe(SharedSpaceService.name, () => {
       await expect(sut.rejectSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
         true,
       );
+      // S11 (slice 11c): identityId alone doesn't prove ensureSpacePersonIdentity was called with the RIGHT
+      // person — the mock resolves the same value regardless of its argument. Pin the argument too, or a
+      // caller that resolves the space's own identity instead of the space-PERSON's identity slips through.
+      expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
       expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'space-identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
@@ -7642,8 +7701,10 @@ describe(SharedSpaceService.name, () => {
       await expect(sut.ignoreSpacePersonFaceSuggestion(authUser, 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
         true,
       );
+      // S11 (slice 11c): same argument pin as reject — see the comment there.
+      expect(mocks.faceIdentity.ensureSpacePersonIdentity).toHaveBeenCalledWith('space-person-1');
       expect(mocks.facePersonVerdict.markIgnoredForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'space-identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });
@@ -7661,7 +7722,7 @@ describe(SharedSpaceService.name, () => {
         true,
       );
       expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalledWith('space-person-1', 'face-1', {
-        identityId: expect.any(String),
+        identityId: 'space-identity-1',
         source: 'suggestion',
         actorId: authUser.user.id,
       });

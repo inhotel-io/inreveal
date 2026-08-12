@@ -2144,6 +2144,30 @@ describe('FacePersonVerdictRepository', () => {
     });
   });
 
+  // H6: face-verdict.service.ts calls this for every flagged face in a scan, unchunked. minFaces is
+  // admin-settable, so a full-library scan can pass every flagged face in the instance — far larger than
+  // Postgres's 65 535 bind-parameter ceiling (one id is one bind parameter). Mirrors the removeVerdicts
+  // (F20) / clearNegativeForTarget (F15) chunking tests below.
+  describe('getNegativeVerdictTokens (H6)', () => {
+    it('resolves negative-verdict tokens for a face among an assetFaceId list far larger than the bind-parameter ceiling', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { person } = await ctx.newPerson({ ownerId: user.id });
+      const { asset: rejectedAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: rejectedFace } = await ctx.newAssetFace({ assetId: rejectedAsset.id, personId: null });
+      const { asset: untouchedAsset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace: untouchedFace } = await ctx.newAssetFace({ assetId: untouchedAsset.id, personId: null });
+
+      await sut.markRejected(person.id, rejectedFace.id);
+
+      const filler = Array.from({ length: 70_000 }, () => randomUUID());
+      const tokens = await sut.getNegativeVerdictTokens([rejectedFace.id, untouchedFace.id, ...filler]);
+
+      expect(tokens.get(rejectedFace.id)).toEqual(new Set([`person:${person.id}`]));
+      expect(tokens.has(untouchedFace.id)).toBe(false); // positive control: no verdict recorded for this face
+    });
+  });
+
   // S10.3 (F20): the resolutions-remove DTO's verdictIds now goes up to MAX_RESOLVE_FACES (25 000), and
   // removeVerdicts was completely unchunked. The filler below is far larger than Postgres's 65 535
   // bind-parameter ceiling (non-existent ids — the bind count is a function of list length, not of whether
@@ -2518,6 +2542,107 @@ describe('FacePersonVerdictRepository', () => {
       // value copied onto both fields.
       expect(personalRow?.spacePersonThumbnailFaceId).toBeNull();
       expect(spaceRow?.personThumbnailFaceId).toBeNull();
+    });
+  });
+
+  // S12f: nothing anywhere in the PR exercised these three FK cascades against a real database — every
+  // deletion path here is a fork-owned onDelete choice (face-person-verdict.table.ts) that a unit test's
+  // mocked repository cannot prove.
+  describe('deletion cascades (S12f)', () => {
+    it('deleting the asset_face cascades its verdict row (ON DELETE CASCADE)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const { person } = await ctx.newPerson({ ownerId: user.id, name: 'Cascade Target' });
+
+      await sut.markRejected(person.id, assetFace.id, { source: 'cleanup', actorId: user.id });
+      await expect(getRowOrUndefined(person.id, assetFace.id)).resolves.toBeDefined(); // positive control
+
+      await defaultDatabase.deleteFrom('asset_face').where('id', '=', assetFace.id).execute();
+
+      await expect(getRowOrUndefined(person.id, assetFace.id)).resolves.toBeUndefined();
+    });
+
+    it('deleting the actor user degrades actorId to NULL, and the scan requester field the same way — listNegativeVerdicts still renders the row', async () => {
+      const { ctx, sut } = setup();
+      const { user: owner } = await ctx.newUser();
+      const { user: actor } = await ctx.newUser();
+      const { asset } = await ctx.newAsset({ ownerId: owner.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+      const { person } = await ctx.newPerson({ ownerId: owner.id, name: 'Actor Cascade' });
+
+      await sut.markRejected(person.id, assetFace.id, { source: 'cleanup', actorId: actor.id });
+      const scan = await defaultDatabase
+        .insertInto('face_repair_scan')
+        .values({ requestedBy: actor.id })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      // Positive control: the row DOES carry the acting user before the delete.
+      const before = await getRow(person.id, assetFace.id);
+      expect(before.actorId).toBe(actor.id);
+
+      await defaultDatabase.deleteFrom('user').where('id', '=', actor.id).execute();
+
+      const after = await getRow(person.id, assetFace.id);
+      expect(after.actorId).toBeNull();
+      const scanAfter = await defaultDatabase
+        .selectFrom('face_repair_scan')
+        .selectAll()
+        .where('id', '=', scan.id)
+        .executeTakeFirstOrThrow();
+      expect(scanAfter.requestedBy).toBeNull();
+
+      // The admin resolutions page's read must survive the degrade — a LEFT (not INNER) join on the actor.
+      const { items } = await sut.listNegativeVerdicts({ page: 1, size: 10 });
+      const row = items.find((i) => i.assetFaceId === assetFace.id);
+      expect(row).toBeDefined();
+      expect(row?.actorId).toBeNull();
+      expect(row?.actorName).toBeNull();
+
+      await defaultDatabase.deleteFrom('user').where('id', '=', owner.id).execute();
+    });
+
+    it('deleting a shared space degrades spacePersonId to NULL while identityId survives (independent FKs)', async () => {
+      const { ctx, sut } = setup();
+      const { user } = await ctx.newUser();
+      const { space } = await ctx.newSharedSpace({ createdById: user.id });
+      const spacePerson = await defaultDatabase
+        .insertInto('shared_space_person')
+        .values({ spaceId: space.id, name: 'Casper' })
+        .returningAll()
+        .executeTakeFirstOrThrow();
+      const identity = await ctx.get(FaceIdentityRepository).ensureSpacePersonIdentity(spacePerson.id);
+      const { asset } = await ctx.newAsset({ ownerId: user.id });
+      const { assetFace } = await ctx.newAssetFace({ assetId: asset.id, personId: null });
+
+      await sut.markRejectedForSpacePerson(spacePerson.id, assetFace.id, {
+        identityId: identity.id,
+        source: 'cleanup',
+        actorId: user.id,
+      });
+
+      // Positive control: both keys are set before the space is deleted.
+      const before = await getSpaceRow(spacePerson.id, assetFace.id);
+      expect(before.spacePersonId).toBe(spacePerson.id);
+      expect(before.identityId).toBe(identity.id);
+
+      // shared_space_person.spaceId is ON DELETE CASCADE, so deleting the space deletes the space-person row —
+      // face_person_verdict.spacePersonId (FK'd to shared_space_person) then degrades via its OWN independent
+      // ON DELETE SET NULL. identityId FKs face_identity directly and is untouched by any of this.
+      await defaultDatabase.deleteFrom('shared_space').where('id', '=', space.id).execute();
+
+      const after = await defaultDatabase
+        .selectFrom('face_person_verdict')
+        .selectAll()
+        .where('assetFaceId', '=', assetFace.id)
+        .where('identityId', '=', identity.id)
+        .executeTakeFirstOrThrow();
+      expect(after.spacePersonId).toBeNull();
+      expect(after.identityId).toBe(identity.id);
+
+      await defaultDatabase.deleteFrom('user').where('id', '=', user.id).execute();
     });
   });
 });

@@ -865,9 +865,8 @@ export const utils = {
 
   isQueueEmpty: async (accessToken: string, queue: keyof QueuesResponseLegacyDto) => {
     const queues = await getQueuesLegacy({ headers: asBearerAuth(accessToken) });
-    const { jobCounts, queueStatus } = queues[queue];
-    const waiting = queueStatus.isPaused ? Math.max(0, jobCounts.waiting - jobCounts.paused) : jobCounts.waiting;
-    return !jobCounts.active && !waiting;
+    const jobCounts = queues[queue].jobCounts;
+    return !jobCounts.active && !jobCounts.waiting;
   },
 
   waitForQueueFinish: (accessToken: string, queue: keyof QueuesResponseLegacyDto, ms?: number) => {
