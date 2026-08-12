@@ -71,8 +71,10 @@ final driftGetAllPeopleWithSharedSpacesProvider = FutureProvider.family<List<Dri
 /// have no local rows at all (the person/asset_face sync streams are owner-scoped), and the
 /// owner-scoped local list contains people who are *not* in this space, so degrading to it
 /// would be wrong rather than stale. Failures therefore surface as AsyncError.
-final driftSpacePeopleProvider =
-    FutureProvider.family<List<DriftPerson>, ({String spaceId, PeopleSortBy sortBy})>((ref, key) async {
+final driftSpacePeopleProvider = FutureProvider.family<List<DriftPerson>, ({String spaceId, PeopleSortBy sortBy})>((
+  ref,
+  key,
+) async {
   final repository = ref.watch(sharedSpaceApiRepositoryProvider);
   return repository.getSpacePeople(key.spaceId, sortBy: key.sortBy);
 });
