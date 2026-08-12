@@ -37361,6 +37361,9 @@
           "storageTemplate": {
             "$ref": "#/components/schemas/SystemConfigStorageTemplateDto"
           },
+          "storageUsage": {
+            "$ref": "#/components/schemas/SystemConfigStorageUsageDto"
+          },
           "templates": {
             "$ref": "#/components/schemas/SystemConfigTemplatesDto"
           },
@@ -37395,6 +37398,7 @@
           "reverseGeocoding",
           "server",
           "storageTemplate",
+          "storageUsage",
           "templates",
           "theme",
           "trash",
@@ -38293,6 +38297,18 @@
           "enabled",
           "hashVerificationEnabled",
           "template"
+        ],
+        "type": "object"
+      },
+      "SystemConfigStorageUsageDto": {
+        "properties": {
+          "includeDerivatives": {
+            "description": "Include thumbnails and transcoded videos in storage usage",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "includeDerivatives"
         ],
         "type": "object"
       },
