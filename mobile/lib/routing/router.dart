@@ -35,6 +35,7 @@ import 'package:immich_mobile/pages/library/spaces/space_member_selection.page.d
 import 'package:immich_mobile/pages/library/spaces/space_album_detail.page.dart';
 import 'package:immich_mobile/pages/library/spaces/space_albums.page.dart';
 import 'package:immich_mobile/pages/library/spaces/space_members.page.dart';
+import 'package:immich_mobile/pages/library/spaces/space_people.page.dart';
 import 'package:immich_mobile/pages/library/spaces/spaces.page.dart';
 import 'package:immich_mobile/pages/library/shared_link/shared_link.page.dart';
 import 'package:immich_mobile/pages/library/shared_link/shared_link_edit.page.dart';
