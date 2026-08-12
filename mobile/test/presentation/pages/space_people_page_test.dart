@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
 import 'package:immich_mobile/domain/models/settings_key.dart';
 import 'package:immich_mobile/domain/models/store.model.dart';
@@ -184,5 +185,32 @@ void main() {
     await pumpPage(tester, people: () async => [_p('sp1', 'Mia')]);
 
     expect(find.text('Mia'), findsOneWidget);
+  });
+
+  group('invalidation', () {
+    testWidgets('re-fetches after the space list provider is invalidated', (tester) async {
+      var calls = 0;
+      await tester.pumpConsumerWidget(
+        const SpacePeoplePage(spaceId: 'space-1', canEdit: true),
+        overrides: [
+          driftSpacePeopleProvider.overrideWith((ref, key) async {
+            calls++;
+            return [_p('sp1', calls == 1 ? 'Mia' : 'Renamed')];
+          }),
+        ],
+      );
+
+      expect(find.text('Mia'), findsOneWidget);
+
+      // Both edit modals invalidate the whole family after a successful write; renaming from
+      // the GLOBAL People page must refresh this page too, which is why the shared modals —
+      // not this page — own the invalidation.
+      final container = ProviderScope.containerOf(tester.element(find.byType(SpacePeoplePage)));
+      container.invalidate(driftSpacePeopleProvider);
+      await tester.pumpAndSettle();
+
+      expect(calls, 2);
+      expect(find.text('Renamed'), findsOneWidget);
+    });
   });
 }
