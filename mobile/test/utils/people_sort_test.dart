@@ -58,5 +58,23 @@ void main() {
 
       expect(result.map((p) => p.id), ['has-count', 'null-count']);
     });
+
+    test('in name mode, ties on name break by asset count descending', () {
+      final result = _sorted([
+        _p('fewer', name: 'Same', numberOfAssets: 1),
+        _p('more', name: 'Same', numberOfAssets: 9),
+      ], PeopleSortBy.name);
+
+      expect(result.map((p) => p.id), ['more', 'fewer']);
+    });
+
+    test('in photoCount mode, ties on asset count break alphabetically by name', () {
+      final result = _sorted([
+        _p('zoe', name: 'Zoe', numberOfAssets: 5),
+        _p('alice', name: 'Alice', numberOfAssets: 5),
+      ], PeopleSortBy.photoCount);
+
+      expect(result.map((p) => p.id), ['alice', 'zoe']);
+    });
   });
 }

@@ -405,7 +405,14 @@ is B21.
   `driftSpacePeopleProvider` is invalidated and the grid reflects the change.
 - **B38** Given a space person is renamed **from the global People page**, Then
   `driftSpacePeopleProvider` is also invalidated. This is the whole reason §5.7 touches the
-  shared modals; without a scenario the shared-modal change is untested.
+  shared modals — but the only test exercising it (`space_people_page_test.dart`'s
+  `invalidation` group) drives `container.invalidate(driftSpacePeopleProvider)` directly rather
+  than pumping either edit modal, so neither of the two production call sites
+  (`person_edit_name_modal.widget.dart`, `person_edit_birthday_modal.widget.dart`) is actually
+  exercised; deleting either `ref.invalidate(driftSpacePeopleProvider)` line would break no
+  test. The four-site wiring is correct and was verified by code review, not by this test —
+  closing that gap properly would mean pumping an edit modal against a mocked
+  `driftPeopleServiceProvider`, and no existing modal-save test exists to extend for it.
 
 ## 7. TDD implementation order
 

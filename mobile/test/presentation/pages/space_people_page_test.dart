@@ -127,6 +127,9 @@ void main() {
 
     // Deliberate divergence from the global People page, which shows a bare empty grid.
     expect(find.byKey(const Key('space-people-no-match')), findsOneWidget);
+    // Asserts the query is actually interpolated into the message — dropping `args: {'name':
+    // query}` in space_people.page.dart would leave the key assertion above green.
+    expect(find.text('No people named "nobody"'), findsOneWidget);
     expect(find.text('No people found'), findsNothing);
   });
 

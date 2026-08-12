@@ -13,6 +13,7 @@ import 'package:immich_mobile/presentation/widgets/people/people_sort_button.wid
 import 'package:immich_mobile/providers/infrastructure/people.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/settings.provider.dart';
 import 'package:immich_mobile/routing/router.dart';
+import 'package:immich_mobile/utils/debug_print.dart';
 import 'package:immich_mobile/widgets/common/search_field.dart';
 
 /// A shared space's own people — the mobile equivalent of the web `/spaces/[id]/people` tab.
@@ -75,9 +76,12 @@ class _SpacePeoplePageState extends ConsumerState<SpacePeoplePage> {
           loading: () => const Center(child: CircularProgressIndicator()),
           // No local fallback exists for space people, so a failure is a real dead end —
           // show it rather than silently rendering the owner-scoped list.
-          error: (error, _) => _ErrorState(
-            onRetry: () => ref.invalidate(driftSpacePeopleProvider((spaceId: widget.spaceId, sortBy: sortBy))),
-          ),
+          error: (error, _) {
+            dPrint(() => 'Error loading space people: $error');
+            return _ErrorState(
+              onRetry: () => ref.invalidate(driftSpacePeopleProvider((spaceId: widget.spaceId, sortBy: sortBy))),
+            );
+          },
           data: (people) {
             if (people.isEmpty) {
               return const _EmptyState(key: Key('space-people-empty'));

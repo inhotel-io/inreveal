@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:immich_mobile/domain/models/person.model.dart';
@@ -73,5 +74,34 @@ void main() {
       container.read(driftSpacePeopleProvider((spaceId: 'space-1', sortBy: PeopleSortBy.name)).future),
       throwsA(isA<Exception>()),
     );
+  });
+
+  test('autoDispose: dropping the last listener tears the provider down, so re-reading re-fetches', () {
+    // The route to SpacePeoplePage (Spaces tab -> space detail -> app-bar face icon)
+    // invalidates nothing on entry, unlike the Library tab. autoDispose is what keeps the
+    // list fresh across visits: with no listeners, the provider is disposed, and a fresh
+    // read after that must issue a brand-new fetch rather than replaying a cached instance.
+    fakeAsync((async) {
+      when(
+        () => mockRepository.getSpacePeople(any(), sortBy: any(named: 'sortBy')),
+      ).thenAnswer((_) async => [_p('sp1', name: 'Mia')]);
+
+      const key = (spaceId: 'space-1', sortBy: PeopleSortBy.name);
+
+      final subscription = container.listen(driftSpacePeopleProvider(key), (_, __) {});
+      async.flushMicrotasks();
+      verify(() => mockRepository.getSpacePeople('space-1', sortBy: PeopleSortBy.name)).called(1);
+
+      // Drop the only listener and let the scheduler's disposal task run (it is scheduled
+      // via a real Timer, not a microtask, so this needs elapse(), not just flushMicrotasks()).
+      subscription.close();
+      async.elapse(const Duration(milliseconds: 1));
+      async.flushMicrotasks();
+
+      container.listen(driftSpacePeopleProvider(key), (_, __) {});
+      async.flushMicrotasks();
+
+      verify(() => mockRepository.getSpacePeople('space-1', sortBy: PeopleSortBy.name)).called(1);
+    });
   });
 }
