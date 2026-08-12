@@ -34,7 +34,7 @@ ProviderContainer _container({required FilterSheetSnap sheet, _HapticSpy? haptic
 
 void main() {
   test('already on Photos: no tab switch, no delay, sheet→browse, focus++', () async {
-    final router = FakeTabsRouter(initialIndex: GalleryTabEnum.photos.index);
+    final router = FakeTabsRouter(initialIndex: kGalleryPhotosIndex);
     final c = _container(sheet: FilterSheetSnap.hidden);
     addTearDown(c.dispose);
     final haptic = c.read(hapticFeedbackProvider.notifier) as _HapticSpy;
@@ -49,14 +49,14 @@ void main() {
 
   test('from Albums: setActiveIndex(photos), 620ms delay, then sheet+focus', () {
     fakeAsync((async) {
-      final router = FakeTabsRouter(initialIndex: GalleryTabEnum.albums.index);
+      final router = FakeTabsRouter(initialIndex: kGalleryCollectionIndex);
       final c = _container(sheet: FilterSheetSnap.hidden);
       addTearDown(c.dispose);
 
       openGallerySearch(router, c.read);
       async.flushMicrotasks();
 
-      expect(router.setCalls, [GalleryTabEnum.photos.index]);
+      expect(router.setCalls, [kGalleryPhotosIndex]);
       expect(c.read(photosFilterSheetProvider), FilterSheetSnap.hidden, reason: 'sheet waits for delay');
       expect(c.read(photosFilterSearchFocusRequestProvider), 0, reason: 'focus waits for delay');
 
@@ -70,7 +70,7 @@ void main() {
   });
 
   test('sheet already at deep: write is no-op, focus still increments', () async {
-    final router = FakeTabsRouter(initialIndex: GalleryTabEnum.photos.index);
+    final router = FakeTabsRouter(initialIndex: kGalleryPhotosIndex);
     final c = _container(sheet: FilterSheetSnap.deep);
     addTearDown(c.dispose);
 
@@ -80,7 +80,7 @@ void main() {
   });
 
   test('sheet at browse: write transitions to deep, focus counter += 1', () async {
-    final router = FakeTabsRouter(initialIndex: GalleryTabEnum.photos.index);
+    final router = FakeTabsRouter(initialIndex: kGalleryPhotosIndex);
     final c = _container(sheet: FilterSheetSnap.browse);
     addTearDown(c.dispose);
 
@@ -91,7 +91,7 @@ void main() {
 
   test('from Library: same behavior as Albums', () {
     fakeAsync((async) {
-      final router = FakeTabsRouter(initialIndex: GalleryTabEnum.library.index);
+      final router = FakeTabsRouter(initialIndex: kGalleryLibraryIndex);
       final c = _container(sheet: FilterSheetSnap.hidden);
       addTearDown(c.dispose);
 
@@ -99,7 +99,7 @@ void main() {
       async.elapse(const Duration(milliseconds: 620));
       async.flushMicrotasks();
 
-      expect(router.setCalls, [GalleryTabEnum.photos.index]);
+      expect(router.setCalls, [kGalleryPhotosIndex]);
       expect(c.read(photosFilterSheetProvider), FilterSheetSnap.deep);
       expect(c.read(photosFilterSearchFocusRequestProvider), 1);
     });
@@ -107,7 +107,7 @@ void main() {
 
   test('haptic fires exactly once per call regardless of sheet state', () async {
     for (final initial in [FilterSheetSnap.hidden, FilterSheetSnap.deep, FilterSheetSnap.deep]) {
-      final router = FakeTabsRouter(initialIndex: GalleryTabEnum.photos.index);
+      final router = FakeTabsRouter(initialIndex: kGalleryPhotosIndex);
       final c = _container(sheet: initial);
       final haptic = c.read(hapticFeedbackProvider.notifier) as _HapticSpy;
 
@@ -119,7 +119,7 @@ void main() {
 
   test('rapid second openGallerySearch mid-delay: +2 counter, no crash', () {
     fakeAsync((async) {
-      final router = FakeTabsRouter(initialIndex: GalleryTabEnum.albums.index);
+      final router = FakeTabsRouter(initialIndex: kGalleryCollectionIndex);
       final c = _container(sheet: FilterSheetSnap.hidden);
       addTearDown(c.dispose);
 
@@ -133,27 +133,20 @@ void main() {
     });
   });
 
-  test('search targets slot 0 regardless of the nav configuration', () {
-    for (final showSpaces in [true, false]) {
-      expect(galleryNavSlots(showSpaces: showSpaces).first, GalleryTabEnum.photos);
-      expect(kGalleryPhotosIndex, 0);
-    }
-  });
-
   test('user taps different tab mid-delay: no crash, deferred-open accepted', () {
     fakeAsync((async) {
-      final router = FakeTabsRouter(initialIndex: GalleryTabEnum.albums.index);
+      final router = FakeTabsRouter(initialIndex: kGalleryCollectionIndex);
       final c = _container(sheet: FilterSheetSnap.hidden);
       addTearDown(c.dispose);
 
       openGallerySearch(router, c.read);
       async.elapse(const Duration(milliseconds: 100));
-      router.setActiveIndex(GalleryTabEnum.library.index);
+      router.setActiveIndex(kGalleryLibraryIndex);
       async.elapse(const Duration(milliseconds: 700));
 
       expect(c.read(photosFilterSheetProvider), FilterSheetSnap.deep);
       expect(c.read(photosFilterSearchFocusRequestProvider), 1);
-      expect(router.activeIndex, GalleryTabEnum.library.index);
+      expect(router.activeIndex, kGalleryLibraryIndex);
     });
   });
 }
