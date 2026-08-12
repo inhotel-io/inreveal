@@ -297,6 +297,14 @@ export interface IFaceIdentityBackfillJob extends IBaseJob {
   continuationCount?: number;
 }
 
+export interface IPersonSuggestionScanJob extends IBaseJob {
+  id: string;
+}
+
+export interface ISpacePersonSuggestionScanJob extends IBaseJob {
+  id: string;
+}
+
 export interface ISharedSpaceFaceMatchJob extends IBaseJob {
   spaceId: string;
   assetId: string;
@@ -333,6 +341,10 @@ export interface ISharedSpacePersonDedupJob extends IBaseJob {
   spaceId: string;
   /** 1-based pass number. Each dedup job runs one pass and re-queues the next with pass + 1. */
   pass?: number;
+}
+
+export interface IFaceRepairScanJob extends IBaseJob {
+  scanId: string;
 }
 
 export interface ISharedSpacePersonMetadataBackfillJob extends IBaseJob {
@@ -512,6 +524,11 @@ export type JobItem =
   | { name: JobName.FacialRecognition; data: IFacialRecognitionJob }
   | { name: JobName.FaceIdentityBackfill; data: IFaceIdentityBackfillJob }
   | { name: JobName.FaceIdentityMaintenanceAfterRecognition; data: IDelayedJob }
+  | { name: JobName.FaceSuggestionMaintenance; data: IBaseJob }
+  | { name: JobName.PersonSuggestionScanQueueAll; data: IBaseJob }
+  | { name: JobName.PersonSuggestionScan; data: IPersonSuggestionScanJob }
+  | { name: JobName.SpacePersonSuggestionScanQueueAll; data: IBaseJob }
+  | { name: JobName.SpacePersonSuggestionScan; data: ISpacePersonSuggestionScanJob }
   | { name: JobName.PersonGenerateThumbnail; data: IEntityJob }
 
   // Smart Search
@@ -612,7 +629,10 @@ export type JobItem =
 
   // Classification
   | { name: JobName.AssetClassifyQueueAll; data: IBaseJob }
-  | { name: JobName.AssetClassify; data: IEntityJob };
+  | { name: JobName.AssetClassify; data: IEntityJob }
+
+  // Face Repair
+  | { name: JobName.FaceRepairScan; data: IFaceRepairScanJob };
 
 export type VectorExtension = (typeof VECTOR_EXTENSIONS)[number];
 
@@ -717,10 +737,12 @@ export type MediaLocation = { location: string };
 export interface SystemMetadata extends Record<SystemMetadataKey, Record<string, any>> {
   [SystemMetadataKey.AdminOnboarding]: { isOnboarded: boolean };
   [SystemMetadataKey.ClassificationConfigState]: SystemConfig['classification'];
+  [SystemMetadataKey.FaceSuggestionDefaultOnState]: { sweptAt?: string };
   [SystemMetadataKey.FacialRecognitionState]: { lastRun?: string };
   [SystemMetadataKey.License]: { licenseKey: string; activationKey: string; activatedAt: Date };
   [SystemMetadataKey.MaintenanceMode]: MaintenanceModeState;
   [SystemMetadataKey.MediaLocation]: MediaLocation;
+  [SystemMetadataKey.PersonSuggestionScanJobCleanupState]: { cleanedAt?: string };
   [SystemMetadataKey.ReverseGeocodingState]: { lastUpdate?: string; lastImportFileName?: string };
   [SystemMetadataKey.SharedSpaceFaceJobCleanupState]: { cleanedAt?: string };
   [SystemMetadataKey.SystemConfig]: DeepPartial<SystemConfig>;
