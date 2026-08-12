@@ -353,8 +353,11 @@ Written as the acceptance criteria the tests encode. Every scenario below must h
   no-match state instead. Do not "correct" it to match the global page, and do not retrofit it
   onto the global page as part of this work.
 - **B26** Given the sort setting changes, Then the grid re-orders.
-- **B27** Given a person tile is tapped, Then `DriftPersonRoute` is pushed with a `DriftPerson`
-  whose `spaceId` is set.
+- **B27** Given a person tile is tapped, Then the grid's `onPersonTap` fires with a `DriftPerson`
+  whose `spaceId` is set — the value both pages hand to `DriftPersonRoute`. Asserted on the
+  grid callback rather than through a `RootStackRouter` harness, which would have to build the
+  whole `DriftPersonPage` and its timeline providers just to observe a push. The one-line push
+  in each page is untested wiring, the same accommodation made for B31. Belongs to slice 5.
 - **B34** Given a hidden person somehow reaches the grid, Then it is not rendered — the guard is
   not solely the `withHidden: false` request parameter of B6.
 - **B35** Given an active search query, When the sort setting changes, Then the filter still
@@ -401,16 +404,16 @@ is B21.
 Each slice is RED → GREEN → REFACTOR: write the failing test first, run it and confirm it fails
 for the stated reason, then implement. No slice starts before the previous one is green.
 
-| Slice | Scenarios             | Test file (new unless noted)                                                                                              |
-| ----- | --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| 1     | B12–B14               | `mobile/test/utils/people_sort_test.dart`; existing `person_api_repository_test.dart:180,194` stays green **unmodified**  |
-| 2     | B1–B6, B15            | extend `mobile/test/modules/spaces/shared_space_api_repository_test.dart`                                                 |
-| 3     | B7–B11                | same file as slice 2                                                                                                      |
-| 4     | B16–B18               | `mobile/test/providers/infrastructure/space_people_provider_test.dart`                                                    |
-| 5     | B19–B21, B34, B36     | `mobile/test/presentation/widgets/people/people_grid_test.dart`; existing `drift_people_collection_test.dart` stays green |
-| 6     | B22–B27, B35, B37     | `mobile/test/presentation/pages/space_people_page_test.dart`                                                              |
-| 7     | B28–B31               | `mobile/test/presentation/widgets/spaces/space_people_action_test.dart`                                                   |
-| 8     | B33, B38 (B32 re-run) | `mobile/test/presentation/pages/space_people_page_test.dart`                                                              |
+| Slice | Scenarios              | Test file (new unless noted)                                                                                              |
+| ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1     | B12–B14                | `mobile/test/utils/people_sort_test.dart`; existing `person_api_repository_test.dart:180,194` stays green **unmodified**  |
+| 2     | B1–B6, B15             | extend `mobile/test/modules/spaces/shared_space_api_repository_test.dart`                                                 |
+| 3     | B7–B11                 | same file as slice 2                                                                                                      |
+| 4     | B16–B18                | `mobile/test/providers/infrastructure/space_people_provider_test.dart`                                                    |
+| 5     | B19–B21, B27, B34, B36 | `mobile/test/presentation/widgets/people/people_grid_test.dart`; existing `drift_people_collection_test.dart` stays green |
+| 6     | B22–B26, B35, B37      | `mobile/test/presentation/pages/space_people_page_test.dart`                                                              |
+| 7     | B28–B31                | `mobile/test/presentation/widgets/spaces/space_people_action_test.dart`                                                   |
+| 8     | B33, B38 (B32 re-run)  | `mobile/test/presentation/pages/space_people_page_test.dart`                                                              |
 
 Slice 1 is deliberately first: it is a pure refactor of existing behaviour, and doing it under
 the existing tests means slices 2–3 build on a comparator that is already proven.
