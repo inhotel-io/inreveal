@@ -93,6 +93,9 @@ void main() {
 
   RemoteAlbum ownedAlbum() => RemoteAlbumFactory.create(ownerId: user.id, ownerName: user.name, assetCount: 1);
 
+  RemoteAlbum foreignAlbum() =>
+      RemoteAlbumFactory.create(ownerId: 'someone-else', ownerName: 'Someone Else', assetCount: 1);
+
   Future<void> pumpSheet(WidgetTester tester, Widget sheet) async {
     final userService = _MockUserService();
     when(() => userService.tryGetMyUser()).thenReturn(user);
@@ -201,5 +204,15 @@ void main() {
     final slivers = tester.widget<BaseBottomSheet>(find.byType(BaseBottomSheet)).slivers ?? const <Widget>[];
     final picker = slivers.whereType<CollectionPicker>().single;
     expect(picker.excludeSpaceId, isNull);
+  });
+
+  testWidgets('S3: an album the user does not own still offers the picker', (tester) async {
+    await pumpSheet(tester, RemoteAlbumBottomSheet(album: foreignAlbum()));
+    expectPickerMounted(tester);
+  });
+
+  testWidgets('S5: an album the user owns still offers the picker', (tester) async {
+    await pumpSheet(tester, RemoteAlbumBottomSheet(album: ownedAlbum()));
+    expectPickerMounted(tester);
   });
 }
