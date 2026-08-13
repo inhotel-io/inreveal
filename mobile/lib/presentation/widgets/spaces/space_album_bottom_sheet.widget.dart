@@ -5,6 +5,7 @@ import 'package:immich_mobile/presentation/widgets/action_buttons/download_actio
 import 'package:immich_mobile/presentation/widgets/action_buttons/remove_from_album_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/action_buttons/share_action_button.widget.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/base_bottom_sheet.widget.dart';
+import 'package:immich_mobile/presentation/widgets/collection/collection_picker.widget.dart';
 
 /// Reduced multiselect bottom sheet for the Space Album detail page.
 ///
@@ -52,6 +53,11 @@ class _SpaceAlbumBottomSheetState extends ConsumerState<SpaceAlbumBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    Future<void> onKeyboardExpand() {
+      // 0.85 is this sheet's maxChildSize.
+      return sheetController.animateTo(0.85, duration: const Duration(milliseconds: 200), curve: Curves.easeInOut);
+    }
+
     return BaseBottomSheet(
       controller: sheetController,
       initialChildSize: 0.18,
@@ -68,6 +74,9 @@ class _SpaceAlbumBottomSheetState extends ConsumerState<SpaceAlbumBottomSheet> {
             onComplete: widget.onRemoved,
           ),
       ],
+      // The same picker every other multi-select surface offers. No excludeSpaceId: this sheet has
+      // no spaceId, and the current space is a legitimate target from inside one of its albums.
+      slivers: [CollectionPicker(onKeyboardExpanded: onKeyboardExpand)],
     );
   }
 }
