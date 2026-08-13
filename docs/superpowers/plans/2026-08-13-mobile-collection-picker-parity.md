@@ -518,9 +518,17 @@ cd mobile && ~/.local/share/mise/installs/aqua-flutter-flutter/3.44.8/flutter/bi
   test/presentation/widgets/collection/collection_picker_test.dart
 ```
 
-Expected: **PASS**, including the pre-existing "composes the header, the album selector and the
-spaces section, in that order" test — update only its ordering expectation if it asserted the old
-albums-then-spaces order, and nothing else.
+Expected: **PASS**, and the pre-existing "composes the header, the album selector and the spaces
+section, in that order" test passes **unmodified**. Do not edit it. It asserts
+`headerY < albumsY` where `albumsY` is `getTopLeft(find.byType(SearchField))` — the search field is
+still `AlbumSelector`'s first sliver after this change, so the relation holds. Its other two
+assertions (`find.byType(AlbumSelector)` and `find.byType(SpaceCollectionSection)` each finding one)
+also still hold: the section is now a descendant of `AlbumSelector` rather than its sibling, and
+`find.byType` does not care.
+
+That test's local variable is now misleadingly named — `albumsY` marks where the _search field_
+starts, and albums no longer begin there. Renaming it to `selectorY` is optional and cosmetic; if you
+do, change only the identifier, never the assertion.
 
 - [ ] **Step 7: Commit**
 
@@ -589,16 +597,17 @@ already used in this file's first test.
   testWidgets('L6: typing keeps the search field focused and narrows the spaces section', (tester) async {
     await pumpPicker(tester, spaces: [space('s1', 'Family'), space('s2', 'Holiday')]);
 
-    await tester.tap(find.byType(SearchField));
-    await tester.pump();
+    // enterText focuses the field itself (it calls showKeyboard), so no explicit tap is needed --
+    // and the focus assertion below is therefore NOT "did typing acquire focus" but "did focus
+    // SURVIVE the rebuild that the keystroke triggered". That is the regression this task guards:
+    // onSearchChanged -> setState -> AlbumSelector is handed a new child.
     await tester.enterText(find.byType(SearchField), 'Fam');
     await tester.pump();
 
     expect(find.byKey(const Key('space-row-s1')), findsOneWidget);
     expect(find.byKey(const Key('space-row-s2')), findsNothing);
 
-    // Asserting only on the narrowed rows would pass even if every keystroke dropped focus --
-    // which is exactly what the new parent/child rebuild makes possible.
+    // Asserting only on the narrowed rows would pass even if every keystroke dropped focus.
     final editable = tester.widget<EditableText>(find.descendant(
       of: find.byType(SearchField),
       matching: find.byType(EditableText),
