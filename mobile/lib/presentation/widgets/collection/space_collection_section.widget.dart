@@ -5,6 +5,7 @@ import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
 import 'package:immich_mobile/domain/models/collection_target.dart';
 import 'package:immich_mobile/extensions/build_context_extensions.dart';
 import 'package:immich_mobile/extensions/translate_extensions.dart';
+import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:immich_mobile/providers/shared_space.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
@@ -207,7 +208,18 @@ class _SpaceCollectionSectionState extends ConsumerState<SpaceCollectionSection>
           ListTile(
             key: Key('space-album-child-${album.id}'),
             contentPadding: const EdgeInsets.only(left: 48, right: 16),
-            leading: const Icon(Icons.photo_album_outlined),
+            leading: album.thumbnailAssetId == null
+                ? const Icon(Icons.photo_album_outlined)
+                : SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      // SpaceAlbum carries no thumbhash; on Thumbnail.remote the value is only a
+                      // cache-busting URL param, never a blur placeholder, so '' costs nothing here.
+                      child: Thumbnail.remote(remoteId: album.thumbnailAssetId!, thumbhash: ''),
+                    ),
+                  ),
             title: Text(album.name, maxLines: 1, overflow: TextOverflow.ellipsis),
             enabled: !widget.isBusy,
             onTap: widget.isBusy ? null : () => _emit(SpaceAlbumTarget(spaceId: space.id, album: album)),

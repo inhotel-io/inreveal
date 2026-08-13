@@ -7,6 +7,7 @@ import 'package:immich_mobile/domain/models/space_album.model.dart';
 import 'package:immich_mobile/domain/models/user.model.dart';
 import 'package:immich_mobile/domain/services/user.service.dart';
 import 'package:immich_mobile/presentation/widgets/collection/space_collection_section.widget.dart';
+import 'package:immich_mobile/presentation/widgets/images/thumbnail.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart';
 import 'package:immich_mobile/providers/shared_space.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
@@ -67,9 +68,10 @@ void main() {
     albumCount: Optional.present(albums),
   );
 
-  SpaceAlbum album(String id, String name) => SpaceAlbum(
+  SpaceAlbum album(String id, String name, {String? thumbnailAssetId}) => SpaceAlbum(
     id: id,
     name: name,
+    thumbnailAssetId: thumbnailAssetId,
     showInTimeline: true,
     linkedAt: DateTime(2026, 1, 1),
     updatedAt: DateTime(2026, 1, 1),
@@ -453,5 +455,53 @@ void main() {
     // The collage draws its own gradient fallback when the id list is empty; the row must not
     // silently drop its leading widget in that case.
     expect(find.byType(SpaceCollage), findsOneWidget);
+  });
+
+  testWidgets('T3: a space album with a thumbnail asset renders it', (tester) async {
+    await pump(
+      tester,
+      spaces: [space('s1', albums: 1)],
+      albums: {
+        's1': [album('al1', 'Hawaii', thumbnailAssetId: 'asset-1')],
+      },
+    );
+    await tester.tap(find.byKey(const Key('space-row-s1')));
+    // A single pump only rebuilds with the album stream override still in its loading state --
+    // spaceAlbumsProvider's first value arrives via a microtask the frame doesn't wait on --
+    // so the album child never mounts under one pump. pumpAndSettle matches every other
+    // expand-then-read-children case in this file (e.g. "an album child emits a
+    // SpaceAlbumTarget...").
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Thumbnail), findsOneWidget);
+  });
+
+  testWidgets('T4: a space album with no thumbnail asset falls back to the icon', (tester) async {
+    await pump(
+      tester,
+      spaces: [space('s1', albums: 1)],
+      albums: {
+        's1': [album('al1', 'Hawaii', thumbnailAssetId: null)],
+      },
+    );
+    await tester.tap(find.byKey(const Key('space-row-s1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.photo_album_outlined), findsOneWidget);
+    expect(find.byType(Thumbnail), findsNothing);
+  });
+
+  testWidgets('T5: the pool child keeps its action icon and never becomes a thumbnail', (tester) async {
+    await pump(
+      tester,
+      spaces: [space('s1', albums: 1)],
+      albums: {
+        's1': [album('al1', 'Hawaii', thumbnailAssetId: 'asset-1')],
+      },
+    );
+    await tester.tap(find.byKey(const Key('space-row-s1')));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.workspaces_outline), findsOneWidget);
   });
 }
