@@ -8,7 +8,6 @@ import 'package:immich_mobile/extensions/translate_extensions.dart';
 import 'package:immich_mobile/presentation/widgets/bottom_sheet/space_bottom_sheet.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_detail_kebab.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_edit_sheet.widget.dart';
-import 'package:immich_mobile/presentation/widgets/spaces/space_people_action.widget.dart';
 import 'package:immich_mobile/presentation/widgets/spaces/space_top_sliver.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_route_scope.dart';
@@ -21,6 +20,7 @@ import 'package:immich_mobile/providers/sync_status.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
 import 'package:immich_mobile/repositories/shared_space_api.repository.dart';
 import 'package:immich_mobile/routing/router.dart';
+import 'package:immich_mobile/utils/space_face_recognition.dart';
 import 'package:immich_mobile/utils/space_permissions.dart';
 import 'package:immich_mobile/widgets/common/immich_toast.dart';
 import 'package:immich_mobile/widgets/spaces/sync_status_banner.dart';
@@ -468,21 +468,27 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
           floating: true,
           pinned: false,
           snap: false,
+          // Adding photos is the only action that stays on the bar; everything else lives in the
+          // kebab, which is why that menu is no longer hidden for viewers.
           actions: [
-            IconButton(
-              icon: Icon(_showInTimeline ? Icons.visibility : Icons.visibility_off),
-              onPressed: _togglingTimeline ? null : _toggleTimeline,
-              tooltip: _showInTimeline ? 'Hide from timeline' : 'Show in timeline',
-            ),
             if (_canEdit)
               IconButton(
                 icon: const Icon(Icons.add_photo_alternate_outlined),
                 onPressed: _addPhotos,
-                tooltip: 'Add Photos',
+                tooltip: 'add_photos'.t(context: context),
               ),
-            SpacePeopleAction(space: _space!, onTap: _navigateToSpacePeople),
-            IconButton(icon: const Icon(Icons.people_outline), onPressed: _navigateToMembers, tooltip: 'Members'),
-            SpaceDetailKebab(canEdit: _canEdit, canDelete: _isOwner, onEdit: _editSpace, onDelete: _deleteSpace),
+            SpaceDetailKebab(
+              canEdit: _canEdit,
+              canDelete: _isOwner,
+              showInTimeline: _showInTimeline,
+              timelineBusy: _togglingTimeline,
+              showPeople: spacePeopleVisible(_space!),
+              onToggleTimeline: _toggleTimeline,
+              onPeople: _navigateToSpacePeople,
+              onMembers: _navigateToMembers,
+              onEdit: _editSpace,
+              onDelete: _deleteSpace,
+            ),
           ],
         ),
         bottomSheet: SpaceBottomSheet(
