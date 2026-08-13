@@ -11,10 +11,12 @@ import 'package:immich_mobile/providers/infrastructure/space_album.provider.dart
 import 'package:immich_mobile/providers/shared_space.provider.dart';
 import 'package:immich_mobile/providers/timeline/multiselect.provider.dart';
 import 'package:immich_mobile/providers/user.provider.dart';
+import 'package:immich_mobile/widgets/spaces/space_collage.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:openapi/api.dart';
 
 import '../../../fixtures/user.stub.dart';
+import '../../../unit/presentation/presentation_context.dart';
 import '../../../widget_tester_extensions.dart';
 
 class _MockUserService extends Mock implements UserService {}
@@ -31,6 +33,12 @@ class _StubCurrentUserNotifier extends CurrentUserProvider {
 }
 
 void main() {
+  setUpAll(() async {
+    // PresentationContext.create() runs TestUtils.init() and initializes StoreService, which
+    // SpaceCollage's RemoteImageProvider reads when it builds its image URLs.
+    await PresentationContext.create();
+  });
+
   SharedSpaceMemberResponseDto member(String userId, SharedSpaceRole role) => SharedSpaceMemberResponseDto(
     userId: userId,
     name: userId,
@@ -46,12 +54,15 @@ void main() {
     SharedSpaceRole role = SharedSpaceRole.owner,
     int albums = 0,
     String? name,
+    List<String> recentAssetIds = const [],
   }) => SharedSpaceResponseDto(
     id: id,
     name: name ?? 'Space $id',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     createdById: 'someone-else',
+    recentAssetIds: Optional.present(recentAssetIds),
+    recentAssetThumbhashes: const Optional.present([]),
     members: Optional.present([member('user-1', role)]),
     albumCount: Optional.present(albums),
   );
@@ -427,5 +438,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(targets, hasLength(2), reason: 'a failed add must not leave the section permanently inert');
+  });
+
+  testWidgets('T1: a space with recent assets renders a collage, not a plain colour disc', (tester) async {
+    await pump(tester, spaces: [space('s1', recentAssetIds: ['a1', 'a2'])]);
+
+    expect(find.byType(SpaceCollage), findsOneWidget);
+    expect(find.byType(CircleAvatar), findsNothing);
+  });
+
+  testWidgets('T2: a space with no recent assets still renders the collage on its empty state', (tester) async {
+    await pump(tester, spaces: [space('s1', recentAssetIds: const [])]);
+
+    // The collage draws its own gradient fallback when the id list is empty; the row must not
+    // silently drop its leading widget in that case.
+    expect(find.byType(SpaceCollage), findsOneWidget);
   });
 }

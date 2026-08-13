@@ -155,7 +155,13 @@ class _SpaceCollectionSectionState extends ConsumerState<SpaceCollectionSection>
       ListTile(
         key: Key('space-row-${space.id}'),
         enabled: !widget.isBusy,
-        leading: CircleAvatar(backgroundColor: spaceGradientColors(space.color.orElse(null)).first, radius: 16),
+        leading: SpaceCollage(
+          recentAssetIds: space.recentAssetIds.orElse(null) ?? const [],
+          recentAssetThumbhashes: space.recentAssetThumbhashes.orElse(null) ?? const [],
+          color: space.color.orElse(null),
+          // Matches the `radius: 16` CircleAvatar this replaces, so row height is unchanged.
+          size: 32,
+        ),
         title: Text(space.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         trailing: expandable ? Icon(expanded ? Icons.expand_less : Icons.expand_more) : null,
         onTap: widget.isBusy
