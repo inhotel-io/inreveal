@@ -103,15 +103,19 @@ passes no `excludeSpaceId`. This closes a third row of #970's divergence table a
   section's visibility.
 - The label reuses the existing `albums` i18n key, as the section's header already reuses `spaces`.
   No new keys, so this change adds no nine-locale translation work.
-- **This closes a rebuild loop that did not exist before, and it is the main regression risk.**
-  `_searchQuery` lives in `CollectionPicker`: `AlbumSelector.onSearchChanged` fires → `setState` →
-  `CollectionPicker` rebuilds → it hands `AlbumSelector` a **new `sliverAfterSearch` child**. The
-  spaces section used to be `AlbumSelector`'s _sibling_, so a keystroke never fed back into the
-  widget owning the search field. `AlbumSelector` is stateful and holds `searchController` and
-  `searchFocusNode`; element identity preserves that state across the rebuild, so the field must keep
-  both its text and its focus. The existing `collection_picker_test.dart` case "typing in the search
-  field narrows the spaces section too" already covers the data flow and must stay green unmodified —
-  treat any need to edit it as evidence the restructure broke something, not as test maintenance.
+- **This does not introduce a new rebuild loop — `AlbumSelector` was already reconstructed on every
+  keystroke.** `_searchQuery` lives in `CollectionPicker`; in the old `build`, `AlbumSelector(...)`
+  was already a direct, non-const child of the same `MultiSliver` as `SpaceCollectionSection`'s
+  `SliverToBoxAdapter` sibling, so `onSearchChanged` → `setState` → `CollectionPicker` rebuilds →
+  a fresh `AlbumSelector` widget → `Element.update` → `_AlbumSelectorState.build` was already
+  happening before this change, and `searchController` / `searchFocusNode` were already surviving
+  that rebuild by element identity. What actually changes here is only the **tree position** of
+  `SpaceCollectionSection`'s element: it moves from being `AlbumSelector`'s sibling to being its
+  child (passed in as `sliverAfterSearch`). That position change is still worth guarding — a
+  mistake in the new wiring could plausibly disrupt `AlbumSelector`'s element identity in a way the
+  old sibling layout could not — so the existing `collection_picker_test.dart` case "typing in the
+  search field narrows the spaces section too" must stay green unmodified: treat any need to edit
+  it as evidence the restructure broke something, not as test maintenance.
 
 ### `mobile/lib/presentation/widgets/collection/space_collection_section.widget.dart`
 

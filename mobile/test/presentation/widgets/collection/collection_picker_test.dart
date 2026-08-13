@@ -269,7 +269,7 @@ void main() {
     expect(find.byKey(const Key('collection-picker-albums-header')), findsNothing);
   });
 
-  testWidgets('L5: the notice path still renders the albums label below it', (tester) async {
+  testWidgets('L5: the notice path still renders the albums label', (tester) async {
     // A selection containing a non-owned asset drives the section's notice branch: header and
     // notice render, space rows do not — and albums still follow.
     await pumpPicker(

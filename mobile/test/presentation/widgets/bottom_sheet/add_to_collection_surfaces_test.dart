@@ -121,11 +121,12 @@ void main() {
 
   /// Assert on the sliver list the sheet was handed, not on the rendered tree.
   ///
-  /// These sheets open at 0.22–0.4 of the screen. Measured: `find.byType(CollectionPicker)`
-  /// finds it in the favorites sheet (0.4) but reports nothing for the remote-album (0.22) and
-  /// archive (0.25) sheets, because the picker sits below the viewport and its sliver is never
-  /// built. That makes a rendered-tree assertion pass or fail on sheet height rather than on
-  /// wiring. What the picker renders once built is covered by the picker's own tests.
+  /// These sheets open at 0.18–0.4 of the screen. Measured: `find.byType(CollectionPicker)`
+  /// finds it in the favorites sheet (0.4) but reports nothing for the remote-album (0.22),
+  /// archive (0.25), and space-album (0.18) sheets, because the picker sits below the viewport
+  /// and its sliver is never built. That makes a rendered-tree assertion pass or fail on sheet
+  /// height rather than on wiring. What the picker renders once built is covered by the picker's
+  /// own tests.
   void expectPickerMounted(WidgetTester tester) {
     final slivers = tester.widget<BaseBottomSheet>(find.byType(BaseBottomSheet)).slivers ?? const <Widget>[];
     // Reverting a surface to `[AddToAlbumHeader(), AlbumSelector(...)]` — upstream's album-only

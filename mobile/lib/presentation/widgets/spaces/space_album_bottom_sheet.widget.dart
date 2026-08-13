@@ -18,6 +18,9 @@ import 'package:immich_mobile/presentation/widgets/collection/collection_picker.
 ///   Favorite / Archive / Trash / Lock / Set-cover / Share-link / Stack /
 ///   Unstack / Edit-date-time / Edit-location / Delete-local
 ///
+/// The sheet also mounts the shared [CollectionPicker] (#965 follow-up), with no
+/// `excludeSpaceId` — the current space is a legitimate target from inside one of its own albums.
+///
 /// Role-gating is on [canEdit] (space role), not album ownership (D3).
 ///
 /// [onRemoved] is called after a successful remove-from-album action so the
