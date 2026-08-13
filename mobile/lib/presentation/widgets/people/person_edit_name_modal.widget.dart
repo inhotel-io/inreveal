@@ -33,6 +33,7 @@ class _DriftPersonNameEditFormState extends ConsumerState<DriftPersonNameEditFor
         // A Drift stream can never observe a server-side edit — a space-person rename writes
         // nothing locally — so the server-backed list must still be invalidated by hand.
         ref.invalidate(driftGetAllPeopleWithSharedSpacesProvider);
+        ref.invalidate(driftSpacePeopleProvider);
         context.pop<String>(newName);
       }
     } catch (error) {
