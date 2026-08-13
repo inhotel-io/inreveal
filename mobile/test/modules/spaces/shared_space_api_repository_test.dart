@@ -797,15 +797,15 @@ void main() {
       stubGetSpacePeople((offset) async {
         offsets.add(offset);
         if (offset == 0) {
-          return List.generate(1000, (i) => spacePerson('a${i.toString().padLeft(4, '0')}'));
+          return List.generate(100, (i) => spacePerson('a${i.toString().padLeft(4, '0')}'));
         }
         return [spacePerson('tail')];
       });
 
       final result = await repository.getSpacePeople('space-1', sortBy: PeopleSortBy.name);
 
-      expect(offsets, [0, 1000]);
-      expect(result, hasLength(1001));
+      expect(offsets, [0, 100]);
+      expect(result, hasLength(101));
       expect(result.map((p) => p.id), contains('tail'));
     });
 
@@ -814,7 +814,7 @@ void main() {
       stubGetSpacePeople((offset) async {
         offsets.add(offset);
         if (offset == 0) {
-          return List.generate(1000, (i) => spacePerson('a${i.toString().padLeft(4, '0')}'));
+          return List.generate(100, (i) => spacePerson('a${i.toString().padLeft(4, '0')}'));
         }
         return const [];
       });
@@ -823,8 +823,8 @@ void main() {
 
       // The exactly-`limit` boundary: without the extra probe we would either stop early or
       // never stop at all.
-      expect(offsets, [0, 1000]);
-      expect(result, hasLength(1000));
+      expect(offsets, [0, 100]);
+      expect(result, hasLength(100));
     });
 
     test('stops at the max-page guard and returns what it gathered', () async {
@@ -852,8 +852,33 @@ void main() {
       await repository.getSpacePeople('space-1', sortBy: PeopleSortBy.name);
 
       verify(
-        () => mockApi.getSpacePeople('space-1', limit: 1000, offset: 0, withHidden: false),
+        () => mockApi.getSpacePeople('space-1', limit: 100, offset: 0, withHidden: false),
       ).called(1);
+    });
+
+    // Regression guard: the default page size is a SERVER contract, not a free choice.
+    // `SharedSpacePeopleQuerySchema.limit` is `.max(100)` and rejects an over-cap value with a
+    // 400 instead of clamping it, so a larger default breaks the page against every real server
+    // while every mock-based test here keeps passing. Sending 1000 — copied from `GET /people`,
+    // which caps at 1000 — is exactly how this shipped broken the first time.
+    test('never requests a page larger than the server limit cap', () async {
+      final limits = <int>[];
+      when(
+        () => mockApi.getSpacePeople(
+          any(),
+          limit: any(named: 'limit'),
+          offset: any(named: 'offset'),
+          withHidden: any(named: 'withHidden'),
+        ),
+      ).thenAnswer((invocation) async {
+        limits.add(invocation.namedArguments[#limit] as int);
+        return [spacePerson('sp1')];
+      });
+
+      await repository.getSpacePeople('space-1', sortBy: PeopleSortBy.name);
+
+      expect(limits, isNotEmpty);
+      expect(limits.every((limit) => limit <= 100), isTrue, reason: 'server caps limit at 100');
     });
 
     test('routes through the current ApiService.sharedSpacesApi after an endpoint change', () async {

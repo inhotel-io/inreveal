@@ -94,10 +94,15 @@ class SharedSpaceApiRepository extends ApiRepository {
   /// a unit test. They are deliberately NOT annotated `@visibleForTesting`: that annotation
   /// targets declarations, not parameters, and an `invalid_annotation_target` info would fail
   /// `dart analyze --fatal-infos`.
+  /// [pageSize] must not exceed 100: `SharedSpacePeopleQuerySchema.limit` is `.max(100)`
+  /// (`server/src/dtos/shared-space.dto.ts`), and an over-cap value fails server-side validation
+  /// with a 400 rather than being clamped, so the page shows its error state and never loads.
+  /// Note this differs from `GET /people`, whose `size` caps at 1000 — the 1000 used by
+  /// [PersonApiRepository.getAllPeopleWithSharedSpaces] is NOT a precedent for this endpoint.
   Future<List<DriftPerson>> getSpacePeople(
     String spaceId, {
     required PeopleSortBy sortBy,
-    int pageSize = 1000,
+    int pageSize = 100,
     int maxPages = 100,
   }) async {
     // The endpoint returns a bare array with no hasNextPage envelope, so a short page is the
