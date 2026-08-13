@@ -192,6 +192,18 @@ void main() {
     expect(headerY, lessThan(albumsY));
   });
 
+  // The album rows themselves cannot be asserted on here: `AlbumTile` needs `driftProvider`
+  // overridden and throws in this harness, and `find.text` on an album name is confounded by
+  // the search field's own text. So assert the WIRING -- that the picker asks `AlbumSelector`
+  // to hide albums the user cannot add to -- the same way the bottom-sheet tests assert on
+  // `BaseBottomSheet.slivers` rather than on rows below the fold. The rule itself is covered
+  // exhaustively in test/utils/album_permissions_test.dart.
+  testWidgets('V1: the picker asks the album selector to hide albums the user cannot add to', (tester) async {
+    await pumpPicker(tester);
+
+    expect(tester.widget<AlbumSelector>(find.byType(AlbumSelector)).writableOnly, isTrue);
+  });
+
   testWidgets('L1: spaces render above albums, and both below the search field', (tester) async {
     await pumpPicker(tester, spaces: [space('s1', 'Family')]);
 
