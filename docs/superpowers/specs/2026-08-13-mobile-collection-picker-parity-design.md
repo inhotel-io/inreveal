@@ -103,6 +103,15 @@ passes no `excludeSpaceId`. This closes a third row of #970's divergence table a
   section's visibility.
 - The label reuses the existing `albums` i18n key, as the section's header already reuses `spaces`.
   No new keys, so this change adds no nine-locale translation work.
+- **This closes a rebuild loop that did not exist before, and it is the main regression risk.**
+  `_searchQuery` lives in `CollectionPicker`: `AlbumSelector.onSearchChanged` fires → `setState` →
+  `CollectionPicker` rebuilds → it hands `AlbumSelector` a **new `sliverAfterSearch` child**. The
+  spaces section used to be `AlbumSelector`'s _sibling_, so a keystroke never fed back into the
+  widget owning the search field. `AlbumSelector` is stateful and holds `searchController` and
+  `searchFocusNode`; element identity preserves that state across the rebuild, so the field must keep
+  both its text and its focus. The existing `collection_picker_test.dart` case "typing in the search
+  field narrows the spaces section too" already covers the data flow and must stay green unmodified —
+  treat any need to edit it as evidence the restructure broke something, not as test maintenance.
 
 ### `mobile/lib/presentation/widgets/collection/space_collection_section.widget.dart`
 
@@ -119,12 +128,23 @@ passes no `excludeSpaceId`. This closes a third row of #970's divergence table a
   `Thumbnail.remote` requires **both** `remoteId` and a non-nullable `thumbhash`, and `SpaceAlbum`
   carries no thumbhash. `AlbumSelector` obtains one for personal albums by wrapping the widget in a
   `FutureBuilder` over `assetServiceProvider.getRemoteAsset(...)`. This change deliberately does
-  **not** copy that: it passes `thumbhash: ''`. The thumbhash only supplies a blur placeholder, and
-  copying the `FutureBuilder` would cost one asset fetch per space-album row on every expand — real
-  latency inside a list already gated behind an expand, in exchange for a placeholder on a 32px
-  leading. Rendering the space-album thumbnail on an equal footing with personal albums (its own
-  thumbhash on `SpaceAlbum`, via the Drift column and sync stream) is the honest fix and is out of
-  scope here.
+  **not** copy that: it passes `thumbhash: ''`.
+
+  Note what the thumbhash actually does on this constructor, because it is not what the name
+  suggests. `Thumbnail.remote` sets `thumbhashProvider = null`
+  (`thumbnail.widget.dart:31`), so it renders **no** blur placeholder; the placeholder path belongs
+  to the other constructor, which derives it from a `RemoteAsset`. Here the value is passed straight
+  to `getThumbnailUrlForRemoteId`, which appends it as a **cache-busting query parameter**
+  (`image_url_builder.dart:16` — `'$url&c=${Uri.encodeComponent(thumbhash)}'`). An empty string is
+  non-null, so the URL simply ends in `&c=`; nothing decodes it and nothing throws.
+
+  So passing `''` costs no placeholder, because this constructor never draws one. The real cost is
+  narrow and worth stating: with a constant `c=`, the URL for a given asset id never changes, so a
+  client-cached thumbnail can survive the server regenerating that asset's thumbnail. Picking a
+  different album cover changes `thumbnailAssetId` and therefore the URL, so only re-generation of
+  the _same_ asset goes stale. That is a better trade than one asset fetch per space-album row on
+  every expand. Giving `SpaceAlbum` a real thumbhash (Drift column plus sync-stream field) is the
+  honest fix and is out of scope here.
 
 - The "Add to space" pool child keeps its icon. It is an action, not a collection.
 - New optional `Widget? footer`, appended inside the `Column` on the paths where the section renders
@@ -181,8 +201,18 @@ Two failure modes to guard against specifically, both of which have bitten this 
 | L4  | writable spaces exist                  | a query matches albums but **no** space | the section and **both** labels collapse; album results still render                          |
 | L5  | a non-owned selection (notice path)    | the picker builds                       | header, notice and the `ALBUMS` footer all render, with no space rows                         |
 
+| L6 | the picker is mounted | text is typed into the search field | the field keeps its text **and its focus**, and the spaces section narrows |
+
 L1 is the behaviour the change exists for; it must be red against today's ordering before the hook is
 added. L4 pins the emergent collapse described above so it is not later "fixed" into a bug.
+
+L6 is the regression guard on the rebuild loop, and it behaves unlike every other row here: it is
+**green before and after**, so it demonstrates nothing on its own and earns its place only by being
+run against the restructure. The pre-existing case "typing in the search field narrows the spaces
+section too" already covers the narrowing half and must stay green **unmodified**. Extend it with an
+explicit focus assertion (that the field's `EditableText` still holds focus), because asserting only
+on the narrowed rows would pass even if focus were dropped on every keystroke — which is precisely
+the failure the new loop makes possible, and which no other test here would catch.
 
 ### `space_collection_section_test.dart` — thumbnails
 
