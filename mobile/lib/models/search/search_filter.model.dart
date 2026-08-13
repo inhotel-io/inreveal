@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:collection/collection.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:immich_mobile/domain/models/asset/base_asset.model.dart';
-import 'package:immich_mobile/domain/models/person.model.dart';
+import 'package:immich_mobile/models/photos_filter/filter_person.model.dart';
 import 'package:immich_mobile/utils/option.dart';
 
 part 'search_filter.model.freezed.dart';
@@ -200,7 +200,7 @@ class SearchFilter {
   String? language;
   String? assetId;
   List<String>? tagIds;
-  Set<Person> people;
+  Set<FilterPerson> people;
   SearchLocationFilter location;
   SearchCameraFilter camera;
   SearchDateFilter date;
@@ -239,7 +239,7 @@ class SearchFilter {
     mediaType: AssetType.other,
   );
 
-  static const _setEq = SetEquality<PersonDto>();
+  static const _setEq = SetEquality<FilterPerson>();
   static const _listEq = ListEquality<String>();
 
   bool get isEmpty {
@@ -272,7 +272,7 @@ class SearchFilter {
     String? language,
     String? ocr,
     String? assetId,
-    Set<Person>? people,
+    Set<FilterPerson>? people,
     List<String>? tagIds,
     SearchLocationFilter? location,
     SearchCameraFilter? camera,
