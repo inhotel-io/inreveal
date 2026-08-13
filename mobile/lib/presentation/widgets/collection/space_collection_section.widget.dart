@@ -29,6 +29,7 @@ class SpaceCollectionSection extends ConsumerStatefulWidget {
     this.isBusy = false,
     this.searchQuery = '',
     this.assets,
+    this.footer,
   });
 
   final void Function(CollectionTarget target) onTargetSelected;
@@ -49,6 +50,11 @@ class SpaceCollectionSection extends ConsumerStatefulWidget {
   /// Narrows the rows to spaces whose name contains this query — supplied by the picker so
   /// its single search field covers both halves of the sheet.
   final String searchQuery;
+
+  /// Rendered at the bottom of the section, and only when the section renders at all — so a caller
+  /// can attach a label for whatever follows without duplicating the section's visibility rules
+  /// (writable filter, excludeSpaceId, search query).
+  final Widget? footer;
 
   @override
   ConsumerState<SpaceCollectionSection> createState() => _SpaceCollectionSectionState();
@@ -140,6 +146,7 @@ class _SpaceCollectionSectionState extends ConsumerState<SpaceCollectionSection>
           )
         else
           for (final space in writable) ..._rowsFor(space),
+        if (widget.footer != null) widget.footer!,
       ],
     );
   }

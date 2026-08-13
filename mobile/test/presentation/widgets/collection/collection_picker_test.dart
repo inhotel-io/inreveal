@@ -93,6 +93,33 @@ class _RecordingActionNotifier extends ActionNotifier {
 }
 
 void main() {
+  Future<void> pumpPicker(
+    WidgetTester tester, {
+    List<SharedSpaceResponseDto> spaces = const [],
+    List<RemoteAsset> selection = const [],
+  }) async {
+    final userService = _MockUserService();
+    final user = UserStub.user1;
+    when(() => userService.tryGetMyUser()).thenReturn(user);
+    when(() => userService.watchMyUser()).thenAnswer((_) => const Stream.empty());
+
+    await tester.pumpConsumerWidgetRaw(
+      const CustomScrollView(slivers: [CollectionPicker()]),
+      overrides: [
+        currentUserProvider.overrideWith((ref) => _StubCurrentUserNotifier(userService, user)),
+        remoteAlbumProvider.overrideWith(() => _StubRemoteAlbumNotifier()),
+        appConfigProvider.overrideWithValue(const AppConfig()),
+        sharedSpacesProvider.overrideWith((ref) async => spaces),
+        multiSelectProvider.overrideWith(
+          () => MultiSelectNotifier(
+            MultiSelectState(selectedAssets: selection.toSet(), lockedSelectionAssets: const {}),
+          ),
+        ),
+      ],
+    );
+    await tester.pump();
+  }
+
   SharedSpaceMemberResponseDto member(String userId, SharedSpaceRole role) => SharedSpaceMemberResponseDto(
     userId: userId,
     name: userId,
@@ -152,6 +179,31 @@ void main() {
     final headerY = tester.getTopLeft(find.byKey(const Key('collection-picker-header'))).dy;
     final albumsY = tester.getTopLeft(find.byType(SearchField)).dy;
     expect(headerY, lessThan(albumsY));
+  });
+
+  testWidgets('L1: spaces render above albums, and both below the search field', (tester) async {
+    await pumpPicker(tester, spaces: [space('s1', 'Family')]);
+
+    final searchY = tester.getTopLeft(find.byType(SearchField)).dy;
+    final spacesY = tester.getTopLeft(find.byKey(const Key('space-collection-header'))).dy;
+    final albumsY = tester.getTopLeft(find.byKey(const Key('collection-picker-albums-header'))).dy;
+
+    expect(searchY, lessThan(spacesY));
+    expect(spacesY, lessThan(albumsY));
+  });
+
+  testWidgets('L2: both section labels render when the user has writable spaces', (tester) async {
+    await pumpPicker(tester, spaces: [space('s1', 'Family')]);
+
+    expect(find.byKey(const Key('space-collection-header')), findsOneWidget);
+    expect(find.byKey(const Key('collection-picker-albums-header')), findsOneWidget);
+  });
+
+  testWidgets('L3: neither label renders when the user has no writable spaces', (tester) async {
+    await pumpPicker(tester, spaces: const []);
+
+    expect(find.byKey(const Key('space-collection-header')), findsNothing);
+    expect(find.byKey(const Key('collection-picker-albums-header')), findsNothing);
   });
 
   testWidgets('typing in the search field narrows the spaces section too', (tester) async {
