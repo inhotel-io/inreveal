@@ -600,7 +600,7 @@ describe('album-context commands', () => {
     it('hides when album is null', () => {
       expect(cmd().isAvailable!(ctxNoAlbum())).toBe(false);
     });
-    it('hides for non-owners', () => {
+    it('hides for a member who is neither owner nor editor', () => {
       expect(cmd().isAvailable!(ctxNonOwner())).toBe(false);
     });
     it('shows for owner', () => {
