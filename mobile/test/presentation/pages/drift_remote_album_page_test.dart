@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -20,6 +22,7 @@ import 'package:immich_mobile/infrastructure/repositories/db.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/settings.repository.dart';
 import 'package:immich_mobile/infrastructure/repositories/store.repository.dart';
 import 'package:immich_mobile/presentation/pages/drift_remote_album.page.dart';
+import 'package:immich_mobile/presentation/widgets/remote_album/drift_album_option.widget.dart';
 import 'package:immich_mobile/presentation/widgets/timeline/timeline_grouping_bottom_pill.widget.dart';
 import 'package:immich_mobile/providers/infrastructure/album.provider.dart';
 import 'package:immich_mobile/providers/infrastructure/timeline.provider.dart';
@@ -117,9 +120,14 @@ void main() {
     TimeBucket(date: DateTime(2026, 1, 1), assetCount: 12),
   ];
 
-  Future<void> pumpAlbumPage(WidgetTester tester) async {
+  Future<_MockRemoteAlbumService> pumpAlbumPage(
+    WidgetTester tester, {
+    String ownerId = 'user-1',
+    AlbumUserRole role = AlbumUserRole.viewer,
+    Completer<AlbumUserRole?>? roleCompleter,
+  }) async {
     final user = _user('user-1');
-    final album = _albumFixture(user.id);
+    final album = _albumFixture(ownerId);
 
     final albumService = _MockRemoteAlbumService();
     // watchAlbum: return a stream that emits the album then closes.
@@ -131,8 +139,16 @@ void main() {
     ).thenAnswer((_) => Stream.value((DateTime(2026, 1, 1), DateTime(2026, 6, 1))));
     // getSharedUsers: empty list (no shared users icons).
     when(() => albumService.getSharedUsers(any())).thenAnswer((_) async => <UserDto>[]);
-    // getUserRole: viewer role.
-    when(() => albumService.getUserRole(any(), any())).thenAnswer((_) async => AlbumUserRole.viewer);
+    // An unresolved completer lets a test observe the pending state of the role lookup.
+    when(() => albumService.getUserRole(any(), any())).thenAnswer((_) => roleCompleter?.future ?? Future.value(role));
+    when(
+      () => albumService.updateAlbum(
+        any(),
+        name: any(named: 'name'),
+        description: any(named: 'description'),
+        createdAt: any(named: 'createdAt'),
+      ),
+    ).thenAnswer((_) async => album);
 
     final factory = _MockTimelineFactory();
     final service = _service(buckets);
@@ -176,6 +192,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pump(const Duration(milliseconds: 500));
+
+    return albumService;
+  }
+
+  DriftRemoteAlbumOption albumOption(WidgetTester tester) =>
+      tester.widget<DriftRemoteAlbumOption>(find.byType(DriftRemoteAlbumOption));
+
+  Future<void> openEditDialog(WidgetTester tester) async {
+    albumOption(tester).onEditAlbum!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
   }
 
   testWidgets('grouping selector stays visible after scrolling deep (bottom pill)', (tester) async {
@@ -224,5 +251,64 @@ void main() {
     const band = TimelineGroupingBottomPill.pillHeight + TimelineGroupingBottomPill.bottomFloat;
     expect(pillRect.bottom, closeTo(screenHeight - float, 1)); // floats bottomFloat above the edge
     expect(pillRect.top, closeTo(screenHeight - band, 1)); // top of the reserved clearance band
+  });
+
+  testWidgets('owner gets the edit album affordance', (tester) async {
+    await pumpAlbumPage(tester, ownerId: 'user-1');
+
+    expect(albumOption(tester).onEditAlbum, isNotNull);
+  });
+
+  testWidgets('editor gets the edit album affordance', (tester) async {
+    await pumpAlbumPage(tester, ownerId: 'someone-else', role: AlbumUserRole.editor);
+
+    expect(albumOption(tester).onEditAlbum, isNotNull);
+  });
+
+  testWidgets('viewer does not get the edit album affordance', (tester) async {
+    await pumpAlbumPage(tester, ownerId: 'someone-else', role: AlbumUserRole.viewer);
+
+    expect(albumOption(tester).onEditAlbum, isNull);
+  });
+
+  testWidgets('edit album affordance is withheld while the role is still resolving', (tester) async {
+    final completer = Completer<AlbumUserRole?>();
+    await pumpAlbumPage(tester, ownerId: 'someone-else', roleCompleter: completer);
+
+    // FutureBuilder default is `snapshot.data ?? false` — fail closed, matching onAddPhotos.
+    expect(albumOption(tester).onEditAlbum, isNull);
+
+    completer.complete(AlbumUserRole.editor);
+    await tester.pump();
+    await tester.pump();
+
+    expect(albumOption(tester).onEditAlbum, isNotNull);
+  });
+
+  testWidgets('edit dialog shows the album created date', (tester) async {
+    await pumpAlbumPage(tester, ownerId: 'user-1');
+    await openEditDialog(tester);
+
+    expect(find.byKey(const Key('album-edit-created-at')), findsOneWidget);
+    // _albumFixture pins createdAt to 2026-01-01; DateFormat.yMMMd() renders "Jan 1, 2026".
+    expect(find.text(DateFormat.yMMMd().format(DateTime(2026, 1, 1))), findsOneWidget);
+  });
+
+  testWidgets('saving without touching the date keeps the original created date', (tester) async {
+    final albumService = await pumpAlbumPage(tester, ownerId: 'user-1');
+    await openEditDialog(tester);
+
+    await tester.tap(find.byKey(const Key('album-edit-save')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    verify(
+      () => albumService.updateAlbum(
+        'album-1',
+        name: 'Test Album',
+        description: any(named: 'description'),
+        createdAt: DateTime(2026, 1, 1),
+      ),
+    ).called(1);
   });
 }
