@@ -458,12 +458,20 @@ coverage: assert the album appears in the next `SyncEntityType.AlbumV1` batch ca
 
 ### Slice 3 — web modal
 
-1. **Red.** New `web/src/lib/modals/AlbumEditModal.spec.ts` covering W1–W5, mocking `@immich/sdk`'s
-   `updateAlbumInfo` and asserting the exact DTO. Model it on
-   `PersonEditBirthDateModal.spec.ts`. Fix the timezone in the test (`process.env.TZ` /
-   vitest config) so W1 and W2 assert real instants rather than whatever the runner's zone is.
-   Note `web/vitest` does not clear mocks between tests in a file — assert on call arguments, not
-   call counts, or reset explicitly.
+1. **Red.** New `web/src/lib/modals/AlbumEditModal.spec.ts` covering W1–W5. Mock
+   `$lib/services/album.service`'s `handleUpdateAlbum` (the modal's actual dependency) with
+   `vi.hoisted` + `vi.mock` and assert the exact DTO. `SpaceEditModal.spec.ts` is the closest model:
+   it documents why queries must be pinned to `data-testid` (`@immich/ui`'s `Field`/`Label` wiring
+   uses `aria-labelledby`, which happy-dom does not reliably associate) and why the submit button is
+   `Save` capitalised (that string comes from `@immich/ui`'s own translation service, not
+   svelte-i18n, so it is real English in tests while `$t()` keys are not).
+
+   `web/vite.config.ts` pins `TZ: 'UTC'` for unit tests, so the runner's zone cannot exercise the
+   local↔UTC conversion W1 and W2 are about. Force the zone through Luxon instead —
+   `Settings.defaultZone = 'Europe/Berlin'`, restored afterwards — which is what the component
+   reads. The same config sets `clearMocks: true`, so mock **call history** is cleared between
+   tests; implementations are not, so re-stub `mockResolvedValue` in `beforeEach`.
+
 2. **Green.** `AlbumEditModal.svelte` — a third `Field` labelled `$t('date_created')` between Name
    and Description, holding `DateInput` with `type="datetime-local"`. Keep local state as a Luxon
    `DateTime` string in `yyyy-MM-dd'T'HH:mm:ss.SSS`, seeded from `album.createdAt`; on submit
