@@ -48,9 +48,12 @@ export const createAlbumAndRedirect = async (name?: string, assetIds?: string[])
 /**
  * Whether `userId` may edit `album`'s metadata.
  *
- * Mirrors the server's `Permission.AlbumUpdate`, which grants owner ∪ shared-with-editor
- * (`server/src/utils/access.ts`). Sharing and deletion stay owner-only, so callers must keep
- * using their own ownership check for those.
+ * Mirrors the server's `Permission.AlbumUpdate` (owner ∪ shared-with-editor,
+ * `server/src/utils/access.ts:208-216`). Deletion is server-side owner-only
+ * (`AlbumDelete`, :218-220). Sharing (`AlbumShare`, :222-230) is *also* owner ∪
+ * editor server-side, but this UI deliberately keeps sharing owner-gated — the
+ * stricter check is always safe, since it can never offer an action the server
+ * would refuse. Callers must keep using their own ownership check for sharing.
  */
 export const isAlbumEditor = (album: AlbumResponseDto, userId: string) =>
   album.albumUsers.some(
