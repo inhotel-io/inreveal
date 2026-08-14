@@ -663,6 +663,19 @@ describe('/albums', () => {
       expect(body.createdAt).toBe('1996-06-15T14:30:00.000Z');
     });
 
+    it('should apply albumName and createdAt together in one request', async () => {
+      const album = await utils.createAlbum(user1.accessToken, { albumName: 'Combined update' });
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({ albumName: 'Combined update - renamed', createdAt: '1996-06-15T14:30:00.000Z' });
+
+      expect(status).toBe(200);
+      expect(body.albumName).toBe('Combined update - renamed');
+      expect(body.createdAt).toBe('1996-06-15T14:30:00.000Z');
+    });
+
     it('should not set the album created date as a viewer', async () => {
       const album = await utils.createAlbum(user1.accessToken, {
         albumName: 'Viewer may not re-date',
@@ -714,35 +727,39 @@ describe('/albums', () => {
       expect(status).toBe(200);
       expect(body.albumName).toBe('Untouched');
       expect(body.createdAt).toBe(album.createdAt);
+      expect(body.updatedAt).not.toBe(album.updatedAt);
     });
 
     it.each([
-      ['1996-06-15T14:30:00.000Z', 200, 'UTC with milliseconds'],
-      ['1996-06-15T14:30:00+02:00', 200, 'a numeric offset'],
-      ['1996-06-15T14:30Z', 200, 'omitted seconds'],
-      ['1996-02-29T00:00:00.000Z', 200, 'a real leap day'],
-      ['0001-01-01T00:00:00.000Z', 200, 'the earliest four-digit year'],
-      ['1996-06-15T14:30:00', 400, 'no timezone designator'],
-      ['1996-06-15', 400, 'a date with no time'],
-      ['not-a-date', 400, 'a non-date string'],
-      ['', 400, 'an empty string'],
-      [null, 400, 'null'],
-      ['12345-06-15T14:30:00Z', 400, 'a five-digit year'],
-      ['1996-06-31T00:00:00.000Z', 400, 'the 31st of a 30-day month'],
-      ['1997-02-29T00:00:00.000Z', 400, 'a leap day in a non-leap year'],
-      ['1996-06-15T24:00:00.000Z', 400, 'hour 24'],
-      ['1996-06-15t14:30:00z', 400, 'lowercase t and z'],
-    ] as [createdAt: unknown, expected: number, label: string][])(
-      'should answer %i for createdAt %s (%s)',
-      async (createdAt, expected, label) => {
+      ['1996-06-15T14:30:00.000Z', 'UTC with milliseconds', 200, '1996-06-15T14:30:00.000Z'],
+      ['1996-06-15T14:30:00+02:00', 'a numeric offset', 200, '1996-06-15T12:30:00.000Z'],
+      ['1996-06-15T14:30Z', 'omitted seconds', 200, '1996-06-15T14:30:00.000Z'],
+      ['1996-02-29T00:00:00.000Z', 'a real leap day', 200, '1996-02-29T00:00:00.000Z'],
+      ['0001-01-01T00:00:00.000Z', 'the earliest four-digit year', 200, '0001-01-01T00:00:00.000Z'],
+      ['1996-06-15T14:30:00', 'no timezone designator', 400, undefined],
+      ['1996-06-15', 'a date with no time', 400, undefined],
+      ['not-a-date', 'a non-date string', 400, undefined],
+      ['', 'an empty string', 400, undefined],
+      [null, 'null', 400, undefined],
+      ['12345-06-15T14:30:00Z', 'a five-digit year', 400, undefined],
+      ['1996-06-31T00:00:00.000Z', 'the 31st of a 30-day month', 400, undefined],
+      ['1997-02-29T00:00:00.000Z', 'a leap day in a non-leap year', 400, undefined],
+      ['1996-06-15T24:00:00.000Z', 'hour 24', 400, undefined],
+      ['1996-06-15t14:30:00z', 'lowercase t and z', 400, undefined],
+    ] as [createdAt: unknown, label: string, expectedStatus: number, expectedStored: string | undefined][])(
+      'createdAt %s (%s) should answer %i',
+      async (createdAt, label, expectedStatus, expectedStored) => {
         const album = await utils.createAlbum(user1.accessToken, { albumName: `Grammar: ${label}` });
 
-        const { status } = await request(app)
+        const { status, body } = await request(app)
           .patch(`/albums/${album.id}`)
           .set('Authorization', `Bearer ${user1.accessToken}`)
           .send({ createdAt });
 
-        expect(status).toBe(expected);
+        expect(status).toBe(expectedStatus);
+        if (expectedStored !== undefined) {
+          expect(body.createdAt).toBe(expectedStored);
+        }
       },
     );
 
