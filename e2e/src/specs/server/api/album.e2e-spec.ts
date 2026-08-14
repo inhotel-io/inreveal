@@ -631,6 +631,145 @@ describe('/albums', () => {
         }),
       );
     });
+
+    it('should set the album created date as the owner', async () => {
+      const album = await utils.createAlbum(user1.accessToken, { albumName: 'Backdated' });
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({ createdAt: '1996-06-15T14:30:00.000Z' });
+
+      expect(status).toBe(200);
+      expect(body.createdAt).toBe('1996-06-15T14:30:00.000Z');
+      expect(body.updatedAt).not.toBe(album.updatedAt);
+
+      const after = await getAlbumInfo({ id: album.id }, { headers: asBearerAuth(user1.accessToken) });
+      expect(after.createdAt).toBe('1996-06-15T14:30:00.000Z');
+    });
+
+    it('should set the album created date as an editor', async () => {
+      const album = await utils.createAlbum(user1.accessToken, {
+        albumName: 'Editor may re-date',
+        albumUsers: [{ userId: user2.userId, role: AlbumUserRole.Editor }],
+      });
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user2.accessToken}`)
+        .send({ createdAt: '1996-06-15T14:30:00.000Z' });
+
+      expect(status).toBe(200);
+      expect(body.createdAt).toBe('1996-06-15T14:30:00.000Z');
+    });
+
+    it('should not set the album created date as a viewer', async () => {
+      const album = await utils.createAlbum(user1.accessToken, {
+        albumName: 'Viewer may not re-date',
+        albumUsers: [{ userId: user2.userId, role: AlbumUserRole.Viewer }],
+      });
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user2.accessToken}`)
+        .send({ createdAt: '1996-06-15T14:30:00.000Z' });
+
+      expect(status).toBe(400);
+      expect(body).toEqual(errorDto.badRequest('Not found or no album.update access'));
+    });
+
+    it('should not set the album created date as a non-member', async () => {
+      const album = await utils.createAlbum(user2.accessToken, { albumName: 'Not yours' });
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({ createdAt: '1996-06-15T14:30:00.000Z' });
+
+      expect(status).toBe(400);
+      expect(body).toEqual(errorDto.badRequest('Not found or no album.update access'));
+    });
+
+    it('should leave the created date alone when the request omits it', async () => {
+      const album = await utils.createAlbum(user1.accessToken, { albumName: 'Keep my date' });
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({ albumName: 'Renamed' });
+
+      expect(status).toBe(200);
+      expect(body.albumName).toBe('Renamed');
+      expect(body.createdAt).toBe(album.createdAt);
+    });
+
+    it('should accept an empty body without changing anything', async () => {
+      const album = await utils.createAlbum(user1.accessToken, { albumName: 'Untouched' });
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({});
+
+      expect(status).toBe(200);
+      expect(body.albumName).toBe('Untouched');
+      expect(body.createdAt).toBe(album.createdAt);
+    });
+
+    it.each([
+      ['1996-06-15T14:30:00.000Z', 200, 'UTC with milliseconds'],
+      ['1996-06-15T14:30:00+02:00', 200, 'a numeric offset'],
+      ['1996-06-15T14:30Z', 200, 'omitted seconds'],
+      ['1996-02-29T00:00:00.000Z', 200, 'a real leap day'],
+      ['0001-01-01T00:00:00.000Z', 200, 'the earliest four-digit year'],
+      ['1996-06-15T14:30:00', 400, 'no timezone designator'],
+      ['1996-06-15', 400, 'a date with no time'],
+      ['not-a-date', 400, 'a non-date string'],
+      ['', 400, 'an empty string'],
+      [null, 400, 'null'],
+      ['12345-06-15T14:30:00Z', 400, 'a five-digit year'],
+      ['1996-06-31T00:00:00.000Z', 400, 'the 31st of a 30-day month'],
+      ['1997-02-29T00:00:00.000Z', 400, 'a leap day in a non-leap year'],
+      ['1996-06-15T24:00:00.000Z', 400, 'hour 24'],
+      ['1996-06-15t14:30:00z', 400, 'lowercase t and z'],
+    ] as [createdAt: unknown, expected: number, label: string][])(
+      'should answer %i for createdAt %s (%s)',
+      async (createdAt, expected, label) => {
+        const album = await utils.createAlbum(user1.accessToken, { albumName: `Grammar: ${label}` });
+
+        const { status } = await request(app)
+          .patch(`/albums/${album.id}`)
+          .set('Authorization', `Bearer ${user1.accessToken}`)
+          .send({ createdAt });
+
+        expect(status).toBe(expected);
+      },
+    );
+
+    it('should accept a future created date', async () => {
+      const album = await utils.createAlbum(user1.accessToken, { albumName: 'From the future' });
+      const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({ createdAt: future });
+
+      expect(status).toBe(200);
+      expect(body.createdAt).toBe(future);
+    });
+
+    it('should truncate sub-millisecond precision', async () => {
+      const album = await utils.createAlbum(user1.accessToken, { albumName: 'Microseconds' });
+
+      const { status, body } = await request(app)
+        .patch(`/albums/${album.id}`)
+        .set('Authorization', `Bearer ${user1.accessToken}`)
+        .send({ createdAt: '1996-06-15T14:30:00.123456Z' });
+
+      expect(status).toBe(200);
+      expect(body.createdAt).toBe('1996-06-15T14:30:00.123Z');
+    });
   });
 
   describe('DELETE /albums/:id/assets', () => {
