@@ -106,6 +106,8 @@ part 'model/asset_edit_action.dart';
 part 'model/asset_edit_action_item_dto.dart';
 part 'model/asset_edit_action_item_dto_parameters.dart';
 part 'model/asset_edit_action_item_response_dto.dart';
+part 'model/asset_editable_dto.dart';
+part 'model/asset_editable_response_dto.dart';
 part 'model/asset_edits_create_dto.dart';
 part 'model/asset_edits_response_dto.dart';
 part 'model/asset_face_create_dto.dart';

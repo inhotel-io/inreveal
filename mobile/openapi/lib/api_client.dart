@@ -247,6 +247,10 @@ class ApiClient {
           return AssetEditActionItemDtoParameters.fromJson(value);
         case 'AssetEditActionItemResponseDto':
           return AssetEditActionItemResponseDto.fromJson(value);
+        case 'AssetEditableDto':
+          return AssetEditableDto.fromJson(value);
+        case 'AssetEditableResponseDto':
+          return AssetEditableResponseDto.fromJson(value);
         case 'AssetEditsCreateDto':
           return AssetEditsCreateDto.fromJson(value);
         case 'AssetEditsResponseDto':
