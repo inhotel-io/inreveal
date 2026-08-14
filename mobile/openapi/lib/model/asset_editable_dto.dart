@@ -14,42 +14,26 @@ class AssetEditableDto {
   /// Returns a new [AssetEditableDto] instance.
   AssetEditableDto({
     this.assetIds = const [],
-    this.spaceId = const Optional.absent(),
   });
 
   /// Asset IDs to resolve editability for
   List<String> assetIds;
 
-  /// Space context the assets are being viewed through
-  ///
-  /// Please note: This property should have been non-nullable! Since the specification file
-  /// does not include a default value (using the "default:" property), however, the generated
-  /// source code must fall back to having a nullable type.
-  /// Consider adding a "default:" property in the specification file to hide this note.
-  ///
-  Optional<String?> spaceId;
-
   @override
   bool operator ==(Object other) => identical(this, other) || other is AssetEditableDto &&
-    _deepEquality.equals(other.assetIds, assetIds) &&
-    other.spaceId == spaceId;
+    _deepEquality.equals(other.assetIds, assetIds);
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
-    (assetIds.hashCode) +
-    (spaceId == null ? 0 : spaceId!.hashCode);
+    (assetIds.hashCode);
 
   @override
-  String toString() => 'AssetEditableDto[assetIds=$assetIds, spaceId=$spaceId]';
+  String toString() => 'AssetEditableDto[assetIds=$assetIds]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'assetIds'] = this.assetIds;
-    if (this.spaceId.isPresent) {
-      final value = this.spaceId.value;
-      json[r'spaceId'] = value;
-    }
     return json;
   }
 
@@ -65,7 +49,6 @@ class AssetEditableDto {
         assetIds: json[r'assetIds'] is Iterable
             ? (json[r'assetIds'] as Iterable).cast<String>().toList(growable: false)
             : const [],
-        spaceId: json.containsKey(r'spaceId') ? Optional.present(mapValueOfType<String>(json, r'spaceId')) : const Optional.absent(),
       );
     }
     return null;
