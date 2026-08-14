@@ -358,17 +358,22 @@ it.each([
   ['1997-02-29T00:00:00.000Z', 400, 'a leap day in a non-leap year'],
   ['1996-06-15T24:00:00.000Z', 400, 'hour 24'],
   ['1996-06-15t14:30:00z', 400, 'lowercase t and z'],
-])('should return %s → %i for createdAt with %s', async (createdAt, expected) => {
-  const album = await utils.createAlbum(user1.accessToken, { albumName: `Grammar ${String(createdAt)}` });
+] as [createdAt: unknown, expected: number, label: string][])(
+  'should answer %i for createdAt %s (%s)',
+  async (createdAt, expected, label) => {
+    const album = await utils.createAlbum(user1.accessToken, { albumName: `Grammar: ${label}` });
 
-  const { status } = await request(app)
-    .patch(`/albums/${album.id}`)
-    .set('Authorization', `Bearer ${user1.accessToken}`)
-    .send({ createdAt });
+    const { status } = await request(app)
+      .patch(`/albums/${album.id}`)
+      .set('Authorization', `Bearer ${user1.accessToken}`)
+      .send({ createdAt });
 
-  expect(status).toBe(expected);
-});
+    expect(status).toBe(expected);
+  },
+);
 ```
+
+The tuple is typed explicitly because the rows mix `string` and `null`; without it TypeScript widens the array and `expect(status).toBe(expected)` loses its `number`. Reorder the format arguments if the generated titles read badly — but keep the label in the album name, or fifteen failures all report against albums called `Grammar undefined`.
 
 - [ ] **Step 3: Write the two deliberate-behaviour tests**
 
@@ -656,7 +661,7 @@ Create `web/src/lib/modals/AlbumEditModal.spec.ts`. It follows `SpaceEditModal.s
 ```ts
 import { type AlbumResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { Settings } from 'luxon';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -681,6 +686,14 @@ const album = (o: Partial<AlbumResponseDto> = {}): AlbumResponseDto =>
 const createdAtInput = () => screen.getByTestId('album-edit-created-at') as HTMLInputElement;
 const saveButton = () => screen.getByRole('button', { name: 'Save' });
 
+// `userEvent.type` is unreliable against `datetime-local`, which browsers and happy-dom
+// treat as segmented rather than free text. Set the whole value at once — the same
+// input+change pair AssetChangeDateModal.spec.ts:57-62 uses on this element.
+const setDate = async (value: string) => {
+  await fireEvent.input(createdAtInput(), { target: { value } });
+  await fireEvent.change(createdAtInput(), { target: { value } });
+};
+
 beforeEach(() => {
   // 1996-06-15T12:30Z is 14:30 in Berlin summer time (+02:00). Pinning the zone here
   // rather than via TZ makes the local <-> UTC conversion observable under the
@@ -704,8 +717,7 @@ describe('AlbumEditModal', () => {
     const onClose = vi.fn();
     render(AlbumEditModal, { props: { album: album(), onClose } });
 
-    await userEvent.clear(createdAtInput());
-    await userEvent.type(createdAtInput(), '1996-06-15T09:00:00.000');
+    await setDate('1996-06-15T09:00:00.000');
     await userEvent.click(saveButton());
 
     await waitFor(() => expect(handleUpdateAlbumMock).toHaveBeenCalled());
@@ -728,7 +740,7 @@ describe('AlbumEditModal', () => {
   it('omits the created date when the input is cleared, and still saves the name', async () => {
     render(AlbumEditModal, { props: { album: album(), onClose: vi.fn() } });
 
-    await userEvent.clear(createdAtInput());
+    await setDate('');
     await userEvent.click(saveButton());
 
     await waitFor(() => expect(handleUpdateAlbumMock).toHaveBeenCalled());
@@ -1004,8 +1016,12 @@ and add a new group:
       final dto = verify(() => mockApi.updateAlbumInfo('a1', captureAny())).captured.single as api.UpdateAlbumDto;
       expect(dto.createdAt.isPresent, isTrue);
       expect(dto.createdAt.value, createdAt);
-      // The generated toJson calls value.toUtc().toIso8601String(), so the server's
-      // required timezone designator is satisfied whatever zone the picker returned.
+      // The generated toJson branches on _isEpochMarker(pattern) — it emits a raw
+      // millisecondsSinceEpoch *number* when a field's OpenAPI pattern is the literal
+      // 'epoch' (mobile/openapi/lib/api.dart:576,583), and value.toUtc().toIso8601String()
+      // otherwise. createdAt carries the long ISO regex, so it takes the string branch and
+      // satisfies the server's required timezone designator whatever zone the picker used.
+      // Assert it rather than trust it: this is invisible generated code.
       expect(dto.toJson()['createdAt'], endsWith('Z'));
     });
 
@@ -1222,10 +1238,17 @@ git commit -m "feat(mobile): plumb album createdAt through the update path"
 
 - [ ] **Step 1: Write the failing gating tests**
 
-In `mobile/test/presentation/pages/drift_remote_album_page_test.dart`, `pumpAlbumPage` currently hardcodes an owned album and a viewer role. Parameterise it:
+**Two hard constraints on every test in this file, both learned the hard way:**
+
+1. **Never call `pumpAndSettle`.** `pumpAlbumPage` documents why: the app bar runs a continuous zoom-pan background animation, so `pumpAndSettle` never returns and the test times out. Use explicit `pump()` frames, exactly as the existing tests do.
+2. **Do not open the kebab menu to assert on it.** The changed expression is `onEditAlbum: isOwner || canAddPhotos ? onEditAlbum : null`. Read it straight off the widget instead — no overlay, no animation, and it cannot pass vacuously. (Driving the menu would also need `Icons.more_vert_rounded`, not `Icons.more_vert` — `drift_album_option.widget.dart:168`. A `find.byIcon` typo makes a `findsNothing` assertion pass for the wrong reason, which is exactly the failure mode this file has a history of.)
+
+First parameterise `pumpAlbumPage` and have it return the mocked service so tests can verify calls against it. Add `import 'dart:async';` (for `Completer`) and `import 'package:immich_mobile/presentation/widgets/remote_album/drift_album_option.widget.dart';`.
+
+Change its signature and the two stubs that need to vary; everything else in the body stays as it is, including the trailing `pump()` sequence:
 
 ```dart
-  Future<void> pumpAlbumPage(
+  Future<_MockRemoteAlbumService> pumpAlbumPage(
     WidgetTester tester, {
     String ownerId = 'user-1',
     AlbumUserRole role = AlbumUserRole.viewer,
@@ -1233,90 +1256,104 @@ In `mobile/test/presentation/pages/drift_remote_album_page_test.dart`, `pumpAlbu
   }) async {
     final user = _user('user-1');
     final album = _albumFixture(ownerId);
-    ...
+
+    final albumService = _MockRemoteAlbumService();
+    // ... existing watchAlbum / watchDateRange / getSharedUsers stubs unchanged ...
+
+    // An unresolved completer lets a test observe the pending state of the role lookup.
     when(() => albumService.getUserRole(any(), any())).thenAnswer(
       (_) => roleCompleter?.future ?? Future.value(role),
     );
+    when(
+      () => albumService.updateAlbum(
+        any(),
+        name: any(named: 'name'),
+        description: any(named: 'description'),
+        createdAt: any(named: 'createdAt'),
+      ),
+    ).thenAnswer((_) async => album);
+
+    // ... existing factory / userService setup and pumpWidget call unchanged ...
+
+    return albumService;
+  }
 ```
 
-Change `_albumFixture` to take the owner id it is already given (it does — `_albumFixture(ownerId)`), and add `import 'dart:async';` for `Completer`.
+`_albumFixture` already takes the owner id. `RemoteAlbumNotifier.build()` only reads `remoteAlbumServiceProvider` and returns empty state — no eager fetch — so the un-overridden `remoteAlbumProvider` routes straight to this mock.
 
-Then add:
+Then add a helper and the gating tests:
 
 ```dart
-  testWidgets('owner sees the edit album option', (tester) async {
+  DriftRemoteAlbumOption _albumOption(WidgetTester tester) =>
+      tester.widget<DriftRemoteAlbumOption>(find.byType(DriftRemoteAlbumOption));
+
+  testWidgets('owner gets the edit album affordance', (tester) async {
     await pumpAlbumPage(tester, ownerId: 'user-1');
-    await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('album-option-edit')), findsOneWidget);
+    expect(_albumOption(tester).onEditAlbum, isNotNull);
   });
 
-  testWidgets('editor sees the edit album option', (tester) async {
+  testWidgets('editor gets the edit album affordance', (tester) async {
     await pumpAlbumPage(tester, ownerId: 'someone-else', role: AlbumUserRole.editor);
-    await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('album-option-edit')), findsOneWidget);
+    expect(_albumOption(tester).onEditAlbum, isNotNull);
   });
 
-  testWidgets('viewer does not see the edit album option', (tester) async {
+  testWidgets('viewer does not get the edit album affordance', (tester) async {
     await pumpAlbumPage(tester, ownerId: 'someone-else', role: AlbumUserRole.viewer);
-    await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('album-option-edit')), findsNothing);
+    expect(_albumOption(tester).onEditAlbum, isNull);
   });
 
-  testWidgets('edit album option is hidden while the role is still resolving', (tester) async {
+  testWidgets('edit album affordance is withheld while the role is still resolving', (tester) async {
     final completer = Completer<AlbumUserRole?>();
     await pumpAlbumPage(tester, ownerId: 'someone-else', roleCompleter: completer);
-    await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pump();
 
-    expect(find.byKey(const Key('album-option-edit')), findsNothing);
+    // FutureBuilder default is `snapshot.data ?? false` — fail closed, matching onAddPhotos.
+    expect(_albumOption(tester).onEditAlbum, isNull);
 
     completer.complete(AlbumUserRole.editor);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('album-option-edit')), findsOneWidget);
+    await tester.pump();
+    await tester.pump();
+
+    expect(_albumOption(tester).onEditAlbum, isNotNull);
   });
 ```
 
 The pending case must use an unresolved `Completer`, not a resolved future — otherwise it silently duplicates the editor test.
 
-This requires `DriftRemoteAlbumOption` to give its edit entry `key: const Key('album-option-edit')`. Add that key in Step 4 if it is not already there; a `find.byIcon`/`find.text` match here would be exactly the vacuous assertion this file has been bitten by before.
-
 - [ ] **Step 2: Write the failing dialog tests**
 
+Open the dialog by invoking the callback the previous step just asserted on, rather than tapping through the menu overlay. Same reason: no `pumpAndSettle`, no icon lookup, and the dialog is what these tests are actually about.
+
 ```dart
-  testWidgets('edit dialog shows the album created date and saves a new one', (tester) async {
+  Future<void> _openEditDialog(WidgetTester tester) async {
+    _albumOption(tester).onEditAlbum!();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  testWidgets('edit dialog shows the album created date', (tester) async {
     await pumpAlbumPage(tester, ownerId: 'user-1');
-    await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('album-option-edit')));
-    await tester.pumpAndSettle();
+    await _openEditDialog(tester);
 
     expect(find.byKey(const Key('album-edit-created-at')), findsOneWidget);
-    expect(find.textContaining('2026'), findsWidgets);
+    // _albumFixture pins createdAt to 2026-01-01; DateFormat.yMMMd() renders "Jan 1, 2026".
+    expect(find.text(DateFormat.yMMMd().format(DateTime(2026, 1, 1))), findsOneWidget);
   });
-```
 
-and, for M7 (cancelling the picker), assert that saving without touching the date passes the album's original `createdAt`:
-
-```dart
   testWidgets('saving without touching the date keeps the original created date', (tester) async {
-    await pumpAlbumPage(tester, ownerId: 'user-1');
-    await tester.tap(find.byIcon(Icons.more_vert));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('album-option-edit')));
-    await tester.pumpAndSettle();
+    final albumService = await pumpAlbumPage(tester, ownerId: 'user-1');
+    await _openEditDialog(tester);
+
     await tester.tap(find.byKey(const Key('album-edit-save')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     verify(
       () => albumService.updateAlbum(
-        any(),
-        name: any(named: 'name'),
+        'album-1',
+        name: 'Test Album',
         description: any(named: 'description'),
         createdAt: DateTime(2026, 1, 1),
       ),
@@ -1324,14 +1361,14 @@ and, for M7 (cancelling the picker), assert that saving without touching the dat
   });
 ```
 
-This needs the dialog's save button keyed `album-edit-save` and the mocked service stubbed for `updateAlbum`. Wire the stub in `pumpAlbumPage` alongside the existing ones.
+The second test is M7: dismissing the picker (or never opening it) must send the album's original instant, not `DateTime.now()`. Add `import 'package:intl/intl.dart';` to the test for `DateFormat`.
 
 - [ ] **Step 3: Run to verify they fail**
 
 Run: `cd mobile && flutter test test/presentation/pages/drift_remote_album_page_test.dart`
-Expected: FAIL — the keys do not exist and the viewer/editor gating is still owner-only.
+Expected: FAIL — the editor/viewer gating is still owner-only, and the dialog has no date row or keyed save button.
 
-Prove each new test can go red before making it green: invert one expectation (`findsOneWidget` ↔ `findsNothing`) and confirm the result flips. Widget tests in this file have a history of passing vacuously.
+Prove each new test can go red before making it green: invert one expectation (`isNotNull` ↔ `isNull`, `findsOneWidget` ↔ `findsNothing`) and confirm the result flips. Widget tests in this file have a history of passing vacuously. If any test hangs instead of failing, you have reintroduced a `pumpAndSettle`.
 
 - [ ] **Step 4: Relax the kebab gate**
 
@@ -1343,7 +1380,7 @@ In `mobile/lib/presentation/pages/drift_remote_album.page.dart`, inside the `Fut
 
 Leave `onDeleteAlbum`, `onAddUsers`, `onToggleAlbumOrder`, `onCreateSharedLink` and `onLinkToSpace` on `isOwner`.
 
-Add `key: const Key('album-option-edit')` to the edit entry inside `DriftRemoteAlbumOption` (`mobile/lib/presentation/widgets/remote_album/drift_album_option.widget.dart`) if it has none.
+`drift_album_option.widget.dart` itself needs no change — the tests read `onEditAlbum` off the widget rather than off the rendered menu, so its `BaseActionButton` needs no key.
 
 - [ ] **Step 5: Add the date row to the dialog**
 
@@ -1354,7 +1391,7 @@ import 'package:immich_mobile/widgets/common/date_time_picker.dart';
 import 'package:intl/intl.dart';
 ```
 
-(`intl` is already a dependency — `date_time_picker.dart` uses `DateFormat`. Confirm with `grep -n "intl:" mobile/pubspec.yaml` before adding.)
+`intl` is a direct dependency (`mobile/pubspec.yaml:44`, `intl: ^0.20.2`), so this needs no pubspec change.
 
 Add state and a picker handler:
 
@@ -1437,7 +1474,6 @@ Format **only** the files you touched. `dart format .` reformats hundreds of fil
 
 ```bash
 git add mobile/lib/presentation/pages/drift_remote_album.page.dart \
-        mobile/lib/presentation/widgets/remote_album/drift_album_option.widget.dart \
         mobile/test/presentation/pages/drift_remote_album_page_test.dart
 git commit -m "feat(mobile): edit an album's creation date from the album menu"
 ```
