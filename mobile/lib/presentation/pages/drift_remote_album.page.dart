@@ -153,7 +153,7 @@ class _RemoteAlbumPageState extends ConsumerState<RemoteAlbumPage> {
     }
   }
 
-  Future<void> showEditTitleAndDescription(BuildContext context) async {
+  Future<void> showEditAlbum(BuildContext context) async {
     final result = await showDialog<_EditAlbumData?>(
       context: context,
       barrierDismissible: true,
@@ -162,7 +162,7 @@ class _RemoteAlbumPageState extends ConsumerState<RemoteAlbumPage> {
 
     if (result != null && context.mounted) {
       setState(() {
-        _album = _album.copyWith(name: result.name, description: result.description ?? '');
+        _album = _album.copyWith(name: result.name, description: result.description ?? '', createdAt: result.createdAt);
       });
       unawaited(HapticFeedback.mediumImpact());
     }
@@ -220,12 +220,12 @@ class _RemoteAlbumPageState extends ConsumerState<RemoteAlbumPage> {
             onAddUsers: () => addUsers(context),
             onAddPhotos: () => addAssets(context),
             onToggleAlbumOrder: () => toggleAlbumOrder(),
-            onEditAlbum: () => showEditTitleAndDescription(context),
+            onEditAlbum: () => showEditAlbum(context),
             onCreateSharedLink: () => unawaited(context.pushRoute(SharedLinkEditRoute(albumId: _album.id))),
             onShowOptions: () => context.pushRoute(DriftAlbumOptionsRoute(album: _album)),
             onLinkToSpace: () => unawaited(linkToSpace(context)),
           ),
-          onEditTitle: isOwner ? () => showEditTitleAndDescription(context) : null,
+          onEditTitle: isOwner ? () => showEditAlbum(context) : null,
           onActivity: () => showActivity(context),
         ),
         bottomSheet: RemoteAlbumBottomSheet(album: _album),
@@ -237,8 +237,9 @@ class _RemoteAlbumPageState extends ConsumerState<RemoteAlbumPage> {
 class _EditAlbumData {
   final String name;
   final String? description;
+  final DateTime createdAt;
 
-  const _EditAlbumData({required this.name, this.description});
+  const _EditAlbumData({required this.name, this.description, required this.createdAt});
 }
 
 class _EditAlbumDialog extends ConsumerStatefulWidget {
@@ -280,7 +281,7 @@ class _EditAlbumDialogState extends ConsumerState<_EditAlbumDialog> {
     if (picked == null) {
       return;
     }
-    setState(() => createdAt = DateTime.parse(picked));
+    setState(() => createdAt = DateTime.parse(picked).toLocal());
   }
 
   Future<void> _handleSave() async {
@@ -297,9 +298,13 @@ class _EditAlbumDialogState extends ConsumerState<_EditAlbumDialog> {
           .updateAlbum(widget.album.id, name: newTitle, description: newDescription, createdAt: createdAt);
 
       if (mounted) {
-        Navigator.of(
-          context,
-        ).pop(_EditAlbumData(name: newTitle, description: newDescription.isEmpty ? null : newDescription));
+        Navigator.of(context).pop(
+          _EditAlbumData(
+            name: newTitle,
+            description: newDescription.isEmpty ? null : newDescription,
+            createdAt: createdAt,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
