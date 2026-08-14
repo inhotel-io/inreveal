@@ -1,4 +1,4 @@
-import type { AlbumResponseDto } from '@immich/sdk';
+import { AlbumUserRole, type AlbumResponseDto } from '@immich/sdk';
 import * as sdk from '@immich/sdk';
 import { orderBy } from 'lodash-es';
 import { t } from 'svelte-i18n';
@@ -44,6 +44,18 @@ export const createAlbumAndRedirect = async (name?: string, assetIds?: string[])
     await goto(Route.viewAlbum(newAlbum));
   }
 };
+
+/**
+ * Whether `userId` may edit `album`'s metadata.
+ *
+ * Mirrors the server's `Permission.AlbumUpdate`, which grants owner ∪ shared-with-editor
+ * (`server/src/utils/access.ts`). Sharing and deletion stay owner-only, so callers must keep
+ * using their own ownership check for those.
+ */
+export const isAlbumEditor = (album: AlbumResponseDto, userId: string) =>
+  album.albumUsers.some(
+    ({ user, role }) => user.id === userId && (role === AlbumUserRole.Owner || role === AlbumUserRole.Editor),
+  );
 
 /**
  * -------------
