@@ -608,8 +608,11 @@ Then add, immediately above the `Album Sorting` banner comment:
  * Whether `userId` may edit `album`'s metadata.
  *
  * Mirrors the server's `Permission.AlbumUpdate`, which grants owner ∪ shared-with-editor
- * (`server/src/utils/access.ts`). Sharing and deletion stay owner-only, so callers must keep
- * using their own ownership check for those.
+ * (`server/src/utils/access.ts:208-216`). Deletion is owner-only server-side
+ * (`Permission.AlbumDelete`, :218-220). Sharing is **not** — `Permission.AlbumShare`
+ * (:222-230) grants owner ∪ editor exactly as `AlbumUpdate` does — but the albums-list UI
+ * has always gated Share on ownership and this change does not widen it, so callers must
+ * keep using their own ownership check for Share and Delete.
  */
 export const isAlbumEditor = (album: AlbumResponseDto, userId: string) =>
   album.albumUsers.some(
@@ -926,8 +929,11 @@ import {
 Replace the single `showFullContextMenu` derivation at line 173 with two:
 
 ```ts
-// Editing follows the server's Permission.AlbumUpdate (owner ∪ editor); sharing and
-// deleting stay owner-only. `allowEdit` gates both — only /albums passes it, and a list
+// Editing follows the server's Permission.AlbumUpdate (owner ∪ editor). Delete stays
+// owner-only because Permission.AlbumDelete is. Share stays owner-only because this menu
+// has always gated it that way — the server's Permission.AlbumShare is actually owner ∪
+// editor, so the UI is deliberately the stricter of the two, and widening it is not this
+// change's business. `allowEdit` gates all of them — only /albums passes it, and a list
 // that opted out of editing must not sprout an Edit entry.
 let canEditSelectedAlbum = $derived(allowEdit && !!selectedAlbum && isAlbumEditor(selectedAlbum, authManager.user.id));
 let isSelectedAlbumOwner = $derived(

@@ -264,6 +264,19 @@ This is the change: `showFullContextMenu` (`AlbumsList.svelte:173`) is one flag 
 Share and Delete, gated on `albumUsers[0].user.id === authManager.user.id`. It splits into
 `canEdit` (owner ∪ editor) and `isOwner` (Share, Delete).
 
+**Correction (found during implementation, Task 5 review).** An earlier draft of this spec
+claimed sharing and deletion are both owner-only on the server. Only deletion is:
+`Permission.AlbumDelete` (`access.ts:218-220`) is a bare `checkOwnerAccess`, but
+`Permission.AlbumShare` (`:222-230`) is byte-identical to `AlbumUpdate` — owner ∪ editor —
+and it gates `addUsers`/`removeUser`/`updateUser` plus shared-link creation.
+
+Share nevertheless stays owner-gated in this UI. Not because the server demands it, but
+because the albums-list menu has always gated it that way; widening it would be an
+unrequested behaviour change riding along with a date picker. The UI is deliberately the
+stricter of the two, which is the safe direction — it can never offer an action the server
+would refuse. Any comment justifying the gate must say that, rather than mis-describing the
+server's RBAC.
+
 **W8 — gating: viewer**
 Given an album shared with the caller as `viewer`
 When the caller right-clicks it in the albums list
