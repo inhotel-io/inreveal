@@ -1343,6 +1343,9 @@ describe('section availability (#910)', () => {
     // The sibling assertion matters: without it a panel that rendered nothing would pass.
     await waitFor(() => expect(screen.getByTestId('filter-section-media')).toBeInTheDocument());
     expect(screen.queryByTestId('filter-section-rating')).not.toBeInTheDocument();
+
+    // The section toggles live inside the cog's popover, so it has to be opened to see them.
+    await fireEvent.click(screen.getByTestId('section-menu-btn'));
     expect(screen.queryByTestId('section-toggle-rating')).not.toBeInTheDocument();
     expect(screen.getByTestId('section-toggle-media')).toBeInTheDocument();
   });

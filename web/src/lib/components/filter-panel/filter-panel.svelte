@@ -798,6 +798,14 @@
         <div class="pt-4">
           {#each renderableSections as section (section)}
             {#if visibleSections.has(section)}
+              <!-- The "(0)" / disable gate answers "has a CROSS-SECTION filter narrowed the panel?",
+                   so the #910 availability verdict is gated on filterContext exactly as the legacy
+                   formula below is: #858 §3.3 decision 3 keeps `state` / `lensModel` / `ownerId`
+                   (and the location/camera/media dimensions) out of it, because those arrive from a
+                   contextual filter or a link rather than the panel's own controls. 'timeline' is
+                   the one exception — its `empty` means "this page has no assets at all", which no
+                   filter is responsible for. Hiding an `unavailable` section is separate and stays
+                   ungated (renderableSections, above). -->
               <FilterSection
                 title={sectionTitles[section]}
                 testId={section}
@@ -805,7 +813,7 @@
                 expanded={expandedSections.has(section)}
                 onToggleExpanded={() => toggleSectionExpanded(section)}
                 count={config.suggestionsProvider
-                  ? availability.get(section) === 'empty'
+                  ? (section === 'timeline' || filterContext) && availability.get(section) === 'empty'
                     ? 0
                     : undefined
                   : filterContext

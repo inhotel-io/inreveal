@@ -614,6 +614,9 @@ describe(SearchController.name, () => {
           ratings: [],
           mediaTypes: [],
           hasUnnamedPeople: false,
+          hasFavorites: false,
+          hasAssetsInAlbum: false,
+          hasAssetsNotInAlbum: false,
         });
 
         const { status } = await request(ctx.getHttpServer())
