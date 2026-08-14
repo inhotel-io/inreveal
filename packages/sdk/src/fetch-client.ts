@@ -834,6 +834,8 @@ export type UpdateAlbumDto = {
     albumName?: string;
     /** Album thumbnail asset ID */
     albumThumbnailAssetId?: string;
+    /** Album creation date. Must include a timezone designator (Z or ±HH:MM). */
+    createdAt?: string;
     /** Album description */
     description?: string;
     /** Enable activity feed */
