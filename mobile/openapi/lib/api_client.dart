@@ -487,6 +487,28 @@ class ApiClient {
           return FoldersResponse.fromJson(value);
         case 'FoldersUpdate':
           return FoldersUpdate.fromJson(value);
+        case 'GameChallengeDetailResponseDto':
+          return GameChallengeDetailResponseDto.fromJson(value);
+        case 'GameChallengeListItemResponseDto':
+          return GameChallengeListItemResponseDto.fromJson(value);
+        case 'GameChallengeResponseDto':
+          return GameChallengeResponseDto.fromJson(value);
+        case 'GameCreateDto':
+          return GameCreateDto.fromJson(value);
+        case 'GameGuessDto':
+          return GameGuessDto.fromJson(value);
+        case 'GameGuessResponseDto':
+          return GameGuessResponseDto.fromJson(value);
+        case 'GameLeaderboardResponseDto':
+          return GameLeaderboardResponseDto.fromJson(value);
+        case 'GameLeaderboardResponseDtoEntriesInner':
+          return GameLeaderboardResponseDtoEntriesInner.fromJson(value);
+        case 'GameRoundDetailResponseDto':
+          return GameRoundDetailResponseDto.fromJson(value);
+        case 'GameRoundDetailResponseDtoAnswer':
+          return GameRoundDetailResponseDtoAnswer.fromJson(value);
+        case 'GameRoundType':
+          return GameRoundTypeTypeTransformer().decode(value);
         case 'HlsVideoResolution':
           return HlsVideoResolutionTypeTransformer().decode(value);
         case 'ImageFormat':

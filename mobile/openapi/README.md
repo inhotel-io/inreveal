@@ -192,6 +192,13 @@ Class | Method | HTTP request | Description
 *FacesApi* | [**triggerScan**](doc//FacesApi.md#triggerscan) | **POST** /admin/face-repair/scan | Trigger a face-repair scan
 *FacesApi* | [**unconfirmFaceRepairFaces**](doc//FacesApi.md#unconfirmfacerepairfaces) | **POST** /admin/face-repair/unconfirm | Un-confirm human-placed faces so a re-scan may flag them again
 *GalleryMapApi* | [**getFilteredMapMarkers**](doc//GalleryMapApi.md#getfilteredmapmarkers) | **GET** /gallery/map/markers | Get filtered map markers
+*GamesApi* | [**createChallenge**](doc//GamesApi.md#createchallenge) | **POST** /shared-spaces/{spaceId}/games | Create a photo guessing challenge
+*GamesApi* | [**deleteChallenge**](doc//GamesApi.md#deletechallenge) | **DELETE** /games/{id} | Delete a photo guessing challenge
+*GamesApi* | [**getChallenge**](doc//GamesApi.md#getchallenge) | **GET** /games/{id} | Get a photo guessing challenge
+*GamesApi* | [**getChallenges**](doc//GamesApi.md#getchallenges) | **GET** /shared-spaces/{spaceId}/games | List photo guessing challenges
+*GamesApi* | [**getLeaderboard**](doc//GamesApi.md#getleaderboard) | **GET** /games/{id}/leaderboard | Get a challenge leaderboard
+*GamesApi* | [**getRoundImage**](doc//GamesApi.md#getroundimage) | **GET** /games/{id}/rounds/{index}/image | Get a round image
+*GamesApi* | [**guessRound**](doc//GamesApi.md#guessround) | **POST** /games/{id}/rounds/{index}/guess | Submit a round guess
 *JobsApi* | [**createJob**](doc//JobsApi.md#createjob) | **POST** /jobs | Create a manual job
 *JobsApi* | [**getQueuesLegacy**](doc//JobsApi.md#getqueueslegacy) | **GET** /jobs | Retrieve queue counts and status
 *JobsApi* | [**runQueueCommandLegacy**](doc//JobsApi.md#runqueuecommandlegacy) | **PUT** /jobs/{name} | Run jobs
@@ -594,6 +601,17 @@ Class | Method | HTTP request | Description
  - [FilterSuggestionsTagDto](doc//FilterSuggestionsTagDto.md)
  - [FoldersResponse](doc//FoldersResponse.md)
  - [FoldersUpdate](doc//FoldersUpdate.md)
+ - [GameChallengeDetailResponseDto](doc//GameChallengeDetailResponseDto.md)
+ - [GameChallengeListItemResponseDto](doc//GameChallengeListItemResponseDto.md)
+ - [GameChallengeResponseDto](doc//GameChallengeResponseDto.md)
+ - [GameCreateDto](doc//GameCreateDto.md)
+ - [GameGuessDto](doc//GameGuessDto.md)
+ - [GameGuessResponseDto](doc//GameGuessResponseDto.md)
+ - [GameLeaderboardResponseDto](doc//GameLeaderboardResponseDto.md)
+ - [GameLeaderboardResponseDtoEntriesInner](doc//GameLeaderboardResponseDtoEntriesInner.md)
+ - [GameRoundDetailResponseDto](doc//GameRoundDetailResponseDto.md)
+ - [GameRoundDetailResponseDtoAnswer](doc//GameRoundDetailResponseDtoAnswer.md)
+ - [GameRoundType](doc//GameRoundType.md)
  - [HlsVideoResolution](doc//HlsVideoResolution.md)
  - [ImageFormat](doc//ImageFormat.md)
  - [IntegrityReport](doc//IntegrityReport.md)
