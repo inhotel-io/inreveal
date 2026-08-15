@@ -67,6 +67,7 @@
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
   import { resolveFilterNames } from '$lib/utils/filter-name-resolution';
   import { filterStateToSearchTerms } from '$lib/utils/filter-search-terms';
+  import type { SearchTerms } from '$lib/services/search.service';
   import { buildFilterStateUrl, isFilterStateUrlUnchanged, withoutAtParam } from '$lib/utils/filter-target';
   import { decodeFilterParams } from '$lib/utils/filter-url';
   import { lang } from '$lib/stores/preferences.store';
@@ -88,9 +89,11 @@
     mapSmartSearchFacetsToFilterSuggestions,
   } from '$lib/utils/space-search';
   import { consumeTypedSearchNamesInto } from '$lib/utils/typed-search/typed-search-name-cache';
+  import { removeSearchResults, selectAllSearchResults, updateSearchResults } from '$lib/utils/search-result-selection';
   import {
     AlbumUserRole,
     AssetOrder,
+    type AssetVisibility,
     getAlbumInfo,
     searchSmartFacets,
     updateAlbumInfo,
@@ -158,6 +161,8 @@
   // these show, so the selection toolbar acts on this array instead — mirrors the space timeline.
   let searchResults = $state<AssetResponseDto[]>([]);
   let searchIsLoading = $state(false);
+  // Bumped to force a re-run of the current search (undo-delete restores the removed assets).
+  let searchReloadToken = $state(0);
   // Token guard for the URL $effect below. Copied in spirit from photos/…/+page.svelte: without it,
   // our own goto() re-runs the effect, which re-runs goto(), forever. It is at-stripped because
   // closing the asset viewer writes `?at=<assetId>` (replaceScrollTarget), which is not a filter
@@ -212,6 +217,13 @@
   };
 
   const handleEscape = async () => {
+    // Search mode unmounts <Timeline>, so `timelineManager` is undefined here on a directly-loaded
+    // `?q=` URL — dereferencing it below would throw before anything else ran. Escape clears the
+    // search instead, matching the space timeline's handler.
+    if (showSearchResults) {
+      clearAlbumSearch();
+      return;
+    }
     timelineManager.suspendTransitions = true;
     if (viewMode === AlbumPageViewMode.SELECT_THUMBNAIL) {
       viewMode = AlbumPageViewMode.VIEW;
@@ -250,19 +262,52 @@
     await setModeToView();
   };
 
+  // While search results are showing, <Timeline> is unmounted and its manager destroyed — every
+  // bulk action has to mutate the results array instead, or it silently no-ops and the asset stays
+  // on screen (#908, the same split the space timeline makes).
   const handleSetVisibility = (assetIds: string[]) => {
-    timelineManager.removeAssets(assetIds);
+    if (showSearchResults) {
+      removeSearchResults(searchResults, assetIds);
+    } else {
+      timelineManager?.removeAssets(assetIds);
+    }
     assetMultiSelectManager.clear();
   };
 
   const handleRemoveAssets = async (assetIds: string[]) => {
-    timelineManager.removeAssets(assetIds);
+    if (showSearchResults) {
+      removeSearchResults(searchResults, assetIds);
+    } else {
+      timelineManager?.removeAssets(assetIds);
+    }
     await refreshAlbum();
   };
 
   const handleUndoRemoveAssets = async (assets: TimelineAsset[]) => {
-    timelineManager.upsertAssets(assets);
+    if (showSearchResults) {
+      // Undo hands back TimelineAssets; the results list holds full AssetResponseDtos, so
+      // re-running the search is how they come back.
+      searchReloadToken++;
+    } else {
+      timelineManager?.upsertAssets(assets);
+    }
     await refreshAlbum();
+  };
+
+  const handleBulkFavorite = (ids: string[], isFavorite: boolean) => {
+    if (showSearchResults) {
+      updateSearchResults(searchResults, ids, (asset) => (asset.isFavorite = isFavorite));
+      return;
+    }
+    timelineManager?.update(ids, (asset) => (asset.isFavorite = isFavorite));
+  };
+
+  const handleBulkArchive = (ids: string[], visibility: AssetVisibility) => {
+    if (showSearchResults) {
+      updateSearchResults(searchResults, ids, (asset) => (asset.visibility = visibility));
+      return;
+    }
+    timelineManager?.update(ids, (asset) => (asset.visibility = visibility));
   };
 
   const handleUpdateThumbnail = async (assetId: string) => {
@@ -312,17 +357,18 @@
     getAssets: () => (viewMode === AlbumPageViewMode.VIEW ? assetMultiSelectManager.assets : []),
     clearSelection: () => assetMultiSelectManager.clear(),
     canAddToAlbum: () => viewMode === AlbumPageViewMode.VIEW,
+    // `showSearchResults` joins `timelineManager` as an availability condition: in search mode the
+    // manager is gone but the handlers below are still meaningful — they act on the results array.
     getOnFavorite: () =>
-      viewMode === AlbumPageViewMode.VIEW && timelineManager
-        ? (ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))
-        : undefined,
+      viewMode === AlbumPageViewMode.VIEW && (timelineManager || showSearchResults) ? handleBulkFavorite : undefined,
     getOnArchive: () =>
-      viewMode === AlbumPageViewMode.VIEW && timelineManager
-        ? (ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))
-        : undefined,
-    getOnDelete: () => (viewMode === AlbumPageViewMode.VIEW && timelineManager ? handleRemoveAssets : undefined),
+      viewMode === AlbumPageViewMode.VIEW && (timelineManager || showSearchResults) ? handleBulkArchive : undefined,
+    getOnDelete: () =>
+      viewMode === AlbumPageViewMode.VIEW && (timelineManager || showSearchResults) ? handleRemoveAssets : undefined,
     getOnUndoDelete: () =>
-      viewMode === AlbumPageViewMode.VIEW && timelineManager ? handleUndoRemoveAssets : undefined,
+      viewMode === AlbumPageViewMode.VIEW && (timelineManager || showSearchResults)
+        ? handleUndoRemoveAssets
+        : undefined,
   });
 
   $effect(() => {
@@ -361,11 +407,22 @@
     untrack(() => {
       // Every filter — including the temporal picker's year/month — round-trips through the URL, so
       // rebuilding FilterState from the URL alone is lossless.
+      const nextQuery = getSearchablePageState(page.url).query;
+      // A NEW query invalidates the facets outright. Leaving them would let the previous query's
+      // total and time buckets annotate the new results until the fresh ones land — and a failed
+      // fetch returns the stale value, so they would never be corrected.
+      if (nextQuery !== committedSearchQuery) {
+        smartFacetInFlight?.controller.abort();
+        smartFacetInFlight = undefined;
+        smartFacets = undefined;
+        smartFacetKey = '';
+        searchResults = [];
+      }
       albumFilters = {
         ...createFilterState(),
         ...hydrateAlbumFilters(page.url),
       };
-      committedSearchQuery = getSearchablePageState(page.url).query;
+      committedSearchQuery = nextQuery;
       searchIsLoading = false;
       lastHandledFilterSearch = nextFilterSearch;
       consumeTypedSearchNamesInto(page.url.pathname + page.url.search, albumPersonNames, albumTagNames);
@@ -457,13 +514,15 @@
     return {
       ...base,
       // Browse mode asks the album's own suggestion endpoint; query mode has to ask the SEARCH, or
-      // the panel would offer facets the visible results do not contain.
+      // the panel would offer facets the visible results do not contain. BOTH branches feed the
+      // name maps — a chip picked from the facets has no other source for its label, and
+      // ActiveFiltersBar falls back to rendering the raw `person:<uuid>` token without it.
       suggestionsProvider: async (filters: FilterState) => {
-        if (showSearchResults) {
-          const facets = await loadAlbumSmartFacets(filters);
-          return facets ? mapSmartSearchFacetsToFilterSuggestions(facets) : emptyFilterSuggestions();
-        }
-        const result = await provider(filters);
+        const result = showSearchResults
+          ? await loadAlbumSmartFacets(filters).then((facets) =>
+              facets ? mapSmartSearchFacetsToFilterSuggestions(facets) : emptyFilterSuggestions(),
+            )
+          : await provider(filters);
         for (const person of result.people) {
           albumPersonNames.set(person.id, person.name);
         }
@@ -495,11 +554,19 @@
 
   const totalAssetCount = $derived(timelineManager?.assetCount ?? 0);
 
+  // The bar prints the SEARCH total in its label, so the collect call has to run the same search.
+  // Omitting the query sends `collectSearchResultAssetIds` down the metadata branch, which then
+  // collects every asset in the album — "Add all 3" quietly adding 800.
   const handleAddAllToCollection = () => {
+    const query = committedSearchQuery.trim();
+    const terms: SearchTerms = { ...filterStateToSearchTerms(albumFilters), albumIds: [album.id] };
+    if (query) {
+      terms.query = query;
+    }
     void modalManager.show(SearchAddAllToCollectionModal, {
-      terms: { ...filterStateToSearchTerms(albumFilters), albumIds: [album.id] },
-      total: totalAssetCount,
-      smartSearchEnabled: false,
+      terms,
+      total: showSearchResults ? (searchTotal ?? 0) : totalAssetCount,
+      smartSearchEnabled: !!query,
       language: $lang,
     });
   };
@@ -739,6 +806,8 @@
                   timeBuckets={filterTimeBuckets}
                   storageKey="gallery-filter-visible-sections-album-detail"
                   hidden={isTimelineEmpty && !showSearchResults}
+                  personNames={albumPersonNames}
+                  tagNames={albumTagNames}
                   onFiltersChange={syncAlbumFilterUrl}
                 />
               {/key}
@@ -808,6 +877,7 @@
               searchQuery={committedSearchQuery}
               bind:isLoading={searchIsLoading}
               bind:results={searchResults}
+              reloadToken={searchReloadToken}
               filters={albumFilters}
               albumIds={searchAlbumIds}
               language={$lang}
@@ -966,12 +1036,16 @@
         {@const Actions = getAssetBulkActions($t)}
         <CommandPaletteDefaultProvider name={$t('assets')} actions={Object.values(Actions)} />
         <CreateSharedLink />
-        <SelectAllAssets {timelineManager} assetInteraction={assetMultiSelectManager} />
+        <SelectAllAssets
+          timelineManager={showSearchResults ? undefined : timelineManager}
+          assetInteraction={assetMultiSelectManager}
+          onSelectAll={showSearchResults
+            ? () => selectAllSearchResults(searchResults, assetMultiSelectManager)
+            : undefined}
+        />
         <ActionButton action={Actions.AddToAlbum} />
         {#if assetMultiSelectManager.isAllUserOwned}
-          <FavoriteAction
-            removeFavorite={assetMultiSelectManager.isAllFavorite}
-            onFavorite={(ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))}
+          <FavoriteAction removeFavorite={assetMultiSelectManager.isAllFavorite} onFavorite={handleBulkFavorite}
           ></FavoriteAction>
         {/if}
         <ButtonContextMenu icon={mdiDotsVertical} title={$t('menu')} offset={{ x: 175, y: 25 }}>
@@ -981,11 +1055,7 @@
             <ChangeDate menuItem />
             <ChangeDescription menuItem />
             <ChangeLocation menuItem />
-            <ArchiveAction
-              menuItem
-              unarchive={assetMultiSelectManager.isAllArchived}
-              onArchive={(ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))}
-            />
+            <ArchiveAction menuItem unarchive={assetMultiSelectManager.isAllArchived} onArchive={handleBulkArchive} />
             <SetVisibilityAction menuItem onVisibilitySet={handleSetVisibility} />
           {/if}
           {#if isEditor && assetMultiSelectManager.assets.length === 1}

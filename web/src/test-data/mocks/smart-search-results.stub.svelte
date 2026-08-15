@@ -10,6 +10,12 @@
     albumIds?: string[];
     language?: string;
     total?: number;
+    // $bindable on the real component, so a host that binds it expects to be able to read loaded
+    // results back. Spreading it onto the div instead made any behaviour keyed on results — the
+    // selection toolbar acting on the search grid — unobservable.
+    results?: unknown[];
+    isShared?: boolean;
+    space?: { id: string; canWrite: boolean };
     [key: string]: unknown;
   }
 
@@ -22,6 +28,9 @@
     albumIds,
     language = '',
     total,
+    results = $bindable([]),
+    isShared,
+    space,
     ...rest
   }: Props = $props();
 </script>
@@ -49,6 +58,9 @@
   data-with-shared-spaces={String(withSharedSpaces)}
   data-space-id={spaceId ?? ''}
   data-album-ids={albumIds?.join(',') ?? ''}
+  data-result-count={results.length}
+  data-is-shared={String(isShared)}
+  data-space={JSON.stringify(space ?? null)}
   data-country={filters?.country ?? ''}
   data-language={language}
   data-total={total ?? ''}

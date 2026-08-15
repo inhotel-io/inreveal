@@ -49,6 +49,7 @@
     mapSmartSearchFacetsToFilterSuggestions,
   } from '$lib/utils/space-search';
   import { consumeTypedSearchNamesInto } from '$lib/utils/typed-search/typed-search-name-cache';
+  import { removeSearchResults, selectAllSearchResults, updateSearchResults } from '$lib/utils/search-result-selection';
   import { untrack } from 'svelte';
   import SearchAddAllToCollectionModal from '$lib/modals/SearchAddAllToCollectionModal.svelte';
   import { lang } from '$lib/stores/preferences.store';
@@ -61,6 +62,7 @@
   import {
     AlbumUserRole,
     AssetOrder,
+    type AssetVisibility,
     getAlbumInfo,
     searchSmartFacets,
     SharedSpaceRole,
@@ -129,6 +131,8 @@
   // these show, so the selection toolbar acts on this array instead — mirrors the space timeline.
   let searchResults = $state<AssetResponseDto[]>([]);
   let searchIsLoading = $state(false);
+  // Bumped to force a re-run of the current search (undo-delete restores the removed assets).
+  let searchReloadToken = $state(0);
   let pickerFilters = $state(createFilterState());
   const browsePersonNames = new SvelteMap<string, string>();
   const browseTagNames = new SvelteMap<string, string>();
@@ -329,8 +333,19 @@
     untrack(() => {
       // Every filter — including the temporal picker's year/month — round-trips through the URL, so
       // rebuilding FilterState from the URL alone is lossless.
+      const nextQuery = getSearchablePageState(page.url).query;
+      // A NEW query invalidates the facets outright. Leaving them would let the previous query's
+      // total and time buckets annotate the new results until the fresh ones land — and a failed
+      // fetch returns the stale value, so they would never be corrected.
+      if (nextQuery !== committedSearchQuery) {
+        smartFacetInFlight?.controller.abort();
+        smartFacetInFlight = undefined;
+        smartFacets = undefined;
+        smartFacetKey = '';
+        searchResults = [];
+      }
       browseFilters = hydrateAlbumFilters(page.url);
-      committedSearchQuery = getSearchablePageState(page.url).query;
+      committedSearchQuery = nextQuery;
       searchIsLoading = false;
       lastHandledSearch = nextSearch;
       consumeTypedSearchNamesInto(page.url.pathname + page.url.search, browsePersonNames, browseTagNames);
@@ -393,11 +408,18 @@
     album = await getAlbumInfo({ id: album.id });
   };
 
+  // While search results are showing, <Timeline> is unmounted and its manager destroyed — every
+  // bulk action has to mutate the results array instead, or it silently no-ops and the asset stays
+  // on screen (#908, same split the space timeline makes).
   const handleRemoveAssets = (assetIds: string[]) => {
     // Prune the browse timeline immediately so removed photos don't linger.
     // RemoveFromAlbumAction already re-fetches the album via bind:album and clears the
     // selection internally before firing onRemove, so we only need to defensively clear here.
-    timelineManager?.removeAssets(assetIds);
+    if (showSearchResults) {
+      removeSearchResults(searchResults, assetIds);
+    } else {
+      timelineManager?.removeAssets(assetIds);
+    }
     assetMultiSelectManager.clear();
   };
 
@@ -405,8 +427,28 @@
   // folder takes them out of this (non-locked) timeline view. It isn't an album-membership
   // change (RemoveFromAlbum is the only membership mutation this route offers), so it doesn't
   // touch album.assetCount either.
+  const handleFavorite = (ids: string[], isFavorite: boolean) => {
+    if (showSearchResults) {
+      updateSearchResults(searchResults, ids, (asset) => (asset.isFavorite = isFavorite));
+      return;
+    }
+    timelineManager?.update(ids, (asset) => (asset.isFavorite = isFavorite));
+  };
+
+  const handleArchive = (ids: string[], visibility: AssetVisibility) => {
+    if (showSearchResults) {
+      updateSearchResults(searchResults, ids, (asset) => (asset.visibility = visibility));
+      return;
+    }
+    timelineManager?.update(ids, (asset) => (asset.visibility = visibility));
+  };
+
   const handleSetVisibility = (assetIds: string[]) => {
-    timelineManager?.removeAssets(assetIds);
+    if (showSearchResults) {
+      removeSearchResults(searchResults, assetIds);
+    } else {
+      timelineManager?.removeAssets(assetIds);
+    }
     assetMultiSelectManager.clear();
   };
 
@@ -416,7 +458,11 @@
   // space-person page's identical reasoning — so force a data reload here to keep
   // album.assetCount in sync with the server.
   const handleAssetDelete = (assetIds: string[]) => {
-    timelineManager?.removeAssets(assetIds);
+    if (showSearchResults) {
+      removeSearchResults(searchResults, assetIds);
+    } else {
+      timelineManager?.removeAssets(assetIds);
+    }
     void invalidateAll();
   };
 
@@ -424,6 +470,12 @@
   // restore, so re-add the assets to the local view directly; no count refresh is needed since
   // undoing a delete doesn't change album membership either.
   const handleUndoAssetDelete = (assets: TimelineAsset[]) => {
+    if (showSearchResults) {
+      // Undo hands back TimelineAssets; the results list holds full AssetResponseDtos, so
+      // re-running the search is how they come back.
+      searchReloadToken++;
+      return;
+    }
     timelineManager?.upsertAssets(assets);
   };
 
@@ -622,6 +674,7 @@
             searchQuery={committedSearchQuery}
             bind:isLoading={searchIsLoading}
             bind:results={searchResults}
+            reloadToken={searchReloadToken}
             filters={browseFilters}
             albumIds={searchAlbumIds}
             language={$lang}
@@ -639,6 +692,9 @@
               onclick={() => {
                 browseFilters = clearFilters(browseFilters);
                 temporalAnchor = undefined;
+                // The filters are URL-backed now: without this the params survive the "clear",
+                // so a refresh or back/forward restores what the user just cleared.
+                syncFilterUrl(browseFilters);
               }}
             >
               {$t('space_album_clear_all_filters')}
@@ -729,15 +785,16 @@
      `isAllUserOwned` gates the whole metadata-edit block, matching the merged direct-space timeline. -->
 {#if mode === 'browse' && assetMultiSelectManager.selectionActive}
   <SelectionToolbar
-    {timelineManager}
+    timelineManager={showSearchResults ? undefined : timelineManager}
     assetInteraction={assetMultiSelectManager}
     {album}
     space={{ id: space.id, canWrite: isSpaceEditor }}
     downloadFilename={`${album.albumName}.zip`}
+    onSelectAll={showSearchResults ? () => selectAllSearchResults(searchResults, assetMultiSelectManager) : undefined}
     onRemove={handleRemoveAssets}
     onSetCover={handleSetAlbumCover}
-    onFavorite={(ids, isFavorite) => timelineManager.update(ids, (asset) => (asset.isFavorite = isFavorite))}
-    onArchive={(ids, visibility) => timelineManager.update(ids, (asset) => (asset.visibility = visibility))}
+    onFavorite={handleFavorite}
+    onArchive={handleArchive}
     onVisibilitySet={handleSetVisibility}
     onAssetDelete={handleAssetDelete}
     onUndoDelete={handleUndoAssetDelete}

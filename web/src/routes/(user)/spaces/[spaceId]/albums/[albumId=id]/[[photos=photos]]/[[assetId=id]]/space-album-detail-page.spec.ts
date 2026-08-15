@@ -3,6 +3,8 @@ import {
   AssetOrder,
   SharedSpaceRole,
   getAlbumInfo,
+  getFilterSuggestions,
+  searchSmartFacets,
   type AlbumResponseDto,
   type SharedSpaceMemberResponseDto,
   type SharedSpaceResponseDto,
@@ -143,6 +145,8 @@ vi.mock('@immich/sdk', async (importOriginal) => {
   return {
     ...actual,
     getAlbumInfo: vi.fn(),
+    getFilterSuggestions: vi.fn(),
+    searchSmartFacets: vi.fn(),
   };
 });
 
@@ -1343,6 +1347,96 @@ describe('Space album detail page', () => {
       await waitFor(() =>
         expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-search-query', 'sunset'),
       );
+    });
+
+    const facetsWith = (people: Array<{ id: string; name: string }> = []) =>
+      ({
+        total: 7,
+        timeBuckets: [{ timeBucket: '2025-06-01', count: 7 }],
+        countries: [],
+        cities: [],
+        cameraMakes: [],
+        cameraModels: [],
+        tags: [],
+        people,
+        ratings: [],
+        mediaTypes: [],
+        hasUnnamedPeople: false,
+      }) as never;
+
+    // The panel's suggestions must come from the SEARCH in query mode, not the album's own
+    // suggestion endpoint — otherwise it offers facets the visible results do not contain.
+    it('sources the filter panel options from the search facets while a query is running', async () => {
+      mockPage.reset('https://gallery.test/spaces/space-1/albums/album-1?q=beach');
+      vi.mocked(searchSmartFacets).mockResolvedValue(facetsWith([{ id: 'facet-person', name: 'Facet Person' }]));
+
+      renderPage();
+
+      await waitFor(() => expect(screen.getByTestId('filter-panel-suggested-person-facet-person')).toBeInTheDocument());
+      expect(vi.mocked(getFilterSuggestions)).not.toHaveBeenCalled();
+    });
+
+    it('feeds the search facet time buckets to the filter panel instead of the album buckets', async () => {
+      mockPage.reset('https://gallery.test/spaces/space-1/albums/album-1?q=beach');
+      vi.mocked(searchSmartFacets).mockResolvedValue(facetsWith());
+
+      renderPage();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('filter-panel')).toHaveAttribute('data-time-buckets', '2025-06-01'),
+      );
+    });
+
+    it('shows the search total rather than the browse count', async () => {
+      mockPage.reset('https://gallery.test/spaces/space-1/albums/album-1?q=beach');
+      vi.mocked(searchSmartFacets).mockResolvedValue(facetsWith());
+
+      renderPage();
+
+      await waitFor(() => expect(screen.getByTestId('active-filters-bar')).toHaveAttribute('data-result-count', '7'));
+    });
+
+    it('clears the query from the URL when the search chip is dismissed', async () => {
+      mockPage.reset('https://gallery.test/spaces/space-1/albums/album-1?q=beach');
+      vi.mocked(searchSmartFacets).mockResolvedValue(facetsWith());
+
+      renderPage();
+
+      await fireEvent.click(await screen.findByTestId('active-filters-clear-search'));
+
+      await waitFor(() => {
+        const [target] = vi.mocked(goto).mock.calls.at(-1) as [string];
+        expect(target).not.toContain('q=beach');
+      });
+    });
+
+    // The filters are URL-backed now, so removing a chip has to write the URL too — otherwise the
+    // param survives and a refresh restores the filter the user just removed.
+    it('writes temporal chip removal back to the URL', async () => {
+      mockPage.reset('https://gallery.test/spaces/space-1/albums/album-1?year=2025');
+
+      renderPage();
+
+      await fireEvent.click(await screen.findByTestId('active-filters-remove-timeline'));
+
+      await waitFor(() => {
+        const [target] = vi.mocked(goto).mock.calls.at(-1) as [string];
+        expect(target).not.toContain('year=2025');
+      });
+    });
+
+    it('writes a filtered-empty "clear all filters" back to the URL', async () => {
+      mockPage.reset('https://gallery.test/spaces/space-1/albums/album-1?city=Berlin');
+      setMockTimelineEmpty();
+
+      renderPage();
+
+      await fireEvent.click(await screen.findByTestId('browse-clear-filters'));
+
+      await waitFor(() => {
+        const [target] = vi.mocked(goto).mock.calls.at(-1) as [string];
+        expect(target).not.toContain('city=Berlin');
+      });
     });
 
     it('re-scopes the search when navigating straight to a sibling album', async () => {
