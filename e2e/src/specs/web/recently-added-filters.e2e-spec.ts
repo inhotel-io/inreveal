@@ -157,7 +157,8 @@ test.describe('Recently Added filters', () => {
     // People: createFace inserts asset_face + face_identity + face_identity_face directly, so it
     // needs no ML — see e2e/src/utils.ts:490. No new asset, so TOTAL stays exact.
     const person = await utils.createPerson(admin.accessToken, { name: '#910 Person' });
-    await utils.createFace({ assetId: images[0].id, personId: person.id });
+    // sourceType: 'manual' — see utils.createFace; detection runs on these uploads.
+    await utils.createFace({ assetId: images[0].id, personId: person.id, sourceType: 'manual' });
   });
 
   async function gotoRecentlyAdded(

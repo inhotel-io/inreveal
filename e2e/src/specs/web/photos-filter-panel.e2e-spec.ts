@@ -64,7 +64,9 @@ test.describe('Photos FilterPanel', () => {
     // needs no ML — getFilteredPeople's global-scope query only requires a named, non-hidden person
     // with a face on an asset in scope. See e2e/src/utils.ts:490.
     const person = await utils.createPerson(admin.accessToken, { name: '#910 Person' });
-    await utils.createFace({ assetId: asset1.id, personId: person.id });
+    // sourceType: 'manual' — this spec uploads real assets, so detection runs and would delete a
+    // machine-learning-sourced seed (see utils.createFace).
+    await utils.createFace({ assetId: asset1.id, personId: person.id, sourceType: 'manual' });
   });
 
   async function gotoPhotos(context: import('@playwright/test').BrowserContext, page: import('@playwright/test').Page) {

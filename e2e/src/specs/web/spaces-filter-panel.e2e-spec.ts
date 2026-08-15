@@ -361,7 +361,8 @@ test.describe('Spaces FilterPanel', () => {
       // ever regressed to the global people list, this person would leak into it.
       const outsideAsset = await utils.createAsset(admin.accessToken);
       const outsidePerson = await utils.createPerson(admin.accessToken, { name: 'Outside The Space' });
-      await utils.createFace({ assetId: outsideAsset.id, personId: outsidePerson.id });
+      // sourceType: 'manual' — see utils.createFace; detection runs on these uploads.
+      await utils.createFace({ assetId: outsideAsset.id, personId: outsidePerson.id, sourceType: 'manual' });
 
       await gotoSpace(context, page, space.id);
 

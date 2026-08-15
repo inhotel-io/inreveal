@@ -509,21 +509,35 @@ export const utils = {
     return person;
   },
 
-  createFace: async ({ assetId, personId }: { assetId: string; personId: string }): Promise<string> => {
+  createFace: async ({
+    assetId,
+    personId,
+    sourceType = 'machine-learning',
+  }: {
+    assetId: string;
+    personId: string;
+    /**
+     * Defaults to the schema default, `machine-learning`, because that is what the face-repair
+     * surfaces require: getScanFlaggedFaces (and the cross-engine console) join `face_search` on
+     * `sourceType = MachineLearning`, so a face seeded any other way is invisible to them and the
+     * scan silently finds nothing — see face-cleanup / face-review-cross-engine.
+     *
+     * Pass `'manual'` from specs that upload real assets and let detection run: on a stack with
+     * facial recognition enabled, `handleDetectFaces` treats an existing MachineLearning-sourced
+     * face as a prior ML detection, re-runs detection, finds 0 real faces in these fixtures, and
+     * deletes every face whose id was not re-confirmed — wiping the seeded face.
+     */
+    sourceType?: 'machine-learning' | 'manual';
+  }): Promise<string> => {
     if (!client) {
       throw new Error('Database client not connected');
     }
 
-    // sourceType must be 'manual', NOT left at its schema default ('machine-learning'). On any
-    // stack with facial recognition enabled, person.service.ts's handleDetectFaces treats every
-    // existing MachineLearning-sourced face on an asset as a prior ML detection: it re-runs
-    // detection, finds 0 real faces in these test fixtures, and deletes every face whose id wasn't
-    // re-confirmed — silently wiping a manually-seeded face that defaulted to that sourceType.
     const result = await client.query(
       `
       WITH inserted_face AS (
         INSERT INTO asset_face ("assetId", "personId", "sourceType")
-        VALUES ($1, $2, 'manual')
+        VALUES ($1, $2, $3)
         RETURNING id
       ),
       person_row AS (
@@ -557,7 +571,7 @@ export const utils = {
       SELECT (SELECT id FROM inserted_face), (SELECT id FROM resolved_identity), 'manual'
       RETURNING "assetFaceId" AS id
       `,
-      [assetId, personId],
+      [assetId, personId, sourceType],
     );
     return result.rows[0].id as string;
   },
