@@ -79,7 +79,25 @@
     getTimelineManagerTimeBuckets,
   } from '$lib/utils/timeline-zoom-navigation';
   import { getTimelineTopVisibleAnchor } from '$lib/managers/timeline-manager/timeline-anchor';
-  import { AlbumUserRole, getAlbumInfo, updateAlbumInfo, type AlbumResponseDto } from '@immich/sdk';
+  import SmartSearchResults from '$lib/components/search/smart-search-results.svelte';
+  import { globalSearchManager } from '$lib/managers/global-search-manager.svelte';
+  import { buildSearchablePageUrl, getSearchablePageState } from '$lib/utils/searchable-page-search';
+  import {
+    buildSmartSearchFacetKey,
+    buildSmartSearchFacetsParams,
+    mapSmartSearchFacetsToFilterSuggestions,
+  } from '$lib/utils/space-search';
+  import { consumeTypedSearchNamesInto } from '$lib/utils/typed-search/typed-search-name-cache';
+  import {
+    AlbumUserRole,
+    AssetOrder,
+    getAlbumInfo,
+    searchSmartFacets,
+    updateAlbumInfo,
+    type AlbumResponseDto,
+    type AssetResponseDto,
+    type SmartSearchFacetsResponseDto,
+  } from '@immich/sdk';
   import {
     ActionButton,
     CommandPaletteDefaultProvider,
@@ -130,9 +148,16 @@
     ...createFilterState(),
     ...decodeFilterParams(url),
     albumId: undefined,
+    sortOrder: getSearchablePageState(url).sortOrder,
   });
 
   let albumFilters = $state<FilterState>(hydrateAlbumFilters(page.url));
+  let committedSearchQuery = $state(getSearchablePageState(page.url).query);
+  const showSearchResults = $derived(committedSearchQuery.trim().length > 0);
+  // Loaded smart-search results. The browse Timeline (and its TimelineManager) is unmounted while
+  // these show, so the selection toolbar acts on this array instead — mirrors the space timeline.
+  let searchResults = $state<AssetResponseDto[]>([]);
+  let searchIsLoading = $state(false);
   // Token guard for the URL $effect below. Copied in spirit from photos/…/+page.svelte: without it,
   // our own goto() re-runs the effect, which re-runs goto(), forever. It is at-stripped because
   // closing the asset viewer writes `?at=<assetId>` (replaceScrollTarget), which is not a filter
@@ -307,6 +332,12 @@
 
     album = data.album;
     albumFilters = hydrateAlbumFilters(page.url);
+    committedSearchQuery = getSearchablePageState(page.url).query;
+    searchIsLoading = false;
+    smartFacetInFlight?.controller.abort();
+    smartFacets = undefined;
+    smartFacetKey = '';
+    smartFacetInFlight = undefined;
     lastHandledFilterSearch = withoutAtParam(page.url.search);
     pickerFilters = createFilterState();
     albumPersonNames.clear();
@@ -334,7 +365,10 @@
         ...createFilterState(),
         ...hydrateAlbumFilters(page.url),
       };
+      committedSearchQuery = getSearchablePageState(page.url).query;
+      searchIsLoading = false;
       lastHandledFilterSearch = nextFilterSearch;
+      consumeTypedSearchNamesInto(page.url.pathname + page.url.search, albumPersonNames, albumTagNames);
     });
   });
 
@@ -347,12 +381,88 @@
     }
   });
 
+  let smartFacets = $state<SmartSearchFacetsResponseDto>();
+  let smartFacetKey = $state('');
+  let smartFacetInFlight:
+    | { key: string; controller: AbortController; promise: Promise<SmartSearchFacetsResponseDto | undefined> }
+    | undefined;
+
+  const emptyFilterSuggestions = () => ({
+    countries: [],
+    cities: [],
+    cameraMakes: [],
+    cameraModels: [],
+    tags: [],
+    people: [],
+    ratings: [],
+    mediaTypes: [],
+    hasUnnamedPeople: false,
+  });
+
+  /**
+   * Facets for the ACTIVE search, scoped to this album — the source of the result count and of the
+   * temporal picker's buckets while a query is running. Memoised on the request shape so a filter
+   * change that cannot alter the facets (sortOrder) does not refetch.
+   */
+  async function loadAlbumSmartFacets(nextFilters: FilterState): Promise<SmartSearchFacetsResponseDto | undefined> {
+    const query = committedSearchQuery.trim();
+    if (!query) {
+      return undefined;
+    }
+
+    const args = { query, filters: nextFilters, albumIds: searchAlbumIds, language: $lang };
+    const key = buildSmartSearchFacetKey(args);
+    if (smartFacets && smartFacetKey === key) {
+      return smartFacets;
+    }
+    if (smartFacetInFlight?.key === key) {
+      return smartFacetInFlight.promise;
+    }
+
+    smartFacetInFlight?.controller.abort();
+    const controller = new AbortController();
+
+    const promise = searchSmartFacets(
+      { smartSearchFacetsDto: buildSmartSearchFacetsParams(args) },
+      { signal: controller.signal },
+    )
+      .then((result) => {
+        if (smartFacetInFlight?.key === key && !controller.signal.aborted) {
+          smartFacets = result;
+          smartFacetKey = key;
+        }
+        return result;
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          console.error('Failed to fetch smart search facets:', error);
+        }
+        return smartFacets;
+      })
+      .finally(() => {
+        if (smartFacetInFlight?.key === key) {
+          smartFacetInFlight = undefined;
+        }
+      });
+
+    smartFacetInFlight = { key, controller, promise };
+    return promise;
+  }
+
+  const searchTotal = $derived(showSearchResults ? smartFacets?.total : undefined);
+
   const albumFilterConfig = $derived.by(() => {
     const base = buildAlbumDetailFilterConfig(album.id);
     const provider = base.suggestionsProvider!;
     return {
       ...base,
+      // Browse mode asks the album's own suggestion endpoint; query mode has to ask the SEARCH, or
+      // the panel would offer facets the visible results do not contain.
       suggestionsProvider: async (filters: FilterState) => {
+        if (showSearchResults) {
+          const facets = await loadAlbumSmartFacets(filters);
+          return facets ? mapSmartSearchFacetsToFilterSuggestions(facets) : emptyFilterSuggestions();
+        }
         const result = await provider(filters);
         for (const person of result.people) {
           albumPersonNames.set(person.id, person.name);
@@ -407,17 +517,33 @@
     timelineManager?.isInitialized && !hasTimelineMonths && totalAssetCount === 0 && activeFilterCount > 0,
   );
   const timeBuckets = $derived(getTimelineManagerTimeBuckets(timelineManager));
+  // While a query is running the panel's temporal picker must bucket the MATCHES, not the album.
+  const filterTimeBuckets = $derived(showSearchResults ? (smartFacets?.timeBuckets ?? []) : timeBuckets);
   const isBrowseTimeline = $derived(viewMode === AlbumPageViewMode.VIEW);
+
+  /**
+   * The album scope handed to smart search — this album alone, matching the browse timeline's own
+   * `albumId` scope and the personal person tokens its filter panel speaks.
+   */
+  const searchAlbumIds = $derived([album.id]);
+
+  /**
+   * Browse order. An album carries its own `order`, but the navbar sort dropdown renders on every
+   * searchable page — browse mode included — so an EXPLICIT `?sort=` has to win, or the control
+   * would visibly do nothing here. Absent that param the album's own order stands.
+   */
+  const browseOrder = $derived.by(() => {
+    if (!getSearchablePageState(page.url).hasExplicitSort) {
+      return album.order ?? authManager.preferences.albums.defaultAssetOrder;
+    }
+    return albumFilters.sortOrder === 'asc' ? AssetOrder.Asc : AssetOrder.Desc;
+  });
 
   const options = $derived.by(() => {
     if (viewMode === AlbumPageViewMode.SELECT_ASSETS) {
       return buildAlbumAssetPickerOptions(album.id, pickerFilters);
     }
-    const albumOptions = buildAlbumTimelineOptions(
-      album.id,
-      album.order ?? authManager.preferences.albums.defaultAssetOrder,
-      albumFilters,
-    );
+    const albumOptions = buildAlbumTimelineOptions(album.id, browseOrder, albumFilters);
     return isBrowseTimeline ? { ...albumOptions, grouping: timelineGrouping } : albumOptions;
   });
 
@@ -490,6 +616,17 @@
     }
     void goto(nextUrl, { replaceState: true, keepFocus: true, noScroll: true });
   }
+
+  $effect(() => globalSearchManager.registerSearchablePageFilters(() => albumFilters));
+
+  const clearAlbumSearch = () => {
+    searchIsLoading = false;
+    const nextUrl = buildSearchablePageUrl(page.url, '', albumFilters.sortOrder, albumFilters);
+    if (!nextUrl) {
+      return;
+    }
+    void goto(nextUrl, { replaceState: true, keepFocus: true, noScroll: true });
+  };
 
   function clearAlbumTemporalFilter() {
     albumFilters = clearTimelineTemporalFilter(albumFilters);
@@ -591,15 +728,17 @@
                 />
               {/key}
             {:else}
-              {#key `album-${album.id}`}
+              <!-- Keyed on the search too: switching between browse and query mode swaps the whole
+                   suggestions provider, so the panel has to re-run it rather than keep browse facets. -->
+              {#key `album-${album.id}:${showSearchResults ? `search-${committedSearchQuery.trim()}:${$lang}` : 'browse'}`}
                 <FilterPanel
                   config={albumFilterConfig}
                   bind:filters={albumFilters}
                   bind:collapsed={filterCollapsed}
                   externalToggle
-                  {timeBuckets}
+                  timeBuckets={filterTimeBuckets}
                   storageKey="gallery-filter-visible-sections-album-detail"
-                  hidden={isTimelineEmpty}
+                  hidden={isTimelineEmpty && !showSearchResults}
                   onFiltersChange={syncAlbumFilterUrl}
                 />
               {/key}
@@ -626,7 +765,7 @@
               <ActiveFiltersBar
                 embedded
                 filters={albumFilters}
-                resultCount={totalAssetCount}
+                resultCount={showSearchResults ? searchTotal : totalAssetCount}
                 personNames={albumPersonNames}
                 tagNames={albumTagNames}
                 ownerNames={albumOwnerNames}
@@ -643,6 +782,8 @@
                   temporalAnchor = undefined;
                   syncAlbumFilterUrl(albumFilters);
                 }}
+                searchQuery={committedSearchQuery}
+                onClearSearch={clearAlbumSearch}
                 onAddAllToCollection={handleAddAllToCollection}
               />
             {/snippet}
@@ -650,19 +791,30 @@
               class="mb-2"
               grouping={timelineGrouping}
               onGroupingChange={handleTimelineGroupingChange}
-              showGrouping={isBrowseTimeline && !assetMultiSelectManager.selectionActive}
-              showFilters={getActiveFilterCount(albumFilters) > 0}
+              showGrouping={isBrowseTimeline && !showSearchResults && !assetMultiSelectManager.selectionActive}
+              showFilters={getActiveFilterCount(albumFilters) > 0 || showSearchResults}
               filters={albumFiltersBar}
               showFilterButton={filterCollapsed &&
                 isBrowseTimeline &&
                 !assetMultiSelectManager.selectionActive &&
-                !isTimelineEmpty}
+                (!isTimelineEmpty || showSearchResults)}
               filterActive={getActiveFilterCount(albumFilters) > 0}
               onExpandFilters={() => (filterCollapsed = false)}
             />
           {/if}
 
-          {#if showFilteredEmptyState}
+          {#if showSearchResults && viewMode !== AlbumPageViewMode.SELECT_ASSETS}
+            <SmartSearchResults
+              searchQuery={committedSearchQuery}
+              bind:isLoading={searchIsLoading}
+              bind:results={searchResults}
+              filters={albumFilters}
+              albumIds={searchAlbumIds}
+              language={$lang}
+              {isShared}
+              total={searchTotal}
+            />
+          {:else if showFilteredEmptyState}
             <div class="flex flex-1 flex-col items-center justify-center gap-2" data-testid="empty-state-message">
               <p class="text-sm text-(--fg-muted)">
                 {viewMode === AlbumPageViewMode.SELECT_ASSETS

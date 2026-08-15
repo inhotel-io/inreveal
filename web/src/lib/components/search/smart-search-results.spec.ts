@@ -243,6 +243,21 @@ describe('SmartSearchResults', () => {
     );
   });
 
+  it('forwards the route album scope to buildSmartSearchParams', async () => {
+    render(SmartSearchResults, { props: { ...baseProps, albumIds: ['album-1'] } });
+    await vi.advanceTimersByTimeAsync(SEARCH_FILTER_DEBOUNCE_MS);
+    expect(searchSmartMock).toHaveBeenCalledWith(
+      expect.objectContaining({ smartSearchDto: expect.objectContaining({ albumIds: ['album-1'] }) }),
+    );
+  });
+
+  it('omits albumIds entirely when no album scope is given', async () => {
+    render(SmartSearchResults, { props: baseProps });
+    await vi.advanceTimersByTimeAsync(SEARCH_FILTER_DEBOUNCE_MS);
+    const dto = searchSmartMock.mock.calls[0][0].smartSearchDto as Record<string, unknown>;
+    expect(dto).not.toHaveProperty('albumIds');
+  });
+
   it('forwards route-provided exact total to the result grid', async () => {
     searchSmartMock.mockResolvedValueOnce({
       assets: {

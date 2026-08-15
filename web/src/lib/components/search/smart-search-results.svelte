@@ -9,6 +9,11 @@
     searchQuery: string;
     filters: FilterState;
     spaceId?: string;
+    /**
+     * Album scope imposed by the host route — how an album detail page narrows a page-aware search
+     * to the album it is showing. Unioned with any `filters.albumId`; see `buildSmartSearchParams`.
+     */
+    albumIds?: string[];
     /** Shared-space surface + the caller's write capability on it — see `Timeline` (#889). */
     space?: { id: string; canWrite: boolean };
     withSharedSpaces?: boolean;
@@ -32,6 +37,7 @@
     searchQuery,
     filters,
     spaceId,
+    albumIds,
     space,
     withSharedSpaces,
     language,
@@ -60,7 +66,7 @@
     try {
       const { assets } = await searchSmart({
         smartSearchDto: {
-          ...buildSmartSearchParams({ query, filters, spaceId, withSharedSpaces, language }),
+          ...buildSmartSearchParams({ query, filters, spaceId, albumIds, withSharedSpaces, language }),
           page,
           size: 100,
         },
@@ -108,6 +114,9 @@
     const _ = [
       searchQuery,
       reloadToken,
+      // Navigating straight from one album to a sibling keeps this component mounted and only swaps
+      // the scope, so it has to re-search like any other narrowing change.
+      albumIds,
       filters.personIds,
       filters.city,
       filters.country,

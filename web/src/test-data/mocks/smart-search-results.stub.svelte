@@ -7,6 +7,7 @@
     filters?: FilterState;
     withSharedSpaces?: boolean;
     spaceId?: string;
+    albumIds?: string[];
     language?: string;
     total?: number;
     [key: string]: unknown;
@@ -18,6 +19,7 @@
     filters,
     withSharedSpaces,
     spaceId,
+    albumIds,
     language = '',
     total,
     ...rest
@@ -46,6 +48,7 @@
   data-filter-model={filters?.model ?? ''}
   data-with-shared-spaces={String(withSharedSpaces)}
   data-space-id={spaceId ?? ''}
+  data-album-ids={albumIds?.join(',') ?? ''}
   data-country={filters?.country ?? ''}
   data-language={language}
   data-total={total ?? ''}

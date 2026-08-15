@@ -1,4 +1,4 @@
-import { AlbumUserRole } from '@immich/sdk';
+import { AlbumUserRole, AssetOrder } from '@immich/sdk';
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -39,6 +39,11 @@ vi.mock('$app/state', async () => {
 vi.mock('$lib/components/timeline/Timeline.svelte', async () => {
   const { default: MockTimeline } = await import('./mock-timeline.test-wrapper.svelte');
   return { default: MockTimeline };
+});
+
+vi.mock('$lib/components/search/smart-search-results.svelte', async () => {
+  const { default: MockComponent } = await import('@test-data/mocks/smart-search-results.stub.svelte');
+  return { default: MockComponent };
 });
 
 vi.mock('$lib/managers/command-context-manager.svelte', () => ({
@@ -727,6 +732,108 @@ describe('album detail filter panel route', () => {
           expect.anything(),
         ),
       );
+    });
+  });
+
+  // #986: an album is a searchable page, so a query launched from one runs against that album
+  // instead of bouncing the user to /photos and searching their whole library.
+  describe('page-aware search', () => {
+    const album1 = () => albumFactory.build({ id: 'album-1', assetCount: 2 });
+
+    it('runs the search in place instead of showing the browse timeline', async () => {
+      mockPage.url = new URL('https://gallery.test/albums/album-1?q=beach');
+
+      renderPage(album1());
+
+      await waitFor(() =>
+        expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-search-query', 'beach'),
+      );
+      expect(screen.queryByTestId('timeline-options')).not.toBeInTheDocument();
+    });
+
+    it('scopes the search to the album it was launched from', async () => {
+      mockPage.url = new URL('https://gallery.test/albums/album-1?q=beach');
+
+      renderPage(album1());
+
+      await waitFor(() =>
+        expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-album-ids', 'album-1'),
+      );
+    });
+
+    it('shows the browse timeline when there is no query', async () => {
+      renderPage(album1());
+
+      await waitFor(() => expect(screen.getByTestId('timeline-options')).toBeInTheDocument());
+      expect(screen.queryByTestId('smart-search-results')).not.toBeInTheDocument();
+    });
+
+    it('hydrates filters from the URL into the search', async () => {
+      mockPage.url = new URL('https://gallery.test/albums/album-1?q=beach&make=Apple');
+
+      renderPage(album1());
+
+      await waitFor(() =>
+        expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-filter-make', 'Apple'),
+      );
+    });
+
+    it('keeps the query in the URL when a filter changes during a search', async () => {
+      mockPage.url = new URL('https://gallery.test/albums/album-1?q=beach');
+      // In query mode the panel's options come from the SEARCH facets, not the album's suggestion
+      // endpoint — so this is what puts a person row on screen to click.
+      sdkMock.searchSmartFacets.mockResolvedValue({
+        total: 3,
+        timeBuckets: [],
+        countries: [],
+        cities: [],
+        cameraMakes: [],
+        cameraModels: [],
+        tags: [],
+        people: [{ id: 'person-view', name: 'Search Person' }],
+        ratings: [],
+        mediaTypes: [],
+        hasUnnamedPeople: false,
+      } as never);
+      renderPage(album1());
+      const user = userEvent.setup();
+
+      await waitFor(() => expect(screen.getByTestId('people-item-person-view')).toBeInTheDocument());
+      await user.click(screen.getByTestId('people-item-person-view'));
+
+      await waitFor(() => {
+        const [target] = gotoMock.mock.calls.at(-1) as [string];
+        expect(target).toContain('q=beach');
+        expect(target).toContain('people=person-view');
+      });
+    });
+
+    it('re-hydrates when the URL changes under it (back/forward, shared link)', async () => {
+      renderPage(album1());
+
+      await waitFor(() => expect(screen.getByTestId('timeline-options')).toBeInTheDocument());
+
+      mockPage.url = new URL('https://gallery.test/albums/album-1?q=sunset');
+
+      await waitFor(() =>
+        expect(screen.getByTestId('smart-search-results')).toHaveAttribute('data-search-query', 'sunset'),
+      );
+    });
+
+    // The navbar sort dropdown renders on every searchable page, browse mode included, so an
+    // explicit ?sort= has to reach the browse query or the control visibly does nothing.
+    it('lets an explicit sort override the album order in browse mode', async () => {
+      mockPage.url = new URL('https://gallery.test/albums/album-1?sort=asc');
+
+      renderPage(albumFactory.build({ id: 'album-1', assetCount: 2, order: AssetOrder.Desc }));
+
+      await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"order":"asc"'));
+    });
+
+    it("keeps the album's own order in browse mode when the URL carries no sort", async () => {
+      renderPage(albumFactory.build({ id: 'album-1', assetCount: 2, order: AssetOrder.Asc }));
+
+      await waitFor(() => expect(screen.getByTestId('timeline-options').textContent).toContain('"order":"asc"'));
     });
   });
 });
