@@ -37,7 +37,7 @@ class GameChallengeListItemResponseDto {
   DateTime createdAt;
 
   /// The UTC date this is the space's daily challenge for, or null for a player-created one
-  String? dailyOn;
+  DateTime? dailyOn;
 
   /// Challenge ID
   String id;
@@ -111,7 +111,7 @@ class GameChallengeListItemResponseDto {
         ? this.createdAt.millisecondsSinceEpoch
         : this.createdAt.toUtc().toIso8601String();
     if (this.dailyOn != null) {
-      json[r'dailyOn'] = this.dailyOn;
+      json[r'dailyOn'] = _dateFormatter.format(this.dailyOn!);
     } else {
       json[r'dailyOn'] = null;
     }
@@ -138,7 +138,7 @@ class GameChallengeListItemResponseDto {
         answered: num.parse('${json[r'answered']}'),
         closedAt: mapDateTime(json, r'closedAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/'),
         createdAt: mapDateTime(json, r'createdAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/')!,
-        dailyOn: mapValueOfType<String>(json, r'dailyOn'),
+        dailyOn: mapDateTime(json, r'dailyOn', r''),
         id: mapValueOfType<String>(json, r'id')!,
         locationRoundCount: num.parse('${json[r'locationRoundCount']}'),
         name: mapValueOfType<String>(json, r'name')!,
