@@ -426,6 +426,64 @@ class GamesApi {
     return null;
   }
 
+  /// Get the space's monthly standings
+  ///
+  /// Per-player totals across this UTC calendar month's daily challenges. Custom challenges never contribute. Membership-gated, like the daily.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] spaceId (required):
+  Future<Response> getStandingsWithHttpInfo(String spaceId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{spaceId}/games/standings'
+      .replaceAll('{spaceId}', spaceId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get the space's monthly standings
+  ///
+  /// Per-player totals across this UTC calendar month's daily challenges. Custom challenges never contribute. Membership-gated, like the daily.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] spaceId (required):
+  Future<GameStandingsResponseDto?> getStandings(String spaceId, { Future<void>? abortTrigger, }) async {
+    final response = await getStandingsWithHttpInfo(spaceId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'GameStandingsResponseDto',) as GameStandingsResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Submit a round guess
   ///
   /// Submit a guess for one round of a challenge and receive the score and the answer.

@@ -513,6 +513,10 @@ class ApiClient {
           return GameRoundDetailResponseDtoAnswer.fromJson(value);
         case 'GameRoundType':
           return GameRoundTypeTypeTransformer().decode(value);
+        case 'GameStandingsResponseDto':
+          return GameStandingsResponseDto.fromJson(value);
+        case 'GameStandingsResponseDtoEntriesInner':
+          return GameStandingsResponseDtoEntriesInner.fromJson(value);
         case 'HlsVideoResolution':
           return HlsVideoResolutionTypeTransformer().decode(value);
         case 'ImageFormat':

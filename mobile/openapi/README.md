@@ -199,6 +199,7 @@ Class | Method | HTTP request | Description
 *GamesApi* | [**getDailyChallenge**](doc//GamesApi.md#getdailychallenge) | **GET** /shared-spaces/{spaceId}/games/daily | Get the space's daily challenge
 *GamesApi* | [**getLeaderboard**](doc//GamesApi.md#getleaderboard) | **GET** /games/{id}/leaderboard | Get a challenge leaderboard
 *GamesApi* | [**getRoundImage**](doc//GamesApi.md#getroundimage) | **GET** /games/{id}/rounds/{index}/image | Get a round image
+*GamesApi* | [**getStandings**](doc//GamesApi.md#getstandings) | **GET** /shared-spaces/{spaceId}/games/standings | Get the space's monthly standings
 *GamesApi* | [**guessRound**](doc//GamesApi.md#guessround) | **POST** /games/{id}/rounds/{index}/guess | Submit a round guess
 *JobsApi* | [**createJob**](doc//JobsApi.md#createjob) | **POST** /jobs | Create a manual job
 *JobsApi* | [**getQueuesLegacy**](doc//JobsApi.md#getqueueslegacy) | **GET** /jobs | Retrieve queue counts and status
@@ -615,6 +616,8 @@ Class | Method | HTTP request | Description
  - [GameRoundDetailResponseDto](doc//GameRoundDetailResponseDto.md)
  - [GameRoundDetailResponseDtoAnswer](doc//GameRoundDetailResponseDtoAnswer.md)
  - [GameRoundType](doc//GameRoundType.md)
+ - [GameStandingsResponseDto](doc//GameStandingsResponseDto.md)
+ - [GameStandingsResponseDtoEntriesInner](doc//GameStandingsResponseDtoEntriesInner.md)
  - [HlsVideoResolution](doc//HlsVideoResolution.md)
  - [ImageFormat](doc//ImageFormat.md)
  - [IntegrityReport](doc//IntegrityReport.md)

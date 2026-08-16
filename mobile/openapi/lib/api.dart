@@ -240,6 +240,8 @@ part 'model/game_leaderboard_response_dto_entries_inner.dart';
 part 'model/game_round_detail_response_dto.dart';
 part 'model/game_round_detail_response_dto_answer.dart';
 part 'model/game_round_type.dart';
+part 'model/game_standings_response_dto.dart';
+part 'model/game_standings_response_dto_entries_inner.dart';
 part 'model/hls_video_resolution.dart';
 part 'model/image_format.dart';
 part 'model/integrity_report.dart';
