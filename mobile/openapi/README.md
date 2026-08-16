@@ -196,6 +196,7 @@ Class | Method | HTTP request | Description
 *GamesApi* | [**deleteChallenge**](doc//GamesApi.md#deletechallenge) | **DELETE** /games/{id} | Delete a photo guessing challenge
 *GamesApi* | [**getChallenge**](doc//GamesApi.md#getchallenge) | **GET** /games/{id} | Get a photo guessing challenge
 *GamesApi* | [**getChallenges**](doc//GamesApi.md#getchallenges) | **GET** /shared-spaces/{spaceId}/games | List photo guessing challenges
+*GamesApi* | [**getDailyChallenge**](doc//GamesApi.md#getdailychallenge) | **GET** /shared-spaces/{spaceId}/games/daily | Get the space's daily challenge
 *GamesApi* | [**getLeaderboard**](doc//GamesApi.md#getleaderboard) | **GET** /games/{id}/leaderboard | Get a challenge leaderboard
 *GamesApi* | [**getRoundImage**](doc//GamesApi.md#getroundimage) | **GET** /games/{id}/rounds/{index}/image | Get a round image
 *GamesApi* | [**guessRound**](doc//GamesApi.md#guessround) | **POST** /games/{id}/rounds/{index}/guess | Submit a round guess
@@ -604,7 +605,9 @@ Class | Method | HTTP request | Description
  - [GameChallengeDetailResponseDto](doc//GameChallengeDetailResponseDto.md)
  - [GameChallengeListItemResponseDto](doc//GameChallengeListItemResponseDto.md)
  - [GameChallengeResponseDto](doc//GameChallengeResponseDto.md)
+ - [GameChallengeType](doc//GameChallengeType.md)
  - [GameCreateDto](doc//GameCreateDto.md)
+ - [GameDailyResponseDto](doc//GameDailyResponseDto.md)
  - [GameGuessDto](doc//GameGuessDto.md)
  - [GameGuessResponseDto](doc//GameGuessResponseDto.md)
  - [GameLeaderboardResponseDto](doc//GameLeaderboardResponseDto.md)

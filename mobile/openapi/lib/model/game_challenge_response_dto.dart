@@ -14,6 +14,7 @@ class GameChallengeResponseDto {
   /// Returns a new [GameChallengeResponseDto] instance.
   GameChallengeResponseDto({
     required this.createdAt,
+    required this.dailyOn,
     required this.id,
     required this.name,
     required this.roundCount,
@@ -24,6 +25,9 @@ class GameChallengeResponseDto {
 
   /// Creation date
   DateTime createdAt;
+
+  /// The UTC date this is the space's daily challenge for, or null for a player-created one
+  String? dailyOn;
 
   /// Challenge ID
   String id;
@@ -46,6 +50,7 @@ class GameChallengeResponseDto {
   @override
   bool operator ==(Object other) => identical(this, other) || other is GameChallengeResponseDto &&
     other.createdAt == createdAt &&
+    other.dailyOn == dailyOn &&
     other.id == id &&
     other.name == name &&
     other.roundCount == roundCount &&
@@ -57,6 +62,7 @@ class GameChallengeResponseDto {
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (createdAt.hashCode) +
+    (dailyOn == null ? 0 : dailyOn!.hashCode) +
     (id.hashCode) +
     (name.hashCode) +
     (roundCount.hashCode) +
@@ -65,13 +71,18 @@ class GameChallengeResponseDto {
     (spaceId.hashCode);
 
   @override
-  String toString() => 'GameChallengeResponseDto[createdAt=$createdAt, id=$id, name=$name, roundCount=$roundCount, scaleDays=$scaleDays, scaleKm=$scaleKm, spaceId=$spaceId]';
+  String toString() => 'GameChallengeResponseDto[createdAt=$createdAt, dailyOn=$dailyOn, id=$id, name=$name, roundCount=$roundCount, scaleDays=$scaleDays, scaleKm=$scaleKm, spaceId=$spaceId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'createdAt'] = _isEpochMarker(r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/')
         ? this.createdAt.millisecondsSinceEpoch
         : this.createdAt.toUtc().toIso8601String();
+    if (this.dailyOn != null) {
+      json[r'dailyOn'] = this.dailyOn;
+    } else {
+      json[r'dailyOn'] = null;
+    }
       json[r'id'] = this.id;
       json[r'name'] = this.name;
       json[r'roundCount'] = this.roundCount;
@@ -91,6 +102,7 @@ class GameChallengeResponseDto {
 
       return GameChallengeResponseDto(
         createdAt: mapDateTime(json, r'createdAt', r'/^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$/')!,
+        dailyOn: mapValueOfType<String>(json, r'dailyOn'),
         id: mapValueOfType<String>(json, r'id')!,
         name: mapValueOfType<String>(json, r'name')!,
         roundCount: num.parse('${json[r'roundCount']}'),
@@ -145,6 +157,7 @@ class GameChallengeResponseDto {
   /// The list of required keys that must be present in a JSON.
   static const requiredKeys = <String>{
     'createdAt',
+    'dailyOn',
     'id',
     'name',
     'roundCount',

@@ -15,6 +15,7 @@ class GameCreateDto {
   GameCreateDto({
     this.name = const Optional.absent(),
     this.roundCount = const Optional.present(5),
+    this.type = const Optional.absent(),
   });
 
   /// Challenge name
@@ -32,19 +33,29 @@ class GameCreateDto {
   /// Maximum value: 20
   Optional<int?> roundCount;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<GameChallengeType?> type;
+
   @override
   bool operator ==(Object other) => identical(this, other) || other is GameCreateDto &&
     other.name == name &&
-    other.roundCount == roundCount;
+    other.roundCount == roundCount &&
+    other.type == type;
 
   @override
   int get hashCode =>
     // ignore: unnecessary_parenthesis
     (name == null ? 0 : name!.hashCode) +
-    (roundCount.hashCode);
+    (roundCount.hashCode) +
+    (type == null ? 0 : type!.hashCode);
 
   @override
-  String toString() => 'GameCreateDto[name=$name, roundCount=$roundCount]';
+  String toString() => 'GameCreateDto[name=$name, roundCount=$roundCount, type=$type]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -55,6 +66,10 @@ class GameCreateDto {
     if (this.roundCount.isPresent) {
       final value = this.roundCount.value;
       json[r'roundCount'] = value;
+    }
+    if (this.type.isPresent) {
+      final value = this.type.value;
+      json[r'type'] = value;
     }
     return json;
   }
@@ -70,6 +85,7 @@ class GameCreateDto {
       return GameCreateDto(
         name: json.containsKey(r'name') ? Optional.present(mapValueOfType<String>(json, r'name')) : const Optional.absent(),
         roundCount: json.containsKey(r'roundCount') ? Optional.present(json[r'roundCount'] == null ? null : int.parse('${json[r'roundCount']}')) : const Optional.absent(),
+        type: json.containsKey(r'type') ? Optional.present(GameChallengeType.fromJson(json[r'type'])) : const Optional.absent(),
       );
     }
     return null;

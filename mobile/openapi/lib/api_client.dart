@@ -493,8 +493,12 @@ class ApiClient {
           return GameChallengeListItemResponseDto.fromJson(value);
         case 'GameChallengeResponseDto':
           return GameChallengeResponseDto.fromJson(value);
+        case 'GameChallengeType':
+          return GameChallengeTypeTypeTransformer().decode(value);
         case 'GameCreateDto':
           return GameCreateDto.fromJson(value);
+        case 'GameDailyResponseDto':
+          return GameDailyResponseDto.fromJson(value);
         case 'GameGuessDto':
           return GameGuessDto.fromJson(value);
         case 'GameGuessResponseDto':

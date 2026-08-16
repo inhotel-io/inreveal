@@ -247,6 +247,64 @@ class GamesApi {
     return null;
   }
 
+  /// Get the space's daily challenge
+  ///
+  /// Get today's daily challenge for a shared space, generating it on first read. Returns a null challenge when the space has no photos usable for one.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [String] spaceId (required):
+  Future<Response> getDailyChallengeWithHttpInfo(String spaceId, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/shared-spaces/{spaceId}/games/daily'
+      .replaceAll('{spaceId}', spaceId);
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get the space's daily challenge
+  ///
+  /// Get today's daily challenge for a shared space, generating it on first read. Returns a null challenge when the space has no photos usable for one.
+  ///
+  /// Parameters:
+  ///
+  /// * [String] spaceId (required):
+  Future<GameDailyResponseDto?> getDailyChallenge(String spaceId, { Future<void>? abortTrigger, }) async {
+    final response = await getDailyChallengeWithHttpInfo(spaceId, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'GameDailyResponseDto',) as GameDailyResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Get a challenge leaderboard
   ///
   /// Get per-player totals for a challenge.
