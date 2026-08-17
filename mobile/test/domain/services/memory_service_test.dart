@@ -58,5 +58,16 @@ void main() {
       expect(result.map((m) => m.id), ['own-memory']);
       verify(() => mockRepository.getAll('user-1')).called(1);
     });
+
+    // "No memories today" is a valid answer, not a failure. Falling back here would surface
+    // stale local memories the server has already decided not to show.
+    test('does not fall back when the server returns no memories', () async {
+      when(() => mockApiRepository.getMemoryLane()).thenAnswer((_) async => []);
+
+      final result = await sut.getMemoryLane('user-1');
+
+      expect(result, isEmpty);
+      verifyNever(() => mockRepository.getAll(any()));
+    });
   });
 }
