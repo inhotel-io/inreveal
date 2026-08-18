@@ -1288,6 +1288,53 @@ class GalleryTabShellRoute extends PageRouteInfo<void> {
 }
 
 /// generated route for
+/// [GamePlayPage]
+class GamePlayRoute extends PageRouteInfo<GamePlayRouteArgs> {
+  GamePlayRoute({
+    Key? key,
+    required String challengeId,
+    List<PageRouteInfo>? children,
+  }) : super(
+         GamePlayRoute.name,
+         args: GamePlayRouteArgs(key: key, challengeId: challengeId),
+         initialChildren: children,
+       );
+
+  static const String name = 'GamePlayRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      final args = data.argsAs<GamePlayRouteArgs>();
+      return GamePlayPage(key: args.key, challengeId: args.challengeId);
+    },
+  );
+}
+
+class GamePlayRouteArgs {
+  const GamePlayRouteArgs({this.key, required this.challengeId});
+
+  final Key? key;
+
+  final String challengeId;
+
+  @override
+  String toString() {
+    return 'GamePlayRouteArgs{key: $key, challengeId: $challengeId}';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! GamePlayRouteArgs) return false;
+    return key == other.key && challengeId == other.challengeId;
+  }
+
+  @override
+  int get hashCode => key.hashCode ^ challengeId.hashCode;
+}
+
+/// generated route for
 /// [HeaderSettingsPage]
 class HeaderSettingsRoute extends PageRouteInfo<void> {
   const HeaderSettingsRoute({List<PageRouteInfo>? children})
