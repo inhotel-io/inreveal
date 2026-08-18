@@ -2124,6 +2124,70 @@ class SpaceDetailRouteArgs {
 }
 
 /// generated route for
+/// [SpaceGamesPage]
+class SpaceGamesRoute extends PageRouteInfo<SpaceGamesRouteArgs> {
+  SpaceGamesRoute({
+    Key? key,
+    required String spaceId,
+    required bool canEdit,
+    List<PageRouteInfo>? children,
+  }) : super(
+         SpaceGamesRoute.name,
+         args: SpaceGamesRouteArgs(
+           key: key,
+           spaceId: spaceId,
+           canEdit: canEdit,
+         ),
+         initialChildren: children,
+       );
+
+  static const String name = 'SpaceGamesRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      final args = data.argsAs<SpaceGamesRouteArgs>();
+      return SpaceGamesPage(
+        key: args.key,
+        spaceId: args.spaceId,
+        canEdit: args.canEdit,
+      );
+    },
+  );
+}
+
+class SpaceGamesRouteArgs {
+  const SpaceGamesRouteArgs({
+    this.key,
+    required this.spaceId,
+    required this.canEdit,
+  });
+
+  final Key? key;
+
+  final String spaceId;
+
+  final bool canEdit;
+
+  @override
+  String toString() {
+    return 'SpaceGamesRouteArgs{key: $key, spaceId: $spaceId, canEdit: $canEdit}';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! SpaceGamesRouteArgs) return false;
+    return key == other.key &&
+        spaceId == other.spaceId &&
+        canEdit == other.canEdit;
+  }
+
+  @override
+  int get hashCode => key.hashCode ^ spaceId.hashCode ^ canEdit.hashCode;
+}
+
+/// generated route for
 /// [SpaceLinkAlbumPage]
 class SpaceLinkAlbumRoute extends PageRouteInfo<SpaceLinkAlbumRouteArgs> {
   SpaceLinkAlbumRoute({
