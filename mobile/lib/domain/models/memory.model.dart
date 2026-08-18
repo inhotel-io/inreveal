@@ -62,7 +62,7 @@ class MemoryData {
 }
 
 // Model for a memory stored in the server
-// TODO(agg23): DriftMemoryRepository currently mutates `assets`
+// TODO(agg23): MemoryRepository currently mutates `assets`
 @Freezed(makeCollectionsUnmodifiable: false)
 abstract class DriftMemory with _$DriftMemory {
   const factory DriftMemory({
