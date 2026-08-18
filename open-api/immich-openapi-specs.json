@@ -33257,10 +33257,7 @@
       "SharedSpaceMemberMetadataContributionDto": {
         "properties": {
           "sharePersonMetadata": {
-            "description": "Disable person metadata contribution for this member",
-            "enum": [
-              false
-            ],
+            "description": "Disable person metadata contribution for this member; only false is accepted",
             "type": "boolean"
           }
         },
