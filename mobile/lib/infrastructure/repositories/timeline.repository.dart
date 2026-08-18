@@ -1418,7 +1418,9 @@ List<Bucket> _generateBuckets(int count) => count == 0 ? const [] : [Bucket(asse
 
 // Date-less segments (flat) for `none`; dated TimeBuckets in `descending` order otherwise.
 List<Bucket> _buildBuckets(List<BaseAsset> assets, GroupAssetsBy groupBy, bool descending) {
-  if (groupBy == GroupAssetsBy.none) return _generateBuckets(assets.length);
+  if (groupBy == GroupAssetsBy.none) {
+    return _generateBuckets(assets.length);
+  }
   final counts = <DateTime, int>{}; // LinkedHashMap: insertion order follows the pre-ordered list
   for (final asset in _orderedForGrouping(assets, groupBy, descending)) {
     final key = _localBucketDate(asset.createdAt, groupBy);
@@ -1428,7 +1430,9 @@ List<Bucket> _buildBuckets(List<BaseAsset> assets, GroupAssetsBy groupBy, bool d
 }
 
 List<BaseAsset> _orderedForGrouping(List<BaseAsset> assets, GroupAssetsBy groupBy, bool descending) {
-  if (groupBy == GroupAssetsBy.none) return assets;
+  if (groupBy == GroupAssetsBy.none) {
+    return assets;
+  }
   // Tie-break on heroTag so assets sharing an identical createdAt keep a stable order,
   // keeping the overview representative (first asset per bucket) deterministic across rebuilds.
   final sorted = [...assets]
@@ -1663,7 +1667,9 @@ BaseAsset _scopedMainAssetFromRow(QueryRow row) {
 }
 
 Expression<bool> _remoteWithinTemporalScope($RemoteAssetEntityTable row, TimelineTemporalScope scope) {
-  if (scope.isEmpty) return const Constant(true);
+  if (scope.isEmpty) {
+    return const Constant(true);
+  }
   final start = _scopeDateFormat.format(scope.start!);
   final end = _scopeDateFormat.format(scope.end!);
   final dateExp = row.effectiveCreatedAt(GroupAssetsBy.day);
@@ -1671,7 +1677,9 @@ Expression<bool> _remoteWithinTemporalScope($RemoteAssetEntityTable row, Timelin
 }
 
 Expression<bool> _localWithinTemporalScope($LocalAssetEntityTable row, TimelineTemporalScope scope) {
-  if (scope.isEmpty) return const Constant(true);
+  if (scope.isEmpty) {
+    return const Constant(true);
+  }
   final start = _scopeDateFormat.format(scope.start!);
   final end = _scopeDateFormat.format(scope.end!);
   final dateExp = row.createdAt.dateFmt(GroupAssetsBy.day, toLocal: true);
