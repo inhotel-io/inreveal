@@ -66,11 +66,20 @@ export function spaceVisibilityGate(
  * `{ memberUserId }` additionally accepts an optional `memberRole` — when set, the membership
  * join also requires `shared_space_member.role IN (memberRole)` (e.g. restricting to Owner/Editor
  * for a write-capable scope). Omitting it preserves the original any-role membership check.
+ *
+ * It also accepts an optional `memberShowInTimeline` — when true, the membership join additionally
+ * requires `shared_space_member.showInTimeline = true`: the member has not hidden that space from
+ * their own timeline. This is the PER-MEMBER flag, independent of `requireShowInTimeline` below
+ * (which is the per-LINK `shared_space_album.showInTimeline`); a surface that wants "spaces this
+ * user actually wants to see" needs both. It defaults to false so every pre-existing caller keeps
+ * the behaviour it was written with — the surfaces that already honour the flag resolve the
+ * timeline-enabled space ids themselves and pass `{ spaceIds }`, so only a caller scoping purely
+ * by membership has to decide, and it has to decide deliberately.
  */
 export type SpaceScope =
   | { spaceId: string }
   | { spaceIds: string[] }
-  | { memberUserId: string; memberRole?: SharedSpaceRole[] }
+  | { memberUserId: string; memberRole?: SharedSpaceRole[]; memberShowInTimeline?: boolean }
   | { spaceIdRef: ReferenceExpression<DB, keyof DB> };
 
 export interface SpaceAlbumAssetOptions {
@@ -166,6 +175,9 @@ function linkedAlbumAssetExists(
           .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId))
           .$if(!!(scope as { memberRole?: SharedSpaceRole[] }).memberRole?.length, (qb2) =>
             qb2.where('shared_space_member.role', 'in', (scope as { memberRole: SharedSpaceRole[] }).memberRole),
+          )
+          .$if(!!(scope as { memberShowInTimeline?: boolean }).memberShowInTimeline, (qb2) =>
+            qb2.where('shared_space_member.showInTimeline', '=', true),
           ),
       )
       .select(eb.lit(1).as('exists'))
@@ -221,6 +233,9 @@ export function spaceContributedAssetExists(
           .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId))
           .$if(!!(scope as { memberRole?: SharedSpaceRole[] }).memberRole?.length, (qb2) =>
             qb2.where('shared_space_member.role', 'in', (scope as { memberRole: SharedSpaceRole[] }).memberRole),
+          )
+          .$if(!!(scope as { memberShowInTimeline?: boolean }).memberShowInTimeline, (qb2) =>
+            qb2.where('shared_space_member.showInTimeline', '=', true),
           ),
       )
       .select(eb.lit(1).as('exists'))
@@ -267,6 +282,9 @@ export function spaceDirectAssetExists(
           .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId))
           .$if(!!(scope as { memberRole?: SharedSpaceRole[] }).memberRole?.length, (qb2) =>
             qb2.where('shared_space_member.role', 'in', (scope as { memberRole: SharedSpaceRole[] }).memberRole),
+          )
+          .$if(!!(scope as { memberShowInTimeline?: boolean }).memberShowInTimeline, (qb2) =>
+            qb2.where('shared_space_member.showInTimeline', '=', true),
           ),
       )
       .select(eb.lit(1).as('exists'))
@@ -302,6 +320,9 @@ export function spaceLibraryAssetExists(
           .where('shared_space_member.userId', '=', asUuid((scope as { memberUserId: string }).memberUserId))
           .$if(!!(scope as { memberRole?: SharedSpaceRole[] }).memberRole?.length, (qb2) =>
             qb2.where('shared_space_member.role', 'in', (scope as { memberRole: SharedSpaceRole[] }).memberRole),
+          )
+          .$if(!!(scope as { memberShowInTimeline?: boolean }).memberShowInTimeline, (qb2) =>
+            qb2.where('shared_space_member.showInTimeline', '=', true),
           ),
       )
       .select(eb.lit(1).as('exists'))
@@ -347,9 +368,10 @@ export function spaceAssetPathBranches(
 /**
  * How a `spaceAssetIdUnion` is bound: to ONE space, or to every space a user belongs to. The
  * narrower cousin of `SpaceScope` - the union form has no correlated outer row to reference, so
- * the `spaceIdRef` and `spaceIds` cases have no meaning here.
+ * the `spaceIdRef` and `spaceIds` cases have no meaning here. `memberShowInTimeline` means the same
+ * thing it does there, and defaults the same way.
  */
-export type SpaceAssetUnionScope = { spaceId: string } | { memberUserId: string };
+export type SpaceAssetUnionScope = { spaceId: string } | { memberUserId: string; memberShowInTimeline?: boolean };
 
 /**
  * Every asset id reachable from one space - or from every space a user belongs to - as a UNION
@@ -387,6 +409,8 @@ export function spaceAssetIdUnion(
   const byMember = 'memberUserId' in scope;
   const spaceId = bySpaceId ? scope.spaceId : '';
   const memberUserId = byMember ? scope.memberUserId : '';
+  // Same per-member flag, same default, and the same reasoning as `SpaceScope` - see its doc.
+  const memberShowInTimeline = byMember && !!scope.memberShowInTimeline;
 
   return db
     .selectFrom('shared_space_asset')
@@ -395,7 +419,8 @@ export function spaceAssetIdUnion(
     .$if(byMember, (qb) =>
       qb
         .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_asset.spaceId')
-        .where('shared_space_member.userId', '=', asUuid(memberUserId)),
+        .where('shared_space_member.userId', '=', asUuid(memberUserId))
+        .$if(memberShowInTimeline, (qb2) => qb2.where('shared_space_member.showInTimeline', '=', true)),
     )
     .union(
       db
@@ -407,7 +432,8 @@ export function spaceAssetIdUnion(
         .$if(byMember, (qb) =>
           qb
             .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_library.spaceId')
-            .where('shared_space_member.userId', '=', asUuid(memberUserId)),
+            .where('shared_space_member.userId', '=', asUuid(memberUserId))
+            .$if(memberShowInTimeline, (qb2) => qb2.where('shared_space_member.showInTimeline', '=', true)),
         )
         .select('asset.id as assetId'),
     )
@@ -421,7 +447,8 @@ export function spaceAssetIdUnion(
         .$if(byMember, (qb) =>
           qb
             .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
-            .where('shared_space_member.userId', '=', asUuid(memberUserId)),
+            .where('shared_space_member.userId', '=', asUuid(memberUserId))
+            .$if(memberShowInTimeline, (qb2) => qb2.where('shared_space_member.showInTimeline', '=', true)),
         )
         .select('album_asset.assetId as assetId')
         .$if(bySpaceId, (qb) => qb.where('shared_space_album.spaceId', '=', asUuid(spaceId)))
@@ -441,7 +468,8 @@ export function spaceAssetIdUnion(
         .$if(byMember, (qb) =>
           qb
             .innerJoin('shared_space_member', 'shared_space_member.spaceId', 'shared_space_album.spaceId')
-            .where('shared_space_member.userId', '=', asUuid(memberUserId)),
+            .where('shared_space_member.userId', '=', asUuid(memberUserId))
+            .$if(memberShowInTimeline, (qb2) => qb2.where('shared_space_member.showInTimeline', '=', true)),
         )
         .select('album_space_asset.assetId as assetId')
         .$if(bySpaceId, (qb) => qb.where('shared_space_album.spaceId', '=', asUuid(spaceId)))
