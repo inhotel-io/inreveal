@@ -49,6 +49,11 @@ enum SettingsKey<T> {
   spacesSortMode<SpaceSortMode>(codec: EnumCodec(SpaceSortMode.values, fallback: SpaceSortMode.recentActivity)),
   spacesIsReverse<bool>(),
 
+  // Games
+  gameDailyReminderEnabled<bool>(),
+  gameDailyReminderMinuteOfDay<int>(),
+  gameDailyLastPlayed<String?>(),
+
   // Backup
   backupEnabled<bool>(),
   backupUseCellularForVideos<bool>(),
