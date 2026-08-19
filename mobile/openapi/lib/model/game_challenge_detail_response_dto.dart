@@ -18,6 +18,7 @@ class GameChallengeDetailResponseDto {
     required this.dailyOn,
     required this.id,
     required this.name,
+    required this.ownerId,
     required this.roundCount,
     this.rounds = const [],
     required this.scaleDays,
@@ -40,6 +41,9 @@ class GameChallengeDetailResponseDto {
   /// Challenge name
   String name;
 
+  /// Owning user ID, or null for a shared-space challenge
+  String? ownerId;
+
   /// Number of rounds actually generated (may be less than requested)
   num roundCount;
 
@@ -52,8 +56,8 @@ class GameChallengeDetailResponseDto {
   /// Frozen distance scale used to score location rounds
   num scaleKm;
 
-  /// Shared space ID
-  String spaceId;
+  /// Shared space ID, or null for a solo challenge
+  String? spaceId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is GameChallengeDetailResponseDto &&
@@ -62,6 +66,7 @@ class GameChallengeDetailResponseDto {
     other.dailyOn == dailyOn &&
     other.id == id &&
     other.name == name &&
+    other.ownerId == ownerId &&
     other.roundCount == roundCount &&
     _deepEquality.equals(other.rounds, rounds) &&
     other.scaleDays == scaleDays &&
@@ -76,14 +81,15 @@ class GameChallengeDetailResponseDto {
     (dailyOn == null ? 0 : dailyOn!.hashCode) +
     (id.hashCode) +
     (name.hashCode) +
+    (ownerId == null ? 0 : ownerId!.hashCode) +
     (roundCount.hashCode) +
     (rounds.hashCode) +
     (scaleDays.hashCode) +
     (scaleKm.hashCode) +
-    (spaceId.hashCode);
+    (spaceId == null ? 0 : spaceId!.hashCode);
 
   @override
-  String toString() => 'GameChallengeDetailResponseDto[closedAt=$closedAt, createdAt=$createdAt, dailyOn=$dailyOn, id=$id, name=$name, roundCount=$roundCount, rounds=$rounds, scaleDays=$scaleDays, scaleKm=$scaleKm, spaceId=$spaceId]';
+  String toString() => 'GameChallengeDetailResponseDto[closedAt=$closedAt, createdAt=$createdAt, dailyOn=$dailyOn, id=$id, name=$name, ownerId=$ownerId, roundCount=$roundCount, rounds=$rounds, scaleDays=$scaleDays, scaleKm=$scaleKm, spaceId=$spaceId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -104,11 +110,20 @@ class GameChallengeDetailResponseDto {
     }
       json[r'id'] = this.id;
       json[r'name'] = this.name;
+    if (this.ownerId != null) {
+      json[r'ownerId'] = this.ownerId;
+    } else {
+      json[r'ownerId'] = null;
+    }
       json[r'roundCount'] = this.roundCount;
       json[r'rounds'] = this.rounds;
       json[r'scaleDays'] = this.scaleDays;
       json[r'scaleKm'] = this.scaleKm;
+    if (this.spaceId != null) {
       json[r'spaceId'] = this.spaceId;
+    } else {
+      json[r'spaceId'] = null;
+    }
     return json;
   }
 
@@ -126,11 +141,12 @@ class GameChallengeDetailResponseDto {
         dailyOn: mapDateTime(json, r'dailyOn', r''),
         id: mapValueOfType<String>(json, r'id')!,
         name: mapValueOfType<String>(json, r'name')!,
+        ownerId: mapValueOfType<String>(json, r'ownerId'),
         roundCount: num.parse('${json[r'roundCount']}'),
         rounds: GameRoundDetailResponseDto.listFromJson(json[r'rounds']),
         scaleDays: num.parse('${json[r'scaleDays']}'),
         scaleKm: num.parse('${json[r'scaleKm']}'),
-        spaceId: mapValueOfType<String>(json, r'spaceId')!,
+        spaceId: mapValueOfType<String>(json, r'spaceId'),
       );
     }
     return null;
@@ -183,6 +199,7 @@ class GameChallengeDetailResponseDto {
     'dailyOn',
     'id',
     'name',
+    'ownerId',
     'roundCount',
     'rounds',
     'scaleDays',

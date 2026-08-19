@@ -20,6 +20,7 @@ class GameChallengeListItemResponseDto {
     required this.id,
     required this.locationRoundCount,
     required this.name,
+    required this.ownerId,
     required this.roundCount,
     required this.scaleDays,
     required this.scaleKm,
@@ -48,6 +49,9 @@ class GameChallengeListItemResponseDto {
   /// Challenge name
   String name;
 
+  /// Owning user ID, or null for a shared-space challenge
+  String? ownerId;
+
   /// Number of rounds actually generated (may be less than requested)
   num roundCount;
 
@@ -57,8 +61,8 @@ class GameChallengeListItemResponseDto {
   /// Frozen distance scale used to score location rounds
   num scaleKm;
 
-  /// Shared space ID
-  String spaceId;
+  /// Shared space ID, or null for a solo challenge
+  String? spaceId;
 
   /// The caller's total score across answered rounds
   num total;
@@ -72,6 +76,7 @@ class GameChallengeListItemResponseDto {
     other.id == id &&
     other.locationRoundCount == locationRoundCount &&
     other.name == name &&
+    other.ownerId == ownerId &&
     other.roundCount == roundCount &&
     other.scaleDays == scaleDays &&
     other.scaleKm == scaleKm &&
@@ -88,14 +93,15 @@ class GameChallengeListItemResponseDto {
     (id.hashCode) +
     (locationRoundCount.hashCode) +
     (name.hashCode) +
+    (ownerId == null ? 0 : ownerId!.hashCode) +
     (roundCount.hashCode) +
     (scaleDays.hashCode) +
     (scaleKm.hashCode) +
-    (spaceId.hashCode) +
+    (spaceId == null ? 0 : spaceId!.hashCode) +
     (total.hashCode);
 
   @override
-  String toString() => 'GameChallengeListItemResponseDto[answered=$answered, closedAt=$closedAt, createdAt=$createdAt, dailyOn=$dailyOn, id=$id, locationRoundCount=$locationRoundCount, name=$name, roundCount=$roundCount, scaleDays=$scaleDays, scaleKm=$scaleKm, spaceId=$spaceId, total=$total]';
+  String toString() => 'GameChallengeListItemResponseDto[answered=$answered, closedAt=$closedAt, createdAt=$createdAt, dailyOn=$dailyOn, id=$id, locationRoundCount=$locationRoundCount, name=$name, ownerId=$ownerId, roundCount=$roundCount, scaleDays=$scaleDays, scaleKm=$scaleKm, spaceId=$spaceId, total=$total]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -118,10 +124,19 @@ class GameChallengeListItemResponseDto {
       json[r'id'] = this.id;
       json[r'locationRoundCount'] = this.locationRoundCount;
       json[r'name'] = this.name;
+    if (this.ownerId != null) {
+      json[r'ownerId'] = this.ownerId;
+    } else {
+      json[r'ownerId'] = null;
+    }
       json[r'roundCount'] = this.roundCount;
       json[r'scaleDays'] = this.scaleDays;
       json[r'scaleKm'] = this.scaleKm;
+    if (this.spaceId != null) {
       json[r'spaceId'] = this.spaceId;
+    } else {
+      json[r'spaceId'] = null;
+    }
       json[r'total'] = this.total;
     return json;
   }
@@ -142,10 +157,11 @@ class GameChallengeListItemResponseDto {
         id: mapValueOfType<String>(json, r'id')!,
         locationRoundCount: num.parse('${json[r'locationRoundCount']}'),
         name: mapValueOfType<String>(json, r'name')!,
+        ownerId: mapValueOfType<String>(json, r'ownerId'),
         roundCount: num.parse('${json[r'roundCount']}'),
         scaleDays: num.parse('${json[r'scaleDays']}'),
         scaleKm: num.parse('${json[r'scaleKm']}'),
-        spaceId: mapValueOfType<String>(json, r'spaceId')!,
+        spaceId: mapValueOfType<String>(json, r'spaceId'),
         total: num.parse('${json[r'total']}'),
       );
     }
@@ -201,6 +217,7 @@ class GameChallengeListItemResponseDto {
     'id',
     'locationRoundCount',
     'name',
+    'ownerId',
     'roundCount',
     'scaleDays',
     'scaleKm',

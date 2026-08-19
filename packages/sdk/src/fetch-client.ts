@@ -1529,6 +1529,8 @@ export type GameChallengeDetailResponseDto = {
     id: string;
     /** Challenge name */
     name: string;
+    /** Owning user ID, or null for a shared-space challenge */
+    ownerId: string | null;
     /** Number of rounds actually generated (may be less than requested) */
     roundCount: number;
     /** Rounds, with answers withheld until guessed */
@@ -1537,8 +1539,8 @@ export type GameChallengeDetailResponseDto = {
     scaleDays: number;
     /** Frozen distance scale used to score location rounds */
     scaleKm: number;
-    /** Shared space ID */
-    spaceId: string;
+    /** Shared space ID, or null for a solo challenge */
+    spaceId: string | null;
 };
 export type GameLeaderboardResponseDto = {
     /** Per-player totals, highest first */
@@ -3214,14 +3216,16 @@ export type GameChallengeListItemResponseDto = {
     locationRoundCount: number;
     /** Challenge name */
     name: string;
+    /** Owning user ID, or null for a shared-space challenge */
+    ownerId: string | null;
     /** Number of rounds actually generated (may be less than requested) */
     roundCount: number;
     /** Frozen day scale used to score date rounds */
     scaleDays: number;
     /** Frozen distance scale used to score location rounds */
     scaleKm: number;
-    /** Shared space ID */
-    spaceId: string;
+    /** Shared space ID, or null for a solo challenge */
+    spaceId: string | null;
     /** The caller's total score across answered rounds */
     total: number;
 };
@@ -3242,14 +3246,16 @@ export type GameChallengeResponseDto = {
     id: string;
     /** Challenge name */
     name: string;
+    /** Owning user ID, or null for a shared-space challenge */
+    ownerId: string | null;
     /** Number of rounds actually generated (may be less than requested) */
     roundCount: number;
     /** Frozen day scale used to score date rounds */
     scaleDays: number;
     /** Frozen distance scale used to score location rounds */
     scaleKm: number;
-    /** Shared space ID */
-    spaceId: string;
+    /** Shared space ID, or null for a solo challenge */
+    spaceId: string | null;
 };
 export type GameDailyResponseDto = {
     /** Today's daily, if one could be generated */

@@ -17,6 +17,7 @@ class GameChallengeResponseDto {
     required this.dailyOn,
     required this.id,
     required this.name,
+    required this.ownerId,
     required this.roundCount,
     required this.scaleDays,
     required this.scaleKm,
@@ -35,6 +36,9 @@ class GameChallengeResponseDto {
   /// Challenge name
   String name;
 
+  /// Owning user ID, or null for a shared-space challenge
+  String? ownerId;
+
   /// Number of rounds actually generated (may be less than requested)
   num roundCount;
 
@@ -44,8 +48,8 @@ class GameChallengeResponseDto {
   /// Frozen distance scale used to score location rounds
   num scaleKm;
 
-  /// Shared space ID
-  String spaceId;
+  /// Shared space ID, or null for a solo challenge
+  String? spaceId;
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is GameChallengeResponseDto &&
@@ -53,6 +57,7 @@ class GameChallengeResponseDto {
     other.dailyOn == dailyOn &&
     other.id == id &&
     other.name == name &&
+    other.ownerId == ownerId &&
     other.roundCount == roundCount &&
     other.scaleDays == scaleDays &&
     other.scaleKm == scaleKm &&
@@ -65,13 +70,14 @@ class GameChallengeResponseDto {
     (dailyOn == null ? 0 : dailyOn!.hashCode) +
     (id.hashCode) +
     (name.hashCode) +
+    (ownerId == null ? 0 : ownerId!.hashCode) +
     (roundCount.hashCode) +
     (scaleDays.hashCode) +
     (scaleKm.hashCode) +
-    (spaceId.hashCode);
+    (spaceId == null ? 0 : spaceId!.hashCode);
 
   @override
-  String toString() => 'GameChallengeResponseDto[createdAt=$createdAt, dailyOn=$dailyOn, id=$id, name=$name, roundCount=$roundCount, scaleDays=$scaleDays, scaleKm=$scaleKm, spaceId=$spaceId]';
+  String toString() => 'GameChallengeResponseDto[createdAt=$createdAt, dailyOn=$dailyOn, id=$id, name=$name, ownerId=$ownerId, roundCount=$roundCount, scaleDays=$scaleDays, scaleKm=$scaleKm, spaceId=$spaceId]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -85,10 +91,19 @@ class GameChallengeResponseDto {
     }
       json[r'id'] = this.id;
       json[r'name'] = this.name;
+    if (this.ownerId != null) {
+      json[r'ownerId'] = this.ownerId;
+    } else {
+      json[r'ownerId'] = null;
+    }
       json[r'roundCount'] = this.roundCount;
       json[r'scaleDays'] = this.scaleDays;
       json[r'scaleKm'] = this.scaleKm;
+    if (this.spaceId != null) {
       json[r'spaceId'] = this.spaceId;
+    } else {
+      json[r'spaceId'] = null;
+    }
     return json;
   }
 
@@ -105,10 +120,11 @@ class GameChallengeResponseDto {
         dailyOn: mapDateTime(json, r'dailyOn', r''),
         id: mapValueOfType<String>(json, r'id')!,
         name: mapValueOfType<String>(json, r'name')!,
+        ownerId: mapValueOfType<String>(json, r'ownerId'),
         roundCount: num.parse('${json[r'roundCount']}'),
         scaleDays: num.parse('${json[r'scaleDays']}'),
         scaleKm: num.parse('${json[r'scaleKm']}'),
-        spaceId: mapValueOfType<String>(json, r'spaceId')!,
+        spaceId: mapValueOfType<String>(json, r'spaceId'),
       );
     }
     return null;
@@ -160,6 +176,7 @@ class GameChallengeResponseDto {
     'dailyOn',
     'id',
     'name',
+    'ownerId',
     'roundCount',
     'scaleDays',
     'scaleKm',
