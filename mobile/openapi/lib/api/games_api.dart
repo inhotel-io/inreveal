@@ -78,6 +78,63 @@ class GamesApi {
     return null;
   }
 
+  /// Start a solo photo guessing challenge
+  ///
+  /// Generate and freeze a new challenge from the caller's own photos, plus whichever of partner and shared-space photos they have asked for.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [GameSoloCreateDto] gameSoloCreateDto (required):
+  Future<Response> createSoloChallengeWithHttpInfo(GameSoloCreateDto gameSoloCreateDto, { Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/games/solo';
+
+    // ignore: prefer_final_locals
+    Object? postBody = gameSoloCreateDto;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>['application/json'];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'POST',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Start a solo photo guessing challenge
+  ///
+  /// Generate and freeze a new challenge from the caller's own photos, plus whichever of partner and shared-space photos they have asked for.
+  ///
+  /// Parameters:
+  ///
+  /// * [GameSoloCreateDto] gameSoloCreateDto (required):
+  Future<GameChallengeResponseDto?> createSoloChallenge(GameSoloCreateDto gameSoloCreateDto, { Future<void>? abortTrigger, }) async {
+    final response = await createSoloChallengeWithHttpInfo(gameSoloCreateDto, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'GameChallengeResponseDto',) as GameChallengeResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Delete a photo guessing challenge
   ///
   /// Permanently delete a challenge, cascading its rounds and guesses.
@@ -421,6 +478,55 @@ class GamesApi {
     // FormatException when trying to decode an empty string.
     if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
       return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'MultipartFile',) as MultipartFile;
+    
+    }
+    return null;
+  }
+
+  /// Get the caller's daily challenge
+  ///
+  /// Get today's personal daily challenge, generating it on first read. Returns a null challenge when the caller has no photos usable for one.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> getSoloDailyChallengeWithHttpInfo({ Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/games/solo/daily';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get the caller's daily challenge
+  ///
+  /// Get today's personal daily challenge, generating it on first read. Returns a null challenge when the caller has no photos usable for one.
+  Future<GameDailyResponseDto?> getSoloDailyChallenge({ Future<void>? abortTrigger, }) async {
+    final response = await getSoloDailyChallengeWithHttpInfo(abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'GameDailyResponseDto',) as GameDailyResponseDto;
     
     }
     return null;
