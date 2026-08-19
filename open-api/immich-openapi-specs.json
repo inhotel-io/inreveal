@@ -7623,7 +7623,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.update",
+        "x-immich-permission": "game.delete",
         "x-immich-state": "Beta"
       },
       "get": {
@@ -7678,7 +7678,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.read",
+        "x-immich-permission": "game.read",
         "x-immich-state": "Beta"
       }
     },
@@ -7735,7 +7735,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.read",
+        "x-immich-permission": "game.read",
         "x-immich-state": "Beta"
       }
     },
@@ -7812,7 +7812,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.read",
+        "x-immich-permission": "game.read",
         "x-immich-state": "Beta"
       }
     },
@@ -7880,7 +7880,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.read",
+        "x-immich-permission": "game.read",
         "x-immich-state": "Beta"
       }
     },
@@ -19112,7 +19112,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.read",
+        "x-immich-permission": "game.read",
         "x-immich-state": "Beta"
       },
       "post": {
@@ -19177,7 +19177,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.update",
+        "x-immich-permission": "game.create",
         "x-immich-state": "Beta"
       }
     },
@@ -19234,7 +19234,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.read",
+        "x-immich-permission": "game.read",
         "x-immich-state": "Beta"
       }
     },
@@ -19291,7 +19291,7 @@
             "state": "Beta"
           }
         ],
-        "x-immich-permission": "sharedSpace.read",
+        "x-immich-permission": "game.read",
         "x-immich-state": "Beta"
       }
     },
@@ -31006,6 +31006,9 @@
           "face.update",
           "face.delete",
           "folder.read",
+          "game.create",
+          "game.read",
+          "game.delete",
           "job.create",
           "job.read",
           "library.create",
