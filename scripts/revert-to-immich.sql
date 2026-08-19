@@ -427,6 +427,7 @@ DELETE FROM "kysely_migrations"
    '1791000000000-AddPhotoGuessingGame',
    '1792000000000-AddDailyGameChallenge',
    '1793000000000-AddSpaceDailyChallengeEnabled',
+   '1794000000000-AddSoloGameChallenge',
 
    -- Pre-rename names for two migrations that were renumbered off timestamp collisions
    -- ("renumber AddFaceRepairScanFlaggedFace off the #722 collision",
