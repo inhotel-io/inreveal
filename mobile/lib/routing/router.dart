@@ -171,7 +171,11 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: SpacePeopleRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SpaceAlbumsRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SpaceAlbumDetailRoute.page, guards: [_authGuard, _duplicateGuard]),
-    AutoRoute(page: GamePlayRoute.page, guards: [_authGuard, _duplicateGuard]),
+    // No _duplicateGuard, for the same reason FolderRoute below omits it: this route is pushed
+    // from its own page. "Play again" on a finished solo game creates the next challenge and opens
+    // it, and the guard compares route NAMES — a const string with no challenge id in it — so it
+    // reads that as re-opening the page you are already on and cancels the push silently.
+    AutoRoute(page: GamePlayRoute.page, guards: [_authGuard]),
     AutoRoute(page: SpaceGamesRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: PhotoGuesserRoute.page, guards: [_authGuard, _duplicateGuard]),
     CustomRoute(
