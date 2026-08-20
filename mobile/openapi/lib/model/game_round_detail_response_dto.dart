@@ -15,6 +15,7 @@ class GameRoundDetailResponseDto {
   GameRoundDetailResponseDto({
     this.answer = const Optional.absent(),
     this.assetId = const Optional.absent(),
+    this.guess = const Optional.absent(),
     required this.index,
     this.score = const Optional.absent(),
     required this.type,
@@ -37,6 +38,14 @@ class GameRoundDetailResponseDto {
   ///
   Optional<String?> assetId;
 
+  ///
+  /// Please note: This property should have been non-nullable! Since the specification file
+  /// does not include a default value (using the "default:" property), however, the generated
+  /// source code must fall back to having a nullable type.
+  /// Consider adding a "default:" property in the specification file to hide this note.
+  ///
+  Optional<GameRoundDetailResponseDtoGuess?> guess;
+
   /// Round index (0-based)
   num index;
 
@@ -55,6 +64,7 @@ class GameRoundDetailResponseDto {
   bool operator ==(Object other) => identical(this, other) || other is GameRoundDetailResponseDto &&
     other.answer == answer &&
     other.assetId == assetId &&
+    other.guess == guess &&
     other.index == index &&
     other.score == score &&
     other.type == type;
@@ -64,12 +74,13 @@ class GameRoundDetailResponseDto {
     // ignore: unnecessary_parenthesis
     (answer == null ? 0 : answer!.hashCode) +
     (assetId == null ? 0 : assetId!.hashCode) +
+    (guess == null ? 0 : guess!.hashCode) +
     (index.hashCode) +
     (score == null ? 0 : score!.hashCode) +
     (type.hashCode);
 
   @override
-  String toString() => 'GameRoundDetailResponseDto[answer=$answer, assetId=$assetId, index=$index, score=$score, type=$type]';
+  String toString() => 'GameRoundDetailResponseDto[answer=$answer, assetId=$assetId, guess=$guess, index=$index, score=$score, type=$type]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -80,6 +91,10 @@ class GameRoundDetailResponseDto {
     if (this.assetId.isPresent) {
       final value = this.assetId.value;
       json[r'assetId'] = value;
+    }
+    if (this.guess.isPresent) {
+      final value = this.guess.value;
+      json[r'guess'] = value;
     }
       json[r'index'] = this.index;
     if (this.score.isPresent) {
@@ -101,6 +116,7 @@ class GameRoundDetailResponseDto {
       return GameRoundDetailResponseDto(
         answer: json.containsKey(r'answer') ? Optional.present(GameRoundDetailResponseDtoAnswer.fromJson(json[r'answer'])) : const Optional.absent(),
         assetId: json.containsKey(r'assetId') ? Optional.present(mapValueOfType<String>(json, r'assetId')) : const Optional.absent(),
+        guess: json.containsKey(r'guess') ? Optional.present(GameRoundDetailResponseDtoGuess.fromJson(json[r'guess'])) : const Optional.absent(),
         index: num.parse('${json[r'index']}'),
         score: json.containsKey(r'score') ? Optional.present(json[r'score'] == null ? null : num.parse('${json[r'score']}')) : const Optional.absent(),
         type: GameRoundType.fromJson(json[r'type'])!,

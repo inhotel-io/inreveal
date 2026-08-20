@@ -511,6 +511,8 @@ class ApiClient {
           return GameRoundDetailResponseDto.fromJson(value);
         case 'GameRoundDetailResponseDtoAnswer':
           return GameRoundDetailResponseDtoAnswer.fromJson(value);
+        case 'GameRoundDetailResponseDtoGuess':
+          return GameRoundDetailResponseDtoGuess.fromJson(value);
         case 'GameRoundType':
           return GameRoundTypeTypeTransformer().decode(value);
         case 'GameSoloCreateDto':

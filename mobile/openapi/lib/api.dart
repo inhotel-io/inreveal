@@ -239,6 +239,7 @@ part 'model/game_leaderboard_response_dto.dart';
 part 'model/game_leaderboard_response_dto_entries_inner.dart';
 part 'model/game_round_detail_response_dto.dart';
 part 'model/game_round_detail_response_dto_answer.dart';
+part 'model/game_round_detail_response_dto_guess.dart';
 part 'model/game_round_type.dart';
 part 'model/game_solo_create_dto.dart';
 part 'model/game_solo_history_item_response_dto.dart';

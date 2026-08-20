@@ -619,6 +619,7 @@ Class | Method | HTTP request | Description
  - [GameLeaderboardResponseDtoEntriesInner](doc//GameLeaderboardResponseDtoEntriesInner.md)
  - [GameRoundDetailResponseDto](doc//GameRoundDetailResponseDto.md)
  - [GameRoundDetailResponseDtoAnswer](doc//GameRoundDetailResponseDtoAnswer.md)
+ - [GameRoundDetailResponseDtoGuess](doc//GameRoundDetailResponseDtoGuess.md)
  - [GameRoundType](doc//GameRoundType.md)
  - [GameSoloCreateDto](doc//GameSoloCreateDto.md)
  - [GameSoloHistoryItemResponseDto](doc//GameSoloHistoryItemResponseDto.md)
