@@ -515,8 +515,14 @@ class ApiClient {
           return GameRoundTypeTypeTransformer().decode(value);
         case 'GameSoloCreateDto':
           return GameSoloCreateDto.fromJson(value);
+        case 'GameSoloHistoryItemResponseDto':
+          return GameSoloHistoryItemResponseDto.fromJson(value);
+        case 'GameSoloHistoryResponseDto':
+          return GameSoloHistoryResponseDto.fromJson(value);
         case 'GameSoloSourcesDto':
           return GameSoloSourcesDto.fromJson(value);
+        case 'GameSoloStatsResponseDto':
+          return GameSoloStatsResponseDto.fromJson(value);
         case 'GameStandingsResponseDto':
           return GameStandingsResponseDto.fromJson(value);
         case 'GameStandingsResponseDtoEntriesInner':

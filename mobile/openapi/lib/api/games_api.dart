@@ -532,6 +532,127 @@ class GamesApi {
     return null;
   }
 
+  /// Get the caller's solo game history
+  ///
+  /// One page of the games the caller has played, newest first. Paging past the last page returns an empty page rather than an error.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  ///
+  /// Parameters:
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of games per page
+  Future<Response> getSoloHistoryWithHttpInfo({ int? page, int? size, Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/games/solo/history';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    if (page != null) {
+      queryParams.addAll(_queryParams('', 'page', page));
+    }
+    if (size != null) {
+      queryParams.addAll(_queryParams('', 'size', size));
+    }
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get the caller's solo game history
+  ///
+  /// One page of the games the caller has played, newest first. Paging past the last page returns an empty page rather than an error.
+  ///
+  /// Parameters:
+  ///
+  /// * [int] page:
+  ///   Page number
+  ///
+  /// * [int] size:
+  ///   Number of games per page
+  Future<GameSoloHistoryResponseDto?> getSoloHistory({ int? page, int? size, Future<void>? abortTrigger, }) async {
+    final response = await getSoloHistoryWithHttpInfo(page: page, size: size, abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'GameSoloHistoryResponseDto',) as GameSoloHistoryResponseDto;
+    
+    }
+    return null;
+  }
+
+  /// Get the caller's solo statistics
+  ///
+  /// Streak, best score, average and games played, computed from the games themselves on every read. A player who has never played gets zeroes, never nulls.
+  ///
+  /// Note: This method returns the HTTP [Response].
+  Future<Response> getSoloStatsWithHttpInfo({ Future<void>? abortTrigger, }) async {
+    // ignore: prefer_const_declarations
+    final apiPath = r'/games/solo/stats';
+
+    // ignore: prefer_final_locals
+    Object? postBody;
+
+    final queryParams = <QueryParam>[];
+    final headerParams = <String, String>{};
+    final formParams = <String, String>{};
+
+    const contentTypes = <String>[];
+
+
+    return apiClient.invokeAPI(
+      apiPath,
+      'GET',
+      queryParams,
+      postBody,
+      headerParams,
+      formParams,
+      contentTypes.isEmpty ? null : contentTypes.first,
+      abortTrigger: abortTrigger,
+    );
+  }
+
+  /// Get the caller's solo statistics
+  ///
+  /// Streak, best score, average and games played, computed from the games themselves on every read. A player who has never played gets zeroes, never nulls.
+  Future<GameSoloStatsResponseDto?> getSoloStats({ Future<void>? abortTrigger, }) async {
+    final response = await getSoloStatsWithHttpInfo(abortTrigger: abortTrigger,);
+    if (response.statusCode >= HttpStatus.badRequest) {
+      throw ApiException(response.statusCode, await _decodeBodyBytes(response));
+    }
+    // When a remote server returns no body with a status of 204, we shall not decode it.
+    // At the time of writing this, `dart:convert` will throw an "Unexpected end of input"
+    // FormatException when trying to decode an empty string.
+    if (response.body.isNotEmpty && response.statusCode != HttpStatus.noContent) {
+      return await apiClient.deserializeAsync(await _decodeBodyBytes(response), 'GameSoloStatsResponseDto',) as GameSoloStatsResponseDto;
+    
+    }
+    return null;
+  }
+
   /// Get the space's monthly standings
   ///
   /// Per-player totals across this UTC calendar month's daily challenges. Custom challenges never contribute. Membership-gated, like the daily.
