@@ -685,6 +685,10 @@ class ApiClient {
           return PersonUpdateDto.fromJson(value);
         case 'PetDetectionConfig':
           return PetDetectionConfig.fromJson(value);
+        case 'PhotoGuesserResponse':
+          return PhotoGuesserResponse.fromJson(value);
+        case 'PhotoGuesserUpdate':
+          return PhotoGuesserUpdate.fromJson(value);
         case 'PinCodeChangeDto':
           return PinCodeChangeDto.fromJson(value);
         case 'PinCodeResetDto':

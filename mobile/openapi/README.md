@@ -706,6 +706,8 @@ Class | Method | HTTP request | Description
  - [PersonStatisticsResponseDto](doc//PersonStatisticsResponseDto.md)
  - [PersonUpdateDto](doc//PersonUpdateDto.md)
  - [PetDetectionConfig](doc//PetDetectionConfig.md)
+ - [PhotoGuesserResponse](doc//PhotoGuesserResponse.md)
+ - [PhotoGuesserUpdate](doc//PhotoGuesserUpdate.md)
  - [PinCodeChangeDto](doc//PinCodeChangeDto.md)
  - [PinCodeResetDto](doc//PinCodeResetDto.md)
  - [PinCodeSetupDto](doc//PinCodeSetupDto.md)

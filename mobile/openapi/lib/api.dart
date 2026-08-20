@@ -326,6 +326,8 @@ part 'model/person_response_dto.dart';
 part 'model/person_statistics_response_dto.dart';
 part 'model/person_update_dto.dart';
 part 'model/pet_detection_config.dart';
+part 'model/photo_guesser_response.dart';
+part 'model/photo_guesser_update.dart';
 part 'model/pin_code_change_dto.dart';
 part 'model/pin_code_reset_dto.dart';
 part 'model/pin_code_setup_dto.dart';
