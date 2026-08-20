@@ -1536,6 +1536,22 @@ class PersonPickerRoute extends PageRouteInfo<void> {
 }
 
 /// generated route for
+/// [PhotoGuesserPage]
+class PhotoGuesserRoute extends PageRouteInfo<void> {
+  const PhotoGuesserRoute({List<PageRouteInfo>? children})
+    : super(PhotoGuesserRoute.name, initialChildren: children);
+
+  static const String name = 'PhotoGuesserRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      return const PhotoGuesserPage();
+    },
+  );
+}
+
+/// generated route for
 /// [PinAuthPage]
 class PinAuthRoute extends PageRouteInfo<PinAuthRouteArgs> {
   PinAuthRoute({

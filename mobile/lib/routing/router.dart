@@ -25,11 +25,12 @@ import 'package:immich_mobile/pages/common/headers_settings.page.dart';
 import 'package:immich_mobile/pages/common/settings.page.dart';
 import 'package:immich_mobile/pages/common/splash_screen.page.dart';
 import 'package:immich_mobile/pages/common/tab_shell.page.dart';
+import 'package:immich_mobile/pages/games/game_play.page.dart';
+import 'package:immich_mobile/pages/games/photo_guesser.page.dart';
 import 'package:immich_mobile/presentation/pages/common/gallery_tab_shell.page.dart';
 import 'package:immich_mobile/pages/library/folder/folder.page.dart';
 import 'package:immich_mobile/pages/library/locked/pin_auth.page.dart';
 import 'package:immich_mobile/pages/library/partner/partner.page.dart';
-import 'package:immich_mobile/pages/library/spaces/games/game_play.page.dart';
 import 'package:immich_mobile/pages/library/spaces/games/space_games.page.dart';
 import 'package:immich_mobile/pages/library/spaces/space_detail.page.dart';
 import 'package:immich_mobile/pages/library/spaces/space_link_album.page.dart';
@@ -172,6 +173,7 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: SpaceAlbumDetailRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: GamePlayRoute.page, guards: [_authGuard, _duplicateGuard]),
     AutoRoute(page: SpaceGamesRoute.page, guards: [_authGuard, _duplicateGuard]),
+    AutoRoute(page: PhotoGuesserRoute.page, guards: [_authGuard, _duplicateGuard]),
     CustomRoute(
       page: SpaceLinkAlbumRoute.page,
       guards: [_authGuard, _duplicateGuard],
