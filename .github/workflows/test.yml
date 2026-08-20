@@ -462,7 +462,6 @@ jobs:
             echo "from=" >> "$GITHUB_OUTPUT"
           fi
 
-
       - name: Start Docker Compose
         env:
           E2E_CACHE_FROM: ${{ steps.cache.outputs.from }}
@@ -568,7 +567,6 @@ jobs:
           else
             echo "from=" >> "$GITHUB_OUTPUT"
           fi
-
 
       - name: Docker build
         env:
