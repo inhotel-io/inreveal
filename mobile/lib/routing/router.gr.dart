@@ -1335,6 +1335,70 @@ class GamePlayRouteArgs {
 }
 
 /// generated route for
+/// [GameRoundReviewPage]
+class GameRoundReviewRoute extends PageRouteInfo<GameRoundReviewRouteArgs> {
+  GameRoundReviewRoute({
+    Key? key,
+    required String challengeId,
+    required int index,
+    List<PageRouteInfo>? children,
+  }) : super(
+         GameRoundReviewRoute.name,
+         args: GameRoundReviewRouteArgs(
+           key: key,
+           challengeId: challengeId,
+           index: index,
+         ),
+         initialChildren: children,
+       );
+
+  static const String name = 'GameRoundReviewRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      final args = data.argsAs<GameRoundReviewRouteArgs>();
+      return GameRoundReviewPage(
+        key: args.key,
+        challengeId: args.challengeId,
+        index: args.index,
+      );
+    },
+  );
+}
+
+class GameRoundReviewRouteArgs {
+  const GameRoundReviewRouteArgs({
+    this.key,
+    required this.challengeId,
+    required this.index,
+  });
+
+  final Key? key;
+
+  final String challengeId;
+
+  final int index;
+
+  @override
+  String toString() {
+    return 'GameRoundReviewRouteArgs{key: $key, challengeId: $challengeId, index: $index}';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! GameRoundReviewRouteArgs) return false;
+    return key == other.key &&
+        challengeId == other.challengeId &&
+        index == other.index;
+  }
+
+  @override
+  int get hashCode => key.hashCode ^ challengeId.hashCode ^ index.hashCode;
+}
+
+/// generated route for
 /// [HeaderSettingsPage]
 class HeaderSettingsRoute extends PageRouteInfo<void> {
   const HeaderSettingsRoute({List<PageRouteInfo>? children})
