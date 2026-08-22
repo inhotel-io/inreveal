@@ -42,7 +42,7 @@ const createTimelineAssetWithPeople = async (
   });
   await ctx.newExif({ assetId: asset.id, timeZone: 'UTC' });
   for (const personId of personIds) {
-    await ctx.newAssetFace({ assetId: asset.id, personGroupId, isVisible: true });
+    await ctx.newAssetFace({ assetId: asset.id, personGroupId: personId, isVisible: true });
   }
   return asset;
 };
@@ -80,7 +80,7 @@ describe(AssetRepository.name, () => {
       await createTimelineAsset(ctx, user.id, new Date('2024-01-31T23:59:59.000Z'));
       await createTimelineAsset(ctx, user.id, new Date('2024-02-01T00:00:00.000Z'));
 
-      await expect(sut.getTimeBuckets({ userIds: [user.id], visibility: AssetVisibility.Timeline })).resolves.toEqual([
+      await expect(sut.getTimeBuckets({ userIds: [user.id], visibility: AssetVisibility.Timeline }, factory.auth({ user: { id: user.id } }))).resolves.toEqual([
         expect.objectContaining({ timeBucket: '2024-02-01', count: 1 }),
         expect.objectContaining({ timeBucket: '2024-01-01', count: 2 }),
       ]);
@@ -99,7 +99,7 @@ describe(AssetRepository.name, () => {
           userIds: [user.id],
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Year,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([
         expect.objectContaining({ timeBucket: '2024-01-01', count: 2 }),
         expect.objectContaining({ timeBucket: '2023-01-01', count: 1 }),
@@ -110,7 +110,7 @@ describe(AssetRepository.name, () => {
           userIds: [user.id],
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Day,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([
         expect.objectContaining({ timeBucket: '2024-01-01', count: 2 }),
         expect.objectContaining({ timeBucket: '2023-12-31', count: 1 }),
@@ -133,7 +133,7 @@ describe(AssetRepository.name, () => {
           takenAfter: '2024-01-10T00:00:00.000Z',
           takenBefore: '2024-01-20T00:00:00.000Z',
           order: AssetOrder.Asc,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 2 })]);
 
       const result = await sut.getTimeBuckets({
@@ -142,7 +142,7 @@ describe(AssetRepository.name, () => {
         bucketSize: TimeBucketSize.Day,
         takenAfter: '2024-01-10T00:00:00.000Z',
         takenBefore: '2024-01-20T00:00:00.000Z',
-      });
+      }, factory.auth({ user: { id: user.id } }));
       expect(result).toEqual([
         expect.objectContaining({ timeBucket: '2024-01-20', count: 1 }),
         expect.objectContaining({ timeBucket: '2024-01-10', count: 1 }),
@@ -195,7 +195,7 @@ describe(AssetRepository.name, () => {
         make: 'Canon',
         model: 'R5',
         rating: 4,
-      });
+      }, factory.auth({ user: { id: user.id } }));
       expect(result).toEqual([expect.objectContaining({ count: 1 })]);
       // representative fields must not appear on getTimeBuckets results
       expect(result[0]).not.toHaveProperty('representativeAssetId');
@@ -218,7 +218,7 @@ describe(AssetRepository.name, () => {
         userIds: [user.id],
         visibility: AssetVisibility.Timeline,
         bucketSize: TimeBucketSize.Month,
-      });
+      }, factory.auth({ user: { id: user.id } }));
       expect(result).toEqual([expect.objectContaining({ timeBucket: '2024-07-01', count: 2 })]);
       expect(result[0]).not.toHaveProperty('representativeAssetId');
       expect(result[0]).not.toHaveProperty('representativeThumbhash');
@@ -242,7 +242,7 @@ describe(AssetRepository.name, () => {
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Year,
           bbox: { west: 13.3, south: 52.4, east: 13.5, north: 52.6 },
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 1 })]);
     });
 
@@ -268,10 +268,10 @@ describe(AssetRepository.name, () => {
           spaceId: space.id,
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Year,
-        }),
+        }, factory.auth()),
       ).resolves.toEqual([expect.objectContaining({ count: 2 })]);
       await expect(
-        sut.getTimeBuckets({ spaceId: space.id, visibility: AssetVisibility.Timeline, bucketSize: TimeBucketSize.Day }),
+        sut.getTimeBuckets({ spaceId: space.id, visibility: AssetVisibility.Timeline, bucketSize: TimeBucketSize.Day }, factory.auth()),
       ).resolves.toEqual([
         expect.objectContaining({ timeBucket: '2024-04-02', count: 1 }),
         expect.objectContaining({ timeBucket: '2024-04-01', count: 1 }),
@@ -297,7 +297,7 @@ describe(AssetRepository.name, () => {
           userIds: [user.id],
           visibility: AssetVisibility.Archive,
           bucketSize: TimeBucketSize.Year,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 1 })]);
 
       await expect(
@@ -305,7 +305,7 @@ describe(AssetRepository.name, () => {
           userIds: [user.id],
           visibility: AssetVisibility.Locked,
           bucketSize: TimeBucketSize.Month,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 1 })]);
 
       await expect(
@@ -314,7 +314,7 @@ describe(AssetRepository.name, () => {
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Day,
           isTrashed: true,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 1 })]);
     });
 
@@ -343,16 +343,16 @@ describe(AssetRepository.name, () => {
         bucketSize: TimeBucketSize.Year,
       };
 
-      await expect(sut.getTimeBuckets({ ...commonOptions, assetType: AssetType.Video })).resolves.toEqual([
+      await expect(sut.getTimeBuckets({ ...commonOptions, assetType: AssetType.Video }, factory.auth())).resolves.toEqual([
         expect.objectContaining({ count: 2 }),
       ]);
-      await expect(sut.getTimeBuckets({ ...commonOptions, albumId: album.id })).resolves.toEqual([
+      await expect(sut.getTimeBuckets({ ...commonOptions, albumId: album.id }, factory.auth())).resolves.toEqual([
         expect.objectContaining({ count: 1 }),
       ]);
-      await expect(sut.getTimeBuckets({ ...commonOptions, tagIds: [tag.id] })).resolves.toEqual([
+      await expect(sut.getTimeBuckets({ ...commonOptions, tagIds: [tag.id] }, factory.auth())).resolves.toEqual([
         expect.objectContaining({ count: 1 }),
       ]);
-      await expect(sut.getTimeBuckets({ ...commonOptions, withStacked: true })).resolves.toEqual([
+      await expect(sut.getTimeBuckets({ ...commonOptions, withStacked: true }, factory.auth())).resolves.toEqual([
         expect.objectContaining({ count: 2 }),
       ]);
     });
@@ -400,7 +400,7 @@ describe(AssetRepository.name, () => {
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Year,
           personIds: [person.personGroupId],
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 2 })]);
 
       await expect(
@@ -409,7 +409,7 @@ describe(AssetRepository.name, () => {
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Month,
           identityIds: [identity.id],
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 1 })]);
 
       await expect(
@@ -418,7 +418,7 @@ describe(AssetRepository.name, () => {
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Day,
           spacePersonIds: [spacePerson.id],
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 1 })]);
     });
 
@@ -439,7 +439,7 @@ describe(AssetRepository.name, () => {
           timelineSpaceIds: [space.id],
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Year,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 2 })]);
 
       await expect(
@@ -447,7 +447,7 @@ describe(AssetRepository.name, () => {
           userIds: [user.id],
           visibility: AssetVisibility.Timeline,
           bucketSize: TimeBucketSize.Day,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 1 })]);
     });
 
@@ -467,7 +467,7 @@ describe(AssetRepository.name, () => {
             visibility: AssetVisibility.Timeline,
             bucketSize,
             assetType: AssetType.Video,
-          }),
+          }, factory.auth({ user: { id: user.id } })),
         ).resolves.toEqual([]);
       },
     );
@@ -1488,7 +1488,7 @@ describe(AssetRepository.name, () => {
           userIds: [user.id],
           personIds: [alice.personGroupId, bob.personGroupId],
           visibility: AssetVisibility.Timeline,
-        }),
+        }, factory.auth({ user: { id: user.id } })),
       ).resolves.toEqual([expect.objectContaining({ count: 1, timeBucket: '2026-03-01' })]);
     });
   });
