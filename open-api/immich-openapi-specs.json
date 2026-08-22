@@ -24603,6 +24603,10 @@
       "description": "Administrative endpoints related to authentication."
     },
     {
+      "name": "Cluster groups",
+      "description": "A cluster group is a set of users whose faces are clustered together, so that a person can be shared between them."
+    },
+    {
       "name": "Config (user)",
       "description": "The system configuration properties that are visible to logged in users."
     },
@@ -31648,6 +31652,7 @@
           "SystemMessage",
           "AlbumInvite",
           "AlbumUpdate",
+          "ClusterGroupRequest",
           "Custom"
         ],
         "type": "string"
@@ -32132,6 +32137,11 @@
           "backup.download",
           "backup.upload",
           "backup.delete",
+          "clusterGroup.read",
+          "clusterGroup.leave",
+          "clusterGroupRequest.create",
+          "clusterGroupRequest.read",
+          "clusterGroupRequest.delete",
           "adminConfig.read",
           "adminConfig.update",
           "userConfig.read",
@@ -39765,6 +39775,18 @@
           "avatarColor": {
             "$ref": "#/components/schemas/UserAvatarColor"
           },
+          "clusterGroupId": {
+            "description": "Cluster group the user is a member of",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})$",
+            "type": "string",
+            "x-immich-history": [
+              {
+                "version": "v3.2.0",
+                "state": "Added"
+              }
+            ]
+          },
           "createdAt": {
             "description": "Creation date",
             "example": "2024-01-01T00:00:00.000Z",
@@ -39857,6 +39879,7 @@
         },
         "required": [
           "avatarColor",
+          "clusterGroupId",
           "createdAt",
           "deletedAt",
           "email",
