@@ -365,6 +365,8 @@ export type AdminConfigNotificationsDto = {
     smtp: AdminConfigSmtpDto;
 };
 export type AdminConfigOAuthDto = {
+    /** Account management URL */
+    accountManagementUrl?: string;
     /** Allow insecure requests */
     allowInsecureRequests: boolean;
     /** Auto launch */
@@ -1343,8 +1345,8 @@ export type AssetFileResponseDto = {
     isProgressive: boolean;
     /** The file is transparent */
     isTransparent: boolean;
-    /** File path */
-    path: string;
+    /** File path. Only returned to the owner of the asset. */
+    path?: string;
     "type": AssetFileType;
     /** Update date */
     updatedAt: string;
@@ -1957,6 +1959,8 @@ export type UserConfigDto = {
     user: UserConfigUserDto;
 };
 export type DownloadArchiveDto = {
+    /** The name of the archive to download, without extension */
+    archiveName?: string;
     /** Asset IDs */
     assetIds: string[];
     /** Download edited asset if available */
@@ -3158,6 +3162,8 @@ export type ServerConfigDto = {
     mapLightStyleUrl: string;
     /** People min faces server default */
     minFaces: number;
+    /** OAuth account management URL */
+    oauthAccountManagementUrl?: string;
     /** OAuth button text */
     oauthButtonText: string;
     /** Whether public user registration is enabled */
