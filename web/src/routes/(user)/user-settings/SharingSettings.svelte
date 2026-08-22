@@ -38,7 +38,6 @@
 
   let partners: Array<PartnerSharing> = $state([]);
 
-
   onMount(async () => {
     await refreshPartners();
   });
