@@ -25895,6 +25895,11 @@
       },
       "AdminConfigOAuthDto": {
         "properties": {
+          "accountManagementUrl": {
+            "default": "",
+            "description": "Account management URL",
+            "type": "string"
+          },
           "allowInsecureRequests": {
             "description": "Allow insecure requests",
             "type": "boolean"
@@ -27337,7 +27342,7 @@
             "type": "boolean"
           },
           "path": {
-            "description": "File path",
+            "description": "File path. Only returned to the owner of the asset.",
             "type": "string"
           },
           "type": {
@@ -27357,7 +27362,6 @@
           "isEdited",
           "isProgressive",
           "isTransparent",
-          "path",
           "type",
           "updatedAt"
         ],
@@ -28621,6 +28625,10 @@
       },
       "DownloadArchiveDto": {
         "properties": {
+          "archiveName": {
+            "description": "The name of the archive to download, without extension",
+            "type": "string"
+          },
           "assetIds": {
             "description": "Asset IDs",
             "items": {
@@ -34205,6 +34213,11 @@
             "maximum": 9007199254740991,
             "minimum": -9007199254740991,
             "type": "integer"
+          },
+          "oauthAccountManagementUrl": {
+            "default": "",
+            "description": "OAuth account management URL",
+            "type": "string"
           },
           "oauthButtonText": {
             "description": "OAuth button text",
