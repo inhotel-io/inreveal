@@ -510,7 +510,7 @@ export class SearchRepository {
               .whereRef('asset_face.assetId', '=', 'asset.id')
               .where('asset_face.deletedAt', 'is', null)
               .where('asset_face.isVisible', 'is', true)
-              .where('asset_face.personId', '=', Array.isArray(personId) ? anyUuid(personId) : asUuid(personId)),
+              .where('asset_face.personGroupId', '=', Array.isArray(personId) ? anyUuid(personId) : asUuid(personId)),
           );
 
         return options.personMatchAny
@@ -897,14 +897,14 @@ export class SearchRepository {
 
     const peopleRows = await trx
       .selectFrom('person')
-      .select(['person.id', 'person.name'])
+      .select(['person.personGroupId', 'person.name'])
       .where('person.name', '!=', '')
       .where('person.isHidden', '=', false)
       .where((eb) =>
         eb.exists(
           eb
             .selectFrom('asset_face')
-            .whereRef('asset_face.personId', '=', 'person.id')
+            .whereRef('asset_face.personGroupId', '=', 'person.personGroupId')
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', 'is', true)
             .where('asset_face.assetId', 'in', filteredIds),
@@ -914,7 +914,7 @@ export class SearchRepository {
       .execute();
     const people = peopleRows.map((person) => ({
       ...person,
-      primaryProfile: { type: 'user-person' as const, id: person.id },
+      primaryProfile: { type: 'user-person' as const, id: person.personGroupId },
     }));
 
     const unnamed = await trx
@@ -926,7 +926,7 @@ export class SearchRepository {
         eb.exists(
           eb
             .selectFrom('asset_face')
-            .whereRef('asset_face.personId', '=', 'person.id')
+            .whereRef('asset_face.personGroupId', '=', 'person.personGroupId')
             .where('asset_face.deletedAt', 'is', null)
             .where('asset_face.isVisible', 'is', true)
             .where('asset_face.assetId', 'in', filteredIds),
@@ -1703,7 +1703,7 @@ export class SearchRepository {
     const peopleRows = await this.buildFilteredGlobalPeopleQuery(filteredIds).execute();
     const people = peopleRows.map((person) => ({
       ...person,
-      primaryProfile: { type: 'user-person' as const, id: person.id },
+      primaryProfile: { type: 'user-person' as const, id: person.personGroupId },
     }));
 
     const unnamed = await this.db
@@ -1714,7 +1714,7 @@ export class SearchRepository {
         eb.exists(
           eb
             .selectFrom('asset_face')
-            .whereRef('asset_face.personId', '=', 'person.id')
+            .whereRef('asset_face.personGroupId', '=', 'person.personGroupId')
             .where('asset_face.assetId', 'in', filteredIds),
         ),
       )
@@ -1748,14 +1748,14 @@ export class SearchRepository {
   private buildFilteredGlobalPeopleQuery(filteredIds: SelectQueryBuilder<DB, 'asset', { id: string }>) {
     return this.db
       .selectFrom('person')
-      .select(['person.id', 'person.name'])
+      .select(['person.personGroupId', 'person.name'])
       .where('person.name', '!=', '')
       .where('person.isHidden', '=', false)
       .where((eb) =>
         eb.exists(
           eb
             .selectFrom('asset_face')
-            .whereRef('asset_face.personId', '=', 'person.id')
+            .whereRef('asset_face.personGroupId', '=', 'person.personGroupId')
             .where('asset_face.assetId', 'in', filteredIds),
         ),
       )
