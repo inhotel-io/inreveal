@@ -474,13 +474,13 @@ where
 
 -- AccessRepository.person.checkUnlockedThumbnailAccess
 select
-  "person"."id"
+  "person"."personGroupId"
 from
   "person"
   left join "asset_face" on "asset_face"."id" = "person"."faceAssetId"
   left join "asset" on "asset"."id" = "asset_face"."assetId"
 where
-  "person"."id" in ($1)
+  "person"."personGroupId" in ($1)
   and (
     "asset"."visibility" is null
     or "asset"."visibility" != $2
@@ -488,11 +488,11 @@ where
 
 -- AccessRepository.person.checkSharedSpaceAccess
 select
-  "person"."id"
+  "person"."personGroupId"
 from
   "person"
 where
-  "person"."id" in ($1)
+  "person"."personGroupId" in ($1)
   and exists (
     select
     from
@@ -501,7 +501,7 @@ where
       and "asset"."deletedAt" is null
       and "asset"."visibility" in ($2, $3)
     where
-      "asset_face"."personId" = "person"."id"
+      "asset_face"."personGroupId" = "person"."personGroupId"
       and "asset_face"."deletedAt" is null
       and "asset_face"."isVisible" is true
       and (
@@ -559,11 +559,11 @@ where
 
 -- AccessRepository.person.checkSharedSpaceEditAccess
 select
-  "person"."id"
+  "person"."personGroupId"
 from
   "person"
 where
-  "person"."id" in ($1)
+  "person"."personGroupId" in ($1)
   and exists (
     select
     from
@@ -572,7 +572,7 @@ where
       and "asset"."deletedAt" is null
       and "asset"."visibility" in ($2, $3)
     where
-      "asset_face"."personId" = "person"."id"
+      "asset_face"."personGroupId" = "person"."personGroupId"
       and "asset_face"."deletedAt" is null
       and "asset_face"."isVisible" is true
       and (
