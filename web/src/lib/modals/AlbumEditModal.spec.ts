@@ -1,9 +1,9 @@
 import { type AlbumResponseDto } from '@immich/sdk';
 import '@testing-library/jest-dom';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { Settings } from 'luxon';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AlbumEditModal from './AlbumEditModal.svelte';
 
 const handleUpdateAlbumMock = vi.hoisted(() => vi.fn());
@@ -39,6 +39,19 @@ beforeEach(() => {
   // config's TZ: 'UTC'.
   Settings.defaultZone = 'Europe/Berlin';
   handleUpdateAlbumMock.mockResolvedValue(true);
+});
+
+// `FormModal` mounts a bits-ui dialog, which takes a body scroll lock and releases it on a
+// 24ms timer rather than synchronously, so that a same-tick destroy/create keeps the lock
+// (bits-ui/dist/internal/body-scroll-lock.svelte.js:75). If the file finishes inside that
+// window, happy-dom has already torn the environment down when the timer fires and
+// `resetBodyStyle` throws `document is not defined`. Vitest reports that as an *unhandled
+// error*, not a test failure — so the run exits 1 while every test still passes, which is
+// exactly how it surfaced in CI. Unmount and drain the timer before the file ends.
+// `cleanup` is idempotent, so testing-library's own afterEach stays a no-op.
+afterEach(async () => {
+  cleanup();
+  await new Promise((resolve) => setTimeout(resolve, 30));
 });
 
 afterAll(() => {
