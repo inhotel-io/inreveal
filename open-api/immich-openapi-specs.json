@@ -25791,6 +25791,13 @@
             "description": "Birthday memories",
             "type": "boolean"
           },
+          "personThrowbackDormancyMonths": {
+            "default": 6,
+            "description": "Months a person must be absent from photos before person_throwback resurfaces them",
+            "maximum": 120,
+            "minimum": 1,
+            "type": "integer"
+          },
           "recentTrips": {
             "description": "Recent trip memories",
             "type": "boolean"
@@ -25800,6 +25807,13 @@
             "maximum": 9007199254740991,
             "minimum": 0,
             "type": "integer"
+          },
+          "themeMaxDistance": {
+            "default": 0.75,
+            "description": "Max CLIP cosine distance for themed memories",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number"
           },
           "types": {
             "additionalProperties": {
