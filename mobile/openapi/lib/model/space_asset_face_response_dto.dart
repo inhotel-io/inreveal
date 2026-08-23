@@ -20,6 +20,7 @@ class SpaceAssetFaceResponseDto {
     required this.id,
     required this.imageHeight,
     required this.imageWidth,
+    required this.isEditorDrawn,
     required this.spacePersonId,
     required this.spacePersonName,
   });
@@ -45,6 +46,9 @@ class SpaceAssetFaceResponseDto {
   /// Original image width
   num imageWidth;
 
+  /// Whether this face box was drawn by a space Owner/Editor, and so may be deleted by one
+  bool isEditorDrawn;
+
   /// Space person ID this face is attached to, if any
   String? spacePersonId;
 
@@ -60,6 +64,7 @@ class SpaceAssetFaceResponseDto {
     other.id == id &&
     other.imageHeight == imageHeight &&
     other.imageWidth == imageWidth &&
+    other.isEditorDrawn == isEditorDrawn &&
     other.spacePersonId == spacePersonId &&
     other.spacePersonName == spacePersonName;
 
@@ -73,11 +78,12 @@ class SpaceAssetFaceResponseDto {
     (id.hashCode) +
     (imageHeight.hashCode) +
     (imageWidth.hashCode) +
+    (isEditorDrawn.hashCode) +
     (spacePersonId == null ? 0 : spacePersonId!.hashCode) +
     (spacePersonName == null ? 0 : spacePersonName!.hashCode);
 
   @override
-  String toString() => 'SpaceAssetFaceResponseDto[boundingBoxX1=$boundingBoxX1, boundingBoxX2=$boundingBoxX2, boundingBoxY1=$boundingBoxY1, boundingBoxY2=$boundingBoxY2, id=$id, imageHeight=$imageHeight, imageWidth=$imageWidth, spacePersonId=$spacePersonId, spacePersonName=$spacePersonName]';
+  String toString() => 'SpaceAssetFaceResponseDto[boundingBoxX1=$boundingBoxX1, boundingBoxX2=$boundingBoxX2, boundingBoxY1=$boundingBoxY1, boundingBoxY2=$boundingBoxY2, id=$id, imageHeight=$imageHeight, imageWidth=$imageWidth, isEditorDrawn=$isEditorDrawn, spacePersonId=$spacePersonId, spacePersonName=$spacePersonName]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
@@ -88,6 +94,7 @@ class SpaceAssetFaceResponseDto {
       json[r'id'] = this.id;
       json[r'imageHeight'] = this.imageHeight;
       json[r'imageWidth'] = this.imageWidth;
+      json[r'isEditorDrawn'] = this.isEditorDrawn;
     if (this.spacePersonId != null) {
       json[r'spacePersonId'] = this.spacePersonId;
     } else {
@@ -117,6 +124,7 @@ class SpaceAssetFaceResponseDto {
         id: mapValueOfType<String>(json, r'id')!,
         imageHeight: num.parse('${json[r'imageHeight']}'),
         imageWidth: num.parse('${json[r'imageWidth']}'),
+        isEditorDrawn: mapValueOfType<bool>(json, r'isEditorDrawn')!,
         spacePersonId: mapValueOfType<String>(json, r'spacePersonId'),
         spacePersonName: mapValueOfType<String>(json, r'spacePersonName'),
       );
@@ -173,6 +181,7 @@ class SpaceAssetFaceResponseDto {
     'id',
     'imageHeight',
     'imageWidth',
+    'isEditorDrawn',
     'spacePersonId',
     'spacePersonName',
   };
