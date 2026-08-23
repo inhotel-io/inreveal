@@ -32,7 +32,12 @@ describe('/shared-links (from a space)', () => {
       });
 
       expect(status).toBe(201);
-      expect(body).toEqual(expect.objectContaining({ userId: ctx.spaceEditor.userId, spaceId: ctx.spaceId }));
+      // The response deliberately does NOT echo the space back: it is readable by anyone holding
+      // the link, and naming the space there tells a visitor something they have no need for. That
+      // the link really is space-scoped is proved behaviourally below — an anonymous reader can
+      // fetch the contributed asset, which is only possible through the space.
+      expect(body).toEqual(expect.objectContaining({ userId: ctx.spaceEditor.userId }));
+      expect(body).not.toHaveProperty('spaceId');
     });
 
     it('still refuses the same asset when no space is named', async () => {
