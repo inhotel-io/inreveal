@@ -30,7 +30,20 @@ class SharedLinkEditPage extends HookConsumerWidget {
   /// shows rather than only the creator's own photos.
   final String? spaceId;
 
-  const SharedLinkEditPage({super.key, this.existingLink, this.assetsList, this.albumId, this.spaceId});
+  /// #1018: how many of `assetsList` other members contributed. Drives the consent warning — those
+  /// photos are about to become publicly visible on someone else's behalf, so the caller is told
+  /// before the link exists rather than after. An album link leaves this at 0: its contributed
+  /// share is only known server-side, and the warning below says so without claiming a count.
+  final int contributedCount;
+
+  const SharedLinkEditPage({
+    super.key,
+    this.existingLink,
+    this.assetsList,
+    this.albumId,
+    this.spaceId,
+    this.contributedCount = 0,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,6 +90,34 @@ class SharedLinkEditPage extends HookConsumerWidget {
           const SizedBox(width: 8),
           Text(leading, style: const TextStyle(fontWeight: FontWeight.bold)),
         ],
+      );
+    }
+
+    // Mirrors the web modal (SharedLinkCreateModal): warning colours, not muted body text — this
+    // reports a disclosure, not a detail. Only ever shown while CREATING a link from a space.
+    Widget? buildContributedWarning() {
+      final isAlbumLink = albumId != null;
+      final showWarning = existingLink == null && spaceId != null && (isAlbumLink || contributedCount > 0);
+      if (!showWarning) {
+        return null;
+      }
+
+      return Padding(
+        key: const Key('shared-link-contributed-warning'),
+        padding: const EdgeInsets.only(top: 16),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorScheme.errorContainer.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            isAlbumLink
+                ? context.t.shared_link_album_includes_contributed_assets
+                : context.t.shared_link_includes_contributed_assets(count: contributedCount),
+            style: TextStyle(fontSize: 13, color: colorScheme.onErrorContainer),
+          ),
+        ),
       );
     }
 
@@ -461,6 +502,7 @@ class SharedLinkEditPage extends HookConsumerWidget {
                   children: [
                     const SizedBox(height: 20),
                     buildLinkTitle(),
+                    ?buildContributedWarning(),
                     if (existingLink != null)
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.center,

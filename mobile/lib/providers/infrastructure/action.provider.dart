@@ -137,8 +137,11 @@ class ActionNotifier extends Notifier<void> {
 
   Future<ActionResult> shareLink(ActionSource source, BuildContext context, {String? spaceId}) async {
     final ids = _getRemoteIdsForSource(source);
+    // #1018: how many of the selection belong to other members. Drives the editor's consent
+    // warning; 0 off a space surface, where the whole selection is the caller's own anyway.
+    final contributedCount = spaceId == null ? 0 : ids.length - _getOwnedRemoteIdsForSource(source).length;
     try {
-      await _service.shareLink(ids, context, spaceId: spaceId);
+      await _service.shareLink(ids, context, spaceId: spaceId, contributedCount: contributedCount);
       return ActionResult(count: ids.length, success: true);
     } catch (error, stack) {
       _logger.severe('Failed to create shared link for assets', error, stack);
