@@ -2797,8 +2797,6 @@ export type SharedLinkResponseDto = {
     showMetadata: boolean;
     /** Custom URL slug */
     slug: string | null;
-    /** Shared space this link was created from */
-    spaceId: string | null;
     "type": SharedLinkType;
     /** Owner user ID */
     userId: string;

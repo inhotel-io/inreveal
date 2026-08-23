@@ -12,6 +12,17 @@ import { getForSharedLink } from 'test/mappers';
 import { factory, newUuid } from 'test/small.factory';
 import { newTestService, ServiceMocks } from 'test/utils';
 
+// Seeds a link whose single asset belongs to SOMEONE ELSE — the shape #1018 made reachable on a
+// public link. Module scope so `unicorn/consistent-function-scoping` stays satisfied.
+const seedPublicLinkWithContributedAsset = (mocks: ServiceMocks) => {
+  const contributed = AssetFactory.from({ ownerId: newUuid() }).exif().build();
+  const link = SharedLinkFactory.from({ userId: authStub.adminSharedLink.user.id })
+    .asset(contributed, (builder) => builder.exif())
+    .build();
+  mocks.sharedLink.get.mockResolvedValue(getForSharedLink(link) as never);
+  return { contributed };
+};
+
 describe(SharedLinkService.name, () => {
   let sut: SharedLinkService;
   let mocks: ServiceMocks;
@@ -153,6 +164,47 @@ describe(SharedLinkService.name, () => {
       await expect(sut.getMine(authStub.adminSharedLink, ['invalid-token'])).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
+    });
+  });
+
+  // #1018: a link can now carry photos its creator does not own, so the payload an ANONYMOUS
+  // visitor receives must not name the people behind them. Before this feature an individual link
+  // only ever held the creator's own assets, so a third party's user id was never reachable here.
+  describe('public payload redaction (#1018)', () => {
+    it('does not name the owner of an asset in the link a visitor fetches', async () => {
+      seedPublicLinkWithContributedAsset(mocks);
+
+      const result = await sut.getMine(authStub.adminSharedLink, []);
+
+      for (const asset of result.assets) {
+        expect(asset).not.toHaveProperty('ownerId');
+      }
+    });
+
+    it('does not tell a visitor which space the link came from', async () => {
+      seedPublicLinkWithContributedAsset(mocks);
+
+      const result = await sut.getMine(authStub.adminSharedLink, []);
+
+      expect(result).not.toHaveProperty('spaceId');
+    });
+
+    it('redacts the same way on the password-login response', async () => {
+      const contributed = AssetFactory.from({ ownerId: newUuid() }).exif().build();
+      const link = SharedLinkFactory.from({
+        userId: authStub.adminSharedLink.user.id,
+        password: 'correct-password',
+      })
+        .asset(contributed, (builder) => builder.exif())
+        .build();
+      mocks.sharedLink.get.mockResolvedValue(getForSharedLink(link) as never);
+      mocks.crypto.hashSha256.mockReturnValue(Buffer.from('hashed-token'));
+
+      const { sharedLink } = await sut.login(authStub.adminSharedLink, { password: 'correct-password' });
+
+      for (const asset of sharedLink.assets) {
+        expect(asset).not.toHaveProperty('ownerId');
+      }
     });
   });
 

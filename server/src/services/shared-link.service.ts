@@ -42,7 +42,11 @@ export class SharedLinkService extends BaseService {
     }
 
     return {
-      sharedLink: mapSharedLink(sharedLink, { stripAssetMetadata: !sharedLink.showExif }),
+      // Anonymous visitor path — redact who owns what (#1018).
+      sharedLink: mapSharedLink(sharedLink, {
+        stripAssetMetadata: !sharedLink.showExif,
+        redactAssetOwners: true,
+      }),
       token: this.asToken({ id, password }),
     };
   }
@@ -59,7 +63,8 @@ export class SharedLinkService extends BaseService {
       throw new UnauthorizedException('Password required');
     }
 
-    return mapSharedLink(sharedLink, { stripAssetMetadata: !sharedLink.showExif });
+    // Anonymous visitor path — redact who owns what (#1018).
+    return mapSharedLink(sharedLink, { stripAssetMetadata: !sharedLink.showExif, redactAssetOwners: true });
   }
 
   async get(auth: AuthDto, id: string): Promise<SharedLinkResponseDto> {
