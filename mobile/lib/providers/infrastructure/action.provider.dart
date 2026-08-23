@@ -135,10 +135,10 @@ class ActionNotifier extends Notifier<void> {
     return ActionResult(count: assets.length, success: true);
   }
 
-  Future<ActionResult> shareLink(ActionSource source, BuildContext context) async {
+  Future<ActionResult> shareLink(ActionSource source, BuildContext context, {String? spaceId}) async {
     final ids = _getRemoteIdsForSource(source);
     try {
-      await _service.shareLink(ids, context);
+      await _service.shareLink(ids, context, spaceId: spaceId);
       return ActionResult(count: ids.length, success: true);
     } catch (error, stack) {
       _logger.severe('Failed to create shared link for assets', error, stack);

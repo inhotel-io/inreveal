@@ -25,7 +25,12 @@ class SharedLinkEditPage extends HookConsumerWidget {
   final List<String>? assetsList;
   final String? albumId;
 
-  const SharedLinkEditPage({super.key, this.existingLink, this.assetsList, this.albumId});
+  /// #1018: the Space this link is being created from, when it is. Naming it makes the server
+  /// authorize against the space instead of asset ownership, so the link covers what the space
+  /// shows rather than only the creator's own photos.
+  final String? spaceId;
+
+  const SharedLinkEditPage({super.key, this.existingLink, this.assetsList, this.albumId, this.spaceId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -335,6 +340,7 @@ class SharedLinkEditPage extends HookConsumerWidget {
             password: passwordController.text.isEmpty ? null : passwordController.text,
             slug: slugController.text.isEmpty ? null : slugController.text,
             expiresAt: calculateExpiry()?.toUtc(),
+            spaceId: spaceId,
           );
       if (!context.mounted) {
         return;
