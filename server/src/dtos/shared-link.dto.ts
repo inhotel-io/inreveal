@@ -30,6 +30,13 @@ const SharedLinkCreateSchema = z
     allowUpload: z.boolean().optional().describe('Allow uploads'),
     allowDownload: z.boolean().default(true).optional().describe('Allow downloads'),
     showMetadata: z.boolean().default(true).optional().describe('Show metadata'),
+    spaceId: z
+      .uuidv4()
+      .optional()
+      .describe(
+        'Shared space this link is created from. Lets the link cover assets contributed by other ' +
+          'members, which requires the caller to be an Owner or Editor of the space.',
+      ),
   })
   .meta({ id: 'SharedLinkCreateDto' });
 
@@ -67,6 +74,7 @@ const SharedLinkResponseSchema = z
     allowDownload: z.boolean().describe('Allow downloads'),
     showMetadata: z.boolean().describe('Show metadata'),
     slug: z.string().nullable().describe('Custom URL slug'),
+    spaceId: z.uuidv4().nullable().describe('Shared space this link was created from'),
   })
   .describe('Shared link response')
   .meta({ id: 'SharedLinkResponseDto' });
@@ -95,6 +103,7 @@ export function mapSharedLink(sharedLink: SharedLink, options: { stripAssetMetad
     allowDownload: sharedLink.allowDownload,
     showMetadata: sharedLink.showExif,
     slug: sharedLink.slug,
+    spaceId: sharedLink.spaceId,
   };
 
   // unless we select sharedLink.album.sharedLinks this will be wrong

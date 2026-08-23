@@ -54,6 +54,69 @@ select
         where
           "shared_link"."id" = "shared_link_asset"."sharedLinkId"
           and "asset"."deletedAt" is null
+          and (
+            "asset"."ownerId" = "shared_link"."userId"
+            or (
+              "shared_link"."spaceId" is not null
+              and exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_member"
+                where
+                  "shared_space_member"."spaceId" = "shared_link"."spaceId"
+                  and "shared_space_member"."userId" = "shared_link"."userId"
+              )
+              and "asset"."visibility" in ($1, $2)
+              and (
+                exists (
+                  select
+                    1 as "exists"
+                  from
+                    "shared_space_asset"
+                  where
+                    "shared_space_asset"."assetId" = "asset"."id"
+                    and "shared_space_asset"."spaceId" = "shared_link"."spaceId"
+                )
+                or exists (
+                  select
+                    1 as "exists"
+                  from
+                    "shared_space_library"
+                  where
+                    "shared_space_library"."libraryId" = "asset"."libraryId"
+                    and "shared_space_library"."spaceId" = "shared_link"."spaceId"
+                )
+                or (
+                  exists (
+                    select
+                      1 as "exists"
+                    from
+                      "shared_space_album"
+                      inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                      and "album"."deletedAt" is null
+                    where
+                      "album_asset"."assetId" = "asset"."id"
+                      and "shared_space_album"."spaceId" = "shared_link"."spaceId"
+                  )
+                  or exists (
+                    select
+                      1 as "exists"
+                    from
+                      "shared_space_album"
+                      inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                      and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                      and "album"."deletedAt" is null
+                    where
+                      "album_space_asset"."assetId" = "asset"."id"
+                      and "shared_space_album"."spaceId" = "shared_link"."spaceId"
+                  )
+                )
+              )
+            )
+          )
         order by
           "asset"."fileCreatedAt" asc
       ) as agg
@@ -78,7 +141,35 @@ from
       to_json("owner") as "owner"
     from
       "album"
-      left join "album_asset" on "album_asset"."albumId" = "album"."id"
+      left join lateral (
+        select
+          "album_asset"."assetId" as "assetId"
+        from
+          "album_asset"
+        where
+          "album_asset"."albumId" = "album"."id"
+        union
+        select
+          "album_space_asset"."assetId" as "assetId"
+        from
+          "album_space_asset"
+          inner join "shared_space_album" on "shared_space_album"."albumId" = "album_space_asset"."albumId"
+          and "shared_space_album"."spaceId" = "album_space_asset"."spaceId"
+          inner join "asset" on "asset"."id" = "album_space_asset"."assetId"
+        where
+          "asset"."visibility" in ($3, $4)
+          and "album_space_asset"."albumId" = "album"."id"
+          and "album_space_asset"."spaceId" = "shared_link"."spaceId"
+          and exists (
+            select
+              1 as "exists"
+            from
+              "shared_space_member"
+            where
+              "shared_space_member"."spaceId" = "shared_link"."spaceId"
+              and "shared_space_member"."userId" = "shared_link"."userId"
+          )
+      ) as "album_members" on true
       left join lateral (
         select
           "asset".*,
@@ -123,7 +214,7 @@ from
               "asset_exif"."assetId" = "asset"."id"
           ) as "exifInfo" on true
         where
-          "album_asset"."assetId" = "asset"."id"
+          "album_members"."assetId" = "asset"."id"
           and "asset"."deletedAt" is null
         order by
           "asset"."fileCreatedAt" asc
@@ -158,10 +249,10 @@ from
       "owner".*
   ) as "album" on true
 where
-  "shared_link"."id" = $1
-  and "shared_link"."userId" = $2
+  "shared_link"."id" = $5
+  and "shared_link"."userId" = $6
   and (
-    "shared_link"."type" = $3
+    "shared_link"."type" = $7
     or "album"."id" is not null
   )
 order by
@@ -183,10 +274,73 @@ select
         where
           "shared_link"."id" = "shared_link_asset"."sharedLinkId"
           and "asset"."deletedAt" is null
+          and (
+            "asset"."ownerId" = "shared_link"."userId"
+            or (
+              "shared_link"."spaceId" is not null
+              and exists (
+                select
+                  1 as "exists"
+                from
+                  "shared_space_member"
+                where
+                  "shared_space_member"."spaceId" = "shared_link"."spaceId"
+                  and "shared_space_member"."userId" = "shared_link"."userId"
+              )
+              and "asset"."visibility" in ($1, $2)
+              and (
+                exists (
+                  select
+                    1 as "exists"
+                  from
+                    "shared_space_asset"
+                  where
+                    "shared_space_asset"."assetId" = "asset"."id"
+                    and "shared_space_asset"."spaceId" = "shared_link"."spaceId"
+                )
+                or exists (
+                  select
+                    1 as "exists"
+                  from
+                    "shared_space_library"
+                  where
+                    "shared_space_library"."libraryId" = "asset"."libraryId"
+                    and "shared_space_library"."spaceId" = "shared_link"."spaceId"
+                )
+                or (
+                  exists (
+                    select
+                      1 as "exists"
+                    from
+                      "shared_space_album"
+                      inner join "album_asset" on "album_asset"."albumId" = "shared_space_album"."albumId"
+                      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                      and "album"."deletedAt" is null
+                    where
+                      "album_asset"."assetId" = "asset"."id"
+                      and "shared_space_album"."spaceId" = "shared_link"."spaceId"
+                  )
+                  or exists (
+                    select
+                      1 as "exists"
+                    from
+                      "shared_space_album"
+                      inner join "album_space_asset" on "album_space_asset"."albumId" = "shared_space_album"."albumId"
+                      and "album_space_asset"."spaceId" = "shared_space_album"."spaceId"
+                      inner join "album" on "album"."id" = "shared_space_album"."albumId"
+                      and "album"."deletedAt" is null
+                    where
+                      "album_space_asset"."assetId" = "asset"."id"
+                      and "shared_space_album"."spaceId" = "shared_link"."spaceId"
+                  )
+                )
+              )
+            )
+          )
         order by
           "asset"."fileCreatedAt" asc
         limit
-          $1
+          $3
       ) as agg
   ) as "assets",
   to_json("album") as "album"
@@ -225,12 +379,12 @@ from
       and "album"."deletedAt" is null
   ) as "album" on true
 where
-  "shared_link"."userId" = $2
+  "shared_link"."userId" = $4
   and (
-    "shared_link"."type" = $3
+    "shared_link"."type" = $5
     or "album"."id" is not null
   )
-  and "shared_link"."albumId" = $4
+  and "shared_link"."albumId" = $6
 order by
   "shared_link"."createdAt" desc
 
@@ -239,6 +393,7 @@ select
   "shared_link"."id",
   "shared_link"."userId",
   "shared_link"."albumId",
+  "shared_link"."spaceId",
   "shared_link"."expiresAt",
   "shared_link"."showExif",
   "shared_link"."allowUpload",
@@ -278,6 +433,7 @@ select
   "shared_link"."id",
   "shared_link"."userId",
   "shared_link"."albumId",
+  "shared_link"."spaceId",
   "shared_link"."expiresAt",
   "shared_link"."showExif",
   "shared_link"."allowUpload",

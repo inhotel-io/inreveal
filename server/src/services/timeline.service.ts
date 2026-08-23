@@ -88,12 +88,30 @@ export class TimelineService extends BaseService {
 
     let albumSpaceIds: string[] | undefined;
     // #752 P0-2: album browse — resolve the viewer's live member-spaces linking this album so the
-    // repository unions member-gated contributions. NEVER for shared-link auth: auth.user is the
-    // link OWNER there, and their membership must not leak contributions to anonymous viewers.
-    if (dto.albumId && !auth.sharedLink) {
-      const ids = await this.sharedSpaceRepository.getMemberSpaceIdsLinkingAlbum(dto.albumId, auth.user.id);
-      if (ids.length > 0) {
-        albumSpaceIds = ids;
+    // repository unions member-gated contributions.
+    if (dto.albumId) {
+      if (auth.sharedLink) {
+        // #1018: a shared link resolves at most the ONE space it was created from, never the link
+        // creator's full membership — that would leak a contribution from any OTHER space they
+        // happen to share the album into. Both halves of the tether are re-checked here: the album
+        // must still be linked to that space, and the creator must still be a member of it (which
+        // is exactly what getMemberSpaceIdsLinkingAlbum returns). A link with no space — every
+        // pre-#1018 link, and every album_user share — resolves none, as before.
+        const linkSpaceId = auth.sharedLink.spaceId;
+        if (linkSpaceId) {
+          const ids = await this.sharedSpaceRepository.getMemberSpaceIdsLinkingAlbum(
+            dto.albumId,
+            auth.sharedLink.userId,
+          );
+          if (ids.includes(linkSpaceId)) {
+            albumSpaceIds = [linkSpaceId];
+          }
+        }
+      } else {
+        const ids = await this.sharedSpaceRepository.getMemberSpaceIdsLinkingAlbum(dto.albumId, auth.user.id);
+        if (ids.length > 0) {
+          albumSpaceIds = ids;
+        }
       }
     }
 
