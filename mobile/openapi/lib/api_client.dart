@@ -825,6 +825,8 @@ class ApiClient {
           return SharedSpacePeopleStatisticsResponseDto.fromJson(value);
         case 'SharedSpacePersonAliasDto':
           return SharedSpacePersonAliasDto.fromJson(value);
+        case 'SharedSpacePersonCreateDto':
+          return SharedSpacePersonCreateDto.fromJson(value);
         case 'SharedSpacePersonMergeDto':
           return SharedSpacePersonMergeDto.fromJson(value);
         case 'SharedSpacePersonResponseDto':
@@ -849,6 +851,10 @@ class ApiClient {
           return SmartSearchFacetsResponseDto.fromJson(value);
         case 'SourceType':
           return SourceTypeTypeTransformer().decode(value);
+        case 'SpaceAssetFaceCreateDto':
+          return SpaceAssetFaceCreateDto.fromJson(value);
+        case 'SpaceAssetFaceResponseDto':
+          return SpaceAssetFaceResponseDto.fromJson(value);
         case 'SpaceRepresentativeFaceUpdateDto':
           return SpaceRepresentativeFaceUpdateDto.fromJson(value);
         case 'StackCreateDto':
