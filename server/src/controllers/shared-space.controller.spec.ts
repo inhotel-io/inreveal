@@ -593,6 +593,7 @@ describe(SharedSpaceController.name, () => {
           imageHeight: 3000,
           spacePersonId: personId,
           spacePersonName: 'Uncle Tom',
+          isEditorDrawn: true,
         },
       ]);
 
@@ -618,10 +619,9 @@ describe(SharedSpaceController.name, () => {
           imageHeight: 3000,
           spacePersonId: personId,
           spacePersonName: 'Uncle Tom',
+          isEditorDrawn: true,
         },
       ]);
-      // No isEditorDrawn field yet -- asset_face.createdBy does not exist until Slice 6.
-      expect(body[0]).not.toHaveProperty('isEditorDrawn');
     });
 
     it('should validate assetId as a uuid', async () => {
@@ -675,6 +675,7 @@ describe(SharedSpaceController.name, () => {
         imageHeight: 3000,
         spacePersonId: personId,
         spacePersonName: 'Aurelia',
+        isEditorDrawn: true,
       });
 
       const { status, body: response } = await request(ctx.getHttpServer())
@@ -699,6 +700,7 @@ describe(SharedSpaceController.name, () => {
         imageHeight: 3000,
         spacePersonId: personId,
         spacePersonName: 'Aurelia',
+        isEditorDrawn: true,
       });
     });
 
