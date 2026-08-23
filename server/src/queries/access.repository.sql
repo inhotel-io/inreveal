@@ -384,8 +384,9 @@ from
         where
           "shared_space_member"."spaceId" = "shared_link"."spaceId"
           and "shared_space_member"."userId" = "shared_link"."userId"
+          and "shared_space_member"."role" in ($1, $2)
       )
-      and "asset"."visibility" in ($1, $2)
+      and "asset"."visibility" in ($3, $4)
       and (
         exists (
           select
@@ -457,12 +458,13 @@ from
     where
       "shared_space_member"."spaceId" = "shared_link"."spaceId"
       and "shared_space_member"."userId" = "shared_link"."userId"
+      and "shared_space_member"."role" in ($5, $6)
   )
   left join "asset" as "contributedAssets" on "contributedAssets"."id" = "album_space_asset"."assetId"
   and "contributedAssets"."deletedAt" is null
-  and "contributedAssets"."visibility" in ($3, $4)
+  and "contributedAssets"."visibility" in ($7, $8)
 where
-  "shared_link"."id" = $5
+  "shared_link"."id" = $9
   and array[
     "asset"."id",
     "asset"."livePhotoVideoId",
@@ -470,7 +472,7 @@ where
     "albumAssets"."livePhotoVideoId",
     "contributedAssets"."id",
     "contributedAssets"."livePhotoVideoId"
-  ] && array[$6]::uuid[]
+  ] && array[$10]::uuid[]
 
 -- AccessRepository.authDevice.checkOwnerAccess
 select

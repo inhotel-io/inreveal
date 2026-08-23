@@ -1,5 +1,5 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { AssetType, AssetVisibility, TimeBucketSize } from 'src/enum';
+import { AssetType, AssetVisibility, SharedSpaceRole, TimeBucketSize } from 'src/enum';
 import { TimelineService } from 'src/services/timeline.service';
 import { authStub } from 'test/fixtures/auth.stub';
 import { factory, newUuid } from 'test/small.factory';
@@ -379,6 +379,19 @@ describe(TimelineService.name, () => {
       await sut.getTimeBuckets(sharedLinkAuth(null), { albumId });
 
       expect(mocks.asset.getTimeBuckets).toHaveBeenCalledWith(expect.objectContaining({ albumSpaceIds: undefined }));
+    });
+
+    it('resolves only spaces where the creator still holds a write role', async () => {
+      // The role, not just membership, is what authorised publishing another member's photo. The
+      // service must ask for write-capable spaces so a demoted creator resolves none.
+      mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum.mockResolvedValue([]);
+      mocks.asset.getTimeBuckets.mockResolvedValue([]);
+
+      await sut.getTimeBuckets(sharedLinkAuth(spaceId), { albumId });
+
+      expect(mocks.sharedSpace.getMemberSpaceIdsLinkingAlbum).toHaveBeenCalledWith(albumId, expect.any(String), {
+        roles: [SharedSpaceRole.Owner, SharedSpaceRole.Editor],
+      });
     });
 
     it('leaves the contributed arm off when the album is no longer linked to that space', async () => {

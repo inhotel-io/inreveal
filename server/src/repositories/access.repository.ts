@@ -5,7 +5,7 @@ import { ChunkedSet, DummyValue, GenerateSql } from 'src/decorators';
 import { AlbumUserRole, AssetVisibility, SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { asUuid } from 'src/utils/database';
-import { asBaseEb, sharedLinkAssetIsServable, sharedLinkCreatorIsMember } from 'src/utils/shared-link-space-tether';
+import { asBaseEb, sharedLinkAssetIsServable, sharedLinkCreatorCanPublish } from 'src/utils/shared-link-space-tether';
 import {
   spaceAssetPathBranches,
   spaceVisibilityGate,
@@ -588,7 +588,7 @@ class AssetAccess {
                   .whereRef('shared_space_album.spaceId', '=', 'album_space_asset.spaceId'),
               ),
             )
-            .on((eb) => sharedLinkCreatorIsMember(asBaseEb(eb))),
+            .on((eb) => sharedLinkCreatorCanPublish(asBaseEb(eb))),
         )
         .leftJoin('asset as contributedAssets', (join) =>
           join

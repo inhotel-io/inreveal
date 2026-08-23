@@ -14,6 +14,7 @@ import {
 import { Permission, SharedLinkType, SharedSpaceRole } from 'src/enum';
 import { BaseService } from 'src/services/base.service';
 import { getExternalDomain, OpenGraphTags } from 'src/utils/misc';
+import { sharedLinkPublisherRoles } from 'src/utils/shared-link-space-tether';
 
 @Injectable()
 export class SharedLinkService extends BaseService {
@@ -151,7 +152,7 @@ export class SharedLinkService extends BaseService {
    */
   private async requireSpaceEditor(auth: AuthDto, spaceId: string): Promise<void> {
     const member = await this.sharedSpaceRepository.getMember(spaceId, auth.user.id);
-    if (!member || (member.role !== SharedSpaceRole.Owner && member.role !== SharedSpaceRole.Editor)) {
+    if (!member || !sharedLinkPublisherRoles.includes(member.role as SharedSpaceRole)) {
       throw new BadRequestException('Not found or no shared space editor access');
     }
   }

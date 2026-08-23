@@ -66,8 +66,9 @@ select
                 where
                   "shared_space_member"."spaceId" = "shared_link"."spaceId"
                   and "shared_space_member"."userId" = "shared_link"."userId"
+                  and "shared_space_member"."role" in ($1, $2)
               )
-              and "asset"."visibility" in ($1, $2)
+              and "asset"."visibility" in ($3, $4)
               and (
                 exists (
                   select
@@ -157,7 +158,7 @@ from
           and "shared_space_album"."spaceId" = "album_space_asset"."spaceId"
           inner join "asset" on "asset"."id" = "album_space_asset"."assetId"
         where
-          "asset"."visibility" in ($3, $4)
+          "asset"."visibility" in ($5, $6)
           and "album_space_asset"."albumId" = "album"."id"
           and "album_space_asset"."spaceId" = "shared_link"."spaceId"
           and exists (
@@ -168,6 +169,7 @@ from
             where
               "shared_space_member"."spaceId" = "shared_link"."spaceId"
               and "shared_space_member"."userId" = "shared_link"."userId"
+              and "shared_space_member"."role" in ($7, $8)
           )
       ) as "album_members" on true
       left join lateral (
@@ -249,10 +251,10 @@ from
       "owner".*
   ) as "album" on true
 where
-  "shared_link"."id" = $5
-  and "shared_link"."userId" = $6
+  "shared_link"."id" = $9
+  and "shared_link"."userId" = $10
   and (
-    "shared_link"."type" = $7
+    "shared_link"."type" = $11
     or "album"."id" is not null
   )
 order by
@@ -286,8 +288,9 @@ select
                 where
                   "shared_space_member"."spaceId" = "shared_link"."spaceId"
                   and "shared_space_member"."userId" = "shared_link"."userId"
+                  and "shared_space_member"."role" in ($1, $2)
               )
-              and "asset"."visibility" in ($1, $2)
+              and "asset"."visibility" in ($3, $4)
               and (
                 exists (
                   select
@@ -340,7 +343,7 @@ select
         order by
           "asset"."fileCreatedAt" asc
         limit
-          $3
+          $5
       ) as agg
   ) as "assets",
   to_json("album") as "album"
@@ -379,12 +382,12 @@ from
       and "album"."deletedAt" is null
   ) as "album" on true
 where
-  "shared_link"."userId" = $4
+  "shared_link"."userId" = $6
   and (
-    "shared_link"."type" = $5
+    "shared_link"."type" = $7
     or "album"."id" is not null
   )
-  and "shared_link"."albumId" = $6
+  and "shared_link"."albumId" = $8
 order by
   "shared_link"."createdAt" desc
 

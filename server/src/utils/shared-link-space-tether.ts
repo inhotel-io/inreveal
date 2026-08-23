@@ -9,7 +9,7 @@
 //
 // Two conditions must hold for a non-owned asset to be served:
 //
-//   1. the link creator is still a member of the space, and
+//   1. the link creator still holds the role that authorised publishing (Owner/Editor), and
 //   2. the asset is still visible in that space through one of its paths (direct add, linked
 //      library, linked album, or a cross-owner contribution).
 //
@@ -17,17 +17,33 @@
 // link to the creator's own assets rather than breaking it. Encoding this once here means the access
 // gate and the link payload can never drift apart and start disagreeing about what a link shows.
 import { Expression, ExpressionBuilder, SqlBool } from 'kysely';
+import { SharedSpaceRole } from 'src/enum';
 import { DB } from 'src/schema';
 import { spaceAssetPathBranches, spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 
-/** Condition 1 — the link's creator is still a member of the space the link was created from. */
-export const sharedLinkCreatorIsMember = (eb: ExpressionBuilder<DB, keyof DB>): Expression<SqlBool> =>
+/**
+ * The space roles that may publish a link covering other members' photos. Single source of truth for
+ * the create gate and every read gate, so they cannot drift apart.
+ */
+export const sharedLinkPublisherRoles = [SharedSpaceRole.Owner, SharedSpaceRole.Editor];
+
+/**
+ * Condition 1 — the link's creator still holds a write role in the space it was created from.
+ *
+ * Deliberately the ROLE, not bare membership: Owner/Editor is what authorised publishing another
+ * member's photo in the first place (`shared-link.service.requireSpaceEditor`), so a creator demoted
+ * to Viewer must stop publishing, exactly as one removed from the space does. Checking only
+ * membership would leave a demoted editor holding a public link over photos they may no longer act
+ * on — and with no space-level view of published links, nobody could find it to revoke it.
+ */
+export const sharedLinkCreatorCanPublish = (eb: ExpressionBuilder<DB, keyof DB>): Expression<SqlBool> =>
   eb.exists(
     eb
       .selectFrom('shared_space_member')
       .select(eb.lit(1).as('exists'))
       .whereRef('shared_space_member.spaceId', '=', 'shared_link.spaceId')
-      .whereRef('shared_space_member.userId', '=', 'shared_link.userId'),
+      .whereRef('shared_space_member.userId', '=', 'shared_link.userId')
+      .where('shared_space_member.role', 'in', sharedLinkPublisherRoles),
   );
 
 /**
@@ -37,7 +53,7 @@ export const sharedLinkCreatorIsMember = (eb: ExpressionBuilder<DB, keyof DB>): 
 export const sharedLinkSpaceTether = (eb: ExpressionBuilder<DB, keyof DB>): Expression<SqlBool> =>
   eb.and([
     eb('shared_link.spaceId', 'is not', null),
-    sharedLinkCreatorIsMember(eb),
+    sharedLinkCreatorCanPublish(eb),
     spaceVisibilityGate(eb, 'asset.visibility'),
     eb.or(
       spaceAssetPathBranches(eb, {

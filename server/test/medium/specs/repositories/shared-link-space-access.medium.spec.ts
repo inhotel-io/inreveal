@@ -9,7 +9,7 @@
  * Assets the link creator DOES own are unaffected by any of that — they were always theirs to share.
  */
 import { Kysely } from 'kysely';
-import { AssetVisibility, SharedLinkType } from 'src/enum';
+import { AssetVisibility, SharedLinkType, SharedSpaceRole } from 'src/enum';
 import { AccessRepository } from 'src/repositories/access.repository';
 import { AlbumRepository } from 'src/repositories/album.repository';
 import { LoggingRepository } from 'src/repositories/logging.repository';
@@ -108,6 +108,32 @@ describe('checkSharedLinkAccess — individual link from a space', () => {
 
     await defaultDatabase
       .deleteFrom('shared_space_member')
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', sharer.id)
+      .execute();
+
+    await expect(
+      accessRepo.asset.checkSharedLinkAccess(sharedLink.id, new Set([contributedAsset.id])),
+    ).resolves.toEqual(new Set());
+  });
+
+  // The authority to publish another member's photo is the Owner/Editor role, so losing that role
+  // has to stop the publishing — not only losing membership outright. Otherwise a demoted editor
+  // keeps a public link over photos they may no longer act on, and the space owner has no way to
+  // see it, let alone revoke it.
+  it('stops serving it once the link creator is demoted to viewer', async () => {
+    const { ctx, accessRepo, sharer, space, contributedAsset } = await seedSpace();
+    await ctx.newSharedSpaceAsset({ spaceId: space.id, assetId: contributedAsset.id });
+    const { sharedLink } = await ctx.newSharedLink({
+      userId: sharer.id,
+      type: SharedLinkType.Individual,
+      spaceId: space.id,
+      assetIds: [contributedAsset.id],
+    });
+
+    await defaultDatabase
+      .updateTable('shared_space_member')
+      .set({ role: SharedSpaceRole.Viewer })
       .where('spaceId', '=', space.id)
       .where('userId', '=', sharer.id)
       .execute();
@@ -340,6 +366,31 @@ describe('SharedLinkRepository.get — payload (#1018)', () => {
     const result = await sharedLinkRepo.get(sharer.id, sharedLink.id);
 
     expect(result?.album?.assets.map(({ id }) => id).sort()).toEqual([contributedAsset.id, ownAsset.id].sort());
+  });
+
+  it('drops contributions from an album link once the creator is demoted to viewer', async () => {
+    const { ctx, sharedLinkRepo, sharer, space, contributedAsset, ownAsset } = await seedSpace();
+    const { album } = await ctx.newAlbum({ ownerId: sharer.id }, [ownAsset.id]);
+    await ctx.newSharedSpaceAlbum({ spaceId: space.id, albumId: album.id });
+    await ctx.newAlbumSpaceAsset({ albumId: album.id, assetId: contributedAsset.id, spaceId: space.id });
+    const { sharedLink } = await ctx.newSharedLink({
+      userId: sharer.id,
+      type: SharedLinkType.Album,
+      albumId: album.id,
+      spaceId: space.id,
+    });
+
+    await defaultDatabase
+      .updateTable('shared_space_member')
+      .set({ role: SharedSpaceRole.Viewer })
+      .where('spaceId', '=', space.id)
+      .where('userId', '=', sharer.id)
+      .execute();
+
+    const result = await sharedLinkRepo.get(sharer.id, sharedLink.id);
+
+    // The album's own asset survives; only the contributed one goes.
+    expect(result?.album?.assets.map(({ id }) => id)).toEqual([ownAsset.id]);
   });
 
   it('never lists a hidden contribution', async () => {

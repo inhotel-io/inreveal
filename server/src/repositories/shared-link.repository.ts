@@ -10,7 +10,7 @@ import { DB } from 'src/schema';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
 import { AssetTable } from 'src/schema/tables/asset.table';
 import { SharedLinkTable } from 'src/schema/tables/shared-link.table';
-import { asBaseEb, sharedLinkAssetIsServable, sharedLinkCreatorIsMember } from 'src/utils/shared-link-space-tether';
+import { asBaseEb, sharedLinkAssetIsServable, sharedLinkCreatorCanPublish } from 'src/utils/shared-link-space-tether';
 import { spaceVisibilityGate } from 'src/utils/shared-space-album-scope';
 
 export type SharedLinkSearchOptions = {
@@ -114,7 +114,7 @@ export class SharedLinkRepository {
                       .select('album_space_asset.assetId as assetId')
                       .whereRef('album_space_asset.albumId', '=', 'album.id')
                       .whereRef('album_space_asset.spaceId', '=', 'shared_link.spaceId')
-                      .where((eb) => sharedLinkCreatorIsMember(asBaseEb(eb))),
+                      .where((eb) => sharedLinkCreatorCanPublish(asBaseEb(eb))),
                   )
                   .as('album_members'),
               (join) => join.onTrue(),

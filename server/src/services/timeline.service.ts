@@ -12,6 +12,7 @@ import { TimeBucketOptions } from 'src/repositories/asset.repository';
 import { BaseService } from 'src/services/base.service';
 import { requireElevatedPermission } from 'src/utils/access';
 import { getMyPartnerIds } from 'src/utils/asset.util';
+import { sharedLinkPublisherRoles } from 'src/utils/shared-link-space-tether';
 import { normalizeTimeBucketForBucketSize } from 'src/utils/timeline-bucket';
 
 @Injectable()
@@ -99,9 +100,12 @@ export class TimelineService extends BaseService {
         // pre-#1018 link, and every album_user share — resolves none, as before.
         const linkSpaceId = auth.sharedLink.spaceId;
         if (linkSpaceId) {
+          // Role-gated for the same reason the access tether is: a creator demoted to Viewer no
+          // longer holds the authority that published the contributions.
           const ids = await this.sharedSpaceRepository.getMemberSpaceIdsLinkingAlbum(
             dto.albumId,
             auth.sharedLink.userId,
+            { roles: sharedLinkPublisherRoles },
           );
           if (ids.includes(linkSpaceId)) {
             albumSpaceIds = [linkSpaceId];
