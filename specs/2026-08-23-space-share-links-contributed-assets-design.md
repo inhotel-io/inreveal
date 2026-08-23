@@ -42,8 +42,8 @@ When a contributor pulls their photo out of the space, or the album is unlinked,
 creator leaves the space, the link stops serving that asset. Deleting the space nulls `spaceId`
 and the link degrades to the creator's own assets.
 
-This follows the doctrine already stated verbatim in `album_space_asset.table.ts`: *"Visibility is
-re-derived from live space membership + the live album↔space link on every read."* A permanent
+This follows the doctrine already stated verbatim in `album_space_asset.table.ts`: _"Visibility is
+re-derived from live space membership + the live album↔space link on every read."_ A permanent
 `shared_link_asset` grant would leave a withdrawn photo publicly exposed forever.
 
 ## Who may create one
@@ -55,17 +55,17 @@ keeps today's owned-subset narrowing and the existing notice.
 
 ## Slices
 
-| # | Area | Change |
-| - | ---- | ------ |
-| S1 | schema + DTO | `shared_link.spaceId` (nullable FK → `shared_space`, `SET NULL`), fork migration, create/response DTO fields, `AuthSharedLink.spaceId`, `authBuilder` select |
-| S2 | create | space-gated authorization for both link types |
-| S3 | read: per-asset | `checkSharedLinkAccess` — contributed arm for album links, live tether for non-owned individual assets |
-| S4 | read: timeline | `timeline.service` resolves `albumSpaceIds` from the link's space instead of refusing for shared-link auth |
-| S5 | read: counts | `album.service.get` passes the link's space to `getMetadataForIds` |
-| S6 | serialization | `shared-link.repository` album leg unions contributions; individual leg tethered |
-| S7 | web | thread `spaceId`, stop narrowing for space editors, consent warning, ten locales |
-| S8 | mobile | Dart client regen |
-| S9 | docs + e2e | `shared-spaces.md`, `sharing.md`, cross-owner e2e coverage |
+| #   | Area            | Change                                                                                                                                                       |
+| --- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S1  | schema + DTO    | `shared_link.spaceId` (nullable FK → `shared_space`, `SET NULL`), fork migration, create/response DTO fields, `AuthSharedLink.spaceId`, `authBuilder` select |
+| S2  | create          | space-gated authorization for both link types                                                                                                                |
+| S3  | read: per-asset | `checkSharedLinkAccess` — contributed arm for album links, live tether for non-owned individual assets                                                       |
+| S4  | read: timeline  | `timeline.service` resolves `albumSpaceIds` from the link's space instead of refusing for shared-link auth                                                   |
+| S5  | read: counts    | `album.service.get` passes the link's space to `getMetadataForIds`                                                                                           |
+| S6  | serialization   | `shared-link.repository` album leg unions contributions; individual leg tethered                                                                             |
+| S7  | web             | thread `spaceId`, stop narrowing for space editors, consent warning, ten locales                                                                             |
+| S8  | mobile          | Dart client regen                                                                                                                                            |
+| S9  | docs + e2e      | `shared-spaces.md`, `sharing.md`, cross-owner e2e coverage                                                                                                   |
 
 ### S2 — authorization rules
 
