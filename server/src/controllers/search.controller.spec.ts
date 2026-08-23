@@ -158,6 +158,9 @@ describe(SearchController.name, () => {
           ratings: [4, 5],
           mediaTypes: [AssetType.Image],
           hasUnnamedPeople: false,
+          hasFavorites: true,
+          hasAssetsInAlbum: true,
+          hasAssetsNotInAlbum: true,
         });
       });
 
@@ -460,6 +463,9 @@ describe(SearchController.name, () => {
           ratings: [],
           mediaTypes: [],
           hasUnnamedPeople: false,
+          hasFavorites: false,
+          hasAssetsInAlbum: false,
+          hasAssetsNotInAlbum: false,
         });
 
         const { status, body } = await request(ctx.getHttpServer())
@@ -475,6 +481,9 @@ describe(SearchController.name, () => {
           ratings: [],
           mediaTypes: [],
           hasUnnamedPeople: false,
+          hasFavorites: false,
+          hasAssetsInAlbum: false,
+          hasAssetsNotInAlbum: false,
         });
         expect(service.getFilterSuggestions).toHaveBeenCalledWith(
           expect.anything(),
@@ -529,6 +538,9 @@ describe(SearchController.name, () => {
           ratings: [],
           mediaTypes: [],
           hasUnnamedPeople: false,
+          hasFavorites: false,
+          hasAssetsInAlbum: false,
+          hasAssetsNotInAlbum: false,
         });
 
         const { status } = await request(ctx.getHttpServer())
@@ -556,6 +568,9 @@ describe(SearchController.name, () => {
           ratings: [],
           mediaTypes: [],
           hasUnnamedPeople: false,
+          hasFavorites: false,
+          hasAssetsInAlbum: false,
+          hasAssetsNotInAlbum: false,
         });
 
         const { status } = await request(ctx.getHttpServer())
