@@ -2797,6 +2797,8 @@ export type SharedLinkResponseDto = {
     showMetadata: boolean;
     /** Custom URL slug */
     slug: string | null;
+    /** Shared space this link was created from */
+    spaceId: string | null;
     "type": SharedLinkType;
     /** Owner user ID */
     userId: string;
@@ -2820,6 +2822,8 @@ export type SharedLinkCreateDto = {
     showMetadata?: boolean;
     /** Custom URL slug */
     slug?: string | null;
+    /** Shared space this link is created from. Lets the link cover assets contributed by other members, which requires the caller to be an Owner or Editor of the space. */
+    spaceId?: string;
     "type": SharedLinkType;
 };
 export type SharedLinkLoginDto = {
