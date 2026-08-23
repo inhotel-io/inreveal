@@ -454,6 +454,9 @@
     ratings: [],
     mediaTypes: [],
     hasUnnamedPeople: false,
+    hasFavorites: false,
+    hasAssetsInAlbum: false,
+    hasAssetsNotInAlbum: false,
   });
 
   /**
