@@ -46,6 +46,17 @@ afterAll(() => {
 });
 
 describe('AlbumEditModal', () => {
+  // Regression: the date input was wrapped in `Field`, which publishes its label on context
+  // for `@immich/ui` inputs to render. `DateInput` is a plain element and ignores that
+  // context, so the input shipped with no visible label and no accessible name — nothing in
+  // this file caught it, because every other assertion reaches the input by test id.
+  // getByLabelText resolves through the `for`/`id` association, so it fails if either goes.
+  it('labels the created date input', () => {
+    render(AlbumEditModal, { props: { album: album(), onClose: vi.fn() } });
+
+    expect(screen.getByLabelText('date_created')).toBe(createdAtInput());
+  });
+
   it('pre-fills the created date in local time', () => {
     render(AlbumEditModal, { props: { album: album(), onClose: vi.fn() } });
 

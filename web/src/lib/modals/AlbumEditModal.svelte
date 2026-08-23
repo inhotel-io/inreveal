@@ -3,7 +3,7 @@
   import DateInput from '$lib/elements/DateInput.svelte';
   import { handleUpdateAlbum } from '$lib/services/album.service';
   import { type AlbumResponseDto, type UpdateAlbumDto } from '@immich/sdk';
-  import { Field, FormModal, Input, Textarea } from '@immich/ui';
+  import { Field, FormModal, Input, Label, Textarea } from '@immich/ui';
   import { mdiRenameOutline } from '@mdi/js';
   import { DateTime } from 'luxon';
   import { t } from 'svelte-i18n';
@@ -51,14 +51,21 @@
         <Input bind:value={albumName} />
       </Field>
 
-      <Field label={$t('date_created')}>
+      <!-- Not a `Field`: `Field` renders no label itself, it only publishes one on context for
+           `@immich/ui` inputs to pick up. `DateInput` is a plain element and never reads that
+           context, so wrapping it in `Field` renders the input with no label at all. Label it
+           explicitly instead — the same pattern AssetSelectionChangeDateModal.svelte:82-83 uses.
+           `size`/`color` mirror the Field defaults so this matches the fields around it. -->
+      <div class="flex w-full flex-col gap-1">
+        <Label for="album-edit-created-at" label={$t('date_created')} size="small" color="secondary" />
         <DateInput
+          id="album-edit-created-at"
           type="datetime-local"
           class="immich-form-input w-full"
           data-testid="album-edit-created-at"
           bind:value={createdAt}
         />
-      </Field>
+      </div>
 
       <Field label={$t('description')}>
         <Textarea bind:value={description} />
