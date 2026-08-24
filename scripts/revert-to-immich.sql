@@ -197,6 +197,9 @@ DROP INDEX IF EXISTS "asset_face_personId_idx";
 DROP INDEX IF EXISTS "person_ownerId_identityId_key";
 DROP INDEX IF EXISTS "person_identityId_idx";
 ALTER TABLE "person"            DROP COLUMN IF EXISTS "identityId";
+-- #1018: the space a share link was created from. Dropping it implicitly drops
+-- shared_link_spaceId_idx; the links themselves survive as owner-only links.
+ALTER TABLE "shared_link"       DROP COLUMN IF EXISTS "spaceId";
 
 -- -----------------------------------------------------------------------------
 -- 5. Strip Gallery's merged 'classification' key out of system_metadata's
@@ -441,6 +444,7 @@ DELETE FROM "kysely_migrations"
    '1788000000000-ReconcileFacePersonVerdictConstraints',
    '1789000000000-AddFacePersonVerdictStatusCreatedAtIdIndex',
    '1790000000000-FixFaceRepairScanInFlightIndex',
+   '1792123120451-AddSharedLinkSpaceId',
 
    -- Pre-rename names for two migrations that were renumbered off timestamp collisions
    -- ("renumber AddFaceRepairScanFlaggedFace off the #722 collision",
