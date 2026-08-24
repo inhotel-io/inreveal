@@ -5930,7 +5930,6 @@
             "in": "query",
             "description": "Return original asset as an attachment download",
             "schema": {
-              "default": false,
               "type": "boolean"
             }
           },
@@ -22022,7 +22021,7 @@
           },
           {
             "name": "timeBuckets",
-            "required": true,
+            "required": false,
             "in": "query",
             "description": "Time bucket identifiers (YYYY-MM-DD) to resolve covers for",
             "schema": {
@@ -24969,8 +24968,7 @@
           }
         },
         "required": [
-          "categories",
-          "enabled"
+          "categories"
         ],
         "type": "object"
       },
@@ -25825,8 +25823,6 @@
           }
         },
         "required": [
-          "birthday",
-          "recentTrips",
           "retentionDays"
         ],
         "type": "object"
@@ -26140,7 +26136,6 @@
         "required": [
           "externalDomain",
           "loginPageMessage",
-          "mergePeopleAcrossOwners",
           "publicUsers"
         ],
         "type": "object"
@@ -26239,9 +26234,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "includeDerivatives"
-        ],
         "type": "object"
       },
       "AdminConfigTemplateEmailsDto": {
