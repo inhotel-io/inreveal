@@ -584,6 +584,12 @@ from
   "shared_space_album_folder"
 where
   "spaceId" = $1
+insert into
+  "shared_space_album_folder" ("spaceId", "parentId", "name", "createdById")
+values
+  ($1, $2, $3, $4)
+returning
+  *
 rollback
 
 -- SharedSpaceRepository.getAlbumFolderById
@@ -695,7 +701,7 @@ where
   "spaceId" = $1
   and "id" = $2
 for update
-rollback
+commit
 
 -- SharedSpaceRepository.moveAlbumFolderChecked
 begin
@@ -711,7 +717,7 @@ from
 where
   "spaceId" = $1
   and "id" = $2
-rollback
+commit
 
 -- SharedSpaceRepository.setAlbumLinkFolder
 update "shared_space_album"
