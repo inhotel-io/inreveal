@@ -7566,6 +7566,9 @@ describe(SharedSpaceService.name, () => {
         identityId: null,
         assetOwnerId: 'default-asset-owner',
       });
+      // §6.3.1 (revised): every attach now propagates into the owner's layer, so the owner-person
+      // resolve is on the default path for all of these tests, not just the propagation ones.
+      mocks.person.getOrCreateOwnerPersonForIdentity.mockResolvedValue({ id: 'owner-person-1' });
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
     });
 
@@ -7689,11 +7692,15 @@ describe(SharedSpaceService.name, () => {
       );
     });
 
-    // F-36 (§6.3.1 row 3): the owner already named this face under a DIFFERENT identity. The attach is
-    // ALLOWED, but the identity must NOT be rewritten — the owner's person depends on it, and
-    // applyResolvedPersonMetadata resolves their view through it. This is the assertion the design exists
-    // for: a status-only check would pass even if the implementation always called replaceFaceIdentity.
-    it('overrides an owner-named face WITHOUT rewriting its identity (F-36)', async () => {
+    // F-36 (§6.3.1 REVISED): the owner already named this face under a DIFFERENT identity. The attach is
+    // allowed and now propagates all the way into the owner's layer — both the identity AND
+    // `asset_face.personId` move to the space person's human.
+    //
+    // This inverts the original F-36, which asserted the identity was left alone. The insulated model was
+    // dropped deliberately (an editor's edit must be visible on the owner's own copy of the photo); the
+    // assertion that matters now is that the two owner-side layers move TOGETHER, since a split between
+    // them is what applyResolvedPersonMetadata would resolve inconsistently.
+    it('overrides an owner-named face and propagates to the owner layer (F-36)', async () => {
       mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
       mocks.sharedSpace.getPersonById.mockResolvedValue(
         factory.sharedSpacePerson({ id: 'space-person-1', spaceId: 'space-1', identityId: 'space-identity' }),
@@ -7716,13 +7723,18 @@ describe(SharedSpaceService.name, () => {
         undefined,
         mocks.database,
       );
-      // but the owner's identity is untouched
-      expect(mocks.faceIdentity.replaceFaceIdentity).not.toHaveBeenCalled();
-      // and the pipeline will not re-offer it
-      expect(mocks.facePersonVerdict.markRejectedForSpacePerson).toHaveBeenCalledWith(
-        'space-person-1',
-        'face-1',
-        expect.objectContaining({ identityId: 'owner-identity' }),
+      // the owner's identity now MOVES to the space person's identity, rather than being pinned
+      expect(mocks.faceIdentity.replaceFaceIdentity).toHaveBeenCalledWith(
+        { assetFaceId: 'face-1', identityId: 'space-identity-1', source: 'manual' },
+        mocks.database,
+      );
+      // and the owner's own person layer follows it, so the asset-detail People row agrees with the space
+      expect(mocks.person.getOrCreateOwnerPersonForIdentity).toHaveBeenCalledWith(
+        expect.objectContaining({ ownerId: 'default-asset-owner', identityId: 'space-identity-1' }),
+        mocks.database,
+      );
+      expect(mocks.person.setFaceOwnerPerson).toHaveBeenCalledWith(
+        { assetFaceId: 'face-1', personId: 'owner-person-1' },
         mocks.database,
       );
     });
@@ -7820,6 +7832,53 @@ describe(SharedSpaceService.name, () => {
       });
       mocks.sharedSpace.removePersonFace.mockResolvedValue(void 0);
       mocks.sharedSpace.logActivity.mockResolvedValue(void 0);
+    });
+
+    // §6.3.1 (revised): the detach must reach the OWNER's layer, not just the space projection.
+    // Without this the asset-detail People row -- seeded from `asset_face.personId` -- keeps
+    // rendering the person the editor just removed, and no amount of reloading fixes it, because
+    // the space-person link lookup is not scoped to the asset.
+    it('clears the owner personId when the owner person is the same human', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue(
+        factory.sharedSpacePerson({ id: 'space-person-1', spaceId: 'space-1', name: 'Bob', identityId: 'identity-1' }),
+      );
+      mocks.facePersonVerdict.getFaceOwnerLink.mockResolvedValue({
+        personId: 'owner-person-1',
+        identityId: 'identity-1',
+        assetOwnerId: 'bob',
+      });
+
+      await expect(sut.detachFaceFromSpacePerson(factory.auth(), 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
+        true,
+      );
+
+      expect(mocks.person.setFaceOwnerPerson).toHaveBeenCalledWith(
+        { assetFaceId: 'face-1', personId: null, expectedPersonId: 'owner-person-1' },
+        mocks.database,
+      );
+    });
+
+    // The guard on the propagation above. An editor detaching space person "Uncle Tom" must never
+    // null out the owner's UNRELATED "Dad" tag on the same face -- the identities differ, so the
+    // owner's tag was never a statement about this space person at all. This is the assertion that
+    // separates "propagate the edit" from "let an editor wipe arbitrary owner tags".
+    it('leaves the owner personId alone when the owner named a different human', async () => {
+      mocks.sharedSpace.getMember.mockResolvedValue(makeMemberResult({ role: SharedSpaceRole.Editor }));
+      mocks.sharedSpace.getPersonById.mockResolvedValue(
+        factory.sharedSpacePerson({ id: 'space-person-1', spaceId: 'space-1', name: 'Bob', identityId: 'identity-1' }),
+      );
+      mocks.facePersonVerdict.getFaceOwnerLink.mockResolvedValue({
+        personId: 'owner-person-1',
+        identityId: 'a-different-identity',
+        assetOwnerId: 'bob',
+      });
+
+      await expect(sut.detachFaceFromSpacePerson(factory.auth(), 'space-1', 'space-person-1', 'face-1')).resolves.toBe(
+        true,
+      );
+
+      expect(mocks.person.setFaceOwnerPerson).not.toHaveBeenCalled();
     });
 
     // F-25 (spec §6.7): the detach twin of F-24. An editor un-naming a face on someone ELSE's
