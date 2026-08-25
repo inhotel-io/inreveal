@@ -3060,6 +3060,7 @@
   "space_album_unlink_action": "Scollega",
   "space_album_unlink_confirmation": "Rimuovere questo album dallo spazio? Le sue foto non appariranno più qui.",
   "space_album_unlink_from_space": "Scollega dallo spazio",
+  "space_album_unlink_title": "Scollegare l'album?",
   "space_album_unlinked_success": "Album scollegato",
   "space_albums_empty": "Nessun album ancora collegato",
   "space_albums_empty_editor_cta": "Collega un album",

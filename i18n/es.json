@@ -3060,6 +3060,7 @@
   "space_album_unlink_action": "Desvincular",
   "space_album_unlink_confirmation": "¿Quitar este álbum del espacio? Sus fotos dejarán de aparecer aquí.",
   "space_album_unlink_from_space": "Desvincular del espacio",
+  "space_album_unlink_title": "¿Desvincular el álbum?",
   "space_album_unlinked_success": "Álbum desvinculado",
   "space_albums_empty": "Aún no hay álbumes vinculados",
   "space_albums_empty_editor_cta": "Vincular un álbum",
