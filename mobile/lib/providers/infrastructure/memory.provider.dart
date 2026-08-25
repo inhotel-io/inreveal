@@ -28,6 +28,6 @@ final driftAllMemoriesProvider = FutureProvider.autoDispose.family<List<DriftMem
     return const [];
   }
 
-  final service = DriftMemoryService(ref.watch(driftProvider).memoryRepository);
+  final service = DriftMemoryService(ref.watch(driftProvider).memoryRepository, ref.watch(memoryApiRepositoryProvider));
   return service.getAll(userId, onlyFavorites: onlyFavorites);
 });
