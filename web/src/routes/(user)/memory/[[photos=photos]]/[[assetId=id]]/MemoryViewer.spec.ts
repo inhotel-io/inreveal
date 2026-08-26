@@ -194,6 +194,21 @@ function memory(id: string, assetIds: string[]): MemoryResponseDto {
   };
 }
 
+/** A memory whose assets span several years, as an `on_this_day_place` card does. */
+function multiYearMemory(id: string, assets: { id: string; localDateTime: string }[]): MemoryResponseDto {
+  return {
+    ...memory(
+      id,
+      assets.map(({ id }) => id),
+    ),
+    assets: assets.map(({ id, localDateTime }) =>
+      assetFactory.build({ id, type: AssetTypeEnum.Image, localDateTime, fileCreatedAt: localDateTime }),
+    ),
+    type: MemoryType.Rule,
+    data: { ruleId: 'on_this_day_place', title: 'On this day in Berlin', context: { years: [2021, 2025] } },
+  };
+}
+
 function renderViewer() {
   return render(TestWrapper as Component<{ component: typeof MemoryViewer; componentProps: Record<string, never> }>, {
     component: MemoryViewer,
@@ -272,5 +287,51 @@ describe('MemoryViewer memory-scoped navigation (#790)', () => {
         expect(href).toContain('memoryId=memory-2');
       }
     });
+  });
+});
+
+describe('MemoryViewer date overlay for a memory spanning years', () => {
+  const memoryAssets = [
+    { id: 'berlin-2021', localDateTime: '2021-08-26T13:48:33.000Z' },
+    { id: 'berlin-2025', localDateTime: '2025-08-26T18:15:01.000Z' },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockMemoryManager.memories = [multiYearMemory('memory-1', memoryAssets)];
+    mockMemoryManager.ready.mockResolvedValue(undefined);
+    mockMemoryManager.getMemoryAsset.mockImplementation((assetId: string | undefined, memoryId?: string) =>
+      findMemoryAsset(mockMemoryManager.memories, assetId, memoryId),
+    );
+    mockGetAssetInfo.mockResolvedValue(mockMemoryManager.memories[0].assets[0]);
+    mockPage.params = {};
+    mockAfterNavigate.mockImplementation((callback) => {
+      callback({ from: null, to: { params: mockPage.params, url: mockPage.url } });
+    });
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe = vi.fn();
+        disconnect = vi.fn();
+      },
+    );
+  });
+
+  it("shows the FIRST asset's date when it is the one being viewed", async () => {
+    mockPage.url = new URL('https://gallery.test/memory?id=berlin-2021&memoryId=memory-1');
+
+    renderViewer();
+
+    expect(await screen.findByText(/August 26, 2021/)).toBeInTheDocument();
+    expect(screen.queryByText(/August 26, 2025/)).not.toBeInTheDocument();
+  });
+
+  it("shows the SECOND asset's own date, not the memory's first asset", async () => {
+    mockPage.url = new URL('https://gallery.test/memory?id=berlin-2025&memoryId=memory-1');
+
+    renderViewer();
+
+    expect(await screen.findByText(/August 26, 2025/)).toBeInTheDocument();
+    expect(screen.queryByText(/August 26, 2021/)).not.toBeInTheDocument();
   });
 });
