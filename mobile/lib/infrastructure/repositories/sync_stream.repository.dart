@@ -90,6 +90,13 @@ class SyncStreamRepository extends DriftDatabaseRepository {
             // children-before-parents kept for readability.
             await _db.sharedSpaceAlbumAssetEntity.deleteAll();
             await _db.sharedSpaceAlbumLinkEntity.deleteAll();
+            // Folders must be listed EXPLICITLY. Their only other removal path is the spaceId
+            // cascade, and foreign_keys is OFF for this whole block — so an omission here is never
+            // cleared by anything: a folder deleted server-side while the device was away has had
+            // its tombstone pruned, so the delete is never re-delivered, and folders for spaces the
+            // user was removed from stay on disk with their names while every other space table is
+            // rebuilt from what the user can still access.
+            await _db.sharedSpaceAlbumFolderEntity.deleteAll();
             await _db.sharedSpaceAlbumEntity.deleteAll();
             await _db.sharedSpaceAssetEntity.deleteAll();
             await _db.sharedSpaceLibraryEntity.deleteAll();

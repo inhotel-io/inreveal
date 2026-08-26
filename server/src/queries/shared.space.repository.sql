@@ -694,7 +694,8 @@ SELECT
   )
 select
   "id",
-  "parentId"
+  "parentId",
+  "name"
 from
   "shared_space_album_folder"
 where
