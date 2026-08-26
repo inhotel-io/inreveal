@@ -359,15 +359,16 @@ describe(MemoryService.name, () => {
             score: 100,
             assetIds: ['asset-1'],
             memoryAt: DateTime.fromISO('2023-04-23T00:00:00Z'),
-            supersedesOnThisDayYear: 2023,
+            supersedesOnThisDayYears: [2021, 2023],
           },
           {
             ruleId: 'on_this_day_place',
-            dedupeKey: 'place_day:2022-04-23:portugal:porto',
+            dedupeKey: 'place_day:2026-04-23:portugal:porto',
             title: 'On this day in Porto',
             score: 90,
             assetIds: ['asset-2'],
             memoryAt: DateTime.fromISO('2022-04-23T00:00:00Z'),
+            supersedesOnThisDayYears: [],
           },
         ]),
       };
@@ -377,9 +378,10 @@ describe(MemoryService.name, () => {
       await sut.onMemoriesCreate();
 
       expect(mocks.memory.create).toHaveBeenCalledTimes(2);
-      // Only the candidate that declared supersession removes a plain card, and only for its
-      // own year, on its own trigger day.
+      // Every year the candidate declared is removed, and only those years — the second
+      // candidate declared none, so it removes nothing. All on the one trigger day.
       expect(mocks.memory.deleteOnThisDay.mock.calls).toEqual([
+        [{ ownerId: user.id, year: 2021, showAt: new Date('2026-04-23T00:00:00.000Z') }],
         [{ ownerId: user.id, year: 2023, showAt: new Date('2026-04-23T00:00:00.000Z') }],
       ]);
 
@@ -405,12 +407,12 @@ describe(MemoryService.name, () => {
         evaluate: vi.fn().mockResolvedValue([
           {
             ruleId: 'on_this_day_place',
-            dedupeKey: 'place_day:2023-04-23:portugal:lisbon',
+            dedupeKey: 'place_day:2026-04-23:portugal:lisbon',
             title: 'On this day in Lisbon',
             score: 100,
             assetIds: ['asset-1'],
             memoryAt: DateTime.fromISO('2023-04-23T00:00:00Z'),
-            supersedesOnThisDayYear: 2023,
+            supersedesOnThisDayYears: [2023],
           },
         ]),
       };

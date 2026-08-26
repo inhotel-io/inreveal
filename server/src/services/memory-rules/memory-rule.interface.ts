@@ -16,15 +16,15 @@ export interface MemoryRuleCandidate {
    */
   visibleForDays?: number;
   /**
-   * Set when this card stands in for the plain `on_this_day` ("N years ago") memory of the
-   * given year, on the same trigger day: the two would hold substantially the same photos,
-   * so only one should reach the memory lane. Once the candidate is persisted, the service
-   * removes that year's `on_this_day` memory for the day (never a saved one).
+   * Years whose plain `on_this_day` ("N years ago") memory this card stands in for, on the
+   * same trigger day: the two would hold substantially the same photos, so only one should
+   * reach the memory lane. Once the candidate is persisted, the service removes each of those
+   * years' `on_this_day` memories for the day (never a saved one).
    *
-   * A rule must only set this when its card genuinely stands in for the whole day — it
-   * silently drops whatever the card left behind.
+   * A rule must only list a year when its card genuinely stands in for that year's whole day
+   * — it silently drops whatever the card left behind.
    */
-  supersedesOnThisDayYear?: number;
+  supersedesOnThisDayYears?: number[];
 }
 
 export interface MemoryRuleContext {

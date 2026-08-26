@@ -226,12 +226,8 @@ export class MemoryService extends BaseService {
       // so that memory already exists, and its cursor only ever moves forward, so it is never
       // recreated afterwards. (Resetting MemoriesState can bring the pair back for a few days;
       // retention clears it.)
-      if (candidate.supersedesOnThisDayYear !== undefined) {
-        await this.memoryRepository.deleteOnThisDay({
-          ownerId,
-          year: candidate.supersedesOnThisDayYear,
-          showAt,
-        });
+      for (const year of candidate.supersedesOnThisDayYears ?? []) {
+        await this.memoryRepository.deleteOnThisDay({ ownerId, year, showAt });
       }
       if (isMultiDay) {
         insertedMultiDayRuleIds.add(candidate.ruleId);
