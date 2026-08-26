@@ -811,6 +811,46 @@ describe(MemoryService.name, () => {
       ]);
       // only the dominant-city (Lisbon) assets are attached
       expect(memories[0]?.assets.map(({ id }) => id).toSorted()).toEqual([...lisbonIds].toSorted());
+
+      // Lisbon covers 6 of the day's 8 photos (75%), so this card stands in for the plain
+      // "3 years ago" memory of 2023 rather than sitting beside it holding the same photos.
+      const onThisDay = await memoryRepo.search(user.id, { type: MemoryType.OnThisDay, for: now.toJSDate() });
+      expect(onThisDay).toEqual([]);
+    });
+
+    it('keeps the plain on_this_day memory when the place card would leave photos behind', async () => {
+      const { sut, ctx } = setup();
+      const memoryRepo = ctx.get(MemoryRepository);
+      const now = DateTime.fromObject({ year: 2026, month: 7, day: 10 }, { zone: 'utc' }) as DateTime<true>;
+      const { user } = await ctx.newUser();
+
+      // 6 Lisbon + 4 ungeotagged on Jul 10 2023: Lisbon is 6/6 = 100% of the GEOTAGGED assets so
+      // the place card is still emitted, but it holds only 6 of the day's 10 photos (60%).
+      // Dropping the plain card here would lose the 4 ungeotagged ones from the memory lane.
+      for (let i = 0; i < 6; i++) {
+        await seedRuleAsset(ctx, {
+          ownerId: user.id,
+          localDateTime: `2023-07-10T0${i}:00:00Z`,
+          city: 'Lisbon',
+          country: 'Portugal',
+        });
+      }
+      for (let i = 0; i < 4; i++) {
+        await seedRuleAsset(ctx, { ownerId: user.id, localDateTime: `2023-07-10T1${i}:00:00Z` });
+      }
+
+      vi.setSystemTime(now.toJSDate());
+      await sut.onMemoriesCreate();
+
+      const rules = await memoryRepo.search(user.id, { type: MemoryType.Rule, for: now.toJSDate() });
+      expect(rules).toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({ ruleId: 'on_this_day_place', title: 'On this day in Lisbon' }),
+        }),
+      ]);
+
+      const onThisDay = await memoryRepo.search(user.id, { type: MemoryType.OnThisDay, for: now.toJSDate() });
+      expect(onThisDay).toEqual([expect.objectContaining({ data: { year: 2023 } })]);
     });
   });
 

@@ -12,6 +12,17 @@ export const MAX_YEARS = 3;
 export const ASSET_CAP = 16;
 export const SCORE_BASE = 100;
 export const MAX_COUNT_BONUS = 30;
+/**
+ * Share of *all* that year's photos for the day — not just the geotagged ones — that the
+ * dominant city must hold before this card stands in for the plain "N years ago" memory.
+ *
+ * MIN_DOMINANCE is measured over geotagged assets only, so a day that is 60% Lisbon-tagged
+ * and 40% untagged still emits a card. Superseding on that would silently drop the untagged
+ * 40% from the memory lane, so supersession asks the stricter question: does this card
+ * actually represent the day? At 0.75 a day loses at most a quarter of its photos, and only
+ * when three quarters of them share one city.
+ */
+export const SUPERSEDE_COVERAGE = 0.75;
 
 /** A usable place needs a non-blank city (EXIF city is usually null when absent, but can be ''). */
 const hasCity = (asset: MemoryPeriodAsset): boolean => asset.city !== null && asset.city.trim() !== '';
@@ -29,9 +40,11 @@ export class OnThisDayPlaceMemoryRule implements MemoryRule {
       takenBefore: target.endOf('day').toJSDate(),
     });
 
+    // Keyed on every past-year asset for the day, geotagged or not: dominance is measured over
+    // the geotagged subset (below), but supersession needs the day's full denominator.
     const byYear = new Map<number, MemoryPeriodAsset[]>();
     for (const asset of assets) {
-      if (asset.year >= target.year || !hasCity(asset)) {
+      if (asset.year >= target.year) {
         continue;
       }
       const yearAssets = byYear.get(asset.year) ?? [];
@@ -43,7 +56,8 @@ export class OnThisDayPlaceMemoryRule implements MemoryRule {
     const dd = String(target.day).padStart(2, '0');
     const candidates: MemoryRuleCandidate[] = [];
 
-    for (const [year, geotagged] of byYear) {
+    for (const [year, dayAssets] of byYear) {
+      const geotagged = dayAssets.filter((asset) => hasCity(asset));
       const dominant = dominantBy(geotagged, (asset) => placeKeyOf(asset.country, asset.city));
       if (dominant.items.length < MIN_ASSETS || dominant.ratio < MIN_DOMINANCE) {
         continue;
@@ -51,6 +65,7 @@ export class OnThisDayPlaceMemoryRule implements MemoryRule {
 
       const city = dominant.items[0]!.city!;
       const count = dominant.items.length;
+      const dayCoverage = count / dayAssets.length;
       candidates.push({
         ruleId: this.id,
         dedupeKey: `place_day:${year}-${mm}-${dd}:${dominant.key}`,
@@ -60,6 +75,8 @@ export class OnThisDayPlaceMemoryRule implements MemoryRule {
         assetIds: sampleAssetsByTime(dominant.items, ASSET_CAP),
         memoryAt: target.set({ year }),
         context: { year, city, country: dominant.items[0]!.country, count },
+        // The plain "N years ago" card for this same year and day holds the very same photos.
+        supersedesOnThisDayYear: dayCoverage >= SUPERSEDE_COVERAGE ? year : undefined,
       });
     }
 

@@ -122,6 +122,8 @@ Once created, a memory stays in the memory lane on the home page for its visibil
 
 A type generates a memory only when your library has enough matching photos for it, so a qualifying day does not guarantee a card. The cap of 6 rule memories per day also applies, and it counts memories still inside their window from earlier days: when more qualify than there is room for, the highest-scoring cards win and the rest are skipped. **On this day** memories are not part of that cap.
 
+`on_this_day_place` and `on_this_day` describe the same day of the same past year, so when the place card covers at least 75% of that day's photos it replaces that year's plain **On this day** card instead of appearing next to it — the two would otherwise hold nearly the same photos. Below 75% the plain card is kept, because the place card only holds photos from the one dominant city and dropping it would hide the rest of the day. A **saved** memory is never replaced. This only affects newly generated memories: any duplicate pair already in your library stays until it ages out under `memories.retentionDays`.
+
 ### Per-user toggles
 
 Each user manages their own memory types from **Account Settings → Features → Memories**. Below the master memory switch, a toggle appears for every memory type the admin has made available. Turning one off:

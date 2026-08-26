@@ -163,6 +163,65 @@ describe(OnThisDayPlaceMemoryRule.name, () => {
     expect(await rule.evaluate({ ownerId: 'user-1', target })).toEqual([]);
   });
 
+  describe('superseding the plain "N years ago" memory', () => {
+    it('supersedes the year when the dominant city holds the entire day', async () => {
+      const { rule } = ruleWith(cityAssets(2023, 'Lisbon', 8));
+      const [candidate] = await rule.evaluate({ ownerId: 'user-1', target });
+      expect(candidate.supersedesOnThisDayYear).toBe(2023);
+    });
+
+    it('does not supersede when ungeotagged photos would be dropped with the plain card', async () => {
+      // 6 Lisbon + 4 untagged: dominance is 6/6 = 100% of the GEOTAGGED assets, so the card is
+      // still emitted — but the card holds only 6 of the day's 10 photos (60% coverage), so
+      // dropping the plain card would lose the 4 untagged ones.
+      const { rule } = ruleWith([...cityAssets(2023, 'Lisbon', 6), ...cityAssets(2023, null, 4, null)]);
+      const [candidate] = await rule.evaluate({ ownerId: 'user-1', target });
+      expect(candidate.title).toBe('On this day in Lisbon');
+      expect(candidate.supersedesOnThisDayYear).toBeUndefined();
+    });
+
+    it('does not supersede when a second city holds a quarter of the day', async () => {
+      // 6 Lisbon + 4 Porto passes the 60% dominance gate but covers only 60% of the day.
+      const { rule } = ruleWith([...cityAssets(2023, 'Lisbon', 6), ...cityAssets(2023, 'Porto', 4)]);
+      const [candidate] = await rule.evaluate({ ownerId: 'user-1', target });
+      expect(candidate.supersedesOnThisDayYear).toBeUndefined();
+    });
+
+    it('supersedes at exactly 75% day coverage (inclusive boundary)', async () => {
+      const { rule } = ruleWith([...cityAssets(2023, 'Lisbon', 6), ...cityAssets(2023, null, 2, null)]);
+      const [candidate] = await rule.evaluate({ ownerId: 'user-1', target });
+      expect(candidate.supersedesOnThisDayYear).toBe(2023);
+    });
+
+    it('does not supersede just below 75% day coverage', async () => {
+      // 5 of 7 = 71.4%
+      const { rule } = ruleWith([...cityAssets(2023, 'Lisbon', 5), ...cityAssets(2023, null, 2, null)]);
+      const [candidate] = await rule.evaluate({ ownerId: 'user-1', target });
+      expect(candidate.supersedesOnThisDayYear).toBeUndefined();
+    });
+
+    it('supersedes only the years it covers, not every year it emits', async () => {
+      const { rule } = ruleWith([
+        ...cityAssets(2023, 'Lisbon', 8),
+        ...cityAssets(2022, 'Rome', 6, 'Italy'),
+        ...cityAssets(2022, null, 6, null),
+      ]);
+      const result = await rule.evaluate({ ownerId: 'user-1', target });
+      expect(Object.fromEntries(result.map((c) => [c.context?.year, c.supersedesOnThisDayYear]))).toEqual({
+        2023: 2023,
+        2022: undefined,
+      });
+    });
+
+    it('measures coverage against the day, not the capped asset list', async () => {
+      // 40 Lisbon photos: the card attaches ASSET_CAP of them but still stands in for the day.
+      const { rule } = ruleWith(cityAssets(2023, 'Lisbon', 40));
+      const [candidate] = await rule.evaluate({ ownerId: 'user-1', target });
+      expect(candidate.assetIds).toHaveLength(ASSET_CAP);
+      expect(candidate.supersedesOnThisDayYear).toBe(2023);
+    });
+  });
+
   it('handles a leap-day target without crashing', async () => {
     const leap = DateTime.fromISO('2028-02-29', { zone: 'utc' });
     const { rule, assetRepository } = ruleWith([...cityAssets(2024, 'Lisbon', 6)]);
