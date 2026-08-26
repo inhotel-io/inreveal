@@ -19,7 +19,7 @@
   import { createCrossOwnerMergeHandlers, runMergeWithCrossOwnerConfirmation } from '$lib/utils/cross-owner-merge';
   import { handleError } from '$lib/utils/handle-error';
   import { clearQueryParam } from '$lib/utils/navigation';
-  import { sortPeople } from '$lib/utils/people-utils';
+  import { appendUniqueById, sortPeople } from '$lib/utils/people-utils';
   import { formatPeopleHeaderDescription } from '$lib/utils/people-statistics';
   import {
     getSpacePeople,
@@ -311,7 +311,11 @@
     loading = true;
     try {
       const more = await getSpacePeople(getPeopleQuery({ limit: PAGE_SIZE, offset: people.length }));
-      people = [...people, ...more];
+      // Merged by id, not concatenated: the ordering this pages over keys on hidden state, name and
+      // asset count, and every face attach/detach recounts those -- so a shifted window can re-emit
+      // a row page 1 already returned, and a repeated key kills the keyed grid outright. Same
+      // reasoning, same helper, as the global people page.
+      people = appendUniqueById(people, more);
       hasMore = more.length >= PAGE_SIZE;
     } catch (error) {
       handleError(error, $t('spaces_error_loading_people'));
@@ -346,7 +350,8 @@
         limit: PAGE_SIZE,
         offset: allPeople.length,
       });
-      allPeople = [...allPeople, ...more];
+      // Same merge, same reason, as loadMore above -- this grid is keyed on the person id too.
+      allPeople = appendUniqueById(allPeople, more);
       hasMoreVisibility = more.length >= PAGE_SIZE;
     } catch (error) {
       handleError(error, $t('spaces_error_loading_people'));
