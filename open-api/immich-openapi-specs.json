@@ -1387,11 +1387,14 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/FaceRepairScanStatusDto"
                 }
               }
             },
-            "description": ""
+            "description": "The latest face-repair scan"
+          },
+          "204": {
+            "description": "This instance has never run a face-repair scan"
           }
         },
         "security": [
@@ -29885,6 +29888,216 @@
           "maxDistance",
           "maxFlaggedFraction",
           "minFaces"
+        ],
+        "type": "object"
+      },
+      "FaceRepairScanStatusDto": {
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "error": {
+            "nullable": true,
+            "type": "string"
+          },
+          "finishedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "persons": {
+            "items": {
+              "properties": {
+                "eligible": {
+                  "type": "number"
+                },
+                "faceCount": {
+                  "type": "number"
+                },
+                "flagged": {
+                  "type": "number"
+                },
+                "flaggedFraction": {
+                  "type": "number"
+                },
+                "ownerId": {
+                  "type": "string"
+                },
+                "personId": {
+                  "type": "string"
+                },
+                "personName": {
+                  "nullable": true,
+                  "type": "string"
+                },
+                "recommendation": {
+                  "enum": [
+                    "confident",
+                    "review-first"
+                  ],
+                  "type": "string"
+                },
+                "reviewReasons": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "suspectedOwners": {
+                  "items": {
+                    "properties": {
+                      "count": {
+                        "type": "number"
+                      },
+                      "ownerFaceCount": {
+                        "type": "number"
+                      },
+                      "ownerMissing": {
+                        "type": "boolean"
+                      },
+                      "ownerName": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "ownerPersonId": {
+                        "type": "string"
+                      },
+                      "thumbnailFaceId": {
+                        "nullable": true,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ownerPersonId",
+                      "ownerName",
+                      "thumbnailFaceId",
+                      "count",
+                      "ownerFaceCount",
+                      "ownerMissing"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "thumbnailFaceId": {
+                  "nullable": true,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "personId",
+                "ownerId",
+                "personName",
+                "faceCount",
+                "thumbnailFaceId",
+                "eligible",
+                "flagged",
+                "flaggedFraction",
+                "suspectedOwners",
+                "recommendation",
+                "reviewReasons"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "progress": {
+            "nullable": true,
+            "properties": {
+              "scanned": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "scanned",
+              "total"
+            ],
+            "type": "object"
+          },
+          "startedAt": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "totals": {
+            "nullable": true,
+            "properties": {
+              "affectedPersons": {
+                "type": "number"
+              },
+              "eligibleFaces": {
+                "type": "number"
+              },
+              "flaggedFaces": {
+                "type": "number"
+              },
+              "reviewOnlyByReason": {
+                "properties": {
+                  "badTarget": {
+                    "type": "number"
+                  },
+                  "overCap": {
+                    "type": "number"
+                  },
+                  "unAttributable": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "overCap",
+                  "badTarget",
+                  "unAttributable"
+                ],
+                "type": "object"
+              },
+              "reviewOnlyFaces": {
+                "type": "number"
+              },
+              "reviewOnlyPersons": {
+                "type": "number"
+              },
+              "toRepair": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "eligibleFaces",
+              "flaggedFaces",
+              "toRepair",
+              "reviewOnlyFaces",
+              "reviewOnlyPersons",
+              "affectedPersons",
+              "reviewOnlyByReason"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "createdAt",
+          "error",
+          "finishedAt",
+          "id",
+          "persons",
+          "progress",
+          "startedAt",
+          "status",
+          "totals"
         ],
         "type": "object"
       },
