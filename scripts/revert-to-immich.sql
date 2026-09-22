@@ -446,7 +446,7 @@ DELETE FROM "kysely_migrations"
    '1789000000000-AddFacePersonVerdictStatusCreatedAtIdIndex',
    '1790000000000-FixFaceRepairScanInFlightIndex',
    '1792123120451-AddSharedLinkSpaceId',
-   '1793000000000-AddAssetDerivedFile',
+   '1793400000000-AddAssetDerivedFile',
 
    -- Pre-rename names for two migrations that were renumbered off timestamp collisions
    -- ("renumber AddFaceRepairScanFlaggedFace off the #722 collision",

@@ -116,7 +116,7 @@ the thumbnail job owns those rows end to end (`syncFiles` deletes anything it di
 Derived rows are written by the serve path and are a cache index, not a record of truth — losing the
 table loses nothing that a request cannot recreate.
 
-Migration `1793000000000-AddAssetDerivedFile` lives in `migrations-gallery/` like every fork migration;
+Migration `1793400000000-AddAssetDerivedFile` lives in `migrations-gallery/` like every fork migration;
 `scripts/revert-to-immich.sql` drops the table and forgets the migration.
 
 ## Lifecycle
