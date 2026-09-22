@@ -8,12 +8,12 @@
 # inhotel/build-image branch only; it is not part of any upstream PR.
 name: inreveal-build-server
 
-# Triggered by a push to this branch: workflow_dispatch can only start workflows that exist on
-# the default branch, and this file deliberately does not live there. Every push to
-# inhotel/build-image therefore publishes an image of that branch's HEAD.
+# workflow_dispatch only, now that this file is on the default branch. The GHCR package it
+# publishes is PRIVATE by inhotel-io org policy (public packages are disabled), so the inReveal VM
+# cannot pull it anonymously. The deployed image is instead built by Cloud Build from
+# cloudbuild.yaml into Artifact Registry (europe-west6-docker.pkg.dev/inhotel-prod/inreveal); this
+# workflow is kept as a secondary, GitHub-side build of the same Dockerfile.
 on:
-  push:
-    branches: [inhotel/build-image]
   workflow_dispatch:
 
 permissions: {}

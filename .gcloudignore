@@ -1,0 +1,10 @@
+# Only build outputs and VCS metadata. The branding script walks the whole
+# checkout (docs/, mobile/, machine-learning/ included) and hard-fails on a
+# missing target, so nothing else may be trimmed.
+.git
+node_modules
+**/node_modules
+**/dist
+**/build
+**/.svelte-kit
+**/coverage

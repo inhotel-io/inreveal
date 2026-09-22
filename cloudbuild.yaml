@@ -1,0 +1,62 @@
+# Builds the inReveal server image entirely inside GCP and pushes it to Artifact
+# Registry. Deliberately NOT Workload Identity Federation from GitHub Actions:
+# inhotel-io/inreveal is a PUBLIC repository, and granting a public repo's CI push
+# access to a production registry is a trust relationship this project does not
+# otherwise have (data-platform, platform-ops and task-fleet are all private).
+# Cloud Build needs no GitHub credential at all.
+#
+# Mirrors .github/workflows/gallery-release-server-only.yml: apply branding, verify
+# it, then build server/Dockerfile with the same build args.
+substitutions:
+  _IMAGE: europe-west6-docker.pkg.dev/inhotel-prod/inreveal/inreveal-server
+  _TAG: dev
+  _COMMIT: unknown
+  _FORK_VERSION: v5.4.0
+
+steps:
+  - id: branding
+    name: ubuntu:24.04
+    entrypoint: bash
+    env:
+      # The source tarball carries no .git (excluded to keep the upload small), so the
+      # script's `git describe` fallback would exit 128. Supplying the version skips it.
+      - FORK_VERSION=${_FORK_VERSION}
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        apt-get update -qq
+        apt-get install -y -qq jq imagemagick >/dev/null
+        ./branding/scripts/apply-branding.sh
+        ./branding/scripts/verify-branding.sh
+
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    env:
+      # server/Dockerfile uses `RUN --mount=type=cache/bind`, which the legacy builder rejects.
+      - DOCKER_BUILDKIT=1
+    args:
+      - build
+      - -f
+      - server/Dockerfile
+      - --build-arg
+      - DEVICE=cpu
+      - --build-arg
+      - BUILD_ID=${BUILD_ID}
+      - --build-arg
+      - BUILD_SOURCE_REF=${_TAG}
+      - --build-arg
+      - BUILD_SOURCE_COMMIT=${_COMMIT}
+      - -t
+      - ${_IMAGE}:${_TAG}
+      - .
+
+images:
+  - ${_IMAGE}:${_TAG}
+
+options:
+  machineType: E2_HIGHCPU_32
+  diskSizeGb: 200
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 3600s
