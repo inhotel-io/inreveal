@@ -52,6 +52,7 @@ enum JobName {
   hlsSessionCleanup._(r'HlsSessionCleanup'),
   memoryCleanup._(r'MemoryCleanup'),
   memoryGenerate._(r'MemoryGenerate'),
+  assetDerivedFileCleanup._(r'AssetDerivedFileCleanup'),
   notificationsCleanup._(r'NotificationsCleanup'),
   notifyUserSignup._(r'NotifyUserSignup'),
   notifyAlbumInvite._(r'NotifyAlbumInvite'),
@@ -204,6 +205,7 @@ class JobNameTypeTransformer {
         case r'HlsSessionCleanup': return JobName.hlsSessionCleanup;
         case r'MemoryCleanup': return JobName.memoryCleanup;
         case r'MemoryGenerate': return JobName.memoryGenerate;
+        case r'AssetDerivedFileCleanup': return JobName.assetDerivedFileCleanup;
         case r'NotificationsCleanup': return JobName.notificationsCleanup;
         case r'NotifyUserSignup': return JobName.notifyUserSignup;
         case r'NotifyAlbumInvite': return JobName.notifyAlbumInvite;

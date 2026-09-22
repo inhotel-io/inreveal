@@ -15,7 +15,7 @@ import {
   VideoCodec,
   VideoContainer,
 } from 'src/enum';
-import { ConcurrentQueueName, FullsizeImageOptions, ImageOptions } from 'src/types';
+import { ConcurrentQueueName, FullsizeImageOptions, ImageOptions, ImagePresetOptions } from 'src/types';
 
 export type ClassificationFaceExclusion = 'off' | 'any_assigned_face' | 'named_people' | 'named_visible_people';
 
@@ -167,6 +167,9 @@ export type SystemConfig = {
     colorspace: Colorspace;
     extractEmbedded: boolean;
     fullsize: FullsizeImageOptions;
+    // Gallery-fork: on-demand, exact-dimension variants keyed by preset name. Empty by default so
+    // a stock install renders and stores nothing extra until an admin adds a preset.
+    presets: Record<string, ImagePresetOptions>;
   };
   newVersionCheck: {
     enabled: boolean;
@@ -439,6 +442,7 @@ export const defaults = Object.freeze<SystemConfig>({
       quality: 80,
       progressive: false,
     },
+    presets: {},
   },
   newVersionCheck: {
     // Gallery polls its own release endpoint at version.opennoodle.de/gallery

@@ -1774,10 +1774,16 @@ class AssetsApi {
   ///
   /// * [String] key:
   ///
+  /// * [String] preset:
+  ///   Derived image preset name (see system config image.presets). Requires width.
+  ///
   /// * [AssetMediaSize] size:
   ///
   /// * [String] slug:
-  Future<Response> viewAssetWithHttpInfo(String id, { bool? edited, String? key, AssetMediaSize? size, String? slug, Future<void>? abortTrigger, }) async {
+  ///
+  /// * [int] width:
+  ///   Output width in pixels; must be one of the widths configured for the preset
+  Future<Response> viewAssetWithHttpInfo(String id, { bool? edited, String? key, String? preset, AssetMediaSize? size, String? slug, int? width, Future<void>? abortTrigger, }) async {
     // ignore: prefer_const_declarations
     final apiPath = r'/assets/{id}/thumbnail'
       .replaceAll('{id}', id);
@@ -1795,11 +1801,17 @@ class AssetsApi {
     if (key != null) {
       queryParams.addAll(_queryParams('', 'key', key));
     }
+    if (preset != null) {
+      queryParams.addAll(_queryParams('', 'preset', preset));
+    }
     if (size != null) {
       queryParams.addAll(_queryParams('', 'size', size));
     }
     if (slug != null) {
       queryParams.addAll(_queryParams('', 'slug', slug));
+    }
+    if (width != null) {
+      queryParams.addAll(_queryParams('', 'width', width));
     }
 
     const contentTypes = <String>[];
@@ -1830,11 +1842,17 @@ class AssetsApi {
   ///
   /// * [String] key:
   ///
+  /// * [String] preset:
+  ///   Derived image preset name (see system config image.presets). Requires width.
+  ///
   /// * [AssetMediaSize] size:
   ///
   /// * [String] slug:
-  Future<MultipartFile?> viewAsset(String id, { bool? edited, String? key, AssetMediaSize? size, String? slug, Future<void>? abortTrigger, }) async {
-    final response = await viewAssetWithHttpInfo(id, edited: edited, key: key, size: size, slug: slug, abortTrigger: abortTrigger,);
+  ///
+  /// * [int] width:
+  ///   Output width in pixels; must be one of the widths configured for the preset
+  Future<MultipartFile?> viewAsset(String id, { bool? edited, String? key, String? preset, AssetMediaSize? size, String? slug, int? width, Future<void>? abortTrigger, }) async {
+    final response = await viewAssetWithHttpInfo(id, edited: edited, key: key, preset: preset, size: size, slug: slug, width: width, abortTrigger: abortTrigger,);
     if (response.statusCode >= HttpStatus.badRequest) {
       throw ApiException(response.statusCode, await _decodeBodyBytes(response));
     }

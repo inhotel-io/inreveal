@@ -121,6 +121,7 @@ DROP TABLE IF EXISTS "shared_space_face_match_backfill_target" CASCADE;
 DROP TABLE IF EXISTS "shared_space_library_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_album_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "face_person_verdict" CASCADE;
+DROP TABLE IF EXISTS "asset_derived_file" CASCADE;
 DROP TABLE IF EXISTS "shared_space_asset_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_member_audit" CASCADE;
 DROP TABLE IF EXISTS "shared_space_audit" CASCADE;
@@ -445,6 +446,7 @@ DELETE FROM "kysely_migrations"
    '1789000000000-AddFacePersonVerdictStatusCreatedAtIdIndex',
    '1790000000000-FixFaceRepairScanInFlightIndex',
    '1792123120451-AddSharedLinkSpaceId',
+   '1793000000000-AddAssetDerivedFile',
 
    -- Pre-rename names for two migrations that were renumbered off timestamp collisions
    -- ("renumber AddFaceRepairScanFlaggedFace off the #722 collision",
@@ -539,7 +541,8 @@ BEGIN
        'classification_prompt_embedding', 'classification_category',
        'storage_migration_log', 'asset_duplicate_checksum',
        'face_person_verdict', 'face_repair_scan', 'face_repair_decline',
-       'face_repair_scan_flagged_face', 'face_repair_lock'
+       'face_repair_scan_flagged_face', 'face_repair_lock',
+       'asset_derived_file'
      );
   IF fork_tables_left > 0 THEN
     RAISE EXCEPTION 'revert-to-immich: % Gallery table(s) still present after cleanup — aborting.', fork_tables_left;

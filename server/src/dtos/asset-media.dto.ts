@@ -2,6 +2,7 @@ import { createZodDto } from 'nestjs-zod';
 import { HistoryBuilder } from 'src/decorators';
 import { AssetMetadataUpsertItemSchema } from 'src/dtos/asset.dto';
 import { AssetVisibilitySchema } from 'src/enum';
+import { IMAGE_PRESET_NAME_PATTERN } from 'src/utils/image-preset';
 import { isoDatetimeToDate, JsonParsed, stringToBool } from 'src/validation';
 import z from 'zod';
 
@@ -26,6 +27,19 @@ const AssetMediaOptionsSchema = z
         .getExtensions(),
     ),
     edited: stringToBool.default(false).optional().describe('Return edited asset if available'),
+    // Gallery-fork: derived image presets. When `preset` is given, `size` is ignored and the response is
+    // an exact-dimension variant rendered on demand from the admin-configured preset.
+    preset: z
+      .string()
+      .regex(IMAGE_PRESET_NAME_PATTERN)
+      .optional()
+      .describe('Derived image preset name (see system config image.presets). Requires width.'),
+    width: z.coerce
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Output width in pixels; must be one of the widths configured for the preset'),
   })
   .meta({ id: 'AssetMediaOptionsDto' });
 

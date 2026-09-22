@@ -16,6 +16,7 @@ class SystemConfigImageDto {
     required this.colorspace,
     required this.extractEmbedded,
     required this.fullsize,
+    this.presets = const Optional.present(const {}),
     required this.preview,
     required this.thumbnail,
   });
@@ -27,6 +28,9 @@ class SystemConfigImageDto {
 
   SystemConfigGeneratedFullsizeImageDto fullsize;
 
+  /// Derived image presets, keyed by name. Empty unless an admin adds one.
+  Optional<Map<String, SystemConfigImagePresetDto>?> presets;
+
   SystemConfigGeneratedImageDto preview;
 
   SystemConfigGeneratedImageDto thumbnail;
@@ -36,6 +40,7 @@ class SystemConfigImageDto {
     other.colorspace == colorspace &&
     other.extractEmbedded == extractEmbedded &&
     other.fullsize == fullsize &&
+    _deepEquality.equals(other.presets, presets) &&
     other.preview == preview &&
     other.thumbnail == thumbnail;
 
@@ -45,17 +50,22 @@ class SystemConfigImageDto {
     (colorspace.hashCode) +
     (extractEmbedded.hashCode) +
     (fullsize.hashCode) +
+    (presets.hashCode) +
     (preview.hashCode) +
     (thumbnail.hashCode);
 
   @override
-  String toString() => 'SystemConfigImageDto[colorspace=$colorspace, extractEmbedded=$extractEmbedded, fullsize=$fullsize, preview=$preview, thumbnail=$thumbnail]';
+  String toString() => 'SystemConfigImageDto[colorspace=$colorspace, extractEmbedded=$extractEmbedded, fullsize=$fullsize, presets=$presets, preview=$preview, thumbnail=$thumbnail]';
 
   Map<String, dynamic> toJson() {
     final json = <String, dynamic>{};
       json[r'colorspace'] = this.colorspace;
       json[r'extractEmbedded'] = this.extractEmbedded;
       json[r'fullsize'] = this.fullsize;
+    if (this.presets.isPresent) {
+      final value = this.presets.value;
+      json[r'presets'] = value;
+    }
       json[r'preview'] = this.preview;
       json[r'thumbnail'] = this.thumbnail;
     return json;
@@ -73,6 +83,7 @@ class SystemConfigImageDto {
         colorspace: Colorspace.fromJson(json[r'colorspace'])!,
         extractEmbedded: mapValueOfType<bool>(json, r'extractEmbedded')!,
         fullsize: SystemConfigGeneratedFullsizeImageDto.fromJson(json[r'fullsize'])!,
+        presets: json.containsKey(r'presets') ? Optional.present(SystemConfigImagePresetDto.mapFromJson(json[r'presets'])) : const Optional.absent(),
         preview: SystemConfigGeneratedImageDto.fromJson(json[r'preview'])!,
         thumbnail: SystemConfigGeneratedImageDto.fromJson(json[r'thumbnail'])!,
       );

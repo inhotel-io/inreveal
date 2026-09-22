@@ -115,6 +115,9 @@ String parameterToString(dynamic value) {
   if (value is ImageFormat) {
     return ImageFormatTypeTransformer().encode(value).toString();
   }
+  if (value is ImagePresetPosition) {
+    return ImagePresetPositionTypeTransformer().encode(value).toString();
+  }
   if (value is IntegrityReport) {
     return IntegrityReportTypeTransformer().encode(value).toString();
   }

@@ -491,6 +491,8 @@ class ApiClient {
           return HlsVideoResolutionTypeTransformer().decode(value);
         case 'ImageFormat':
           return ImageFormatTypeTransformer().decode(value);
+        case 'ImagePresetPosition':
+          return ImagePresetPositionTypeTransformer().decode(value);
         case 'IntegrityReport':
           return IntegrityReportTypeTransformer().decode(value);
         case 'IntegrityReportResponseDto':
@@ -991,6 +993,8 @@ class ApiClient {
           return SystemConfigGeneratedImageDto.fromJson(value);
         case 'SystemConfigImageDto':
           return SystemConfigImageDto.fromJson(value);
+        case 'SystemConfigImagePresetDto':
+          return SystemConfigImagePresetDto.fromJson(value);
         case 'SystemConfigIntegrityChecks':
           return SystemConfigIntegrityChecks.fromJson(value);
         case 'SystemConfigIntegrityChecksumJob':

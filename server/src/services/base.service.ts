@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import sanitize from 'sanitize-filename';
+import { DiskStorageBackend } from 'src/backends/disk-storage.backend';
 import { SystemConfig } from 'src/config';
 import { FACE_THUMBNAIL_SIZE, SALT_ROUNDS } from 'src/constants';
 import { StorageCore } from 'src/cores/storage.core';
@@ -445,6 +446,28 @@ export class BaseService {
     const backend = StorageService.resolveBackendForKey(filePath);
     const { tempPath, cleanup } = await backend.downloadToTemp(filePath);
     return { localPath: tempPath, cleanup };
+  }
+
+  /**
+   * After generating a file locally, uploads it to S3 if the write backend is S3.
+   * Returns the key to store in the DB.
+   */
+  protected async persistFile(localPath: string, relativeKey: string, contentType?: string): Promise<string> {
+    // lazy import to avoid circular dependency (StorageService extends BaseService)
+    const { StorageService } = await import('./storage.service.js');
+    const writeBackend = StorageService.getWriteBackend();
+    if (!writeBackend || writeBackend instanceof DiskStorageBackend) {
+      // Disk mode: the file was already written to the final path
+      return localPath;
+    }
+    // S3 mode: upload the locally-generated file
+    const stream = this.storageRepository.createPlainReadStream(localPath);
+    await writeBackend.put(relativeKey, stream, { contentType });
+    // Clean up local temp file
+    await this.storageRepository.unlink(localPath).catch(() => {
+      /* ignore */
+    });
+    return relativeKey;
   }
 
   /**
