@@ -1,0 +1,79 @@
+# inHotel-only: build the server image from a chosen commit of this fork and publish it as
+# ghcr.io/inhotel-io/inreveal-server so platform-ops can pin it (config.sh IMMICH_SERVER_IMAGE).
+#
+# Why this exists: the upstream release workflow pushes to ghcr.io/open-noodle/gallery-server,
+# which this fork cannot write to, and platform-ops requires every deployed image to be pinned
+# to a tag whose source is available (AGPLv3 section 13). The image tag here is
+# <date>-<short sha>, so the source is always the commit named in the tag. Lives on the
+# inhotel/build-image branch only; it is not part of any upstream PR.
+name: inreveal-build-server
+
+# Triggered by a push to this branch: workflow_dispatch can only start workflows that exist on
+# the default branch, and this file deliberately does not live there. Every push to
+# inhotel/build-image therefore publishes an image of that branch's HEAD.
+on:
+  push:
+    branches: [inhotel/build-image]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          sha="$(git rev-parse --short=7 HEAD)"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "tag=$(date -u +%Y.%m.%d)-${sha}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
+
+      - name: Login to GHCR
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply branding
+        uses: ./.github/actions/apply-branding
+
+      - name: Build and push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: server/Dockerfile
+          # The inReveal VM is linux/amd64.
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            DEVICE=cpu
+            BUILD_ID=${{ github.run_id }}
+            BUILD_SOURCE_REF=${{ github.ref_name }}
+            BUILD_SOURCE_COMMIT=${{ steps.meta.outputs.sha }}
+          tags: |
+            ghcr.io/inhotel-io/inreveal-server:${{ steps.meta.outputs.tag }}
+            ghcr.io/inhotel-io/inreveal-server:sha-${{ steps.meta.outputs.sha }}
+          cache-from: type=gha,scope=inreveal-server
+          cache-to: type=gha,scope=inreveal-server,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Published" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "ghcr.io/inhotel-io/inreveal-server:${{ steps.meta.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "source: ${{ steps.meta.outputs.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
